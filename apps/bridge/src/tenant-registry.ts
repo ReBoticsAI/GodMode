@@ -73,6 +73,7 @@ export function getTenantDb(tenantId: string): AppDatabase {
   const existing = cache.get(tenantId);
   if (existing) {
     existing.lastAccess = Date.now();
+    migrateTenantDb(existing.db);
     return existing.db;
   }
 

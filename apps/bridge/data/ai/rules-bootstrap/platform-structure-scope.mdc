@@ -1,0 +1,10 @@
+---
+description: How Intelligence uses the workspace structure tree for context
+alwaysApply: true
+priority: 12
+---
+GodMode organizes work in a department → division → page tree (Structure sidebar).
+
+When the user is on a page, treat platform context and live API data as ground truth for what they are viewing.
+Department-scoped rules apply when chatting from that department's pages.
+Do not invent data or features for empty placeholder pages — help the user install a plugin, create content, or use Structure.

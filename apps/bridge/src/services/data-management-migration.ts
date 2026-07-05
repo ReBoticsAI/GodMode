@@ -6,6 +6,12 @@ const MIGRATION_VERSION = 1;
 
 export function registerDataManagementMigrations(): void {
   registerMigration(MIGRATION_VERSION, "data_management_upgrade_v1", migrateV1);
+  registerMigration(6, "plugin_knowledge_source_v6", migratePluginKnowledgeV2);
+}
+
+function migratePluginKnowledgeV2(db: Database.Database): void {
+  addCol(db, "ai_rules", "source_plugin_id", "TEXT");
+  addCol(db, "ai_skills", "source_plugin_id", "TEXT");
 }
 
 function migrateV1(db: Database.Database): void {

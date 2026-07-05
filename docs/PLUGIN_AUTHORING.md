@@ -131,6 +131,21 @@ Use `tsup` or similar to emit `dist/bridge.js` and `dist/web.js`. See your plugi
 
 Web bundles load at runtime from `GET /api/plugins/:id/web.js` via dynamic import and the host import map — no `@/` aliases in the core Vite app are required at plugin build time except where your repo uses them locally via `tsup` `esbuildOptions.alias`.
 
+### Plugin knowledge (`data/ai/`)
+
+Ship optional Intelligence rules and skills inside the plugin repo:
+
+```
+data/ai/rules/*.mdc
+data/ai/skills/<id>/SKILL.md
+```
+
+On **tenant install**, core imports these into the tenant SQLite (`ai_rules` / `ai_skills`) with `source_plugin_id` set. On **uninstall**, they are removed automatically. You do not copy files into `apps/bridge/data/ai/` manually.
+
+`.mdc` files are the **authoring format** (easy to review in git, same shape as Cursor rules). The Bridge **imports them into the database** on first knowledge load and on plugin install; runtime reads from SQLite, not the filesystem.
+
+Core ships generic bootstrap rules in `apps/bridge/data/ai/rules-bootstrap/`. Domain rules belong in the plugin that owns that domain (Sierra, Polymarket, etc.).
+
 ## Packages
 
 During development, depend on core packages via workspace link:

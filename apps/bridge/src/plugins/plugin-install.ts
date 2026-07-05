@@ -3,6 +3,11 @@ import type { AppDatabase } from "../db.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 import { discoverPluginRoots } from "./loader.js";
 import { pluginRuntime } from "./runtime.js";
+import {
+  importPluginKnowledgeFromRoot,
+  removePluginKnowledge,
+} from "../services/knowledge-store.js";
+import { getTenantDb } from "../tenant-registry.js";
 
 export interface TenantPluginRow {
   tenant_id: string;
@@ -92,6 +97,36 @@ export async function installPluginForTenant(
        installed_at=datetime('now')`
   ).run(tenantId, pluginId, loaded.manifest.version, root);
   await pluginRuntime.installPluginForTenant(pluginId, tenantId);
+  syncPluginKnowledgeForTenant(core, tenantId, pluginId, root);
+}
+
+function syncPluginKnowledgeForTenant(
+  core: CoreDatabase,
+  tenantId: string,
+  pluginId: string,
+  pluginRoot: string
+): void {
+  const db = getTenantDb(tenantId);
+  const { rules, skills } = importPluginKnowledgeFromRoot(db, pluginRoot, pluginId);
+  if (rules > 0 || skills > 0) {
+    console.log(
+      `[plugins] imported knowledge for ${pluginId} on tenant ${tenantId}: ${rules} rules, ${skills} skills`
+    );
+  }
+}
+
+export function syncInstalledPluginKnowledge(
+  core: CoreDatabase,
+  tenantId: string
+): void {
+  for (const row of listInstalledPlugins(core, tenantId)) {
+    const root =
+      row.plugin_root ??
+      pluginRuntime.getPlugin(row.plugin_id)?.pluginRoot ??
+      null;
+    if (!root) continue;
+    syncPluginKnowledgeForTenant(core, tenantId, row.plugin_id, root);
+  }
 }
 
 export function isPluginEnabledForTenant(
@@ -115,6 +150,8 @@ export async function uninstallPluginForTenant(
   tenantId: string,
   pluginId: string
 ): Promise<void> {
+  const db = getTenantDb(tenantId);
+  removePluginKnowledge(db, pluginId);
   await pluginRuntime.uninstallPluginForTenant(pluginId, tenantId);
   core.prepare(
     `DELETE FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`

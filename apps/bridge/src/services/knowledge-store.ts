@@ -438,3 +438,106 @@ export function getLatestPrompt(
     .get(agentId, kind) as { content: string } | undefined;
   return row?.content ?? null;
 }
+
+function upsertRuleFromFile(
+  db: AppDatabase,
+  filePath: string,
+  filename: string,
+  sourcePluginId?: string
+): void {
+  const parsed = parseMdc(fs.readFileSync(filePath, "utf8"), filename);
+  db.prepare(
+    `INSERT INTO ai_rules
+     (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       description=excluded.description, body=excluded.body, always_apply=excluded.always_apply,
+       globs_json=excluded.globs_json, departments_json=excluded.departments_json,
+       priority=excluded.priority, source_plugin_id=excluded.source_plugin_id,
+       version=ai_rules.version+1, updated_at=datetime('now')`
+  ).run(
+    parsed.id,
+    parsed.description,
+    parsed.body,
+    parsed.alwaysApply ? 1 : 0,
+    JSON.stringify(parsed.globs),
+    JSON.stringify(parsed.departments),
+    parsed.priority,
+    sourcePluginId ?? null
+  );
+}
+
+function upsertSkillFromDir(
+  db: AppDatabase,
+  skillPath: string,
+  skillId: string,
+  sourcePluginId: string
+): void {
+  const raw = fs.readFileSync(skillPath, "utf8");
+  const parsed = parseSkillMd(raw, skillId);
+  db.prepare(
+    `INSERT INTO ai_skills
+     (id, agent_id, name, description, body, tools_json, departments_json, enabled, status, source_plugin_id, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       name=excluded.name, description=excluded.description, body=excluded.body,
+       tools_json=excluded.tools_json, departments_json=excluded.departments_json,
+       source_plugin_id=excluded.source_plugin_id,
+       version=ai_skills.version+1, updated_at=datetime('now')`
+  ).run(
+    parsed.id,
+    parsed.name,
+    parsed.description,
+    parsed.body,
+    JSON.stringify(parsed.tools),
+    JSON.stringify(parsed.departments),
+    sourcePluginId
+  );
+}
+
+/** Import or refresh plugin-shipped rules/skills from data/ai into the tenant DB. */
+export function importPluginKnowledgeFromRoot(
+  db: AppDatabase,
+  pluginRoot: string,
+  pluginId: string
+): { rules: number; skills: number } {
+  let rules = 0;
+  let skills = 0;
+  const rulesDir = path.join(path.resolve(pluginRoot), "data", "ai", "rules");
+  if (fs.existsSync(rulesDir)) {
+    for (const file of fs.readdirSync(rulesDir).filter((f) => f.endsWith(".mdc"))) {
+      upsertRuleFromFile(db, path.join(rulesDir, file), file, pluginId);
+      rules++;
+    }
+  }
+  const skillsDir = path.join(path.resolve(pluginRoot), "data", "ai", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) continue;
+      upsertSkillFromDir(db, skillPath, ent.name, pluginId);
+      skills++;
+    }
+  }
+  return { rules, skills };
+}
+
+/** Remove knowledge rows owned by a plugin (on uninstall). */
+export function removePluginKnowledge(db: AppDatabase, pluginId: string): void {
+  const ruleIds = db
+    .prepare(`SELECT id FROM ai_rules WHERE source_plugin_id = ?`)
+    .all(pluginId) as Array<{ id: string }>;
+  for (const row of ruleIds) {
+    db.prepare(`DELETE FROM ai_agent_rule_state WHERE rule_id = ?`).run(row.id);
+  }
+  db.prepare(`DELETE FROM ai_rules WHERE source_plugin_id = ?`).run(pluginId);
+
+  const skillIds = db
+    .prepare(`SELECT id FROM ai_skills WHERE source_plugin_id = ?`)
+    .all(pluginId) as Array<{ id: string }>;
+  for (const row of skillIds) {
+    db.prepare(`DELETE FROM ai_agent_skill_state WHERE skill_id = ?`).run(row.id);
+  }
+  db.prepare(`DELETE FROM ai_skills WHERE source_plugin_id = ?`).run(pluginId);
+}

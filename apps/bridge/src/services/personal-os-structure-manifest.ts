@@ -51,6 +51,7 @@ export const PERSONAL_BOOTSTRAP_RULE_IDS = [
   "platform-actions",
   "platform-builder-tiers",
   "platform-plugins",
+  "platform-structure-scope",
   "ui-shadcn",
 ] as const;
 

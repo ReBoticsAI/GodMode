@@ -71,6 +71,7 @@ import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plug
 import {
   ensureOperatorPluginsInstalled,
   ensureTenantPluginsTable,
+  syncInstalledPluginKnowledge,
 } from "./plugins/plugin-install.js";
 
 export async function startBridge(): Promise<void> {
@@ -97,6 +98,7 @@ const bus = new EventEmitter();
 pluginRuntime.configure({ operatorTenantId, bus });
 ensureTenantPluginsTable(coreDb);
 await ensureOperatorPluginsInstalled(coreDb, operatorTenantId, db);
+syncInstalledPluginKnowledge(coreDb, operatorTenantId);
 
 const hasSierra = pluginRuntime.hasPlugin("sierra-chart");
 
