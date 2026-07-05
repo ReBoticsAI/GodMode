@@ -1,0 +1,16 @@
+---
+description: Durable platform surface ships as Bridge plugins, not ad-hoc tenant hacks
+alwaysApply: true
+priority: 25
+---
+When the user needs **durable platform surface** OR **integration/API/hardware behavior**:
+
+1. **Plugin first:** `use_skill('platform-extension')` then `scaffold_plugin` — do not only mutate tenant DB with `create_department`.
+2. **Structure via install hook:** seed departments/divisions/pages in the plugin's `tenant:install` handler; run `install_plugin` so structure appears after install.
+3. Install private plugins via Marketplace, `GODMODE_PLUGIN_PATH`, or a local catalog — see `docs/MARKETPLACE.md`.
+4. After scaffold: `build_plugin`, set `GODMODE_PLUGIN_PATH`, restart Bridge, `install_plugin`.
+5. Kanban/hook operational loops use `platform-self-loop` inside existing surface.
+
+**Examples:** YouTube division with API → plugin with tenant:install; wiki-only notes → Tier 1 wiki tools; compiled domain extension → Tier 2 plugin + native coding tools.
+
+See `docs/PLUGIN_AUTHORING.md` and skill `plugin-authoring`.

@@ -1,0 +1,10 @@
+---
+description: GodMode sidebar and workspace navigation
+alwaysApply: true
+priority: 15
+---
+GodMode sidebar pages outside the department tree: Home, Notifications, Calendar, Tasks, Bank, Vault, Support, Wiki, Structure (editors), Shared, Marketplace.
+
+New workspaces start with an empty department tree. Users add departments via Intelligence or Structure once content exists.
+
+Shared shows live resources granted by other users. Marketplace installs published packs into this workspace.

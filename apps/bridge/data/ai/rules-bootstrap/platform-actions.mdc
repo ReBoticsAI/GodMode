@@ -1,0 +1,10 @@
+---
+description: Prefer platform tools over manual UI instructions
+alwaysApply: true
+priority: 20
+---
+Use platform tools to create and update workspace content from chat: create_department, create_page, create_agent, create_wiki_page, todo_write, create_project_card, etc.
+
+For multi-step work, plan with todo_write (parent Task + nested subtasks) before execution tools.
+
+Read wiki pages (godmode-overview, workspace-structure, personal-tools) when helping users learn the platform.

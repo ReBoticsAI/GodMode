@@ -1,0 +1,397 @@
+<!doctype html>
+<!--
+  Intelligence Avatar — feasibility SPIKE (self-contained, dependency-free).
+
+  This file is NOT imported by the app bundler. It exists only to prove out two
+  ideas before any real integration work:
+    1. A floating, draggable "tamagotchi" avatar layer that lives ABOVE the app
+       chrome and reacts to mood/energy state + events. (2D canvas, zero deps.)
+    2. An agent "render_3d" TOOL contract: the agent emits a structured JSON
+       *scene description* (primitives / transforms / materials / animation) and
+       the frontend renders it into a Three.js scene. Three.js is pulled from a
+       CDN via an import map so this file needs no npm install.
+
+  HOW TO VIEW:
+    - Easiest: with the web dev server already running, open
+      http://localhost:5173/src/spikes/avatar/avatar-spike.html
+      (Vite serves files under /src as static assets when requested directly).
+    - Or copy this single file anywhere and open it over http (the CDN import
+      map needs http/https, not file://). e.g. `npx serve apps/web/src/spikes/avatar`.
+
+  This touches no existing file and imports nothing from the app.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intelligence Avatar — Spike</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; height: 100dvh; overflow: hidden;
+        font: 13px/1.5 system-ui, sans-serif;
+        background: #0a0a0a; color: #e7e7e7;
+      }
+      /* Fake "app" content behind everything, to show the avatar floats over it. */
+      #fake-app {
+        position: absolute; inset: 0; padding: 24px;
+        background:
+          radial-gradient(900px 500px at 80% -10%, #15223a 0%, transparent 60%),
+          linear-gradient(160deg, #0c0f15, #0a0a0a);
+      }
+      #fake-app h1 { font-size: 15px; opacity: .65; font-weight: 600; }
+      #canvas3d-wrap {
+        position: absolute; left: 24px; top: 70px; right: 360px; bottom: 24px;
+        border: 1px solid #1f2733; border-radius: 12px; overflow: hidden;
+        background: #06080c;
+      }
+      #canvas3d-wrap canvas { display: block; width: 100%; height: 100%; }
+      #scene-empty {
+        position: absolute; inset: 0; display: grid; place-items: center;
+        color: #4a5566; font-size: 13px; text-align: center; padding: 24px;
+      }
+
+      /* Right control rail (stands in for the chat / tool log). */
+      #rail {
+        position: absolute; top: 70px; right: 24px; bottom: 24px; width: 312px;
+        display: flex; flex-direction: column; gap: 10px;
+        background: #0e1219; border: 1px solid #1f2733; border-radius: 12px;
+        padding: 14px;
+      }
+      #rail h2 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #6b7686; }
+      .btn {
+        appearance: none; border: 1px solid #283142; background: #131927; color: #dfe6f0;
+        border-radius: 8px; padding: 8px 10px; font: inherit; cursor: pointer; text-align: left;
+      }
+      .btn:hover { background: #1a2233; }
+      .btn small { color: #7c879a; }
+      #log {
+        margin-top: auto; flex: 1 1 auto; min-height: 80px; overflow: auto;
+        background: #06080c; border: 1px solid #1b2230; border-radius: 8px; padding: 8px;
+        font-family: ui-monospace, monospace; font-size: 11px; color: #8aa0bf;
+        white-space: pre-wrap;
+      }
+
+      /* The floating avatar layer — pointer-events only on the avatar itself. */
+      #avatar-layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+      #avatar {
+        position: absolute; left: 40px; bottom: 40px; width: 132px; height: 168px;
+        pointer-events: auto; cursor: grab; user-select: none;
+        filter: drop-shadow(0 10px 24px rgba(0,0,0,.55));
+      }
+      #avatar.dragging { cursor: grabbing; }
+      #avatar canvas { display: block; }
+      #bubble {
+        position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%);
+        margin-bottom: 6px; max-width: 220px; padding: 7px 10px;
+        background: #eef3fb; color: #0c1118; border-radius: 10px; font-size: 12px;
+        opacity: 0; transition: opacity .2s; pointer-events: none; text-align: center;
+      }
+      #bubble.show { opacity: 1; }
+      #moodbar {
+        position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+        margin-top: 4px; width: 110px;
+      }
+      #moodbar .row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+      #moodbar .row span { width: 34px; color: #7c879a; font-size: 9px; text-transform: uppercase; }
+      #moodbar .track { flex: 1; height: 5px; border-radius: 3px; background: #1b2230; overflow: hidden; }
+      #moodbar .fill { height: 100%; transition: width .4s; }
+    </style>
+  </head>
+  <body>
+    <div id="fake-app">
+      <h1>platform content (the avatar floats above this, the 3D surface is the agent's canvas)</h1>
+      <div id="canvas3d-wrap"><div id="scene-empty">Agent canvas — empty.<br />Click a "render_3d" button to have Intelligence draw here.</div></div>
+      <div id="rail">
+        <h2>Simulated agent tool calls</h2>
+        <button class="btn" data-scene="solar">render_3d &nbsp;<small>· orbiting spheres</small></button>
+        <button class="btn" data-scene="bars">render_3d &nbsp;<small>· 3D equity bars</small></button>
+        <button class="btn" data-scene="logo">render_3d &nbsp;<small>· spinning torus knot</small></button>
+        <button class="btn" data-scene="clear"><small>clear scene</small></button>
+        <h2 style="margin-top:6px">Simulated platform events</h2>
+        <button class="btn" data-event="message">event: new chat message</button>
+        <button class="btn" data-event="task_done">event: task completed (+XP)</button>
+        <button class="btn" data-event="error">event: trade error / risk halt</button>
+        <button class="btn" data-event="idle">event: neglected (drain energy)</button>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <div id="avatar-layer">
+      <div id="avatar">
+        <div id="bubble"></div>
+        <canvas id="avatar-canvas" width="264" height="336" style="width:132px;height:168px"></canvas>
+        <div id="moodbar">
+          <div class="row"><span>mood</span><div class="track"><div class="fill" id="fill-mood" style="background:#5b9cff"></div></div></div>
+          <div class="row"><span>energy</span><div class="track"><div class="fill" id="fill-energy" style="background:#4ddb9a"></div></div></div>
+          <div class="row"><span>xp</span><div class="track"><div class="fill" id="fill-xp" style="background:#d9a441"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+
+      const log = (m) => {
+        const el = document.getElementById("log");
+        el.textContent += (el.textContent ? "\n" : "") + m;
+        el.scrollTop = el.scrollHeight;
+      };
+
+      /* ----------------------------------------------------------------------
+       * 1) RPG / TAMAGOTCHI STATE  (this is the model proposed in the report)
+       * -------------------------------------------------------------------- */
+      const state = {
+        mood: 70,      // 0..100  (sad -> happy)
+        energy: 85,    // 0..100  (drains over time / neglect)
+        xp: 20,        // 0..100 within level
+        level: 1,
+        expression: "idle", // idle | happy | thinking | sad | alert
+      };
+
+      function applyEvent(kind) {
+        switch (kind) {
+          case "message":   state.mood = clamp(state.mood + 4); state.expression = "thinking"; say("On it…"); break;
+          case "task_done": state.xp += 28; state.mood = clamp(state.mood + 10); state.expression = "happy"; say("Nice — done!"); break;
+          case "error":     state.mood = clamp(state.mood - 18); state.expression = "alert"; say("Heads up: risk halt."); break;
+          case "idle":      state.energy = clamp(state.energy - 25); state.mood = clamp(state.mood - 8); state.expression = "sad"; say("…you still there?"); break;
+        }
+        if (state.xp >= 100) { state.level++; state.xp -= 100; state.energy = 100; say("Level " + state.level + "!"); }
+        log(`event(${kind}) -> mood:${state.mood|0} energy:${state.energy|0} xp:${state.xp|0} lv:${state.level}`);
+        renderBars();
+        // Auto-relax expression after a beat.
+        clearTimeout(applyEvent._t);
+        applyEvent._t = setTimeout(() => (state.expression = "idle"), 2600);
+      }
+      const clamp = (n) => Math.max(0, Math.min(100, n));
+
+      function renderBars() {
+        document.getElementById("fill-mood").style.width = state.mood + "%";
+        document.getElementById("fill-energy").style.width = state.energy + "%";
+        document.getElementById("fill-xp").style.width = state.xp + "%";
+      }
+      let bubbleTimer;
+      function say(text) {
+        const b = document.getElementById("bubble");
+        b.textContent = text; b.classList.add("show");
+        clearTimeout(bubbleTimer);
+        bubbleTimer = setTimeout(() => b.classList.remove("show"), 2200);
+      }
+      // Passive energy drain (tamagotchi heartbeat).
+      setInterval(() => { state.energy = clamp(state.energy - 1); renderBars(); }, 4000);
+
+      /* ----------------------------------------------------------------------
+       * 2) AVATAR RENDERER  (2D canvas — stand-in for a Live2D/VRM avatar).
+       *    Cheap, expressive, zero-dep. Demonstrates idle bob + blink + emote.
+       * -------------------------------------------------------------------- */
+      const ac = document.getElementById("avatar-canvas");
+      const ctx = ac.getContext("2d");
+      let t = 0, nextBlink = 60, blink = 0;
+      const palette = { idle: "#5b9cff", happy: "#4ddb9a", thinking: "#9b8cff", sad: "#6b7686", alert: "#ff7a6b" };
+
+      function drawAvatar() {
+        t++;
+        const w = ac.width, h = ac.height;
+        ctx.clearRect(0, 0, w, h);
+        const bob = Math.sin(t / 28) * 6;
+        const cx = w / 2, cy = h / 2 + bob;
+        const accent = palette[state.expression] || palette.idle;
+
+        // body (rounded blob)
+        ctx.fillStyle = "#121828";
+        ctx.strokeStyle = accent; ctx.lineWidth = 6;
+        roundRect(cx - 78, cy - 86, 156, 196, 56); ctx.fill(); ctx.stroke();
+
+        // glow ring reflects mood
+        ctx.globalAlpha = 0.25 + (state.mood / 100) * 0.5;
+        ctx.strokeStyle = accent; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(cx, cy - 10, 92, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // eyes (blink + expression)
+        if (--nextBlink <= 0) { blink = 6; nextBlink = 90 + Math.random() * 120; }
+        const eo = state.expression === "sad" ? 8 : 0;
+        const eh = blink > 0 ? 2 : 16;
+        if (blink > 0) blink--;
+        ctx.fillStyle = "#eef3fb";
+        eye(cx - 32, cy - 22 + eo, eh); eye(cx + 32, cy - 22 + eo, eh);
+
+        // mouth reflects expression
+        ctx.strokeStyle = "#eef3fb"; ctx.lineWidth = 5; ctx.beginPath();
+        if (state.expression === "happy") ctx.arc(cx, cy + 22, 26, 0.1 * Math.PI, 0.9 * Math.PI);
+        else if (state.expression === "sad" || state.expression === "alert") ctx.arc(cx, cy + 48, 26, 1.1 * Math.PI, 1.9 * Math.PI);
+        else { ctx.moveTo(cx - 20, cy + 30); ctx.lineTo(cx + 20, cy + 30); }
+        ctx.stroke();
+
+        // "thinking" dots
+        if (state.expression === "thinking") {
+          ctx.fillStyle = accent;
+          for (let i = 0; i < 3; i++) {
+            const a = (t / 10 + i) % 3;
+            ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin((t / 14) + i));
+            ctx.beginPath(); ctx.arc(cx + 54, cy - 60 - i * 14, 4, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+        requestAnimationFrame(drawAvatar);
+      }
+      function eye(x, y, h) { ctx.beginPath(); ctx.ellipse(x, y, 8, h, 0, 0, Math.PI * 2); ctx.fill(); }
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+      }
+      drawAvatar();
+      renderBars();
+
+      // Draggable avatar (floats anywhere over the app, like Clippy/Sayah).
+      (() => {
+        const el = document.getElementById("avatar");
+        let sx, sy, ox, oy, drag = false;
+        el.addEventListener("pointerdown", (e) => {
+          drag = true; el.classList.add("dragging"); el.setPointerCapture(e.pointerId);
+          sx = e.clientX; sy = e.clientY;
+          const r = el.getBoundingClientRect(); ox = r.left; oy = r.top;
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!drag) return;
+          el.style.left = ox + (e.clientX - sx) + "px";
+          el.style.top = oy + (e.clientY - sy) + "px";
+          el.style.bottom = "auto";
+        });
+        el.addEventListener("pointerup", () => { drag = false; el.classList.remove("dragging"); });
+        el.addEventListener("click", () => { state.expression = "happy"; say("hi!"); });
+      })();
+
+      /* ----------------------------------------------------------------------
+       * 3) AGENT "render_3d" TOOL  →  Three.js scene from a JSON description.
+       *    The SCENE SCHEMA below is exactly what the report proposes the tool
+       *    returns. The frontend is a pure interpreter of that JSON.
+       * -------------------------------------------------------------------- */
+      const wrap = document.getElementById("canvas3d-wrap");
+      let renderer, scene, camera, animed = [], raf3d;
+      function ensureThree() {
+        if (renderer) return;
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        wrap.appendChild(renderer.domElement);
+        camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 100);
+        camera.position.set(0, 2.2, 8);
+        addEventListener("resize", () => {
+          if (!renderer) return;
+          renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+          camera.aspect = wrap.clientWidth / wrap.clientHeight; camera.updateProjectionMatrix();
+        });
+      }
+
+      // Interpreter: { background, camera, nodes:[{geometry,args,position,scale,color,spin}] }
+      function renderScene(desc) {
+        ensureThree();
+        document.getElementById("scene-empty")?.remove();
+        cancelAnimationFrame(raf3d);
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(desc.background ?? "#06080c");
+        animed = [];
+        scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+        const dir = new THREE.DirectionalLight(0xffffff, 1.1); dir.position.set(4, 8, 6); scene.add(dir);
+        if (desc.camera?.position) camera.position.fromArray(desc.camera.position);
+
+        for (const n of desc.nodes ?? []) {
+          const geo = makeGeometry(n.geometry, n.args || []);
+          const mat = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(n.color ?? "#5b9cff"),
+            metalness: n.metalness ?? 0.3, roughness: n.roughness ?? 0.45,
+            emissive: new THREE.Color(n.emissive ?? "#000000"),
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          if (n.position) mesh.position.fromArray(n.position);
+          if (n.scale) mesh.scale.setScalar(n.scale);
+          scene.add(mesh);
+          if (n.spin || n.orbit) animed.push({ mesh, spin: n.spin || 0, orbit: n.orbit });
+        }
+        log(`render_3d -> ${ (desc.nodes||[]).length } node(s)`);
+        const loop = () => {
+          raf3d = requestAnimationFrame(loop);
+          for (const a of animed) {
+            if (a.spin) a.mesh.rotation.y += a.spin;
+            if (a.orbit) {
+              a.orbit.theta = (a.orbit.theta || 0) + (a.orbit.speed || 0.01);
+              a.mesh.position.x = Math.cos(a.orbit.theta) * a.orbit.radius;
+              a.mesh.position.z = Math.sin(a.orbit.theta) * a.orbit.radius;
+            }
+          }
+          renderer.render(scene, camera);
+        };
+        loop();
+      }
+      function makeGeometry(type, a) {
+        switch (type) {
+          case "sphere":      return new THREE.SphereGeometry(a[0] ?? 1, 32, 32);
+          case "box":         return new THREE.BoxGeometry(a[0] ?? 1, a[1] ?? 1, a[2] ?? 1);
+          case "cylinder":    return new THREE.CylinderGeometry(a[0] ?? 0.5, a[1] ?? 0.5, a[2] ?? 1, 24);
+          case "torusKnot":   return new THREE.TorusKnotGeometry(a[0] ?? 1, a[1] ?? 0.3, 120, 16);
+          default:            return new THREE.IcosahedronGeometry(a[0] ?? 1, 0);
+        }
+      }
+      function clearScene() {
+        cancelAnimationFrame(raf3d);
+        if (renderer) { renderer.dispose(); renderer.domElement.remove(); renderer = null; }
+        const e = document.createElement("div"); e.id = "scene-empty";
+        e.innerHTML = "Agent canvas — empty.<br />Click a \"render_3d\" button to have Intelligence draw here.";
+        wrap.appendChild(e);
+        log("scene cleared");
+      }
+
+      // Example scene descriptions == what the agent tool would emit as JSON.
+      const SCENES = {
+        solar: {
+          background: "#05070d",
+          nodes: [
+            { geometry: "sphere", args: [1], color: "#ffcf5b", emissive: "#5a3d00", spin: 0.01 },
+            { geometry: "sphere", args: [0.4], color: "#5b9cff", orbit: { radius: 3, speed: 0.02 } },
+            { geometry: "sphere", args: [0.6], color: "#4ddb9a", orbit: { radius: 4.6, speed: 0.012 } },
+            { geometry: "sphere", args: [0.3], color: "#ff7a6b", orbit: { radius: 6, speed: 0.03 } },
+          ],
+        },
+        bars: {
+          background: "#06080c",
+          nodes: [3.2, 1.6, 2.4, 4.1, 2.0].map((hgt, i) => ({
+            geometry: "box", args: [0.7, hgt, 0.7],
+            position: [-3 + i * 1.5, hgt / 2 - 1, 0],
+            color: hgt > 3 ? "#4ddb9a" : "#5b9cff", metalness: 0.5, roughness: 0.25,
+          })),
+        },
+        logo: {
+          background: "#070a12",
+          nodes: [{ geometry: "torusKnot", args: [1.4, 0.42], color: "#9b8cff", metalness: 0.7, roughness: 0.2, spin: 0.02 }],
+        },
+      };
+
+      document.querySelectorAll("[data-scene]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const k = b.dataset.scene;
+          if (k === "clear") return clearScene();
+          state.expression = "thinking"; say("drawing…");
+          renderScene(SCENES[k]);
+          setTimeout(() => { state.expression = "happy"; say("done"); }, 600);
+        })
+      );
+      document.querySelectorAll("[data-event]").forEach((b) =>
+        b.addEventListener("click", () => applyEvent(b.dataset.event))
+      );
+
+      log("spike ready. avatar is draggable; buttons simulate agent tool calls + events.");
+    </script>
+  </body>
+</html>

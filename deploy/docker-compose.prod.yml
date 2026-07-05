@@ -1,0 +1,23 @@
+# Official multi-tenant SaaS hub (your VPS only).
+# Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to your public domain.
+services:
+  godmode:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "80:80"
+    env_file:
+      - .env.production
+    volumes:
+      - godmode-data:/data
+    environment:
+      - PLATFORM_DATA_DIR=/data
+      - DEPLOYMENT_MODE=hub
+      - BRIDGE_HOST=127.0.0.1
+      - AUTH_ALLOW_ANONYMOUS=false
+      - AUTH_ALLOW_SIGNUP=false
+    restart: unless-stopped
+
+volumes:
+  godmode-data:

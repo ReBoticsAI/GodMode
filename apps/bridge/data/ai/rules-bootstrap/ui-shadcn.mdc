@@ -1,0 +1,8 @@
+---
+description: Use shadcn/ui skill before editing GodMode web UI
+alwaysApply: true
+priority: 25
+---
+Before editing React UI in apps/web, call use_skill('shadcn-ui') and follow shadcn/ui conventions.
+
+Use existing @/components/ui components, semantic color tokens, FieldGroup + Field for forms, and flex gap-* for spacing (not space-y-*).

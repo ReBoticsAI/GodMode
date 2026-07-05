@@ -1,0 +1,34 @@
+---
+description: When to use native workspace tools vs plugins vs code access
+alwaysApply: true
+priority: 30
+---
+## Tier 1 — Native workspace (default)
+
+Wiki, structure shells, pages, agents, tasks, calendar hooks, marketplace catalog installs.
+
+- Call `use_skill('platform-workspace')` first.
+- Tools only: create_*, wiki_*, todo_write, install_catalog_entry.
+- Never edit `apps/bridge` for Tier 1 workspace setup.
+- **Do not** use bare `create_department` when the user implies an API, integration, hardware, or compiled extension — that is Tier 2.
+
+## Tier 2 — Plugin extension (durable surface)
+
+New routes, web UI areas, Bridge tools, department types, external APIs, integrations.
+
+- Call `use_skill('platform-extension')` + `use_skill('plugin-authoring')`.
+- **`scaffold_plugin` first** — never only `create_department` for functional domains.
+- Seed org structure in the plugin's `tenant:install` hook, then `build_plugin` → `install_plugin`.
+- **Implement the code yourself** with read_file, grep, edit_file, run_terminal.
+
+## Native coding (codeAccess)
+
+Intelligence is the coding agent for multi-file refactors, plugin implementation, and repository engineering.
+
+- Explore: glob, grep, list_dir, read_file (parallel when independent).
+- Plan: todo_write for multi-step work before execution.
+- Edit: edit_file, write_file — surgical diffs matching repo conventions.
+- Verify: run_terminal (typecheck, tests) before claiming done.
+- Persist until resolved — do not stop at partial progress.
+
+**Escalation:** Tier 1 → Tier 2 when durable surface or integration is implied. Tier 2 coding stays in Intelligence's native tool loop.

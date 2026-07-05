@@ -1,0 +1,17 @@
+# Unsloth QLoRA training dependencies for scripts/ai/unsloth-train.py
+#
+# Requires NVIDIA GPU + CUDA. Install PyTorch with CUDA first if needed:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+#
+# Then:
+#   pip install -r scripts/ai/requirements-train.txt
+#
+# Also requires llama.cpp with convert_lora_to_gguf.py (set LLAMA_CPP_DIR).
+
+unsloth>=2025.1.0
+transformers>=4.48.0
+datasets>=3.2.0
+trl>=0.15.0
+peft>=0.14.0
+accelerate>=1.2.0
+bitsandbytes>=0.45.0

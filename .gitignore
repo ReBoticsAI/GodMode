@@ -1,0 +1,107 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# TypeScript / JavaScript build output
+dist/
+**/dist/
+build/
+**/build/
+.vite/
+**/.vite/
+*.tsbuildinfo
+coverage/
+**/coverage/
+.cache/
+.apps-cache/
+
+# Sierra Chart / C++ build artifacts
+*.dll
+*.exe
+*.o
+*.obj
+*.pdb
+*.lib
+*.exp
+
+# Generated Sierra Chart studies (reproducible via npm run codegen)
+sierrachart/studies/playbooks/Playbook_*.cpp
+
+# Local runtime data / databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.duckdb
+*.duckdb.wal
+*.wal
+*.shm
+platform-ipc/
+apps/bridge/data/**/*.db
+apps/bridge/data/**/*.sqlite*
+apps/bridge/data/**/timeseries/
+apps/bridge/data/**/blobs/
+apps/bridge/data/**/artifacts/
+
+# Environment and secrets
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Logs, temp, runtime artifacts
+*.log
+*.tmp
+.tmp/
+.screenshots/
+*.sse
+.cursor/debug-*.log
+.cursor/plans/
+.cursor/rules/
+**/from_sc.txt
+**/to_sc.txt
+
+# Local operator AI pack (clone from godmode-operator-pack; never commit to OSS core)
+apps/bridge/data/ai/rules/
+apps/bridge/data/ai/skills/
+!apps/bridge/data/ai/rules-bootstrap/
+!apps/bridge/data/ai/skills-bootstrap/
+
+# AI training / model artifacts
+apps/bridge/data/ai/adapters/
+apps/bridge/data/ai/datasets/
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# Exported trading/backtest data
+backtests/
+backtest-exports/
+**/*trade*.csv
+**/*trades*.csv
+**/*fills*.csv
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Local run markers
+.last-run-id.txt
+.holdings-key
+federation-public-url.txt

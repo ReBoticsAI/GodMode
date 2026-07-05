@@ -1,0 +1,40 @@
+{
+  "name": "@godmode/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test:awaiting": "tsx src/services/__tests__/card-awaiting.test.ts"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.23",
+    "@godmode/flow-core": "*",
+    "@godmode/plugin-api": "*",
+    "@godmode/plugin-host": "*",
+    "better-sqlite3": "^12.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "duckdb": "^1.4.4",
+    "express": "^4.21.2",
+    "multer": "^2.1.1",
+    "node-cron": "^3.0.3",
+    "uuid": "^11.0.5",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

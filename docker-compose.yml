@@ -1,0 +1,20 @@
+# Serves the GodMode web dashboard on http://<this-host>:5173
+#
+# The Bridge backend (apps/bridge) talks to Sierra Chart and must run on your
+# Windows machine. Point the dashboard at it by setting BRIDGE_TARGET, e.g.:
+#
+#   BRIDGE_TARGET=http://192.168.1.50:3847 docker compose up
+#
+# If unset, /api and /ws proxy to localhost (works only if a bridge runs here).
+services:
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    environment:
+      - BRIDGE_TARGET=${BRIDGE_TARGET:-http://127.0.0.1:3847}
+    volumes:
+      - .:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -w @godmode/web -- --host 0.0.0.0"
+    restart: unless-stopped

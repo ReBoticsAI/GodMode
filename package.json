@@ -1,0 +1,25 @@
+{
+  "name": "godmode",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build -w @godmode/flow-core -w @godmode/plugin-api -w @godmode/plugin-host",
+    "dev": "concurrently \"npm run dev -w @godmode/bridge\" \"npm run dev -w @godmode/web\"",
+    "dev:bridge": "npm run dev -w @godmode/bridge",
+    "dev:web": "npm run dev -w @godmode/web",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "audit:oss": "node scripts/audit-oss-core.mjs",
+    "seed:demo": "node scripts/seed-readme-demo.mjs",
+    "plugins": "tsx scripts/godmode-plugins-cli.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

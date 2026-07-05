@@ -1,0 +1,23 @@
+# Personal single-tenant Docker instance. Marketplace/credits proxy to official hub.
+services:
+  godmode-client:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:80"
+    env_file:
+      - .env.client
+    volumes:
+      - godmode-client-data:/data
+    environment:
+      - PLATFORM_DATA_DIR=/data
+      - DEPLOYMENT_MODE=client
+      - AUTH_ALLOW_ANONYMOUS=false
+      - AUTH_ALLOW_SIGNUP=false
+      # Required: official hub base URL (no trailing slash)
+      - CLOUD_HUB_URL=${CLOUD_HUB_URL}
+    restart: unless-stopped
+
+volumes:
+  godmode-client-data:
