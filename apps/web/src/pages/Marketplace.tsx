@@ -383,7 +383,7 @@ export default function MarketplacePage() {
                   id="local-plugin-path"
                   value={localPath}
                   onChange={(e) => setLocalPath(e.target.value)}
-                  placeholder="C:\Users\you\Desktop\godmode-plugin-sierra"
+                  placeholder="C:\Users\you\Desktop\my-godmode-plugin"
                 />
               </div>
               <Button

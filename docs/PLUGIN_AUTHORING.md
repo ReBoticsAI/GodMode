@@ -144,7 +144,7 @@ On **tenant install**, core imports these into the tenant SQLite (`ai_rules` / `
 
 `.mdc` files are the **authoring format** (easy to review in git, same shape as Cursor rules). The Bridge **imports them into the database** on first knowledge load and on plugin install; runtime reads from SQLite, not the filesystem.
 
-Core ships generic bootstrap rules in `apps/bridge/data/ai/rules-bootstrap/`. Domain rules belong in the plugin that owns that domain (Sierra, Polymarket, etc.).
+Core ships generic bootstrap rules in `apps/bridge/data/ai/rules-bootstrap/`. Domain rules belong in the plugin that owns that domain (e.g. a trading or analytics integration plugin).
 
 ## Packages
 

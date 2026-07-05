@@ -1,22 +1,21 @@
 import * as ReactDOM from "react-dom";
+import * as ReactDOMClient from "react-dom/client";
 
 export default ReactDOM;
 
 export const {
   createPortal,
   flushSync,
-  hydrate,
   preconnect,
   prefetchDNS,
   preinit,
   preinitModule,
   preload,
   preloadModule,
-  render,
-  unmountComponentAtNode,
   unstable_batchedUpdates,
+  useFormState,
+  useFormStatus,
   version,
 } = ReactDOM;
 
-export const createRoot = ReactDOM.createRoot;
-export const hydrateRoot = ReactDOM.hydrateRoot;
+export const { createRoot, hydrateRoot } = ReactDOMClient;
