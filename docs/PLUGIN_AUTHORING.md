@@ -11,9 +11,9 @@ GodMode core ships as a **complete personal OS** — Intelligence, wiki, tasks, 
 | **Core** | Auth, tenants, Intelligence, productivity apps, plugin platform APIs |
 | **Plugins** | Domain routes, tools, web UI, and install hooks registered at runtime |
 
-Bridge loads plugins from `GODMODE_PLUGIN_PATH` or marketplace install paths. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (Settings → Plugins).
+Bridge loads plugins from Marketplace-registered paths or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Unofficial** or **Installed**).
 
-Fresh clones run as personal OS only until you install plugins from Marketplace or set `GODMODE_PLUGIN_PATH`.
+Fresh clones run as personal OS only until you install plugins from **Marketplace**.
 
 ## Manifest (`godmode.plugin.json`)
 
@@ -83,21 +83,45 @@ export const registerWeb: GodModeWebPluginRegister = (api) => {
 };
 ```
 
-Web bundles are served at `GET /api/plugins/:id/web.js` and loaded via dynamic import.
+Web bundles are served at `GET /api/plugins/:id/web.js` and loaded via dynamic import (with an import map for shared dependencies).
+
+### Shared dependencies (import map)
+
+The host serves a browser import map so plugin bundles share one copy of React, the router, and other heavy libraries. In `tsup`, **externalize** at least:
+
+- `react`, `react-dom`, `react-router-dom`
+- `@godmode/plugin-api`, `@godmode/web-host`
+- `lucide-react`, `sonner`, `@xyflow/react`, `@godmode/flow-core`, `recharts`
+- `use-sync-external-store` and its `/shim` subpaths
+
+Do not bundle these into `dist/web.js` — the host resolves them at runtime.
+
+### Host singletons (`@godmode/web-host`)
+
+Some host modules must be the **same instance** as the main app (plugin page registry, structure tabs, React context). If you bundle them via a `@/` alias, you get a second copy and tab pages fall back to placeholders.
+
+Import host singletons from `@godmode/web-host` instead of `@/…`:
+
+```typescript
+import { StructureTabGroupPage } from "@godmode/web-host";
+```
+
+Add `"@godmode/web-host"` to your web `external` list in `tsup.config.ts`. You may still use `@/` for presentational imports (buttons, cards, `PageHeader`) that do not carry cross-bundle singleton state.
+
+Define `import.meta.env.*` in the web build if you bundle host `@/api` code — the host inlines those at compile time; plugin bundles do not.
 
 ## Discovery
 
-1. `GODMODE_PLUGIN_PATH` — semicolon-separated paths (Windows) for non-standard layouts
-2. Marketplace install — paths persisted in `platform_meta.marketplace.plugin_paths`
-3. **Settings → Plugins** — per-tenant install from discovered roots
+1. **Marketplace** — local folder UI, catalog install, or git clone; paths persisted in `platform_meta.marketplace.plugin_paths`
+2. `GODMODE_PLUGIN_PATH` — optional env override for advanced setups
 
-There is no automatic sibling-repo discovery in OSS core. Clone plugins yourself or install from Marketplace.
+There is no automatic sibling-repo discovery in OSS core. Clone plugins yourself or add them under **Marketplace → Unofficial**.
 
 ## Per-tenant install
 
 `tenant_plugins` records which plugins a workspace has installed. Bridge gates manifest, web bundles, and routes on this table.
 
-Install: Settings → Plugins or `npm run plugins -- install <id> --tenant <uuid>`.
+Install: **Marketplace → Unofficial** (local folder, catalog entry, or discovered plugin) or `npm run plugins -- install <id> --tenant <uuid>`.
 
 Only the target plugin's `tenant:install` hook runs (not all plugins).
 
@@ -105,7 +129,7 @@ Only the target plugin's `tenant:install` hook runs (not all plugins).
 
 Use `tsup` or similar to emit `dist/bridge.js` and `dist/web.js`. See your plugin repo's README for a full example.
 
-Web bundles load at runtime from `GET /api/plugins/:id/web.js` via dynamic import — no core Vite aliases required.
+Web bundles load at runtime from `GET /api/plugins/:id/web.js` via dynamic import and the host import map — no `@/` aliases in the core Vite app are required at plugin build time except where your repo uses them locally via `tsup` `esbuildOptions.alias`.
 
 ## Packages
 

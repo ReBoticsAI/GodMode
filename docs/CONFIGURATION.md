@@ -32,7 +32,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GODMODE_PLUGIN_PATH` | empty | Semicolon-separated plugin roots (Windows) |
+| `GODMODE_PLUGIN_PATH` | empty | Optional advanced override: semicolon-separated plugin roots (Windows). Prefer **Marketplace → Unofficial** for UI-based install. |
 | `GITHUB_TOKEN` | empty | Clone private GitHub plugin repos from Marketplace |
 | `GODMODE_PLUGIN_SCAFFOLD_DIR` | `~/godmode-plugins` | Target dir for `scaffold_plugin` tool |
 | `MARKETPLACE_OFFICIAL_URL` | GitHub raw index | Official catalog URL |

@@ -8,6 +8,7 @@ import {
 } from "../core-db.js";
 import { coreUserToAuth } from "../types/express-auth.js";
 import {
+  clearLegacySessionCookie,
   clearSessionCookie,
   createSession,
   deleteSession,
@@ -168,9 +169,12 @@ export function createAuthRouter(): Router {
 
   router.post("/logout", attachAuthContext, (req, res) => {
     const core = getCoreDb();
-    const sessionId = parseSessionCookie(req.headers.cookie);
+    const sessionId = req.sessionId ?? parseSessionCookie(req.headers.cookie);
     if (sessionId) deleteSession(core, sessionId);
-    res.setHeader("Set-Cookie", clearSessionCookie(secure));
+    res.setHeader("Set-Cookie", [
+      clearSessionCookie(secure),
+      clearLegacySessionCookie(secure),
+    ]);
     res.json({ ok: true });
   });
 

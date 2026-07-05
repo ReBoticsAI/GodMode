@@ -46,7 +46,7 @@ Complete reference for the personal OS shipped in core. **Intelligence** is the 
 | **Shared** | Sidebar → Shared | Live resources another user granted you; Tailscale network panel for cross-home federation. |
 | **Settings** | `/settings` | Account, workspace, plugins, AI configuration, and slash commands. |
 | **Marketplace** | `/marketplace` | Official and Unofficial catalog tabs; free install of packs and plugins. See [MARKETPLACE.md](MARKETPLACE.md). |
-| **Settings → Plugins** | `/settings` (Plugins tab) | Per-tenant plugin install and management. |
+| **Marketplace** | `/marketplace` | Install and manage plugin packs (Official, Unofficial, Installed). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
 
 ## Chat modes and commands

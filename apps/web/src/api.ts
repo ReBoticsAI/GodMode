@@ -2329,9 +2329,10 @@ export function createAuthTenant(name: string, slug?: string) {
 }
 
 export function logoutAuth() {
-  return api<{ ok: boolean }>("/auth/logout", { method: "POST" }).finally(() =>
-    clearSessionToken()
-  );
+  return api<{ ok: boolean }>("/auth/logout", { method: "POST" }).finally(() => {
+    clearSessionToken();
+    clearActiveTenant();
+  });
 }
 
 export function changePasswordAuth(currentPassword: string, newPassword: string) {
@@ -2490,6 +2491,23 @@ export interface CatalogEntry {
   sourceName?: string;
 }
 
+export interface DiscoveredPlugin {
+  id: string;
+  version: string;
+  name: string;
+  pluginRoot: string;
+  loaded: boolean;
+  installed: boolean;
+  source: "env" | "marketplace";
+}
+
+export interface TenantPluginRow {
+  plugin_id: string;
+  version: string;
+  installed_at: string;
+  plugin_root?: string | null;
+}
+
 export function fetchOfficialCatalog() {
   return api<{ catalogUrl: string; entries: CatalogEntry[] }>("/marketplace/catalog/official");
 }
@@ -2498,6 +2516,8 @@ export function fetchUnofficialCatalog() {
   return api<{
     sources: Array<{ id: string; name: string; url: string; created_at: string }>;
     entries: CatalogEntry[];
+    discovered: DiscoveredPlugin[];
+    localPaths: string[];
   }>("/marketplace/catalog/unofficial");
 }
 
@@ -2522,9 +2542,45 @@ export function installCatalogEntry(entryId: string, sourceCatalog?: string) {
 export function fetchInstalledCatalog() {
   return api<{
     catalogInstalls: Array<Record<string, unknown>>;
-    plugins: Array<Record<string, unknown>>;
-    available: Array<Record<string, unknown>>;
+    plugins: TenantPluginRow[];
+    available: DiscoveredPlugin[];
+    discovered: DiscoveredPlugin[];
   }>("/marketplace/catalog/installed");
+}
+
+export function registerLocalPlugin(path: string) {
+  return api<{
+    pluginId: string;
+    pluginRoot: string;
+    name: string;
+    version: string;
+    installed: boolean;
+    built: boolean;
+  }>("/marketplace/catalog/local-plugins", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function removeLocalPlugin(path: string) {
+  return api<{ ok: boolean }>("/marketplace/catalog/local-plugins", {
+    method: "DELETE",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function installWorkspacePlugin(pluginId: string) {
+  return api<{ ok: boolean; pluginId: string }>("/marketplace/catalog/plugins/install", {
+    method: "POST",
+    body: JSON.stringify({ pluginId }),
+  });
+}
+
+export function uninstallWorkspacePlugin(pluginId: string) {
+  return api<{ ok: boolean; pluginId: string }>("/marketplace/catalog/plugins/uninstall", {
+    method: "POST",
+    body: JSON.stringify({ pluginId }),
+  });
 }
 
 export function fetchNetworkStatus() {

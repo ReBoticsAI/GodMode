@@ -62,7 +62,7 @@ Slash commands (type `/` in the composer) include `/help`, `/clear`, and workspa
 | Goal | Where |
 |------|--------|
 | Edit navigation tree | **Structure** (`/structure`) |
-| Install a plugin pack | **Marketplace** or **Settings → Plugins** |
+| Install a plugin pack | **Marketplace → Unofficial** (local folder or catalog) |
 | Private plugin | [MARKETPLACE.md](./MARKETPLACE.md#private-plugins) |
 | Full env reference | [CONFIGURATION.md](./CONFIGURATION.md) |
 | Post-install checklist | [VERIFICATION.md](./VERIFICATION.md) |

@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 import { logoutAuth } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
-import { PluginsPanel } from "@/components/PluginsPanel";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light", Icon: SunIcon },
@@ -91,9 +90,10 @@ function SessionCard() {
     try {
       await logoutAuth();
     } catch {
-      /* ignore */
+      /* still clear local session below */
     }
     await refresh();
+    window.location.assign("/");
   };
 
   return (
@@ -122,7 +122,6 @@ export default function Settings() {
       <div className="flex flex-col gap-4">
         <AccountCard />
         <AppearanceCard />
-        <PluginsPanel />
         <SessionCard />
       </div>
     </Page>

@@ -159,9 +159,10 @@ export function UserProfilePanel() {
     try {
       await logoutAuth();
     } catch {
-      /* ignore */
+      /* still clear local session below */
     }
     await refresh();
+    window.location.assign("/");
   };
 
   const handleSaveProfile = async () => {

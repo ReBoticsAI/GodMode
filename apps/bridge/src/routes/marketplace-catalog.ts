@@ -10,12 +10,19 @@ import {
   fetchOfficialCatalog,
   fetchUnofficialCatalog,
   installCatalogEntry,
+  installDiscoveredPlugin,
   listCatalogInstalls,
   listCatalogSources,
+  listDiscoveredPluginsForTenant,
+  registerLocalPluginFolder,
   removeCatalogSource,
+  removeLocalPluginFolder,
+  uninstallDiscoveredPlugin,
+  extraPluginPathsFromMeta,
 } from "../services/marketplace-catalog.js";
 import { getCoreDb } from "../core-db.js";
 import { listInstalledPlugins, listAvailablePlugins } from "../plugins/plugin-install.js";
+import { requireTenantRole } from "../services/auth/middleware.js";
 
 export function createMarketplaceCatalogRouter(): Router {
   const router = Router();
@@ -37,7 +44,9 @@ export function createMarketplaceCatalogRouter(): Router {
       const core = getCoreDb();
       const sources = listCatalogSources(core, req.user!.id);
       const entries = await fetchUnofficialCatalog(core, req.user!.id);
-      res.json({ sources, entries });
+      const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
+      const localPaths = extraPluginPathsFromMeta(core);
+      res.json({ sources, entries, discovered, localPaths });
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : "Failed to load unofficial catalog",
@@ -76,7 +85,77 @@ export function createMarketplaceCatalogRouter(): Router {
     const catalogInstalls = listCatalogInstalls(core, req.tenantId!);
     const plugins = listInstalledPlugins(core, req.tenantId!);
     const available = listAvailablePlugins();
-    res.json({ catalogInstalls, plugins, available });
+    const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
+    res.json({ catalogInstalls, plugins, available, discovered });
+  });
+
+  router.post("/local-plugins", requireTenantRole("owner"), async (req, res) => {
+    try {
+      const core = getCoreDb();
+      const pathInput = String(req.body?.path ?? "").trim();
+      if (!pathInput) {
+        res.status(400).json({ error: "path required" });
+        return;
+      }
+      const result = await registerLocalPluginFolder(core, req.tenantId!, pathInput, {
+        userId: req.user!.id,
+        installForTenant: req.body?.installForTenant !== false,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Failed to register local plugin",
+      });
+    }
+  });
+
+  router.delete("/local-plugins", requireTenantRole("owner"), (req, res) => {
+    const core = getCoreDb();
+    const pathInput = String(req.body?.path ?? "").trim();
+    if (!pathInput) {
+      res.status(400).json({ error: "path required" });
+      return;
+    }
+    const ok = removeLocalPluginFolder(core, pathInput);
+    if (!ok) {
+      res.status(404).json({ error: "Local plugin path not registered" });
+      return;
+    }
+    res.json({ ok: true });
+  });
+
+  router.post("/plugins/install", requireTenantRole("owner"), async (req, res) => {
+    try {
+      const core = getCoreDb();
+      const pluginId = String(req.body?.pluginId ?? "").trim();
+      if (!pluginId) {
+        res.status(400).json({ error: "pluginId required" });
+        return;
+      }
+      await installDiscoveredPlugin(core, req.tenantId!, pluginId);
+      res.json({ ok: true, pluginId });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Install failed",
+      });
+    }
+  });
+
+  router.post("/plugins/uninstall", requireTenantRole("owner"), async (req, res) => {
+    try {
+      const core = getCoreDb();
+      const pluginId = String(req.body?.pluginId ?? "").trim();
+      if (!pluginId) {
+        res.status(400).json({ error: "pluginId required" });
+        return;
+      }
+      await uninstallDiscoveredPlugin(core, req.tenantId!, pluginId);
+      res.json({ ok: true, pluginId });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Uninstall failed",
+      });
+    }
   });
 
   router.post("/install/:entryId", async (req, res) => {

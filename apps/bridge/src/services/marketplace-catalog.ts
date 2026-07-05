@@ -6,8 +6,15 @@ import { config } from "../config.js";
 import { getCoreDb, type CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { importEntity, type PortableBundle } from "./portability.js";
-import { installPluginForTenant } from "../plugins/plugin-install.js";
+import {
+  installPluginForTenant,
+  listAvailablePlugins,
+  listInstalledPlugins,
+  uninstallPluginForTenant,
+} from "../plugins/plugin-install.js";
 import { loadPluginFromRoot } from "../plugins/loader.js";
+import { pluginRuntime } from "../plugins/runtime.js";
+import { readGodmodePluginManifest } from "@godmode/plugin-api";
 
 export type CatalogInstallType = "clone" | "plugin";
 
@@ -272,19 +279,209 @@ export function extraPluginPathsFromMeta(core: CoreDatabase): string[] {
   }
 }
 
+export function normalizeLocalPathInput(raw: string): string {
+  let p = raw.trim().replace(/^["']|["']$/g, "");
+  if (p.startsWith("file://")) {
+    p = p.slice("file://".length);
+  }
+  return path.resolve(p);
+}
+
+function bridgeEntryExists(pluginRoot: string): boolean {
+  const manifest = readGodmodePluginManifest(pluginRoot);
+  const entry = manifest.bridge?.entry ?? "dist/bridge.js";
+  const candidates = [
+    path.join(pluginRoot, entry),
+    path.join(pluginRoot, entry.replace(/\.js$/, ".ts")),
+    path.join(pluginRoot, "src/bridge/index.ts"),
+  ];
+  return candidates.some((c) => fs.existsSync(c));
+}
+
+function ensurePluginBuilt(pluginRoot: string): void {
+  if (bridgeEntryExists(pluginRoot)) return;
+  const pkg = path.join(pluginRoot, "package.json");
+  if (!fs.existsSync(pkg)) {
+    throw new Error(
+      "Plugin is not built and has no package.json. Run npm install && npm run build in the plugin folder first."
+    );
+  }
+  console.log(`[catalog] building plugin at ${pluginRoot}…`);
+  execSync("npm run build", {
+    cwd: pluginRoot,
+    stdio: "pipe",
+    timeout: 300_000,
+    env: { ...process.env, CI: "true" },
+  });
+  if (!bridgeEntryExists(pluginRoot)) {
+    throw new Error("Plugin build finished but bridge entry is still missing.");
+  }
+}
+
+export function listDiscoveredPluginsForTenant(
+  core: CoreDatabase,
+  tenantId: string
+): Array<{
+  id: string;
+  version: string;
+  name: string;
+  pluginRoot: string;
+  loaded: boolean;
+  installed: boolean;
+  source: "env" | "marketplace";
+}> {
+  const installedIds = new Set(
+    listInstalledPlugins(core, tenantId).map((r) => r.plugin_id)
+  );
+  const marketplacePaths = new Set(
+    extraPluginPathsFromMeta(core).map((p) => path.resolve(p))
+  );
+  const out: Array<{
+    id: string;
+    version: string;
+    name: string;
+    pluginRoot: string;
+    loaded: boolean;
+    installed: boolean;
+    source: "env" | "marketplace";
+  }> = [];
+
+  for (const p of listAvailablePlugins()) {
+    const resolved = path.resolve(p.pluginRoot);
+    out.push({
+      id: p.id,
+      version: p.version,
+      name: p.name,
+      pluginRoot: resolved,
+      loaded: p.loaded,
+      installed: installedIds.has(p.id),
+      source: marketplacePaths.has(resolved) ? "marketplace" : "env",
+    });
+  }
+  return out;
+}
+
+export async function registerLocalPluginFolder(
+  core: CoreDatabase,
+  tenantId: string,
+  rawPath: string,
+  opts?: { installForTenant?: boolean; userId?: string }
+): Promise<{
+  pluginId: string;
+  pluginRoot: string;
+  name: string;
+  version: string;
+  installed: boolean;
+  built: boolean;
+}> {
+  const pluginRoot = normalizeLocalPathInput(rawPath);
+  if (!fs.existsSync(pluginRoot)) {
+    throw new Error(`Folder not found: ${pluginRoot}`);
+  }
+  if (!fs.statSync(pluginRoot).isDirectory()) {
+    throw new Error(`Path is not a directory: ${pluginRoot}`);
+  }
+
+  const manifest = readGodmodePluginManifest(pluginRoot);
+  const builtBefore = bridgeEntryExists(pluginRoot);
+  if (!builtBefore) {
+    ensurePluginBuilt(pluginRoot);
+  }
+
+  appendPluginPath(core, pluginRoot);
+  await loadPluginFromRoot(pluginRoot);
+
+  let installed = false;
+  if (opts?.installForTenant !== false) {
+    await installPluginForTenant(core, tenantId, manifest.id, pluginRoot);
+    installed = true;
+
+    const installId = uuidv4();
+    core.prepare(
+      `INSERT INTO catalog_installs (id, tenant_id, user_id, entry_id, entry_title, install_type, source_catalog)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      installId,
+      tenantId,
+      opts?.userId ?? "",
+      manifest.id,
+      manifest.name,
+      "plugin",
+      `local://${pluginRoot}`
+    );
+  }
+
+  return {
+    pluginId: manifest.id,
+    pluginRoot,
+    name: manifest.name,
+    version: manifest.version,
+    installed,
+    built: !builtBefore,
+  };
+}
+
+export function removeLocalPluginFolder(core: CoreDatabase, rawPath: string): boolean {
+  const pluginRoot = normalizeLocalPathInput(rawPath);
+  const key = "marketplace.plugin_paths";
+  const existing = core.prepare(`SELECT value FROM platform_meta WHERE key=?`).get(key) as
+    | { value: string }
+    | undefined;
+  if (!existing?.value) return false;
+  const paths = JSON.parse(existing.value) as string[];
+  const next = paths.filter((p) => path.resolve(p) !== pluginRoot);
+  if (next.length === paths.length) return false;
+  core.prepare(
+    `INSERT INTO platform_meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+  ).run(key, JSON.stringify(next));
+  return true;
+}
+
+export async function installDiscoveredPlugin(
+  core: CoreDatabase,
+  tenantId: string,
+  pluginId: string
+): Promise<void> {
+  const available = listAvailablePlugins().find((p) => p.id === pluginId);
+  if (!available) {
+    throw new Error(
+      `Plugin not available: ${pluginId}. Add its folder under Marketplace → Unofficial first.`
+    );
+  }
+  if (!pluginRuntime.hasPlugin(pluginId)) {
+    await loadPluginFromRoot(available.pluginRoot);
+  }
+  await installPluginForTenant(core, tenantId, pluginId, available.pluginRoot);
+}
+
+export async function uninstallDiscoveredPlugin(
+  core: CoreDatabase,
+  tenantId: string,
+  pluginId: string
+): Promise<void> {
+  await uninstallPluginForTenant(core, tenantId, pluginId);
+}
+
 async function installPluginEntry(
   core: CoreDatabase,
   tenantId: string,
   entry: CatalogEntry
-): Promise<{ pluginId: string; pluginRoot: string; restartRequired: boolean }> {
+): Promise<{ pluginId: string; pluginRoot: string; restartRequired: boolean; built: boolean }> {
   const ref = entry.pluginRef ?? "main";
   const dirName = entry.id.replace(/[^a-z0-9-]/gi, "-");
   let target: string;
+  let built = false;
 
   if (entry.pluginLocalPath?.trim()) {
     target = path.resolve(entry.pluginLocalPath.trim());
     if (!fs.existsSync(target)) {
       throw new Error(`pluginLocalPath not found: ${target}`);
+    }
+    const builtBefore = bridgeEntryExists(target);
+    if (!builtBefore) {
+      ensurePluginBuilt(target);
+      built = true;
     }
   } else {
     if (!entry.pluginRepo) {
@@ -311,7 +508,7 @@ async function installPluginEntry(
   appendPluginPath(core, target);
   const loadResult = await loadPluginFromRoot(target);
   await installPluginForTenant(core, tenantId, loadResult.pluginId, target);
-  return { pluginId: loadResult.pluginId, pluginRoot: target, restartRequired: false };
+  return { pluginId: loadResult.pluginId, pluginRoot: target, restartRequired: false, built };
 }
 
 function authenticatedGitCloneUrl(repo: string): string {

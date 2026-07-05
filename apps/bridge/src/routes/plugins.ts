@@ -40,6 +40,18 @@ function resolveWebBundlePath(pluginId: string): string | null {
   return null;
 }
 
+function resolveDistAssetPath(pluginId: string, filename: string): string | null {
+  const loaded = pluginRuntime.getPlugin(pluginId);
+  if (!loaded) return null;
+  if (!/^[A-Za-z0-9_.-]+\.(js|map|css)$/.test(filename)) return null;
+  const pluginRoot = path.resolve(loaded.pluginRoot);
+  const distDir = path.join(pluginRoot, "dist");
+  const resolved = path.resolve(distDir, filename);
+  if (!resolved.startsWith(distDir + path.sep) && resolved !== distDir) return null;
+  if (!fs.existsSync(resolved)) return null;
+  return resolved;
+}
+
 function resolveSharedExportPath(pluginId: string, exportName: string): string | null {
   const loaded = pluginRuntime.getPlugin(pluginId);
   if (!loaded) return null;
@@ -58,14 +70,51 @@ function resolveSharedExportPath(pluginId: string, exportName: string): string |
   return null;
 }
 
+function resolvePluginPackagePath(pluginId: string, pkgName: string): string | null {
+  const loaded = pluginRuntime.getPlugin(pluginId);
+  if (!loaded) return null;
+  const safe = pkgName.replace(/\.js$/i, "").trim();
+  if (!safe || !/^[A-Za-z0-9_-]+$/.test(safe)) return null;
+  const pluginRoot = path.resolve(loaded.pluginRoot);
+  const candidates = [
+    path.join(pluginRoot, "packages", safe, "dist", "index.js"),
+    path.join(pluginRoot, "node_modules", "@godmode", safe, "dist", "index.js"),
+  ];
+  for (const c of candidates) {
+    const resolved = path.resolve(c);
+    if (!resolved.startsWith(pluginRoot + path.sep)) continue;
+    if (fs.existsSync(resolved)) return resolved;
+  }
+  return null;
+}
+
+function discoverPluginPackageImports(
+  pluginRoot: string,
+  pluginId: string
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const root = path.resolve(pluginRoot);
+  const packagesDir = path.join(root, "packages");
+  if (!fs.existsSync(packagesDir)) return out;
+  for (const ent of fs.readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue;
+    const dist = path.join(packagesDir, ent.name, "dist", "index.js");
+    if (!fs.existsSync(dist)) continue;
+    out[`@godmode/${ent.name}`] = `/api/plugins/${pluginId}/packages/${ent.name}.js`;
+  }
+  return out;
+}
+
 export function createPluginsManifestHandler(coreDb: CoreDatabase) {
   return (req: import("express").Request, res: import("express").Response) => {
     const tenantId = req.tenantId;
     const installed = tenantId ? new Set(installedPluginIdsForTenant(coreDb, tenantId)) : null;
 
     const sharedImports: Record<string, string> = {};
+    const packageImports: Record<string, string> = {};
     for (const p of pluginRuntime.loaded) {
       if (installed && !installed.has(p.manifest.id)) continue;
+      Object.assign(packageImports, discoverPluginPackageImports(p.pluginRoot, p.manifest.id));
       const sharedDir = path.join(path.resolve(p.pluginRoot), "dist", "shared");
       if (!fs.existsSync(sharedDir)) continue;
       for (const ent of fs.readdirSync(sharedDir, { withFileTypes: true })) {
@@ -93,6 +142,7 @@ export function createPluginsManifestHandler(coreDb: CoreDatabase) {
       plugins: listPluginManifestsForWeb(),
       loaded,
       sharedImports,
+      packageImports,
     });
   };
 }
@@ -121,6 +171,27 @@ export function createPluginsRouter(coreDb: CoreDatabase): Router {
     res.sendFile(bundlePath);
   });
 
+  router.get("/:id/packages/:pkg.js", (req, res) => {
+    const pluginId = String(req.params.id ?? "").trim();
+    const pkgName = String(req.params.pkg ?? "").trim();
+    if (!pluginId || !pkgName) {
+      res.status(400).json({ error: "plugin id and package name required" });
+      return;
+    }
+    const tenantId = req.tenantId;
+    if (!tenantId || !isPluginEnabledForTenant(coreDb, tenantId, pluginId)) {
+      res.status(404).json({ error: "plugin not installed for tenant" });
+      return;
+    }
+    const bundlePath = resolvePluginPackagePath(pluginId, pkgName);
+    if (!bundlePath) {
+      res.status(404).json({ error: "plugin package not found" });
+      return;
+    }
+    res.type("application/javascript");
+    res.sendFile(bundlePath);
+  });
+
   router.get("/:id/web.js", (req, res) => {
     const pluginId = String(req.params.id ?? "").trim();
     if (!pluginId) {
@@ -139,6 +210,33 @@ export function createPluginsRouter(coreDb: CoreDatabase): Router {
     }
     res.type("application/javascript");
     res.sendFile(bundlePath);
+  });
+
+  router.get("/:id/:filename", (req, res, next) => {
+    const pluginId = String(req.params.id ?? "").trim();
+    const filename = String(req.params.filename ?? "").trim();
+    if (!pluginId || !filename || filename === "web.js") {
+      next();
+      return;
+    }
+    const tenantId = req.tenantId;
+    if (!tenantId || !isPluginEnabledForTenant(coreDb, tenantId, pluginId)) {
+      res.status(404).json({ error: "plugin not installed for tenant" });
+      return;
+    }
+    const assetPath = resolveDistAssetPath(pluginId, filename);
+    if (!assetPath) {
+      next();
+      return;
+    }
+    if (filename.endsWith(".map")) {
+      res.type("application/json");
+    } else if (filename.endsWith(".css")) {
+      res.type("text/css");
+    } else {
+      res.type("application/javascript");
+    }
+    res.sendFile(assetPath);
   });
 
   router.get("/", (req, res) => {

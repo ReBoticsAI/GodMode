@@ -27,9 +27,10 @@ export function SidebarShellContent({
     try {
       await logoutAuth();
     } catch {
-      /* ignore */
+      /* still clear local session below */
     }
     await refresh();
+    window.location.assign("/");
   };
 
   return (

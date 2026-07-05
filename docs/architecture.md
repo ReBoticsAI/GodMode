@@ -110,9 +110,9 @@ Plugins ship a manifest (`godmode.plugin.json`) and register:
 
 Discovery order:
 
-1. `GODMODE_PLUGIN_PATH` env var
-2. Marketplace-installed paths in `platform_meta.marketplace.plugin_paths`
-3. Per-tenant `tenant_plugins` (Settings → Plugins)
+1. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
+2. Optional `GODMODE_PLUGIN_PATH` env var
+3. Per-tenant `tenant_plugins` (**Marketplace** install/uninstall)
 
 See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
 

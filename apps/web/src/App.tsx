@@ -64,6 +64,7 @@ import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 import { pageElementFor } from "@/lib/page-registry";
+import { loadWebPlugins } from "@/plugins/loader";
 import { webPluginRuntime } from "@/plugins/runtime";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useMemo, useState, createElement, type ComponentType } from "react";
@@ -369,8 +370,18 @@ function LegacyBuilderRedirect() {
 function AuthGatedApp() {
   const { authenticated, loading } = useTenant();
   const { checking, needsWizard, refresh } = useOnboardingGate();
+  const [pluginsReady, setPluginsReady] = useState(false);
 
-  if (loading || (authenticated && checking)) {
+  useEffect(() => {
+    if (!authenticated) {
+      setPluginsReady(true);
+      return;
+    }
+    setPluginsReady(false);
+    void loadWebPlugins().finally(() => setPluginsReady(true));
+  }, [authenticated]);
+
+  if (loading || (authenticated && (checking || !pluginsReady))) {
     return <div className="h-dvh bg-background" />;
   }
 

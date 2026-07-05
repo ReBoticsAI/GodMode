@@ -16,7 +16,15 @@ Open **Marketplace → Official** to browse and install packs for free.
 
 ## Unofficial sources
 
-Add third-party catalog URLs under **Marketplace → Unofficial**. Each source must expose a `catalog/index.json` compatible with the official schema.
+**Marketplace → Unofficial** is the single place to install plugins for your workspace:
+
+1. **Add local plugin folder** — paste the path to a cloned repo (must contain `godmode.plugin.json`). GodMode validates the manifest, builds if needed, registers the plugin with Bridge, and installs it for the current workspace.
+2. **Add catalog source** — third-party catalog URLs (remote or local `file://` index).
+3. **Plugins on this machine** — install or uninstall discovered plugins without leaving the UI.
+
+Use **Marketplace → Installed** to review workspace plugins, uninstall, or remove registered local paths.
+
+Each unofficial catalog must expose a `catalog/index.json` compatible with the official schema.
 
 You can point at a **local file catalog** (never leaves your machine):
 
@@ -28,7 +36,11 @@ file:///C:/Users/you/my-catalog/catalog/index.json
 
 Three supported paths for plugins that are not public on GitHub:
 
-### 1. Local file catalog + `pluginLocalPath`
+### 1. Local folder in the UI (recommended)
+
+Clone the repo anywhere on disk, then **Marketplace → Unofficial → Add local plugin folder**. No terminal or env var required.
+
+### 2. Local file catalog + `pluginLocalPath`
 
 Add an unofficial catalog URL pointing at a JSON file on disk. Entries can install from an existing directory — no git:
 
@@ -43,7 +55,7 @@ Add an unofficial catalog URL pointing at a JSON file on disk. Entries can insta
 
 The directory must contain a valid `godmode.plugin.json`.
 
-### 2. `GITHUB_TOKEN` for private HTTPS repos
+### 3. `GITHUB_TOKEN` for private HTTPS repos
 
 Set in `apps/bridge/.env`:
 
@@ -53,15 +65,15 @@ GITHUB_TOKEN=ghp_...
 
 Catalog entries with `installType: "plugin"` and `pluginRepo: https://github.com/you/private-plugin.git` clone using token auth.
 
-### 3. Manual `GODMODE_PLUGIN_PATH`
+### 4. Advanced: `GODMODE_PLUGIN_PATH`
 
-Clone the repo yourself, then:
+For automation or non-standard layouts, set in `apps/bridge/.env`:
 
 ```
 GODMODE_PLUGIN_PATH=C:\dev\godmode-plugin-mine
 ```
 
-Restart Bridge and install under **Settings → Plugins**.
+Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins on this machine**.
 
 Intelligence tools `scaffold_plugin` and `install_plugin` follow the same install paths.
 
