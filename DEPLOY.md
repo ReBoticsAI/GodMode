@@ -71,6 +71,17 @@ Both compose files mount `PLATFORM_DATA_DIR=/data` (SQLite tenants, core DB, ten
 
 New tenants get Intelligence with `backend=provider` (OpenAI-compatible). Users add API keys in **Vault → Secrets** and configure the provider in **Agents → Pipeline**.
 
+### Hub + local GGUF on the host GPU
+
+The production image does not run CUDA. Run `llama-server` on the host and attach from the container:
+
+```bash
+cd deploy
+docker compose -f docker-compose.hub-external-llm.yml up -d --build
+```
+
+Requires `LLAMA_EXTERNAL=true`, a models bind-mount, and `host.docker.internal` → host gateway. See [docs/LOCAL_LLM.md](docs/LOCAL_LLM.md) for a recommended Gemma 4 26B / 16 GB GPU profile.
+
 ## Hardware-bound marketplace plugins
 
 Some domain packs require a **local connector** on the user's machine. See `apps/connector/README.md`. The hub/client Docker image runs the platform core only.
