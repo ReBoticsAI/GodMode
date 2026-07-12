@@ -382,7 +382,11 @@ function AuthGatedApp() {
   }, [authenticated]);
 
   if (loading || (authenticated && (checking || !pluginsReady))) {
-    return <div className="h-dvh bg-background" />;
+    return (
+      <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading workspace…
+      </div>
+    );
   }
 
   if (!authenticated) {

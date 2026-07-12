@@ -71,6 +71,10 @@ async function importPluginWebBundle(
 
 async function waitForImportShim(maxMs = 5000): Promise<void> {
   if (importShim()) return;
+  // es-module-shims is injected only by the Vite DEV server. Production static
+  // builds never load it — waiting the full timeout caused a ~5s black screen
+  // after every sign-in while AuthGatedApp blocked on pluginsReady.
+  if (!import.meta.env.DEV) return;
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 50));
