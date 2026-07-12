@@ -402,6 +402,17 @@ export class LlmManager {
     };
   }
 
+  /** Resolve a basename or relative path to a scanned model under modelDirs. */
+  private resolveModelPath(modelPath: string): string | null {
+    if (fs.existsSync(modelPath) && path.isAbsolute(modelPath)) return path.resolve(modelPath);
+    if (fs.existsSync(modelPath)) return path.resolve(modelPath);
+    const base = path.basename(modelPath);
+    const hit = this.scanModels().find(
+      (m) => m.path === modelPath || m.name === modelPath || m.name === base
+    );
+    return hit?.path ?? null;
+  }
+
   async start(modelPath?: string): Promise<LlmStatus> {
     if (this.state === "running" || this.state === "starting") {
       return this.getStatus();
@@ -412,6 +423,11 @@ export class LlmManager {
       modelPath ??
       ((settings.activeModelPath as string) ||
         this.scanModels().find((m) => !m.name.toLowerCase().includes("thinking"))?.path);
+
+    if (target) {
+      const resolved = this.resolveModelPath(target);
+      if (resolved) target = resolved;
+    }
 
     if (target && modelPath) {
       const resolved = path.resolve(target);
@@ -432,17 +448,35 @@ export class LlmManager {
       return this.getStatus();
     }
 
-    if (!fs.existsSync(config.ai.llamaServerBin)) {
-      this.state = "error";
-      this.error = `llama-server not found: ${config.ai.llamaServerBin}`;
-      return this.getStatus();
-    }
-
     const models = this.scanModels();
     const model = models.find((m) => m.path === target);
     this.modelPath = target;
     this.mmprojPath = model?.mmprojPath ?? null;
     writeSetting(this.db, "activeModelPath", target);
+
+    // Hub / Docker: use host-managed llama-server (do not spawn inside the container).
+    if (config.ai.external) {
+      const port = config.ai.serverPort;
+      writeSetting(this.db, "port", String(port));
+      this.state = "starting";
+      this.error = null;
+      this.logs = [];
+      this.startedAt = new Date().toISOString();
+      this.healthOk = false;
+      this.proc = null;
+      this.pushLog(
+        `Attaching to external llama-server at http://${config.ai.serverHost}:${port}`
+      );
+      await this.waitForReady(port, 120_000);
+      this.startHealthPoll(port);
+      return this.getStatus();
+    }
+
+    if (!fs.existsSync(config.ai.llamaServerBin)) {
+      this.state = "error";
+      this.error = `llama-server not found: ${config.ai.llamaServerBin}`;
+      return this.getStatus();
+    }
 
     this.state = "starting";
     this.error = null;
@@ -500,6 +534,14 @@ export class LlmManager {
   async stop(): Promise<LlmStatus> {
     this.state = "stopping";
     this.stopHealthPoll();
+    if (config.ai.external) {
+      // Host-managed process — detach only; do not kill systemd llama-server.
+      this.proc = null;
+      this.state = "stopped";
+      this.healthOk = false;
+      this.pushLog("Detached from external llama-server (left running on host)");
+      return this.getStatus();
+    }
     if (this.proc) {
       this.proc.kill("SIGTERM");
       await new Promise((r) => setTimeout(r, 1500));
@@ -541,7 +583,8 @@ export class LlmManager {
 
   getServerBaseUrl(): string {
     const settings = this.getSettings();
-    return `http://${config.ai.serverHost}:${settings.port}`;
+    const port = config.ai.external ? config.ai.serverPort : Number(settings.port);
+    return `http://${config.ai.serverHost}:${port}`;
   }
 
   isReady(): boolean {

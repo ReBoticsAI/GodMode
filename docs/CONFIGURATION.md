@@ -60,15 +60,18 @@ Not used in local OSS installs.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLAMA_SERVER_BIN` | `~/llama.cpp/bin/llama-server` | llama-server binary |
-| `LLAMA_SERVER_HOST` | `127.0.0.1` | Inference server host |
+| `LLAMA_SERVER_BIN` | `~/llama.cpp/bin/llama-server` | llama-server binary (ignored when `LLAMA_EXTERNAL=true`) |
+| `LLAMA_EXTERNAL` | `false` | Attach to an already-running server; do not spawn or kill it |
+| `LLAMA_SERVER_HOST` | `127.0.0.1` | Inference server host (`host.docker.internal` from Docker) |
 | `LLAMA_SERVER_PORT` | `8080` | Inference server port |
 | `LLAMA_MODEL_DIRS` | search paths | Semicolon-separated model directories |
-| `LLAMA_CTX_SIZE` | `262144` | Total context across parallel slots |
+| `LLAMA_CTX_SIZE` | `262144` | Total context across parallel slots (host-managed when external) |
 | `LLAMA_GPU_LAYERS` | `99` | GPU layer offload |
+| `LLAMA_THREADS` | `0` | CPU threads (`0` = llama.cpp default) |
+| `LLAMA_EXTRA_ARGS` | empty | Extra llama-server flags when Bridge spawns the process |
 | `EMBEDDINGS_ENABLED` | `false` | Semantic memory RAG embedder |
 
-See `apps/bridge/src/config.ts` for the full list of `LLAMA_*` tuning flags.
+Recommended hardware / Gemma 4 profile: [LOCAL_LLM.md](./LOCAL_LLM.md). Full flag list: `apps/bridge/src/config.ts`.
 
 ## Optional integrations
 
