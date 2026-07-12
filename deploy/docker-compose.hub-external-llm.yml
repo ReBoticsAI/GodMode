@@ -5,11 +5,12 @@
 #
 # Setup:
 #   1. Put GGUF files in ./models
-#   2. mkdir -p ./data
+#   2. mkdir -p ./data ./plugins
 #   3. cp .env.production.example .env.production  # set secrets
 #   4. Start host llama-server on :8081 (see docs/LOCAL_LLM.md)
-#   5. docker compose -f docker-compose.hub-external-llm.yml up -d --build
-#   6. Open http://localhost:8080
+#   5. Optional: clone a plugin under ./plugins/my-plugin (built dist/)
+#   6. docker compose -f docker-compose.hub-external-llm.yml up -d --build
+#   7. Open http://localhost:8080 — Marketplace → Unofficial path e.g. /plugins/my-plugin
 #
 services:
   godmode:
@@ -25,6 +26,7 @@ services:
     volumes:
       - ./data:/data
       - ./models:/models:ro
+      - ./plugins:/plugins
     environment:
       - PLATFORM_DATA_DIR=/data
       - DEPLOYMENT_MODE=hub
@@ -35,4 +37,6 @@ services:
       - LLAMA_EXTERNAL=true
       - LLAMA_SERVER_HOST=host.docker.internal
       - LLAMA_SERVER_PORT=8081
+      # Optional: auto-discover a plugin (semicolon-separated). Or use Marketplace UI.
+      # - GODMODE_PLUGIN_PATH=/plugins/my-plugin
     restart: unless-stopped
