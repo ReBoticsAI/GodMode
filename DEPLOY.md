@@ -82,6 +82,8 @@ docker compose -f docker-compose.hub-external-llm.yml up -d --build
 
 Requires `LLAMA_EXTERNAL=true`, a models bind-mount, and `host.docker.internal` → host gateway. See [docs/LOCAL_LLM.md](docs/LOCAL_LLM.md) for a recommended Gemma 4 26B / 16 GB GPU profile.
 
+Optional: mount `./plugins:/plugins` and install via **Marketplace → Unofficial** using a container path such as `/plugins/my-plugin`. See [docs/MARKETPLACE.md](docs/MARKETPLACE.md#docker-hub-notes).
+
 ## Hardware-bound marketplace plugins
 
 Some domain packs require a **local connector** on the user's machine. See `apps/connector/README.md`. The hub/client Docker image runs the platform core only.

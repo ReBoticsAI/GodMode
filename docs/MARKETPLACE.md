@@ -77,6 +77,23 @@ Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins
 
 Intelligence tools `scaffold_plugin` and `install_plugin` follow the same install paths.
 
+## Docker hub notes
+
+Bridge runs **inside** the container. Folder paths you paste in **Unofficial** must be visible there (for example `/plugins/my-plugin`), not a Windows `C:\...` path on your laptop.
+
+Mount a host plugins directory and optionally set `GODMODE_PLUGIN_PATH`:
+
+```yaml
+volumes:
+  - ./plugins:/plugins
+environment:
+  - GODMODE_PLUGIN_PATH=/plugins/my-plugin
+```
+
+When a plugin's `bridge.js` externalizes `@godmode/plugin-api` / `@godmode/plugin-host`, Bridge rewrites those `node_modules` entries to the image's built packages before load. You do not need a sibling GodMode checkout inside the container for those two packages.
+
+Hardware-bound plugins (desktop apps, devices) still need the **Connector** on the machine that runs that software — see `apps/connector/README.md`.
+
 ## Submitting to Official
 
 See [CONTRIBUTING.md](https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md) in the marketplace repo. Intelligence can generate a manifest with `prepare_marketplace_submission`.
