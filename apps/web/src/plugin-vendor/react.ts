@@ -37,13 +37,9 @@ export const {
   version,
 } = React;
 
-// React 19 optional exports (when present)
 export const useActionState = (React as Record<string, unknown>).useActionState as
   | typeof import("react").useActionState
   | undefined;
 export const useOptimistic = (React as Record<string, unknown>).useOptimistic as
   | typeof import("react").useOptimistic
-  | undefined;
-export const useFormStatus = (React as Record<string, unknown>).useFormStatus as
-  | (() => import("react-dom").FormStatus)
   | undefined;
