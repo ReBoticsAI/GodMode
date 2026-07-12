@@ -1,0 +1,38 @@
+# Hub + host llama-server (external LLM)
+#
+# CUDA inference runs on the host (systemd / manual llama-server).
+# Bridge attaches via LLAMA_EXTERNAL — it does not spawn llama-server in the container.
+#
+# Setup:
+#   1. Put GGUF files in ./models
+#   2. mkdir -p ./data
+#   3. cp .env.production.example .env.production  # set secrets
+#   4. Start host llama-server on :8081 (see docs/LOCAL_LLM.md)
+#   5. docker compose -f docker-compose.hub-external-llm.yml up -d --build
+#   6. Open http://localhost:8080
+#
+services:
+  godmode:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:80"
+    env_file:
+      - .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/data
+      - ./models:/models:ro
+    environment:
+      - PLATFORM_DATA_DIR=/data
+      - DEPLOYMENT_MODE=hub
+      - BRIDGE_HOST=127.0.0.1
+      - AUTH_ALLOW_ANONYMOUS=false
+      - AUTH_ALLOW_SIGNUP=true
+      - LLAMA_MODEL_DIRS=/models
+      - LLAMA_EXTERNAL=true
+      - LLAMA_SERVER_HOST=host.docker.internal
+      - LLAMA_SERVER_PORT=8081
+    restart: unless-stopped
