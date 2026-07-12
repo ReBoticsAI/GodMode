@@ -1178,7 +1178,7 @@ export function createAiRouter(
     }
     const db = tdb(req);
     upsertCursorApiKey(db, apiKey);
-    markLlmReady();
+    markLlmReady(db);
     res.json({ ok: true, status: getCursorAuthStatus(db) });
   });
 
@@ -1222,7 +1222,7 @@ export function createAiRouter(
       thinking: { ...agent.thinking, nativeTools: true },
       config: { ...agent.config, model },
     });
-    markLlmReady();
+    markLlmReady(db);
     res.json({ ok: true, agent: getAgent(db, "intelligence") });
   });
 

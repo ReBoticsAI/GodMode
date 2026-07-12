@@ -39,11 +39,13 @@ Expect: `{ ok: true, deploymentMode: "local", hub: false }`
 
 ## 3. First-run onboarding
 
-On a fresh install (or reset onboarding meta), the **FirstRunWizard** appears before the workspace:
+On a fresh **workspace** (or reset tenant onboarding settings), the **FirstRunWizard** appears before the workspace:
 
 1. Welcome step
 2. Choose local GGUF, Ollama detect, or **Use cloud API (Vault)**
 3. **Get started** opens the workspace
+
+Each user/workspace completes this independently on multi-tenant hubs.
 
 See [ONBOARDING.md](./ONBOARDING.md).
 
