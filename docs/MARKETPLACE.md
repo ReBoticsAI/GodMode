@@ -92,7 +92,7 @@ environment:
 
 When a plugin's `bridge.js` externalizes `@godmode/plugin-api` / `@godmode/plugin-host`, Bridge rewrites those `node_modules` entries to the image's built packages before load. You do not need a sibling GodMode checkout inside the container for those two packages.
 
-Hardware-bound plugins (e.g. Sierra Chart) still need the **Connector** on the machine that runs the desktop app — see `apps/connector/README.md`.
+Hardware-bound plugins (desktop apps, devices) still need the **Connector** on the machine that runs that software — see `apps/connector/README.md`.
 
 ## Submitting to Official
 
