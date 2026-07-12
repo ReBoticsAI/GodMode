@@ -129,7 +129,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   }, []);
 
   const launchNewUserOnboarding = () => {
-    writeOnboardingCompleted();
+    writeOnboardingCompleted(activeTenantId);
     openPanel({
       tab: "chat",
       maximized: true,
@@ -141,9 +141,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   useEffect(() => {
-    if (loading || readOnboardingCompleted()) return;
+    if (loading || readOnboardingCompleted(activeTenantId)) return;
     // FirstRunWizard handles LLM onboarding; skip duplicate welcome dialog.
-  }, [loading, departments.length, user]);
+  }, [loading, departments.length, user, activeTenantId]);
 
   // Empty-state CTAs: kick off a chat that creates the user's first agent/page.
   // Default to the user's own User Agent (their digital twin); fall back to the
@@ -268,7 +268,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         open={onboardingOpen}
         onOpenChange={(open) => {
           setOnboardingOpen(open);
-          if (!open) writeOnboardingCompleted();
+          if (!open) writeOnboardingCompleted(activeTenantId);
         }}
         onStartTour={launchNewUserOnboarding}
       />
