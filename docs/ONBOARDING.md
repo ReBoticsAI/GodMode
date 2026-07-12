@@ -1,6 +1,6 @@
 # Onboarding
 
-First sign-in runs the **FirstRunWizard** until an LLM is ready or you choose cloud API keys.
+Each **workspace (tenant)** runs the **FirstRunWizard** on first use until that workspace marks an LLM as ready (or you choose the cloud/Vault path). Completing onboarding for one account does **not** dismiss it for others — important for multi-user hubs.
 
 ![Home after onboarding](assets/readme/hero-home.png)
 
@@ -12,11 +12,15 @@ First sign-in runs the **FirstRunWizard** until an LLM is ready or you choose cl
 
 ## Backend
 
-- `GET /api/onboarding/status` — `{ completed, llmReady, llmStatus }`
+Onboarding flags live in the **tenant** SQLite `ai_settings` table (`onboarding.completed`, `onboarding.llm_ready`), not platform-wide meta.
+
+- `GET /api/onboarding/status` — `{ completed, llmReady, llmStatus }` for the active workspace
 - `GET /api/onboarding/detect` — local models + Ollama probe
-- `POST /api/onboarding/llm/local` — start llama-server with selected model
-- `POST /api/onboarding/llm/cloud-ready` — mark cloud path (Vault keys)
-- `POST /api/onboarding/complete` — dismiss wizard
+- `POST /api/onboarding/llm/local` — start llama-server with selected model (marks this workspace ready)
+- `POST /api/onboarding/llm/cloud-ready` — mark cloud path for this workspace (Vault keys)
+- `POST /api/onboarding/complete` — dismiss wizard for this workspace
+
+Local single-user installs that previously stored flags in `platform_meta` are migrated once into the active tenant DB. **Hub mode never migrates** platform flags so every new workspace gets the wizard.
 
 ## Models directory
 

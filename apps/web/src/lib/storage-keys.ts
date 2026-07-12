@@ -83,14 +83,28 @@ export function clearActiveTenant(): void {
   localStorage.removeItem(LEGACY_TENANT_STORAGE_KEY);
 }
 
+/** @deprecated Prefer tenant-scoped helpers below; kept for migration reads. */
 export const ONBOARDING_COMPLETED_KEY = "godmode.onboarding.completed";
 
-export function readOnboardingCompleted(): boolean {
-  return readStorageKey(ONBOARDING_COMPLETED_KEY) === "1";
+function onboardingCompletedKey(tenantId?: string | null): string {
+  const id = tenantId?.trim() || readTenantId();
+  return id
+    ? `godmode.onboarding.completed.${id}`
+    : ONBOARDING_COMPLETED_KEY;
 }
 
-export function writeOnboardingCompleted(): void {
-  writeStorageKey(ONBOARDING_COMPLETED_KEY, "1");
+export function readOnboardingCompleted(tenantId?: string | null): boolean {
+  const scoped = onboardingCompletedKey(tenantId);
+  if (readStorageKey(scoped) === "1") return true;
+  // Legacy browser-global flag (pre per-workspace onboarding).
+  if (scoped !== ONBOARDING_COMPLETED_KEY && readStorageKey(ONBOARDING_COMPLETED_KEY) === "1") {
+    return true;
+  }
+  return false;
+}
+
+export function writeOnboardingCompleted(tenantId?: string | null): void {
+  writeStorageKey(onboardingCompletedKey(tenantId), "1");
 }
 
 export function readMigratedKey(newKey: string, legacyKey: string): string | null {

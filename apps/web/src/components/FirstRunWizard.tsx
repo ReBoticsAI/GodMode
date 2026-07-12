@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { writeOnboardingCompleted } from "@/lib/storage-keys";
+import { useTenant } from "@/lib/tenant-context";
 
 type Props = {
   open: boolean;
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export function FirstRunWizard({ open, onFinished }: Props) {
+  const { activeTenantId } = useTenant();
   const [step, setStep] = useState(0);
   const [localModels, setLocalModels] = useState<string[]>([]);
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
@@ -40,6 +42,7 @@ export function FirstRunWizard({ open, onFinished }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    setStep(0);
     void fetchOnboardingDetect()
       .then((d) => {
         setLocalModels(d.localModels);
@@ -47,11 +50,11 @@ export function FirstRunWizard({ open, onFinished }: Props) {
         if (d.localModels[0]) setSelectedModel(d.localModels[0]);
       })
       .catch(() => undefined);
-  }, [open]);
+  }, [open, activeTenantId]);
 
   const finish = async () => {
     await completeOnboarding();
-    writeOnboardingCompleted();
+    writeOnboardingCompleted(activeTenantId);
     onFinished();
   };
 
@@ -176,6 +179,7 @@ export function FirstRunWizard({ open, onFinished }: Props) {
 }
 
 export function useOnboardingGate() {
+  const { authenticated, activeTenantId } = useTenant();
   const [checking, setChecking] = useState(true);
   const [needsWizard, setNeedsWizard] = useState(false);
 
@@ -192,8 +196,13 @@ export function useOnboardingGate() {
   };
 
   useEffect(() => {
+    if (!authenticated) {
+      setNeedsWizard(false);
+      setChecking(false);
+      return;
+    }
     void refresh();
-  }, []);
+  }, [authenticated, activeTenantId]);
 
   return { checking, needsWizard, refresh };
 }
