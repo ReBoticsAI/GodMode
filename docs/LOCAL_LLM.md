@@ -63,6 +63,8 @@ The Alpine GodMode image does **not** run CUDA inference. Run `llama-server` on 
 
 Compose example: [deploy/docker-compose.hub-external-llm.yml](../deploy/docker-compose.hub-external-llm.yml).
 
+Mount local plugins at `/plugins` and paste container paths in **Marketplace → Unofficial** (for example `/plugins/my-plugin`). Bridge links `@godmode/plugin-api` / `@godmode/plugin-host` to the image builds automatically when loading a plugin.
+
 With `LLAMA_EXTERNAL=true`, Bridge **attaches** to the host server (does not spawn or kill it). Stopping the model in the UI only detaches.
 
 ## Onboarding
