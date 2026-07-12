@@ -7,14 +7,19 @@ COPY apps/web/package.json apps/web/
 COPY packages/ packages/
 RUN npm ci
 COPY . .
-RUN npm run build -w @godmode/web && npm run build -w @godmode/bridge
+RUN npm run build:packages && npm run build -w @godmode/web && npm run build -w @godmode/bridge
 
 FROM node:22-alpine AS runtime
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/bridge/package.json apps/bridge/
-RUN npm ci --omit=dev -w @godmode/bridge
+COPY packages/ packages/
+RUN npm ci --omit=dev -w @godmode/bridge \
+  && apk del python3 make g++
+COPY --from=build /app/packages/flow-core/dist packages/flow-core/dist
+COPY --from=build /app/packages/plugin-api/dist packages/plugin-api/dist
+COPY --from=build /app/packages/plugin-host/dist packages/plugin-host/dist
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
