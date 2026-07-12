@@ -155,6 +155,12 @@ export const config = {
     llamaServerBin:
       process.env.LLAMA_SERVER_BIN ??
       path.join(os.homedir(), "llama.cpp", "bin", "llama-server.exe"),
+    /**
+     * When true, Bridge does not spawn llama-server; it attaches to an
+     * already-running OpenAI-compatible server at serverHost:serverPort
+     * (e.g. host systemd on a Docker hub).
+     */
+    external: (process.env.LLAMA_EXTERNAL ?? "false") === "true",
     modelDirs: (
       process.env.LLAMA_MODEL_DIRS ??
       [
