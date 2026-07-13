@@ -490,6 +490,8 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
   let messages = [...opts.messages];
   const iterationLimit = Math.max(1, maxIterations);
   const useGrammar = toolMode === "grammar" && nativeTools;
+  /** Cross-turn identical tool signatures — Gemma/grammar often re-calls list_subagents{}. */
+  const recentToolTurnKeys: string[] = [];
 
   const samplingBody = {
     temperature: sampling.temperature,
@@ -605,6 +607,12 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
     }
 
     const sanitizedToolCalls = dedupeToolCalls(step.toolCalls.map(sanitizeToolCall));
+    const turnKey = sanitizedToolCalls
+      .map((tc) => `${tc.function.name}:${tc.function.arguments}`)
+      .sort()
+      .join("|");
+    const priorSameTurns = recentToolTurnKeys.filter((k) => k === turnKey).length;
+    recentToolTurnKeys.push(turnKey);
 
     messages.push({
       role: "assistant",
@@ -622,6 +630,16 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
       onTerminalOutput,
     });
     messages.push(...toolMessages);
+
+    // Second identical tool turn in one chat: stop looping and force a final answer.
+    if (priorSameTurns >= 1) {
+      messages.push({
+        role: "user",
+        content:
+          "You already ran those exact tool calls and have the results above. Reply to the user now in plain language. Do not call tools again.",
+      });
+      return streamFinalText(messages);
+    }
   }
 
   return streamFinalText(messages);
