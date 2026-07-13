@@ -118,12 +118,12 @@ import { emitEvent, listEventsForOwner } from "./event-bus.js";
 import { createFinancialServices } from "../routes/financial.js";
 import { installCatalogEntry } from "./marketplace-catalog.js";
 import {
-  installPluginForTenant,
   listAvailablePlugins,
   listInstalledPlugins,
 } from "../plugins/plugin-install.js";
-import { execSync } from "node:child_process";
-import { scaffoldPlugin, prepareMarketplaceSubmission } from "./plugin-scaffold.js";
+import { activatePluginForTenant } from "../plugins/activate-plugin.js";
+import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
+import { buildPluginWithEsbuild } from "./plugin-build.js";
 import { exportEntity } from "./portability.js";
 import { listInferenceEndpoints } from "./inference-service.js";
 import type { AiQueueWorker } from "./ai-queue-worker.js";
@@ -2366,27 +2366,40 @@ export async function executeTool(
         departments: Array.isArray(args.departments)
           ? args.departments.map(String)
           : undefined,
+        tenantId: ctx.tenantId,
       });
     }
 
     case "install_plugin": {
       if (!ctx.tenantId) throw new Error("tenant required");
-      const pluginId = String(args.pluginId ?? "");
+      const pluginId = String(args.pluginId ?? "").trim();
       if (!pluginId) throw new Error("pluginId required");
-      await installPluginForTenant(
+      const pluginRoot =
+        typeof args.pluginRoot === "string" && args.pluginRoot.trim()
+          ? path.resolve(args.pluginRoot.trim())
+          : defaultPluginRoot(pluginId, { tenantId: ctx.tenantId });
+      const result = await activatePluginForTenant(
         getCoreDb(),
         ctx.tenantId,
-        pluginId,
-        typeof args.pluginRoot === "string" ? args.pluginRoot : undefined
+        pluginRoot,
+        { buildIfNeeded: true, installForTenant: true }
       );
-      return { ok: true, pluginId };
+      return { ok: true, ...result };
     }
 
     case "build_plugin": {
-      const pluginRoot = String(args.pluginRoot ?? "");
-      if (!pluginRoot) throw new Error("pluginRoot required");
-      execSync("npm run build", { cwd: pluginRoot, stdio: "pipe", encoding: "utf8" });
-      return { ok: true, pluginRoot };
+      const pluginRoot =
+        typeof args.pluginRoot === "string" && args.pluginRoot.trim()
+          ? path.resolve(args.pluginRoot.trim())
+          : args.pluginId
+            ? defaultPluginRoot(String(args.pluginId), { tenantId: ctx.tenantId })
+            : "";
+      if (!pluginRoot) throw new Error("pluginRoot or pluginId required");
+      const built = await buildPluginWithEsbuild(pluginRoot);
+      return {
+        ...built,
+        next: "Call install_plugin to load at runtime and enable for this tenant (no Bridge restart).",
+      };
     }
 
     case "prepare_marketplace_submission": {

@@ -75,19 +75,22 @@ GODMODE_PLUGIN_PATH=C:\dev\godmode-plugin-mine
 
 Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins on this machine**.
 
-Intelligence tools `scaffold_plugin` and `install_plugin` follow the same install paths.
+Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart required for tools / `tenant:install`.
 
 ## Docker hub notes
 
-Bridge runs **inside** the container. Folder paths you paste in **Unofficial** must be visible there (for example `/plugins/my-plugin`), not a Windows `C:\...` path on your laptop.
+**Intelligence-authored plugins** persist under `/data/tenant-workspaces/<tenantId>/plugins/<id>` (already on `PLATFORM_DATA_DIR`). No extra volume is required for that pipeline.
 
-Mount a host plugins directory and optionally set `GODMODE_PLUGIN_PATH`:
+**Operator-dropped plugins** (paste a folder in Unofficial): Bridge runs **inside** the container. Paths must be visible there (for example `/plugins/my-plugin`), not a Windows `C:\...` path on your laptop.
+
+Optional host mount for shared operator plugins:
 
 ```yaml
 volumes:
   - ./plugins:/plugins
 environment:
-  - GODMODE_PLUGIN_PATH=/plugins/my-plugin
+  # optional override; Intelligence defaults to tenant-workspace plugins/
+  - GODMODE_PLUGIN_SCAFFOLD_DIR=/plugins
 ```
 
 When a plugin's `bridge.js` externalizes `@godmode/plugin-api` / `@godmode/plugin-host`, Bridge rewrites those `node_modules` entries to the image's built packages before load. You do not need a sibling GodMode checkout inside the container for those two packages.

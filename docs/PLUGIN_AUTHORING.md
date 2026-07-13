@@ -11,11 +11,22 @@ GodMode core ships as a **complete personal OS** — Intelligence, wiki, tasks, 
 | **Core** | Auth, tenants, Intelligence, productivity apps, plugin platform APIs |
 | **Plugins** | Domain routes, tools, web UI, and install hooks registered at runtime |
 
-Bridge loads plugins from Marketplace-registered paths or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Unofficial** or **Installed**).
+Bridge loads plugins from Marketplace-registered paths, Intelligence `install_plugin`, or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Unofficial**, **Installed**, or Intelligence `install_plugin`).
 
-Fresh clones run as personal OS only until you install plugins from **Marketplace**.
+Fresh clones run as personal OS only until you install plugins from **Marketplace** or scaffold one via Intelligence.
 
 **Model harness profiles** (tool mode, sampling, discovery-tool filters per LLM family) live in Bridge core (`model-profiles/`), not in plugins. Plugins should not try to replace per-model harness behavior — pick a model in Intelligence and GodMode loads that profile automatically. See [LOCAL_LLM.md](./LOCAL_LLM.md#model-harness-profiles-picker-driven).
+
+## Intelligence pipeline (local + hub)
+
+Same tools work in the monorepo and on Docker hub/client:
+
+1. `scaffold_plugin` — creates `plugins/<id>/` under the **coding root** (local: `{repo}/plugins/<id>`; hub/client: `/data/tenant-workspaces/<tenant>/plugins/<id>`). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
+2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`).
+3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`).
+4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools and `tenant:install`.
+
+This matches **Marketplace → Unofficial**. Custom Express routes registered via `api.routes.mount` / `server:beforeListen` after boot may still need a restart — scaffolds should prefer tools + tenant hooks.
 
 ## Manifest (`godmode.plugin.json`)
 
@@ -114,22 +125,25 @@ Define `import.meta.env.*` in the web build if you bundle host `@/api` code — 
 
 ## Discovery
 
-1. **Marketplace** — local folder UI, catalog install, or git clone; paths persisted in `platform_meta.marketplace.plugin_paths`
-2. `GODMODE_PLUGIN_PATH` — optional env override for advanced setups
+1. **Intelligence** — `scaffold_plugin` → `build_plugin` → `install_plugin` (runtime load)
+2. **Marketplace** — local folder UI, catalog install, or git clone; paths persisted in `platform_meta.marketplace.plugin_paths`
+3. `GODMODE_PLUGIN_PATH` — optional env override for advanced setups
 
-There is no automatic sibling-repo discovery in OSS core. Clone plugins yourself or add them under **Marketplace → Unofficial**.
+There is no automatic sibling-repo discovery in OSS core. Prefer Intelligence or **Marketplace → Unofficial**.
 
 ## Per-tenant install
 
 `tenant_plugins` records which plugins a workspace has installed. Bridge gates manifest, web bundles, and routes on this table.
 
-Install: **Marketplace → Unofficial** (local folder, catalog entry, or discovered plugin) or `npm run plugins -- install <id> --tenant <uuid>`.
+Install: Intelligence `install_plugin`, **Marketplace → Unofficial**, or `npm run plugins -- install <id> --tenant <uuid>`.
 
 Only the target plugin's `tenant:install` hook runs (not all plugins).
 
 ## Build
 
-Use `tsup` or similar to emit `dist/bridge.js` and `dist/web.js`. See your plugin repo's README for a full example.
+**Intelligence / Bridge:** `build_plugin` runs esbuild inside Bridge (`src/bridge.ts` → `dist/bridge.js`, optional web entry). `@godmode/plugin-api` and `@godmode/plugin-host` are externalized and linked to the host packages at load time.
+
+**Standalone plugin repos:** use `tsup` or similar to emit `dist/bridge.js` and `dist/web.js`. See your plugin repo's README for a full example.
 
 Web bundles load at runtime from `GET /api/plugins/:id/web.js` via dynamic import and the host import map — no `@/` aliases in the core Vite app are required at plugin build time except where your repo uses them locally via `tsup` `esbuildOptions.alias`.
 

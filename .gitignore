@@ -101,7 +101,5 @@ Thumbs.db
 !.vscode/tasks.json
 !.vscode/launch.json
 
-# Local run markers
-.last-run-id.txt
-.holdings-key
-federation-public-url.txt
+# Local Intelligence plugin scaffolds (not part of OSS core)
+/plugins/

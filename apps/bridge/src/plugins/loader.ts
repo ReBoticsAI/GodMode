@@ -117,8 +117,14 @@ function resolveBridgeEntry(pluginRoot: string, entry: string): string {
   throw new Error(`Plugin bridge entry not found: ${entry} in ${pluginRoot}`);
 }
 
-async function importBridgeRegister(entryPath: string): Promise<GodModePluginRegister> {
-  const url = pathToFileURL(entryPath).href;
+async function importBridgeRegister(
+  entryPath: string,
+  cacheBust?: boolean
+): Promise<GodModePluginRegister> {
+  let url = pathToFileURL(entryPath).href;
+  if (cacheBust) {
+    url += `${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+  }
   const mod = (await import(url)) as {
     default?: GodModePluginRegister;
     register?: GodModePluginRegister;
@@ -164,24 +170,37 @@ export async function loadPluginsFromEnv(): Promise<LoadPluginsResult> {
   return { loaded, errors };
 }
 
-/** Load a single plugin at runtime (e.g. after marketplace git clone). */
+/**
+ * Load a single plugin at runtime (Marketplace / Intelligence).
+ * If already loaded, unregister and re-import with a cache-bust so rebuilds apply.
+ */
 export async function loadPluginFromRoot(
-  pluginRoot: string
-): Promise<{ pluginId: string; pluginRoot: string }> {
+  pluginRoot: string,
+  opts?: { reload?: boolean }
+): Promise<{ pluginId: string; pluginRoot: string; reloaded: boolean }> {
   const manifest = readGodmodePluginManifest(pluginRoot);
   assertEngineCompatible(manifest);
-  if (pluginRuntime.hasPlugin(manifest.id)) {
-    return { pluginId: manifest.id, pluginRoot };
-  }
   if (!manifest.bridge?.entry) {
     throw new Error("manifest missing bridge.entry");
   }
+
+  const already = pluginRuntime.hasPlugin(manifest.id);
+  const shouldReload = already && (opts?.reload !== false);
+  if (already && !shouldReload) {
+    return { pluginId: manifest.id, pluginRoot, reloaded: false };
+  }
+  if (already) {
+    pluginRuntime.unregister(manifest.id);
+  }
+
   ensureHostGodmodePackageLinks(pluginRoot);
   const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
-  const registerFn = await importBridgeRegister(entryPath);
+  const registerFn = await importBridgeRegister(entryPath, already);
   await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
-  console.log(`[plugins] runtime-loaded ${manifest.name} (${manifest.id}) from ${pluginRoot}`);
-  return { pluginId: manifest.id, pluginRoot };
+  console.log(
+    `[plugins] runtime-${already ? "reloaded" : "loaded"} ${manifest.name} (${manifest.id}) from ${pluginRoot}`
+  );
+  return { pluginId: manifest.id, pluginRoot, reloaded: already };
 }
 
 export function listPluginManifestsForWeb(): Array<{
