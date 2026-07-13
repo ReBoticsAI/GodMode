@@ -220,8 +220,16 @@ export const config = {
       | "normal"
       | "low",
     defaultNativeTools: (process.env.LLAMA_NATIVE_TOOLS ?? "true") !== "false",
-    /** native = OpenAI-style tools via llama-server --jinja; grammar = JSON-schema constrained decoding */
-    defaultToolMode: (process.env.LLAMA_TOOL_MODE ?? "grammar") as "native" | "grammar",
+    /**
+     * native = OpenAI-style tools via llama-server --jinja;
+     * grammar = JSON-schema constrained decoding.
+     * External llama-server (Gemma + --jinja) defaults to native — grammar
+     * often loops on empty-arg discovery tools like list_subagents.
+     */
+    defaultToolMode: (process.env.LLAMA_TOOL_MODE ??
+      ((process.env.LLAMA_EXTERNAL ?? "false") === "true" ? "native" : "grammar")) as
+      | "native"
+      | "grammar",
     adaptersDir:
       process.env.LLAMA_ADAPTERS_DIR ??
       path.join(process.cwd(), "apps", "bridge", "data", "ai", "adapters"),
