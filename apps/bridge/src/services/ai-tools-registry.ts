@@ -1429,7 +1429,8 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "scaffold_plugin",
-    description: "Create a sibling plugin repo from template (id, name, departments). Requires confirmation.",
+    description:
+      "Create a plugin under plugins/<id> (coding root). Returns pluginRoot + codingPath. Then edit → build_plugin → install_plugin. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1444,7 +1445,8 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "install_plugin",
-    description: "Enable a loaded plugin for the current tenant. Requires confirmation.",
+    description:
+      "Build if needed, load plugin at runtime (no Bridge restart), and enable for the current tenant. Same pipeline as Marketplace Unofficial. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1458,13 +1460,16 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "build_plugin",
-    description: "Run npm run build in a plugin directory. Requires confirmation.",
+    description:
+      "Compile plugin with Bridge esbuild (src → dist). Pass pluginRoot or pluginId. Then call install_plugin. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
       type: "object",
-      properties: { pluginRoot: { type: "string" } },
-      required: ["pluginRoot"],
+      properties: {
+        pluginRoot: { type: "string" },
+        pluginId: { type: "string" },
+      },
     },
   },
   {
