@@ -60,12 +60,11 @@ The Alpine GodMode image does **not** run CUDA inference. Run `llama-server` on 
 | `LLAMA_MODEL_DIRS` | `/models` |
 | `LLAMA_SERVER_HOST` | `host.docker.internal` |
 | `LLAMA_SERVER_PORT` | `8081` |
+| `LLAMA_TOOL_MODE` | `native` (required for Gemma with host `--jinja`; grammar can loop on tools like `list_subagents`) |
 
 Compose example: [deploy/docker-compose.hub-external-llm.yml](../deploy/docker-compose.hub-external-llm.yml).
 
-Mount local plugins at `/plugins` and paste container paths in **Marketplace → Unofficial** (for example `/plugins/my-plugin`). Bridge links `@godmode/plugin-api` / `@godmode/plugin-host` to the image builds automatically when loading a plugin.
-
-With `LLAMA_EXTERNAL=true`, Bridge **attaches** to the host server (does not spawn or kill it). Stopping the model in the UI only detaches.
+Host `llama-server` must use **`--jinja`** so chat/tool templates match. With `LLAMA_EXTERNAL=true`, Bridge defaults `LLAMA_TOOL_MODE` to **native** if unset.
 
 ## Onboarding
 

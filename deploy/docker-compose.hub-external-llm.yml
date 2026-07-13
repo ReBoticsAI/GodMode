@@ -37,6 +37,8 @@ services:
       - LLAMA_EXTERNAL=true
       - LLAMA_SERVER_HOST=host.docker.internal
       - LLAMA_SERVER_PORT=8081
+      # Gemma + host --jinja: use OpenAI-style tools (not JSON-schema grammar).
+      - LLAMA_TOOL_MODE=native
       # Optional: auto-discover a plugin (semicolon-separated). Or use Marketplace UI.
       # - GODMODE_PLUGIN_PATH=/plugins/my-plugin
     restart: unless-stopped
