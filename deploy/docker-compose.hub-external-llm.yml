@@ -8,10 +8,10 @@
 #   2. mkdir -p ./data ./plugins
 #   3. cp .env.production.example .env.production  # set secrets
 #   4. Start host llama-server on :8081 (see docs/LOCAL_LLM.md)
+#   4b. Optional: host EmbeddingGemma on :8082 with EMBEDDINGS_* (agent memory RAG)
 #   5. Optional: clone a plugin under ./plugins/my-plugin (built dist/)
 #   6. docker compose -f docker-compose.hub-external-llm.yml up -d --build
 #   7. Open http://localhost:8080 — Marketplace → Unofficial path e.g. /plugins/my-plugin
-#
 services:
   godmode:
     build:
@@ -37,8 +37,12 @@ services:
       - LLAMA_EXTERNAL=true
       - LLAMA_SERVER_HOST=host.docker.internal
       - LLAMA_SERVER_PORT=8081
-      # Gemma + host --jinja: use OpenAI-style tools (not JSON-schema grammar).
       - LLAMA_TOOL_MODE=native
+      # Host EmbeddingGemma on :8082 (see docs/LOCAL_LLM.md)
+      - EMBEDDINGS_ENABLED=true
+      - EMBEDDINGS_EXTERNAL=true
+      - EMBEDDINGS_SERVER_HOST=host.docker.internal
+      - EMBEDDINGS_PORT=8082
       # Optional: auto-discover a plugin (semicolon-separated). Or use Marketplace UI.
       # - GODMODE_PLUGIN_PATH=/plugins/my-plugin
     restart: unless-stopped

@@ -15,6 +15,10 @@ import {
 } from "../services/prompt-assembler.js";
 import { getCapabilitiesText } from "../services/capability-rag.js";
 import {
+  indexMemory,
+  removeMemoryFromIndex,
+} from "../services/embeddings/memory-embeddings.js";
+import {
   countCapabilityIndex,
   rebuildAllAgentCapabilityIndexes,
 } from "../services/capability-index.js";
@@ -60,6 +64,13 @@ import { AUTONOMOUS_RUNNER_ID } from "../services/ai-queue-worker.js";
 import type { AiTrainingManager } from "../services/ai-training-manager.js";
 import type { EmbeddingManager } from "../services/embeddings/embedding-manager.js";
 import type { ReflectionService } from "../services/reflection-service.js";
+import type { MemoryMaintenanceService } from "../services/memory-maintenance.js";
+import { getHybridWikiText } from "../services/wiki-rag.js";
+import {
+  approveWikiProposal,
+  listWikiProposals,
+  rejectWikiProposal,
+} from "../services/wiki-proposals.js";
 import {
   getReflectionConfig,
   patchReflectionConfig,
@@ -183,6 +194,7 @@ export interface AiRouterDeps {
   bridgePort: number;
   embeddings?: EmbeddingManager;
   reflection?: ReflectionService;
+  memoryMaintenance?: MemoryMaintenanceService;
   bus?: EventEmitter;
 }
 
@@ -198,7 +210,8 @@ export function createAiRouter(
     throw new Error("Tenant context required");
   };
   router.use(requireEditorForMutation);
-  const { training, scheduler, bridgePort, queue, embeddings, reflection, bus } = deps;
+  const { training, scheduler, bridgePort, queue, embeddings, reflection, memoryMaintenance, bus } =
+    deps;
   const datasetBuilderFor = (req: Request) => new AiDatasetBuilder(tdb(req));
 
   type AgentScope = {
@@ -414,13 +427,29 @@ export function createAiRouter(
     const pendingMemories = count(
       `SELECT COUNT(*) AS n FROM ai_memories WHERE status = 'pending'`
     );
-    // RAG readiness: active memories vs. those that already carry an embedding.
     const activeMemories = count(
       `SELECT COUNT(*) AS n FROM ai_memories WHERE status = 'active'`
     );
     const embeddedMemories = count(
       `SELECT COUNT(*) AS n FROM ai_memories WHERE status = 'active' AND embedding IS NOT NULL`
     );
+    const ftsIndexed = count(
+      `SELECT COUNT(*) AS n FROM ai_memories_fts`
+    );
+    const pendingEpisodes = count(
+      `SELECT COUNT(*) AS n FROM ai_memories WHERE status = 'pending' AND source = 'distill'`
+    );
+    let pendingWikiProposals = 0;
+    try {
+      const row = getCoreDb()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM wiki_page_proposals WHERE status = 'pending'`
+        )
+        .get() as { n: number } | undefined;
+      pendingWikiProposals = row?.n ?? 0;
+    } catch {
+      pendingWikiProposals = 0;
+    }
 
     const embeddingStatus = embeddings?.getStatus() ?? null;
 
@@ -430,12 +459,19 @@ export function createAiRouter(
         skills: pendingSkills,
         rules: pendingRules,
         memories: pendingMemories,
+        episodes: pendingEpisodes,
+        wikiProposals: pendingWikiProposals,
       },
       embeddingCoverage: {
         total: activeMemories,
         embedded: embeddedMemories,
       },
+      ftsCoverage: {
+        total: activeMemories,
+        indexed: ftsIndexed,
+      },
       ragTopK: config.embeddings.ragTopK,
+      wikiRagTopK: config.embeddings.wikiRagTopK,
       embedderLogTail: embeddingStatus?.embedder.logs.slice(-20) ?? [],
     });
   });
@@ -605,7 +641,18 @@ export function createAiRouter(
       res.status(404).json({ error: "Not found" });
       return;
     }
-    res.json(agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id));
+    const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id) as
+      | { id: string; text: string }
+      | undefined;
+    if (row) {
+      indexMemory(
+        agentDb,
+        embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
+        row.id,
+        row.text
+      );
+    }
+    res.json(row);
   });
 
   router.post("/memories", (req, res) => {
@@ -632,6 +679,12 @@ export function createAiRouter(
       req.body?.category ?? null,
       req.body?.source ?? "manual"
     );
+    indexMemory(
+      agentDb,
+      embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
+      id,
+      text
+    );
     const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(id);
     res.status(201).json(row);
   });
@@ -642,8 +695,8 @@ export function createAiRouter(
     if (!agentDb) return;
     const { text, enabled, category } = req.body ?? {};
     const existing = agentDb
-      .prepare(`SELECT id FROM ai_memories WHERE id = ?`)
-      .get(req.params.id);
+      .prepare(`SELECT id, text FROM ai_memories WHERE id = ?`)
+      .get(req.params.id) as { id: string; text: string } | undefined;
     if (!existing) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -663,13 +716,25 @@ export function createAiRouter(
         `UPDATE ai_memories SET category = ?, updated_at = datetime('now') WHERE id = ?`
       ).run(String(category), req.params.id);
     }
-    res.json(agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id));
+    const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id) as
+      | { id: string; text: string }
+      | undefined;
+    if (row) {
+      indexMemory(
+        agentDb,
+        embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
+        row.id,
+        row.text
+      );
+    }
+    res.json(row);
   });
 
   router.delete("/memories/:id", (req, res) => {
     const agentId = agentIdFromRequest(req);
     const agentDb = agentDbFromRequest(req, res, agentId, "editor");
     if (!agentDb) return;
+    removeMemoryFromIndex(agentDb, req.params.id);
     const result = agentDb.prepare(`DELETE FROM ai_memories WHERE id = ?`).run(req.params.id);
     res.json({ ok: result.changes > 0 });
   });
@@ -1143,6 +1208,38 @@ export function createAiRouter(
       return;
     }
     res.json({ ok: true });
+  });
+
+  router.post("/memory/distill", (req, res) => {
+    if (!memoryMaintenance) {
+      res.status(503).json({ error: "Memory maintenance not available" });
+      return;
+    }
+    const chatId = String(req.body?.chatId ?? "");
+    const agentId = String(req.body?.agentId ?? "intelligence");
+    if (!chatId) {
+      res.status(400).json({ error: "chatId required" });
+      return;
+    }
+    const jobId = memoryMaintenance.enqueueDistill({
+      chatId,
+      agentId,
+      tenantId: req.tenantId,
+      force: Boolean(req.body?.force),
+    });
+    res.json({ ok: true, jobId });
+  });
+
+  router.post("/memory/wiki-synthesize", (req, res) => {
+    if (!memoryMaintenance) {
+      res.status(503).json({ error: "Memory maintenance not available" });
+      return;
+    }
+    const jobId = memoryMaintenance.enqueueWikiSynthesize(
+      req.tenantId ?? "",
+      String(req.body?.agentId ?? "intelligence")
+    );
+    res.json({ ok: true, jobId });
   });
 
   router.get("/secrets", (req, res) => {
@@ -1632,6 +1729,9 @@ export function createAiRouter(
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
+    if (embeddings) {
+      void embeddings.ensureTenantBackfill(scope.tenantId);
+    }
     const memoryOverride = embeddings
       ? await getSemanticMemoriesText(
           engineDb,
@@ -1648,6 +1748,22 @@ export function createAiRouter(
           { agentId: agent.id, topK: config.embeddings.ragTopK }
         )
       : undefined;
+    const wikiTenantIds = [
+      ...new Set(
+        [req.tenantId, scope.tenantId, work.tenantId].filter(
+          (id): id is string => Boolean(id)
+        )
+      ),
+    ];
+    const wikiOverride = await getHybridWikiText(
+      getCoreDb(),
+      embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : undefined,
+      message?.trim() ?? "",
+      {
+        tenantIds: wikiTenantIds.length ? wikiTenantIds : [scope.tenantId].filter(Boolean),
+        topK: config.embeddings.wikiRagTopK,
+      }
+    );
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,
       platformContext,
@@ -1662,6 +1778,7 @@ export function createAiRouter(
       tenantId: req.tenantId,
       agent,
       memoryOverride,
+      wikiOverride: wikiOverride || undefined,
       capabilitiesOverride,
       chatMode,
       harnessDelta: harnessProfile.harnessDelta,
@@ -1672,7 +1789,18 @@ export function createAiRouter(
       stripThinking: harnessProfile.stripThinkingFromHistory,
     });
     const ctxBudget = Math.floor(llm.getStatus().ctxSize * 4 * HISTORY_CHAR_BUDGET_RATIO);
-    const compactedHistory = compactAgentMessages(historyAgentMessages, ctxBudget);
+    const { messages: compactedHistory, droppedTurns } = compactAgentMessages(
+      historyAgentMessages,
+      ctxBudget
+    );
+    if (droppedTurns > 0 && activeChatId && memoryMaintenance) {
+      // Compaction erased turns — enqueue distill so episodic knowledge survives.
+      memoryMaintenance.enqueueDistill({
+        chatId: activeChatId,
+        agentId: agent.id,
+        tenantId: work.tenantId,
+      });
+    }
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -1852,6 +1980,9 @@ export function createAiRouter(
             bridgePort,
             llm,
             queue,
+            embedder: embeddings?.isEmbedderReady()
+              ? embeddings.getEmbeddingClient()
+              : undefined,
             activeAgentId: agent.id,
             userId: req.user?.id,
             tenantId: work.tenantId,

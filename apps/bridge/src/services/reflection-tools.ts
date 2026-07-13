@@ -24,6 +24,11 @@ import {
   createReflectionProposal,
   type ReflectionProposalKind,
 } from "./reflection-proposals.js";
+import {
+  indexMemory,
+  removeMemoryFromIndex,
+} from "./embeddings/memory-embeddings.js";
+import { gateSkillDraft } from "./skill-quality.js";
 
 export const REFLECTION_TOOL_NAMES = new Set([
   "read_recent_chats",
@@ -158,7 +163,8 @@ export function getReflectionToolSchemas(): Array<{
     },
     {
       name: "create_skill",
-      description: "Create a skill (instruction bundle) for this agent.",
+      description:
+        "Create a skill playbook for this agent (numbered / headed steps: when X, do Y). Rejected if too short or near-duplicate.",
       parameters: objSchema(
         {
           name: { type: "string" },
@@ -388,14 +394,17 @@ export async function executeReflectionTool(
         `INSERT INTO ai_memories (id, scope, chat_id, agent_id, text, category, source, status)
          VALUES (?, 'global', NULL, ?, ?, ?, 'reflection', ?)`
       ).run(id, aid, text, args.category ? String(args.category) : null, status);
+      if (status === "active") {
+        indexMemory(db, ctx.embedder, id, text);
+      }
       return { ok: true, id, status };
     }
     case "update_memory": {
       const id = String(args.id ?? "");
       if (!id) throw new Error("id required");
       const row = db
-        .prepare(`SELECT id, status FROM ai_memories WHERE id = ? AND agent_id = ?`)
-        .get(id, aid) as { id: string; status: string } | undefined;
+        .prepare(`SELECT id, status, text FROM ai_memories WHERE id = ? AND agent_id = ?`)
+        .get(id, aid) as { id: string; status: string; text: string } | undefined;
       if (!row) throw new Error("memory not found");
       const payload = {
         text: args.text != null ? String(args.text) : undefined,
@@ -421,6 +430,8 @@ export async function executeReflectionTool(
           sets.push("updated_at = datetime('now')");
           params.push(id);
           db.prepare(`UPDATE ai_memories SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+          const nextText = payload.text ?? row.text;
+          indexMemory(db, ctx.embedder, id, nextText);
         }
         return { ok: true, id, applied: true };
       }
@@ -430,6 +441,7 @@ export async function executeReflectionTool(
       const id = String(args.id ?? "");
       if (!id) throw new Error("id required");
       return stageOrApply(db, ctx, "memory", id, "delete", {}, () => {
+        removeMemoryFromIndex(db, id);
         db.prepare(`DELETE FROM ai_memories WHERE id = ? AND agent_id = ?`).run(id, aid);
       });
     }
@@ -495,14 +507,18 @@ export async function executeReflectionTool(
       });
     }
     case "create_skill": {
+      const name = String(args.name ?? "");
+      const body = String(args.body ?? "");
+      const gate = gateSkillDraft(db, aid, { name, body });
+      if (gate) throw new Error(`Skill rejected: ${gate}`);
       const status = mode === "auto" ? "active" : "pending";
       const id = createSkillFile(
         db,
         aid,
         {
-          name: String(args.name ?? ""),
+          name,
           description: String(args.description ?? ""),
-          body: String(args.body ?? ""),
+          body,
           tools: Array.isArray(args.tools) ? args.tools.map(String) : undefined,
           departments: Array.isArray(args.departments)
             ? args.departments.map(String)

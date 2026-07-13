@@ -253,6 +253,11 @@ export const config = {
     enabled: (process.env.EMBEDDINGS_ENABLED ?? "false") === "true",
     /** Re-launch the embedder on bridge boot when enabled. */
     autoStart: (process.env.EMBEDDINGS_AUTO_START ?? "true") !== "false",
+    /**
+     * When true, do not spawn embedder llama-server; attach to
+     * serverHost:embedderPort (e.g. host systemd on Docker hub).
+     */
+    external: (process.env.EMBEDDINGS_EXTERNAL ?? "false") === "true",
     serverHost: process.env.EMBEDDINGS_SERVER_HOST ?? "127.0.0.1",
     /** Embedding model (EmbeddingGemma). Launch with --embeddings --pooling mean. */
     embedderModelPath:
@@ -264,6 +269,8 @@ export const config = {
     threads: Number(process.env.EMBEDDINGS_THREADS ?? 4),
     /** Top-K active memories returned by semantic (cosine) retrieval. */
     ragTopK: Number(process.env.EMBEDDINGS_RAG_TOP_K ?? 12),
+    /** Top-K wiki snippets for chat prompt section. */
+    wikiRagTopK: Number(process.env.EMBEDDINGS_WIKI_RAG_TOP_K ?? 4),
   },
   holdings: {
     /** AES-256-GCM key (hex). Auto-generated to data dir if absent. */

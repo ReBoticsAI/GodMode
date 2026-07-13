@@ -631,6 +631,7 @@ export function initCoreDb(): CoreDatabase {
   ensureWikiPerTenantSlugIndexes(db);
   ensureOssPlatformV2Tables(db);
   ensurePlatformGroupsTables(db);
+  ensureWikiSearchAndProposals(db);
 
   backfillWelcomeWikiPages(db);
 
@@ -895,6 +896,45 @@ function ensureWikiPerTenantSlugIndexes(db: CoreDatabase): void {
       ON wiki_pages(tenant_id, visibility, slug);
     CREATE UNIQUE INDEX wiki_pages_external_slug_idx
       ON wiki_pages(slug) WHERE visibility = 'external';
+  `);
+}
+
+/** Wiki hybrid RAG (FTS + embeddings) and staged synthesize proposals. */
+function ensureWikiSearchAndProposals(db: CoreDatabase): void {
+  const cols = db.prepare("PRAGMA table_info(wiki_pages)").all() as Array<{ name: string }>;
+  const has = (name: string) => cols.some((c) => c.name === name);
+  if (!has("embedding")) {
+    db.exec("ALTER TABLE wiki_pages ADD COLUMN embedding BLOB");
+  }
+  if (!has("embedding_dim")) {
+    db.exec("ALTER TABLE wiki_pages ADD COLUMN embedding_dim INTEGER");
+  }
+
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
+      page_id UNINDEXED,
+      title,
+      body
+    );
+
+    CREATE TABLE IF NOT EXISTS wiki_page_proposals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      action TEXT NOT NULL CHECK (action IN ('create', 'update')),
+      space TEXT,
+      slug TEXT,
+      title TEXT NOT NULL,
+      body_markdown TEXT NOT NULL DEFAULT '',
+      target_page_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected')),
+      reason TEXT,
+      source TEXT NOT NULL DEFAULT 'synthesize',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS wiki_page_proposals_status_idx
+      ON wiki_page_proposals(tenant_id, status, created_at DESC);
   `);
 }
 
