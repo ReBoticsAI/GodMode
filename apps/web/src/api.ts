@@ -3354,7 +3354,7 @@ export function createSupportTicket(body: {
   subject: string;
   body: string;
   category?: string | null;
-  targetKind?: "platform_github" | "resource_owner";
+  targetKind?: "platform_github" | "platform_admin" | "resource_owner";
   sharedGrantId?: string | null;
   ownerUserId?: string | null;
 }) {
