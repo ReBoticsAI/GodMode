@@ -36,18 +36,20 @@ npm run dev
 
 After signup, the **FirstRunWizard** guides three steps:
 
-1. **Welcome** — overview of Intelligence and structure
-2. **Profile** — display name and persona basics for Digital You
+1. **Welcome** — overview of Intelligence and why an LLM is required
+2. **Choose your LLM** — local GGUF, detect Ollama, or use a cloud / Cursor path via Vault
 3. **Ready** — open Chat and start with Intelligence
 
-Complete the wizard, then open **Chat** from the sidebar.
+Complete the wizard, then open **Chat** from the sidebar. Details: [ONBOARDING.md](./ONBOARDING.md).
 
 ## First Intelligence chat
 
 1. Open **Chat** and select **Intelligence**
-2. Add an LLM provider key under **Vault → Secrets** (or use a local model if configured)
-3. Configure the model in **Agents → Pipeline** for Intelligence
-4. Ask Intelligence to create a department, wiki page, or task — it uses platform tools to mutate your workspace
+2. Ensure an LLM is ready:
+   - **Local:** GGUF under your model dirs (see [LOCAL_LLM.md](./LOCAL_LLM.md)), or
+   - **Cursor:** Vault → **Cursor subscription** → Connect, then pick Auto / a named model ([CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)), or
+   - **Cloud provider:** Vault → Secrets + Intelligence model picker / Agents → Pipeline
+3. Ask Intelligence to create a department, wiki page, or task — it uses platform tools to mutate your workspace
 
 Try chat modes from the composer:
 
@@ -64,6 +66,9 @@ Slash commands (type `/` in the composer) include `/help`, `/clear`, and workspa
 | Edit navigation tree | **Structure** (`/structure`) |
 | Install a plugin pack | **Marketplace → Unofficial** (local folder or catalog) |
 | Private plugin | [MARKETPLACE.md](./MARKETPLACE.md#private-plugins) |
+| Local Gemma / hub attach | [LOCAL_LLM.md](./LOCAL_LLM.md) |
+| Cursor subscription chat | [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md) |
+| Agent memory / embeddings | [AGENT_MEMORY.md](./AGENT_MEMORY.md) |
 | Full env reference | [CONFIGURATION.md](./CONFIGURATION.md) |
 | Post-install checklist | [VERIFICATION.md](./VERIFICATION.md) |
 
