@@ -108,6 +108,7 @@ import {
   listCursorSubscriptionModels,
   probeCursorCliAuth,
   startCursorCliLoginUrl,
+  normalizeCursorVaultSecret,
 } from "../services/cursor-subscription.js";
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
@@ -1243,7 +1244,14 @@ export function createAiRouter(
   });
 
   router.get("/secrets", (req, res) => {
-    res.json({ secrets: listSecrets(tdb(req)) });
+    // Cursor subscription key is managed by the Cursor card — hide from generic list.
+    const secrets = listSecrets(tdb(req)).filter(
+      (s) =>
+        s.id !== "cursor-api-key" &&
+        s.name !== "cursor_api_key" &&
+        s.name !== "CURSOR_API_KEY"
+    );
+    res.json({ secrets });
   });
 
   router.post("/secrets", (req, res) => {
@@ -1252,7 +1260,19 @@ export function createAiRouter(
       res.status(400).json({ error: "name and value required" });
       return;
     }
-    res.status(201).json(createSecret(tdb(req), String(name).trim(), String(value)));
+    const trimmedName = String(name).trim();
+    if (
+      trimmedName === "cursor_api_key" ||
+      trimmedName === "CURSOR_API_KEY" ||
+      trimmedName.toLowerCase() === "cursor-api-key"
+    ) {
+      res.status(400).json({
+        error:
+          "Use Vault → Cursor subscription → Connect for Cursor API keys (not this list).",
+      });
+      return;
+    }
+    res.status(201).json(createSecret(tdb(req), trimmedName, String(value)));
   });
 
   router.delete("/secrets/:id", (req, res) => {
@@ -1261,6 +1281,7 @@ export function createAiRouter(
 
   router.get("/cursor/status", async (req, res) => {
     const db = tdb(req);
+    normalizeCursorVaultSecret(db);
     const status = getCursorAuthStatus(db);
     const cli = await probeCursorCliAuth().catch(() => ({
       ok: false,
@@ -1308,25 +1329,24 @@ export function createAiRouter(
     }
   });
 
-  router.post("/cursor/use-for-intelligence", (req, res) => {
-    const db = tdb(req);
-    if (!getCursorAuthStatus(db).connected) {
-      res.status(400).json({ error: "Connect Cursor with an API key first" });
-      return;
+  router.post("/cursor/use-for-intelligence", async (req, res) => {
+    try {
+      const db = tdb(req);
+      if (!getCursorAuthStatus(db).connected) {
+        res.status(400).json({ error: "Connect Cursor with an API key first" });
+        return;
+      }
+      const model = req.body?.model ? String(req.body.model) : "auto";
+      const result = await selectIntelligenceModel(db, llm, {
+        source: "cursor",
+        model,
+      });
+      res.json({ ok: true, agent: getAgent(db, "intelligence"), active: result.active });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-    const model = req.body?.model ? String(req.body.model) : "auto";
-    const agent = getAgent(db, "intelligence");
-    if (!agent) {
-      res.status(404).json({ error: "Intelligence agent not found" });
-      return;
-    }
-    updateAgent(db, "intelligence", {
-      backend: "cursor_cloud",
-      thinking: { ...agent.thinking, nativeTools: true },
-      config: { ...agent.config, model },
-    });
-    markLlmReady(db);
-    res.json({ ok: true, agent: getAgent(db, "intelligence") });
   });
 
   router.get("/model-catalog", async (req, res) => {

@@ -9,6 +9,7 @@ Documentation for installing, using, and extending GodMode.
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Clone, sign up, first Intelligence chat |
 | [ONBOARDING.md](ONBOARDING.md) | FirstRunWizard and LLM setup |
 | [LOCAL_LLM.md](LOCAL_LLM.md) | llama.cpp / Gemma 4 reference profile and Docker attach |
+| [CURSOR_SUBSCRIPTION.md](CURSOR_SUBSCRIPTION.md) | Cursor Auto / named models for Intelligence (`cursor_cloud`) |
 | [FEATURES.md](FEATURES.md) | Full feature catalog by route and tab |
 
 ## Use GodMode
