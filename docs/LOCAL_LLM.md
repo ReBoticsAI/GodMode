@@ -66,6 +66,34 @@ Compose example: [deploy/docker-compose.hub-external-llm.yml](../deploy/docker-c
 
 Host `llama-server` must use **`--jinja`** so chat/tool templates match. With `LLAMA_EXTERNAL=true`, Bridge defaults `LLAMA_TOOL_MODE` to **native** if unset.
 
+## Model harness profiles (picker-driven)
+
+Changing the model in the Intelligence picker does more than swap backends: Bridge resolves a **`ModelHarnessProfile`** and applies it on the next chat turn. Profiles encode NVIDIA-style harness engineering (tool mode, sampling, prompt delta, discovery-tool middleware) per model family — not one global Cursor-parity loop for every LLM.
+
+Registry: [`apps/bridge/src/services/model-profiles/`](../apps/bridge/src/services/model-profiles/index.ts).
+
+| Profile | When | Highlights |
+|---------|------|------------|
+| **`gemma-4`** | Local GGUF path/name matches `/gemma-4/i` | `toolMode: native`, sampling `1.0 / 0.95 / 64`, max 12 tool iterations, defer `list_subagents` unless agent context, strip thought channels from history |
+| **`cursor`** | Picker `source: cursor` | Stub: native tools, no grammar |
+| **`openai` / `anthropic`** | Picker `source: provider` | Stub: provider-native tools |
+| **`generic-local`** | Other local GGUFs | Conservative discovery deferral + simple-chat delta |
+| **`remote`** | Shared marketplace model | Stub |
+
+Flow: picker → `POST /ai/select-model` → `resolveHarnessProfile` → store `config.harnessProfileId` (display) → each `/ai/chat` **re-derives** from the active model so the harness cannot drift.
+
+### Gemma 4 card → profile
+
+| HF / Google card | Profile setting |
+|------------------|-----------------|
+| Native function calling + jinja | `toolMode: "native"` (never grammar for this family) |
+| `temperature=1.0`, `top_p=0.95`, `top_k=64` | Sampling overlay on chat |
+| Thinking via `<\|think\|>` / channel thoughts | Default thinking off; strip channels before multi-turn history |
+| Agentic but loops on discovery tools | Harness delta: no tools for greetings; defer `list_subagents` unless the user asks about agents |
+| Long tool loops | `maxChatIterations: 12` (+ existing identical-call breaker) |
+
+Adding a new model later = add/fill a profile entry; picker wiring stays the same. Profiles are **not** plugins — see [PLUGIN_AUTHORING.md](./PLUGIN_AUTHORING.md).
+
 ## Onboarding
 
 See [ONBOARDING.md](./ONBOARDING.md). Each workspace must complete the LLM step; hub tenants do not share that flag.
