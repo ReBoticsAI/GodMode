@@ -77,7 +77,7 @@ export default function Support() {
     <Page>
       <PageHeader
         title="Support"
-        description="Platform bugs on GitHub; shared resource issues to owners."
+        description="Hub issues go to administrators in-app; open-source bugs go to GitHub."
         actions={
           <SupportRequestDialog
             trigger={<Button>New request</Button>}

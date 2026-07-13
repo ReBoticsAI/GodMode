@@ -173,6 +173,13 @@ export function ensureAgentDescriptions(db: AppDatabase): void {
   }
 }
 
+/** Hub/client default: cloud provider unless an external llama-server is attached. */
+function defaultIntelligenceBackend(): AgentBackendKind {
+  if (config.ai.external) return "local";
+  if (config.isHub || config.isClient) return "provider";
+  return "local";
+}
+
 export function seedIntelligenceAgent(db: AppDatabase): void {
   const existing = db
     .prepare(`SELECT id FROM ai_agents WHERE id IN ('intelligence', 'intelligence')`)
@@ -194,8 +201,7 @@ export function seedIntelligenceAgent(db: AppDatabase): void {
     thinkingEfficiency: config.ai.defaultThinkingEfficiency,
     nativeTools: config.ai.defaultNativeTools,
   };
-  const defaultBackend =
-    config.isHub || config.isClient ? "provider" : "local";
+  const defaultBackend = defaultIntelligenceBackend();
   const defaultConfig =
     defaultBackend === "provider"
       ? { knowsUser: true, codeAccess: true, provider: "openai", model: "gpt-4o" }
@@ -219,6 +225,32 @@ export function seedIntelligenceAgent(db: AppDatabase): void {
   db.prepare(`UPDATE ai_agents SET config_json=? WHERE id='intelligence' AND config_json='{}'`).run(
     JSON.stringify(defaultConfig)
   );
+}
+
+/** Idempotent: when LLAMA_EXTERNAL is set, Intelligence must use local llama, not provider keys. */
+export function ensureIntelligenceLocalBackendWhenExternalLlm(db: AppDatabase): void {
+  if (!config.ai.external) return;
+  const row = db
+    .prepare(`SELECT backend, config_json FROM ai_agents WHERE id='intelligence'`)
+    .get() as { backend: string; config_json: string } | undefined;
+  if (!row || row.backend === "local") return;
+  if (row.backend !== "provider") return;
+
+  let agentConfig: Record<string, unknown> = {};
+  try {
+    agentConfig = JSON.parse(row.config_json || "{}") as Record<string, unknown>;
+  } catch {
+    agentConfig = {};
+  }
+  const nextConfig = {
+    knowsUser: agentConfig.knowsUser !== false,
+    codeAccess: agentConfig.codeAccess !== false,
+  };
+  db.prepare(
+    `UPDATE ai_agents
+     SET backend='local', config_json=?, model_path=NULL, updated_at=datetime('now')
+     WHERE id='intelligence'`
+  ).run(JSON.stringify(nextConfig));
 }
 
 /** Whether an agent may use coding/terminal tools (read_file, run_terminal, etc.). */
