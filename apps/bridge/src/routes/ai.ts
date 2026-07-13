@@ -100,6 +100,11 @@ import {
 } from "../services/cursor-subscription.js";
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
+import {
+  applyProfileSampling,
+  filterSchemasForProfile,
+  resolveProfileForAgent,
+} from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir } from "../services/coding/fs-tools.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
@@ -1619,8 +1624,11 @@ export function createAiRouter(
       work.tenantId
     );
 
-    const settings = llm.getSettings();
     const flowConfig = loadPromptFlowConfig(engineDb);
+    const harnessProfile = resolveProfileForAgent(
+      agent,
+      llm.getStatus().modelPath
+    );
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
@@ -1656,10 +1664,13 @@ export function createAiRouter(
       memoryOverride,
       capabilitiesOverride,
       chatMode,
+      harnessDelta: harnessProfile.harnessDelta,
     });
     const systemPrompt = assembled.systemPrompt;
 
-    const historyAgentMessages = historyToAgentMessages(history);
+    const historyAgentMessages = historyToAgentMessages(history, {
+      stripThinking: harnessProfile.stripThinkingFromHistory,
+    });
     const ctxBudget = Math.floor(llm.getStatus().ctxSize * 4 * HISTORY_CHAR_BUDGET_RATIO);
     const compactedHistory = compactAgentMessages(historyAgentMessages, ctxBudget);
 
@@ -1674,17 +1685,20 @@ export function createAiRouter(
       { role: "user", content: userContent },
     ];
 
-    const sampling = {
-      temperature: agent.sampling.temperature,
-      topP: agent.sampling.topP,
-      topK: agent.sampling.topK,
-      minP: agent.sampling.minP,
-      repeatPenalty: agent.sampling.repeatPenalty,
-      presencePenalty: agent.sampling.presencePenalty,
-      frequencyPenalty: agent.sampling.frequencyPenalty,
-      maxTokens: agent.sampling.maxTokens,
-      seed: agent.sampling.seed,
-    };
+    const sampling = applyProfileSampling(
+      {
+        temperature: agent.sampling.temperature,
+        topP: agent.sampling.topP,
+        topK: agent.sampling.topK,
+        minP: agent.sampling.minP,
+        repeatPenalty: agent.sampling.repeatPenalty,
+        presencePenalty: agent.sampling.presencePenalty,
+        frequencyPenalty: agent.sampling.frequencyPenalty,
+        maxTokens: agent.sampling.maxTokens,
+        seed: agent.sampling.seed,
+      },
+      harnessProfile
+    );
 
     // Snapshot what we send so the AI Settings inspector can show it. Image
     // payloads are huge base64 blobs, so we only record their count.
@@ -1813,11 +1827,24 @@ export function createAiRouter(
         // engine DB; tool execution writes (artifacts, memory) land in the work
         // DB. Memory contribute-back (if enabled) mirrors into the engine DB.
         const backend = getBackend(agent, engineDb, llm);
+        const rawSchemas = getToolSchemasForLlm(engineDb, agent.id, chatMode);
+        const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, {
+          userMessage: message?.trim(),
+          pathname: platformContext?.pathname,
+          mentionIds: platformContext?.mentionedSources?.map((s) => s.id) ?? [],
+        });
         const answer = await backend.run({
           agent,
           messages: agentMessages,
           chatMode,
-          toolSchemas: getToolSchemasForLlm(engineDb, agent.id, chatMode),
+          toolSchemas,
+          toolMode:
+            harnessProfile.toolMode === "grammar" ? "grammar" : "native",
+          samplingOverlay: {
+            temperature: harnessProfile.sampling.temperature,
+            topP: harnessProfile.sampling.topP,
+            topK: harnessProfile.sampling.topK,
+          },
           toolCtx: {
             db: workDb,
             contributeDb,
@@ -1838,7 +1865,7 @@ export function createAiRouter(
             },
           },
           abortSignal: abortController.signal,
-          maxIterations: 32,
+          maxIterations: harnessProfile.maxChatIterations,
           onToken: (chunk) => {
             streamed += chunk;
             segRaw += chunk;

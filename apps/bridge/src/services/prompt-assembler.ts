@@ -319,6 +319,8 @@ export function assemblePrompt(
     memoryOverride?: string;
     capabilitiesOverride?: string;
     chatMode?: IntelligenceChatMode;
+    /** Model harness profile delta appended after the base harness. */
+    harnessDelta?: string;
   }
 ): AssembleResult {
   const flow = opts.flowConfig ?? loadPromptFlowConfig(db);
@@ -399,9 +401,11 @@ export function assemblePrompt(
     codeAccess,
     opts.chatMode
   );
+  const harnessDelta = opts.harnessDelta?.trim();
+  const harnessBlock = harnessDelta ? `${harness}\n\n${harnessDelta}` : harness;
   systemPrompt = systemPrompt
-    ? `${systemPrompt}\n\n${harness}\n\n<!-- harness:${HARNESS_VERSION} -->`
-    : `${harness}\n\n<!-- harness:${HARNESS_VERSION} -->`;
+    ? `${systemPrompt}\n\n${harnessBlock}\n\n<!-- harness:${HARNESS_VERSION} -->`
+    : `${harnessBlock}\n\n<!-- harness:${HARNESS_VERSION} -->`;
 
   if (opts.enableThinking) {
     const thinkPrefix = "<|think|>\n";
