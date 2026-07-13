@@ -34,7 +34,6 @@ Documentation for installing, using, and extending GodMode.
 
 ## Project
 
-- [../CONTRIBUTING.md](../CONTRIBUTING.md) — development and pull requests
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) — development, PRs, and roadmap themes
 - [../CHANGELOG.md](../CHANGELOG.md) — release history
-- [../ROADMAP.md](../ROADMAP.md) — planned themes (not a schedule)
 - [../SECURITY.md](../SECURITY.md) — vulnerability reporting

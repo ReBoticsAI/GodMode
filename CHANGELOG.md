@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — see [ROADMAP.md](ROADMAP.md) for planned themes.
+Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — see [CONTRIBUTING.md](CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes) for planned themes.
 
 ### Added
 

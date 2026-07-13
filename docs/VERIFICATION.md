@@ -127,4 +127,4 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [CONFIGURATION.md](./CONFIGURATION.
 - [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)
 - [AGENT_MEMORY.md](./AGENT_MEMORY.md)
 - [../CHANGELOG.md](../CHANGELOG.md)
-- [../ROADMAP.md](../ROADMAP.md)
+- [../CONTRIBUTING.md](../CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes)

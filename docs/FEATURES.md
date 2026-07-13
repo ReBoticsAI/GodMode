@@ -2,7 +2,7 @@
 
 Complete reference for the personal OS shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** (sidebar) is where you talk to Intelligence, Digital You, department agents, and DMs.
 
-For what shipped since v0.1.0, see [CHANGELOG.md](../CHANGELOG.md). Planned themes: [ROADMAP.md](../ROADMAP.md).
+For what shipped since v0.1.0, see [CHANGELOG.md](../CHANGELOG.md). Contribution themes: [CONTRIBUTING.md](../CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes).
 
 ## Platform and agents
 

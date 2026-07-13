@@ -245,7 +245,7 @@ Full documentation index: **[docs/README.md](docs/README.md)**
 | **Get started** | [GETTING_STARTED](docs/GETTING_STARTED.md) · [ONBOARDING](docs/ONBOARDING.md) · [FEATURES](docs/FEATURES.md) · [LOCAL_LLM](docs/LOCAL_LLM.md) · [CURSOR](docs/CURSOR_SUBSCRIPTION.md) |
 | **Use GodMode** | [AGENT_MEMORY](docs/AGENT_MEMORY.md) · [MARKETPLACE](docs/MARKETPLACE.md) · [SHARED_FEDERATION](docs/SHARED_FEDERATION.md) · [CONFIGURATION](docs/CONFIGURATION.md) · [SECURITY](docs/SECURITY.md) |
 | **Deploy & extend** | [DEPLOY](DEPLOY.md) · [architecture](docs/architecture.md) · [PLUGIN_AUTHORING](docs/PLUGIN_AUTHORING.md) (contributors) |
-| **Project** | [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) · [CONTRIBUTING](CONTRIBUTING.md) |
+| **Project** | [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) (includes roadmap themes) |
 
 ## License
 
