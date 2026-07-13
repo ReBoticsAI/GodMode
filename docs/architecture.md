@@ -87,7 +87,23 @@ flowchart TB
   Tools --> Memory[Memory artifacts]
 ```
 
-Intelligence assembles context from structure scope, rules, skills, and retrieved capabilities, then calls an LLM backend (local llama.cpp or cloud provider via Vault API keys). Tool calls mutate tenant state through a confirm/auto policy.
+Intelligence assembles context from structure scope, rules, skills, retrieved capabilities, **memory/wiki RAG** (when enabled), and a **model harness profile**, then calls an LLM backend. Tool calls mutate tenant state through a confirm/auto policy.
+
+### LLM backends
+
+| Backend | How it runs |
+|---------|-------------|
+| **`local`** | Bridge-spawned `llama-server`, or **`LLAMA_EXTERNAL`** attach to a host process ([LOCAL_LLM.md](LOCAL_LLM.md)) |
+| **`cursor_cloud`** | Cursor subscription via `@cursor/sdk` + GodMode custom tools ([CURSOR_SUBSCRIPTION.md](CURSOR_SUBSCRIPTION.md)) |
+| **`provider`** | OpenAI / Anthropic (etc.) via Vault API keys |
+| **`remote`** | Shared marketplace inference endpoint |
+| **`cursor`** | CLI contractor (`cursor-agent`) — separate from subscription Intelligence |
+
+Selecting a model in the Intelligence picker resolves a **harness profile** (sampling, tool mode, discovery middleware). See [LOCAL_LLM.md](LOCAL_LLM.md#model-harness-profiles-picker-driven).
+
+### Agent memory
+
+Working chat history, semantic `ai_memories` (hybrid RAG), episodic distill jobs, procedural skills, and wiki RAG are described in [AGENT_MEMORY.md](AGENT_MEMORY.md). Hub installs often attach an external EmbeddingGemma process (`EMBEDDINGS_EXTERNAL`).
 
 ## Agent model
 
@@ -113,6 +129,8 @@ Discovery order:
 1. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
 2. Optional `GODMODE_PLUGIN_PATH` env var
 3. Per-tenant `tenant_plugins` (**Marketplace** install/uninstall)
+
+Intelligence can also **scaffold → build → install** plugins from chat ([PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md)).
 
 See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
 
