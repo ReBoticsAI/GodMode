@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -19,10 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createSupportTicket } from "@/api";
+import { createSupportTicket, fetchBridgeHealth } from "@/api";
 
 const GITHUB_ISSUES =
   "https://github.com/ReBoticsAI/GodMode/issues/new?template=bug_report.md";
+
+type SupportTarget =
+  | "platform_admin"
+  | "platform_github"
+  | "resource_owner";
 
 export function SupportRequestDialog({
   trigger,
@@ -33,11 +38,17 @@ export function SupportRequestDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState("");
-  const [targetKind, setTargetKind] = useState<"platform_github" | "resource_owner">(
-    "platform_github"
-  );
+  const [targetKind, setTargetKind] = useState<SupportTarget>("platform_admin");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [isHub, setIsHub] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchBridgeHealth()
+      .then((h) => setIsHub(Boolean(h.hub)))
+      .catch(() => setIsHub(false));
+  }, [open]);
 
   const submit = async () => {
     if (!subject.trim()) {
@@ -57,13 +68,20 @@ export function SupportRequestDialog({
       const res = await createSupportTicket({
         subject: subject.trim(),
         body: body.trim(),
-        targetKind: "resource_owner",
-        category: "shared_resource",
+        targetKind,
+        category:
+          targetKind === "platform_admin"
+            ? "hub_operator"
+            : "shared_resource",
       });
       if (res.redirectUrl) {
         window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
       } else {
-        toast.success("Support request submitted to resource owner");
+        toast.success(
+          targetKind === "platform_admin"
+            ? "Support request sent to hub administrators. Track replies on the Support page."
+            : "Support request submitted"
+        );
       }
       setOpen(false);
       setSubject("");
@@ -86,7 +104,9 @@ export function SupportRequestDialog({
           <DialogHeader>
             <DialogTitle>Submit a support request</DialogTitle>
             <DialogDescription>
-              Platform bugs go to GitHub. Shared resource issues route to the resource owner.
+              {isHub
+                ? "Hub problems go to your hub administrators in-app. Open-source GodMode bugs go to GitHub."
+                : "Platform bugs go to GitHub. Shared resource issues route to the resource owner."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -94,16 +114,25 @@ export function SupportRequestDialog({
               <Label>Type</Label>
               <Select
                 value={targetKind}
-                onValueChange={(v) =>
-                  setTargetKind(v as "platform_github" | "resource_owner")
-                }
+                onValueChange={(v) => setTargetKind(v as SupportTarget)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="platform_github">GodMode platform (GitHub)</SelectItem>
-                  <SelectItem value="resource_owner">Shared resource owner</SelectItem>
+                  {isHub ? (
+                    <SelectItem value="platform_admin">
+                      Hub administrator (in-app)
+                    </SelectItem>
+                  ) : null}
+                  <SelectItem value="platform_github">
+                    GodMode open-source bug (GitHub)
+                  </SelectItem>
+                  {!isHub ? (
+                    <SelectItem value="resource_owner">
+                      Shared resource owner
+                    </SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             </div>

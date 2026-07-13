@@ -49,7 +49,11 @@ export function createSupportRouter(): Router {
         body: String(body ?? ""),
         category: category ?? null,
         targetKind:
-          targetKind === "platform_github" ? "platform_github" : "resource_owner",
+          targetKind === "platform_github"
+            ? "platform_github"
+            : targetKind === "platform_admin"
+              ? "platform_admin"
+              : "resource_owner",
         sharedGrantId: sharedGrantId ? String(sharedGrantId) : null,
         ownerUserId: resolvedOwnerId ?? null,
       });

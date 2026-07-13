@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import Database from "better-sqlite3";
 import { config } from "./config.js";
-import { seedIntelligenceAgent, removeDeprecatedBuiltinAgents, ensureAgentPrincipalDefaults, ensureIntelligenceDescription, ensureIntelligenceCodeAccess, ensureAgentDescriptions, ensureAgentReflectionDefaults, ensureAgentAutoApproveDefaults, ensureSpecialistCodeAccess } from "./services/agents/agents-db.js";
+import { seedIntelligenceAgent, removeDeprecatedBuiltinAgents, ensureAgentPrincipalDefaults, ensureIntelligenceDescription, ensureIntelligenceCodeAccess, ensureIntelligenceLocalBackendWhenExternalLlm, ensureAgentDescriptions, ensureAgentReflectionDefaults, ensureAgentAutoApproveDefaults, ensureSpecialistCodeAccess } from "./services/agents/agents-db.js";
 import { createSchedule } from "./services/ai-scheduler.js";
 import { configureDbPragmas, logDbConfig, runForeignKeyCheck } from "./services/db-config.js";
 import { runPendingMigrations } from "./services/db-migrations.js";
@@ -1666,6 +1666,7 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
     ensureAgentPrincipalDefaults(db);
     ensureIntelligenceDescription(db);
     ensureIntelligenceCodeAccess(db);
+    ensureIntelligenceLocalBackendWhenExternalLlm(db);
     ensureSpecialistCodeAccess(db);
     ensureAgentReflectionDefaults(db);
     ensureAgentAutoApproveDefaults(db);

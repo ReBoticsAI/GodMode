@@ -50,7 +50,7 @@ function notifyAdmins(
   }
 }
 
-export type SupportTargetKind = "platform_github" | "resource_owner";
+export type SupportTargetKind = "platform_github" | "platform_admin" | "resource_owner";
 
 export const GITHUB_ISSUES_NEW_URL =
   "https://github.com/ReBoticsAI/GodMode/issues/new";
@@ -86,6 +86,7 @@ export function createTicket(
       redirectUrl: buildGithubIssueUrl(input.subject, input.body),
     };
   }
+  const targetKind = input.targetKind ?? "resource_owner";
   const subject = input.subject.trim();
   if (!subject) throw new SupportError("Subject is required");
   const id = uuidv4();
@@ -103,7 +104,7 @@ export function createTicket(
     input.body ?? "",
     input.category ?? null,
     input.priority ?? null,
-    input.targetKind ?? "resource_owner",
+    targetKind,
     input.sharedGrantId ?? null,
     input.ownerUserId ?? null
   );
@@ -139,7 +140,11 @@ export function createTicket(
       db
     );
   } else {
-    notifyAdmins(db, ticket, `New support ticket: ${subject}`, input.body ?? "");
+    const adminTitle =
+      targetKind === "platform_admin"
+        ? `Hub support request: ${subject}`
+        : `New support ticket: ${subject}`;
+    notifyAdmins(db, ticket, adminTitle, input.body ?? "");
   }
   return ticket;
 }
