@@ -763,9 +763,17 @@ export interface EmbeddingEngineStatus {
 
 export interface EmbeddingEngineActivity {
   enabled: boolean;
-  pending: { skills: number; rules: number; memories: number };
+  pending: {
+    skills: number;
+    rules: number;
+    memories: number;
+    episodes?: number;
+    wikiProposals?: number;
+  };
   embeddingCoverage: { total: number; embedded: number };
+  ftsCoverage?: { total: number; indexed: number };
   ragTopK: number;
+  wikiRagTopK?: number;
   embedderLogTail: string[];
 }
 
@@ -3549,4 +3557,38 @@ export function updateWikiPage(
 
 export function deleteWikiPage(id: string) {
   return api<{ ok: boolean }>(`/wiki/pages/${id}`, { method: "DELETE" });
+}
+
+export interface WikiPageProposal {
+  id: string;
+  tenant_id: string;
+  action: "create" | "update";
+  space: string | null;
+  slug: string | null;
+  title: string;
+  body_markdown: string;
+  target_page_id: string | null;
+  status: "pending" | "approved" | "rejected";
+  reason: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function fetchWikiProposals(status: "pending" | "all" = "pending") {
+  return api<{ proposals: WikiPageProposal[] }>(
+    `/wiki/proposals?status=${status}`
+  );
+}
+
+export function approveWikiProposal(id: string) {
+  return api<{ ok: boolean; pageId?: string }>(`/wiki/proposals/${id}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectWikiProposal(id: string) {
+  return api<{ ok: boolean }>(`/wiki/proposals/${id}/reject`, {
+    method: "POST",
+  });
 }

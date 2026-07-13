@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { getCoreDb } from "../core-db.js";
-import { attachAuthContext, requireAuth, resolveTenant, requireEditorForMutation } from "../services/auth/middleware.js";
+import {
+  attachAuthContext,
+  requireAuth,
+  resolveTenant,
+  requireEditorForMutation,
+} from "../services/auth/middleware.js";
 import { getUserOwnerTenantId } from "../services/user-scope.js";
 import { ensureWelcomeWikiPage } from "../services/welcome-wiki.js";
 import {
@@ -14,7 +19,13 @@ import {
   WikiError,
   type WikiScope,
 } from "../services/wiki-service.js";
+import {
+  approveWikiProposal,
+  listWikiProposals,
+  rejectWikiProposal,
+} from "../services/wiki-proposals.js";
 import type { WikiVisibility } from "../core-db.js";
+import type { EmbeddingManager } from "../services/embeddings/embedding-manager.js";
 
 function paramId(value: string | string[]): string {
   return Array.isArray(value) ? value[0]! : value;
@@ -30,7 +41,7 @@ function resolveScope(userId: string): WikiScope {
   return { tenantIds };
 }
 
-export function createWikiRouter(): Router {
+export function createWikiRouter(embeddings?: EmbeddingManager): Router {
   const router = Router();
 
   // Public, unauthenticated read path for published (external) pages.
@@ -47,6 +58,46 @@ export function createWikiRouter(): Router {
   });
 
   router.use(attachAuthContext, requireAuth, resolveTenant, requireEditorForMutation);
+
+  router.get("/proposals", (req, res) => {
+    const status = String(req.query.status ?? "pending") as
+      | "pending"
+      | "approved"
+      | "rejected"
+      | "all";
+    const tenantId = req.tenantId ?? getUserOwnerTenantId(req.user!.id);
+    res.json({
+      proposals: listWikiProposals({
+        tenantId,
+        status,
+      }),
+    });
+  });
+
+  router.post("/proposals/:id/approve", (req, res) => {
+    const scope = resolveScope(req.user!.id);
+    const result = approveWikiProposal(paramId(req.params.id), {
+      authorUserId: req.user!.id,
+      scope,
+      embedder: embeddings?.isEmbedderReady()
+        ? embeddings.getEmbeddingClient()
+        : null,
+    });
+    if (!result.ok) {
+      res.status(400).json({ error: result.error ?? "Approve failed" });
+      return;
+    }
+    res.json(result);
+  });
+
+  router.post("/proposals/:id/reject", (req, res) => {
+    const ok = rejectWikiProposal(paramId(req.params.id));
+    if (!ok) {
+      res.status(404).json({ error: "Proposal not found or not pending" });
+      return;
+    }
+    res.json({ ok: true });
+  });
 
   router.get("/pages", (req, res) => {
     const scope = resolveScope(req.user!.id);

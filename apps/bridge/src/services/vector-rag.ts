@@ -5,6 +5,15 @@ import { blobToVector, cosineSimilarity } from "./embeddings/embedding-client.js
 const DEFAULT_AGENT_ID = "intelligence";
 const RRF_K = 60;
 
+/** Active memories whose validity window includes "now" (UTC). */
+function validitySql(alias = ""): string {
+  const p = alias ? `${alias}.` : "";
+  return `(
+    (${p}valid_from IS NULL OR ${p}valid_from <= datetime('now'))
+    AND (${p}valid_until IS NULL OR ${p}valid_until > datetime('now'))
+  )`;
+}
+
 function getMemoriesTextRecency(
   db: AppDatabase,
   chatId: string | undefined,
@@ -18,6 +27,7 @@ function getMemoriesTextRecency(
        WHERE enabled = 1 AND status = 'active'
          AND (scope = 'global' OR (scope = 'chat' AND chat_id IS ?))
          AND ${agentClause}
+         AND ${validitySql()}
        ORDER BY created_at DESC LIMIT 12`
     )
     .all(chatId ?? null, agentId) as Array<{ text: string }>;
@@ -49,22 +59,39 @@ export function backfillMemoryFts(db: AppDatabase): number {
 function bm25Search(
   db: AppDatabase,
   query: string,
+  agentId: string,
+  chatId: string | null,
   limit: number
-): Array<{ memoryId: string; rank: number }> {
+): Array<{ memoryId: string; text: string; rank: number }> {
   try {
+    const agentClause =
+      agentId === DEFAULT_AGENT_ID
+        ? `(m.agent_id = ? OR m.agent_id IS NULL)`
+        : `m.agent_id = ?`;
     const rows = db
       .prepare(
-        `SELECT memory_id, bm25(ai_memories_fts) AS rank
-         FROM ai_memories_fts
+        `SELECT f.memory_id AS memory_id, m.text AS text, bm25(ai_memories_fts) AS rank
+         FROM ai_memories_fts f
+         INNER JOIN ai_memories m ON m.id = f.memory_id
          WHERE ai_memories_fts MATCH ?
+           AND m.enabled = 1 AND m.status = 'active'
+           AND (m.scope = 'global' OR (m.scope = 'chat' AND m.chat_id IS ?))
+           AND ${agentClause}
+           AND ${validitySql("m")}
          ORDER BY rank
          LIMIT ?`
       )
-      .all(query.replace(/[^\w\s]/g, " ").trim() || query, limit) as Array<{
-      memory_id: string;
-      rank: number;
-    }>;
-    return rows.map((r, i) => ({ memoryId: r.memory_id, rank: i + 1 }));
+      .all(
+        query.replace(/[^\w\s]/g, " ").trim() || query,
+        chatId,
+        agentId,
+        limit
+      ) as Array<{ memory_id: string; text: string; rank: number }>;
+    return rows.map((r, i) => ({
+      memoryId: r.memory_id,
+      text: r.text,
+      rank: i + 1,
+    }));
   } catch {
     return [];
   }
@@ -85,6 +112,7 @@ function vectorSearch(
        WHERE enabled = 1 AND status = 'active'
          AND (scope = 'global' OR (scope = 'chat' AND chat_id IS ?))
          AND ${agentClause}
+         AND ${validitySql()}
          AND embedding IS NOT NULL`
     )
     .all(chatId, agentId) as Array<{ id: string; text: string; embedding: Buffer | null }>;
@@ -134,27 +162,27 @@ export async function getHybridMemoriesText(
 ): Promise<string> {
   const agentId = opts.agentId ?? "intelligence";
   const topK = opts.topK ?? 12;
+  const chatId = opts.chatId ?? null;
   const recencyFallback = () => getMemoriesTextRecency(db, opts.chatId, agentId);
 
   if (!query.trim()) return recencyFallback();
 
   const textById = new Map<string, string>();
   const rows = db
-    .prepare(`SELECT id, text FROM ai_memories WHERE enabled = 1 AND status = 'active'`)
+    .prepare(
+      `SELECT id, text FROM ai_memories
+       WHERE enabled = 1 AND status = 'active' AND ${validitySql()}`
+    )
     .all() as Array<{ id: string; text: string }>;
   for (const r of rows) textById.set(r.id, r.text);
 
-  const bm25 = bm25Search(db, query, topK * 2).map((r) => ({
-    memoryId: r.memoryId,
-    text: textById.get(r.memoryId),
-    rank: r.rank,
-  }));
+  const bm25 = bm25Search(db, query, agentId, chatId, topK * 2);
 
   let vector: Array<{ memoryId: string; text: string; rank: number }> = [];
   if (embedder?.isReady()) {
     const queryVec = await embedder.embed(query);
     if (queryVec) {
-      vector = vectorSearch(db, queryVec, agentId, opts.chatId ?? null, topK * 2);
+      vector = vectorSearch(db, queryVec, agentId, chatId, topK * 2);
     }
   }
 
@@ -165,6 +193,11 @@ export async function getHybridMemoriesText(
 
   if (fusedIds.length === 0) return recencyFallback();
 
-  const texts = fusedIds.map((id) => textById.get(id)).filter((t): t is string => Boolean(t));
+  const texts = fusedIds
+    .map((id) => {
+      const fromBm25 = bm25.find((b) => b.memoryId === id)?.text;
+      return fromBm25 ?? textById.get(id);
+    })
+    .filter((t): t is string => Boolean(t));
   return renderMemoryList(texts);
 }

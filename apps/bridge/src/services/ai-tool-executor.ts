@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import { config } from "../config.js";
 import { loadSkillBody, createSkillFile, listAiSkills } from "./ai-skills.js";
+import { gateSkillDraft } from "./skill-quality.js";
 import { createRuleFile } from "./ai-rules.js";
 import {
   saveArtifact,
@@ -124,6 +125,7 @@ import {
 import { activatePluginForTenant } from "../plugins/activate-plugin.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
+import { indexMemory, removeMemoryFromIndex } from "./embeddings/memory-embeddings.js";
 import { exportEntity } from "./portability.js";
 import { listInferenceEndpoints } from "./inference-service.js";
 import type { AiQueueWorker } from "./ai-queue-worker.js";
@@ -135,6 +137,8 @@ export interface ToolExecContext {
   bridgePort?: number;
   llm?: LlmManager;
   queue?: AiQueueWorker;
+  /** Optional embedder for immediate memory FTS/vector indexing on write. */
+  embedder?: import("./embeddings/embedding-client.js").EmbeddingClient;
   activeAgentId?: string;
   /** Parent Kanban task card id (autonomous executor / workflow). */
   activeTaskCardId?: string;
@@ -618,17 +622,20 @@ export async function executeTool(
            VALUES (?, ?, ?, ?, ?, ?, 'model')`
         )
         .run(id, ctx.chatId ? "chat" : "global", ctx.chatId ?? null, agentId, text, category);
+      indexMemory(ctx.db, ctx.embedder, id, text);
       // Contribute back to the agent owner's engine DB when enabled. The chat
       // itself lives in the actor's work DB, so the mirrored copy is stored as a
       // global (non-chat-scoped) memory the owner's agent can reuse.
       let contributed = false;
       if (ctx.contributeDb && ctx.contributeDb !== ctx.db) {
+        const mirrorId = uuidv4();
         ctx.contributeDb
           .prepare(
             `INSERT INTO ai_memories (id, scope, chat_id, agent_id, text, category, source)
              VALUES (?, 'global', NULL, ?, ?, ?, 'model')`
           )
-          .run(uuidv4(), agentId, text, category);
+          .run(mirrorId, agentId, text, category);
+        indexMemory(ctx.contributeDb, ctx.embedder, mirrorId, text);
         contributed = true;
       }
       return { ok: true, id, contributed };
@@ -1166,6 +1173,11 @@ export async function executeTool(
       const description = String(args.description ?? "").trim();
       const body = String(args.body ?? "").trim();
       if (!name || !body) throw new Error("name and body required");
+      const gate = gateSkillDraft(ctx.db, ctx.activeAgentId ?? "intelligence", {
+        name,
+        body,
+      });
+      if (gate) throw new Error(`Skill rejected: ${gate}`);
       const id = createSkillFile(
         ctx.db,
         ctx.activeAgentId ?? "intelligence",

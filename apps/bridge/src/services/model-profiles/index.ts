@@ -51,6 +51,9 @@ const GEMMA4_HARNESS_DELTA = [
   "You are running on Gemma 4 (native function calling + jinja chat template).",
   "Greetings and simple conversational questions: answer in plain language with NO tools.",
   "Do not call discovery tools (list_subagents, list agents, etc.) unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+  "Memory and wiki sections in this prompt are already retrieved — do not re-probe them with tools unless the user asks for a full page or deeper search.",
+  "Use remember only for explicit durable facts the user asks you to keep — never for greetings or chitchat.",
+  "Use wiki tools when the user asks how GodMode works or clearly needs docs — not by default before coding.",
   "Prefer one purposeful tool turn over probing. Keep coding/plugin tiers for real engineering tasks.",
   "</model_profile>",
 ].join("\n");
@@ -70,6 +73,7 @@ export const GEMMA4_PROFILE: ModelHarnessProfile = {
     "list_agents",
     "fetch_ai_agents",
     "list_ai_agents",
+    "remember",
   ],
   harnessDelta: GEMMA4_HARNESS_DELTA,
 };
@@ -260,6 +264,31 @@ export function allowDiscoveryTools(
   return false;
 }
 
+/**
+ * Soft remember deferral for Gemma: omit `remember` on greetings / simple chat.
+ * Discovery tools stay gated by {@link allowDiscoveryTools}; wiki is never deferred.
+ */
+export function allowRememberTool(
+  profile: ModelHarnessProfile,
+  ctx: AgentContextForDiscovery
+): boolean {
+  if (!profile.deferredDiscoveryTools.includes("remember")) return true;
+  const text = (ctx.userMessage ?? "").trim();
+  if (!text) return false;
+  if (/^(hi|hello|hey|thanks|thank you|ok|okay|yo)\b/i.test(text) && text.length < 40) {
+    return false;
+  }
+  if (
+    /\b(remember|don't forget|save this|note that|keep in mind|my (name|preference|email))\b/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  // Substantive asks may remember; short chitchat stays deferred.
+  return text.length >= 48 || /[.!?]/.test(text);
+}
+
 export function filterSchemasForProfile<
   T extends { function: { name: string } },
 >(
@@ -268,8 +297,14 @@ export function filterSchemasForProfile<
   ctx: AgentContextForDiscovery
 ): T[] {
   if (!profile.deferredDiscoveryTools.length) return schemas;
-  if (allowDiscoveryTools(profile, ctx)) return schemas;
-  const blocked = new Set(profile.deferredDiscoveryTools);
+  const blocked = new Set<string>();
+  if (!allowDiscoveryTools(profile, ctx)) {
+    for (const name of profile.deferredDiscoveryTools) {
+      if (name !== "remember") blocked.add(name);
+    }
+  }
+  if (!allowRememberTool(profile, ctx)) blocked.add("remember");
+  if (!blocked.size) return schemas;
   return schemas.filter((s) => !blocked.has(s.function.name));
 }
 

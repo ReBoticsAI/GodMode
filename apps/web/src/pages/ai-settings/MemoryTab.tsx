@@ -195,6 +195,8 @@ export function MemoryTab() {
   const embedderState = engineStatus?.embedder?.state ?? "stopped";
   const cov = engineActivity?.embeddingCoverage;
   const covPct = cov && cov.total > 0 ? Math.round((cov.embedded / cov.total) * 100) : 0;
+  const fts = engineActivity?.ftsCoverage;
+  const ftsPct = fts && fts.total > 0 ? Math.round((fts.indexed / fts.total) * 100) : 0;
 
   const filterButtons: Array<{ id: MemoryFilter; label: string }> = [
     { id: "all", label: "All" },
@@ -233,12 +235,15 @@ export function MemoryTab() {
               <div className="text-[10px] text-muted-foreground">Pending</div>
               <div className="text-xs font-medium tabular-nums">
                 {engineActivity?.pending.memories ?? pending.length}
+                {(engineActivity?.pending.episodes ?? 0) > 0
+                  ? ` · ${engineActivity?.pending.episodes} ep`
+                  : ""}
               </div>
             </div>
             <div className="rounded-md border bg-muted/20 px-2 py-2 text-center">
-              <div className="text-[10px] text-muted-foreground">RAG top-K</div>
+              <div className="text-[10px] text-muted-foreground">RAG / wiki K</div>
               <div className="text-xs font-medium tabular-nums">
-                {engineActivity?.ragTopK ?? "—"}
+                {engineActivity?.ragTopK ?? "—"} / {engineActivity?.wikiRagTopK ?? "—"}
               </div>
             </div>
           </div>
@@ -256,6 +261,26 @@ export function MemoryTab() {
               />
             </div>
           </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">FTS coverage (keyword index)</span>
+              <span className="font-mono">
+                {fts ? `${fts.indexed}/${fts.total} (${ftsPct}%)` : "—"}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-sky-500 transition-all"
+                style={{ width: `${ftsPct}%` }}
+              />
+            </div>
+          </div>
+          {(engineActivity?.pending.wikiProposals ?? 0) > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              {engineActivity?.pending.wikiProposals} wiki synthesize proposal(s) awaiting
+              review in Wiki.
+            </p>
+          )}
         </CardContent>
       </Card>
 
