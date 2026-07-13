@@ -16,6 +16,7 @@ Documentation for installing, using, and extending GodMode.
 
 | Guide | Description |
 |-------|-------------|
+| [AGENT_MEMORY.md](AGENT_MEMORY.md) | Working / semantic / episodic / procedural memory and embeddings |
 | [MARKETPLACE.md](MARKETPLACE.md) | Install packs and plugins from catalogs |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
@@ -35,4 +36,5 @@ Documentation for installing, using, and extending GodMode.
 
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — development and pull requests
 - [../CHANGELOG.md](../CHANGELOG.md) — release history
+- [../ROADMAP.md](../ROADMAP.md) — planned themes (not a schedule)
 - [../SECURITY.md](../SECURITY.md) — vulnerability reporting

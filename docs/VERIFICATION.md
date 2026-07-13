@@ -71,6 +71,7 @@ See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 2. **New request** → choose type:
    - **GodMode platform (GitHub)** opens a prefilled [GitHub issue](https://github.com/ReBoticsAI/GodMode/issues/new)
    - **Shared resource owner** creates a ticket routed to the grant owner
+3. On hubs: Admin can staff a **Support group** (users and/or agents) who answer inbound tickets
 
 ![Support page](assets/readme/support.png)
 
@@ -87,13 +88,31 @@ See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 ## 7. Verify Intelligence
 
 1. Open **Chat** and select **Intelligence**
-2. Add an LLM API key under **Vault → Secrets**, then configure the provider in **Agents → Pipeline**
-3. Send a message — confirm the agent responds
-4. Try chat modes from the composer:
+2. Pick a model from the composer catalog (local GGUF, Cursor, or provider) — or connect Cursor under **Vault → Cursor subscription**
+3. Confirm **EmbeddingGemma** (and other embed-only GGUFs) do **not** appear as chat models
+4. Send a message — confirm the agent responds
+5. Try chat modes from the composer:
    - **Agent** — full tool access (default)
    - **Plan** — structured planning without auto-execution
    - **Ask** — read-only Q&A
-5. Optional: ask Intelligence to create a wiki page or task card to confirm platform tools work
+6. Optional: ask Intelligence to create a wiki page or task card to confirm platform tools work
+
+### Optional: Cursor subscription
+
+1. **Vault → Cursor subscription** → paste User API key → **Connect**
+2. Badge shows **Connected**; Intelligence picker lists **Auto (Cursor picks)** and named models
+3. Chat with tools (e.g. remember / list skills) under `cursor_cloud`
+
+See [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md).
+
+### Optional: embeddings / memory
+
+When `EMBEDDINGS_ENABLED=true` (and optionally `EMBEDDINGS_EXTERNAL`):
+
+1. Embedder health responds on the configured host/port (default `:8082`)
+2. Saving a memory indexes for hybrid RAG; chat can inject a memory section
+
+See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [CONFIGURATION.md](./CONFIGURATION.md).
 
 ---
 
@@ -104,3 +123,8 @@ See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 - [ONBOARDING.md](./ONBOARDING.md)
 - [FEATURES.md](./FEATURES.md)
 - [GETTING_STARTED.md](./GETTING_STARTED.md)
+- [LOCAL_LLM.md](./LOCAL_LLM.md)
+- [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)
+- [AGENT_MEMORY.md](./AGENT_MEMORY.md)
+- [../CHANGELOG.md](../CHANGELOG.md)
+- [../ROADMAP.md](../ROADMAP.md)
