@@ -12,8 +12,10 @@ import {
   listInstalledPlugins,
   uninstallPluginForTenant,
 } from "../plugins/plugin-install.js";
+import { appendPluginPath } from "../plugins/activate-plugin.js";
 import { loadPluginFromRoot } from "../plugins/loader.js";
 import { pluginRuntime } from "../plugins/runtime.js";
+import { bridgeEntryExists, ensurePluginBuilt } from "./plugin-build.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 
 export type CatalogInstallType = "clone" | "plugin";
@@ -253,20 +255,6 @@ function marketplacePluginsDir(): string {
   return dir;
 }
 
-function appendPluginPath(core: CoreDatabase, pluginRoot: string): void {
-  const key = "marketplace.plugin_paths";
-  const existing = core.prepare(`SELECT value FROM platform_meta WHERE key=?`).get(key) as
-    | { value: string }
-    | undefined;
-  const paths: string[] = existing?.value ? JSON.parse(existing.value) : [];
-  const resolved = path.resolve(pluginRoot);
-  if (!paths.includes(resolved)) paths.push(resolved);
-  core.prepare(
-    `INSERT INTO platform_meta (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value=excluded.value`
-  ).run(key, JSON.stringify(paths));
-}
-
 export function extraPluginPathsFromMeta(core: CoreDatabase): string[] {
   const row = core.prepare(`SELECT value FROM platform_meta WHERE key=?`).get(
     "marketplace.plugin_paths"
@@ -285,37 +273,6 @@ export function normalizeLocalPathInput(raw: string): string {
     p = p.slice("file://".length);
   }
   return path.resolve(p);
-}
-
-function bridgeEntryExists(pluginRoot: string): boolean {
-  const manifest = readGodmodePluginManifest(pluginRoot);
-  const entry = manifest.bridge?.entry ?? "dist/bridge.js";
-  const candidates = [
-    path.join(pluginRoot, entry),
-    path.join(pluginRoot, entry.replace(/\.js$/, ".ts")),
-    path.join(pluginRoot, "src/bridge/index.ts"),
-  ];
-  return candidates.some((c) => fs.existsSync(c));
-}
-
-function ensurePluginBuilt(pluginRoot: string): void {
-  if (bridgeEntryExists(pluginRoot)) return;
-  const pkg = path.join(pluginRoot, "package.json");
-  if (!fs.existsSync(pkg)) {
-    throw new Error(
-      "Plugin is not built and has no package.json. Run npm install && npm run build in the plugin folder first."
-    );
-  }
-  console.log(`[catalog] building plugin at ${pluginRoot}…`);
-  execSync("npm run build", {
-    cwd: pluginRoot,
-    stdio: "pipe",
-    timeout: 300_000,
-    env: { ...process.env, CI: "true" },
-  });
-  if (!bridgeEntryExists(pluginRoot)) {
-    throw new Error("Plugin build finished but bridge entry is still missing.");
-  }
 }
 
 export function listDiscoveredPluginsForTenant(
@@ -385,7 +342,7 @@ export async function registerLocalPluginFolder(
   const manifest = readGodmodePluginManifest(pluginRoot);
   const builtBefore = bridgeEntryExists(pluginRoot);
   if (!builtBefore) {
-    ensurePluginBuilt(pluginRoot);
+    await ensurePluginBuilt(pluginRoot);
   }
 
   appendPluginPath(core, pluginRoot);
@@ -480,7 +437,7 @@ async function installPluginEntry(
     }
     const builtBefore = bridgeEntryExists(target);
     if (!builtBefore) {
-      ensurePluginBuilt(target);
+      await ensurePluginBuilt(target);
       built = true;
     }
   } else {
@@ -502,6 +459,10 @@ async function installPluginEntry(
       execSync(`git clone --depth 1 --branch ${ref} ${cloneUrl} ${target}`, {
         stdio: "pipe",
       });
+    }
+    if (!bridgeEntryExists(target)) {
+      await ensurePluginBuilt(target);
+      built = true;
     }
   }
 
