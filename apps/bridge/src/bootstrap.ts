@@ -45,6 +45,8 @@ import { AiQueueWorker } from "./services/ai-queue-worker.js";
 import { AiScheduler, registerAiScheduler } from "./services/ai-scheduler.js";
 import { AiTrainingManager } from "./services/ai-training-manager.js";
 import { ReflectionService } from "./services/reflection-service.js";
+import { MemoryMaintenanceService } from "./services/memory-maintenance.js";
+import { setWikiEmbedder } from "./services/wiki-service.js";
 import { syncAdaptersFromDisk } from "./services/ai-adapters.js";
 import { attachWebSocket } from "./ws.js";
 import { EngineRegistry } from "./services/engines/registry.js";
@@ -169,7 +171,11 @@ const embeddingManager = new EmbeddingManager(db);
 // serialized and observable.
 syncAdaptersFromDisk(db);
 const aiTraining = new AiTrainingManager(db);
-const aiQueueWorker = new AiQueueWorker(db, llmManager, { bridgePort: config.port, bus });
+const aiQueueWorker = new AiQueueWorker(db, llmManager, {
+  bridgePort: config.port,
+  bus,
+  embeddings: embeddingManager,
+});
 if (hasSierra) {
   getPluginHost().registerAutonomousRunnerKick?.((reason) => {
     if (aiQueueWorker.hasPendingOrRunningWorkflow("autonomous-task-runner")) return;
@@ -183,6 +189,7 @@ if (hasSierra) {
 const aiScheduler = new AiScheduler(db, bus, aiQueueWorker);
 registerAiScheduler(aiScheduler);
 const reflectionService = new ReflectionService(db, bus, llmManager, aiQueueWorker);
+const memoryMaintenance = new MemoryMaintenanceService(db, bus, aiQueueWorker);
 
 // Self-discovering engines: provision per-department subagents, rules, skills,
 // tools, context, and seed memory. Reconcile at boot (safety net) and on the
@@ -237,7 +244,7 @@ app.use("/api/notifications", createNotificationsRouter());
 app.use("/api/hooks", createHooksRouter());
 app.use("/api/events", createEventsRouter());
 app.use("/api/support", createSupportRouter());
-app.use("/api/wiki", createWikiRouter());
+app.use("/api/wiki", createWikiRouter(embeddingManager));
 app.use("/api/bank", createBankRouter());
 if (!config.isHub) {
   app.use("/api/integrations", createIntegrationsRouter());
@@ -283,6 +290,7 @@ app.use(
     bridgePort: config.port,
     embeddings: embeddingManager,
     reflection: reflectionService,
+    memoryMaintenance,
     bus,
   })
 );
@@ -300,10 +308,16 @@ server.listen(config.port, config.host, () => {
   console.log(`Core database: ${config.coreDbPath}`);
   void llmManager.maybeAutoStart();
   void (async () => {
-    if (fs.existsSync(config.embeddings.embedderModelPath)) {
+    if (
+      config.embeddings.external ||
+      fs.existsSync(config.embeddings.embedderModelPath)
+    ) {
       try {
         const status = await embeddingManager.setEnabled(true);
-        console.log(`[embeddings] boot enabled=${status.enabled}`);
+        console.log(`[embeddings] boot enabled=${status.enabled} external=${config.embeddings.external}`);
+        if (embeddingManager.isEmbedderReady()) {
+          setWikiEmbedder(embeddingManager.getEmbeddingClient());
+        }
       } catch (err) {
         console.warn(
           "[embeddings] boot enable failed:",
@@ -332,6 +346,17 @@ server.listen(config.port, config.host, () => {
   aiQueueWorker.start();
   aiScheduler.start();
   reflectionService.start();
+  memoryMaintenance.start();
+  if (embeddingManager.isEmbedderReady()) {
+    setWikiEmbedder(embeddingManager.getEmbeddingClient());
+  }
+  // Keep wiki index embedder in sync when the engine comes up after boot.
+  const wikiEmbedSync = setInterval(() => {
+    if (embeddingManager.isEmbedderReady()) {
+      setWikiEmbedder(embeddingManager.getEmbeddingClient());
+    }
+  }, 15_000);
+  void wikiEmbedSync;
   setDispatcherDeps({ llm: llmManager, bridgePort: config.port, queue: aiQueueWorker });
   startScheduler();
   setInterval(() => {

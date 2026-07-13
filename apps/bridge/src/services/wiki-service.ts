@@ -6,6 +6,18 @@ import {
   type WikiVisibility,
 } from "../core-db.js";
 import { findBacklinksForPage, type WikiBacklink } from "../lib/wiki-links.js";
+import {
+  cascadeWikiProposalCleanup,
+} from "./wiki-proposals.js";
+import { indexWikiPage, removeWikiPageFromIndex } from "./wiki-rag.js";
+import type { EmbeddingClient } from "./embeddings/embedding-client.js";
+
+/** Optional embedder for index-on-write (set from routes/tools when ready). */
+let wikiEmbedder: EmbeddingClient | null = null;
+
+export function setWikiEmbedder(client: EmbeddingClient | null): void {
+  wikiEmbedder = client;
+}
 
 export class WikiError extends Error {
   constructor(
@@ -188,6 +200,7 @@ export function createPage(
   );
   const page = getPageById(id, db)!;
   captureRevision(db, page);
+  indexWikiPage(db, wikiEmbedder, page);
   return page;
 }
 
@@ -234,7 +247,9 @@ export function updatePage(
     );
     captureRevision(db, getPageById(id, db)!);
   }
-  return getPageById(id, db)!;
+  const updated = getPageById(id, db)!;
+  indexWikiPage(db, wikiEmbedder, updated);
+  return updated;
 }
 
 export function deletePage(
@@ -247,6 +262,8 @@ export function deletePage(
   if (!scope.tenantIds.includes(page.tenant_id)) {
     throw new WikiError("Only the owner tenant can delete this page", 403);
   }
+  cascadeWikiProposalCleanup(id, db);
+  removeWikiPageFromIndex(db, id);
   db.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);
 }
 

@@ -70,8 +70,15 @@ Not used in local OSS installs.
 | `LLAMA_THREADS` | `0` | CPU threads (`0` = llama.cpp default) |
 | `LLAMA_EXTRA_ARGS` | empty | Extra llama-server flags when Bridge spawns the process |
 | `EMBEDDINGS_ENABLED` | `false` | Semantic memory RAG embedder |
+| `EMBEDDINGS_EXTERNAL` | `false` | Attach to host embedder; do not spawn inside the container |
+| `EMBEDDINGS_SERVER_HOST` | `127.0.0.1` | Embedder host (`host.docker.internal` from Docker) |
+| `EMBEDDINGS_PORT` | `8082` | Embedder llama-server port |
+| `EMBEDDINGS_MODEL_PATH` | `~/llama.cpp/models/embeddinggemma-300M-Q8_0.gguf` | GGUF for spawn mode |
+| `EMBEDDINGS_AUTO_START` | `true` | Start/attach embedder when enabled |
+| `EMBEDDINGS_RAG_TOP_K` | `12` | Memory hybrid top-K |
+| `EMBEDDINGS_WIKI_RAG_TOP_K` | `4` | Wiki hybrid top-K for chat |
 
-Recommended hardware / Gemma 4 profile: [LOCAL_LLM.md](./LOCAL_LLM.md). Full flag list: `apps/bridge/src/config.ts`.
+See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [LOCAL_LLM.md](./LOCAL_LLM.md).
 
 ## Optional integrations
 

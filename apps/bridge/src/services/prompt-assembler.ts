@@ -23,6 +23,7 @@ export type PromptSectionId =
   | "base"
   | "rules"
   | "memory"
+  | "wiki"
   | "skills"
   | "capabilities"
   | "tools"
@@ -68,6 +69,7 @@ const SECTION_LABELS: Record<PromptSectionId, string> = {
   base: "Base Prompt",
   rules: "Rules",
   memory: "Memory",
+  wiki: "Wiki",
   skills: "Skills Index",
   capabilities: "Capabilities (RAG)",
   tools: "Tools Available",
@@ -84,6 +86,7 @@ export const DEFAULT_FLOW_SECTIONS: PromptFlowSectionConfig[] = [
   { id: "base", enabled: true, order: 0 },
   { id: "rules", enabled: true, order: 1 },
   { id: "memory", enabled: true, order: 2 },
+  { id: "wiki", enabled: true, order: 2.5 },
   { id: "skills", enabled: true, order: 3 },
   { id: "capabilities", enabled: true, order: 4 },
   { id: "tools", enabled: true, order: 5 },
@@ -249,6 +252,8 @@ function sectionBody(
       return getActiveRulesText(db, ctx?.pathname, agentId);
     case "memory":
       return getMemoriesText(db, chatId, agentId);
+    case "wiki":
+      return "";
     case "skills":
       return getSkillsIndexText(db, agentId);
     case "capabilities":
@@ -289,6 +294,7 @@ const SYSTEM_SECTION_IDS = new Set<PromptSectionId>([
   "base",
   "rules",
   "memory",
+  "wiki",
   "skills",
   "capabilities",
   "tools",
@@ -317,6 +323,8 @@ export function assemblePrompt(
      * body; when omitted the synchronous recency path is used.
      */
     memoryOverride?: string;
+    /** Pre-computed wiki hybrid snippets for the prompt. */
+    wikiOverride?: string;
     capabilitiesOverride?: string;
     chatMode?: IntelligenceChatMode;
     /** Model harness profile delta appended after the base harness. */
@@ -337,22 +345,24 @@ export function assemblePrompt(
     const body =
       sec.id === "memory" && opts.memoryOverride != null
         ? opts.memoryOverride
-        : sec.id === "capabilities" && opts.capabilitiesOverride != null
-          ? opts.capabilitiesOverride
-          : sectionBody(
-              sec.id,
-              db,
-              opts.basePrompt,
-              opts.platformContext,
-              opts.chatId,
-              opts.historyCount,
-              opts.userPreview,
-              nativeTools,
-              agentId,
-              agent,
-              opts.tenantId,
-              opts.capabilitiesOverride
-            );
+        : sec.id === "wiki" && opts.wikiOverride != null
+          ? opts.wikiOverride
+          : sec.id === "capabilities" && opts.capabilitiesOverride != null
+            ? opts.capabilitiesOverride
+            : sectionBody(
+                sec.id,
+                db,
+                opts.basePrompt,
+                opts.platformContext,
+                opts.chatId,
+                opts.historyCount,
+                opts.userPreview,
+                nativeTools,
+                agentId,
+                agent,
+                opts.tenantId,
+                opts.capabilitiesOverride
+              );
     const inSystem = SYSTEM_SECTION_IDS.has(sec.id);
     const hasContent =
       body.trim().length > 0 &&

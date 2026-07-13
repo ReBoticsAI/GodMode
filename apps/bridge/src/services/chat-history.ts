@@ -127,11 +127,12 @@ function messageChars(m: AgentMessage): number {
 export function compactAgentMessages(
   messages: AgentMessage[],
   maxChars: number
-): AgentMessage[] {
+): { messages: AgentMessage[]; droppedTurns: number } {
   let total = messages.reduce((a, m) => a + messageChars(m), 0);
-  if (total <= maxChars) return messages;
+  if (total <= maxChars) return { messages, droppedTurns: 0 };
 
   const kept = [...messages];
+  let droppedTurns = 0;
   while (kept.length > 2 && total > maxChars) {
     const drop = kept.findIndex(
       (m, i) => i > 0 && m.role === "user"
@@ -141,6 +142,7 @@ export function compactAgentMessages(
     while (end < kept.length && kept[end].role !== "user") end++;
     const removed = kept.splice(drop, end - drop);
     total -= removed.reduce((a, m) => a + messageChars(m), 0);
+    droppedTurns += 1;
   }
 
   if (total > maxChars) {
@@ -155,5 +157,5 @@ export function compactAgentMessages(
       }
     }
   }
-  return kept;
+  return { messages: kept, droppedTurns };
 }

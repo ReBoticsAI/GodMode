@@ -11,6 +11,9 @@ import {
 } from "./ai-workflows.js";
 import { runReflection } from "./reflection-runner.js";
 import { runAutonomousTick } from "./autonomous-executor.js";
+import { runEpisodicDistill } from "./episodic-distill.js";
+import { runWikiSynthesize } from "./wiki-synthesize.js";
+import type { EmbeddingManager } from "./embeddings/embedding-manager.js";
 
 /** Workflow id of the durable autonomous executor (routed to the tick engine). */
 export const AUTONOMOUS_RUNNER_ID = "autonomous-task-runner";
@@ -60,7 +63,12 @@ export class AiQueueWorker {
   constructor(
     private readonly db: AppDatabase,
     private readonly llm: LlmManager,
-    private readonly opts: { bridgePort?: number; pollMs?: number; bus?: EventEmitter } = {}
+    private readonly opts: {
+      bridgePort?: number;
+      pollMs?: number;
+      bus?: EventEmitter;
+      embeddings?: EmbeddingManager;
+    } = {}
   ) {}
 
   start(): void {
@@ -232,6 +240,9 @@ export class AiQueueWorker {
       llm: this.llm,
       bridgePort: this.opts.bridgePort,
       bus: this.opts.bus,
+      embedder: this.opts.embeddings?.isEmbedderReady()
+        ? this.opts.embeddings.getEmbeddingClient()
+        : null,
     };
 
     // Resume a parked workflow run (does not block; the run either finishes or
@@ -250,6 +261,28 @@ export class AiQueueWorker {
         String(ctx.reflectionAgentId),
         (ctx.reflectionTrigger as "manual" | "scheduled" | "idle" | "queued") ?? "queued"
       );
+    }
+
+    if (ctx.episodicDistillChatId) {
+      return runEpisodicDistill({
+        db,
+        llm: this.llm,
+        chatId: String(ctx.episodicDistillChatId),
+        agentId: String(ctx.episodicDistillAgentId ?? "intelligence"),
+        embedder: deps.embedder,
+        force: Boolean(ctx.episodicDistillForce),
+      });
+    }
+
+    if (ctx.wikiSynthesize === true) {
+      const tenantId =
+        job.tenant_id || getOperatorTenantId(getCoreDb()) || "";
+      return runWikiSynthesize({
+        db,
+        llm: this.llm,
+        tenantId,
+        agentId: String(ctx.wikiSynthesizeAgentId ?? "intelligence"),
+      });
     }
 
     // Durable autonomous executor: one bounded tick, then self-re-enqueue the
