@@ -99,6 +99,7 @@ import {
   startCursorCliLoginUrl,
 } from "../services/cursor-subscription.js";
 import { markLlmReady } from "../services/onboarding.js";
+import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir } from "../services/coding/fs-tools.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
@@ -1224,6 +1225,50 @@ export function createAiRouter(
     });
     markLlmReady(db);
     res.json({ ok: true, agent: getAgent(db, "intelligence") });
+  });
+
+  router.get("/model-catalog", async (req, res) => {
+    try {
+      const catalog = await listModelCatalog(
+        tdb(req),
+        llm,
+        getCoreDb(),
+        req.user?.id
+      );
+      res.json(catalog);
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/select-model", async (req, res) => {
+    try {
+      const source = String(req.body?.source ?? "");
+      if (
+        source !== "local" &&
+        source !== "cursor" &&
+        source !== "provider" &&
+        source !== "remote"
+      ) {
+        res.status(400).json({ error: "source must be local, cursor, provider, or remote" });
+        return;
+      }
+      const result = await selectIntelligenceModel(tdb(req), llm, {
+        source,
+        path: req.body?.path ? String(req.body.path) : undefined,
+        model: req.body?.model ? String(req.body.model) : undefined,
+        provider: req.body?.provider,
+        endpointId: req.body?.endpointId ? String(req.body.endpointId) : undefined,
+        apiKeyRef: req.body?.apiKeyRef ? String(req.body.apiKeyRef) : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   router.post("/start", async (req, res) => {

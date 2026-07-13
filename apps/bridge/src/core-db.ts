@@ -4,6 +4,11 @@ import { v4 as uuidv4 } from "uuid";
 import { config } from "./config.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { backfillWelcomeWikiPages } from "./services/welcome-wiki.js";
+import { ensurePlatformGroups } from "./services/platform-groups.js";
+
+function ensurePlatformGroupsTables(db: CoreDatabase): void {
+  ensurePlatformGroups(db);
+}
 
 export type MembershipRole = "viewer" | "editor" | "owner";
 export type ShareGrantRole = "viewer" | "editor" | "owner";
@@ -625,6 +630,7 @@ export function initCoreDb(): CoreDatabase {
   ensureHooksRunWorkflowAction(db);
   ensureWikiPerTenantSlugIndexes(db);
   ensureOssPlatformV2Tables(db);
+  ensurePlatformGroupsTables(db);
 
   backfillWelcomeWikiPages(db);
 
@@ -1200,6 +1206,9 @@ export interface CoreSupportTicket {
   category: string | null;
   status: SupportTicketStatus;
   priority: string | null;
+  target_kind?: string | null;
+  shared_grant_id?: string | null;
+  owner_user_id?: string | null;
   created_at: string;
   updated_at: string;
 }

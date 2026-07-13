@@ -10,6 +10,9 @@ import {
 } from "../core-db.js";
 import { createNotification } from "./notification-service.js";
 import { emitEvent } from "./event-bus.js";
+import {
+  listSupportStaffUserIds,
+} from "./platform-groups.js";
 
 export class SupportError extends Error {
   constructor(
@@ -27,21 +30,26 @@ function adminUserIds(db: CoreDatabase): string[] {
   ).map((r) => r.id);
 }
 
-function notifyAdmins(
+/** Platform admins + Support group users (deduped). */
+function staffUserIds(db: CoreDatabase): string[] {
+  return [...new Set([...adminUserIds(db), ...listSupportStaffUserIds(db)])];
+}
+
+function notifyStaff(
   db: CoreDatabase,
   ticket: CoreSupportTicket,
   title: string,
   body: string
 ): void {
-  for (const adminId of adminUserIds(db)) {
+  for (const userId of staffUserIds(db)) {
     createNotification(
       {
         recipientKind: "user",
-        recipientId: adminId,
+        recipientId: userId,
         category: "support",
         title,
         body,
-        link: `/settings/admin?tab=support&ticket=${ticket.id}`,
+        link: `/support?ticket=${ticket.id}&inbox=staff`,
         resourceKind: "support_ticket",
         resourceId: ticket.id,
       },
@@ -133,18 +141,19 @@ export function createTicket(
         category: "support",
         title: `Shared resource support: ${subject}`,
         body: input.body ?? "",
-        link: `/support?ticket=${id}`,
+        link: `/support?ticket=${id}&inbox=staff`,
         resourceKind: "support_ticket",
         resourceId: id,
       },
       db
     );
+    notifyStaff(db, ticket, `Shared resource support: ${subject}`, input.body ?? "");
   } else {
     const adminTitle =
       targetKind === "platform_admin"
         ? `Hub support request: ${subject}`
         : `New support ticket: ${subject}`;
-    notifyAdmins(db, ticket, adminTitle, input.body ?? "");
+    notifyStaff(db, ticket, adminTitle, input.body ?? "");
   }
   return ticket;
 }
@@ -249,7 +258,7 @@ export function addMessage(
       db
     );
   } else {
-    notifyAdmins(db, ticket, `New reply on: ${ticket.subject}`, text.slice(0, 200));
+    notifyStaff(db, ticket, `New reply on: ${ticket.subject}`, text.slice(0, 200));
   }
   return db
     .prepare(`SELECT * FROM support_messages WHERE id = ?`)

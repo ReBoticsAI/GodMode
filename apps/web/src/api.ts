@@ -1545,6 +1545,36 @@ export const applyCursorToIntelligence = (model = "auto") =>
     body: JSON.stringify({ model }),
   });
 
+export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
+
+export interface CatalogModel {
+  id: string;
+  source: CatalogModelSource;
+  label: string;
+  path?: string;
+  model?: string;
+  endpointId?: string;
+  provider?: "openai" | "anthropic" | "openai_compatible";
+  multimodal?: boolean;
+  active?: boolean;
+}
+
+export const fetchModelCatalog = () =>
+  api<{ models: CatalogModel[]; active: CatalogModel | null }>("/ai/model-catalog");
+
+export const selectIntelligenceModel = (body: {
+  source: CatalogModelSource;
+  path?: string;
+  model?: string;
+  provider?: "openai" | "anthropic" | "openai_compatible";
+  endpointId?: string;
+  apiKeyRef?: string;
+}) =>
+  api<{ ok: true; active: CatalogModel }>("/ai/select-model", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
 export const truncateAiChat = (chatId: string, afterMessageId: string) =>
   api<{ deleted: number }>(`/ai/chats/${chatId}/truncate`, {
     method: "POST",
@@ -3337,6 +3367,8 @@ export interface SupportTicket {
   category: string | null;
   status: SupportTicketStatus;
   priority: string | null;
+  target_kind?: string | null;
+  owner_user_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3347,6 +3379,14 @@ export interface SupportMessage {
   author_kind: "user" | "agent" | "admin";
   author_id: string;
   body: string;
+  created_at: string;
+}
+
+export interface SupportGroupMember {
+  group_id: string;
+  member_kind: "user" | "agent";
+  member_id: string;
+  tenant_id: string | null;
   created_at: string;
 }
 
@@ -3375,6 +3415,11 @@ export function fetchMySupportTickets() {
   return api<{ tickets: SupportTicket[] }>("/support/tickets");
 }
 
+export function fetchStaffSupportTickets(status?: SupportTicketStatus) {
+  const suffix = status ? `?status=${status}` : "";
+  return api<{ tickets: SupportTicket[] }>(`/support/staff/tickets${suffix}`);
+}
+
 export function fetchSupportTicket(id: string) {
   return api<{ ticket: SupportTicket; messages: SupportMessage[] }>(
     `/support/tickets/${id}`
@@ -3385,6 +3430,37 @@ export function postSupportMessage(id: string, body: string) {
   return api<{ message: SupportMessage }>(`/support/tickets/${id}/messages`, {
     method: "POST",
     body: JSON.stringify({ body }),
+  });
+}
+
+export function fetchSupportGroup() {
+  return api<{
+    group: { id: string; slug: string; name: string; description: string | null };
+    members: SupportGroupMember[];
+    canManage: boolean;
+    isMember: boolean;
+  }>("/support/group");
+}
+
+export function addSupportGroupMember(body: {
+  memberKind: "user" | "agent";
+  memberId: string;
+  tenantId?: string | null;
+}) {
+  return api<{ member: SupportGroupMember }>("/support/group/members", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removeSupportGroupMember(body: {
+  memberKind: "user" | "agent";
+  memberId: string;
+  tenantId?: string | null;
+}) {
+  return api<{ ok: boolean }>("/support/group/members", {
+    method: "DELETE",
+    body: JSON.stringify(body),
   });
 }
 

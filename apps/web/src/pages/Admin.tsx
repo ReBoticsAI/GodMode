@@ -10,10 +10,18 @@ import {
   fetchAdminBillingConfig,
   updateAdminBillingConfig,
   testAdminBillingConnection,
+  fetchSupportGroup,
+  addSupportGroupMember,
+  removeSupportGroupMember,
+  fetchUsers,
+  fetchAiAgents,
   type PlatformBillingConfig,
+  type SupportGroupMember,
   type SupportMessage,
   type SupportTicket,
   type SupportTicketStatus,
+  type AdminUserRow,
+  type AiAgent,
 } from "@/api";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -103,7 +111,8 @@ export default function Admin() {
         <TabsContent value="users" className="mt-4">
           <AdminUsersPanel />
         </TabsContent>
-        <TabsContent value="support" className="mt-4">
+        <TabsContent value="support" className="mt-4 space-y-4">
+          <AdminSupportGroupCard />
           <AdminSupportTab />
         </TabsContent>
       </Tabs>
@@ -260,6 +269,179 @@ const SUPPORT_STATUS_TONE: Record<SupportTicketStatus, string> = {
   resolved: "bg-emerald-500/15 text-emerald-400",
   closed: "bg-muted text-muted-foreground",
 };
+
+function AdminSupportGroupCard() {
+  const { activeTenantId } = useTenant();
+  const [members, setMembers] = useState<SupportGroupMember[]>([]);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [agents, setAgents] = useState<AiAgent[]>([]);
+  const [pickUser, setPickUser] = useState("");
+  const [pickAgent, setPickAgent] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [group, userRes, agentRes] = await Promise.all([
+        fetchSupportGroup(),
+        fetchUsers(),
+        fetchAiAgents().catch(() => ({ agents: [] as AiAgent[] })),
+      ]);
+      setMembers(group.members);
+      setUsers(userRes.users);
+      setAgents(agentRes.agents);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load Support group");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const addUser = async () => {
+    if (!pickUser) return;
+    try {
+      await addSupportGroupMember({ memberKind: "user", memberId: pickUser });
+      setPickUser("");
+      toast.success("User added to Support group");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add user");
+    }
+  };
+
+  const addAgent = async () => {
+    if (!pickAgent) return;
+    if (!activeTenantId) {
+      toast.error("Select a workspace before adding an agent");
+      return;
+    }
+    try {
+      await addSupportGroupMember({
+        memberKind: "agent",
+        memberId: pickAgent,
+        tenantId: activeTenantId,
+      });
+      setPickAgent("");
+      toast.success("Agent added to Support group");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add agent");
+    }
+  };
+
+  const removeMember = async (m: SupportGroupMember) => {
+    try {
+      await removeSupportGroupMember({
+        memberKind: m.member_kind,
+        memberId: m.member_id,
+        tenantId: m.tenant_id,
+      });
+      toast.success("Removed from Support group");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove");
+    }
+  };
+
+  const userLabel = (id: string) => {
+    const u = users.find((x) => x.id === id);
+    return u ? `${u.displayName} (${u.email})` : id.slice(0, 8);
+  };
+  const agentLabel = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Support group</CardTitle>
+        <CardDescription>
+          Users and agents here can answer hub and shared-resource tickets (Staff inbox on
+          Support). Platform admins always can.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <ul className="flex flex-col gap-1">
+              {members.length === 0 ? (
+                <li className="text-sm text-muted-foreground">No members yet.</li>
+              ) : (
+                members.map((m) => (
+                  <li
+                    key={`${m.member_kind}:${m.member_id}:${m.tenant_id ?? ""}`}
+                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <Badge variant="secondary" className="text-[10px]">
+                      {m.member_kind}
+                    </Badge>
+                    <span className="truncate">
+                      {m.member_kind === "user"
+                        ? userLabel(m.member_id)
+                        : agentLabel(m.member_id)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => void removeMember(m)}
+                    >
+                      Remove
+                    </Button>
+                  </li>
+                ))
+              )}
+            </ul>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex min-w-48 flex-1 flex-col gap-1">
+                <Label>Add user</Label>
+                <Select value={pickUser} onValueChange={(v) => setPickUser(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.displayName} ({u.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={() => void addUser()} disabled={!pickUser}>
+                Add user
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex min-w-48 flex-1 flex-col gap-1">
+                <Label>Add agent (this workspace)</Label>
+                <Select value={pickAgent} onValueChange={(v) => setPickAgent(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={() => void addAgent()} disabled={!pickAgent}>
+                Add agent
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function AdminSupportTab() {
   const [searchParams] = useSearchParams();
