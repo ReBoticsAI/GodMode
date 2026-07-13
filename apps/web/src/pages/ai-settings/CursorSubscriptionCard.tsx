@@ -37,18 +37,24 @@ export function CursorSubscriptionCard() {
   const [model, setModel] = useState("auto");
   const [busy, setBusy] = useState(false);
 
+  const loadModels = useCallback(async () => {
+    try {
+      const m = await fetchCursorModels();
+      setModels(m.models);
+      setModel((prev) =>
+        m.models.some((x) => x.id === prev) ? prev : (m.models[0]?.id ?? "auto")
+      );
+    } catch {
+      setModels([{ id: "auto", label: "Auto (Cursor picks)" }]);
+    }
+  }, []);
+
   const reload = useCallback(async () => {
     try {
       const s = await fetchCursorStatus();
       setStatus(s);
       if (s.connected) {
-        const m = await fetchCursorModels();
-        setModels(m.models);
-        if (m.models.some((x) => x.id === model)) {
-          /* keep selection */
-        } else if (m.models[0]) {
-          setModel(m.models[0].id);
-        }
+        await loadModels();
       } else {
         setModels([]);
       }
@@ -56,7 +62,7 @@ export function CursorSubscriptionCard() {
       setStatus({ connected: false, source: "none" });
       setModels([]);
     }
-  }, [model]);
+  }, [loadModels]);
 
   useEffect(() => {
     void reload();
@@ -69,10 +75,15 @@ export function CursorSubscriptionCard() {
     }
     setBusy(true);
     try {
-      await connectCursorApiKey(apiKey.trim());
+      const res = await connectCursorApiKey(apiKey.trim());
       setApiKey("");
+      setStatus(res.status);
       toast.success("Cursor connected");
-      await reload();
+      if (res.status.connected) {
+        await loadModels();
+      } else {
+        await reload();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to connect");
     } finally {
@@ -83,9 +94,10 @@ export function CursorSubscriptionCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      await disconnectCursorApiKey();
+      const res = await disconnectCursorApiKey();
+      setStatus(res.status);
+      setModels([]);
       toast.success("Cursor disconnected");
-      await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
@@ -171,7 +183,7 @@ export function CursorSubscriptionCard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(models.length ? models : [{ id: "auto", label: "Auto" }]).map((m) => (
+                  {(models.length ? models : [{ id: "auto", label: "Auto (Cursor picks)" }]).map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.label}
                     </SelectItem>
@@ -188,9 +200,10 @@ export function CursorSubscriptionCard() {
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Sets Intelligence backend to Cursor Cloud. You can also pick{" "}
-              <span className="font-mono">Cursor subscription</span> per agent under Agents →
-              Pipeline → Backend.
+              Sets Intelligence to Cursor Cloud. Prefer{" "}
+              <span className="font-medium">Auto (Cursor picks)</span> for everyday
+              use; pin a named model only when you need a fixed route. You can also
+              pick Cursor models in the Intelligence picker.
             </p>
           </>
         )}

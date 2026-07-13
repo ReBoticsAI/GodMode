@@ -84,6 +84,7 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [LOCAL_LLM.md](./LOCAL_LLM.md).
 
 | Variable | Description |
 |----------|-------------|
+| `CURSOR_API_KEY` | Cursor User API key for Intelligence `cursor_cloud` (overrides Vault). See [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md). |
 | `HOLDINGS_SECRET_KEY` | AES key for holdings encryption |
 | `MORALIS_API_KEY` | Crypto balance lookups |
 | `PAYPAL_*` | PayPal sandbox/live for Bank |

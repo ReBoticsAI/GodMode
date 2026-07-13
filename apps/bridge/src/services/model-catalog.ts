@@ -1,5 +1,5 @@
 import { getAgent, listSecrets, updateAgent } from "./agents/agents-db.js";
-import { getCursorAuthStatus, listCursorSubscriptionModels } from "./cursor-subscription.js";
+import { getCursorAuthStatus, listCursorSubscriptionModels, formatCursorModelLabel } from "./cursor-subscription.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import type { LlmManager } from "./llm-manager.js";
@@ -76,12 +76,14 @@ export async function listModelCatalog(
     try {
       const cursorModels = await listCursorSubscriptionModels(db);
       for (const m of cursorModels) {
+        const harness = resolveHarnessProfile({ source: "cursor", model: m.id });
         models.push({
           id: `cursor:${m.id}`,
           source: "cursor",
           label: m.label || m.id,
           model: m.id,
           active: agent?.backend === "cursor_cloud" && agent.config?.model === m.id,
+          harnessProfileId: harness.id,
         });
       }
     } catch {
@@ -264,7 +266,7 @@ export async function selectIntelligenceModel(
       active: {
         id: `cursor:${model}`,
         source: "cursor",
-        label: model,
+        label: formatCursorModelLabel(model),
         model,
         active: true,
         harnessProfileId: profile.id,
