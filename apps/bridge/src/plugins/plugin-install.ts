@@ -84,7 +84,7 @@ export async function installPluginForTenant(
   const loaded = pluginRuntime.getPlugin(pluginId);
   if (!loaded) {
     throw new Error(
-      `Plugin not loaded: ${pluginId}. Set GODMODE_PLUGIN_PATH or install from Marketplace, then restart Bridge.`
+      `Plugin not loaded: ${pluginId}. Call install_plugin (or Marketplace → Unofficial) so Bridge can load it at runtime — no restart required for tools/tenant:install.`
     );
   }
   const root = pluginRoot ?? loaded.pluginRoot;

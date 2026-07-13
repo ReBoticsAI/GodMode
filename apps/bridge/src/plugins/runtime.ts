@@ -47,6 +47,28 @@ export class PluginRuntime {
     this.loaded.push({ manifest, pluginRoot, api });
   }
 
+  /**
+   * Drop a loaded plugin's tools/hooks/loaded entry so it can be re-registered
+   * after a rebuild. Does not unmount Express routes already attached at boot.
+   */
+  unregister(pluginId: string): boolean {
+    const before = this.loaded.length;
+    this.loaded.splice(
+      0,
+      this.loaded.length,
+      ...this.loaded.filter((p) => p.manifest.id !== pluginId)
+    );
+    for (let i = this.tools.length - 1; i >= 0; i--) {
+      if (this.tools[i].pluginId === pluginId) this.tools.splice(i, 1);
+    }
+    for (const [name, entries] of this.hooks) {
+      const next = entries.filter((e) => e.pluginId !== pluginId);
+      if (next.length) this.hooks.set(name, next);
+      else this.hooks.delete(name);
+    }
+    return this.loaded.length < before;
+  }
+
   hasPlugin(id: string): boolean {
     return this.loaded.some((p) => p.manifest.id === id);
   }
