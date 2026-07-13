@@ -1,4 +1,5 @@
 import type { AgentMessage } from "./ai-agent.js";
+import { stripThinkingChannels } from "./model-profiles/index.js";
 
 export interface StoredMsgPart {
   kind: string;
@@ -20,7 +21,13 @@ export const HISTORY_CHAR_BUDGET_RATIO = 0.55;
 
 export function partsToAgentMessages(turn: HistoryTurn): AgentMessage[] {
   if (turn.role !== "assistant" || !turn.parts?.length) {
-    return [{ role: turn.role as AgentMessage["role"], content: turn.content ?? "" }];
+    const raw = turn.content ?? "";
+    return [
+      {
+        role: turn.role as AgentMessage["role"],
+        content: turn.role === "assistant" ? stripThinkingChannels(raw) : raw,
+      },
+    ];
   }
 
   const out: AgentMessage[] = [];
@@ -28,12 +35,16 @@ export function partsToAgentMessages(turn: HistoryTurn): AgentMessage[] {
 
   const flushText = () => {
     if (textBuf.trim()) {
-      out.push({ role: "assistant", content: textBuf.trim() });
+      out.push({ role: "assistant", content: stripThinkingChannels(textBuf.trim()) });
       textBuf = "";
     }
   };
 
   for (const p of turn.parts) {
+    if (p.kind === "thinking") {
+      // Gemma / OpenAI thought channels must not re-enter multi-turn history.
+      continue;
+    }
     if (p.kind === "text" && p.text) {
       textBuf += (textBuf ? "\n\n" : "") + p.text;
       continue;
@@ -72,20 +83,31 @@ export function partsToAgentMessages(turn: HistoryTurn): AgentMessage[] {
   }
   flushText();
   if (!out.length) {
-    return [{ role: "assistant", content: turn.content ?? "" }];
+    return [
+      {
+        role: "assistant",
+        content: stripThinkingChannels(turn.content ?? ""),
+      },
+    ];
   }
   return out;
 }
 
-export function historyToAgentMessages(history: HistoryTurn[]): AgentMessage[] {
+export function historyToAgentMessages(
+  history: HistoryTurn[],
+  opts?: { stripThinking?: boolean }
+): AgentMessage[] {
+  const strip = opts?.stripThinking !== false;
   const out: AgentMessage[] = [];
   for (const h of history) {
     if (h.role === "assistant" && h.parts?.length) {
       out.push(...partsToAgentMessages(h));
     } else {
+      const raw = h.content ?? "";
       out.push({
         role: h.role as AgentMessage["role"],
-        content: h.content ?? "",
+        content:
+          strip && h.role === "assistant" ? stripThinkingChannels(raw) : raw,
       });
     }
   }

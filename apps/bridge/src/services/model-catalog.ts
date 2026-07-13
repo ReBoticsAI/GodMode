@@ -5,6 +5,10 @@ import type { CoreDatabase } from "../core-db.js";
 import type { LlmManager } from "./llm-manager.js";
 import { markLlmReady } from "./onboarding.js";
 import { listSharedModelsForUser } from "./share-service.js";
+import {
+  resolveHarnessProfile,
+  type ModelHarnessProfile,
+} from "./model-profiles/index.js";
 
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
@@ -21,6 +25,8 @@ export interface CatalogModel {
   provider?: "openai" | "anthropic" | "openai_compatible";
   multimodal?: boolean;
   active?: boolean;
+  /** Resolved harness profile id (display / debug). */
+  harnessProfileId?: string;
 }
 
 const OPENAI_CATALOG = [
@@ -155,6 +161,15 @@ export async function listModelCatalog(
   }
 
   const active = models.find((m) => m.active) ?? null;
+  if (active) {
+    const profile = resolveHarnessProfile({
+      source: active.source,
+      path: active.path,
+      model: active.model,
+      provider: active.provider,
+    });
+    active.harnessProfileId = profile.id;
+  }
   return { models, active };
 }
 
@@ -165,6 +180,33 @@ export interface SelectModelInput {
   provider?: "openai" | "anthropic" | "openai_compatible";
   endpointId?: string;
   apiKeyRef?: string;
+}
+
+function applyProfileToAgentPatch(
+  agent: NonNullable<ReturnType<typeof getAgent>>,
+  profile: ModelHarnessProfile,
+  configExtra: Record<string, unknown>
+) {
+  return {
+    thinking: {
+      ...agent.thinking,
+      enableThinking: profile.enableThinkingDefault,
+      nativeTools: profile.toolMode !== "none",
+    },
+    sampling: {
+      ...agent.sampling,
+      temperature: profile.sampling.temperature,
+      topP: profile.sampling.topP,
+      topK: profile.sampling.topK,
+    },
+    config: {
+      ...agent.config,
+      ...configExtra,
+      harnessProfileId: profile.id,
+      knowsUser: agent.config?.knowsUser !== false,
+      codeAccess: agent.config?.codeAccess !== false,
+    },
+  };
 }
 
 export async function selectIntelligenceModel(
@@ -178,13 +220,12 @@ export async function selectIntelligenceModel(
   if (input.source === "local") {
     const path = input.path?.trim();
     if (!path) throw new Error("Local model path required");
+    const profile = resolveHarnessProfile({ source: "local", path });
+    const patch = applyProfileToAgentPatch(agent, profile, {});
     updateAgent(db, "intelligence", {
       backend: "local",
       modelPath: path,
-      config: {
-        knowsUser: agent.config?.knowsUser !== false,
-        codeAccess: agent.config?.codeAccess !== false,
-      },
+      ...patch,
     });
     const status = llm.getStatus();
     if (status.state === "running" && status.modelPath !== path) {
@@ -201,6 +242,7 @@ export async function selectIntelligenceModel(
         label: path.split(/[/\\]/).pop()?.replace(/\.gguf$/i, "") ?? path,
         path,
         active: true,
+        harnessProfileId: profile.id,
       },
     };
   }
@@ -210,10 +252,11 @@ export async function selectIntelligenceModel(
       throw new Error("Connect Cursor with an API key first");
     }
     const model = input.model?.trim() || "auto";
+    const profile = resolveHarnessProfile({ source: "cursor", model });
+    const patch = applyProfileToAgentPatch(agent, profile, { model });
     updateAgent(db, "intelligence", {
       backend: "cursor_cloud",
-      thinking: { ...agent.thinking, nativeTools: true },
-      config: { ...agent.config, model },
+      ...patch,
     });
     markLlmReady(db);
     return {
@@ -224,6 +267,7 @@ export async function selectIntelligenceModel(
         label: model,
         model,
         active: true,
+        harnessProfileId: profile.id,
       },
     };
   }
@@ -243,17 +287,16 @@ export async function selectIntelligenceModel(
           : secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
       ) ?? secrets[0]!;
     const apiKeyRef = input.apiKeyRef || agent.config?.apiKeyRef || preferred.id;
+    const profile = resolveHarnessProfile({ source: "provider", model, provider });
+    const patch = applyProfileToAgentPatch(agent, profile, {
+      provider,
+      model,
+      apiKeyRef,
+    });
     updateAgent(db, "intelligence", {
       backend: "provider",
       modelPath: null,
-      config: {
-        ...agent.config,
-        provider,
-        model,
-        apiKeyRef,
-        knowsUser: agent.config?.knowsUser !== false,
-        codeAccess: agent.config?.codeAccess !== false,
-      },
+      ...patch,
     });
     markLlmReady(db);
     return {
@@ -265,6 +308,7 @@ export async function selectIntelligenceModel(
         model,
         provider,
         active: true,
+        harnessProfileId: profile.id,
       },
     };
   }
@@ -272,15 +316,12 @@ export async function selectIntelligenceModel(
   if (input.source === "remote") {
     const endpointId = input.endpointId?.trim();
     if (!endpointId) throw new Error("Remote endpoint id required");
+    const profile = resolveHarnessProfile({ source: "remote" });
+    const patch = applyProfileToAgentPatch(agent, profile, { endpointId });
     updateAgent(db, "intelligence", {
       backend: "remote",
       modelPath: null,
-      config: {
-        ...agent.config,
-        endpointId,
-        knowsUser: agent.config?.knowsUser !== false,
-        codeAccess: agent.config?.codeAccess !== false,
-      },
+      ...patch,
     });
     markLlmReady(db);
     return {
@@ -291,6 +332,7 @@ export async function selectIntelligenceModel(
         label: endpointId,
         endpointId,
         active: true,
+        harnessProfileId: profile.id,
       },
     };
   }

@@ -15,6 +15,8 @@ Bridge loads plugins from Marketplace-registered paths or optional `GODMODE_PLUG
 
 Fresh clones run as personal OS only until you install plugins from **Marketplace**.
 
+**Model harness profiles** (tool mode, sampling, discovery-tool filters per LLM family) live in Bridge core (`model-profiles/`), not in plugins. Plugins should not try to replace per-model harness behavior — pick a model in Intelligence and GodMode loads that profile automatically. See [LOCAL_LLM.md](./LOCAL_LLM.md#model-harness-profiles-picker-driven).
+
 ## Manifest (`godmode.plugin.json`)
 
 ```json
