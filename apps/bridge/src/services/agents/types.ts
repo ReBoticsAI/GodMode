@@ -78,6 +78,8 @@ export interface AgentCursorConfig {
 export interface AgentCursorCloudConfig {
   /** Model id from Cursor.models.list() — e.g. auto, composer-2.5 */
   model?: string;
+  /** Optional SDK model params (e.g. fast). Changing these recreates the cached agent. */
+  modelParams?: Record<string, unknown>;
   workspace?: string;
 }
 

@@ -8,6 +8,7 @@ import { executeTool, type ToolExecContext } from "../ai-tool-executor.js";
 import { shouldAutoApproveTool } from "../confirm-policy.js";
 import { resolveCursorApiKey } from "../cursor-subscription.js";
 import type { IntelligenceChatMode } from "../chat-mode.js";
+import type { AgentMessage } from "../ai-agent.js";
 
 type SdkAgent = Awaited<
   ReturnType<(typeof import("@cursor/sdk"))["Agent"]["create"]>
@@ -15,8 +16,14 @@ type SdkAgent = Awaited<
 
 interface ChatAgentEntry {
   agent: SdkAgent;
-  systemHash: string;
+  /** Fingerprint of system + model (+ optional params) — recreate when this changes. */
+  cacheFingerprint: string;
 }
+
+/** Soft cap for prior-turn transcript appendix (chars). */
+const TRANSCRIPT_CHAR_BUDGET = 6_000;
+const TRANSCRIPT_MAX_TURNS = 12;
+const TRANSCRIPT_PER_MESSAGE_CAP = 1_200;
 
 const chatAgents = new Map<string, ChatAgentEntry>();
 
@@ -33,17 +40,91 @@ function filterSchemas(
   return all.filter((t) => set.has(t.function.name));
 }
 
-function buildPrompt(req: AgentRunRequest): string {
+function flattenTextContent(content: string): string {
+  return content.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Rolling user/assistant transcript for continuity when the SDK agent is reset
+ * (e.g. model switch). Skips system/tool messages and the current last user turn.
+ * Not a full Gemma-local history replay — no tool JSON.
+ */
+export function buildTranscriptAppendix(
+  messages: AgentMessage[],
+  budget = TRANSCRIPT_CHAR_BUDGET
+): string {
+  const textTurns = messages.filter(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      typeof m.content === "string" &&
+      m.content.trim().length > 0 &&
+      !m.tool_calls?.length
+  );
+  if (textTurns.length <= 1) return "";
+
+  // Drop the last user message — it is sent as the live prompt.
+  const prior = textTurns.slice(0, -1).slice(-TRANSCRIPT_MAX_TURNS);
+  const blocks: string[] = [];
+  let used = 0;
+  for (let i = prior.length - 1; i >= 0; i--) {
+    const m = prior[i]!;
+    let body = flattenTextContent(m.content);
+    if (body.length > TRANSCRIPT_PER_MESSAGE_CAP) {
+      body = `${body.slice(0, TRANSCRIPT_PER_MESSAGE_CAP)}…`;
+    }
+    const line = `${m.role === "user" ? "User" : "Assistant"}: ${body}`;
+    if (used + line.length + 1 > budget) break;
+    blocks.unshift(line);
+    used += line.length + 1;
+  }
+  if (!blocks.length) return "";
+  return [
+    "<!-- godmode-recent-transcript -->",
+    "Recent turns (for continuity; not a full tool replay):",
+    ...blocks,
+    "<!-- /godmode-recent-transcript -->",
+  ].join("\n");
+}
+
+export function buildPrompt(req: AgentRunRequest): string {
   const system = req.messages.find((m) => m.role === "system")?.content?.trim() ?? "";
   const lastUser =
     [...req.messages].reverse().find((m) => m.role === "user")?.content?.trim() ?? "";
   if (!lastUser) throw new Error("User message required");
-  if (!system) return lastUser;
-  return `<!-- godmode-system -->\n${system}\n<!-- /godmode-system -->\n\n${lastUser}`;
+  const appendix = buildTranscriptAppendix(req.messages);
+  const parts: string[] = [];
+  if (system) {
+    parts.push(`<!-- godmode-system -->\n${system}\n<!-- /godmode-system -->`);
+  }
+  if (appendix) parts.push(appendix);
+  parts.push(lastUser);
+  return parts.join("\n\n");
 }
 
 function systemHash(system: string): string {
   return createHash("sha256").update(system).digest("hex").slice(0, 16);
+}
+
+/** Hash optional Cursor model params so param changes recreate the SDK agent. */
+export function cursorModelParamsHash(
+  params: Record<string, unknown> | null | undefined
+): string {
+  if (!params || Object.keys(params).length === 0) return "";
+  const keys = Object.keys(params).sort();
+  const normalized: Record<string, unknown> = {};
+  for (const k of keys) normalized[k] = params[k];
+  return createHash("sha256")
+    .update(JSON.stringify(normalized))
+    .digest("hex")
+    .slice(0, 12);
+}
+
+export function cursorCloudCacheFingerprint(
+  modelId: string,
+  sysHash: string,
+  paramsHash = ""
+): string {
+  return `${modelId}|${paramsHash}|${sysHash}`;
 }
 
 function buildCustomTools(
@@ -108,12 +189,12 @@ function buildCustomTools(
 async function getOrCreateChatAgent(
   chatKey: string,
   apiKey: string,
-  cfg: AgentCursorCloudConfig,
   cwd: string,
-  hash: string
+  fingerprint: string,
+  modelId: string
 ): Promise<SdkAgent> {
   const existing = chatAgents.get(chatKey);
-  if (existing && existing.systemHash === hash) return existing.agent;
+  if (existing && existing.cacheFingerprint === fingerprint) return existing.agent;
   if (existing) {
     chatAgents.delete(chatKey);
   }
@@ -121,13 +202,13 @@ async function getOrCreateChatAgent(
   const agent = await Agent.create({
     apiKey,
     agentId: chatKey,
-    model: { id: cfg.model?.trim() || "auto" },
+    model: { id: modelId },
     local: {
       cwd,
       sandboxOptions: { enabled: false },
     },
   });
-  chatAgents.set(chatKey, { agent, systemHash: hash });
+  chatAgents.set(chatKey, { agent, cacheFingerprint: fingerprint });
   return agent;
 }
 
@@ -157,9 +238,23 @@ export class CursorCloudBackend implements AgentBackend {
     const customTools = buildCustomTools(req, this.db, toolCtx, chatMode);
     const prompt = buildPrompt(req);
     const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
-    const hash = systemHash(sys);
+    const modelId = cfg.model?.trim() || "auto";
+    const paramsHash = cursorModelParamsHash(
+      cfg.modelParams as Record<string, unknown> | undefined
+    );
+    const fingerprint = cursorCloudCacheFingerprint(
+      modelId,
+      systemHash(sys),
+      paramsHash
+    );
 
-    const sdkAgent = await getOrCreateChatAgent(chatKey, apiKey, cfg, cwd, hash);
+    const sdkAgent = await getOrCreateChatAgent(
+      chatKey,
+      apiKey,
+      cwd,
+      fingerprint,
+      modelId
+    );
     const run = await sdkAgent.send(prompt, { local: { customTools } });
 
     let streamed = "";

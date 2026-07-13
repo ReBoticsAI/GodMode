@@ -95,10 +95,15 @@ Registry: [`apps/bridge/src/services/model-profiles/`](../apps/bridge/src/servic
 | Profile | When | Highlights |
 |---------|------|------------|
 | **`gemma-4`** | Local GGUF path/name matches `/gemma-4/i` | `toolMode: native`, sampling `1.0 / 0.95 / 64`, max 12 tool iterations, defer discovery + soft `remember` on greetings, harness delta: trust memory/wiki sections, no greeting remembers |
-| **`cursor`** | Picker `source: cursor` | Stub: native tools, no grammar |
+| **`cursor-auto`** | Cursor picker `auto` / empty | Native tools; trust memory/wiki; no discovery spam on greetings; Auto-bucket (Cursor picks) |
+| **`cursor-composer`** | Cursor model matches `/composer/` | Coding-forward delta; higher iteration budget (48); thinking off by default |
+| **`cursor-grok`** | Cursor model matches `/grok/i` | Broader STEM/knowledge delta; same native tools; defer discovery on greetings |
+| **`cursor`** | Other Cursor subscription model ids | Fallback: native tools, Auto-like delta |
 | **`openai` / `anthropic`** | Picker `source: provider` | Stub: provider-native tools |
 | **`generic-local`** | Other local GGUFs | Conservative discovery deferral + simple-chat delta |
 | **`remote`** | Shared marketplace model | Stub |
+
+Cursor subscription setup (Vault API key, Auto vs pin): [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md).
 
 Flow: picker → `POST /ai/select-model` → `resolveHarnessProfile` → store `config.harnessProfileId` (display) → each `/ai/chat` **re-derives** from the active model so the harness cannot drift.
 
