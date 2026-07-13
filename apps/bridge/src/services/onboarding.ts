@@ -3,6 +3,7 @@ import type { AppDatabase } from "../db.js";
 import { getCoreDb, getPlatformMeta } from "../core-db.js";
 import { config } from "../config.js";
 import type { LlmManager } from "./llm-manager.js";
+import { isEmbeddingGguf } from "./llm-manager.js";
 import { isCursorSubscriptionReady } from "./cursor-subscription.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
@@ -106,7 +107,10 @@ export function listLocalGgufModels(): string[] {
     try {
       if (!fs.existsSync(dir)) continue;
       for (const f of fs.readdirSync(dir)) {
-        if (f.endsWith(".gguf")) out.add(f);
+        const lower = f.toLowerCase();
+        if (!lower.endsWith(".gguf")) continue;
+        if (isEmbeddingGguf(f) || lower.includes("mmproj")) continue;
+        out.add(f);
       }
     } catch {
       /* skip */
