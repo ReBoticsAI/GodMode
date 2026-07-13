@@ -42,6 +42,10 @@ export interface AgentRunRequest {
   ) => void;
   abortSignal?: AbortSignal;
   maxIterations?: number;
+  /** Override llama tool mode (native | grammar | none) from harness profile. */
+  toolMode?: "native" | "grammar" | "none";
+  /** Optional sampling overlay from harness profile (temp / top_p / top_k). */
+  samplingOverlay?: { temperature: number; topP: number; topK: number };
   chatMode?: import("../chat-mode.js").IntelligenceChatMode;
   onTerminalOutput?: (
     toolCallId: string,

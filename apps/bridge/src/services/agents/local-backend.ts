@@ -1,8 +1,11 @@
 import type { LlmManager } from "../llm-manager.js";
 import { DEFAULT_MAX_ITERATIONS, runAgentChat, type AgentSampling } from "../ai-agent.js";
-import { config } from "../../config.js";
 import { getToolSchemasForLlm } from "../ai-tools-registry.js";
 import { shouldAutoApproveTool } from "../confirm-policy.js";
+import {
+  applyProfileSampling,
+  resolveProfileForAgent,
+} from "../model-profiles/index.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
 import type { AppDatabase } from "../../db.js";
 
@@ -55,7 +58,11 @@ export class LocalLlamaBackend implements AgentBackend {
       }
     }
 
-    const sampling: AgentSampling = {
+    const profile = resolveProfileForAgent(
+      agent,
+      this.llm.getStatus().modelPath
+    );
+    const baseSampling: AgentSampling = {
       temperature: agent.sampling.temperature,
       topP: agent.sampling.topP,
       topK: agent.sampling.topK,
@@ -66,6 +73,9 @@ export class LocalLlamaBackend implements AgentBackend {
       maxTokens: agent.sampling.maxTokens,
       seed: agent.sampling.seed,
     };
+    const sampling = req.samplingOverlay
+      ? { ...baseSampling, ...req.samplingOverlay }
+      : applyProfileSampling(baseSampling, profile);
 
     const allow = agent.toolAllow;
     const lora = this.resolveLora(agent.adapterIds);
@@ -77,14 +87,26 @@ export class LocalLlamaBackend implements AgentBackend {
       ? new Set(allow.includes("*") ? allSchemas.map((s) => s.function.name) : allow)
       : null;
 
+    const resolvedToolMode =
+      req.toolMode ??
+      (profile.toolMode === "grammar" ? "grammar" : "native");
+    const nativeTools =
+      profile.toolMode !== "none" &&
+      agent.thinking.nativeTools &&
+      chatMode !== "ask";
+    const iterationCap = Math.min(
+      req.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+      profile.maxChatIterations
+    );
+
     return runAgentChat({
       baseUrl: this.llm.getServerBaseUrl(),
       messages: req.messages,
       sampling,
-      nativeTools: agent.thinking.nativeTools && chatMode !== "ask",
-      toolMode: config.ai.defaultToolMode,
+      nativeTools,
+      toolMode: resolvedToolMode === "none" ? "native" : resolvedToolMode,
       lora: lora.length ? lora : undefined,
-      maxIterations: req.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+      maxIterations: iterationCap,
       tools: allSchemas,
       toolCtx: {
         ...req.toolCtx,
