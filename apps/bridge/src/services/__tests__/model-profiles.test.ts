@@ -51,9 +51,13 @@ assert.equal(
   true
 );
 
+assert.ok(GEMMA4_PROFILE.harnessDelta.includes("remember only for explicit"));
+assert.ok(GEMMA4_PROFILE.deferredDiscoveryTools.includes("remember"));
+
 const schemas = [
   { function: { name: "read_file" } },
   { function: { name: "list_subagents" } },
+  { function: { name: "remember" } },
 ];
 assert.deepEqual(
   filterSchemasForProfile(schemas, GEMMA4_PROFILE, { userMessage: "hi" }).map(

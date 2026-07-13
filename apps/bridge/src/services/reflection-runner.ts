@@ -14,11 +14,13 @@ import {
   REFLECTION_TOOL_NAMES,
 } from "./reflection-tools.js";
 import { isUserAgentId } from "./agents/user-agent-prompt.js";
+import type { EmbeddingClient } from "./embeddings/embedding-client.js";
 
 export interface ReflectionRunDeps {
   db: AppDatabase;
   llm: LlmManager;
   bus?: EventEmitter;
+  embedder?: EmbeddingClient | null;
 }
 
 export interface ReflectionRunResult {
@@ -117,6 +119,7 @@ export async function runReflection(
     : [
         "You are running a REFLECTION pass for this agent.",
         "Review recent activity and decide whether to create, update, or delete Rules, Memories, Skills, Artifacts, or Workflows.",
+        "Skills must be PLAYBOOKS: named procedures with clear steps (\"when X, do Y\") — never chat transcripts or unstructured notes.",
         "Use the provided tools only. Do not invent ids — read knowledge first.",
         config.mode === "approval"
           ? "Changes are staged for user approval unless they are new pending drafts."
@@ -155,6 +158,7 @@ export async function runReflection(
         activeAgentId: agentId,
         reflectionMode: config.mode,
         reflectionWatermark: watermark,
+        embedder: deps.embedder ?? undefined,
       },
     });
 

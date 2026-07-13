@@ -451,7 +451,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_skill",
     description:
-      "Draft a new file-backed skill (SKILL.md) for this agent. Created in 'pending' status awaiting user approval before it is injected. Use when a novel, repeatable workflow is worth capturing.",
+      "Draft a playbook skill (named steps: when X, do Y). Pending approval. Rejected if too short or a near-duplicate.",
     mode: "confirm",
     parameters: {
       type: "object",

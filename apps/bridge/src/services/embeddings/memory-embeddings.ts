@@ -1,4 +1,5 @@
 import type { AppDatabase } from "../../db.js";
+import { syncMemoryToFts } from "../vector-rag.js";
 import { vectorToBlob, type EmbeddingClient } from "./embedding-client.js";
 
 /**
@@ -22,6 +23,32 @@ export async function embedAndStoreMemory(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Always sync FTS; optionally embed when the client is ready.
+ * Embed is async / best-effort so hot write paths stay responsive.
+ */
+export function indexMemory(
+  db: AppDatabase,
+  embedder: EmbeddingClient | null | undefined,
+  id: string,
+  text: string
+): void {
+  if (!text.trim()) return;
+  syncMemoryToFts(db, id, text);
+  if (embedder?.isReady()) {
+    void embedAndStoreMemory(db, embedder, id, text);
+  }
+}
+
+/** Remove FTS row (and leave embedding cleanup to the DELETE on ai_memories). */
+export function removeMemoryFromIndex(db: AppDatabase, id: string): void {
+  try {
+    db.prepare(`DELETE FROM ai_memories_fts WHERE memory_id = ?`).run(id);
+  } catch {
+    /* fts table may not exist yet */
   }
 }
 

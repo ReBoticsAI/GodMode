@@ -61,10 +61,30 @@ The Alpine GodMode image does **not** run CUDA inference. Run `llama-server` on 
 | `LLAMA_SERVER_HOST` | `host.docker.internal` |
 | `LLAMA_SERVER_PORT` | `8081` |
 | `LLAMA_TOOL_MODE` | `native` (required for Gemma with host `--jinja`; grammar can loop on tools like `list_subagents`) |
+| `EMBEDDINGS_ENABLED` | `true` |
+| `EMBEDDINGS_EXTERNAL` | `true` |
+| `EMBEDDINGS_SERVER_HOST` | `host.docker.internal` |
+| `EMBEDDINGS_PORT` | `8082` |
 
 Compose example: [deploy/docker-compose.hub-external-llm.yml](../deploy/docker-compose.hub-external-llm.yml).
 
 Host `llama-server` must use **`--jinja`** so chat/tool templates match. With `LLAMA_EXTERNAL=true`, Bridge defaults `LLAMA_TOOL_MODE` to **native** if unset.
+
+### Host EmbeddingGemma (sibling unit)
+
+Run a second `llama-server` on **:8082** with embeddings enabled (mean pooling). Example systemd `ExecStart` fragment:
+
+```bash
+llama-server \
+  -m /path/to/embeddinggemma-300M-Q8_0.gguf \
+  --embeddings --pooling mean \
+  -c 2048 -t 4 \
+  --host 0.0.0.0 --port 8082
+```
+
+Mirror your chat `llama-server.service` as e.g. `embeddinggemma.service`. Bridge attaches with `EMBEDDINGS_EXTERNAL=true` (no CUDA in the hub image).
+
+Memory layers and index-on-write: [AGENT_MEMORY.md](./AGENT_MEMORY.md).
 
 ## Model harness profiles (picker-driven)
 
@@ -74,7 +94,7 @@ Registry: [`apps/bridge/src/services/model-profiles/`](../apps/bridge/src/servic
 
 | Profile | When | Highlights |
 |---------|------|------------|
-| **`gemma-4`** | Local GGUF path/name matches `/gemma-4/i` | `toolMode: native`, sampling `1.0 / 0.95 / 64`, max 12 tool iterations, defer `list_subagents` unless agent context, strip thought channels from history |
+| **`gemma-4`** | Local GGUF path/name matches `/gemma-4/i` | `toolMode: native`, sampling `1.0 / 0.95 / 64`, max 12 tool iterations, defer discovery + soft `remember` on greetings, harness delta: trust memory/wiki sections, no greeting remembers |
 | **`cursor`** | Picker `source: cursor` | Stub: native tools, no grammar |
 | **`openai` / `anthropic`** | Picker `source: provider` | Stub: provider-native tools |
 | **`generic-local`** | Other local GGUFs | Conservative discovery deferral + simple-chat delta |
@@ -90,6 +110,7 @@ Flow: picker → `POST /ai/select-model` → `resolveHarnessProfile` → store `
 | `temperature=1.0`, `top_p=0.95`, `top_k=64` | Sampling overlay on chat |
 | Thinking via `<\|think\|>` / channel thoughts | Default thinking off; strip channels before multi-turn history |
 | Agentic but loops on discovery tools | Harness delta: no tools for greetings; defer `list_subagents` unless the user asks about agents |
+| Memory / wiki already in prompt | Do not re-probe with tools; soft-defer `remember` on short greetings |
 | Long tool loops | `maxChatIterations: 12` (+ existing identical-call breaker) |
 
 Adding a new model later = add/fill a profile entry; picker wiring stays the same. Profiles are **not** plugins — see [PLUGIN_AUTHORING.md](./PLUGIN_AUTHORING.md).

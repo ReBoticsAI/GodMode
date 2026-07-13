@@ -89,6 +89,23 @@ export class CpuLlamaServer {
     if (this.state === "running" || this.state === "starting") {
       return this.getStatus();
     }
+
+    // Hub / Docker: attach to host-managed embedder (do not spawn inside Alpine).
+    if (config.embeddings.external) {
+      this.state = "starting";
+      this.error = null;
+      this.logs = [];
+      this.startedAt = new Date().toISOString();
+      this.healthOk = false;
+      this.proc = null;
+      this.pushLog(
+        `[${this.opts.role}] attaching to external embedder at ${this.getBaseUrl()}`
+      );
+      await this.waitForReady(120_000);
+      this.startHealthPoll();
+      return this.getStatus();
+    }
+
     if (!fs.existsSync(config.ai.llamaServerBin)) {
       this.state = "error";
       this.error = `llama-server not found: ${config.ai.llamaServerBin}`;
@@ -149,6 +166,13 @@ export class CpuLlamaServer {
   async stop(): Promise<CpuServerStatus> {
     this.state = "stopping";
     this.stopHealthPoll();
+    if (config.embeddings.external) {
+      this.proc = null;
+      this.state = "stopped";
+      this.healthOk = false;
+      this.pushLog(`[${this.opts.role}] detached from external embedder (left running on host)`);
+      return this.getStatus();
+    }
     if (this.proc) {
       this.proc.kill("SIGTERM");
       await new Promise((r) => setTimeout(r, 1000));

@@ -1373,6 +1373,8 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   addCol("ai_prompt_queue", "tenant_id", "TEXT");
   addCol("ai_chats", "user_id", "TEXT");
   addCol("ai_messages", "user_id", "TEXT");
+  addCol("ai_chats", "distilled_at", "TEXT");
+  addCol("ai_chats", "distill_msg_count", "INTEGER");
 
   addCol("ai_memories", "agent_id", "TEXT");
   // Memory engine: 'active' memories are injected into prompts; 'pending' ones
