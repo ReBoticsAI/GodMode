@@ -37,14 +37,11 @@ import { clampComposerWidth, useIntelligence, type IntelligenceChatMode, type To
 import { useAiStatus } from "@/hooks/use-ai-status";
 import {
   fetchAiCommands,
-  fetchAiModels,
-  fetchCursorModels,
-  fetchCursorStatus,
-  applyCursorToIntelligence,
-  startAiModel,
+  fetchModelCatalog,
+  selectIntelligenceModel,
   uploadDmFile,
   type AiChatCommand,
-  type AiModel,
+  type CatalogModel,
   type DmAttachmentInput,
 } from "@/api";
 import {
@@ -190,9 +187,8 @@ export function IntelligenceComposer({
   } = useIntelligence();
   const { status, refresh } = useAiStatus();
 
-  const [models, setModels] = useState<AiModel[]>([]);
-  const [cursorModels, setCursorModels] = useState<Array<{ id: string; label: string }>>([]);
-  const [cursorConnected, setCursorConnected] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogModel[]>([]);
+  const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const [slashCommands, setSlashCommands] = useState<AiChatCommand[]>([]);
   const [images, setImages] = useState<string[]>([]);
   const [dmAttachments, setDmAttachments] = useState<DmAttachmentInput[]>([]);
@@ -235,25 +231,30 @@ export function IntelligenceComposer({
 
   useEffect(() => {
     if (!isPanel || dmMode) return;
-    fetchAiModels()
-      .then((r) => setModels(r.models))
-      .catch(() => setModels([]));
+    fetchModelCatalog()
+      .then((r) => {
+        setCatalog(r.models);
+        setActiveModel(r.active);
+      })
+      .catch(() => {
+        setCatalog([]);
+        setActiveModel(null);
+      });
     fetchAiCommands()
       .then((r) => setSlashCommands(r.commands))
       .catch(() => setSlashCommands([]));
-    fetchCursorStatus()
-      .then((s) => {
-        setCursorConnected(s.connected);
-        if (s.connected) {
-          return fetchCursorModels().then((r) => setCursorModels(r.models));
-        }
-        return undefined;
-      })
-      .catch(() => {
-        setCursorConnected(false);
-        setCursorModels([]);
-      });
   }, [isPanel, dmMode]);
+
+  const catalogBySource = useMemo(() => {
+    const groups: Record<CatalogModel["source"], CatalogModel[]> = {
+      local: [],
+      cursor: [],
+      provider: [],
+      remote: [],
+    };
+    for (const m of catalog) groups[m.source].push(m);
+    return groups;
+  }, [catalog]);
 
   const mentionIndex = useMemo(() => {
     const skills = new Map<string, string>();
@@ -341,11 +342,11 @@ export function IntelligenceComposer({
         if (slash.action === "open-rules") onOpenRules?.();
         if (slash.action === "start-model" && slash.modelName) {
           const match =
-            models.find((m) => m.id === slash.modelName) ??
-            models.find((m) =>
-              m.name.toLowerCase().includes(slash.modelName!.toLowerCase())
+            catalog.find((m) => m.id === slash.modelName) ??
+            catalog.find((m) =>
+              m.label.toLowerCase().includes(slash.modelName!.toLowerCase())
             );
-          if (match) await handleModelSelect(match);
+          if (match) await handleCatalogSelect(match);
         }
         onChange("");
         return;
@@ -526,21 +527,23 @@ export function IntelligenceComposer({
     setListening(true);
   };
 
-  const handleModelSelect = async (model: AiModel) => {
+  const handleCatalogSelect = async (model: CatalogModel) => {
     try {
-      await startAiModel(model.path);
+      const res = await selectIntelligenceModel({
+        source: model.source,
+        path: model.path,
+        model: model.model,
+        provider: model.provider,
+        endpointId: model.endpointId,
+      });
+      setActiveModel(res.active);
+      setCatalog((prev) =>
+        prev.map((m) => ({ ...m, active: m.id === res.active.id }))
+      );
       refresh();
-    } catch {
-      /* surfaced via status */
-    }
-  };
-
-  const handleCursorModelSelect = async (modelId: string) => {
-    try {
-      await applyCursorToIntelligence(modelId);
-      toast.success(`Intelligence using Cursor model: ${modelId}`);
-    } catch {
-      toast.error("Failed to switch to Cursor model");
+      toast.success(`Using ${res.active.label}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to switch model");
     }
   };
 
@@ -551,11 +554,24 @@ export function IntelligenceComposer({
   };
 
   const running = status?.state === "running";
-  const modelLabel = running
-    ? status?.modelName?.replace(/\.gguf$/i, "") ?? "Model"
-    : status?.state === "starting"
-      ? "Starting…"
-      : "Auto";
+  const modelLabel =
+    activeModel?.label ??
+    (running
+      ? status?.modelName?.replace(/\.gguf$/i, "") ?? "Model"
+      : status?.state === "starting"
+        ? "Starting…"
+        : "Select model");
+
+  const modelDotClass =
+    activeModel?.source === "local"
+      ? running
+        ? "bg-emerald-500"
+        : status?.state === "starting"
+          ? "bg-amber-500"
+          : "bg-muted-foreground/60"
+      : activeModel
+        ? "bg-sky-500"
+        : "bg-muted-foreground/60";
 
   // Footer launcher: compact pill in the app footer; submit opens the floating panel.
   if (!isPanel) {
@@ -917,52 +933,66 @@ export function IntelligenceComposer({
                   className="ml-1 inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/60 px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                   title="Model"
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      running
-                        ? "bg-emerald-500"
-                        : status?.state === "starting"
-                          ? "bg-amber-500"
-                          : "bg-muted-foreground/60"
-                    )}
-                  />
+                  <span className={cn("size-1.5 rounded-full", modelDotClass)} />
                   {modelLabel}
                   <ChevronDownIcon className="size-3" />
                 </button>
               }
             />
-            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuContent align="end" className="max-h-80 w-72 overflow-y-auto">
               <DropdownMenuLabel>Local models</DropdownMenuLabel>
-              {models.length === 0 && (
-                <DropdownMenuItem disabled>No models found</DropdownMenuItem>
+              {catalogBySource.local.length === 0 && (
+                <DropdownMenuItem disabled>No local GGUF models found</DropdownMenuItem>
               )}
-              {models.map((m) => (
-                <DropdownMenuItem key={m.id} onClick={() => handleModelSelect(m)}>
-                  <span className="truncate">{m.name.replace(/\.gguf$/i, "")}</span>
-                  {m.isMultimodal && (
+              {catalogBySource.local.map((m) => (
+                <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
+                  <span className="truncate">{m.label}</span>
+                  {m.multimodal && (
                     <ImageIcon className="ml-auto size-3 text-muted-foreground" />
                   )}
-                  {status?.modelPath === m.path && running && (
-                    <span className="ml-1 text-xs text-emerald-500">●</span>
-                  )}
+                  {m.active && <span className="ml-1 text-xs text-emerald-500">●</span>}
                 </DropdownMenuItem>
               ))}
-              {cursorConnected && cursorModels.length > 0 && (
+              {catalogBySource.cursor.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Cursor subscription</DropdownMenuLabel>
-                  {cursorModels.map((m) => (
-                    <DropdownMenuItem key={m.id} onClick={() => handleCursorModelSelect(m.id)}>
+                  <DropdownMenuLabel>Cursor</DropdownMenuLabel>
+                  {catalogBySource.cursor.map((m) => (
+                    <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                       <FileCodeIcon className="size-3 shrink-0 text-sky-500" />
-                      <span className="truncate">{m.label || m.id}</span>
+                      <span className="truncate">{m.label}</span>
+                      {m.active && <span className="ml-1 text-xs text-sky-500">●</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+              {catalogBySource.provider.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Cloud API (Vault keys)</DropdownMenuLabel>
+                  {catalogBySource.provider.map((m) => (
+                    <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
+                      <span className="truncate">{m.label}</span>
+                      {m.active && <span className="ml-1 text-xs text-sky-500">●</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+              {catalogBySource.remote.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Shared with me</DropdownMenuLabel>
+                  {catalogBySource.remote.map((m) => (
+                    <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
+                      <span className="truncate">{m.label}</span>
+                      {m.active && <span className="ml-1 text-xs text-sky-500">●</span>}
                     </DropdownMenuItem>
                   ))}
                 </>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled className="text-[11px]">
-                Manage in the Builder tab
+                Add cloud keys in Vault · manage in Builder
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
