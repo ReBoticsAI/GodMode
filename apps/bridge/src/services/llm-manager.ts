@@ -162,6 +162,24 @@ function isMmprojFile(name: string): boolean {
 }
 
 /**
+ * Embedding-only GGUFs (EmbeddingGemma, nomic-embed, etc.) — not selectable
+ * as Intelligence chat models. Hosted separately via EMBEDDINGS_* / Memory Engine.
+ */
+export function isEmbeddingGguf(nameOrPath: string): boolean {
+  const base = path.basename(nameOrPath).toLowerCase();
+  if (!base.endsWith(".gguf")) return false;
+  return (
+    /embeddinggemma/i.test(base) ||
+    /^embedding[-_]/i.test(base) ||
+    /[-_]embed(ding)?[-_]/i.test(base) ||
+    /nomic[-_]?embed/i.test(base) ||
+    /bge[-_]?(small|base|large|m3)/i.test(base) ||
+    /e5[-_]?(small|base|large)/i.test(base) ||
+    /gte[-_]?(small|base|large|qwen)/i.test(base)
+  );
+}
+
+/**
  * Pairs a model with a compatible mmproj projector by matching the leading
  * family token (e.g. "gemma-4-e4b"). A projector only works with its own model
  * architecture, so we never fall back to an unrelated projector.
@@ -356,8 +374,9 @@ export class LlmManager {
         const full = path.resolve(dir, name);
         if (seen.has(full)) continue;
         seen.add(full);
-        if (isMmprojFile(name)) {
-          mmprojFiles.push(full);
+        if (isMmprojFile(name) || isEmbeddingGguf(name)) {
+          // mmproj: paired later; embeddings: Memory Engine only, not chat picker
+          if (isMmprojFile(name)) mmprojFiles.push(full);
         } else {
           allFiles.push(full);
         }

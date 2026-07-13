@@ -2,7 +2,7 @@ import { getAgent, listSecrets, updateAgent } from "./agents/agents-db.js";
 import { getCursorAuthStatus, listCursorSubscriptionModels, formatCursorModelLabel } from "./cursor-subscription.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
-import type { LlmManager } from "./llm-manager.js";
+import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
 import { markLlmReady } from "./onboarding.js";
 import { listSharedModelsForUser } from "./share-service.js";
 import {
@@ -55,7 +55,7 @@ export async function listModelCatalog(
   const agent = getAgent(db, "intelligence");
   const models: CatalogModel[] = [];
 
-  const local = llm.scanModels().filter((m) => !m.isMmproj);
+  const local = llm.scanModels().filter((m) => !m.isMmproj && !isEmbeddingGguf(m.name));
   const localStatus = llm.getStatus();
   for (const m of local) {
     const active =
