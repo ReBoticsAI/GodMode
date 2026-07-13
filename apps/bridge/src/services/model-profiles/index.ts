@@ -78,6 +78,43 @@ export const GEMMA4_PROFILE: ModelHarnessProfile = {
   harnessDelta: GEMMA4_HARNESS_DELTA,
 };
 
+const CURSOR_COMMON_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+];
+
+const CURSOR_AUTO_HARNESS_DELTA = [
+  "<model_profile id=\"cursor-auto\">",
+  "You are running via Cursor subscription Auto (Cursor picks among the Auto bucket).",
+  "Greetings and simple conversational questions: answer in plain language with NO tools.",
+  "Memory and wiki sections in this prompt are already retrieved — do not re-probe them with tools unless the user asks for a full page or deeper search.",
+  "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+  "Prefer one purposeful tool turn. Use GodMode coding/plugin tools for real engineering tasks.",
+  "</model_profile>",
+].join("\n");
+
+const CURSOR_COMPOSER_HARNESS_DELTA = [
+  "<model_profile id=\"cursor-composer\">",
+  "You are running Cursor Composer (coding specialist) via the Cursor SDK.",
+  "Greetings: answer briefly with no tools. For engineering work, use GodMode coding tools deliberately.",
+  "Memory and wiki sections are already retrieved — deep-read wiki only when docs are clearly needed.",
+  "Prefer structured edits and verification over exploratory tool spam.",
+  "</model_profile>",
+].join("\n");
+
+const CURSOR_GROK_HARNESS_DELTA = [
+  "<model_profile id=\"cursor-grok\">",
+  "You are running Grok via the Cursor SDK (broader STEM / knowledge work, not only coding).",
+  "Greetings and simple chat: answer in plain language with NO tools.",
+  "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+  "Use discovery tools only when the USER asks about agents or tool inventory.",
+  "For coding tasks prefer purposeful GodMode tools; for analysis prefer clear reasoning then tools when needed.",
+  "</model_profile>",
+].join("\n");
+
+/** Fallback for unknown Cursor model ids. */
 export const CURSOR_PROFILE: ModelHarnessProfile = {
   id: "cursor",
   label: "Cursor",
@@ -87,8 +124,56 @@ export const CURSOR_PROFILE: ModelHarnessProfile = {
   enableThinkingDefault: false,
   stripThinkingFromHistory: true,
   requireJinja: false,
-  deferredDiscoveryTools: [],
-  harnessDelta: "",
+  deferredDiscoveryTools: [...CURSOR_COMMON_DEFERRED],
+  harnessDelta: CURSOR_AUTO_HARNESS_DELTA.replace(
+    'id="cursor-auto"',
+    'id="cursor"'
+  ).replace(
+    "Cursor subscription Auto (Cursor picks among the Auto bucket).",
+    "a Cursor subscription model via the SDK."
+  ),
+};
+
+/** Cursor Auto bucket (`model: auto`). */
+export const CURSOR_AUTO_PROFILE: ModelHarnessProfile = {
+  id: "cursor-auto",
+  label: "Cursor Auto",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 0.95, topK: 64 },
+  maxChatIterations: 32,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...CURSOR_COMMON_DEFERRED],
+  harnessDelta: CURSOR_AUTO_HARNESS_DELTA,
+};
+
+/** Cursor Composer family (coding specialist). */
+export const CURSOR_COMPOSER_PROFILE: ModelHarnessProfile = {
+  id: "cursor-composer",
+  label: "Cursor Composer",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 0.95, topK: 64 },
+  maxChatIterations: 48,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...CURSOR_COMMON_DEFERRED],
+  harnessDelta: CURSOR_COMPOSER_HARNESS_DELTA,
+};
+
+/** Grok family via Cursor SDK. */
+export const CURSOR_GROK_PROFILE: ModelHarnessProfile = {
+  id: "cursor-grok",
+  label: "Cursor Grok",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 0.95, topK: 64 },
+  maxChatIterations: 32,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...CURSOR_COMMON_DEFERRED],
+  harnessDelta: CURSOR_GROK_HARNESS_DELTA,
 };
 
 export const OPENAI_PROFILE: ModelHarnessProfile = {
@@ -149,6 +234,9 @@ export const REMOTE_PROFILE: ModelHarnessProfile = {
 
 const REGISTRY: ModelHarnessProfile[] = [
   GEMMA4_PROFILE,
+  CURSOR_AUTO_PROFILE,
+  CURSOR_COMPOSER_PROFILE,
+  CURSOR_GROK_PROFILE,
   CURSOR_PROFILE,
   OPENAI_PROFILE,
   ANTHROPIC_PROFILE,
@@ -174,12 +262,40 @@ export function isGemma4Model(pathOrName: string | null | undefined): boolean {
   return /gemma[-_]?4/i.test(basenameHint(pathOrName));
 }
 
+/** Cursor Auto / empty model id. */
+export function isCursorAutoModel(model: string | null | undefined): boolean {
+  const id = (model ?? "").trim().toLowerCase();
+  return !id || id === "auto";
+}
+
+/** Cursor Composer family (composer-2, composer-2.5, composer-2-fast, etc.). */
+export function isCursorComposerModel(model: string | null | undefined): boolean {
+  if (!model) return false;
+  return /composer[-_]?2(\.5)?/i.test(model) || /^composer/i.test(model.trim());
+}
+
+/** Grok family via Cursor model list (any grok-* slug). */
+export function isCursorGrokModel(model: string | null | undefined): boolean {
+  if (!model) return false;
+  return /grok/i.test(model);
+}
+
+/** Resolve Cursor subscription model id → harness family. */
+export function resolveCursorHarnessProfile(
+  model: string | null | undefined
+): ModelHarnessProfile {
+  if (isCursorAutoModel(model)) return CURSOR_AUTO_PROFILE;
+  if (isCursorGrokModel(model)) return CURSOR_GROK_PROFILE;
+  if (isCursorComposerModel(model)) return CURSOR_COMPOSER_PROFILE;
+  return CURSOR_PROFILE;
+}
+
 /**
  * Resolve harness profile from catalog selection or active runtime model.
  * Prefer deriving from the live model every chat turn so config cannot drift.
  */
 export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessProfile {
-  if (input.source === "cursor") return CURSOR_PROFILE;
+  if (input.source === "cursor") return resolveCursorHarnessProfile(input.model);
   if (input.source === "remote") return REMOTE_PROFILE;
   if (input.source === "provider") {
     const p = (input.provider ?? "").toLowerCase();

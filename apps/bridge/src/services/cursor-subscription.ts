@@ -25,11 +25,11 @@ export interface CursorAuthStatus {
 export function resolveCursorApiKey(db: AppDatabase): string | null {
   const env = process.env.CURSOR_API_KEY?.trim();
   if (env) return env;
-  const stored =
-    getSecretValue(db, CURSOR_API_KEY_SECRET_ID) ??
-    listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME)?.id;
-  if (!stored) return null;
-  return getSecretValue(db, stored);
+  const byId = getSecretValue(db, CURSOR_API_KEY_SECRET_ID);
+  if (byId) return byId;
+  const byName = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
+  if (!byName) return null;
+  return getSecretValue(db, byName.id);
 }
 
 export function upsertCursorApiKey(db: AppDatabase, apiKey: string): void {
@@ -46,27 +46,43 @@ export function upsertCursorApiKey(db: AppDatabase, apiKey: string): void {
   );
 }
 
+/**
+ * If the key only exists as a manually-added `cursor_api_key` secret (UUID id),
+ * rewrite it to the fixed Cursor subscription secret id.
+ */
+export function normalizeCursorVaultSecret(db: AppDatabase): void {
+  if (getSecretValue(db, CURSOR_API_KEY_SECRET_ID)) return;
+  const named = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
+  if (!named || named.id === CURSOR_API_KEY_SECRET_ID) return;
+  const value = getSecretValue(db, named.id);
+  if (!value) return;
+  upsertCursorApiKey(db, value);
+}
+
 export function removeCursorApiKey(db: AppDatabase): boolean {
   return deleteSecret(db, CURSOR_API_KEY_SECRET_ID);
+}
+
+function maskCursorKey(value: string): string {
+  return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
 export function getCursorAuthStatus(db: AppDatabase): CursorAuthStatus {
   const env = process.env.CURSOR_API_KEY?.trim();
   if (env) {
-    return {
-      connected: true,
-      source: "env",
-      masked: env.length > 8 ? `${env.slice(0, 4)}…${env.slice(-4)}` : "****",
-    };
+    return { connected: true, source: "env", masked: maskCursorKey(env) };
   }
-  const stored = getSecretValue(db, CURSOR_API_KEY_SECRET_ID);
-  if (stored) {
-    return {
-      connected: true,
-      source: "vault",
-      masked:
-        stored.length > 8 ? `${stored.slice(0, 4)}…${stored.slice(-4)}` : "****",
-    };
+  // Prefer fixed-id secret, then legacy/manual name `cursor_api_key`.
+  const byId = getSecretValue(db, CURSOR_API_KEY_SECRET_ID);
+  if (byId) {
+    return { connected: true, source: "vault", masked: maskCursorKey(byId) };
+  }
+  const named = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
+  if (named) {
+    const value = getSecretValue(db, named.id);
+    if (value) {
+      return { connected: true, source: "vault", masked: maskCursorKey(value) };
+    }
   }
   return { connected: false, source: "none" };
 }
@@ -122,6 +138,49 @@ export interface CursorModelOption {
   label: string;
 }
 
+/** Soft human label when the SDK only exposes a slug id. */
+export function formatCursorModelLabel(
+  id: string,
+  displayName?: string | null
+): string {
+  const fromSdk = displayName?.trim();
+  if (fromSdk) return fromSdk;
+  const raw = id.trim();
+  if (!raw) return id;
+  if (/^auto$/i.test(raw)) return "Auto (Cursor picks)";
+  // composer-2.5 / composer-2-fast → Composer 2.5 / Composer 2 Fast
+  const composer = raw.match(/^composer[-_]?(.+)$/i);
+  if (composer) {
+    const rest = composer[1]!
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((p) => (p.toLowerCase() === "fast" ? "Fast" : p))
+      .join(" ");
+    return rest ? `Composer ${rest}` : "Composer";
+  }
+  const grok = raw.match(/^grok[-_]?(.*)$/i);
+  if (grok) {
+    const rest = grok[1]!
+      .split(/[-_]/)
+      .filter(Boolean)
+      .join(" ");
+    return rest ? `Grok ${rest}` : "Grok";
+  }
+  // generic kebab → Title Case words
+  return raw
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 3 && /\d/.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+function cursorModelSortRank(id: string): number {
+  if (/^auto$/i.test(id)) return 0;
+  if (/grok/i.test(id)) return 1;
+  if (/composer/i.test(id)) return 2;
+  return 3;
+}
+
 /** List models available on the user's Cursor subscription. */
 export async function listCursorSubscriptionModels(
   db: AppDatabase
@@ -131,14 +190,30 @@ export async function listCursorSubscriptionModels(
 
   const { Cursor } = await import("@cursor/sdk");
   const models = await Cursor.models.list({ apiKey });
-  const out: CursorModelOption[] = [{ id: "auto", label: "Auto" }];
+  const out: CursorModelOption[] = [
+    { id: "auto", label: "Auto (Cursor picks)" },
+  ];
   const seen = new Set<string>(["auto"]);
+  const named: CursorModelOption[] = [];
   for (const m of models) {
     const id = String(m.id ?? "").trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, label: id });
+    const row = m as unknown as { displayName?: unknown; name?: unknown };
+    const display =
+      typeof row.displayName === "string"
+        ? row.displayName
+        : typeof row.name === "string"
+          ? row.name
+          : null;
+    named.push({ id, label: formatCursorModelLabel(id, display) });
   }
+  named.sort((a, b) => {
+    const rank = cursorModelSortRank(a.id) - cursorModelSortRank(b.id);
+    if (rank !== 0) return rank;
+    return a.label.localeCompare(b.label);
+  });
+  out.push(...named);
   return out;
 }
 
