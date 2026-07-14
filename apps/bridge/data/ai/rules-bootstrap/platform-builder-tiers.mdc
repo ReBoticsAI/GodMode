@@ -29,6 +29,7 @@ Intelligence is the coding agent for multi-file refactors, plugin implementation
 - Plan: todo_write for multi-step work before execution.
 - Edit: edit_file, write_file — surgical diffs matching repo conventions.
 - Verify: run_terminal (typecheck, tests) before claiming done.
+- Ship: when Official **Git** / **GitHub** plugins are installed, prefer `git_*` / `gh_*` tools over inventing raw shell for commit/push/PR.
 - Persist until resolved — do not stop at partial progress.
 
 **Escalation:** Tier 1 → Tier 2 when durable surface or integration is implied. Tier 2 coding stays in Intelligence's native tool loop.
