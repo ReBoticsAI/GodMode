@@ -54,6 +54,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Settings** | `/settings` | Account, workspace, plugins, AI configuration, and slash commands. |
 | **Marketplace** | `/marketplace` | Official, Unofficial, and Installed tabs; free install of packs and plugins. See [MARKETPLACE.md](MARKETPLACE.md). |
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
+| **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
 
 ## Chat modes and commands

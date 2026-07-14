@@ -114,6 +114,15 @@ When `EMBEDDINGS_ENABLED=true` (and optionally `EMBEDDINGS_EXTERNAL`):
 
 See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [CONFIGURATION.md](./CONFIGURATION.md).
 
+### Optional: Devtools plugins (git / GitHub)
+
+1. **Marketplace → Official** → install **Git** and **GitHub**
+2. Confirm `git` and `gh` work on the Bridge host
+3. Ask Intelligence to show `git_status` for the coding root
+4. For a full loop (do not force-push): small doc edit → commit → push → `gh_pr_create` on a throwaway branch
+
+See [MARKETPLACE.md](./MARKETPLACE.md#official-devtools-plugins-git--github).
+
 ---
 
 ## Related docs

@@ -12,7 +12,18 @@ The live catalog repo: **[github.com/ReBoticsAI/GodMode-Marketplace](https://git
 - Override with `MARKETPLACE_OFFICIAL_URL` (Bridge env)
 - Local dev auto-detects sibling clone: `../GodMode-Marketplace/catalog/index.json`
 
-Open **Marketplace → Official** to browse and install packs for free.
+Open **Marketplace → Official** to browse and install packs and plugins for free.
+
+### Official Devtools plugins (Git + GitHub)
+
+For Intelligence to operate like a Cursor-style engineering agent on a real git checkout:
+
+1. Install **Git** and **GitHub** from Official (catalog `installType: plugin`).
+2. Ensure the host has `git` and `gh` on PATH; authenticate with `gh auth login` or `GITHUB_TOKEN` / `GH_TOKEN` (never commit tokens).
+3. Coding root should be a git repository (local/operator GodMode checkout). Hub tenant sandboxes only work if they are real clones.
+4. Prefer plugin tools (`git_status`, `git_commit`, `git_push`, `gh_pr_create`, `gh_pr_checks`, …) over free-form `run_terminal` for VCS/PR work.
+
+Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-git), [godmode-plugin-github](https://github.com/ReBoticsAI/godmode-plugin-github).
 
 ## Unofficial sources
 
