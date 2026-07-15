@@ -12,50 +12,51 @@ import type { GroupTabDef } from "./group-tab-definitions";
 import type { DepartmentNode, DivisionNode, PageNode, StructureNode } from "./navigation";
 import { nodesToLegacyDepartments } from "./structure-adapters";
 
-interface StructureApiNode {
+interface StructureRecord {
   id: string;
-  parentId: string | null;
-  label: string;
-  icon: string;
-  segment: string;
-  path: string;
-  kind: string;
-  rightSidebar: string | null;
-  agentId: string | null;
-  builtIn: boolean;
-  sortOrder: number;
-  tabs: GroupTabDef[] | null;
-  children: StructureApiNode[];
+  data: Record<string, unknown>;
 }
 
-interface StructureApiResponse {
-  nodes: StructureApiNode[];
+interface StructureRecordsResponse {
+  records: StructureRecord[];
 }
 
-function adaptNodes(apiRes: StructureApiResponse): {
+function adaptRecords(apiRes: StructureRecordsResponse): {
   nodes: StructureNode[];
   departments: DepartmentNode[];
 } {
-  const nodes: StructureNode[] = apiRes.nodes.map(mapNode);
-  return { nodes, departments: nodesToLegacyDepartments(nodes) };
-}
-
-function mapNode(n: StructureApiNode): StructureNode {
-  return {
-    id: n.id,
-    parentId: n.parentId,
-    label: n.label,
-    icon: n.icon,
-    segment: n.segment,
-    path: n.path,
-    kind: n.kind,
-    rightSidebar: n.rightSidebar,
-    agentId: n.agentId,
-    builtIn: n.builtIn,
-    sortOrder: n.sortOrder,
-    tabs: n.tabs ?? null,
-    children: n.children.map(mapNode),
+  const byId = new Map<string, StructureNode>();
+  for (const row of apiRes.records) {
+    const data = row.data;
+    byId.set(row.id, {
+      id: row.id,
+      parentId: (data.parent_id as string | null) ?? null,
+      label: String(data.label ?? ""),
+      icon: String(data.icon ?? "folder"),
+      segment: String(data.segment ?? ""),
+      path: String(data.path ?? ""),
+      kind: String(data.kind ?? "placeholder"),
+      objectType: (data.object_type as string | null) ?? null,
+      rightSidebar: (data.right_sidebar as string | null) ?? null,
+      agentId: (data.agent_id as string | null) ?? null,
+      builtIn: Boolean(data.built_in),
+      sortOrder: Number(data.sort_order ?? 0),
+      tabs: (data.tabs_json as GroupTabDef[] | null) ?? null,
+      children: [],
+    });
+  }
+  const roots: StructureNode[] = [];
+  for (const node of byId.values()) {
+    const parent = node.parentId ? byId.get(node.parentId) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  const sort = (items: StructureNode[]) => {
+    items.sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+    for (const item of items) sort(item.children);
   };
+  sort(roots);
+  return { nodes: roots, departments: nodesToLegacyDepartments(roots) };
 }
 
 interface StructureCtxValue {
@@ -82,8 +83,10 @@ export function StructureProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      const res = await api<StructureApiResponse>("/structure");
-      const adapted = adaptNodes(res);
+      const res = await api<StructureRecordsResponse>(
+        "/records/StructureNode?limit=500"
+      );
+      const adapted = adaptRecords(res);
       setNodes(adapted.nodes);
       setDepartments(adapted.departments);
       setError(null);

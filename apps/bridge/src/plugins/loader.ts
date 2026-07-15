@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import {
   readGodmodePluginManifest,
@@ -11,70 +10,11 @@ import {
 } from "@godmode/plugin-api";
 import { getCoreDb } from "../core-db.js";
 import { pluginRuntime } from "./runtime.js";
-
-const hostRequire = createRequire(import.meta.url);
-
-/**
- * Packages that plugin bridge bundles typically `external`ize and expect to
- * resolve from node_modules. In Docker hubs the plugin's `file:../GodMode`
- * links often break (symlink outside the bind mount / missing dist). Point
- * them at the Bridge image's built copies instead.
- */
-const HOST_LINKED_PACKAGES = ["plugin-api", "plugin-host"] as const;
-
-/**
- * Ensure `@godmode/plugin-api` and `@godmode/plugin-host` under the plugin's
- * node_modules resolve to the same builds Bridge itself uses.
- */
-export function ensureHostGodmodePackageLinks(pluginRoot: string): void {
-  const nmGodmode = path.join(pluginRoot, "node_modules", "@godmode");
-  fs.mkdirSync(nmGodmode, { recursive: true });
-
-  for (const name of HOST_LINKED_PACKAGES) {
-    let resolvedPkg: string;
-    try {
-      resolvedPkg = path.dirname(hostRequire.resolve(`@godmode/${name}/package.json`));
-    } catch {
-      console.warn(
-        `[plugins] host package @godmode/${name} not resolvable; skip link for ${pluginRoot}`
-      );
-      continue;
-    }
-
-    const distEntry = path.join(resolvedPkg, "dist", "index.js");
-    if (!fs.existsSync(distEntry)) {
-      console.warn(
-        `[plugins] host package @godmode/${name} has no dist/index.js at ${distEntry}`
-      );
-      continue;
-    }
-
-    const linkPath = path.join(nmGodmode, name);
-    try {
-      if (fs.existsSync(linkPath)) {
-        const real = fs.realpathSync(linkPath);
-        if (real === fs.realpathSync(resolvedPkg)) continue;
-        fs.rmSync(linkPath, { recursive: true, force: true });
-      }
-    } catch {
-      try {
-        fs.rmSync(linkPath, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-    }
-
-    try {
-      // 'junction' works for directories on Windows without admin; 'dir' symlink on POSIX.
-      const type = process.platform === "win32" ? "junction" : "dir";
-      fs.symlinkSync(resolvedPkg, linkPath, type);
-      console.log(`[plugins] linked @godmode/${name} -> ${resolvedPkg} for ${pluginRoot}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[plugins] failed to link @godmode/${name} for ${pluginRoot}: ${msg}`);
-    }
-  }
-}
+import { registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
+import {
+  listObjectTypes,
+  replaceObjectTypesByPlugin,
+} from "../kernel/registry.js";
 
 function extraMarketplacePluginPaths(): string[] {
   try {
@@ -141,35 +81,6 @@ export interface LoadPluginsResult {
   errors: Array<{ path: string; error: string }>;
 }
 
-export async function loadPluginsFromEnv(): Promise<LoadPluginsResult> {
-  const roots = discoverPluginRoots();
-  const loaded: string[] = [];
-  const errors: Array<{ path: string; error: string }> = [];
-
-  for (const pluginRoot of roots) {
-    try {
-      const manifest = readGodmodePluginManifest(pluginRoot);
-      assertEngineCompatible(manifest);
-      if (!manifest.bridge?.entry) {
-        errors.push({ path: pluginRoot, error: "manifest missing bridge.entry" });
-        continue;
-      }
-      ensureHostGodmodePackageLinks(pluginRoot);
-      const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
-      const registerFn = await importBridgeRegister(entryPath);
-      await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
-      loaded.push(manifest.id);
-      console.log(`[plugins] loaded ${manifest.name} (${manifest.id}) from ${pluginRoot}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push({ path: pluginRoot, error: msg });
-      console.error(`[plugins] failed to load ${pluginRoot}:`, msg);
-    }
-  }
-
-  return { loaded, errors };
-}
-
 /**
  * Load a single plugin at runtime (Marketplace / Intelligence).
  * If already loaded, unregister and re-import with a cache-bust so rebuilds apply.
@@ -180,23 +91,37 @@ export async function loadPluginFromRoot(
 ): Promise<{ pluginId: string; pluginRoot: string; reloaded: boolean }> {
   const manifest = readGodmodePluginManifest(pluginRoot);
   assertEngineCompatible(manifest);
-  if (!manifest.bridge?.entry) {
-    throw new Error("manifest missing bridge.entry");
-  }
-
   const already = pluginRuntime.hasPlugin(manifest.id);
-  const shouldReload = already && (opts?.reload !== false);
+  const shouldReload = already && opts?.reload !== false;
   if (already && !shouldReload) {
     return { pluginId: manifest.id, pluginRoot, reloaded: false };
   }
-  if (already) {
-    pluginRuntime.unregister(manifest.id);
+  const previousDefs = listObjectTypes().filter(
+    (def) => def.pluginId === manifest.id
+  );
+  registerPluginObjectTypes(manifest);
+  if (!manifest.bridge?.entry) {
+    if ((manifest.objectTypes?.length ?? 0) > 0 || (manifest.records?.length ?? 0) > 0) {
+      pluginRuntime.registerManifestOnly(manifest, pluginRoot);
+      console.log(
+        `[plugins] registered ObjectTypes for ${manifest.name} (${manifest.id}) from ${pluginRoot}`
+      );
+      return { pluginId: manifest.id, pluginRoot, reloaded: false };
+    }
+    throw new Error("manifest missing bridge.entry");
   }
 
-  ensureHostGodmodePackageLinks(pluginRoot);
-  const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
-  const registerFn = await importBridgeRegister(entryPath, already);
-  await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
+  try {
+    const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
+    const registerFn = await importBridgeRegister(entryPath, already);
+    if (already) {
+      pluginRuntime.unregister(manifest.id);
+    }
+    await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
+  } catch (error) {
+    replaceObjectTypesByPlugin(manifest.id, previousDefs);
+    throw error;
+  }
   console.log(
     `[plugins] runtime-${already ? "reloaded" : "loaded"} ${manifest.name} (${manifest.id}) from ${pluginRoot}`
   );

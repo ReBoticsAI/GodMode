@@ -36,29 +36,90 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
   "version": "1.0.0",
   "name": "My Plugin",
   "engine": "^0.1.0",
+  "kernelApiVersion": 1,
   "departments": ["my-domain"],
   "bridge": { "entry": "dist/bridge.js" },
-  "web": { "entry": "dist/web.js" }
+  "web": { "entry": "dist/web.js" },
+  "objectTypes": [
+    {
+      "name": "Invoice",
+      "label": "Invoice",
+      "contractVersion": 1,
+      "schemaVersion": 1,
+      "storage": { "kind": "native" },
+      "operations": ["list", "get", "create", "update", "delete"],
+      "fields": [
+        { "name": "id", "label": "Id", "fieldType": "Data", "required": true },
+        { "name": "amount", "label": "Amount", "fieldType": "Float", "required": true }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "objectType": "StructureNode",
+      "data": {
+        "id": "my-domain",
+        "parent_id": null,
+        "label": "My Domain",
+        "icon": "box",
+        "kind": "placeholder"
+      }
+    }
+  ]
 }
 ```
 
 - `engine` — semver range checked against host (`@godmode/plugin-api` `GODMODE_ENGINE_VERSION`)
+- `kernelApiVersion` — executable kernel client contract; current Bridge/web
+  clients expose version `1`, and unsupported future versions fail validation
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
+- `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
+- `records` — declarative Record seeds applied on tenant install (before / with `tenant:install`). Structure shells should prefer seeding `StructureNode` Records here when possible.
+- Manifest-native ObjectTypes receive native storage and generic CRUD from
+  metadata. Service-backed behavior requires an executable Bridge registration
+  that supplies an adapter and implements every declared operation/action.
+- Defaults are intentionally narrow: declare supported `operations`, action
+  roles, confirmation, idempotency, input/output/error schemas, concurrency,
+  execution mode, retry, timeout, cancellation, and sensitive input explicitly.
+- `tenantMigrations` is parsed manifest metadata, not a general migration runner.
+  Run required versioned migrations from a reviewed lifecycle implementation.
 
+## ObjectType pipeline
+
+```
+objectTypes in manifest → validate ownership → tenant-visible registration → native table or adapter → Record/action tools + list/form UI
+```
+
+Create shells by seeding `StructureNode` Records and set `object_type` when a
+node should render a generic Record page; `segment` remains its URL segment.
+Use ObjectType discovery and declared actions for durable mutations. Specialized
+static tools are for operational or transport capabilities, not an alternate
+durable-write path. Use compiled `bridge.entry` only when metadata is not enough.
 ## Bridge register
 
 ```typescript
 import type { GodModePluginRegister } from "@godmode/plugin-api";
 
 export const register: GodModePluginRegister = (api) => {
+  api.objectTypes.register(invoiceDefinition, {
+    list: (query, ctx) => listInvoices(query, ctx),
+    get: (id, ctx) => getInvoice(id, ctx),
+    create: (data, ctx) => createInvoice(data, ctx),
+    update: (id, data, ctx) => updateInvoice(id, data, ctx),
+    delete: (id, ctx) => deleteInvoice(id, ctx),
+    actions: {
+      approve: (id, input, ctx) => approveInvoice(id, input, ctx),
+    },
+  });
+
   api.tools.register([
     { name: "my_tool", description: "…", handler: async (args, ctx) => ({ ok: true }) },
   ]);
 
   api.hooks.on("tenant:install", async ({ tenantId, host }) => {
     const db = host.getTenantDb(tenantId);
-    // seed structure, run migrations
+    // Run reviewed migrations or seed service-backed state.
   });
 
   api.hooks.on("server:beforeListen", (ctx) => {
@@ -68,6 +129,36 @@ export const register: GodModePluginRegister = (api) => {
   });
 };
 ```
+
+`api.objectTypes.register(definition, adapter)` is the executable path for
+service-backed ObjectTypes. `PluginRecordAdapter` supports optional `list`,
+`get`, `create`, `update`, `delete`, and named `actions`. Every operation/action
+declared by the definition must have a matching adapter implementation; do not
+declare capabilities the plugin cannot execute.
+
+Bridge and web registrations also receive `api.kernel`, a typed client with
+`apiVersion: 1` for discovery, CRUD, and declared actions. Use it instead of
+calling removed domain mutation URLs.
+
+A representative action on `invoiceDefinition` is:
+
+```json
+{
+  "name": "approve",
+  "label": "Approve",
+  "target": "record",
+  "effect": "write",
+  "execution": "sync",
+  "roles": ["editor", "owner"],
+  "confirmation": { "required": true, "ttlSeconds": 300 },
+  "idempotency": { "required": true },
+  "inputSchema": { "type": "object", "additionalProperties": false }
+}
+```
+
+HTTP action input is the direct JSON request body. Clients send
+`Idempotency-Key`, `If-Match`, and `X-Kernel-Confirmation` headers when required
+by the action contract.
 
 ## Host SDK (`@godmode/plugin-host`)
 
@@ -133,11 +224,26 @@ There is no automatic sibling-repo discovery in OSS core. Prefer Intelligence or
 
 ## Per-tenant install
 
-`tenant_plugins` records which plugins a workspace has installed. Bridge gates manifest, web bundles, and routes on this table.
+`tenant_plugins` records which plugins a workspace has installed. Bridge gates
+manifest access, web bundles, ObjectType visibility, and host-managed plugin
+routes on this table. A custom Express route mounted directly by plugin code does
+not automatically inherit that check; resolve authentication, tenant membership,
+and plugin installation in the route.
 
 Install: Intelligence `install_plugin`, **Marketplace → Unofficial**, or `npm run plugins -- install <id> --tenant <uuid>`.
 
 Only the target plugin's `tenant:install` hook runs (not all plugins).
+
+Definition replacement is ownership checked and atomic; a plugin cannot replace
+another plugin's or core's ObjectType/adapter. Core lifecycle state, tenant
+seeds, hooks, and knowledge import are durable compensated steps rather than one
+cross-database transaction. Record seeds run only after their ObjectTypes are
+available. Uninstall removes runtime visibility but deliberately retains native
+tables and Records; plugin-owned rules and skills are removed as described
+below. Treat retained data as tenant data for backup, export, and erasure.
+
+Mark secret fields and sensitive action input paths so audit records redact them.
+Never store credentials in manifest seed Records or source-controlled defaults.
 
 ## Build
 

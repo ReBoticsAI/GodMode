@@ -75,6 +75,15 @@ export class EngineReconciler {
     this.bus.on("structure.reordered", (p: { kind: string }) =>
       this.emitStructureChanged(p.kind ?? "structure", "reordered", "")
     );
+    for (const action of ["created", "updated", "deleted"] as const) {
+      this.bus.on(
+        `structure.node.${action}`,
+        (payload: { nodeId: string }) => {
+          this.registry.reconcileAll();
+          this.emitStructureChanged("node", action, payload.nodeId);
+        }
+      );
+    }
   }
 
   private onDepartmentDeleted(payload: StructureDepartmentEvent): void {

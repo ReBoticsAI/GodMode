@@ -4,6 +4,9 @@ alwaysApply: true
 priority: 12
 ---
 GodMode organizes work in a department → division → page tree (Structure sidebar).
+These labels are roles of `StructureNode` Records.
+`StructureNode.object_type` selects generic Record rendering; `segment` is only
+the URL component.
 
 When the user is on a page, treat platform context and live API data as ground truth for what they are viewing.
 Department-scoped rules apply when chatting from that department's pages.

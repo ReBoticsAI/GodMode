@@ -63,43 +63,9 @@ export function createIntegrationsRouter(): Router {
     res.json(calendarStatus(db));
   });
 
-  router.post("/calendar/sync", (req, res) => {
-    const db = getReqTenantDb(req);
-    const status = calendarStatus(db);
-    if (!status.connected) {
-      res.status(400).json({
-        error: "Calendar not connected",
-        hint: status.message,
-      });
-      return;
-    }
-    res.json({
-      ok: true,
-      queued: true,
-      message: "Calendar sync queued (provider pull runs on next scheduler tick)",
-    });
-  });
-
   router.get("/email/status", (req, res) => {
     const db = getReqTenantDb(req);
     res.json(emailStatus(db));
-  });
-
-  router.post("/email/sync", (req, res) => {
-    const db = getReqTenantDb(req);
-    const status = emailStatus(db);
-    if (!status.connected) {
-      res.status(400).json({
-        error: "Email not connected",
-        hint: status.message,
-      });
-      return;
-    }
-    res.json({
-      ok: true,
-      queued: true,
-      message: "Email sync queued — desktop mail requires the local connector",
-    });
   });
 
   return router;

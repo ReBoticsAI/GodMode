@@ -5,22 +5,27 @@ priority: 30
 ---
 ## Tier 1 — Native workspace (default)
 
-Wiki, structure shells, pages, agents, tasks, calendar hooks, marketplace catalog installs.
+Wiki, StructureNode shells, pages, agents, tasks, calendar hooks, marketplace catalog installs.
 
-- Call `use_skill('platform-workspace')` first.
-- Tools only: create_*, wiki_*, todo_write, install_catalog_entry.
+- Call `use_skill('platform-workspace')` first; for metadata use `use_skill('object-types')`.
+- Tools: list/create_record, create_*, wiki_*, todo_write, install_catalog_entry.
 - Never edit `apps/bridge` for Tier 1 workspace setup.
 - **Do not** use bare `create_department` when the user implies an API, integration, hardware, or compiled extension — that is Tier 2.
 
 ## Tier 2 — Plugin extension (durable surface)
 
-New routes, web UI areas, Bridge tools, department types, external APIs, integrations.
+New ObjectTypes, routes, web UI areas, Bridge tools, department types, external APIs, integrations.
 
-- Call `use_skill('platform-extension')` + `use_skill('plugin-authoring')`.
-- **`scaffold_plugin` first** — never only `create_department` for functional domains.
-- Seed org structure in the plugin's `tenant:install` hook, then `build_plugin` → `install_plugin`.
-- **Implement the code yourself** with read_file, grep, edit_file, run_terminal.
-
+- Call `use_skill('platform-extension')` + `use_skill('plugin-authoring')` + `use_skill('object-types')`.
+- **`scaffold_plugin` first** — ship metadata-native `objectTypes` / `records`
+  for straightforward CRUD; add executable adapters/actions when service logic
+  is required. Never only `create_department` for functional domains.
+- Seed org structure as StructureNode Records, then `build_plugin` → `install_plugin`.
+- Prefer generated ObjectType CRUD/action tools before adding static mutation
+  tools.
+- **Implement the code yourself** with read_file, grep, edit_file, run_terminal when metadata is not enough.
+- Verify action schemas/policies, implementation parity, tenant isolation, and
+  custom-route authentication before claiming completion.
 ## Native coding (codeAccess)
 
 Intelligence is the coding agent for multi-file refactors, plugin implementation, and repository engineering.

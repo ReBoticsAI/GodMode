@@ -48,48 +48,6 @@ export function createSupportRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth);
 
-  router.post("/tickets", (req, res) => {
-    const userId = req.user!.id;
-    const { subject, body, category, targetKind, sharedGrantId, ownerUserId } = req.body ?? {};
-    try {
-      let resolvedOwnerId =
-        typeof ownerUserId === "string" ? ownerUserId : undefined;
-      if (!resolvedOwnerId && sharedGrantId) {
-        const grant = getCoreDb()
-          .prepare(`SELECT owner_user_id FROM share_grants WHERE id=?`)
-          .get(String(sharedGrantId)) as { owner_user_id: string } | undefined;
-        resolvedOwnerId = grant?.owner_user_id;
-      }
-      const result = createTicket({
-        requesterKind: "user",
-        requesterId: userId,
-        requesterTenantId: getUserOwnerTenantId(userId),
-        subject: String(subject ?? ""),
-        body: String(body ?? ""),
-        category: category ?? null,
-        targetKind:
-          targetKind === "platform_github"
-            ? "platform_github"
-            : targetKind === "platform_admin"
-              ? "platform_admin"
-              : "resource_owner",
-        sharedGrantId: sharedGrantId ? String(sharedGrantId) : null,
-        ownerUserId: resolvedOwnerId ?? null,
-      });
-      if ("redirectUrl" in result) {
-        res.status(201).json(result);
-        return;
-      }
-      res.status(201).json({ ticket: result });
-    } catch (err) {
-      if (err instanceof SupportError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
   router.get("/tickets", (req, res) => {
     res.json({ tickets: listTicketsForRequester("user", req.user!.id) });
   });
@@ -128,61 +86,6 @@ export function createSupportRouter(): Router {
     res.json({ ticket, messages: getTicketMessages(id) });
   });
 
-  router.post("/tickets/:id/messages", (req, res) => {
-    const id = paramId(req.params.id);
-    const ticket = getTicket(id);
-    if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
-      return;
-    }
-    if (!canAccessTicket(ticket, req.user!)) {
-      res.status(403).json({ error: "Not allowed" });
-      return;
-    }
-    const isRequester =
-      ticket.requester_kind === "user" && ticket.requester_id === req.user!.id;
-    const isStaff = canStaffSupportAsUser(req.user!);
-    try {
-      const message = addMessage(
-        id,
-        {
-          kind: isStaff && !isRequester ? "admin" : "user",
-          id: req.user!.id,
-        },
-        String(req.body?.body ?? "")
-      );
-      res.status(201).json({ message });
-    } catch (err) {
-      if (err instanceof SupportError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.patch("/tickets/:id", (req, res) => {
-    const id = paramId(req.params.id);
-    if (!canStaffSupportAsUser(req.user!)) {
-      res.status(403).json({ error: "Not allowed" });
-      return;
-    }
-    const { status, priority } = req.body ?? {};
-    try {
-      const ticket = updateTicket(id, {
-        status: status && STATUSES.includes(status) ? status : undefined,
-        priority: priority !== undefined ? priority : undefined,
-      });
-      res.json({ ticket });
-    } catch (err) {
-      if (err instanceof SupportError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
   // --- Support group membership ---
   router.get("/group", (req, res) => {
     const group = getGroupBySlug(SUPPORT_GROUP_SLUG);
@@ -207,56 +110,6 @@ export function createSupportRouter(): Router {
     });
   });
 
-  router.post("/group/members", requirePlatformAdmin, (req, res) => {
-    const group = getGroupBySlug(SUPPORT_GROUP_SLUG);
-    if (!group) {
-      res.status(404).json({ error: "Support group not found" });
-      return;
-    }
-    const memberKind = req.body?.memberKind === "agent" ? "agent" : "user";
-    const memberId = String(req.body?.memberId ?? "").trim();
-    if (!memberId) {
-      res.status(400).json({ error: "memberId required" });
-      return;
-    }
-    try {
-      const member = addGroupMember({
-        groupId: group.id,
-        memberKind,
-        memberId,
-        tenantId: req.body?.tenantId ? String(req.body.tenantId) : null,
-      });
-      res.status(201).json({
-        member: { ...member, tenant_id: member.tenant_id || null },
-      });
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  router.delete("/group/members", requirePlatformAdmin, (req, res) => {
-    const group = getGroupBySlug(SUPPORT_GROUP_SLUG);
-    if (!group) {
-      res.status(404).json({ error: "Support group not found" });
-      return;
-    }
-    const memberKind = req.body?.memberKind === "agent" ? "agent" : "user";
-    const memberId = String(req.body?.memberId ?? "").trim();
-    if (!memberId) {
-      res.status(400).json({ error: "memberId required" });
-      return;
-    }
-    const ok = removeGroupMember({
-      groupId: group.id,
-      memberKind,
-      memberId,
-      tenantId: req.body?.tenantId ? String(req.body.tenantId) : null,
-    });
-    res.json({ ok });
-  });
-
   // --- admin triage (kept for Admin page; same ACL as staff) ---
   router.get("/admin/tickets", (req, res) => {
     if (!canStaffSupportAsUser(req.user!)) {
@@ -269,28 +122,6 @@ export function createSupportRouter(): Router {
         status: status && STATUSES.includes(status) ? status : undefined,
       }),
     });
-  });
-
-  router.patch("/admin/tickets/:id", (req, res) => {
-    if (!canStaffSupportAsUser(req.user!)) {
-      res.status(403).json({ error: "Not allowed" });
-      return;
-    }
-    const id = paramId(req.params.id);
-    const { status, priority } = req.body ?? {};
-    try {
-      const ticket = updateTicket(id, {
-        status: status && STATUSES.includes(status) ? status : undefined,
-        priority: priority !== undefined ? priority : undefined,
-      });
-      res.json({ ticket });
-    } catch (err) {
-      if (err instanceof SupportError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
   });
 
   return router;

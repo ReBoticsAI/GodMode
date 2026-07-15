@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
 import {
   getCoreDb,
@@ -14,9 +13,8 @@ import {
   deleteSession,
   issueSessionCookies,
   parseSessionCookie,
-  slugFromEmail,
 } from "../services/auth/session-store.js";
-import { hashPassword, verifyPassword } from "../services/auth/password.js";
+import { verifyPassword } from "../services/auth/password.js";
 import {
   attachAuthContext,
   getOperatorTenantIdCached,
@@ -25,16 +23,18 @@ import {
   resolveTenant,
 } from "../services/auth/middleware.js";
 import {
-  createTenantForUser,
   listUserTenants,
-  promoteFirstSignupAdmin,
   userHasTenantAccess,
 } from "../services/tenant-bootstrap.js";
 import { refreshUserAgentPrompt } from "../services/agents/user-agent.js";
 import { getUserOwnerTenantDb } from "../services/user-scope.js";
 import { rateLimit } from "../services/auth/rate-limit.js";
-import { seedPersonalOsForNewTenant } from "../services/personal-os-seed.js";
-import { getTenantDb } from "../tenant-registry.js";
+import {
+  createSystemOperationContext,
+  executeCollectionAction,
+  executeRecordAction,
+  KernelError,
+} from "../kernel/record-api.js";
 
 export function createAuthRouter(): Router {
   const router = Router();
@@ -49,38 +49,6 @@ export function createAuthRouter(): Router {
     const core = getCoreDb();
     const tenants = listUserTenants(core, req.user!.id);
     res.json({ tenants, operatorTenantId: getOperatorTenantIdCached() });
-  });
-
-  router.post("/tenants", attachAuthContext, requireAuth, (req, res) => {
-    if (config.isClient) {
-      res.status(403).json({ error: "Additional workspaces are disabled in client mode" });
-      return;
-    }
-    const { name, slug } = req.body ?? {};
-    if (typeof name !== "string" || !name.trim()) {
-      res.status(400).json({ error: "name required" });
-      return;
-    }
-    const tenantSlug =
-      typeof slug === "string" && slug.trim()
-        ? slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-")
-        : slugFromEmail(req.user!.email);
-    const core = getCoreDb();
-    const existing = core
-      .prepare("SELECT id FROM tenants WHERE slug=?")
-      .get(tenantSlug);
-    if (existing) {
-      res.status(409).json({ error: "slug taken" });
-      return;
-    }
-    const tenantId = createTenantForUser(
-      core,
-      req.user!.id,
-      name.trim(),
-      tenantSlug
-    );
-    seedPersonalOsForNewTenant(getTenantDb(tenantId));
-    res.status(201).json({ id: tenantId, slug: tenantSlug });
   });
 
   router.post("/login", authLimiter, (req, res) => {
@@ -110,7 +78,7 @@ export function createAuthRouter(): Router {
     });
   });
 
-  router.post("/signup", authLimiter, (req, res) => {
+  router.post("/signup", authLimiter, async (req, res) => {
     if (!config.auth.allowSignup) {
       res.status(403).json({ error: "Signup is disabled; request an invite or contact the admin" });
       return;
@@ -145,26 +113,37 @@ export function createAuthRouter(): Router {
       return;
     }
 
-    const id = uuidv4();
-    core.prepare(
-      `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash)
-       VALUES (?, ?, ?, NULL, 0, ?)`
-    ).run(id, normalized, displayName, hashPassword(password));
-
-    const tenantId = createTenantForUser(core, id, `${displayName}'s Project`, slugFromEmail(normalized));
-    seedPersonalOsForNewTenant(getTenantDb(tenantId));
-    promoteFirstSignupAdmin(core, id);
-
-    const user = core.prepare("SELECT * FROM users WHERE id=?").get(id) as CoreUser;
-    const sessionId = createSession(core, id, config.auth.sessionTtlDays);
-    res.setHeader(
-      "Set-Cookie",
-      issueSessionCookies(sessionId, config.auth.sessionTtlDays, secure)
-    );
-    res.status(201).json({
-      user: coreUserToAuth(user),
-      ...(config.isProduction ? {} : { sessionToken: sessionId }),
-    });
+    try {
+      const created = await executeCollectionAction(
+        core,
+        "User",
+        "signup",
+        {
+          email: normalized,
+          password,
+          display_name: displayName,
+        },
+        createSystemOperationContext({
+          requestId: req.get("X-Request-Id") || undefined,
+        })
+      ) as { id: string };
+      const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
+      const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
+      res.setHeader(
+        "Set-Cookie",
+        issueSessionCookies(sessionId, config.auth.sessionTtlDays, secure)
+      );
+      res.status(201).json({
+        user: coreUserToAuth(user),
+        ...(config.isProduction ? {} : { sessionToken: sessionId }),
+      });
+    } catch (err) {
+      if (err instanceof KernelError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
   });
 
   router.post("/logout", attachAuthContext, (req, res) => {
@@ -178,7 +157,7 @@ export function createAuthRouter(): Router {
     res.json({ ok: true });
   });
 
-  router.post("/change-password", attachAuthContext, requireAuth, (req, res) => {
+  router.post("/change-password", attachAuthContext, requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body ?? {};
     if (
       typeof currentPassword !== "string" ||
@@ -190,18 +169,31 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "currentPassword and newPassword (min 6 chars) required" });
       return;
     }
-    const core = getCoreDb();
-    const user = core
-      .prepare("SELECT * FROM users WHERE id=?")
-      .get(req.user!.id) as CoreUser | undefined;
-    if (!user?.password_hash || !verifyPassword(currentPassword, user.password_hash)) {
-      res.status(401).json({ error: "Current password is incorrect" });
-      return;
+    try {
+      await executeRecordAction(
+        getCoreDb(),
+        "UserCredential",
+        req.user!.id,
+        "change_password",
+        {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+        {
+          userId: req.user!.id,
+          isAdmin: req.user!.isAdmin,
+          role: "editor",
+          source: "http",
+        }
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof KernelError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
-    core.prepare(
-      `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
-    ).run(hashPassword(newPassword), user.id);
-    res.json({ ok: true });
   });
 
   router.get("/profile", attachAuthContext, requireAuth, (req, res) => {
@@ -216,90 +208,6 @@ export function createAuthRouter(): Router {
     const profile = core
       .prepare("SELECT * FROM user_profiles WHERE user_id=?")
       .get(req.user!.id) as CoreUserProfile | undefined;
-    res.json({ profile: mergeProfile(user, profile) });
-  });
-
-  router.patch("/profile", attachAuthContext, requireAuth, (req, res) => {
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const str = (v: unknown): string | null => {
-      if (v == null) return null;
-      const trimmed = String(v).trim();
-      return trimmed ? trimmed : null;
-    };
-
-    const core = getCoreDb();
-    const userId = req.user!.id;
-
-    if (typeof body.displayName === "string") {
-      const displayName = body.displayName.trim();
-      if (!displayName) {
-        res.status(400).json({ error: "displayName cannot be empty" });
-        return;
-      }
-      core.prepare(
-        `UPDATE users SET display_name=?, updated_at=datetime('now') WHERE id=?`
-      ).run(displayName, userId);
-    }
-    if ("avatarUrl" in body) {
-      core.prepare(
-        `UPDATE users SET avatar_url=?, updated_at=datetime('now') WHERE id=?`
-      ).run(str(body.avatarUrl), userId);
-    }
-
-    core.prepare(
-      `INSERT INTO user_profiles (user_id) VALUES (?)
-       ON CONFLICT(user_id) DO NOTHING`
-    ).run(userId);
-
-    const fieldMap: Record<string, string> = {
-      headline: "headline",
-      bio: "bio",
-      pronouns: "pronouns",
-      location: "location",
-      timezone: "timezone",
-      phone: "phone",
-      company: "company",
-      jobTitle: "job_title",
-      website: "website",
-      twitter: "twitter",
-      github: "github",
-      linkedin: "linkedin",
-      emoji: "emoji",
-      birthday: "birthday",
-      languages: "languages",
-      interests: "interests",
-      values: "values",
-      goals: "goals",
-      personalityNotes: "personality_notes",
-      decisionStyle: "decision_style",
-      riskTolerance: "risk_tolerance",
-    };
-    const sets: string[] = [];
-    const values: Array<string | null> = [];
-    for (const [key, column] of Object.entries(fieldMap)) {
-      if (key in body) {
-        sets.push(`"${column}"=?`);
-        values.push(str(body[key]));
-      }
-    }
-    if (sets.length > 0) {
-      values.push(userId);
-      core.prepare(
-        `UPDATE user_profiles SET ${sets.join(", ")}, updated_at=datetime('now') WHERE user_id=?`
-      ).run(...values);
-    }
-
-    const user = core
-      .prepare("SELECT * FROM users WHERE id=?")
-      .get(userId) as CoreUser;
-    const profile = core
-      .prepare("SELECT * FROM user_profiles WHERE user_id=?")
-      .get(userId) as CoreUserProfile | undefined;
-    try {
-      refreshUserAgentPrompt(getUserOwnerTenantDb(userId), userId);
-    } catch {
-      /* tenant may not exist yet */
-    }
     res.json({ profile: mergeProfile(user, profile) });
   });
 

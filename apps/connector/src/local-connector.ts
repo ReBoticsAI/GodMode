@@ -23,6 +23,10 @@ export interface LocalConnector {
 export interface ConnectorConfig {
   bridgeUrl: string;
   federationToken: string;
+  resourceKind: string;
+  resourceId: string;
+  ownerTenantId: string;
+  targetTenantId: string;
   manifest: LocalConnectorManifest;
 }
 
@@ -50,7 +54,14 @@ export class FederationConnectorClient implements LocalConnector {
         Authorization: `Bearer ${this.cfg.federationToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ line, chartbookKey }),
+      body: JSON.stringify({
+        line,
+        chartbookKey,
+        resourceKind: this.cfg.resourceKind,
+        resourceId: this.cfg.resourceId,
+        ownerTenantId: this.cfg.ownerTenantId,
+        targetTenantId: this.cfg.targetTenantId,
+      }),
     });
     if (!res.ok) {
       return { ok: false, detail: `HTTP ${res.status}` };

@@ -25,6 +25,15 @@ For Intelligence to operate like a Cursor-style engineering agent on a real git 
 
 Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-git), [godmode-plugin-github](https://github.com/ReBoticsAI/godmode-plugin-github).
 
+The durable-kernel updates are tracked in
+[godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1)
+and
+[godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1).
+The official catalog's Record-bundle migration was delivered through
+[GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
+The coordinated private domain-plugin migrations were delivered in their own
+repositories before the ecosystem-wide cutover was declared complete.
+
 ## Unofficial sources
 
 **Marketplace → Unofficial** is the single place to install plugins for your workspace:
@@ -34,6 +43,26 @@ Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-
 3. **Plugins on this machine** — install or uninstall discovered plugins without leaving the UI.
 
 Use **Marketplace → Installed** to review workspace plugins, uninstall, or remove registered local paths.
+
+Plugin ObjectTypes and generated Record/action tools are visible only in
+workspaces where the plugin is installed. Installation validates and atomically
+replaces owned definitions, then records lifecycle state, seed, hook, and
+knowledge steps durably with compensation/recovery across core and tenant
+databases. It does not claim a cross-SQLite transaction. Uninstall removes
+runtime visibility and plugin-owned knowledge, but deliberately retains native
+ObjectType tables and tenant Records for reinstall or recovery. It is not a data
+erasure operation; export or delete retained data explicitly when required.
+
+A manifest-only plugin can ship native `objectTypes` and seed `records` without
+a `bridge.entry`. Executable adapters, actions, hooks, tools, or custom routes
+require Bridge code. Bridge and web plugins use the versioned kernel client
+(`apiVersion: 1`); executable manifests may declare `kernelApiVersion: 1`, and a
+future unsupported version is rejected at validation.
+
+Plugin Bridge code runs with host privileges. Install only trusted sources,
+review requested routes/actions and secret fields, and remember that custom
+Express routes must enforce authentication, tenant membership, and installed
+plugin checks themselves.
 
 Each unofficial catalog must expose a `catalog/index.json` compatible with the official schema.
 
@@ -45,7 +74,7 @@ file:///C:/Users/you/my-catalog/catalog/index.json
 
 ## Private plugins
 
-Three supported paths for plugins that are not public on GitHub:
+Four supported paths for plugins that are not public on GitHub:
 
 ### 1. Local folder in the UI (recommended)
 
@@ -86,7 +115,7 @@ GODMODE_PLUGIN_PATH=C:\dev\godmode-plugin-mine
 
 Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins on this machine**.
 
-Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart required for tools / `tenant:install`.
+Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart is required for tools, live ObjectType/adapter registration, Record seeds, or `tenant:install`.
 
 ## Docker hub notes
 
@@ -118,6 +147,18 @@ See [CONTRIBUTING.md](https://github.com/ReBoticsAI/GodMode-Marketplace/blob/mai
 |------|----------|
 | `clone` | Downloads `bundle.json` and imports via portability |
 | `plugin` | Clones `pluginRepo` (or uses `pluginLocalPath`) and registers with Bridge |
+
+Clone bundles can contain portable `kind: "record"` children for the reviewed
+`StructureNode`, `Agent`, and `Skill` ObjectTypes. Bridge validates the nested
+Record shape and deterministic ID, rejects other ObjectTypes, and imports each
+child through kernel seed/CRUD dispatch rather than writing domain tables
+directly.
+
+Clone acquisition is a durable, idempotent saga across `core.sqlite` and the
+buyer tenant database. Operation registration, tenant import, purchase
+recording, and completion are independently recorded with audit/outbox rows.
+Retrying the same idempotency key resumes the operation without duplicating the
+import or purchase.
 
 Live access to resources is **Shared only**, not sold through Marketplace.
 

@@ -10,6 +10,8 @@ export type ResolvedConnection =
       ownerTenantId: string;
       remoteUrl: string;
       remoteToken: string;
+      resourceKind: MarketplaceListingKind;
+      resourceId: string;
     }
   | { mode: "offline"; ownerTenantId: string; reason: string };
 
@@ -84,6 +86,8 @@ export function resolveConnectionForResource(
       ownerTenantId: access.ownerTenantId,
       remoteUrl,
       remoteToken,
+      resourceKind: opts.resourceKind,
+      resourceId: opts.resourceId,
     };
   }
 

@@ -17,6 +17,21 @@ jobs:
       - run: npm ci
       - run: npm run build:packages
       - run: npm run typecheck
+      - run: npm run audit:kernel
+      - run: npm run test:audit
+      - run: npm test
       - run: npm run build -w @godmode/bridge
       - run: npm run build -w @godmode/web
       - run: node scripts/audit-oss-core.mjs
+      - run: docker build -f deploy/Dockerfile -t godmode-ci .
+      - name: Smoke production image
+        run: |
+          docker run -d --name godmode-ci -p 8080:80 godmode-ci
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8080/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs godmode-ci
+          exit 1

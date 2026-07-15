@@ -58,7 +58,19 @@ import {
   HISTORY_CHAR_BUDGET_RATIO,
   type HistoryTurn,
 } from "../services/chat-history.js";
-import type { AiScheduler } from "../services/ai-scheduler.js";
+import {
+  createSchedule,
+  deleteSchedule,
+  listSchedules,
+  updateSchedule,
+  type AiScheduler,
+} from "../services/ai-scheduler.js";
+import {
+  createWorkflow,
+  listWorkflows,
+  updateWorkflow,
+  type AiWorkflow,
+} from "../services/ai-workflows.js";
 import type { AiQueueWorker } from "../services/ai-queue-worker.js";
 import { AUTONOMOUS_RUNNER_ID } from "../services/ai-queue-worker.js";
 import type { AiTrainingManager } from "../services/ai-training-manager.js";
@@ -131,7 +143,6 @@ import {
 import { listPlatformActions } from "../services/platform-scope.js";
 import {
   getCoreDb,
-  createSharedChatSession,
   getSharedChatSession,
   listSharedChatSessionsForUser,
   type CoreSharedChatSession,
@@ -141,6 +152,9 @@ import { resolveShareAccess } from "../services/share-service.js";
 import { refreshScheduler } from "../services/scheduler.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getShareBroker, broadcastCardActivity } from "../ws-broker.js";
+import { createRecord } from "../kernel/record-api.js";
+import type { OperationContext } from "../kernel/adapter-registry.js";
+import { ensureAgentProject } from "../services/user-productivity.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
@@ -351,55 +365,6 @@ export function createAiRouter(
     res.json(embeddings.getStatus());
   });
 
-  router.post("/embeddings/start", async (req, res) => {
-    if (!embeddings) {
-      res.status(503).json({ error: "Embedding engine not available" });
-      return;
-    }
-    try {
-      res.json(await embeddings.start());
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/embeddings/stop", async (req, res) => {
-    if (!embeddings) {
-      res.status(503).json({ error: "Embedding engine not available" });
-      return;
-    }
-    try {
-      res.json(await embeddings.stop());
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  // Persisted master enable toggle. Survives a bridge restart and reconciles
-  // the embedder server (enabling starts it; disabling stops it).
-  router.post("/embeddings/enabled", async (req, res) => {
-    if (!embeddings) {
-      res.status(503).json({ error: "Embedding engine not available" });
-      return;
-    }
-    const enabled = Boolean(req.body?.enabled);
-    try {
-      res.json(await embeddings.setEnabled(enabled));
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/capabilities/rebuild", async (req, res) => {
-    try {
-      const embedder = embeddings?.getEmbeddingClient();
-      const count = await rebuildAllAgentCapabilityIndexes(tdb(req), embedder);
-      res.json({ ok: true, count, indexRows: countCapabilityIndex(tdb(req)) });
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
   router.get("/capabilities/status", (req, res) => {
     try {
       res.json({ indexRows: countCapabilityIndex(tdb(req)) });
@@ -515,10 +480,6 @@ export function createAiRouter(
     res.json(llm.getSettings());
   });
 
-  router.put("/settings", (req, res) => {
-    res.json(llm.updateSettings(req.body ?? {}));
-  });
-
   // Everything that goes to the model: resolved system prompt template, the
   // sampling params, the launch command, the (empty) tool set, and a snapshot
   // of the last actual request. Lets the UI show "what is sent to the LLM".
@@ -577,29 +538,6 @@ export function createAiRouter(
     res.json({ config, assembled });
   });
 
-  router.put("/prompt-flow", (req, res) => {
-    const config = (req.body?.config ?? req.body) as PromptFlowConfig;
-    if (!config?.sections?.length) {
-      res.status(400).json({ error: "Invalid prompt flow config" });
-      return;
-    }
-    savePromptFlowConfig(tdb(req), config);
-    const settings = llm.getSettings();
-    const agentId = String(req.body?.agentId ?? req.query.agentId ?? "intelligence");
-    const agent = getAgent(tdb(req), agentId);
-    const assembled = assemblePrompt(tdb(req), {
-      basePrompt: agent?.systemPrompt ?? settings.systemPrompt,
-      flowConfig: config,
-      enableThinking: agent?.thinking.enableThinking ?? settings.enableThinking,
-      thinkingEfficiency: agent?.thinking.thinkingEfficiency ?? settings.thinkingEfficiency,
-      nativeTools: agent?.thinking.nativeTools ?? settings.nativeTools,
-      agentId,
-      tenantId: req.tenantId,
-      agent,
-    });
-    res.json({ config, assembled });
-  });
-
   router.get("/memories", (req, res) => {
     const chatId = req.query.chatId as string | undefined;
     const status = req.query.status as string | undefined;
@@ -629,151 +567,11 @@ export function createAiRouter(
     res.json(rows);
   });
 
-  router.post("/memories/:id/approve", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const result = agentDb
-      .prepare(
-        `UPDATE ai_memories SET status = 'active', updated_at = datetime('now') WHERE id = ?`
-      )
-      .run(req.params.id);
-    if (result.changes === 0) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id) as
-      | { id: string; text: string }
-      | undefined;
-    if (row) {
-      indexMemory(
-        agentDb,
-        embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
-        row.id,
-        row.text
-      );
-    }
-    res.json(row);
-  });
-
-  router.post("/memories", (req, res) => {
-    const id = uuidv4();
-    const text = String(req.body?.text ?? "").trim();
-    if (!text) {
-      res.status(400).json({ error: "text required" });
-      return;
-    }
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const scope = req.body?.scope === "chat" ? "chat" : "global";
-    const chatId = scope === "chat" ? String(req.body?.chatId ?? "") : null;
-    agentDb.prepare(
-      `INSERT INTO ai_memories (id, scope, chat_id, agent_id, text, category, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      scope,
-      chatId || null,
-      agentId,
-      text,
-      req.body?.category ?? null,
-      req.body?.source ?? "manual"
-    );
-    indexMemory(
-      agentDb,
-      embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
-      id,
-      text
-    );
-    const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(id);
-    res.status(201).json(row);
-  });
-
-  router.put("/memories/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const { text, enabled, category } = req.body ?? {};
-    const existing = agentDb
-      .prepare(`SELECT id, text FROM ai_memories WHERE id = ?`)
-      .get(req.params.id) as { id: string; text: string } | undefined;
-    if (!existing) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    if (text != null) {
-      agentDb.prepare(
-        `UPDATE ai_memories SET text = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(text), req.params.id);
-    }
-    if (enabled != null) {
-      agentDb.prepare(
-        `UPDATE ai_memories SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(enabled ? 1 : 0, req.params.id);
-    }
-    if (category != null) {
-      agentDb.prepare(
-        `UPDATE ai_memories SET category = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(category), req.params.id);
-    }
-    const row = agentDb.prepare(`SELECT * FROM ai_memories WHERE id = ?`).get(req.params.id) as
-      | { id: string; text: string }
-      | undefined;
-    if (row) {
-      indexMemory(
-        agentDb,
-        embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : null,
-        row.id,
-        row.text
-      );
-    }
-    res.json(row);
-  });
-
-  router.delete("/memories/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    removeMemoryFromIndex(agentDb, req.params.id);
-    const result = agentDb.prepare(`DELETE FROM ai_memories WHERE id = ?`).run(req.params.id);
-    res.json({ ok: result.changes > 0 });
-  });
-
   router.get("/rules", (req, res) => {
     const agentId = agentIdFromRequest(req);
     const agentDb = agentDbFromRequest(req, res, agentId, "viewer");
     if (!agentDb) return;
     res.json({ rules: listAiRules(agentDb, agentId) });
-  });
-
-  router.put("/rules/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    updateAiRuleState(agentDb, agentId, req.params.id, {
-      enabled: req.body?.enabled,
-      priorityOverride: req.body?.priorityOverride,
-    });
-    res.json({ rules: listAiRules(agentDb, agentId) });
-  });
-
-  // Approve a reflection-drafted (pending) rule → becomes active/applied.
-  router.post("/rules/:id/approve", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    setAiRuleStatus(agentDb, agentId, req.params.id, "active");
-    res.json({ rules: listAiRules(agentDb, agentId) });
-  });
-
-  // Reject a pending rule → delete the file and its state.
-  router.delete("/rules/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const ok = deleteRuleFile(agentDb, req.params.id);
-    res.json({ ok, rules: listAiRules(agentDb, agentId) });
   });
 
   router.get("/skills", (req, res) => {
@@ -794,36 +592,6 @@ export function createAiRouter(
       return;
     }
     res.json({ id: req.params.id, body });
-  });
-
-  router.put("/skills/:id", (req, res) => {
-    if (req.body?.enabled == null) {
-      res.status(400).json({ error: "enabled required" });
-      return;
-    }
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    updateAiSkillState(agentDb, agentId, req.params.id, Boolean(req.body.enabled));
-    res.json({ skills: listAiSkills(agentDb, false, agentId) });
-  });
-
-  // Approve a reflection-drafted (pending) skill → becomes injectable.
-  router.post("/skills/:id/approve", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    setAiSkillStatus(agentDb, agentId, req.params.id, "active");
-    res.json({ skills: listAiSkills(agentDb, false, agentId) });
-  });
-
-  // Reject a pending skill → delete the SKILL.md and its state.
-  router.delete("/skills/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const ok = deleteSkillFile(agentDb, req.params.id);
-    res.json({ ok, skills: listAiSkills(agentDb, false, agentId) });
   });
 
   router.get("/artifacts", (req, res) => {
@@ -855,37 +623,6 @@ export function createAiRouter(
       return;
     }
     res.json(artifact);
-  });
-
-  router.post("/artifacts", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const name = String(req.body?.name ?? "").trim();
-    if (!name) {
-      res.status(400).json({ error: "name required" });
-      return;
-    }
-    try {
-      const artifact = saveArtifact(agentDb, agentId, {
-        name,
-        content: String(req.body?.content ?? ""),
-        kind: req.body?.kind,
-        mimeType: req.body?.mimeType,
-        description: req.body?.description,
-        source: req.body?.source ?? "manual",
-      });
-      res.status(201).json(artifact);
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.delete("/artifacts/:id", (req, res) => {
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    res.json({ ok: deleteArtifact(agentDb, agentId, req.params.id) });
   });
 
   router.get("/commands", (req, res) => {
@@ -959,34 +696,6 @@ export function createAiRouter(
     res.json({ actions: listPlatformActions(tdb(req), limit) });
   });
 
-  router.put("/agents/assignments", (req, res) => {
-    const { scopeType, scopeId, agentId, role } = req.body ?? {};
-    if (!isAssignmentScopeType(scopeType)) {
-      res.status(400).json({ error: "invalid scopeType" });
-      return;
-    }
-    if (typeof scopeId !== "string" || scopeId.trim().length === 0) {
-      res.status(400).json({ error: "scopeId required" });
-      return;
-    }
-    try {
-      const assignment = setAssignment(
-          tdb(req),
-        scopeType,
-        scopeId,
-        agentId,
-        role ?? null
-      );
-      res.json({ ok: true, assignment });
-    } catch (err) {
-      if (err instanceof AssignmentError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
   router.get("/agents/resolve", (req, res) => {
     const departmentId = String(req.query.departmentId ?? "").trim();
     if (!departmentId) {
@@ -1014,85 +723,6 @@ export function createAiRouter(
     res.json({ ...agent, shared: !scope.owned, shareRole: scope.role });
   });
 
-  router.post("/agents", (req, res) => {
-    const { name, description, icon, backend, cloneFromId, parentId, systemPrompt, sampling, thinking, toolAllow, autoApprove, modelPath, adapterIds, config } =
-      req.body ?? {};
-    if (!name?.trim()) {
-      res.status(400).json({ error: "name required" });
-      return;
-    }
-    const agent = createAgent(tdb(req), {
-      name: String(name).trim(),
-      description,
-      icon,
-      backend,
-      cloneFromId,
-      parentId: parentId === null || parentId === undefined ? undefined : String(parentId),
-      systemPrompt,
-      sampling,
-      thinking,
-      toolAllow,
-      autoApprove,
-      modelPath,
-      adapterIds,
-      config,
-    });
-    res.status(201).json(agent);
-  });
-
-  router.post("/agents/:id/clone", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "viewer");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const src = getAgent(scope.db, req.params.id);
-    if (!src) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const name = String(req.body?.name ?? `${src.name} copy`).trim();
-    const agent = createAgent(tdb(req), {
-      name,
-      description: src.description ?? undefined,
-      icon: src.icon ?? undefined,
-      backend: src.backend,
-      systemPrompt: src.systemPrompt,
-      sampling: src.sampling,
-      thinking: src.thinking,
-      toolAllow: src.toolAllow,
-      autoApprove: src.autoApprove,
-      modelPath: src.modelPath,
-      adapterIds: src.adapterIds,
-      config: src.config,
-    });
-    res.status(201).json(agent);
-  });
-
-  router.put("/agents/:id", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "editor");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const patchConfig = body.config as Record<string, unknown> | undefined;
-    if (
-      patchConfig &&
-      ("codeAccess" in patchConfig || "codeAutonomy" in patchConfig) &&
-      !req.user?.isAdmin
-    ) {
-      res.status(403).json({ error: "Platform admin required to change coding permissions" });
-      return;
-    }
-    const agent = updateAgent(scope.db, req.params.id, body);
-    if (!agent) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    res.json(agent);
-  });
-
   router.get("/agents/:id/accounts", (req, res) => {
     const scope = resolveAgentScope(req, req.params.id, "viewer");
     if (!scope) {
@@ -1102,49 +732,6 @@ export function createAiRouter(
     res.json({ accounts: listAgentAccounts(scope.db, req.params.id) });
   });
 
-  router.post("/agents/:id/accounts/apikey", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "editor");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const provider = String(req.body?.provider ?? "").trim();
-    const apiKey = String(req.body?.apiKey ?? "").trim();
-    if (!provider || !apiKey) {
-      res.status(400).json({ error: "provider and apiKey required" });
-      return;
-    }
-    const account = createAgentApiKeyAccount(scope.db, {
-      agentId: req.params.id,
-      provider,
-      label: typeof req.body?.label === "string" ? req.body.label : undefined,
-      apiKey,
-    });
-    res.status(201).json({ account });
-  });
-
-  router.delete("/agents/:id/accounts/:accountId", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "editor");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const ok = revokeAgentAccount(scope.db, req.params.accountId, req.params.id);
-    res.json({ ok });
-  });
-
-  router.delete("/agents/:id", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "owner");
-    if (!scope?.owned) {
-      res.status(scope ? 403 : 404).json({
-        error: scope ? "Cannot delete a shared agent" : "Not found",
-      });
-      return;
-    }
-    const ok = deleteAgent(scope.db, req.params.id);
-    res.json({ ok });
-  });
-
   router.get("/agents/:id/reflection", (req, res) => {
     const scope = resolveAgentScope(req, req.params.id, "viewer");
     if (!scope) {
@@ -1152,31 +739,6 @@ export function createAiRouter(
       return;
     }
     res.json({ reflection: getReflectionConfig(scope.db, req.params.id) });
-  });
-
-  router.patch("/agents/:id/reflection", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "editor");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    const next = patchReflectionConfig(scope.db, req.params.id, req.body ?? {});
-    reflection?.reload();
-    res.json({ reflection: next });
-  });
-
-  router.post("/agents/:id/reflection/run", (req, res) => {
-    const scope = resolveAgentScope(req, req.params.id, "editor");
-    if (!scope) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    if (!reflection) {
-      res.status(503).json({ error: "Reflection service unavailable" });
-      return;
-    }
-    const jobId = reflection.enqueueReflection(req.params.id, "manual", scope.tenantId);
-    res.json({ ok: true, jobId });
   });
 
   router.get("/agents/:id/reflection/proposals", (req, res) => {
@@ -1193,56 +755,6 @@ export function createAiRouter(
     res.json({ proposals: listReflectionProposals(scope.db, req.params.id, status) });
   });
 
-  router.post("/reflection/proposals/:id/approve", (req, res) => {
-    const ok = approveReflectionProposal(tdb(req), req.params.id);
-    if (!ok) {
-      res.status(404).json({ error: "Proposal not found or not pending" });
-      return;
-    }
-    res.json({ ok: true });
-  });
-
-  router.post("/reflection/proposals/:id/reject", (req, res) => {
-    const ok = rejectReflectionProposal(tdb(req), req.params.id);
-    if (!ok) {
-      res.status(404).json({ error: "Proposal not found or not pending" });
-      return;
-    }
-    res.json({ ok: true });
-  });
-
-  router.post("/memory/distill", (req, res) => {
-    if (!memoryMaintenance) {
-      res.status(503).json({ error: "Memory maintenance not available" });
-      return;
-    }
-    const chatId = String(req.body?.chatId ?? "");
-    const agentId = String(req.body?.agentId ?? "intelligence");
-    if (!chatId) {
-      res.status(400).json({ error: "chatId required" });
-      return;
-    }
-    const jobId = memoryMaintenance.enqueueDistill({
-      chatId,
-      agentId,
-      tenantId: req.tenantId,
-      force: Boolean(req.body?.force),
-    });
-    res.json({ ok: true, jobId });
-  });
-
-  router.post("/memory/wiki-synthesize", (req, res) => {
-    if (!memoryMaintenance) {
-      res.status(503).json({ error: "Memory maintenance not available" });
-      return;
-    }
-    const jobId = memoryMaintenance.enqueueWikiSynthesize(
-      req.tenantId ?? "",
-      String(req.body?.agentId ?? "intelligence")
-    );
-    res.json({ ok: true, jobId });
-  });
-
   router.get("/secrets", (req, res) => {
     // Cursor subscription key is managed by the Cursor card — hide from generic list.
     const secrets = listSecrets(tdb(req)).filter(
@@ -1252,31 +764,6 @@ export function createAiRouter(
         s.name !== "CURSOR_API_KEY"
     );
     res.json({ secrets });
-  });
-
-  router.post("/secrets", (req, res) => {
-    const { name, value } = req.body ?? {};
-    if (!name?.trim() || !value?.trim()) {
-      res.status(400).json({ error: "name and value required" });
-      return;
-    }
-    const trimmedName = String(name).trim();
-    if (
-      trimmedName === "cursor_api_key" ||
-      trimmedName === "CURSOR_API_KEY" ||
-      trimmedName.toLowerCase() === "cursor-api-key"
-    ) {
-      res.status(400).json({
-        error:
-          "Use Vault → Cursor subscription → Connect for Cursor API keys (not this list).",
-      });
-      return;
-    }
-    res.status(201).json(createSecret(tdb(req), trimmedName, String(value)));
-  });
-
-  router.delete("/secrets/:id", (req, res) => {
-    res.json({ ok: deleteSecret(tdb(req), req.params.id) });
   });
 
   router.get("/cursor/status", async (req, res) => {
@@ -1294,58 +781,12 @@ export function createAiRouter(
     });
   });
 
-  router.post("/cursor/api-key", (req, res) => {
-    const apiKey = String(req.body?.apiKey ?? "").trim();
-    if (!apiKey) {
-      res.status(400).json({ error: "apiKey required" });
-      return;
-    }
-    const db = tdb(req);
-    upsertCursorApiKey(db, apiKey);
-    markLlmReady(db);
-    res.json({ ok: true, status: getCursorAuthStatus(db) });
-  });
-
-  router.delete("/cursor/api-key", (req, res) => {
-    const db = tdb(req);
-    res.json({ ok: removeCursorApiKey(db), status: getCursorAuthStatus(db) });
-  });
-
   router.get("/cursor/models", async (req, res) => {
     try {
       const models = await listCursorSubscriptionModels(tdb(req));
       res.json({ models });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/cursor/cli-login-url", async (_req, res) => {
-    try {
-      const result = await startCursorCliLoginUrl();
-      res.json(result);
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/cursor/use-for-intelligence", async (req, res) => {
-    try {
-      const db = tdb(req);
-      if (!getCursorAuthStatus(db).connected) {
-        res.status(400).json({ error: "Connect Cursor with an API key first" });
-        return;
-      }
-      const model = req.body?.model ? String(req.body.model) : "auto";
-      const result = await selectIntelligenceModel(db, llm, {
-        source: "cursor",
-        model,
-      });
-      res.json({ ok: true, agent: getAgent(db, "intelligence"), active: result.active });
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
   });
 
@@ -1358,65 +799,6 @@ export function createAiRouter(
         req.user?.id
       );
       res.json(catalog);
-    } catch (err) {
-      res.status(500).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  router.post("/select-model", async (req, res) => {
-    try {
-      const source = String(req.body?.source ?? "");
-      if (
-        source !== "local" &&
-        source !== "cursor" &&
-        source !== "provider" &&
-        source !== "remote"
-      ) {
-        res.status(400).json({ error: "source must be local, cursor, provider, or remote" });
-        return;
-      }
-      const result = await selectIntelligenceModel(tdb(req), llm, {
-        source,
-        path: req.body?.path ? String(req.body.path) : undefined,
-        model: req.body?.model ? String(req.body.model) : undefined,
-        provider: req.body?.provider,
-        endpointId: req.body?.endpointId ? String(req.body.endpointId) : undefined,
-        apiKeyRef: req.body?.apiKeyRef ? String(req.body.apiKeyRef) : undefined,
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  router.post("/start", async (req, res) => {
-    try {
-      const status = await llm.start(req.body?.modelPath);
-      res.json(status);
-    } catch (err) {
-      res.status(500).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  router.post("/stop", async (req, res) => {
-    try {
-      res.json(await llm.stop());
-    } catch (err) {
-      res.status(500).json({
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  router.post("/restart", async (req, res) => {
-    try {
-      res.json(await llm.restart(req.body?.modelPath));
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : String(err),
@@ -1493,18 +875,6 @@ export function createAiRouter(
     res.json(chats);
   });
 
-  router.post("/chats", (req, res) => {
-    const id = uuidv4();
-    const title = String(req.body?.title ?? "New chat").slice(0, 120);
-    tdb(req)
-      .prepare(`INSERT INTO ai_chats (id, title, user_id) VALUES (?, ?, ?)`)
-      .run(id, title, req.user!.id);
-    const row = tdb(req)
-      .prepare(`SELECT id, title, created_at, updated_at FROM ai_chats WHERE id = ?`)
-      .get(id);
-    res.status(201).json(row);
-  });
-
   router.get("/chats/:id", (req, res) => {
     // Chats are the actor's work: read from the actor's own DB, or the shared
     // session's home DB when this chat was promoted to a collaborative session.
@@ -1517,15 +887,6 @@ export function createAiRouter(
       return;
     }
     res.json(row);
-  });
-
-  router.delete("/chats/:id", (req, res) => {
-    const { db: chatDb } = resolveChatWorkScope(req, req.params.id);
-    chatDb.prepare(`DELETE FROM ai_messages WHERE chat_id = ?`).run(req.params.id);
-    const result = chatDb
-      .prepare(`DELETE FROM ai_chats WHERE id = ?`)
-      .run(req.params.id);
-    res.json({ ok: result.changes > 0 });
   });
 
   router.get("/chats/:id/messages", (req, res) => {
@@ -1567,56 +928,6 @@ export function createAiRouter(
         createdByUserId: session.created_by_user_id,
         createdAt: session.created_at,
         isHome: req.tenantId === session.home_tenant_id,
-      },
-    });
-  });
-
-  // Promote a chat to a collaborative shared session. The initiator's tenant
-  // becomes the session's home (the chat already lives there). Participants
-  // (agent owner / grantees) then route reads+writes to the home DB and both
-  // sides receive live updates via the agent room.
-  router.post("/chats/:id/share", (req, res) => {
-    const chatId = req.params.id;
-    const agentId = String(req.body?.agentId ?? agentIdFromRequest(req));
-    // You can only start a shared session for a chat that lives in YOUR own
-    // workspace (your work DB) — i.e. a chat you initiated.
-    const ownDb = tdb(req);
-    const chat = ownDb
-      .prepare(`SELECT id FROM ai_chats WHERE id = ?`)
-      .get(chatId);
-    if (!chat) {
-      res.status(404).json({ error: "Chat not found in your workspace" });
-      return;
-    }
-    // Confirm the caller can use this agent (owned or shared to them).
-    if (!resolveAgentScope(req, agentId, "viewer")) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
-    }
-    const session = createSharedChatSession(getCoreDb(), {
-      id: uuidv4(),
-      chatId,
-      homeTenantId: req.tenantId!,
-      agentId,
-      createdByUserId: req.user!.id,
-    });
-    // Notify the agent room so participants can refresh into the shared session.
-    broadcastAgentEvent(
-      agentId,
-      "chat_session_shared",
-      { chatId, agentId, homeTenantId: session.home_tenant_id },
-      req.tenantId
-    );
-    res.status(201).json({
-      ok: true,
-      session: {
-        id: session.id,
-        chatId: session.chat_id,
-        agentId: session.agent_id,
-        homeTenantId: session.home_tenant_id,
-        createdByUserId: session.created_by_user_id,
-        createdAt: session.created_at,
-        isHome: true,
       },
     });
   });
@@ -1691,6 +1002,14 @@ export function createAiRouter(
     const engineDb = scope.db;
     const work = resolveChatWorkScope(req, chatId);
     const workDb = work.db;
+    const chatKernelContext: OperationContext = {
+      tenantId: work.tenantId,
+      userId: req.user!.id,
+      isAdmin: req.user!.isAdmin,
+      role: req.tenantRole ?? "editor",
+      source: "http",
+      bus,
+    };
     // Contribute-back: mirror new memories into the owner's engine DB only when
     // the caller opts in AND the agent is shared (no-op for owned agents).
     const contributeDb =
@@ -1698,16 +1017,13 @@ export function createAiRouter(
 
     let activeChatId = chatId;
     if (!activeChatId) {
-      activeChatId = uuidv4();
       const title = message.trim().slice(0, 80) || "New chat";
-      workDb.prepare(`INSERT INTO ai_chats (id, title) VALUES (?, ?)`).run(
-        activeChatId,
-        title
-      );
-    } else {
-      workDb.prepare(`UPDATE ai_chats SET updated_at = datetime('now') WHERE id = ?`).run(
-        activeChatId
-      );
+      activeChatId = createRecord(
+        workDb,
+        "ChatSession",
+        { title },
+        chatKernelContext
+      ).id;
     }
 
     const userParts: ChatMessagePart[] = [];
@@ -1722,10 +1038,16 @@ export function createAiRouter(
         ? userParts[0].text!
         : userParts;
 
-    const userMsgId = uuidv4();
-    workDb.prepare(
-      `INSERT INTO ai_messages (id, chat_id, role, content_json, user_id) VALUES (?, ?, 'user', ?, ?)`
-    ).run(userMsgId, activeChatId, JSON.stringify({ text: message, images }), req.user!.id);
+    const userMsgId = createRecord(
+      workDb,
+      "ChatMessage",
+      {
+        chat_id: activeChatId,
+        role: "user",
+        content: { text: message, images },
+      },
+      chatKernelContext
+    ).id;
 
     broadcastAgentEvent(
       resolvedAgentId,
@@ -2165,14 +1487,16 @@ export function createAiRouter(
           p.endedAt = 0;
         }
       }
-      const assistantMsgId = uuidv4();
-      workDb.prepare(
-        `INSERT INTO ai_messages (id, chat_id, role, content_json) VALUES (?, ?, 'assistant', ?)`
-      ).run(
-        assistantMsgId,
-        activeChatId,
-        JSON.stringify({ content: fullContent, thinking, answer, parts })
-      );
+      const assistantMsgId = createRecord(
+        workDb,
+        "ChatMessage",
+        {
+          chat_id: activeChatId,
+          role: "assistant",
+          content: { content: fullContent, thinking, answer, parts },
+        },
+        chatKernelContext
+      ).id;
 
       broadcastAgentEvent(
         resolvedAgentId,
@@ -2224,48 +1548,6 @@ export function createAiRouter(
     });
   });
 
-  router.post("/chat/confirm-tool", (req, res) => {
-    const { toolCallId, approved } = req.body as { toolCallId?: string; approved?: boolean };
-    if (!toolCallId) {
-      res.status(400).json({ error: "toolCallId required" });
-      return;
-    }
-    const ok = resolveToolConfirmation(toolCallId, Boolean(approved));
-    res.json({ ok });
-  });
-
-  /** Delete a single message from a chat thread. */
-  router.delete("/chats/:chatId/messages/:messageId", (req, res) => {
-    const work = resolveChatWorkScope(req, req.params.chatId);
-    const r = work.db
-      .prepare(`DELETE FROM ai_messages WHERE id = ? AND chat_id = ?`)
-      .run(req.params.messageId, req.params.chatId);
-    res.json({ ok: r.changes > 0 });
-  });
-
-  /** Truncate chat history after a message (for edit/regenerate). */
-  router.post("/chats/:chatId/truncate", (req, res) => {
-    const { afterMessageId } = req.body as { afterMessageId?: string };
-    if (!afterMessageId) {
-      res.status(400).json({ error: "afterMessageId required" });
-      return;
-    }
-    const work = resolveChatWorkScope(req, req.params.chatId);
-    const anchor = work.db
-      .prepare(`SELECT created_at FROM ai_messages WHERE id = ? AND chat_id = ?`)
-      .get(afterMessageId, req.params.chatId) as { created_at: string } | undefined;
-    if (!anchor) {
-      res.status(404).json({ error: "Message not found" });
-      return;
-    }
-    const r = work.db
-      .prepare(
-        `DELETE FROM ai_messages WHERE chat_id = ? AND created_at > ?`
-      )
-      .run(req.params.chatId, anchor.created_at);
-    res.json({ deleted: r.changes });
-  });
-
   router.get("/lora-adapters", async (req, res) => {
     try {
       if (!llm.isReady()) {
@@ -2278,57 +1560,9 @@ export function createAiRouter(
     }
   });
 
-  router.post("/lora-adapters", async (req, res) => {
-    try {
-      res.json(await llm.proxyLoraAdapters("POST", req.body));
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
   router.get("/adapters", (req, res) => {
     const rows = tdb(req).prepare(`SELECT * FROM ai_adapters ORDER BY name ASC`).all();
     res.json({ adapters: rows });
-  });
-
-  router.post("/adapters", (req, res) => {
-    const id = uuidv4();
-    const { name, path, description, domain, defaultScale } = req.body ?? {};
-    if (!name || !path) {
-      res.status(400).json({ error: "name and path required" });
-      return;
-    }
-    tdb(req).prepare(
-      `INSERT INTO ai_adapters (id, name, path, description, domain, default_scale)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, String(name), String(path), description ?? null, domain ?? null, defaultScale ?? 1);
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_adapters WHERE id = ?`).get(id));
-  });
-
-  router.put("/adapters/:id", (req, res) => {
-    const { enabled, defaultScale, description } = req.body ?? {};
-    if (enabled != null) {
-      tdb(req).prepare(`UPDATE ai_adapters SET enabled = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        enabled ? 1 : 0,
-        req.params.id
-      );
-    }
-    if (defaultScale != null) {
-      tdb(req).prepare(
-        `UPDATE ai_adapters SET default_scale = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(Number(defaultScale), req.params.id);
-    }
-    if (description != null) {
-      tdb(req).prepare(
-        `UPDATE ai_adapters SET description = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(description), req.params.id);
-    }
-    res.json(tdb(req).prepare(`SELECT * FROM ai_adapters WHERE id = ?`).get(req.params.id));
-  });
-
-  router.delete("/adapters/:id", (req, res) => {
-    const r = tdb(req).prepare(`DELETE FROM ai_adapters WHERE id = ?`).run(req.params.id);
-    res.json({ ok: r.changes > 0 });
   });
 
   router.get("/queue", (req, res) => {
@@ -2342,106 +1576,23 @@ export function createAiRouter(
     res.json({ jobs: rows });
   });
 
-  router.post("/queue", (req, res) => {
-    const id = uuidv4();
-    const { prompt, workflowId, priority, context, adapterIds } = req.body ?? {};
-    tdb(req).prepare(
-      `INSERT INTO ai_prompt_queue (id, prompt, workflow_id, priority, context_json, adapter_ids_json)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      prompt ? String(prompt) : null,
-      workflowId ?? null,
-      Number(priority ?? 0),
-      context ? JSON.stringify(context) : null,
-      adapterIds ? JSON.stringify(adapterIds) : null
-    );
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_prompt_queue WHERE id = ?`).get(id));
-  });
-
-  router.post("/queue/:id/cancel", (req, res) => {
-    tdb(req).prepare(
-      `UPDATE ai_prompt_queue SET status = 'cancelled', finished_at = datetime('now') WHERE id = ? AND status IN ('pending','running')`
-    ).run(req.params.id);
-    res.json({ ok: true });
+  const workflowApiRow = (workflow: AiWorkflow) => ({
+    id: workflow.id,
+    agent_id: workflow.agent_id,
+    name: workflow.name,
+    config_json: JSON.stringify(workflow.config),
+    enabled: workflow.enabled,
+    created_at: workflow.created_at,
+    updated_at: workflow.updated_at,
   });
 
   router.get("/workflows", (req, res) => {
     const agentId = String(req.query.agentId ?? "intelligence");
     res.json({
-      workflows: tdb(req)
-        .prepare(`SELECT * FROM ai_workflows WHERE agent_id = ? ORDER BY updated_at DESC`)
-        .all(agentId),
+      workflows: listWorkflows(tdb(req))
+        .filter((workflow) => workflow.agent_id === agentId)
+        .map(workflowApiRow),
     });
-  });
-
-  router.post("/workflows", (req, res) => {
-    const id = uuidv4();
-    const name = String(req.body?.name ?? "Workflow");
-    const agentId = String(req.body?.agentId ?? req.query.agentId ?? "intelligence");
-    const config = req.body?.config ?? { nodes: [], edges: [] };
-    tdb(req).prepare(
-      `INSERT INTO ai_workflows (id, name, config_json, agent_id) VALUES (?, ?, ?, ?)`
-    ).run(id, name, JSON.stringify(config), agentId);
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_workflows WHERE id = ?`).get(id));
-  });
-
-  router.put("/workflows/:id", (req, res) => {
-    const { name, config, enabled } = req.body ?? {};
-    if (name != null) {
-      tdb(req).prepare(`UPDATE ai_workflows SET name = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        String(name),
-        req.params.id
-      );
-    }
-    if (config != null) {
-      tdb(req).prepare(
-        `UPDATE ai_workflows SET config_json = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(JSON.stringify(config), req.params.id);
-    }
-    if (enabled != null) {
-      tdb(req).prepare(`UPDATE ai_workflows SET enabled = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        enabled ? 1 : 0,
-        req.params.id
-      );
-    }
-    res.json(tdb(req).prepare(`SELECT * FROM ai_workflows WHERE id = ?`).get(req.params.id));
-  });
-
-  // Delete a workflow and detach anything that references it so no dangling
-  // schedules/hooks/runs are left pointing at a missing workflow.
-  router.delete("/workflows/:id", (req, res) => {
-    const id = req.params.id;
-    const wf = tdb(req)
-      .prepare(`SELECT id FROM ai_workflows WHERE id = ?`)
-      .get(id) as { id: string } | undefined;
-    if (!wf) {
-      res.status(404).json({ error: "Workflow not found" });
-      return;
-    }
-    // Tenant-scoped dependents: cron schedules + finished run history.
-    const schedules = tdb(req)
-      .prepare(`DELETE FROM ai_schedules WHERE workflow_id = ?`)
-      .run(id).changes;
-    tdb(req).prepare(`DELETE FROM ai_workflow_runs WHERE workflow_id = ?`).run(id);
-    tdb(req).prepare(`DELETE FROM ai_workflow_comments WHERE workflow_id = ?`).run(id);
-    tdb(req).prepare(`DELETE FROM ai_workflows WHERE id = ?`).run(id);
-    // Core-db event/schedule hooks that run THIS workflow (action_config_json
-    // carries {"workflowId": id}). Remove them so they don't fire a ghost run.
-    let hooks = 0;
-    try {
-      hooks = getCoreDb()
-        .prepare(
-          `DELETE FROM hooks
-           WHERE action_kind = 'run_workflow' AND action_config_json LIKE ?`
-        )
-        .run(`%"workflowId":"${id}"%`).changes;
-    } catch {
-      /* core hooks optional */
-    }
-    scheduler.reload();
-    refreshScheduler();
-    res.json({ ok: true, deleted: { workflow: id, schedules, hooks } });
   });
 
   router.get("/workflows/:id/comments", (req, res) => {
@@ -2452,20 +1603,6 @@ export function createAiRouter(
       )
       .all(req.params.id);
     res.json({ comments: rows });
-  });
-
-  router.post("/workflows/:id/comments", (req, res) => {
-    const body = String(req.body?.body ?? "").trim();
-    if (!body) {
-      res.status(400).json({ error: "body required" });
-      return;
-    }
-    const author = req.body?.author === "agent" ? "agent" : "user";
-    const id = uuidv4();
-    tdb(req).prepare(
-      `INSERT INTO ai_workflow_comments (id, workflow_id, author, body) VALUES (?, ?, ?, ?)`
-    ).run(id, req.params.id, author, body);
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_workflow_comments WHERE id = ?`).get(id));
   });
 
   // --- Workflow runs (durable pause/resume for the autonomous runner) ---
@@ -2509,133 +1646,9 @@ export function createAiRouter(
     res.json(row);
   });
 
-  router.post("/workflows/runs/:id/resume", (req, res) => {
-    const run = tdb(req)
-      .prepare(`SELECT id, status, card_id FROM ai_workflow_runs WHERE id = ?`)
-      .get(req.params.id) as
-      | { id: string; status: string; card_id: string | null }
-      | undefined;
-    if (!run) {
-      res.status(404).json({ error: "Run not found" });
-      return;
-    }
-    if (run.status !== "awaiting_input") {
-      res.status(409).json({ error: `Run not awaiting input (status=${run.status})` });
-      return;
-    }
-    const decision = req.body?.decision === "approve" ? "approve" : "request_changes";
-    const comments = req.body?.comments ? String(req.body.comments) : undefined;
-    // Persist the reviewer's comment to the card thread for the change branch.
-    if (decision === "request_changes" && comments && run.card_id) {
-      tdb(req).prepare(
-        `INSERT INTO ai_card_comments (id, card_id, author, body) VALUES (?, ?, 'user', ?)`
-      ).run(uuidv4(), run.card_id, comments);
-    }
-    // Enqueue the resume so it obeys the serial queue and never blocks the
-    // request. The run lives in the caller's tenant DB, so route it back there.
-    queue.enqueue({
-      context: { resumeRunId: run.id, resumeDecision: { decision, comments } },
-      priority: 3,
-      tenantId: req.tenantId,
-    });
-    res.json({ ok: true });
-  });
-
-  router.post("/workflows/runs/:id/cancel", (req, res) => {
-    const r = tdb(req)
-      .prepare(
-        `UPDATE ai_workflow_runs SET status = 'failed', error = 'cancelled', updated_at = datetime('now')
-         WHERE id = ? AND status IN ('running','awaiting_input')`
-      )
-      .run(req.params.id);
-    res.json({ ok: r.changes > 0 });
-  });
-
-  // Kick the durable autonomous executor immediately (instead of waiting for
-  // its cron). No-op if a tick is already queued/running, so it never piles up.
-  router.post("/autonomous/kick", (req, res) => {
-    if (queue.hasPendingOrRunningWorkflow(AUTONOMOUS_RUNNER_ID)) {
-      res.json({ ok: true, alreadyRunning: true });
-      return;
-    }
-    const jobId = queue.enqueue({
-      workflowId: AUTONOMOUS_RUNNER_ID,
-      context: { autonomousTick: true, autoChainTick: 0 },
-      priority: 1,
-      tenantId: req.tenantId,
-    });
-    res.json({ ok: true, jobId });
-  });
-
   router.get("/schedules", (req, res) => {
-    res.json({ schedules: tdb(req).prepare(`SELECT * FROM ai_schedules ORDER BY created_at DESC`).all() });
+    res.json({ schedules: listSchedules(tdb(req)) });
   });
-
-  router.post("/schedules", (req, res) => {
-    const id = uuidv4();
-    const { workflowId, cronExpr, timezone, enabled } = req.body ?? {};
-    if (!workflowId || !cronExpr) {
-      res.status(400).json({ error: "workflowId and cronExpr required" });
-      return;
-    }
-    tdb(req).prepare(
-      `INSERT INTO ai_schedules (id, workflow_id, cron_expr, timezone, enabled)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      String(workflowId),
-      String(cronExpr),
-      timezone ? String(timezone) : "America/Denver",
-      enabled === false ? 0 : 1
-    );
-    scheduler.reload();
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_schedules WHERE id = ?`).get(id));
-  });
-
-  router.put("/schedules/:id", (req, res) => {
-    const { cronExpr, timezone, enabled } = req.body ?? {};
-    if (cronExpr != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET cron_expr = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(cronExpr), req.params.id);
-    if (timezone != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET timezone = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(timezone), req.params.id);
-    if (enabled != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(enabled ? 1 : 0, req.params.id);
-    scheduler.reload();
-    res.json(tdb(req).prepare(`SELECT * FROM ai_schedules WHERE id = ?`).get(req.params.id));
-  });
-
-  router.delete("/schedules/:id", (req, res) => {
-    const r = tdb(req).prepare(`DELETE FROM ai_schedules WHERE id = ?`).run(req.params.id);
-    scheduler.reload();
-    res.json({ ok: r.changes > 0 });
-  });
-
-  // Resolve (or lazily create) the single board project owned by an agent. The
-  // root 'intelligence' agent adopts the legacy 'default' project via the db
-  // backfill; other agents get a fresh project that reuses the shared canonical
-  // columns (backlog/in_progress/review/done) so the board UI keeps working.
-  const ensureAgentProject = (agentId: string, db: AppDatabase): string => {
-    const existing = db
-      .prepare(`SELECT id FROM ai_projects WHERE agent_id = ? ORDER BY created_at ASC LIMIT 1`)
-      .get(agentId) as { id: string } | undefined;
-    if (existing) return existing.id;
-    const agent = db
-      .prepare(`SELECT name FROM ai_agents WHERE id = ?`)
-      .get(agentId) as { name: string } | undefined;
-    const id = agentId === "intelligence" ? "default" : uuidv4();
-    const name = `${agent?.name ?? "Agent"} Tasks`;
-    db.prepare(
-      `INSERT OR IGNORE INTO ai_projects (id, name, agent_id) VALUES (?, ?, ?)`
-    ).run(id, name, agentId);
-    db.prepare(`UPDATE ai_projects SET agent_id = ? WHERE id = ?`).run(agentId, id);
-    return id;
-  };
 
   router.get("/projects", (req, res) => {
     const agentId = String(req.query.agentId ?? "intelligence");
@@ -2657,203 +1670,6 @@ export function createAiRouter(
           .all(...projectIds)
       : [];
     res.json({ projects, columns, cards });
-  });
-
-  router.post("/projects/cards", (req, res) => {
-    const id = uuidv4();
-    const {
-      projectId,
-      agentId,
-      columnId,
-      title,
-      description,
-      prompt,
-      contextJson,
-      tags,
-      dueAt,
-      linkedChatId,
-      linkedWorkflowId,
-      priority,
-      parentCardId,
-      status,
-      assignedAgentId,
-    } = req.body ?? {};
-    // Project resolution order: explicit projectId → parent card's project →
-    // the owning agent's board → legacy 'default'.
-    let pid: string;
-    if (projectId != null) {
-      pid = String(projectId);
-    } else if (parentCardId != null) {
-      const parent = tdb(req)
-        .prepare(`SELECT project_id FROM ai_project_cards WHERE id = ?`)
-        .get(String(parentCardId)) as { project_id: string } | undefined;
-      pid = parent?.project_id ?? ensureAgentProject(String(agentId ?? "intelligence"), tdb(req));
-    } else {
-      pid = ensureAgentProject(String(agentId ?? "intelligence"), tdb(req));
-    }
-    const cid = String(columnId ?? "backlog");
-    const ctx =
-      contextJson == null
-        ? null
-        : typeof contextJson === "string"
-          ? contextJson
-          : JSON.stringify(contextJson);
-    const maxOrder = tdb(req)
-      .prepare(`SELECT COALESCE(MAX(sort_order), -1) as m FROM ai_project_cards WHERE column_id = ?`)
-      .get(cid) as { m: number };
-    tdb(req).prepare(
-      `INSERT INTO ai_project_cards (id, project_id, column_id, title, description, prompt, context_json, tags_json, due_at, linked_chat_id, linked_workflow_id, priority, parent_card_id, status, assigned_agent_id, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      pid,
-      cid,
-      String(title ?? "Untitled"),
-      description ?? null,
-      prompt ?? null,
-      ctx,
-      tags ?? null,
-      dueAt ?? null,
-      linkedChatId ?? null,
-      linkedWorkflowId ?? null,
-      priority != null ? Number(priority) : 2,
-      parentCardId ?? null,
-      status ?? null,
-      assignedAgentId ?? null,
-      maxOrder.m + 1
-    );
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_project_cards WHERE id = ?`).get(id));
-  });
-
-  router.patch("/projects/cards/:id", (req, res) => {
-    const {
-      columnId,
-      sortOrder,
-      title,
-      description,
-      prompt,
-      contextJson,
-      tags,
-      dueAt,
-      linkedChatId,
-      linkedWorkflowId,
-      priority,
-      parentCardId,
-      status,
-      assignedAgentId,
-    } = req.body ?? {};
-    const nextColumnId = columnId != null ? String(columnId) : null;
-    if (priority != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET priority = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(Number(priority), req.params.id);
-    }
-    if (parentCardId !== undefined) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET parent_card_id = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(parentCardId === null ? null : String(parentCardId), req.params.id);
-    }
-    if (status != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET status = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(status), req.params.id);
-    }
-    if (nextColumnId != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET column_id = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(nextColumnId, req.params.id);
-      if (nextColumnId === "done" && status == null) {
-        tdb(req).prepare(
-          `UPDATE ai_project_cards SET status = 'done', updated_at = datetime('now') WHERE id = ?`
-        ).run(req.params.id);
-      }
-    }
-    if (sortOrder != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(Number(sortOrder), req.params.id);
-    }
-    if (title != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET title = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(title), req.params.id);
-    }
-    if (description != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET description = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(description), req.params.id);
-    }
-    if (prompt != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET prompt = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(prompt), req.params.id);
-    }
-    if (contextJson != null) {
-      const ctx =
-        typeof contextJson === "string" ? contextJson : JSON.stringify(contextJson);
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET context_json = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(ctx, req.params.id);
-    }
-    if (tags != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET tags_json = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(tags), req.params.id);
-    }
-    if (dueAt != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET due_at = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(dueAt), req.params.id);
-    }
-    if (linkedChatId != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET linked_chat_id = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(linkedChatId), req.params.id);
-    }
-    if (linkedWorkflowId != null) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET linked_workflow_id = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(linkedWorkflowId), req.params.id);
-    }
-    if (assignedAgentId !== undefined) {
-      tdb(req).prepare(
-        `UPDATE ai_project_cards SET assigned_agent_id = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(assignedAgentId === null ? null : String(assignedAgentId), req.params.id);
-    }
-    const updatedCard = tdb(req)
-      .prepare(`SELECT * FROM ai_project_cards WHERE id = ?`)
-      .get(req.params.id) as
-      | { id: string; column_id: string; status: string | null; project_id: string; assigned_agent_id: string | null }
-      | undefined;
-    // Emit a bus signal when a card reaches Done so any interested listener can
-    // react (knowledge maintenance is owned by the Reflection engine).
-    if (
-      bus &&
-      updatedCard &&
-      (updatedCard.column_id === "done" || updatedCard.status === "accepted")
-    ) {
-      const owner =
-        updatedCard.assigned_agent_id ??
-        (
-          tdb(req)
-            .prepare(`SELECT agent_id FROM ai_projects WHERE id = ?`)
-            .get(updatedCard.project_id) as { agent_id: string | null } | undefined
-        )?.agent_id ??
-        "intelligence";
-      bus.emit("card_completed", { cardId: updatedCard.id, agentId: owner });
-    }
-    // Live ping so in-chat Active-Work panels reflect phase/status moves at once.
-    broadcastCardActivity(req.tenantId, {
-      cardId: req.params.id,
-      agentId: updatedCard?.assigned_agent_id ?? null,
-      reason: "card_updated",
-    });
-    res.json(updatedCard);
-  });
-
-  router.delete("/projects/cards/:id", (req, res) => {
-    tdb(req).prepare(`DELETE FROM ai_project_cards WHERE id = ?`).run(req.params.id);
-    res.json({ ok: true });
   });
 
   router.get("/projects/cards/:id/subtasks", (req, res) => {
@@ -2881,34 +1697,6 @@ export function createAiRouter(
     res.json({ comments: rows });
   });
 
-  router.post("/projects/cards/:id/comments", (req, res) => {
-    const body = String(req.body?.body ?? "").trim();
-    if (!body) {
-      res.status(400).json({ error: "body required" });
-      return;
-    }
-    const author = req.body?.author === "agent" ? "agent" : "user";
-    const id = uuidv4();
-    tdb(req).prepare(
-      `INSERT INTO ai_card_comments (id, card_id, author, body) VALUES (?, ?, ?, ?)`
-    ).run(id, req.params.id, author, body);
-    // Resolve the card's agent/chat so live panels can scope the refetch.
-    const card = tdb(req)
-      .prepare(
-        `SELECT linked_chat_id, assigned_agent_id FROM ai_project_cards WHERE id = ?`
-      )
-      .get(req.params.id) as
-      | { linked_chat_id: string | null; assigned_agent_id: string | null }
-      | undefined;
-    broadcastCardActivity(req.tenantId, {
-      cardId: req.params.id,
-      agentId: card?.assigned_agent_id ?? null,
-      chatId: card?.linked_chat_id ?? null,
-      reason: "comment",
-    });
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_card_comments WHERE id = ?`).get(id));
-  });
-
   router.get("/training/jobs", (req, res) => {
     res.json({ jobs: training.listJobs() });
   });
@@ -2930,34 +1718,8 @@ export function createAiRouter(
     res.json(job);
   });
 
-  router.post("/training/jobs", async (req, res) => {
-    try {
-      const id = await training.startJob(req.body ?? {});
-      res.status(201).json({ id, job: training.getJob(id) });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  router.post("/training/jobs/:id/cancel", (req, res) => {
-    res.json({ ok: training.cancelJob() });
-  });
-
   router.get("/datasets", (req, res) => {
     res.json({ datasets: tdb(req).prepare(`SELECT * FROM ai_datasets ORDER BY updated_at DESC`).all() });
-  });
-
-  router.post("/datasets", (req, res) => {
-    const id = uuidv4();
-    const { name, domain, path, rowCount } = req.body ?? {};
-    if (!name || !path) {
-      res.status(400).json({ error: "name and path required" });
-      return;
-    }
-    tdb(req).prepare(
-      `INSERT INTO ai_datasets (id, name, domain, path, row_count) VALUES (?, ?, ?, ?, ?)`
-    ).run(id, String(name), domain ?? null, String(path), Number(rowCount ?? 0));
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_datasets WHERE id = ?`).get(id));
   });
 
   const VALID_SOURCES: DatasetSource[] = ["chats", "workflows", "queue", "comments"];
@@ -2979,30 +1741,6 @@ export function createAiRouter(
     const limit = Number(req.query.limit ?? 50);
     try {
       res.json(datasetBuilderFor(req).previewSource(source, { limit }));
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/datasets/build", (req, res) => {
-    const { name, domain, source, chatIds, limit } = req.body ?? {};
-    if (!name || !String(name).trim()) {
-      res.status(400).json({ error: "name required" });
-      return;
-    }
-    if (!VALID_SOURCES.includes(source)) {
-      res.status(400).json({ error: "Invalid source" });
-      return;
-    }
-    try {
-      const row = datasetBuilderFor(req).buildDataset({
-        name: String(name),
-        domain: domain ? String(domain) : undefined,
-        source,
-        chatIds: Array.isArray(chatIds) ? chatIds.map(String) : undefined,
-        limit: limit != null ? Number(limit) : undefined,
-      });
-      res.status(201).json(row);
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -3031,98 +1769,6 @@ export function createAiRouter(
       )
       .all(...params);
     res.json({ events });
-  });
-
-  router.post("/calendar/events", (req, res) => {
-    const {
-      agentId,
-      kind,
-      title,
-      description,
-      start_at,
-      end_at,
-      all_day,
-      location,
-      linked_card_id,
-      linked_run_id,
-      status,
-    } = req.body ?? {};
-    if (!title || !String(title).trim() || !start_at || !String(start_at).trim()) {
-      res.status(400).json({ error: "title and start_at required" });
-      return;
-    }
-    const id = uuidv4();
-    const k = CALENDAR_KINDS.has(String(kind)) ? String(kind) : "event";
-    tdb(req).prepare(
-      `INSERT INTO ai_calendar_events
-         (id, agent_id, kind, title, description, start_at, end_at, all_day, location, linked_card_id, linked_run_id, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      String(agentId ?? "intelligence"),
-      k,
-      String(title),
-      description ?? null,
-      String(start_at),
-      end_at ?? null,
-      all_day ? 1 : 0,
-      location ?? null,
-      linked_card_id ?? null,
-      linked_run_id ?? null,
-      status ? String(status) : "scheduled"
-    );
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_calendar_events WHERE id = ?`).get(id));
-  });
-
-  router.patch("/calendar/events/:id", (req, res) => {
-    const { title, description, start_at, end_at, all_day, location, kind, status } =
-      req.body ?? {};
-    if (title != null) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET title = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(title), req.params.id);
-    }
-    if (description !== undefined) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET description = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(description === null ? null : String(description), req.params.id);
-    }
-    if (start_at != null) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET start_at = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(start_at), req.params.id);
-    }
-    if (end_at !== undefined) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET end_at = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(end_at === null ? null : String(end_at), req.params.id);
-    }
-    if (all_day != null) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET all_day = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(all_day ? 1 : 0, req.params.id);
-    }
-    if (location !== undefined) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET location = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(location === null ? null : String(location), req.params.id);
-    }
-    if (kind != null && CALENDAR_KINDS.has(String(kind))) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET kind = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(kind), req.params.id);
-    }
-    if (status != null) {
-      tdb(req).prepare(
-        `UPDATE ai_calendar_events SET status = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(status), req.params.id);
-    }
-    res.json(tdb(req).prepare(`SELECT * FROM ai_calendar_events WHERE id = ?`).get(req.params.id));
-  });
-
-  router.delete("/calendar/events/:id", (req, res) => {
-    tdb(req).prepare(`DELETE FROM ai_calendar_events WHERE id = ?`).run(req.params.id);
-    res.json({ ok: true });
   });
 
   // Read-only timeline activity derived from real agent work: workflow runs

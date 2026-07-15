@@ -1,5 +1,7 @@
 import type { AiToolDef, ToolMode } from "../services/ai-tools-registry.js";
 import { pluginRuntime } from "./runtime.js";
+import { getCoreDb } from "../core-db.js";
+import { installedPluginIdsForTenant } from "./plugin-install.js";
 
 export interface PluginToolExecContext {
   tenantId?: string;
@@ -35,6 +37,15 @@ export async function executePluginTool(
 ): Promise<unknown | undefined> {
   const def = pluginRuntime.getToolHandler(name);
   if (!def?.handler) return undefined;
+  if (
+    !execCtx?.tenantId ||
+    !def.pluginId ||
+    !installedPluginIdsForTenant(getCoreDb(), execCtx.tenantId).includes(
+      def.pluginId
+    )
+  ) {
+    throw new Error(`Plugin tool is not installed for the active tenant: ${name}`);
+  }
   const ctx = pluginRuntime.buildToolContext({
     tenantId: execCtx?.tenantId,
     userId: execCtx?.userId,
