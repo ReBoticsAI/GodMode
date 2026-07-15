@@ -31,7 +31,253 @@ export function setActiveTenantId(tenantId: string): void {
   writeTenantId(tenantId);
 }
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  details?: unknown;
+  retryable: boolean;
+
+  constructor(
+    status: number,
+    message: string,
+    opts: { code?: string; details?: unknown; retryable?: boolean } = {}
+  ) {
+    super(message);
+    this.status = status;
+    this.code = opts.code;
+    this.details = opts.details;
+    this.retryable = opts.retryable ?? false;
+  }
+}
+
+interface ApiRewrite {
+  path: string;
+  options: RequestInit;
+  transform?: (payload: unknown) => unknown;
+}
+
+function jsonBody(options?: RequestInit): Record<string, unknown> {
+  if (typeof options?.body !== "string") return {};
+  try {
+    const value = JSON.parse(options.body);
+    return value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function structureNodeData(
+  body: Record<string, unknown>,
+  parentId?: string | null
+): Record<string, unknown> {
+  return {
+    id: body.id,
+    parent_id:
+      parentId !== undefined
+        ? parentId
+        : body.parentId === undefined
+          ? undefined
+          : body.parentId,
+    label: body.label,
+    icon: body.icon,
+    segment: body.segment,
+    kind: body.kind ?? body.pageKind,
+    object_type: body.objectType,
+    right_sidebar: body.rightSidebar,
+  };
+}
+
+function kernelizeStructureMutation(
+  path: string,
+  options?: RequestInit
+): ApiRewrite {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (!["POST", "PUT", "DELETE"].includes(method)) {
+    return { path, options: options ?? {} };
+  }
+  const body = jsonBody(options);
+  const request = (nextPath: string, nextMethod: string, data?: unknown) => ({
+    path: nextPath,
+    options: {
+      ...options,
+      method: nextMethod,
+      body: data === undefined ? undefined : JSON.stringify(data),
+    },
+  });
+  let match: RegExpMatchArray | null;
+
+  if (method === "POST" && path === "/departments") {
+    return {
+      ...request("/records/StructureNode", "POST", {
+        data: structureNodeData(body, null),
+      }),
+      transform: (payload) => ({
+        id: body.id,
+        label: body.label,
+        icon: body.icon,
+        ...((payload as { data?: object })?.data ?? {}),
+      }),
+    };
+  }
+  if ((match = path.match(/^\/departments\/([^/]+)$/))) {
+    const id = encodeURIComponent(match[1]!);
+    if (method === "DELETE") {
+      return request(`/records/StructureNode/${id}`, "DELETE");
+    }
+    return {
+      ...request(`/records/StructureNode/${id}`, "PUT", {
+        data: structureNodeData(body),
+      }),
+      transform: () => ({ ok: true }),
+    };
+  }
+  if (
+    method === "POST" &&
+    (match = path.match(/^\/departments\/([^/]+)\/divisions$/))
+  ) {
+    const parent = decodeURIComponent(match[1]!);
+    return {
+      ...request("/records/StructureNode", "POST", {
+        data: structureNodeData(body, parent),
+      }),
+      transform: (payload) => ({
+        id: body.id,
+        label: body.label,
+        icon: body.icon,
+        ...((payload as { data?: object })?.data ?? {}),
+      }),
+    };
+  }
+  if ((match = path.match(/^\/divisions\/([^/]+)\/([^/]+)$/))) {
+    const id = encodeURIComponent(
+      `${decodeURIComponent(match[1]!)}-${decodeURIComponent(match[2]!)}`
+    );
+    if (method === "DELETE") {
+      return request(`/records/StructureNode/${id}`, "DELETE");
+    }
+    return {
+      ...request(`/records/StructureNode/${id}`, "PUT", {
+        data: structureNodeData(body),
+      }),
+      transform: () => ({ ok: true }),
+    };
+  }
+  if (
+    method === "POST" &&
+    (match = path.match(/^\/divisions\/([^/]+)\/([^/]+)\/pages$/))
+  ) {
+    const parent = `${decodeURIComponent(match[1]!)}-${decodeURIComponent(
+      match[2]!
+    )}`;
+    return {
+      ...request("/records/StructureNode", "POST", {
+        data: structureNodeData(body, parent),
+      }),
+      transform: (payload) => ({
+        id: body.id,
+        ...((payload as { data?: object })?.data ?? {}),
+      }),
+    };
+  }
+  if ((match = path.match(/^\/pages\/([^/]+)\/([^/]+)\/([^/]+)$/))) {
+    const id = encodeURIComponent(
+      `${decodeURIComponent(match[1]!)}-${decodeURIComponent(
+        match[2]!
+      )}-${decodeURIComponent(match[3]!)}`
+    );
+    if (method === "DELETE") {
+      return request(`/records/StructureNode/${id}`, "DELETE");
+    }
+    return {
+      ...request(`/records/StructureNode/${id}`, "PUT", {
+        data: structureNodeData(body),
+      }),
+      transform: () => ({ ok: true }),
+    };
+  }
+  if (method === "POST" && path === "/nodes") {
+    return {
+      ...request("/records/StructureNode", "POST", {
+        data: structureNodeData(body),
+      }),
+      transform: (payload) => {
+        const row = payload as { id?: string; data?: Record<string, unknown> };
+        return {
+          id: row.id,
+          parentId: row.data?.parent_id ?? null,
+          label: row.data?.label,
+          icon: row.data?.icon,
+          segment: row.data?.segment,
+          kind: row.data?.kind,
+          objectType: row.data?.object_type ?? null,
+          rightSidebar: row.data?.right_sidebar ?? null,
+          agentId: row.data?.agent_id ?? null,
+          builtIn: row.data?.built_in,
+          sortOrder: row.data?.sort_order,
+          tabs: row.data?.tabs_json,
+          path: row.data?.path,
+        };
+      },
+    };
+  }
+  if ((match = path.match(/^\/nodes\/([^/]+)$/))) {
+    const id = encodeURIComponent(decodeURIComponent(match[1]!));
+    if (method === "DELETE") {
+      return request(`/records/StructureNode/${id}`, "DELETE");
+    }
+    return {
+      ...request(`/records/StructureNode/${id}`, "PUT", {
+        data: structureNodeData(body),
+      }),
+      transform: () => ({ ok: true }),
+    };
+  }
+  if ((match = path.match(/^\/nodes\/([^/]+)\/agent$/))) {
+    const id = encodeURIComponent(decodeURIComponent(match[1]!));
+    return {
+      ...request(
+        `/records/StructureNode/${id}/actions/set_agent`,
+        "POST",
+        {
+          agent_id: method === "DELETE" ? null : (body.agentId ?? null),
+        }
+      ),
+      transform: () => ({ ok: true }),
+    };
+  }
+  if (method === "POST" && path === "/structure/reorder") {
+    let parentId = body.parentId;
+    let orderedIds = Array.isArray(body.orderedIds) ? body.orderedIds : [];
+    if (parentId === undefined) {
+      parentId =
+        body.kind === "department"
+          ? null
+          : body.kind === "division"
+            ? body.departmentId
+            : `${body.departmentId}-${body.divisionId}`;
+      if (typeof parentId === "string" && body.kind !== "department") {
+        orderedIds = orderedIds.map((id) =>
+          String(id).startsWith(`${parentId}-`) ? id : `${parentId}-${id}`
+        );
+      }
+    }
+    return {
+      ...request("/records/StructureNode/actions/reorder", "POST", {
+        parent_id: parentId,
+        ordered_ids: orderedIds,
+      }),
+      transform: () => ({ ok: true }),
+    };
+  }
+  return { path, options: options ?? {} };
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  const rewritten = kernelizeStructureMutation(path, options);
+  path = rewritten.path;
+  options = rewritten.options;
   const tenantId = getActiveTenantId();
   const { headers: callerHeaders, ...rest } = options ?? {};
   const headers = new Headers(callerHeaders);
@@ -56,10 +302,30 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     if (res.status === 401) clearSessionToken();
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? res.statusText);
+    const payload = await res.json().catch(() => ({ error: res.statusText }));
+    const error = (payload as { error?: unknown }).error;
+    if (error && typeof error === "object") {
+      const structured = error as {
+        code?: string;
+        message?: string;
+        details?: unknown;
+        retryable?: boolean;
+      };
+      throw new ApiError(res.status, structured.message ?? res.statusText, {
+        code: structured.code,
+        details: structured.details,
+        retryable: structured.retryable,
+      });
+    }
+    throw new ApiError(
+      res.status,
+      typeof error === "string" ? error : res.statusText
+    );
   }
-  return res.json() as Promise<T>;
+  const payload = await res.json();
+  return (rewritten.transform
+    ? rewritten.transform(payload)
+    : payload) as T;
 }
 
 export interface SessionStatus {
@@ -88,6 +354,7 @@ export interface PlaybookSignalRow {
   signalId: string;
   value: number;
   kind: string;
+  objectType: string | null;
   chart: number | null;
   ts: string | null;
   metadataJson: string | null;
@@ -2074,6 +2341,7 @@ export interface StructureNodeDto {
   segment: string;
   path: string;
   kind: string;
+  objectType: string | null;
   rightSidebar: string | null;
   agentId: string | null;
   builtIn: boolean;
@@ -2089,11 +2357,41 @@ export async function createStructureNode(body: {
   segment?: string;
   kind?: string;
   rightSidebar?: string | null;
+  objectType?: string | null;
 }) {
-  return api<StructureNodeDto>("/nodes", {
+  const row = await api<{
+    id: string;
+    data: Record<string, unknown>;
+  }>("/records/StructureNode", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      data: {
+        id: body.id,
+        parent_id: body.parentId ?? null,
+        label: body.label,
+        icon: body.icon ?? "folder",
+        segment: body.segment,
+        kind: body.kind,
+        right_sidebar: body.rightSidebar,
+        object_type: body.objectType,
+      },
+    }),
   });
+  return {
+    id: row.id,
+    parentId: (row.data.parent_id as string | null) ?? null,
+    label: String(row.data.label ?? ""),
+    icon: String(row.data.icon ?? "folder"),
+    segment: String(row.data.segment ?? ""),
+    path: String(row.data.path ?? ""),
+    kind: String(row.data.kind ?? "placeholder"),
+    objectType: (row.data.object_type as string | null) ?? null,
+    rightSidebar: (row.data.right_sidebar as string | null) ?? null,
+    agentId: (row.data.agent_id as string | null) ?? null,
+    builtIn: Boolean(row.data.built_in),
+    sortOrder: Number(row.data.sort_order ?? 0),
+    children: [],
+  } satisfies StructureNodeDto;
 }
 
 export async function updateStructureNode(
@@ -2105,16 +2403,34 @@ export async function updateStructureNode(
     kind?: string;
     rightSidebar?: string | null;
     parentId?: string | null;
+    objectType?: string | null;
   }
 ) {
-  return api<{ ok: boolean }>(`/nodes/${id}`, {
+  return api(`/records/StructureNode/${encodeURIComponent(id)}`, {
     method: "PUT",
-    body: JSON.stringify(patch),
+    body: JSON.stringify({
+      data: {
+        ...(patch.label !== undefined ? { label: patch.label } : {}),
+        ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+        ...(patch.segment !== undefined ? { segment: patch.segment } : {}),
+        ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
+        ...(patch.rightSidebar !== undefined
+          ? { right_sidebar: patch.rightSidebar }
+          : {}),
+        ...(patch.parentId !== undefined ? { parent_id: patch.parentId } : {}),
+        ...(patch.objectType !== undefined
+          ? { object_type: patch.objectType }
+          : {}),
+      },
+    }),
   });
 }
 
 export async function deleteStructureNode(id: string) {
-  return api<{ ok: boolean }>(`/nodes/${id}`, { method: "DELETE" });
+  return api<{ ok: boolean }>(
+    `/records/StructureNode/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
 }
 
 /** Move a node under a new parent (or to top-level with `null`). */

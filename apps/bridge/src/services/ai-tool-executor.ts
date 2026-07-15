@@ -19,8 +19,15 @@ import { runSubagent } from "./agents/runner.js";
 import { runCursorAgent } from "./agents/cursor-backend.js";
 import { buildContractorContextBundle } from "./contractor-context.js";
 import { createAgent, getAgent, listAgents } from "./agents/agents-db.js";
-import { setNodeAgent } from "./structure.js";
-import { isValidPageKind } from "./page-kinds.js";
+import { objectTypeAutoToolDefs } from "../kernel/auto-tools.js";
+import type { OperationContext } from "../kernel/adapter-registry.js";
+import {
+  executeKernelTool,
+  isKernelToolName,
+  KernelError,
+  objectTypeForKernelTool,
+} from "../kernel/tool-exec.js";
+import { isRegisteredPageKind } from "../kernel/kind-registry.js";
 import { getCoreDb } from "../core-db.js";
 import { broadcastCardActivity } from "../ws-broker.js";
 import {
@@ -121,6 +128,7 @@ import { installCatalogEntry } from "./marketplace-catalog.js";
 import {
   listAvailablePlugins,
   listInstalledPlugins,
+  installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
 import { activatePluginForTenant } from "../plugins/activate-plugin.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
@@ -166,6 +174,8 @@ export interface ToolExecContext {
   sessionAutonomy?: import("./agents/agents-db.js").CodeAutonomyLevel;
   /** Active tool call id for streaming terminal output. */
   activeToolCallId?: string;
+  /** The agent backend's confirmation policy approved this exact tool call. */
+  confirmationApproved?: boolean;
   onTerminalOutput?: (chunk: {
     stream: "stdout" | "stderr";
     text: string;
@@ -183,9 +193,44 @@ function pluginExecCtx(ctx: ToolExecContext): PluginToolExecContext {
   };
 }
 
+function kernelOperationContext(ctx: ToolExecContext): OperationContext {
+  return {
+    tenantId: ctx.tenantId,
+    userId: ctx.userId,
+    role:
+      (ctx.activeAgentId ?? "intelligence") === "intelligence"
+        ? "intelligence"
+        : "editor",
+    agentId: ctx.activeAgentId ?? "intelligence",
+    source: "agent",
+    requestId: ctx.activeToolCallId,
+    idempotencyKey: ctx.activeToolCallId,
+    trustedConfirmation: ctx.confirmationApproved === true,
+    installedPluginIds: new Set(
+      ctx.tenantId
+        ? installedPluginIdsForTenant(getCoreDb(), ctx.tenantId)
+        : []
+    ),
+  };
+}
+
 function toolMode(name: string): "auto" | "confirm" | null {
   const core = AI_TOOL_REGISTRY.find((t) => t.name === name);
   if (core) return core.mode;
+  if (isKernelToolName(name)) {
+    if (
+      name.startsWith("create_") ||
+      name.startsWith("update_") ||
+      name.startsWith("delete_")
+    ) {
+      return "confirm";
+    }
+    const auto = objectTypeAutoToolDefs(
+      new Set(AI_TOOL_REGISTRY.map((t) => t.name))
+    ).find((t) => t.name === name);
+    if (auto) return auto.mode;
+    return "auto";
+  }
   const plugin = pluginToolsAsAiDefs().find((t) => t.name === name);
   return plugin ? plugin.mode : null;
 }
@@ -1381,11 +1426,16 @@ export async function executeTool(
     }
     /* -------------------- Platform Builder: Structure (Phase A) ---------- */
     case "list_structure":
-      return bridgeFetch(ctx, "/structure", tenantInit(ctx, "GET"));
+      return executeKernelTool(
+        ctx.db,
+        "list_records",
+        { objectType: "StructureNode" },
+        kernelOperationContext(ctx)
+      );
     case "create_department": {
       const kind =
         args.kind != null ? String(args.kind) : undefined;
-      if (kind && !isValidPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
+      if (kind && !isRegisteredPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
       const body = {
         id: String(args.id ?? ""),
         parentId: null,
@@ -1394,14 +1444,30 @@ export async function executeTool(
         kind,
       };
       return runPlatform(ctx, "create_department", undefined, body, () =>
-        bridgeFetch(ctx, "/nodes", tenantInit(ctx, "POST", body))
+        Promise.resolve(
+          executeKernelTool(
+            ctx.db,
+            "create_record",
+            {
+              objectType: "StructureNode",
+              data: {
+                id: body.id,
+                parent_id: null,
+                label: body.label,
+                icon: body.icon,
+                kind: body.kind,
+              },
+            },
+            kernelOperationContext(ctx)
+          )
+        )
       );
     }
     case "create_division": {
       const departmentId = String(args.departmentId ?? "");
       const kind =
         args.kind != null ? String(args.kind) : undefined;
-      if (kind && !isValidPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
+      if (kind && !isRegisteredPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
       const body = {
         id: String(args.id ?? ""),
         parentId: departmentId,
@@ -1412,7 +1478,25 @@ export async function executeTool(
         segment: args.segment != null ? String(args.segment) : undefined,
       };
       return runPlatform(ctx, "create_division", { departmentId }, body, () =>
-        bridgeFetch(ctx, "/nodes", tenantInit(ctx, "POST", body))
+        Promise.resolve(
+          executeKernelTool(
+            ctx.db,
+            "create_record",
+            {
+              objectType: "StructureNode",
+              data: {
+                id: body.id,
+                parent_id: body.parentId,
+                label: body.label,
+                icon: body.icon,
+                right_sidebar: body.rightSidebar,
+                kind: body.kind,
+                segment: body.segment,
+              },
+            },
+            kernelOperationContext(ctx)
+          )
+        )
       );
     }
     case "create_page": {
@@ -1420,7 +1504,7 @@ export async function executeTool(
       const divisionId = String(args.divisionId ?? "");
       const kind =
         args.kind != null ? String(args.kind) : undefined;
-      if (kind && !isValidPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
+      if (kind && !isRegisteredPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
       const body = {
         id: String(args.id ?? ""),
         parentId: `${departmentId}-${divisionId}`,
@@ -1434,7 +1518,25 @@ export async function executeTool(
         "create_page",
         { departmentId, divisionId },
         body,
-        () => bridgeFetch(ctx, "/nodes", tenantInit(ctx, "POST", body))
+        () =>
+          Promise.resolve(
+            executeKernelTool(
+              ctx.db,
+              "create_record",
+              {
+                objectType: "StructureNode",
+                data: {
+                  id: body.id,
+                  parent_id: body.parentId,
+                  label: body.label,
+                  icon: body.icon,
+                  segment: body.segment,
+                  kind: body.kind,
+                },
+              },
+              kernelOperationContext(ctx)
+            )
+          )
       );
     }
     case "update_structure_node": {
@@ -1449,27 +1551,44 @@ export async function executeTool(
       if (args.rightSidebar != null) patch.rightSidebar = String(args.rightSidebar);
       if (args.kind != null) {
         const kind = String(args.kind);
-        if (!isValidPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
+        if (!isRegisteredPageKind(kind)) throw new Error(`invalid kind: ${kind}`);
         patch.kind = kind;
       }
       let scope: PlatformScope;
-      let path: string;
+      let nodeId: string;
       if (nodeType === "department") {
         scope = { departmentId };
-        path = `/departments/${encodeURIComponent(departmentId)}`;
+        nodeId = departmentId;
       } else if (nodeType === "division") {
         if (!divisionId) throw new Error("divisionId required for division");
         scope = { departmentId, divisionId };
-        path = `/divisions/${encodeURIComponent(departmentId)}/${encodeURIComponent(divisionId)}`;
+        nodeId = `${departmentId}-${divisionId}`;
       } else if (nodeType === "page") {
         if (!divisionId || !pageId) throw new Error("divisionId and pageId required for page");
         scope = { departmentId, divisionId, pageId };
-        path = `/pages/${encodeURIComponent(departmentId)}/${encodeURIComponent(divisionId)}/${encodeURIComponent(pageId)}`;
+        nodeId = `${departmentId}-${divisionId}-${pageId}`;
       } else {
         throw new Error(`invalid nodeType: ${nodeType}`);
       }
       return runPlatform(ctx, "update_structure_node", scope, { nodeType, patch }, () =>
-        bridgeFetch(ctx, path, tenantInit(ctx, "PUT", patch))
+        Promise.resolve(
+          executeKernelTool(
+            ctx.db,
+            "update_record",
+            {
+              objectType: "StructureNode",
+              id: nodeId,
+              data: {
+                label: patch.label,
+                icon: patch.icon,
+                segment: patch.segment,
+                kind: patch.kind,
+                right_sidebar: patch.rightSidebar,
+              },
+            },
+            kernelOperationContext(ctx)
+          )
+        )
       );
     }
     case "delete_structure_node": {
@@ -1478,23 +1597,30 @@ export async function executeTool(
       const divisionId = args.divisionId != null ? String(args.divisionId) : undefined;
       const pageId = args.pageId != null ? String(args.pageId) : undefined;
       let scope: PlatformScope;
-      let path: string;
+      let nodeId: string;
       if (nodeType === "department") {
         scope = { departmentId };
-        path = `/departments/${encodeURIComponent(departmentId)}`;
+        nodeId = departmentId;
       } else if (nodeType === "division") {
         if (!divisionId) throw new Error("divisionId required for division");
         scope = { departmentId, divisionId };
-        path = `/divisions/${encodeURIComponent(departmentId)}/${encodeURIComponent(divisionId)}`;
+        nodeId = `${departmentId}-${divisionId}`;
       } else if (nodeType === "page") {
         if (!divisionId || !pageId) throw new Error("divisionId and pageId required for page");
         scope = { departmentId, divisionId, pageId };
-        path = `/pages/${encodeURIComponent(departmentId)}/${encodeURIComponent(divisionId)}/${encodeURIComponent(pageId)}`;
+        nodeId = `${departmentId}-${divisionId}-${pageId}`;
       } else {
         throw new Error(`invalid nodeType: ${nodeType}`);
       }
       return runPlatform(ctx, "delete_structure_node", scope, { nodeType }, () =>
-        bridgeFetch(ctx, path, tenantInit(ctx, "DELETE"))
+        Promise.resolve(
+          executeKernelTool(
+            ctx.db,
+            "delete_record",
+            { objectType: "StructureNode", id: nodeId },
+            kernelOperationContext(ctx)
+          )
+        )
       );
     }
     case "assign_agent": {
@@ -1568,10 +1694,20 @@ export async function executeTool(
         "attach_node_agent",
         scope,
         { nodeId, agentId },
-        () => {
-          setNodeAgent(ctx.db, nodeId, agentId);
-          return Promise.resolve({ ok: true, nodeId, agentId });
-        }
+        () =>
+          Promise.resolve(
+            executeKernelTool(
+              ctx.db,
+              "run_record_action",
+              {
+                objectType: "StructureNode",
+                id: nodeId,
+                action: "set_agent",
+                input: { agent_id: agentId },
+              },
+              kernelOperationContext(ctx)
+            )
+          )
       );
     }
 
@@ -2456,6 +2592,58 @@ export async function executeTool(
     }
 
     default: {
+      if (isKernelToolName(name)) {
+        try {
+          const installedPluginIds = new Set(
+            ctx.tenantId
+              ? installedPluginIdsForTenant(getCoreDb(), ctx.tenantId)
+              : []
+          );
+          const runKernel = () =>
+            Promise.resolve(
+              executeKernelTool(
+                ctx.db,
+                name,
+                args,
+                {
+                  ...kernelOperationContext(ctx),
+                  installedPluginIds,
+                }
+              )
+            );
+          const objectType = objectTypeForKernelTool(name, args);
+          const isMutation =
+            name.startsWith("create_") ||
+            name.startsWith("update_") ||
+            name.startsWith("delete_");
+          if (objectType === "StructureNode" && isMutation) {
+            const data =
+              args.data && typeof args.data === "object"
+                ? (args.data as Record<string, unknown>)
+                : args;
+            const parentId =
+              data.parent_id != null ? String(data.parent_id) : undefined;
+            const targetId = args.id != null ? String(args.id) : undefined;
+            const scopeId = parentId ?? targetId;
+            const departmentId = scopeId?.split("-")[0];
+            const scope = departmentId ? { departmentId } : undefined;
+            const result = await runPlatform(
+              ctx,
+              name,
+              scope,
+              args,
+              runKernel
+            );
+            if (result !== undefined) return result;
+          } else {
+            const result = await runKernel();
+            if (result !== undefined) return result;
+          }
+        } catch (err) {
+          if (err instanceof KernelError) throw new Error(err.message);
+          throw err;
+        }
+      }
       if (isPluginToolName(name)) {
         const result = await executePluginTool(name, args, pluginExecCtx(ctx));
         if (result !== undefined) return result;

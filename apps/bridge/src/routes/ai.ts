@@ -58,7 +58,19 @@ import {
   HISTORY_CHAR_BUDGET_RATIO,
   type HistoryTurn,
 } from "../services/chat-history.js";
-import type { AiScheduler } from "../services/ai-scheduler.js";
+import {
+  createSchedule,
+  deleteSchedule,
+  listSchedules,
+  updateSchedule,
+  type AiScheduler,
+} from "../services/ai-scheduler.js";
+import {
+  createWorkflow,
+  listWorkflows,
+  updateWorkflow,
+  type AiWorkflow,
+} from "../services/ai-workflows.js";
 import type { AiQueueWorker } from "../services/ai-queue-worker.js";
 import { AUTONOMOUS_RUNNER_ID } from "../services/ai-queue-worker.js";
 import type { AiTrainingManager } from "../services/ai-training-manager.js";
@@ -2366,46 +2378,49 @@ export function createAiRouter(
     res.json({ ok: true });
   });
 
+  const workflowApiRow = (workflow: AiWorkflow) => ({
+    id: workflow.id,
+    agent_id: workflow.agent_id,
+    name: workflow.name,
+    config_json: JSON.stringify(workflow.config),
+    enabled: workflow.enabled,
+    created_at: workflow.created_at,
+    updated_at: workflow.updated_at,
+  });
+
   router.get("/workflows", (req, res) => {
     const agentId = String(req.query.agentId ?? "intelligence");
     res.json({
-      workflows: tdb(req)
-        .prepare(`SELECT * FROM ai_workflows WHERE agent_id = ? ORDER BY updated_at DESC`)
-        .all(agentId),
+      workflows: listWorkflows(tdb(req))
+        .filter((workflow) => workflow.agent_id === agentId)
+        .map(workflowApiRow),
     });
   });
 
   router.post("/workflows", (req, res) => {
-    const id = uuidv4();
     const name = String(req.body?.name ?? "Workflow");
     const agentId = String(req.body?.agentId ?? req.query.agentId ?? "intelligence");
     const config = req.body?.config ?? { nodes: [], edges: [] };
-    tdb(req).prepare(
-      `INSERT INTO ai_workflows (id, name, config_json, agent_id) VALUES (?, ?, ?, ?)`
-    ).run(id, name, JSON.stringify(config), agentId);
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_workflows WHERE id = ?`).get(id));
+    const workflow = createWorkflow(tdb(req), {
+      name,
+      agentId,
+      config,
+    });
+    res.status(201).json(workflowApiRow(workflow));
   });
 
   router.put("/workflows/:id", (req, res) => {
     const { name, config, enabled } = req.body ?? {};
-    if (name != null) {
-      tdb(req).prepare(`UPDATE ai_workflows SET name = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        String(name),
-        req.params.id
-      );
+    const workflow = updateWorkflow(tdb(req), req.params.id, {
+      name: name == null ? undefined : String(name),
+      config: config ?? undefined,
+      enabled: enabled == null ? undefined : Boolean(enabled),
+    });
+    if (!workflow) {
+      res.status(404).json({ error: "Workflow not found" });
+      return;
     }
-    if (config != null) {
-      tdb(req).prepare(
-        `UPDATE ai_workflows SET config_json = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(JSON.stringify(config), req.params.id);
-    }
-    if (enabled != null) {
-      tdb(req).prepare(`UPDATE ai_workflows SET enabled = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        enabled ? 1 : 0,
-        req.params.id
-      );
-    }
-    res.json(tdb(req).prepare(`SELECT * FROM ai_workflows WHERE id = ?`).get(req.params.id));
+    res.json(workflowApiRow(workflow));
   });
 
   // Delete a workflow and detach anything that references it so no dangling
@@ -2568,52 +2583,44 @@ export function createAiRouter(
   });
 
   router.get("/schedules", (req, res) => {
-    res.json({ schedules: tdb(req).prepare(`SELECT * FROM ai_schedules ORDER BY created_at DESC`).all() });
+    res.json({ schedules: listSchedules(tdb(req)) });
   });
 
   router.post("/schedules", (req, res) => {
-    const id = uuidv4();
     const { workflowId, cronExpr, timezone, enabled } = req.body ?? {};
     if (!workflowId || !cronExpr) {
       res.status(400).json({ error: "workflowId and cronExpr required" });
       return;
     }
-    tdb(req).prepare(
-      `INSERT INTO ai_schedules (id, workflow_id, cron_expr, timezone, enabled)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      String(workflowId),
-      String(cronExpr),
-      timezone ? String(timezone) : "America/Denver",
-      enabled === false ? 0 : 1
-    );
+    const schedule = createSchedule(tdb(req), {
+      workflowId: String(workflowId),
+      cronExpr: String(cronExpr),
+      timezone: timezone ? String(timezone) : undefined,
+      enabled: enabled == null ? undefined : Boolean(enabled),
+    });
     scheduler.reload();
-    res.status(201).json(tdb(req).prepare(`SELECT * FROM ai_schedules WHERE id = ?`).get(id));
+    res.status(201).json(schedule);
   });
 
   router.put("/schedules/:id", (req, res) => {
     const { cronExpr, timezone, enabled } = req.body ?? {};
-    if (cronExpr != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET cron_expr = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(cronExpr), req.params.id);
-    if (timezone != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET timezone = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(String(timezone), req.params.id);
-    if (enabled != null)
-      tdb(req).prepare(
-        `UPDATE ai_schedules SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(enabled ? 1 : 0, req.params.id);
+    const schedule = updateSchedule(tdb(req), req.params.id, {
+      cronExpr: cronExpr == null ? undefined : String(cronExpr),
+      timezone: timezone == null ? undefined : String(timezone),
+      enabled: enabled == null ? undefined : Boolean(enabled),
+    });
+    if (!schedule) {
+      res.status(404).json({ error: "Schedule not found" });
+      return;
+    }
     scheduler.reload();
-    res.json(tdb(req).prepare(`SELECT * FROM ai_schedules WHERE id = ?`).get(req.params.id));
+    res.json(schedule);
   });
 
   router.delete("/schedules/:id", (req, res) => {
-    const r = tdb(req).prepare(`DELETE FROM ai_schedules WHERE id = ?`).run(req.params.id);
+    const deleted = deleteSchedule(tdb(req), req.params.id);
     scheduler.reload();
-    res.json({ ok: r.changes > 0 });
+    res.json({ ok: deleted });
   });
 
   // Resolve (or lazily create) the single board project owned by an agent. The

@@ -471,6 +471,7 @@ export function migrateTenantDb(db: Database.Database): void {
       icon          TEXT NOT NULL,
       segment       TEXT NOT NULL DEFAULT '',
       kind          TEXT NOT NULL DEFAULT 'placeholder',
+      object_type   TEXT,
       right_sidebar TEXT,
       agent_id      TEXT,
       built_in      INTEGER NOT NULL DEFAULT 0,
@@ -481,6 +482,12 @@ export function migrateTenantDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS structure_nodes_by_parent
       ON structure_nodes(parent_id, sort_order);
   `);
+
+  try {
+    db.exec(`ALTER TABLE structure_nodes ADD COLUMN object_type TEXT`);
+  } catch {
+    /* already migrated */
+  }
 
   migrateTradeMirrorSchema(db);
   migrateUnifiedDataSchema(db);
@@ -1637,6 +1644,40 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS platform_action_log_by_ts
       ON platform_action_log(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS kernel_action_idempotency (
+      key TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      object_type TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      action_name TEXT NOT NULL,
+      input_hash TEXT NOT NULL,
+      status TEXT NOT NULL,
+      result_json TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (key, actor_id, object_type, record_id, action_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS kernel_operation_runs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT,
+      actor_id TEXT NOT NULL,
+      object_type TEXT NOT NULL,
+      record_id TEXT,
+      action_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      progress REAL,
+      result_json TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS kernel_operation_runs_status
+      ON kernel_operation_runs(status, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS bank_ledger_entries (
       id TEXT PRIMARY KEY,

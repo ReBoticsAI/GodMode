@@ -11,6 +11,11 @@ import {
 } from "@godmode/plugin-api";
 import { getCoreDb } from "../core-db.js";
 import { pluginRuntime } from "./runtime.js";
+import { registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
+import {
+  listObjectTypes,
+  replaceObjectTypesByPlugin,
+} from "../kernel/registry.js";
 
 const hostRequire = createRequire(import.meta.url);
 
@@ -150,7 +155,16 @@ export async function loadPluginsFromEnv(): Promise<LoadPluginsResult> {
     try {
       const manifest = readGodmodePluginManifest(pluginRoot);
       assertEngineCompatible(manifest);
+      registerPluginObjectTypes(manifest);
       if (!manifest.bridge?.entry) {
+        if ((manifest.objectTypes?.length ?? 0) > 0 || (manifest.records?.length ?? 0) > 0) {
+          pluginRuntime.registerManifestOnly(manifest, pluginRoot);
+          loaded.push(manifest.id);
+          console.log(
+            `[plugins] registered ObjectTypes for ${manifest.name} (${manifest.id}) from ${pluginRoot}`
+          );
+          continue;
+        }
         errors.push({ path: pluginRoot, error: "manifest missing bridge.entry" });
         continue;
       }
@@ -180,23 +194,38 @@ export async function loadPluginFromRoot(
 ): Promise<{ pluginId: string; pluginRoot: string; reloaded: boolean }> {
   const manifest = readGodmodePluginManifest(pluginRoot);
   assertEngineCompatible(manifest);
-  if (!manifest.bridge?.entry) {
-    throw new Error("manifest missing bridge.entry");
-  }
-
   const already = pluginRuntime.hasPlugin(manifest.id);
-  const shouldReload = already && (opts?.reload !== false);
+  const shouldReload = already && opts?.reload !== false;
   if (already && !shouldReload) {
     return { pluginId: manifest.id, pluginRoot, reloaded: false };
   }
-  if (already) {
-    pluginRuntime.unregister(manifest.id);
+  const previousDefs = listObjectTypes().filter(
+    (def) => def.pluginId === manifest.id
+  );
+  registerPluginObjectTypes(manifest);
+  if (!manifest.bridge?.entry) {
+    if ((manifest.objectTypes?.length ?? 0) > 0 || (manifest.records?.length ?? 0) > 0) {
+      pluginRuntime.registerManifestOnly(manifest, pluginRoot);
+      console.log(
+        `[plugins] registered ObjectTypes for ${manifest.name} (${manifest.id}) from ${pluginRoot}`
+      );
+      return { pluginId: manifest.id, pluginRoot, reloaded: false };
+    }
+    throw new Error("manifest missing bridge.entry");
   }
 
-  ensureHostGodmodePackageLinks(pluginRoot);
-  const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
-  const registerFn = await importBridgeRegister(entryPath, already);
-  await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
+  try {
+    ensureHostGodmodePackageLinks(pluginRoot);
+    const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
+    const registerFn = await importBridgeRegister(entryPath, already);
+    if (already) {
+      pluginRuntime.unregister(manifest.id);
+    }
+    await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
+  } catch (error) {
+    replaceObjectTypesByPlugin(manifest.id, previousDefs);
+    throw error;
+  }
   console.log(
     `[plugins] runtime-${already ? "reloaded" : "loaded"} ${manifest.name} (${manifest.id}) from ${pluginRoot}`
   );

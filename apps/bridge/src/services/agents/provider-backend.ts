@@ -147,6 +147,7 @@ async function executeOneTool(
     try {
       result = await executeTool(fnName, args, {
         ...toolCtx,
+        confirmationApproved: true,
         activeToolCallId: tc.id,
         onTerminalOutput: req.onTerminalOutput
           ? (chunk) => req.onTerminalOutput!(tc.id, chunk)

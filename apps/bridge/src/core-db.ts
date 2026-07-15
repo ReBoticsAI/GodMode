@@ -743,30 +743,37 @@ function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
     name: string;
   }>;
   const has = (name: string) => cols.some((c) => c.name === name);
+  const add = (sql: string) => {
+    try {
+      db.exec(sql);
+    } catch (error) {
+      if (!/duplicate column name/i.test(String(error))) throw error;
+    }
+  };
   if (!has("delivery_mode")) {
-    db.exec(
+    add(
       "ALTER TABLE marketplace_listings ADD COLUMN delivery_mode TEXT NOT NULL DEFAULT 'clone'"
     );
   }
   if (!has("pricing_model")) {
-    db.exec(
+    add(
       "ALTER TABLE marketplace_listings ADD COLUMN pricing_model TEXT NOT NULL DEFAULT 'one_time'"
     );
   }
   if (!has("price_period")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN price_period TEXT");
+    add("ALTER TABLE marketplace_listings ADD COLUMN price_period TEXT");
   }
   if (!has("meter_unit")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN meter_unit TEXT");
+    add("ALTER TABLE marketplace_listings ADD COLUMN meter_unit TEXT");
   }
   if (!has("meter_rate")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN meter_rate INTEGER");
+    add("ALTER TABLE marketplace_listings ADD COLUMN meter_rate INTEGER");
   }
   if (!has("license")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN license TEXT");
+    add("ALTER TABLE marketplace_listings ADD COLUMN license TEXT");
   }
   if (!has("inference_endpoint_id")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN inference_endpoint_id TEXT");
+    add("ALTER TABLE marketplace_listings ADD COLUMN inference_endpoint_id TEXT");
   }
 }
 
@@ -864,15 +871,21 @@ function ensureDmMembersAgentFkFix(db: CoreDatabase): void {
  * Internal wiki slugs are unique per tenant; external slugs stay globally unique.
  */
 function ensureWikiPerTenantSlugIndexes(db: CoreDatabase): void {
-  const migrated = db
-    .prepare(
-      `SELECT 1 FROM sqlite_master WHERE type='index' AND name='wiki_pages_tenant_visibility_slug_idx'`
-    )
-    .get();
-  if (migrated) return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const migrated = db
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type='index' AND name='wiki_pages_tenant_visibility_slug_idx'`
+      )
+      .get();
+    if (migrated) {
+      db.exec("COMMIT");
+      return;
+    }
 
-  db.exec(`
-    CREATE TABLE wiki_pages__migrated (
+    db.exec(`
+      DROP TABLE IF EXISTS wiki_pages__migrated;
+      CREATE TABLE wiki_pages__migrated (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       space TEXT,
@@ -894,9 +907,14 @@ function ensureWikiPerTenantSlugIndexes(db: CoreDatabase): void {
       ON wiki_pages(tenant_id, visibility, updated_at DESC);
     CREATE UNIQUE INDEX wiki_pages_tenant_visibility_slug_idx
       ON wiki_pages(tenant_id, visibility, slug);
-    CREATE UNIQUE INDEX wiki_pages_external_slug_idx
-      ON wiki_pages(slug) WHERE visibility = 'external';
-  `);
+      CREATE UNIQUE INDEX wiki_pages_external_slug_idx
+        ON wiki_pages(slug) WHERE visibility = 'external';
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 /** Wiki hybrid RAG (FTS + embeddings) and staged synthesize proposals. */

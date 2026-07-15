@@ -165,6 +165,7 @@ function buildCustomTools(
         try {
           const result = await executeTool(name, args as Record<string, unknown>, {
             ...toolCtx,
+            confirmationApproved: true,
             activeToolCallId: context.toolCallId,
             onTerminalOutput: req.onTerminalOutput
               ? (chunk) =>

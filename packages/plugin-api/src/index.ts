@@ -1,5 +1,6 @@
 export {
   type GodmodePluginManifest,
+  type PluginRecordSeed,
   manifestPath,
   parseGodmodePluginManifest,
   readGodmodePluginManifest,
@@ -19,6 +20,10 @@ export {
   type PluginTenantContext,
   type PluginToolDef,
   type PluginToolHandler,
+  type PluginRecordContext,
+  type PluginRecordQuery,
+  type PluginRecordAdapter,
+  type PluginRegistration,
 } from "./bridge-api.js";
 
 export {

@@ -14,6 +14,8 @@ export const PAGE_KINDS = [
   "backtest",
   "placeholder",
   "home",
+  "record-list",
+  "record-form",
   "sierra-dashboard-group",
   "sierra-trading-plan-group",
   "sierra-playbooks-group",

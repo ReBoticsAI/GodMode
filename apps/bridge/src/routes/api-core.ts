@@ -8,23 +8,9 @@ import { getTimeseriesStore } from "../services/timeseries-store.js";
 import { requirePlatformAdmin } from "../services/auth/middleware.js";
 import type { AppDatabase } from "../db.js";
 import {
-  createDepartment,
-  createDivision,
-  createNode,
-  createPage,
-  deleteDepartment,
-  deleteDivision,
-  deleteNode,
-  deletePage,
   readStructure,
-  reorder,
-  reorderNodes,
-  setNodeAgent,
+  structureNodesToLegacy,
   StructureError,
-  updateDepartment,
-  updateDivision,
-  updateNode,
-  updatePage,
   type ReorderKind,
 } from "../services/structure.js";
 import {
@@ -32,6 +18,15 @@ import {
   writeStructureGraphLayout,
 } from "../services/structure-graph-service.js";
 import { requireTenantRole } from "../services/auth/middleware.js";
+import {
+  createRecord,
+  deleteRecord,
+  executeCollectionAction,
+  executeRecordAction,
+  KernelError,
+  updateRecord,
+} from "../kernel/record-api.js";
+import type { OperationContext } from "../kernel/adapter-registry.js";
 
 export interface CoreApiDeps {
   bus?: EventEmitter;
@@ -44,6 +39,14 @@ export function createCoreApiRouter(
   const router = Router();
   const tdb = (req: Request): AppDatabase => req.tenantDb ?? operatorDb;
   const requireEditor = requireTenantRole("editor");
+  const kernelContext = (req: Request): OperationContext => ({
+    tenantId: req.tenantId,
+    userId: req.user?.id,
+    isAdmin: req.user?.isAdmin,
+    role: req.tenantRole ?? "viewer",
+    source: "http",
+    bus: deps.bus,
+  });
 
   router.use((req, res, next) => {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
@@ -65,7 +68,7 @@ export function createCoreApiRouter(
     err: unknown,
     res: import("express").Response
   ): void => {
-    if (err instanceof StructureError) {
+    if (err instanceof StructureError || err instanceof KernelError) {
       res.status(err.status).json({ error: err.message });
       return;
     }
@@ -105,12 +108,21 @@ export function createCoreApiRouter(
 
   router.post("/departments", (req, res) => {
     try {
-      const dept = createDepartment(tdb(req), req.body ?? {});
-      deps.bus?.emit("structure.department.created", {
-        departmentId: dept.id,
-        label: dept.label,
-        icon: dept.icon,
-      });
+      const body = req.body ?? {};
+      createRecord(
+        tdb(req),
+        "StructureNode",
+        {
+          id: String(body.id ?? ""),
+          parent_id: null,
+          label: String(body.label ?? ""),
+          icon: String(body.icon ?? ""),
+        },
+        kernelContext(req)
+      );
+      const dept = structureNodesToLegacy(readStructure(tdb(req))).departments.find(
+        (item) => item.id === String(body.id ?? "")
+      );
       res.json(dept);
     } catch (err) {
       handleStructureError(err, res);
@@ -119,8 +131,13 @@ export function createCoreApiRouter(
 
   router.put("/departments/:id", (req, res) => {
     try {
-      updateDepartment(tdb(req), req.params.id, req.body ?? {});
-      deps.bus?.emit("structure.department.updated", { departmentId: req.params.id });
+      updateRecord(
+        tdb(req),
+        "StructureNode",
+        req.params.id,
+        req.body ?? {},
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -129,8 +146,7 @@ export function createCoreApiRouter(
 
   router.delete("/departments/:id", (req, res) => {
     try {
-      deleteDepartment(tdb(req), req.params.id);
-      deps.bus?.emit("structure.department.deleted", { departmentId: req.params.id });
+      deleteRecord(tdb(req), "StructureNode", req.params.id, kernelContext(req));
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -139,11 +155,22 @@ export function createCoreApiRouter(
 
   router.post("/departments/:dept/divisions", (req, res) => {
     try {
-      const div = createDivision(tdb(req), req.params.dept, req.body ?? {});
-      deps.bus?.emit("structure.division.created", {
-        departmentId: req.params.dept,
-        divisionId: div.id,
-      });
+      const body = req.body ?? {};
+      createRecord(
+        tdb(req),
+        "StructureNode",
+        {
+          id: String(body.id ?? ""),
+          parent_id: req.params.dept,
+          label: String(body.label ?? ""),
+          icon: String(body.icon ?? ""),
+          right_sidebar: body.rightSidebar,
+        },
+        kernelContext(req)
+      );
+      const div = structureNodesToLegacy(readStructure(tdb(req)))
+        .departments.find((item) => item.id === req.params.dept)
+        ?.divisions.find((item) => item.id === String(body.id ?? ""));
       res.json(div);
     } catch (err) {
       handleStructureError(err, res);
@@ -152,11 +179,18 @@ export function createCoreApiRouter(
 
   router.put("/divisions/:dept/:id", (req, res) => {
     try {
-      updateDivision(tdb(req), req.params.dept, req.params.id, req.body ?? {});
-      deps.bus?.emit("structure.division.updated", {
-        departmentId: req.params.dept,
-        divisionId: req.params.id,
-      });
+      const body = req.body ?? {};
+      updateRecord(
+        tdb(req),
+        "StructureNode",
+        `${req.params.dept}-${req.params.id}`,
+        {
+          label: body.label,
+          icon: body.icon,
+          right_sidebar: body.rightSidebar,
+        },
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -165,11 +199,12 @@ export function createCoreApiRouter(
 
   router.delete("/divisions/:dept/:id", (req, res) => {
     try {
-      deleteDivision(tdb(req), req.params.dept, req.params.id);
-      deps.bus?.emit("structure.division.deleted", {
-        departmentId: req.params.dept,
-        divisionId: req.params.id,
-      });
+      deleteRecord(
+        tdb(req),
+        "StructureNode",
+        `${req.params.dept}-${req.params.id}`,
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -178,17 +213,24 @@ export function createCoreApiRouter(
 
   router.post("/divisions/:dept/:div/pages", (req, res) => {
     try {
-      const page = createPage(
+      const body = req.body ?? {};
+      createRecord(
         tdb(req),
-        req.params.dept,
-        req.params.div,
-        req.body ?? {}
+        "StructureNode",
+        {
+          id: String(body.id ?? ""),
+          parent_id: `${req.params.dept}-${req.params.div}`,
+          label: String(body.label ?? ""),
+          icon: String(body.icon ?? ""),
+          segment: String(body.segment ?? ""),
+          kind: body.kind ?? body.pageKind,
+        },
+        kernelContext(req)
       );
-      deps.bus?.emit("structure.page.created", {
-        departmentId: req.params.dept,
-        divisionId: req.params.div,
-        pageId: page.id,
-      });
+      const page = structureNodesToLegacy(readStructure(tdb(req)))
+        .departments.find((item) => item.id === req.params.dept)
+        ?.divisions.find((item) => item.id === req.params.div)
+        ?.pages.find((item) => item.id === String(body.id ?? ""));
       res.json(page);
     } catch (err) {
       handleStructureError(err, res);
@@ -197,18 +239,19 @@ export function createCoreApiRouter(
 
   router.put("/pages/:dept/:div/:id", (req, res) => {
     try {
-      updatePage(
+      const body = req.body ?? {};
+      updateRecord(
         tdb(req),
-        req.params.dept,
-        req.params.div,
-        req.params.id,
-        req.body ?? {}
+        "StructureNode",
+        `${req.params.dept}-${req.params.div}-${req.params.id}`,
+        {
+          label: body.label,
+          icon: body.icon,
+          segment: body.segment,
+          kind: body.kind ?? body.pageKind,
+        },
+        kernelContext(req)
       );
-      deps.bus?.emit("structure.page.updated", {
-        departmentId: req.params.dept,
-        divisionId: req.params.div,
-        pageId: req.params.id,
-      });
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -217,12 +260,12 @@ export function createCoreApiRouter(
 
   router.delete("/pages/:dept/:div/:id", (req, res) => {
     try {
-      deletePage(tdb(req), req.params.dept, req.params.div, req.params.id);
-      deps.bus?.emit("structure.page.deleted", {
-        departmentId: req.params.dept,
-        divisionId: req.params.div,
-        pageId: req.params.id,
-      });
+      deleteRecord(
+        tdb(req),
+        "StructureNode",
+        `${req.params.dept}-${req.params.div}-${req.params.id}`,
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -232,9 +275,9 @@ export function createCoreApiRouter(
   router.post("/nodes", (req, res) => {
     try {
       const body = req.body ?? {};
-      const node = createNode(tdb(req), {
+      const node = createRecord(tdb(req), "StructureNode", {
         id: String(body.id ?? ""),
-        parentId:
+        parent_id:
           body.parentId === null || body.parentId === undefined
             ? null
             : String(body.parentId),
@@ -242,11 +285,30 @@ export function createCoreApiRouter(
         icon: String(body.icon ?? ""),
         segment: body.segment != null ? String(body.segment) : undefined,
         kind: body.kind != null ? String(body.kind) : undefined,
-        rightSidebar:
+        object_type:
+          body.objectType === null
+            ? null
+            : body.objectType != null
+              ? String(body.objectType)
+              : undefined,
+        right_sidebar:
           body.rightSidebar != null ? String(body.rightSidebar) : undefined,
+      }, kernelContext(req));
+      res.json({
+        id: node.id,
+        parentId: node.data.parent_id ?? null,
+        label: node.data.label,
+        icon: node.data.icon,
+        segment: node.data.segment,
+        kind: node.data.kind,
+        objectType: node.data.object_type ?? null,
+        rightSidebar: node.data.right_sidebar ?? null,
+        agentId: node.data.agent_id ?? null,
+        builtIn: node.data.built_in,
+        sortOrder: node.data.sort_order,
+        tabs: node.data.tabs_json,
+        path: node.data.path,
       });
-      deps.bus?.emit("structure.node.created", { nodeId: node.id });
-      res.json(node);
     } catch (err) {
       handleStructureError(err, res);
     }
@@ -254,8 +316,22 @@ export function createCoreApiRouter(
 
   router.put("/nodes/:id", (req, res) => {
     try {
-      updateNode(tdb(req), req.params.id, req.body ?? {});
-      deps.bus?.emit("structure.node.updated", { nodeId: req.params.id });
+      const body = req.body ?? {};
+      updateRecord(
+        tdb(req),
+        "StructureNode",
+        req.params.id,
+        {
+          label: body.label,
+          icon: body.icon,
+          segment: body.segment,
+          kind: body.kind,
+          parent_id: body.parentId,
+          object_type: body.objectType,
+          right_sidebar: body.rightSidebar,
+        },
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
@@ -264,67 +340,101 @@ export function createCoreApiRouter(
 
   router.delete("/nodes/:id", (req, res) => {
     try {
-      deleteNode(tdb(req), req.params.id);
-      deps.bus?.emit("structure.node.deleted", { nodeId: req.params.id });
+      deleteRecord(tdb(req), "StructureNode", req.params.id, kernelContext(req));
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
     }
   });
 
-  router.post("/nodes/:id/agent", (req, res) => {
+  router.post("/nodes/:id/agent", async (req, res) => {
     try {
       const agentId =
         req.body?.agentId === null || req.body?.agentId === undefined
           ? null
           : String(req.body.agentId);
-      setNodeAgent(tdb(req), req.params.id, agentId);
+      await executeRecordAction(
+        tdb(req),
+        "StructureNode",
+        req.params.id,
+        "set_agent",
+        { agent_id: agentId },
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
     }
   });
 
-  router.delete("/nodes/:id/agent", (req, res) => {
+  router.delete("/nodes/:id/agent", async (req, res) => {
     try {
-      setNodeAgent(tdb(req), req.params.id, null);
+      await executeRecordAction(
+        tdb(req),
+        "StructureNode",
+        req.params.id,
+        "set_agent",
+        { agent_id: null },
+        kernelContext(req)
+      );
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);
     }
   });
 
-  router.post("/structure/reorder", (req, res) => {
+  router.post("/structure/reorder", async (req, res) => {
     try {
       const body = req.body ?? {};
       const orderedIds = Array.isArray(body.orderedIds)
         ? (body.orderedIds as string[])
         : [];
       if (typeof body.parentId === "string" || body.parentId === null) {
-        reorderNodes(
+        await executeCollectionAction(
           tdb(req),
-          body.parentId === null ? null : String(body.parentId),
-          orderedIds
+          "StructureNode",
+          "reorder",
+          {
+            parent_id:
+              body.parentId === null ? null : String(body.parentId),
+            ordered_ids: orderedIds,
+          },
+          kernelContext(req)
         );
-        deps.bus?.emit("structure.changed", { kind: "reorder" });
         return res.json({ ok: true });
       }
       const kind = body.kind as ReorderKind;
       if (kind !== "department" && kind !== "division" && kind !== "page") {
         return res.status(400).json({ error: "invalid kind" });
       }
-      reorder(
+      const departmentId =
+        typeof body.departmentId === "string" ? body.departmentId : undefined;
+      const divisionId =
+        typeof body.divisionId === "string" ? body.divisionId : undefined;
+      const parentId =
+        kind === "department"
+          ? null
+          : kind === "division"
+            ? departmentId
+            : departmentId && divisionId
+              ? `${departmentId}-${divisionId}`
+              : undefined;
+      if (parentId === undefined) {
+        return res.status(400).json({ error: "parent scope required" });
+      }
+      const normalizedIds =
+        kind === "department"
+          ? orderedIds
+          : orderedIds.map((id) =>
+              id.startsWith(`${parentId}-`) ? id : `${parentId}-${id}`
+            );
+      await executeCollectionAction(
         tdb(req),
-        kind,
-        {
-          departmentId:
-            typeof body.departmentId === "string" ? body.departmentId : undefined,
-          divisionId:
-            typeof body.divisionId === "string" ? body.divisionId : undefined,
-        },
-        orderedIds
+        "StructureNode",
+        "reorder",
+        { parent_id: parentId, ordered_ids: normalizedIds },
+        kernelContext(req)
       );
-      deps.bus?.emit("structure.reordered", { kind });
       res.json({ ok: true });
     } catch (err) {
       handleStructureError(err, res);

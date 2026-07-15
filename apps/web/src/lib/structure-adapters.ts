@@ -42,6 +42,7 @@ function divisionFromNode(node: StructureNode, dept: StructureNode): DivisionNod
     icon: node.icon,
     segment: "",
     kind: node.kind,
+    objectType: node.objectType,
     builtIn: node.builtIn,
     sortOrder: 0,
   };
@@ -51,6 +52,7 @@ function divisionFromNode(node: StructureNode, dept: StructureNode): DivisionNod
     icon: child.icon,
     segment: child.segment,
     kind: child.kind,
+    objectType: child.objectType,
     builtIn: child.builtIn,
     sortOrder: child.sortOrder ?? idx + 1,
   }));

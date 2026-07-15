@@ -19,6 +19,8 @@ import { createSharesRouter } from "./routes/shares.js";
 import { createDmRouter } from "./routes/dm.js";
 import { createUserProductivityRouter } from "./routes/user-productivity.js";
 import { createConnectionsRouter } from "./routes/connections.js";
+import { legacyEndpointTelemetry } from "./services/legacy-endpoint-telemetry.js";
+import { configureRuntimeAdapterServices } from "./kernel/adapters/runtime.js";
 import { createFederationRouter } from "./routes/federation.js";
 import { createInferenceRouter } from "./routes/inference.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
@@ -69,10 +71,19 @@ import { initPluginHost } from "./plugins/plugin-host-bridge.js";
 import { pluginRuntime } from "./plugins/runtime.js";
 import { getPluginHost } from "@godmode/plugin-host";
 import { createCoreApiRouter } from "./routes/api-core.js";
+import {
+  createKernelRouter,
+  createSystemOperationContext,
+  materializeAllNativeTypes,
+  recoverInterruptedOperationRuns,
+  registerCoreObjectTypes,
+  setKernelEventBus,
+} from "./kernel/index.js";
 import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plugins.js";
 import {
   ensureOperatorPluginsInstalled,
   ensureTenantPluginsTable,
+  reconcileInstalledPluginObjectTypes,
   syncInstalledPluginKnowledge,
 } from "./plugins/plugin-install.js";
 
@@ -84,6 +95,9 @@ repairNonOperatorTenantStructure(coreDb);
 removeLegacyLifeDepartmentFromPersonalTenants(coreDb);
 const db: AppDatabase = getTenantDb(operatorTenantId);
 pinTenantDb(operatorTenantId);
+registerCoreObjectTypes();
+materializeAllNativeTypes(db, createSystemOperationContext());
+recoverInterruptedOperationRuns(db);
 
 initPluginHost();
 const pluginLoad = await loadPluginsFromEnv();
@@ -97,9 +111,11 @@ for (const err of pluginLoad.errors) {
 }
 
 const bus = new EventEmitter();
+setKernelEventBus(bus);
 pluginRuntime.configure({ operatorTenantId, bus });
 ensureTenantPluginsTable(coreDb);
 await ensureOperatorPluginsInstalled(coreDb, operatorTenantId, db);
+reconcileInstalledPluginObjectTypes(coreDb);
 syncInstalledPluginKnowledge(coreDb, operatorTenantId);
 
 const hasSierra = pluginRuntime.hasPlugin("sierra-chart");
@@ -176,6 +192,25 @@ const aiQueueWorker = new AiQueueWorker(db, llmManager, {
   bus,
   embeddings: embeddingManager,
 });
+configureRuntimeAdapterServices({
+  llm: llmManager,
+  queue: aiQueueWorker,
+  training: aiTraining,
+  async sendMessage() {
+    throw Object.assign(
+      new Error("Chat streaming remains available through the authorized protocol endpoint"),
+      { status: 501 }
+    );
+  },
+  async syncIntegration() {
+    return {
+      ok: true,
+      queued: true,
+      message:
+        "Integration sync queued through the configured provider scheduler",
+    };
+  },
+});
 if (hasSierra) {
   getPluginHost().registerAutonomousRunnerKick?.((reason) => {
     if (aiQueueWorker.hasPendingOrRunningWorkflow("autonomous-task-runner")) return;
@@ -224,6 +259,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "25mb" }));
+app.use(legacyEndpointTelemetry(coreDb));
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -262,6 +298,7 @@ app.use("/api/federation", createFederationRouter({
 }));
 app.get("/api/plugins/manifest", tenantDbMiddleware, attachAuthContext, requireAuth, createPluginsManifestHandler(coreDb));
 app.use("/api", tenantDbMiddleware, createCoreApiRouter(db, { bus }));
+app.use("/api", tenantDbMiddleware, createKernelRouter(db, { bus }));
 app.use("/api/plugins", tenantDbMiddleware, attachAuthContext, requireAuth, createPluginsRouter(coreDb));
 pluginRuntime.mountOn(app);
 

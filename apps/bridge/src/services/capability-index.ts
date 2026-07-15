@@ -3,10 +3,11 @@ import type { AppDatabase } from "../db.js";
 import { AI_TOOL_REGISTRY, isToolVisibleForAgent } from "./ai-tools-registry.js";
 import { listAiSkills } from "./ai-skills.js";
 import { getWorkflow } from "./ai-workflows.js";
+import { listObjectTypes } from "../kernel/registry.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
 import { blobToVector } from "./embeddings/embedding-client.js";
 
-export type CapabilityKind = "tool" | "skill" | "workflow";
+export type CapabilityKind = "tool" | "skill" | "workflow" | "objectType";
 
 export interface CapabilityDoc {
   kind: CapabilityKind;
@@ -153,6 +154,65 @@ export function buildCapabilityDocs(db: AppDatabase, agentId: string): Capabilit
       pairsWith,
       text,
       metadata: { mode: tool.mode, category: tool.category ?? null },
+    });
+  }
+
+  // Plugin ObjectTypes are tenant-scoped; this legacy index only has a DB and
+  // agent id, so index built-ins here rather than leaking installed metadata.
+  for (const ot of listObjectTypes().filter((item) => !item.pluginId)) {
+    const operations = ot.operations ?? [];
+    const actions = ot.actions ?? [];
+    const pairs = [
+      "list_object_types",
+      ...operations.map((operation) =>
+        operation === "list"
+          ? "list_records"
+          : operation === "get"
+            ? "get_record"
+            : `${operation}_record`
+      ),
+      ...(actions.length ? ["run_record_action"] : []),
+    ];
+    const whenToUse = `Working with ${ot.label} through its declared ObjectType operations and actions.`;
+    const text = [
+      `[objectType] ${ot.name}: ${ot.label}`,
+      ot.description ?? "",
+      `Storage: ${ot.storage.kind}`,
+      `Fields: ${ot.fields.map((f) => f.name).join(", ")}`,
+      `Operations: ${operations.join(", ") || "none"}`,
+      actions.length
+        ? `Actions: ${actions
+            .map(
+              (action) =>
+                `${action.name} (${action.execution ?? "sync"}, ${
+                  action.confirmation?.required || action.confirm
+                    ? "confirm"
+                    : "auto"
+                })`
+            )
+            .join(", ")}`
+        : "",
+      `When to use: ${whenToUse}`,
+      `Pairs with: ${pairs.join(", ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    docs.push({
+      kind: "objectType",
+      id: ot.name,
+      agentId,
+      name: ot.name,
+      description: ot.description ?? ot.label,
+      whenToUse,
+      pairsWith: pairs.join(", "),
+      text,
+      metadata: {
+        storage: ot.storage,
+        module: ot.module ?? null,
+        contractVersion: ot.contractVersion ?? 1,
+        operations,
+        actions,
+      },
     });
   }
 
