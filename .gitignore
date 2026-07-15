@@ -12,6 +12,7 @@ build/
 *.tsbuildinfo
 coverage/
 **/coverage/
+test-results/
 .cache/
 .apps-cache/
 
@@ -58,6 +59,8 @@ apps/bridge/data/**/artifacts/
 *.log
 *.tmp
 .tmp/
+.tmp*.py
+.last-run-id.txt
 .screenshots/
 *.sse
 .cursor/debug-*.log

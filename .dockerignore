@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.tmp
+.tmp*
+test-results
+coverage
+**/coverage
+apps/bridge/data/*.sqlite*
+apps/bridge/data/**/timeseries
+apps/bridge/data/**/blobs
+apps/bridge/data/**/artifacts
+**/.env
+**/.env.*
+!**/.env.example

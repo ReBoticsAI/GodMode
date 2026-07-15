@@ -1,15 +1,22 @@
 import type { AppDatabase } from "../db.js";
 import { agentCodeAccess, getAgent } from "./agents/agents-db.js";
 import { isOperatorTenantDb } from "./tenant-kind.js";
-import { PAGE_KINDS } from "./page-kinds.js";
 import { pluginToolsAsAiDefs, isTradingDepartmentPluginTool } from "../plugins/plugin-tools.js";
 import {
   filterToolsForChatMode,
   type IntelligenceChatMode,
 } from "./chat-mode.js";
+import {
+  genericObjectTypeToolDefs,
+  objectTypeAutoToolDefs,
+} from "../kernel/auto-tools.js";
+import { pageKindJsonSchema } from "../kernel/kind-registry.js";
 
-/** JSON-schema enum for structure node `kind` (mirrors web page-registry). */
-const KIND_SCHEMA = { type: "string", enum: [...PAGE_KINDS] } as const;
+/** JSON-schema for structure node `kind` — live Kind registry (plugins extend). */
+function kindSchema(): Record<string, unknown> {
+  const base = pageKindJsonSchema();
+  return { ...base, description: "Page renderer kind from the Kind registry" };
+}
 
 export type ToolMode = "auto" | "confirm";
 
@@ -492,6 +499,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       "List the full platform structure tree (departments, divisions, pages).",
     mode: "auto",
   },
+  ...genericObjectTypeToolDefs(),
   {
     name: "create_department",
     description:
@@ -503,7 +511,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         id: { type: "string", description: "lowercase slug (a-z 0-9 -)" },
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (default placeholder)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (default placeholder)" },
       },
       required: ["id", "label", "icon"],
     },
@@ -521,7 +529,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         rightSidebar: { type: "string", description: "Plugin sidebar slot id, or none to clear" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (e.g. sierra-dashboard-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-dashboard-group)" },
         segment: { type: "string", description: "URL segment (defaults to id)" },
       },
       required: ["departmentId", "id", "label", "icon"],
@@ -541,7 +549,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         segment: { type: "string", description: "URL segment (a-z 0-9 -, may be empty)" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (e.g. sierra-playbooks-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-playbooks-group)" },
       },
       required: ["departmentId", "divisionId", "id", "label", "icon"],
     },
@@ -562,7 +570,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         icon: { type: "string" },
         segment: { type: "string" },
         rightSidebar: { type: "string", description: "Plugin sidebar slot id, or none to clear" },
-        kind: KIND_SCHEMA,
+        kind: kindSchema(),
       },
       required: ["nodeType", "departmentId"],
     },
@@ -1596,6 +1604,12 @@ const TASK_TOOLS = new Set<string>([
 // (Intelligence only) but lives in this subset so the model can discover it.
 const PLATFORM_STRUCTURE_TOOLS = new Set<string>([
   "list_structure",
+  "list_object_types",
+  "list_records",
+  "get_record",
+  "create_record",
+  "update_record",
+  "delete_record",
   "create_department",
   "create_division",
   "create_page",
@@ -1679,7 +1693,18 @@ export const PERSONAL_DIGITAL_YOU_TOOL_NAMES = [
 ] as const;
 
 function allRegisteredTools(): AiToolDef[] {
-  return [...AI_TOOL_REGISTRY, ...pluginToolsAsAiDefs()];
+  const coreNames = new Set(AI_TOOL_REGISTRY.map((t) => t.name));
+  const autoOt = objectTypeAutoToolDefs(coreNames).map(
+    (t): AiToolDef => ({
+      name: t.name,
+      description: t.description,
+      mode: t.mode,
+      parameters: t.parameters,
+      category: t.category ?? "platform",
+      write: t.write,
+    })
+  );
+  return [...AI_TOOL_REGISTRY, ...autoOt, ...pluginToolsAsAiDefs()];
 }
 
 /** Default tool allowlist for Intelligence on personal (non-operator) tenants. */

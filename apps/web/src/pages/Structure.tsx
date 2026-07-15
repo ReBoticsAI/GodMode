@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import {
   api,
+  createStructureNode,
   fetchAiAgents,
   fetchAgentAssignments,
   setAgentAssignment,
@@ -644,10 +645,7 @@ function CreateDepartmentDialog({
   const submit = async () => {
     setBusy(true);
     try {
-      await api("/departments", {
-        method: "POST",
-        body: JSON.stringify({ id, label, icon }),
-      });
+      await createStructureNode({ id, label, icon });
       toast.success("Department created");
       reset();
       setOpen(false);

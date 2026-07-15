@@ -1,5 +1,7 @@
 import type { Express, IRouter, RequestHandler } from "express";
 import type { EventEmitter } from "node:events";
+import type { ObjectTypeDef, RecordData } from "@godmode/kernel";
+import type { AppDatabase } from "../db.js";
 import type {
   GodModePluginApi,
   GodModePluginRegister,
@@ -8,8 +10,21 @@ import type {
   PluginHookName,
   PluginTenantContext,
   PluginToolDef,
+  PluginRecordAdapter,
+  PluginRecordContext,
 } from "@godmode/plugin-api";
 import { getPluginHost } from "@godmode/plugin-host";
+import { registerPageKinds } from "../kernel/kind-registry.js";
+import {
+  registerRecordAdapter,
+  unregisterRecordAdapter,
+  type OperationContext,
+  type RecordAdapter,
+} from "../kernel/adapter-registry.js";
+import {
+  registerObjectType,
+  unregisterObjectType,
+} from "../kernel/registry.js";
 
 type HookHandler = (ctx: PluginBootContext & PluginTenantContext) => void | Promise<void>;
 
@@ -34,6 +49,10 @@ export class PluginRuntime {
   private readonly routers: Array<{ path: string; router: IRouter }> = [];
   private readonly middleware: RequestHandler[] = [];
   private readonly tools: PluginToolDef[] = [];
+  private readonly objectTypeDisposers: Array<{
+    pluginId: string;
+    dispose: () => void;
+  }> = [];
   readonly loaded: LoadedPlugin[] = [];
   private config: PluginRuntimeConfig | null = null;
 
@@ -44,6 +63,15 @@ export class PluginRuntime {
   register(manifest: GodmodePluginManifest, pluginRoot: string, registerFn: GodModePluginRegister): void {
     const api = this.createApi(manifest, pluginRoot);
     registerFn(api);
+    this.loaded.push({ manifest, pluginRoot, api });
+  }
+
+  registerManifestOnly(
+    manifest: GodmodePluginManifest,
+    pluginRoot: string
+  ): void {
+    if (this.hasPlugin(manifest.id)) this.unregister(manifest.id);
+    const api = this.createApi(manifest, pluginRoot);
     this.loaded.push({ manifest, pluginRoot, api });
   }
 
@@ -65,6 +93,12 @@ export class PluginRuntime {
       const next = entries.filter((e) => e.pluginId !== pluginId);
       if (next.length) this.hooks.set(name, next);
       else this.hooks.delete(name);
+    }
+    for (let index = this.objectTypeDisposers.length - 1; index >= 0; index -= 1) {
+      const entry = this.objectTypeDisposers[index]!;
+      if (entry.pluginId !== pluginId) continue;
+      entry.dispose();
+      this.objectTypeDisposers.splice(index, 1);
     }
     return this.loaded.length < before;
   }
@@ -175,6 +209,133 @@ export class PluginRuntime {
               departments: t.departments ?? manifest.departments,
             });
           }
+        },
+      },
+      pageKinds: {
+        register(kinds: string[]) {
+          registerPageKinds(kinds);
+        },
+      },
+      objectTypes: {
+        register(definition, pluginAdapter: PluginRecordAdapter) {
+          const adapterId = `plugin:${pluginId}:${definition.name}`;
+          const actions = definition.actions ?? [];
+          for (const action of actions) {
+            if (!pluginAdapter.actions?.[action.name]) {
+              throw new Error(
+                `Plugin ${pluginId} did not implement ${definition.name}.${action.name}`
+              );
+            }
+          }
+          const operationMethod = {
+            list: pluginAdapter.list,
+            get: pluginAdapter.get,
+            create: pluginAdapter.create,
+            update: pluginAdapter.update,
+            delete: pluginAdapter.delete,
+          };
+          for (const operation of definition.operations ?? []) {
+            if (!operationMethod[operation]) {
+              throw new Error(
+                `Plugin ${pluginId} did not implement ${definition.name}.${operation}`
+              );
+            }
+          }
+          const pluginContext = (ctx: OperationContext): PluginRecordContext => ({
+            tenantId: ctx.tenantId ?? self.config?.operatorTenantId ?? "",
+            userId: ctx.userId,
+            activeAgentId: ctx.agentId,
+            role: ctx.role,
+            source: ctx.source,
+            requestId: ctx.requestId,
+            signal: ctx.signal,
+          });
+          const adapter: RecordAdapter = {
+            id: adapterId,
+            list: pluginAdapter.list
+              ? (_db, _def, query, ctx) =>
+                  pluginAdapter.list!(query, pluginContext(ctx))
+              : undefined,
+            get: pluginAdapter.get
+              ? (_db, _def, id, ctx) =>
+                  pluginAdapter.get!(id, pluginContext(ctx))
+              : undefined,
+            create: pluginAdapter.create
+              ? (_db, _def, data, ctx) =>
+                  pluginAdapter.create!(data, pluginContext(ctx))
+              : undefined,
+            update: pluginAdapter.update
+              ? (_db, _def, id, data, ctx) =>
+                  pluginAdapter.update!(id, data, pluginContext(ctx))
+              : undefined,
+            delete: pluginAdapter.delete
+              ? (_db, _def, id, ctx) =>
+                  pluginAdapter.delete!(id, pluginContext(ctx))
+              : undefined,
+            actions: Object.fromEntries(
+              Object.entries(pluginAdapter.actions ?? {}).map(
+                ([name, handler]) => [
+                  name,
+                  (
+                    _db: AppDatabase,
+                    _def: ObjectTypeDef,
+                    id: string,
+                    input: RecordData,
+                    ctx: OperationContext
+                  ) =>
+                    handler(id, input, pluginContext(ctx)),
+                ]
+              )
+            ),
+          };
+          registerRecordAdapter(adapter);
+          const permissions =
+            definition.permissions ??
+            [
+              { role: "viewer" as const, read: true },
+              {
+                role: "editor" as const,
+                read: true,
+                create: Boolean(pluginAdapter.create),
+                update: Boolean(pluginAdapter.update),
+                delete: Boolean(pluginAdapter.delete),
+              },
+              {
+                role: "owner" as const,
+                read: true,
+                create: Boolean(pluginAdapter.create),
+                update: Boolean(pluginAdapter.update),
+                delete: Boolean(pluginAdapter.delete),
+              },
+              {
+                role: "intelligence" as const,
+                read: true,
+                create: Boolean(pluginAdapter.create),
+                update: Boolean(pluginAdapter.update),
+                delete: Boolean(pluginAdapter.delete),
+              },
+            ];
+          try {
+            registerObjectType({
+              ...definition,
+              contractVersion: definition.contractVersion ?? 1,
+              permissions,
+              pluginId,
+              storage: { kind: "adapter", adapterId },
+            });
+          } catch (error) {
+            unregisterRecordAdapter(adapterId);
+            throw error;
+          }
+          let disposed = false;
+          const dispose = () => {
+            if (disposed) return;
+            disposed = true;
+            unregisterObjectType(definition.name);
+            unregisterRecordAdapter(adapterId);
+          };
+          self.objectTypeDisposers.push({ pluginId, dispose });
+          return { dispose };
         },
       },
       hooks: {

@@ -204,7 +204,7 @@ export interface PlatformEventInput {
 export function insertEvent(db: Database.Database, evt: PlatformEventInput): void {
   const seq = nextEventSeq(db);
   db.prepare(
-    `INSERT INTO events (id, seq, type, actor_agent_id, subject, payload_json, dispatched)
+    `INSERT INTO events (id, seq, ts, type, actor_agent_id, subject, payload_json, dispatched)
      VALUES (?, ?, datetime('now'), ?, ?, ?, ?, 0)`
   ).run(
     evt.id,

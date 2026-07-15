@@ -8,6 +8,8 @@ import {
   removePluginKnowledge,
 } from "../services/knowledge-store.js";
 import { getTenantDb } from "../tenant-registry.js";
+import { applyPluginObjectTypeSeeds, registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
+import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 
 export interface TenantPluginRow {
   tenant_id: string;
@@ -15,6 +17,9 @@ export interface TenantPluginRow {
   version: string;
   installed_at: string;
   plugin_root: string | null;
+  state: "installing" | "active" | "uninstalling" | "failed";
+  last_error: string | null;
+  updated_at: string;
 }
 
 export function ensureTenantPluginsTable(core: CoreDatabase): void {
@@ -29,6 +34,27 @@ export function ensureTenantPluginsTable(core: CoreDatabase): void {
     );
     CREATE INDEX IF NOT EXISTS tenant_plugins_tenant_idx ON tenant_plugins(tenant_id);
   `);
+  const columns = new Set(
+    (
+      core.prepare(`PRAGMA table_info(tenant_plugins)`).all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name)
+  );
+  if (!columns.has("state")) {
+    core.exec(
+      `ALTER TABLE tenant_plugins ADD COLUMN state TEXT NOT NULL DEFAULT 'active'`
+    );
+  }
+  if (!columns.has("last_error")) {
+    core.exec(`ALTER TABLE tenant_plugins ADD COLUMN last_error TEXT`);
+  }
+  if (!columns.has("updated_at")) {
+    core.exec(`ALTER TABLE tenant_plugins ADD COLUMN updated_at TEXT`);
+    core.exec(
+      `UPDATE tenant_plugins SET updated_at=COALESCE(updated_at, installed_at)`
+    );
+  }
 }
 
 export function listInstalledPlugins(
@@ -37,8 +63,11 @@ export function listInstalledPlugins(
 ): TenantPluginRow[] {
   return core
     .prepare(
-      `SELECT tenant_id, plugin_id, version, installed_at, plugin_root
-       FROM tenant_plugins WHERE tenant_id=? ORDER BY installed_at`
+      `SELECT tenant_id, plugin_id, version, installed_at, plugin_root,
+              state, last_error, COALESCE(updated_at, installed_at) AS updated_at
+       FROM tenant_plugins
+       WHERE tenant_id=? AND state='active'
+       ORDER BY installed_at`
     )
     .all(tenantId) as TenantPluginRow[];
 }
@@ -88,16 +117,45 @@ export async function installPluginForTenant(
     );
   }
   const root = pluginRoot ?? loaded.pluginRoot;
+  registerPluginObjectTypes(loaded.manifest);
+  ensureTenantPluginsTable(core);
   core.prepare(
-    `INSERT INTO tenant_plugins (tenant_id, plugin_id, version, plugin_root)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO tenant_plugins
+     (tenant_id, plugin_id, version, plugin_root, state, last_error, updated_at)
+     VALUES (?, ?, ?, ?, 'installing', NULL, datetime('now'))
      ON CONFLICT(tenant_id, plugin_id) DO UPDATE SET
        version=excluded.version,
        plugin_root=excluded.plugin_root,
-       installed_at=datetime('now')`
+       state='installing',
+       last_error=NULL,
+       installed_at=datetime('now'),
+       updated_at=datetime('now')`
   ).run(tenantId, pluginId, loaded.manifest.version, root);
-  await pluginRuntime.installPluginForTenant(pluginId, tenantId);
-  syncPluginKnowledgeForTenant(core, tenantId, pluginId, root);
+  try {
+    const tenantDb = getTenantDb(tenantId);
+    applyPluginObjectTypeSeeds(tenantDb, loaded.manifest);
+    await pluginRuntime.installPluginForTenant(pluginId, tenantId);
+    syncPluginKnowledgeForTenant(core, tenantId, pluginId, root);
+    core.prepare(
+      `UPDATE tenant_plugins
+       SET state='active', last_error=NULL, updated_at=datetime('now')
+       WHERE tenant_id=? AND plugin_id=?`
+    ).run(tenantId, pluginId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      removePluginKnowledge(getTenantDb(tenantId), pluginId);
+      await pluginRuntime.uninstallPluginForTenant(pluginId, tenantId);
+    } catch {
+      // Reconciliation will retry compensation from the durable failed state.
+    }
+    core.prepare(
+      `UPDATE tenant_plugins
+       SET state='failed', last_error=?, updated_at=datetime('now')
+       WHERE tenant_id=? AND plugin_id=?`
+    ).run(message, tenantId, pluginId);
+    throw error;
+  }
 }
 
 function syncPluginKnowledgeForTenant(
@@ -129,6 +187,23 @@ export function syncInstalledPluginKnowledge(
   }
 }
 
+/** Reconcile declarative ObjectType storage/seeds for every installed tenant. */
+export function reconcileInstalledPluginObjectTypes(core: CoreDatabase): void {
+  ensureTenantPluginsTable(core);
+  const rows = core
+    .prepare(
+      `SELECT tenant_id, plugin_id FROM tenant_plugins
+       WHERE state='active' ORDER BY tenant_id, plugin_id`
+    )
+    .all() as Array<{ tenant_id: string; plugin_id: string }>;
+  for (const row of rows) {
+    const loaded = pluginRuntime.getPlugin(row.plugin_id);
+    if (!loaded) continue;
+    registerPluginObjectTypes(loaded.manifest);
+    applyPluginObjectTypeSeeds(getTenantDb(row.tenant_id), loaded.manifest);
+  }
+}
+
 export function isPluginEnabledForTenant(
   core: CoreDatabase,
   tenantId: string,
@@ -136,7 +211,10 @@ export function isPluginEnabledForTenant(
 ): boolean {
   if (!pluginRuntime.hasPlugin(pluginId)) return false;
   const row = core
-    .prepare(`SELECT 1 FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`)
+    .prepare(
+      `SELECT 1 FROM tenant_plugins
+       WHERE tenant_id=? AND plugin_id=? AND state='active'`
+    )
     .get(tenantId, pluginId);
   return Boolean(row);
 }
@@ -151,11 +229,29 @@ export async function uninstallPluginForTenant(
   pluginId: string
 ): Promise<void> {
   const db = getTenantDb(tenantId);
-  removePluginKnowledge(db, pluginId);
-  await pluginRuntime.uninstallPluginForTenant(pluginId, tenantId);
   core.prepare(
-    `DELETE FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+    `UPDATE tenant_plugins
+     SET state='uninstalling', last_error=NULL, updated_at=datetime('now')
+     WHERE tenant_id=? AND plugin_id=?`
   ).run(tenantId, pluginId);
+  try {
+    removePluginKnowledge(db, pluginId);
+    await pluginRuntime.uninstallPluginForTenant(pluginId, tenantId);
+    core.prepare(
+      `DELETE FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+    ).run(tenantId, pluginId);
+  } catch (error) {
+    core.prepare(
+      `UPDATE tenant_plugins
+       SET state='failed', last_error=?, updated_at=datetime('now')
+       WHERE tenant_id=? AND plugin_id=?`
+    ).run(error instanceof Error ? error.message : String(error), tenantId, pluginId);
+    throw error;
+  }
+  const remaining = core
+    .prepare(`SELECT 1 FROM tenant_plugins WHERE plugin_id=? LIMIT 1`)
+    .get(pluginId);
+  if (!remaining) unregisterObjectTypesByPlugin(pluginId);
 }
 
 export async function ensureOperatorPluginsInstalled(
@@ -167,7 +263,8 @@ export async function ensureOperatorPluginsInstalled(
   for (const plugin of pluginRuntime.loaded) {
     const row = core
       .prepare(
-        `SELECT 1 FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+        `SELECT 1 FROM tenant_plugins
+         WHERE tenant_id=? AND plugin_id=? AND state='active'`
       )
       .get(operatorTenantId, plugin.manifest.id);
     if (row) continue;

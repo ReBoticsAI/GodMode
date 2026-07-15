@@ -1,0 +1,9 @@
+import type { BuiltinSpec } from "./shared.js";
+import { PLATFORM_ACTION_METADATA } from "../adapters/platform-actions.js";
+
+export const MARKETPLACE_SPECS: BuiltinSpec[] = [
+  { name: "MarketplaceListing", label: "Marketplace Listing", module: "marketplace", id: "marketplace_listing_read", table: "marketplace_listings", database: "core", defaultSort: "updated_at", accessPolicy: "relationship-scoped", actions: PLATFORM_ACTION_METADATA.MarketplaceListing, fields: ["id", "seller_user_id", "seller_tenant_id", "kind", "resource_id", "title", "description", ["price_credits", "Int"], "visibility", "status", "created_at", "updated_at"] },
+  { name: "MarketplaceEntitlement", label: "Marketplace Entitlement", module: "marketplace", id: "marketplace_entitlement_read", table: "marketplace_entitlements", database: "core", scope: "tenant", scopeColumn: "buyer_tenant_id", defaultSort: "updated_at", actions: PLATFORM_ACTION_METADATA.MarketplaceEntitlement, fields: ["id", "listing_id", "buyer_user_id", "buyer_tenant_id", "kind", "owner_tenant_id", "resource_kind", "resource_id", "status", "expires_at", "created_at", "updated_at"] },
+  { name: "CatalogSource", label: "Catalog Source", module: "marketplace", id: "catalog_source_read", table: "catalog_sources", database: "core", scope: "user", writable: ["name", "url"], required: ["name", "url"], operations: ["list", "get", "create", "delete"], actions: PLATFORM_ACTION_METADATA.CatalogSource, fields: ["id", "user_id", "name", "url", "created_at"] },
+  { name: "CatalogInstall", label: "Catalog Install", module: "marketplace", id: "catalog_install_read", table: "catalog_installs", database: "core", scope: "tenant", defaultSort: "installed_at", fields: ["id", "tenant_id", "user_id", "entry_id", "entry_title", "install_type", "source_catalog", "installed_at"] },
+];

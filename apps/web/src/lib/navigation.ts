@@ -11,6 +11,7 @@ export interface StructureNode {
   segment: string;
   path: string;
   kind: string;
+  objectType: string | null;
   rightSidebar: RightSidebarKind | null;
   agentId: string | null;
   builtIn: boolean;
@@ -29,6 +30,7 @@ export interface PageNode {
   segment: string;
   /** Renderer kind (`dashboard`, `routines`, ..., `placeholder`) */
   kind: string;
+  objectType: string | null;
   builtIn: boolean;
   sortOrder: number;
 }
@@ -80,6 +82,7 @@ export const TASKS_PATH = "/tasks";
 export const NOTIFICATIONS_PATH = "/notifications";
 export const SUPPORT_PATH = "/support";
 export const WIKI_PATH = "/wiki";
+export const RECORDS_PATH = "/records";
 
 /**
  * Routes that render standalone (no department/division chrome such as the
@@ -99,6 +102,7 @@ export function isChromelessPath(pathname: string): boolean {
     pathname.startsWith(NOTIFICATIONS_PATH) ||
     pathname.startsWith(SUPPORT_PATH) ||
     pathname.startsWith(WIKI_PATH) ||
+    pathname.startsWith(RECORDS_PATH) ||
     pathname.startsWith(STRUCTURE_PATH) ||
     pathname.startsWith(CONTACTS_PATH) ||
     pathname.startsWith(MARKETPLACE_PATH)
@@ -115,6 +119,7 @@ export function chromelessHeaderSegments(pathname: string): string[] | null {
 
   if (norm.startsWith(HOME_PATH)) return ["Home"];
   if (norm.startsWith(WIKI_PATH)) return ["Wiki"];
+  if (norm.startsWith(RECORDS_PATH)) return ["Records"];
   if (norm.startsWith(CALENDAR_PATH)) return ["Calendar"];
   if (norm.startsWith(TASKS_PATH)) return ["Tasks"];
   if (norm.startsWith(BANK_PATH) || norm.startsWith(HOLDINGS_PATH)) return ["Bank"];

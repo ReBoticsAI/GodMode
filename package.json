@@ -8,18 +8,28 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "build:packages": "npm run build -w @godmode/flow-core -w @godmode/plugin-api -w @godmode/plugin-host",
+    "build:packages": "npm run build -w @godmode/kernel -w @godmode/flow-core -w @godmode/plugin-api -w @godmode/plugin-host",
     "dev": "concurrently \"npm run dev -w @godmode/bridge\" \"npm run dev -w @godmode/web\"",
     "dev:bridge": "npm run dev -w @godmode/bridge",
     "dev:web": "npm run dev -w @godmode/web",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "audit:oss": "node scripts/audit-oss-core.mjs",
+    "audit:kernel": "node scripts/audit-kernel-coverage.mjs",
+    "test": "vitest run",
+    "test:objecttypes": "vitest run packages/kernel/src packages/plugin-api/src apps/bridge/src/kernel apps/web/src",
+    "test:gate": "npm run build:packages && npm run typecheck && npm run audit:kernel && npm test",
     "seed:demo": "node scripts/seed-readme-demo.mjs",
     "plugins": "tsx scripts/godmode-plugins-cli.ts"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
   }
 }

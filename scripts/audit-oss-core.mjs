@@ -89,6 +89,9 @@ const DOC_SCAN_ALLOWLIST = new Set([
   path.normalize("apps/bridge/src/services/structure-regroup-migration.ts"),
   path.normalize("apps/bridge/src/services/platform-scope.ts"),
   path.normalize("packages/plugin-api/src/host-services.ts"),
+  // Explicit boundary/audit documents may name private plugin domains.
+  path.normalize("docs/TRADING_RESIDUE_AUDIT.md"),
+  path.normalize("docs/SALES_PITCH.md"),
 ]);
 
 function scanDocForBannedTerms(rel) {

@@ -48,6 +48,9 @@ try {
 }
 
 Test-Endpoint -Name "Auth me" -Path "/api/auth/me" -ExpectStatus @(200, 401)
+Test-Endpoint -Name "ObjectType registry" -Path "/api/object-types" -ExpectStatus @(200, 401)
+Test-Endpoint -Name "Structure ObjectType" -Path "/api/object-types/StructureNode" -ExpectStatus @(200, 401)
+Test-Endpoint -Name "Structure records" -Path "/api/records/StructureNode?limit=1" -ExpectStatus @(200, 401)
 
 if ($deploymentMode -eq "hub") {
   Test-Endpoint -Name "Marketplace listings (auth required)" -Path "/api/marketplace/listings" -ExpectStatus @(401, 403)

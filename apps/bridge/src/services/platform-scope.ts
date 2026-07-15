@@ -57,7 +57,12 @@ const ACTION_MIN_ROLE: Record<string, AssignmentRole> = {
 };
 
 /** Actions that have no scope (platform-wide) and require the Intelligence superuser. */
-const GLOBAL_ACTIONS = new Set<string>(["create_department", "create_agent"]);
+const GLOBAL_ACTIONS = new Set<string>([
+  "create_department",
+  "create_agent",
+  "create_record",
+  "create_structure_node",
+]);
 
 function scopeLabel(scope: PlatformScope): string {
   if (scope.divisionId && scope.pageId) {
