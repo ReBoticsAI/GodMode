@@ -29,11 +29,10 @@ The durable-kernel updates are tracked in
 [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1)
 and
 [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1).
-The official catalog's Record-bundle migration is
+The official catalog's Record-bundle migration was delivered through
 [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
-Private domain-plugin migrations are coordinated in their own repositories.
-They are external dependencies of ecosystem-wide cutover and may remain open
-after the core repository is complete.
+The coordinated private domain-plugin migrations were delivered in their own
+repositories before the ecosystem-wide cutover was declared complete.
 
 ## Unofficial sources
 

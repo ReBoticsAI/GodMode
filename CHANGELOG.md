@@ -57,11 +57,11 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
   enforced action contract, tenancy, durable recovery, and protocol exceptions
 - [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
   and AI-tool migration inventory
-- Coordinated ecosystem migrations remain external dependencies:
+- Coordinated ecosystem migrations were completed in:
   [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
   [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
   [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2),
-  and private domain-plugin PRs coordinated separately
+  and private domain-plugin PRs delivered in their respective repositories
 
 ## [0.1.0] - 2026-06-29
 
