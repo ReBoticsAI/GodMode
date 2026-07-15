@@ -82,8 +82,6 @@ export function ensureOperationRunTables(db: AppDatabase): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       finished_at TEXT
     );
-    CREATE INDEX IF NOT EXISTS kernel_operation_runs_claim
-      ON kernel_operation_runs(status, next_attempt_at, lease_expires_at, created_at);
   `);
   addColumn(db, "kernel_action_idempotency", "tenant_id", "TEXT NOT NULL DEFAULT ''");
   addColumn(db, "kernel_action_idempotency", "error_json", "TEXT");
@@ -100,6 +98,10 @@ export function ensureOperationRunTables(db: AppDatabase): void {
   addColumn(db, "kernel_operation_runs", "lease_owner", "TEXT");
   addColumn(db, "kernel_operation_runs", "lease_expires_at", "TEXT");
   addColumn(db, "kernel_operation_runs", "error_json", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS kernel_operation_runs_claim
+      ON kernel_operation_runs(status, next_attempt_at, lease_expires_at, created_at);
+  `);
 }
 
 export function recoverLeasedOperationRuns(

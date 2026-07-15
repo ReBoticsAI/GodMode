@@ -16,6 +16,7 @@ import {
 } from "../record-api.js";
 import {
   claimOperationRun,
+  ensureOperationRunTables,
   OperationRunWorker,
 } from "../operation-run-worker.js";
 
@@ -693,5 +694,35 @@ describe("ObjectType action contract", () => {
         )
         .get()
     ).toEqual({ n: 0 });
+  });
+
+  it("upgrades existing operation-run tables before creating claim indexes", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE kernel_operation_runs (
+        id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        object_type TEXT NOT NULL,
+        record_id TEXT,
+        action_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    expect(() => ensureOperationRunTables(db)).not.toThrow();
+    const columns = db
+      .prepare(`PRAGMA table_info(kernel_operation_runs)`)
+      .all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toContain("next_attempt_at");
+    expect(
+      db
+        .prepare(
+          `SELECT 1 FROM sqlite_master
+           WHERE type='index' AND name='kernel_operation_runs_claim'`
+        )
+        .get()
+    ).toBeTruthy();
   });
 });
