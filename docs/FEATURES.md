@@ -74,12 +74,22 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 - **Multi-agent org:** scoped permissions, tool allowlists, and structure-linked agents.
 - **Workspace growth:** Intelligence can create departments, wiki pages, tasks, and automations from chat.
 - **ObjectType kernel:** authenticated web, agent, plugin, and HTTP consumers
-  discover explicit Record CRUD and named actions; adapters preserve existing
-  domain services and side effects.
+  discover explicit Record CRUD and named actions across 72 audited ObjectTypes;
+  exact-parity adapters preserve domain services and side effects behind the
+  single durable mutation boundary.
+- **Durable execution:** asynchronous actions enforce retries/backoff, timeout,
+  declared cancellation, scoped idempotency, leases, and replay-safe recovery;
+  declared events retain per-consumer receipts.
 - **Plugins:** optional domain packs register ObjectTypes, actions, bridge routes,
-  web pages, and install hooks without forking core.
-- **Compatibility:** legacy mutation shims remain measurable during cutover; live
-  chat token streaming is an explicit transport exception.
+  web pages, and install hooks without forking core through a versioned kernel
+  client.
+- **Completed cutover:** strict audits report zero legacy routes/callers,
+  unmatched callers, and direct entry-point writes. WebSocket/token streams,
+  binary transfer, ephemeral presence, and other reviewed wire-level exceptions
+  remain specialized rather than being mislabeled as Record CRUD.
+- **Cross-database safety:** plugin/acquisition sagas resume idempotently across
+  core and tenant SQLite files, while shared-resource adapters enforce the exact
+  grant and owner database.
 - **Generic structure pages:** `StructureNode.object_type` selects the Record
   renderer; `segment` remains the URL component.
 

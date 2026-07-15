@@ -36,6 +36,7 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
   "version": "1.0.0",
   "name": "My Plugin",
   "engine": "^0.1.0",
+  "kernelApiVersion": 1,
   "departments": ["my-domain"],
   "bridge": { "entry": "dist/bridge.js" },
   "web": { "entry": "dist/web.js" },
@@ -69,6 +70,8 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
 ```
 
 - `engine` — semver range checked against host (`@godmode/plugin-api` `GODMODE_ENGINE_VERSION`)
+- `kernelApiVersion` — executable kernel client contract; current Bridge/web
+  clients expose version `1`, and unsupported future versions fail validation
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
@@ -77,8 +80,8 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
   metadata. Service-backed behavior requires an executable Bridge registration
   that supplies an adapter and implements every declared operation/action.
 - Defaults are intentionally narrow: declare supported `operations`, action
-  roles, confirmation, idempotency, schemas, concurrency, execution mode, and
-  sensitive input explicitly.
+  roles, confirmation, idempotency, input/output/error schemas, concurrency,
+  execution mode, retry, timeout, cancellation, and sensitive input explicitly.
 - `tenantMigrations` is parsed manifest metadata, not a general migration runner.
   Run required versioned migrations from a reviewed lifecycle implementation.
 
@@ -90,8 +93,9 @@ objectTypes in manifest → validate ownership → tenant-visible registration �
 
 Create shells by seeding `StructureNode` Records and set `object_type` when a
 node should render a generic Record page; `segment` remains its URL segment.
-Prefer ObjectType discovery and declared actions over legacy static mutation
-tools. Use compiled `bridge.entry` only when metadata is not enough.
+Use ObjectType discovery and declared actions for durable mutations. Specialized
+static tools are for operational or transport capabilities, not an alternate
+durable-write path. Use compiled `bridge.entry` only when metadata is not enough.
 ## Bridge register
 
 ```typescript
@@ -131,6 +135,10 @@ service-backed ObjectTypes. `PluginRecordAdapter` supports optional `list`,
 `get`, `create`, `update`, `delete`, and named `actions`. Every operation/action
 declared by the definition must have a matching adapter implementation; do not
 declare capabilities the plugin cannot execute.
+
+Bridge and web registrations also receive `api.kernel`, a typed client with
+`apiVersion: 1` for discovery, CRUD, and declared actions. Use it instead of
+calling removed domain mutation URLs.
 
 A representative action on `invoiceDefinition` is:
 

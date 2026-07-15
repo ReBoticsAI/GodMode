@@ -10,14 +10,22 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 
 ### Added
 
-- **ObjectType metadata kernel** — 54 core ObjectTypes; explicit CRUD and named
-  action contracts; service-backed and native adapters; mandatory operation
-  context, access policies, confirmation, idempotency, concurrency, redaction,
-  durable declared-action events, and asynchronous `OperationRun` tracking
-- **Kernel consumers and plugin lifecycle** — generic Record/action HTTP routes,
-  generated AI tools, capability discovery, metadata-driven web list/form UI,
-  ownership-safe tenant-scoped plugin registration with durable lifecycle
-  state/compensation and seed Records, and telemetry-backed migration targets
+- **Durable ObjectType kernel** — 72 ObjectTypes discovered by strict audit;
+  explicit CRUD and named actions; exact declaration/adapter parity; mandatory
+  operation context, access policy, confirmation, idempotency, concurrency,
+  redaction, structured errors, durable events/consumer receipts, and
+  asynchronous retries, timeouts, cancellation, leases, and replay-safe recovery
+- **Completed consumer cutover** — generic Record/action HTTP routes, 335
+  generated AI-tool candidates, capability discovery, metadata-driven web
+  list/form UI, 75 static tools, and strict zero legacy routes/callers, unmatched
+  mutation callers, direct entry-point writes, or generated-tool collisions;
+  five narrow mutation protocol exceptions remain
+- **Tenant-safe workflows** — shared-resource adapters enforce exact grants and
+  owner-database routing; marketplace clone acquisition and plugin lifecycle use
+  durable idempotent cross-database sagas rather than implied cross-SQLite
+  transactions
+- **Versioned plugin kernel client** — Bridge/web plugin API version 1 with
+  manifest negotiation and unsupported-version rejection
 - **Per-workspace FirstRunWizard** — onboarding (Welcome → LLM → Ready) is tenant-scoped; hub installs never share platform-wide completion flags
 - **`LLAMA_EXTERNAL` attach mode** — Bridge attaches to a host-managed `llama-server` (no spawn/kill inside Docker); hub external LLM compose example
 - **Unified Intelligence model catalog** — picker lists local GGUFs, Cursor subscription models, cloud providers, and shared/remote endpoints
@@ -46,9 +54,15 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - [AGENT_MEMORY.md](docs/AGENT_MEMORY.md) — memory layers and embeddings
 - Marketplace Docker hub notes; onboarding / verification updates
 - [OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md) — canonical architecture,
-  action contract, tenancy, compatibility strategy, and current limitations
+  enforced action contract, tenancy, durable recovery, and protocol exceptions
 - [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
   and AI-tool migration inventory
+- Coordinated ecosystem migrations remain external dependencies:
+  [godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
+  [godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
+  [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
+  [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
+  and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2)
 
 ## [0.1.0] - 2026-06-29
 

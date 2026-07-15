@@ -20,17 +20,20 @@ Never say DocType. Structure uses ObjectType **StructureNode**; department/divis
 
 1. Prefer existing ObjectTypes: `list_object_types`.
 2. Shell tree: prefer **StructureNode** Records via `create_record`
-   (`objectType: StructureNode`); legacy structure tools are compatibility
-   wrappers.
+   (`objectType: StructureNode`). Specialized static tools may remain for
+   operational UX, but durable mutations still dispatch through the kernel.
 3. Domain data: plugins ship `objectTypes` + `records` seeds in `godmode.plugin.json`; compiled `bridge.entry` only when metadata is not enough.
 4. Generic tools: use declared CRUD tools and `run_record_action` with
    `objectType` set; inspect metadata before mutating.
 5. For page kinds `record-list` / `record-form`,
    `StructureNode.object_type` selects the ObjectType and `segment` remains the
    URL segment.
-6. Honor action schemas, roles, confirmation, idempotency, concurrency, and
-   sensitive-input metadata. Async actions return an `OperationRun`.
+6. Honor action schemas, roles, confirmation, idempotency, concurrency, retry,
+   timeout, cancellation, and sensitive-input metadata. Async actions return a
+   durable `OperationRun`; inspect its terminal state.
 7. Plugin ObjectTypes are visible only to tenants where their owner is installed.
+8. Executable plugins use the versioned kernel client (`apiVersion: 1`) and may
+   declare `kernelApiVersion: 1`.
 
 ## Tiering
 

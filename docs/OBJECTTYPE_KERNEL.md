@@ -41,9 +41,10 @@ There are two storage models:
    changing the type of a field requires an explicit migration outside the
    generic materializer.
 
-The deployed registry exposes 54 core ObjectTypes, including `StructureNode`.
-This is a hybrid architecture: the kernel standardizes discovery and dispatch,
-while domain adapters preserve authoritative business logic.
+The strict static audit discovers 72 deployed ObjectTypes, including
+`StructureNode`. All authenticated durable-domain mutations cross this kernel
+boundary. Service-backed adapters preserve authoritative business logic; that
+implementation choice does not create a second mutation path.
 
 ## Operations and actions
 
@@ -62,22 +63,25 @@ Actions represent domain behavior that does not fit CRUD. An action declares:
 - retry, cancellation, sensitive-input, audit, and event metadata where
   applicable.
 
-The dispatcher validates action input and output, authorizes the caller, enforces
-confirmation and declared concurrency checks, applies idempotency protection,
-redacts sensitive values from audit data, and emits declared events. Metadata is
-not a promise by itself: only behavior implemented by the current dispatcher and
-adapter is enforced.
+The dispatcher validates action input, output, and structured errors; authorizes
+the caller; enforces confirmation and declared concurrency/version fields;
+applies scoped idempotency with expiry and replayed success/failure state;
+redacts sensitive audit input; and appends declared durable events.
 
-Asynchronous actions return an `OperationRun`. Runs persist status, result or
-error, and timestamps for audit and inspection. On restart, interrupted runs are
-marked failed rather than resumed.
+Asynchronous actions return a durable `OperationRun`. A tenant-aware worker
+claims runs with leases and heartbeats, persists attempts and results, enforces
+declared timeouts with `AbortSignal`, retries only retryable errors/codes up to
+`maxAttempts` with declared backoff, and exposes cancellation only when
+`cancellable` is declared. Cancellation aborts an in-process handler and
+atomically finalizes both the run and its idempotency record. On startup or
+lease expiry, interrupted work is requeued only when retry/idempotency metadata
+makes replay safe; unsafe work fails closed with `KERNEL_REPLAY_UNSAFE`.
 
-Current limitations: retry policy, timeout, `errorSchema`, deprecation, custom
-concurrency version fields, `bulk` behavior, and strict enforcement of
-`cancellable` are declared metadata but are not generically executed by the
-dispatcher. Idempotency expiry/retry and native optimistic version handling are
-also limited. Adapters must not promise those behaviors until host enforcement
-is added.
+Declared bulk actions are rejected until an adapter implements their dedicated
+execution shape. Deprecation metadata remains descriptive. An adapter that
+performs external I/O must honor the supplied abort signal for prompt physical
+cancellation; the host still prevents a cancelled run from being finalized as
+successful.
 
 ## Security and tenancy
 
@@ -93,21 +97,29 @@ Authorization is layered:
 4. adapter/service authorization and data scoping.
 
 Plugin ObjectTypes are visible only to tenants where their owning plugin is
-installed. Definition replacement is ownership checked and atomic; core
-lifecycle state, tenant seeds, hooks, and knowledge import are separate durable
-steps with compensation, not one cross-database transaction. Native plugin
-tables and records are intentionally retained on uninstall so reinstall and
-recovery do not destroy tenant data.
+installed. Definition replacement is ownership checked and atomic. Plugin
+activation records separate durable lifecycle steps with compensation.
+Marketplace clone acquisition uses an idempotent cross-database saga: core and
+tenant steps are recorded independently and resume safely after interruption
+instead of pretending SQLite files share one transaction. Native plugin tables
+and records are intentionally retained on uninstall so reinstall and recovery
+do not destroy tenant data.
+
+Shared-resource adapters resolve the exact active grant and owner database for
+each resource. Viewers receive read parity, editors mutate the owner's record,
+and missing, revoked, expired, wrong-kind, guessed-ID, or clone access fails
+closed. A caller's role in its own tenant never upgrades a share grant.
 
 Secret fields and declared sensitive action paths are redacted from logs and
 audit payloads. Plugin custom Express routes are outside generic Record dispatch;
 their authors must enforce authentication, tenant boundaries, and installed
 plugin visibility explicitly.
 
-Declared action events are stored durably. The relay records consumer receipts
-so a named consumer can skip a previously completed durable event; this provides
-idempotent processing, not exactly-once delivery. Generic `object.record.*`
-notifications use the in-memory event bus.
+Declared action events are stored durably. The relay leases each event and
+records a receipt per named consumer only after that consumer succeeds. A retry
+skips completed consumers and resumes the unfinished set; this is durable
+at-least-once delivery with per-consumer idempotent receipts, not exactly-once
+delivery. Generic `object.record.*` notifications use the in-memory event bus.
 
 ## Consumers
 
@@ -125,24 +137,29 @@ Action clients provide `Idempotency-Key`, `If-Match`, and
 `X-Kernel-Confirmation` headers when required by the declared contract.
 
 ObjectType metadata also powers generated AI CRUD/action tools, capability
-discovery, plugin runtime registrations, and generic web list/form pages.
+discovery, plugin runtime registrations, and generic web list/form pages. Bridge
+and web plugins receive a typed kernel client with `apiVersion: 1`; executable
+plugins may declare `kernelApiVersion`, and unsupported future versions are
+rejected during manifest validation.
 `StructureNode.object_type` chooses generic Record rendering; `segment` remains
 the URL segment.
 
-## Compatibility and protocol exceptions
+## Completed migration and protocol exceptions
 
-The migration inventory classifies legacy HTTP mutations by their target.
-Structure compatibility routes currently delegate to kernel operations so
-existing clients keep working; most other entries are migration targets and have
-not yet been replaced by kernel dispatch. Legacy mutation telemetry records
-remaining use. A shim can be retired only after delegation/parity is verified
-and usage remains at zero for a sustained observation period.
+At the completion baseline, the strict audits discover 72 core ObjectTypes and
+report 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers, and 0
+direct writes in audited entry points. Tenant registries can expose additional
+ObjectTypes from installed executable or declarative plugins. Five domain
+routes remain as verified kernel delegates, not compatibility shims. Exact
+declaration/handler parity is tested for every core adapter.
 
-Some transports cannot be represented as a normal Record response. Live chat
-token streaming remains an explicit protocol exception: the session and model
-lifecycle are kernel-discoverable, but the streaming connection keeps its
-specialized protocol. Uploads and similar transport concerns may also remain
-exceptions while durable domain state uses Records and actions.
+Some wire protocols cannot be represented as JSON Record responses. Live chat
+uses WebSocket/token streaming; DM upload/download transfers multipart or binary
+bytes; authentication establishes or invalidates cookies; typing presence is
+ephemeral; analytics POST carries a read-only query; and signed Sierra Chart
+dispatch is an external command transport. These are explicit, narrow transport
+exceptions. Their durable domain effects use kernel CRUD/actions where
+applicable; binary and stream transport are not themselves Record CRUD.
 
 ## Plugin author checklist
 
@@ -153,7 +170,9 @@ exceptions while durable domain state uses Records and actions.
    sensitive-input metadata.
 5. Use generated discovery and action tools instead of adding static mutation
    tools when possible.
-6. Treat `tenantMigrations` as manifest metadata unless a specific host runner is
+6. Declare `kernelApiVersion: 1` for executable clients and use `api.kernel`
+   rather than legacy mutation URLs.
+7. Treat `tenantMigrations` as manifest metadata unless a specific host runner is
    documented; it is not a general migration framework.
-7. Back up persistent data before schema or deployment changes and test install,
+8. Back up persistent data before schema or deployment changes and test install,
    uninstall, reinstall, and tenant isolation.
