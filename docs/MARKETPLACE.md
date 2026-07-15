@@ -44,6 +44,10 @@ native ObjectType tables and tenant Records for reinstall or recovery. It is not
 a data erasure operation; export or delete retained data explicitly when
 required.
 
+A manifest-only plugin can ship native `objectTypes` and seed `records` without
+a `bridge.entry`. Executable adapters, actions, hooks, tools, or custom routes
+require Bridge code.
+
 Plugin Bridge code runs with host privileges. Install only trusted sources,
 review requested routes/actions and secret fields, and remember that custom
 Express routes must enforce authentication, tenant membership, and installed

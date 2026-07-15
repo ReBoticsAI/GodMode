@@ -15,3 +15,5 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
 7. Custom Express routes must enforce authentication, tenant membership, and
    installed-plugin visibility explicitly. Advanced mounts after boot may still
    need a Bridge restart — prefer tools + ObjectTypes + tenant hooks in v1.
+8. Verify discovery, representative Record/action calls, adapter parity, and
+   tenant isolation after install.

@@ -21,6 +21,11 @@ with one of the four classifications and a target or rationale. It also rejects
 mutation declarations whose path is not a static string, so dynamic routing
 cannot bypass review.
 
+`compatibility-shim` is the audit classification for a concrete migration
+target; it does not mean every classified handler already delegates through the
+kernel. Structure mutations currently do, while the remaining targets stay
+measured until cutover.
+
 ## Domain coverage
 
 - **Platform structure (17 declarations):** legacy departments, divisions,

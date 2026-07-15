@@ -43,6 +43,8 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
     {
       "name": "Invoice",
       "label": "Invoice",
+      "contractVersion": 1,
+      "schemaVersion": 1,
       "storage": { "kind": "native" },
       "operations": ["list", "get", "create", "update", "delete"],
       "fields": [
@@ -129,6 +131,22 @@ service-backed ObjectTypes. `PluginRecordAdapter` supports optional `list`,
 `get`, `create`, `update`, `delete`, and named `actions`. Every operation/action
 declared by the definition must have a matching adapter implementation; do not
 declare capabilities the plugin cannot execute.
+
+A representative action on `invoiceDefinition` is:
+
+```json
+{
+  "name": "approve",
+  "label": "Approve",
+  "target": "record",
+  "effect": "write",
+  "execution": "sync",
+  "roles": ["editor", "owner"],
+  "confirmation": { "required": true, "ttlSeconds": 300 },
+  "idempotency": { "required": true },
+  "inputSchema": { "type": "object", "additionalProperties": false }
+}
+```
 
 HTTP action input is the direct JSON request body. Clients send
 `Idempotency-Key`, `If-Match`, and `X-Kernel-Confirmation` headers when required

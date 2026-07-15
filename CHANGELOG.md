@@ -47,6 +47,8 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - Marketplace Docker hub notes; onboarding / verification updates
 - [OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md) — canonical architecture,
   action contract, tenancy, compatibility strategy, and current limitations
+- [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
+  and AI-tool migration inventory
 
 ## [0.1.0] - 2026-06-29
 
