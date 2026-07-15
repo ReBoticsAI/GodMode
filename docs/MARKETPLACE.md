@@ -149,6 +149,12 @@ See [CONTRIBUTING.md](https://github.com/ReBoticsAI/GodMode-Marketplace/blob/mai
 | `clone` | Downloads `bundle.json` and imports via portability |
 | `plugin` | Clones `pluginRepo` (or uses `pluginLocalPath`) and registers with Bridge |
 
+Clone bundles can contain portable `kind: "record"` children for the reviewed
+`StructureNode`, `Agent`, and `Skill` ObjectTypes. Bridge validates the nested
+Record shape and deterministic ID, rejects other ObjectTypes, and imports each
+child through kernel seed/CRUD dispatch rather than writing domain tables
+directly.
+
 Clone acquisition is a durable, idempotent saga across `core.sqlite` and the
 buyer tenant database. Operation registration, tenant import, purchase
 recording, and completion are independently recorded with audit/outbox rows.
