@@ -1,15 +1,22 @@
 import type { AppDatabase } from "../db.js";
 import { agentCodeAccess, getAgent } from "./agents/agents-db.js";
 import { isOperatorTenantDb } from "./tenant-kind.js";
-import { PAGE_KINDS } from "./page-kinds.js";
 import { pluginToolsAsAiDefs, isTradingDepartmentPluginTool } from "../plugins/plugin-tools.js";
 import {
   filterToolsForChatMode,
   type IntelligenceChatMode,
 } from "./chat-mode.js";
+import {
+  genericObjectTypeToolDefs,
+  objectTypeAutoToolDefs,
+} from "../kernel/auto-tools.js";
+import { pageKindJsonSchema } from "../kernel/kind-registry.js";
 
-/** JSON-schema enum for structure node `kind` (mirrors web page-registry). */
-const KIND_SCHEMA = { type: "string", enum: [...PAGE_KINDS] } as const;
+/** JSON-schema for structure node `kind` — live Kind registry (plugins extend). */
+function kindSchema(): Record<string, unknown> {
+  const base = pageKindJsonSchema();
+  return { ...base, description: "Page renderer kind from the Kind registry" };
+}
 
 export type ToolMode = "auto" | "confirm";
 
@@ -28,6 +35,8 @@ export interface AiToolDef {
    */
   write?: boolean;
 }
+
+const supersededStaticName = (name: string): string => name;
 
 /** Registry of platform tools exposed to the model (schemas for inspect UI). */
 export const AI_TOOL_REGISTRY: AiToolDef[] = [
@@ -111,7 +120,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_artifacts",
+    name: supersededStaticName("list_artifacts"),
     description: "List this agent's saved artifacts (id, name, size, description).",
     mode: "auto",
     parameters: {
@@ -120,7 +129,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "delete_artifact",
+    name: supersededStaticName("delete_artifact"),
     description: "Delete one of this agent's artifacts by id or name. Requires confirmation.",
     mode: "confirm",
     parameters: {
@@ -255,7 +264,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_card_comments",
+    name: supersededStaticName("list_card_comments"),
     description: "List the comment thread for a card, oldest first.",
     mode: "auto",
     parameters: {
@@ -449,7 +458,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_skill",
+    name: supersededStaticName("create_skill"),
     description:
       "Draft a playbook skill (named steps: when X, do Y). Pending approval. Rejected if too short or a near-duplicate.",
     mode: "confirm",
@@ -466,7 +475,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_rule",
+    name: supersededStaticName("create_rule"),
     description:
       "Draft a new file-backed rule (.mdc guardrail) for this agent. Created in 'pending' status awaiting user approval before it is applied.",
     mode: "confirm",
@@ -492,6 +501,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       "List the full platform structure tree (departments, divisions, pages).",
     mode: "auto",
   },
+  ...genericObjectTypeToolDefs(),
   {
     name: "create_department",
     description:
@@ -503,7 +513,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         id: { type: "string", description: "lowercase slug (a-z 0-9 -)" },
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (default placeholder)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (default placeholder)" },
       },
       required: ["id", "label", "icon"],
     },
@@ -521,7 +531,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         rightSidebar: { type: "string", description: "Plugin sidebar slot id, or none to clear" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (e.g. sierra-dashboard-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-dashboard-group)" },
         segment: { type: "string", description: "URL segment (defaults to id)" },
       },
       required: ["departmentId", "id", "label", "icon"],
@@ -541,13 +551,13 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         segment: { type: "string", description: "URL segment (a-z 0-9 -, may be empty)" },
-        kind: { ...KIND_SCHEMA, description: "Page renderer kind (e.g. sierra-playbooks-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-playbooks-group)" },
       },
       required: ["departmentId", "divisionId", "id", "label", "icon"],
     },
   },
   {
-    name: "update_structure_node",
+    name: supersededStaticName("update_structure_node"),
     description:
       "Update a department, division, or page (label/icon/segment/rightSidebar/kind). Requires editor. Requires confirmation.",
     mode: "confirm",
@@ -562,13 +572,13 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         icon: { type: "string" },
         segment: { type: "string" },
         rightSidebar: { type: "string", description: "Plugin sidebar slot id, or none to clear" },
-        kind: KIND_SCHEMA,
+        kind: kindSchema(),
       },
       required: ["nodeType", "departmentId"],
     },
   },
   {
-    name: "delete_structure_node",
+    name: supersededStaticName("delete_structure_node"),
     description:
       "Delete a non-built-in department, division, or page. Requires owner. Requires confirmation.",
     mode: "confirm",
@@ -615,7 +625,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_agent",
+    name: supersededStaticName("create_agent"),
     description:
       "Create a new subagent (page-owner or specialist). Intelligence-only platform action. Requires confirmation.",
     mode: "confirm",
@@ -651,13 +661,13 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
 
   /* -------------------- Shares & collaboration --------------------------- */
   {
-    name: "list_share_grants",
+    name: supersededStaticName("list_share_grants"),
     description:
       "List share grants owned by or granted to the current user (includes shared sidebar tree).",
     mode: "auto",
   },
   {
-    name: "create_share_grant",
+    name: supersededStaticName("create_share_grant"),
     description:
       "Share a department, division, page, agent, or other resource with another user or tenant. Requires confirmation.",
     mode: "confirm",
@@ -716,7 +726,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
 
   /* -------------------- Automations / workflows -------------------------- */
   {
-    name: "list_workflows",
+    name: supersededStaticName("list_workflows"),
     description: "List automation workflows for the active agent.",
     mode: "auto",
     parameters: {
@@ -743,7 +753,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_workflow",
+    name: supersededStaticName("create_workflow"),
     description:
       "Create an automation workflow (directed graph of trigger/prompt/tool/agent nodes). Requires confirmation.",
     mode: "confirm",
@@ -759,7 +769,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "update_workflow",
+    name: supersededStaticName("update_workflow"),
     description: "Update a workflow name, graph config, or enabled flag. Requires confirmation.",
     mode: "confirm",
     parameters: {
@@ -774,12 +784,12 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_schedules",
+    name: supersededStaticName("list_schedules"),
     description: "List cron schedules for automation workflows.",
     mode: "auto",
   },
   {
-    name: "create_schedule",
+    name: supersededStaticName("create_schedule"),
     description:
       "Create a cron schedule to run a workflow on a timer. Requires confirmation.",
     mode: "confirm",
@@ -992,7 +1002,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   // --- Notifications ---
   {
-    name: "list_notifications",
+    name: supersededStaticName("list_notifications"),
     description: "List notifications for the current user or active agent.",
     mode: "auto",
     parameters: {
@@ -1004,7 +1014,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_notification",
+    name: supersededStaticName("create_notification"),
     description:
       "Send a notification/alert/message to a user or agent — e.g. a summary, review, or status update they should see. This is the CORRECT tool whenever the user asks you to 'create a notification', 'notify', or 'send a message'. Provide a real `title` AND a non-empty `body` (blank notifications are rejected). Not a task card.",
     mode: "confirm",
@@ -1037,7 +1047,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   // --- Support ---
   {
-    name: "create_support_ticket",
+    name: supersededStaticName("create_support_ticket"),
     description: "Submit a support ticket to platform admins.",
     mode: "confirm",
     write: true,
@@ -1053,7 +1063,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_support_tickets",
+    name: supersededStaticName("list_support_tickets"),
     description: "List support tickets for the requester or all tickets (admin).",
     mode: "auto",
     parameters: {
@@ -1094,7 +1104,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   // --- Wiki ---
   {
-    name: "list_wiki_pages",
+    name: supersededStaticName("list_wiki_pages"),
     description: "List wiki pages visible to the current user.",
     mode: "auto",
     parameters: {
@@ -1119,7 +1129,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "create_wiki_page",
+    name: supersededStaticName("create_wiki_page"),
     description: "Create a wiki page. Requires confirmation.",
     mode: "confirm",
     write: true,
@@ -1136,7 +1146,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "update_wiki_page",
+    name: supersededStaticName("update_wiki_page"),
     description: "Update a wiki page. Requires confirmation.",
     mode: "confirm",
     write: true,
@@ -1153,7 +1163,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "delete_wiki_page",
+    name: supersededStaticName("delete_wiki_page"),
     description: "Delete a wiki page. Requires confirmation.",
     mode: "confirm",
     write: true,
@@ -1219,13 +1229,13 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   // --- Hooks / events ---
   {
-    name: "list_hooks",
+    name: supersededStaticName("list_hooks"),
     description: "List automation hooks owned by the user or their agents.",
     mode: "auto",
     parameters: { type: "object", properties: {} },
   },
     {
-    name: "create_hook",
+    name: supersededStaticName("create_hook"),
     description:
       "Create an automation hook so you can KEEP WORKING across turns (self-loop). For a recurring timer loop set triggerKind:'schedule' WITH scheduleCron (cron, e.g. '*/5 * * * *') and actionKind:'run_agent' WITH actionConfigJson = a JSON STRING '{\"agentId\":\"<your agent id>\",\"prompt\":\"<what to do each wake>\"}'. ownerKind defaults to 'agent' and ownerId to your agent id. A schedule hook MUST include scheduleCron; an event hook (triggerKind:'event') MUST include eventType. Requires confirmation.",
     mode: "confirm",
@@ -1262,7 +1272,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "update_hook",
+    name: supersededStaticName("update_hook"),
     description: "Update an automation hook. Requires confirmation.",
     mode: "confirm",
     write: true,
@@ -1280,7 +1290,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "delete_hook",
+    name: supersededStaticName("delete_hook"),
     description: "Delete an automation hook. Requires confirmation.",
     mode: "confirm",
     write: true,
@@ -1291,7 +1301,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_hook_runs",
+    name: supersededStaticName("list_hook_runs"),
     description: "List recent runs for a hook.",
     mode: "auto",
     parameters: {
@@ -1535,12 +1545,56 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_inference_endpoints",
+    name: supersededStaticName("list_inference_endpoints"),
     description: "List inference endpoints owned by the current user.",
     mode: "auto",
     parameters: { type: "object", properties: {} },
   },
 ];
+
+/**
+ * Static definitions with names now generated from core ObjectTypes. Keeping
+ * both made the legacy switch win over kernel dispatch and exposed divergent
+ * schemas. The legacy definitions remain above only as migration reference;
+ * callers see the generated CRUD/action definition.
+ */
+export const STATIC_GENERATED_COLLISION_NAMES = new Set([
+  "create_agent",
+  "create_hook",
+  "create_notification",
+  "create_rule",
+  "create_schedule",
+  "create_share_grant",
+  "create_skill",
+  "create_support_ticket",
+  "create_wiki_page",
+  "create_workflow",
+  "delete_artifact",
+  "delete_hook",
+  "delete_structure_node",
+  "delete_wiki_page",
+  "list_artifacts",
+  "list_card_comments",
+  "list_hook_runs",
+  "list_hooks",
+  "list_inference_endpoints",
+  "list_notifications",
+  "list_schedules",
+  "list_share_grants",
+  "list_support_tickets",
+  "list_wiki_pages",
+  "list_workflows",
+  "update_hook",
+  "update_structure_node",
+  "update_wiki_page",
+  "update_workflow",
+]);
+
+function effectiveStaticTools(): AiToolDef[] {
+  return AI_TOOL_REGISTRY.filter(
+    (tool) => !STATIC_GENERATED_COLLISION_NAMES.has(tool.name)
+  );
+}
 
 /** Native coding/terminal tools gated by agent codeAccess. */
 export const CODING_TOOL_NAMES = new Set<string>([
@@ -1596,6 +1650,12 @@ const TASK_TOOLS = new Set<string>([
 // (Intelligence only) but lives in this subset so the model can discover it.
 const PLATFORM_STRUCTURE_TOOLS = new Set<string>([
   "list_structure",
+  "list_object_types",
+  "list_records",
+  "get_record",
+  "create_record",
+  "update_record",
+  "delete_record",
   "create_department",
   "create_division",
   "create_page",
@@ -1637,7 +1697,7 @@ for (const t of AI_TOOL_REGISTRY) {
  * and arrive via departmentToolNames("trading").
  */
 export function platformStructureToolNames(): string[] {
-  return AI_TOOL_REGISTRY.filter(
+  return effectiveStaticTools().filter(
     (t) => t.category === "platform" && !t.departments?.length
   ).map((t) => t.name);
 }
@@ -1648,7 +1708,7 @@ export function platformStructureToolNames(): string[] {
  * department explicitly so non-platform contexts don't receive them implicitly.
  */
 export function generalToolNames(): string[] {
-  return AI_TOOL_REGISTRY.filter(
+  return effectiveStaticTools().filter(
     (t) =>
       !t.departments?.length && t.category !== "platform" && t.category !== "coding"
   ).map((t) => t.name);
@@ -1656,7 +1716,7 @@ export function generalToolNames(): string[] {
 
 /** Names of tools scoped to a specific department. */
 export function departmentToolNames(departmentId: string): string[] {
-  const core = AI_TOOL_REGISTRY.filter((t) =>
+  const core = effectiveStaticTools().filter((t) =>
     t.departments?.includes(departmentId)
   ).map((t) => t.name);
   const plugin = pluginToolsAsAiDefs()
@@ -1679,7 +1739,19 @@ export const PERSONAL_DIGITAL_YOU_TOOL_NAMES = [
 ] as const;
 
 function allRegisteredTools(): AiToolDef[] {
-  return [...AI_TOOL_REGISTRY, ...pluginToolsAsAiDefs()];
+  const staticTools = effectiveStaticTools();
+  const coreNames = new Set(staticTools.map((t) => t.name));
+  const autoOt = objectTypeAutoToolDefs(coreNames).map(
+    (t): AiToolDef => ({
+      name: t.name,
+      description: t.description,
+      mode: t.mode,
+      parameters: t.parameters,
+      category: t.category ?? "platform",
+      write: t.write,
+    })
+  );
+  return [...staticTools, ...autoOt, ...pluginToolsAsAiDefs()];
 }
 
 /** Default tool allowlist for Intelligence on personal (non-operator) tenants. */

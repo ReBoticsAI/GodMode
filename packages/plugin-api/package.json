@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@godmode/kernel": "*",
     "express": "^4.21.2"
   },
   "devDependencies": {

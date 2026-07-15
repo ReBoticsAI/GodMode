@@ -14,6 +14,7 @@ export interface StructureNode {
   segment: string;
   path: string;
   kind: string;
+  objectType: string | null;
   rightSidebar: string | null;
   agentId: string | null;
   builtIn: boolean;
@@ -77,6 +78,7 @@ interface DbNode {
   icon: string;
   segment: string;
   kind: string;
+  object_type: string | null;
   right_sidebar: string | null;
   agent_id: string | null;
   built_in: number;
@@ -143,6 +145,7 @@ function buildTree(rows: DbNode[]): StructureNode[] {
     segment: row.segment,
     path: computePath(row, byId),
     kind: row.kind,
+    objectType: row.object_type,
     rightSidebar: parseRightSidebar(row.right_sidebar),
     agentId: row.agent_id,
     builtIn: row.built_in === 1,
@@ -169,7 +172,7 @@ export function flattenStructureNodes(nodes: StructureNode[]): StructureNode[] {
 export function readStructure(db: AppDatabase): StructureTree {
   const rows = db
     .prepare(
-      `SELECT id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order, tabs_json
+      `SELECT id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order, tabs_json
        FROM structure_nodes ORDER BY sort_order, label`
     )
     .all() as DbNode[];
@@ -219,6 +222,7 @@ export function createNode(
     icon: string;
     segment?: string;
     kind?: string;
+    objectType?: string | null;
     rightSidebar?: string | null;
   }
 ): StructureNode {
@@ -262,8 +266,8 @@ export function createNode(
 
   db.prepare(
     `INSERT INTO structure_nodes
-       (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`
+       (id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`
   ).run(
     nodeId,
     parentId,
@@ -271,6 +275,7 @@ export function createNode(
     input.icon,
     segment,
     kind,
+    input.objectType?.trim() || null,
     rightSidebar,
     sortOrder
   );
@@ -290,6 +295,7 @@ export function updateNode(
     icon?: string;
     segment?: string;
     kind?: string;
+    objectType?: string | null;
     rightSidebar?: string | null;
     parentId?: string | null;
   }
@@ -361,6 +367,10 @@ export function updateNode(
   if (patch.kind !== undefined) {
     sets.push("kind=?");
     vals.push(patch.kind.trim() || "placeholder");
+  }
+  if (patch.objectType !== undefined) {
+    sets.push("object_type=?");
+    vals.push(patch.objectType?.trim() || null);
   }
   if (patch.rightSidebar !== undefined) {
     sets.push("right_sidebar=?");

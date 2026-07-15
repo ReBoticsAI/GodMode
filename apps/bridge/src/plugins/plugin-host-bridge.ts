@@ -11,6 +11,11 @@ import {
 } from "../services/card-awaiting.js";
 import { setPluginHost, type PluginHostServices, type SierraPb1SchedulerHost, type TenantDb } from "@godmode/plugin-host";
 import { config } from "../config.js";
+import {
+  createRecord,
+  createSystemOperationContext,
+  KernelError,
+} from "../kernel/index.js";
 
 let pingScHealthImpl: (() => Promise<{ ok: boolean; detail?: string }>) | null = null;
 let enqueueScLineImpl: ((line: string, chartbookKey?: string) => string) | null = null;
@@ -25,11 +30,26 @@ export function setScHealthPing(
 }
 
 function upsertTradingDepartment(db: AppDatabase): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO structure_nodes
-       (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order, tabs_json)
-     VALUES ('trading', NULL, 'Trading', 'trending-up', 'trading', 'placeholder', NULL, NULL, 1, 0, NULL)`
-  ).run();
+  try {
+    createRecord(
+      db,
+      "StructureNode",
+      {
+        id: "trading",
+        parent_id: null,
+        label: "Trading",
+        icon: "trending-up",
+        segment: "trading",
+        kind: "placeholder",
+        built_in: true,
+        sort_order: 0,
+      },
+      createSystemOperationContext()
+    );
+  } catch (error) {
+    if (error instanceof KernelError && error.status === 409) return;
+    throw error;
+  }
 }
 
 export function initPluginHost(): PluginHostServices {

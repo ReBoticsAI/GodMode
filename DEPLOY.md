@@ -67,6 +67,28 @@ Open http://localhost:8080. Sign in with email and password. Workspace data stay
 
 Both compose files mount `PLATFORM_DATA_DIR=/data` (SQLite tenants, core DB, tenant sandboxes).
 
+That volume also contains native ObjectType tables, durable operation/audit
+state (including leases, retries, cancellation, idempotency, and recovery),
+event-consumer receipts, cross-database acquisition saga/outbox rows, and
+Intelligence-authored plugins. Back up the entire platform data directory before
+image upgrades, plugin lifecycle changes, or ObjectType schema changes. A safe
+backup captures `core.sqlite`, every tenant SQLite database (using SQLite's
+backup mechanism or while writers are stopped), and tenant plugin workspaces.
+
+Native ObjectType evolution is additive only. Plugin uninstall removes runtime
+visibility but retains native tables and Records, so uninstall is not an erasure
+or space-reclamation operation. Verify `/api/health`, ObjectType discovery,
+plugin navigation, a representative Record action, async recovery, and the
+strict zero-debt audit after deployment; see
+[docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+Startup reconciles installed-plugin ObjectTypes and seeds before serving tenant
+traffic, recovers replay-safe leased operations, and starts tenant durable-event
+relays. Include `/api/kernel/capabilities` in the post-deploy smoke check. On the
+Z440, also record the exact 40-character source revision and prove the running
+container's immutable image ID equals the image built from it using the commands
+in [docs/VERIFICATION.md](docs/VERIFICATION.md#z440-revision-and-image-identity).
+
 ## Intelligence on hub
 
 New tenants get Intelligence with `backend=provider` (OpenAI-compatible). Users add API keys in **Vault → Secrets** and configure the provider in **Agents → Pipeline**.

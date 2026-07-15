@@ -18,14 +18,44 @@ Fresh clone = **personal OS only** (Intelligence, wiki, tasks, structure). Copy 
 
 `DEPLOYMENT_MODE=local` (default) is for local development. **Authentication is required by default** (`AUTH_ALLOW_ANONYMOUS=false` in `.env.example`). Set `AUTH_ALLOW_ANONYMOUS=true` only for headless local tooling — never on a network-exposed host.
 
-Run `npm run audit:oss` before release-related PRs.
+Run `npm run audit:oss` before release-related PRs. Changes to authenticated
+mutations, AI tools, ObjectTypes, adapters, or actions must also update the
+kernel coverage baseline and contract tests.
 
 ## Pull requests
 
 - Keep changes focused; match existing code style.
-- Run `npm run typecheck` before submitting.
+- Run `npm run test:gate` before submitting kernel or route changes.
+  `npm run audit:kernel:strict` and `npm run test:objecttypes` are available as
+  focused checks; build affected production workspaces.
 - Do not commit secrets (`.env`, API keys, wallet keys).
 - Domain-specific integrations belong in **external plugin repos**, not the public core tree.
+- Declare ObjectType operations/actions explicitly and keep adapter
+  implementations, schemas, roles, confirmation, idempotency, concurrency,
+  retry/timeout/cancellation/recovery, redaction, and durable event behavior
+  consistent with the metadata. Core tests require exact declaration/handler
+  parity.
+- Preserve the authenticated `OperationContext` and tenant/plugin visibility;
+  custom plugin routes require explicit install checks.
+- Document protocol exceptions rather than disguising transport or control-plane
+  operations as Record CRUD. See
+  [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
+- The current strict baseline is 72 ObjectTypes, 75 static tools, 335 generated
+  candidates, 5 protocol exceptions, and zero legacy routes/callers, unmatched
+  callers, direct writes, or tool collisions. Do not reintroduce migration debt.
+- Protocol exceptions are wire-level only: authentication cookies, read-only
+  analytical POST, signed external command transport, ephemeral presence,
+  WebSocket/token streams, and authorized binary transfer. Durable effects must
+  still kernel-dispatch; bytes and streams are not Record CRUD.
+- When mutation routes, callers, tools, or exceptions change, update the audit
+  fixtures/tests and `docs/KERNEL_MIGRATION_MATRIX.md`.
+- The completed plugin ecosystem cutover was coordinated through
+  [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
+  [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
+  and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
+  Private domain-plugin migrations were delivered in their own repositories.
+  Future ecosystem migrations must likewise merge all coordinated external PRs
+  before claiming completion.
 
 ## What we are looking for (roadmap themes)
 

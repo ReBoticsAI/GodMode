@@ -278,7 +278,10 @@ export class LlmManager {
     };
   }
 
-  updateSettings(patch: Record<string, unknown>): LlmSettings {
+  updateSettings(
+    patch: Record<string, unknown>,
+    db: AppDatabase = this.db
+  ): LlmSettings {
     const numKeys = [
       "ctxSize",
       "gpuLayers",
@@ -299,38 +302,38 @@ export class LlmManager {
     ];
     for (const key of numKeys) {
       if (patch[key] != null && Number.isFinite(Number(patch[key]))) {
-        writeSetting(this.db, key, String(Number(patch[key])));
+        writeSetting(db, key, String(Number(patch[key])));
       }
     }
     if (patch.flashAttn != null)
-      writeSetting(this.db, "flashAttn", String(patch.flashAttn));
+      writeSetting(db, "flashAttn", String(patch.flashAttn));
     if (patch.jinja != null)
-      writeSetting(this.db, "jinja", patch.jinja ? "true" : "false");
+      writeSetting(db, "jinja", patch.jinja ? "true" : "false");
     if (patch.extraArgs != null)
-      writeSetting(this.db, "extraArgs", String(patch.extraArgs));
+      writeSetting(db, "extraArgs", String(patch.extraArgs));
     if (patch.autoStart != null)
-      writeSetting(this.db, "autoStart", patch.autoStart ? "true" : "false");
+      writeSetting(db, "autoStart", patch.autoStart ? "true" : "false");
     if (patch.activeModelPath != null)
-      writeSetting(this.db, "activeModelPath", String(patch.activeModelPath));
+      writeSetting(db, "activeModelPath", String(patch.activeModelPath));
     if (patch.systemPrompt != null)
-      writeSetting(this.db, "systemPrompt", String(patch.systemPrompt));
+      writeSetting(db, "systemPrompt", String(patch.systemPrompt));
     if (patch.enableThinking != null)
-      writeSetting(this.db, "enableThinking", patch.enableThinking ? "true" : "false");
+      writeSetting(db, "enableThinking", patch.enableThinking ? "true" : "false");
     if (patch.thinkingEfficiency != null)
       writeSetting(
-        this.db,
+        db,
         "thinkingEfficiency",
         patch.thinkingEfficiency === "low" ? "low" : "normal"
       );
     if (patch.nativeTools != null)
-      writeSetting(this.db, "nativeTools", patch.nativeTools ? "true" : "false");
+      writeSetting(db, "nativeTools", patch.nativeTools ? "true" : "false");
     if (patch.memoryMode != null)
       writeSetting(
-        this.db,
+        db,
         "memoryMode",
         patch.memoryMode === "auto" ? "auto" : "approval"
       );
-    return this.getSettings();
+    return this.getSettings(db);
   }
 
   /** Default base prompt, so the UI can offer a "reset to default". */

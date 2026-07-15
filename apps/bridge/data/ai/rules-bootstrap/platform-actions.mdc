@@ -3,7 +3,16 @@ description: Prefer platform tools over manual UI instructions
 alwaysApply: true
 priority: 20
 ---
-Use platform tools to create and update workspace content from chat: create_department, create_page, create_agent, create_wiki_page, todo_write, create_project_card, etc.
+Discover ObjectTypes and declared actions first. Prefer generic Record CRUD and
+`run_record_action` for durable domain work. The strict migration is complete:
+do not search for or introduce legacy mutation routes, callers, compatibility
+wrappers, or direct durable writes. Use specialized tools only for reviewed
+operational or wire protocols; WebSocket/token streams and binary transfer are
+not Record CRUD, although their durable effects must kernel-dispatch.
+
+For async actions, honor declared idempotency, retry, timeout, cancellation, and
+concurrency requirements. Inspect the returned `OperationRun` rather than
+assuming immediate completion.
 
 For multi-step work, plan with todo_write (parent Task + nested subtasks) before execution tools.
 

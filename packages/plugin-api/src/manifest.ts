@@ -1,11 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  validateObjectTypeDef,
+  type ObjectTypeDef,
+  type RecordData,
+} from "@godmode/kernel";
+import {
+  KERNEL_CLIENT_API_VERSION,
+  type KernelClientApiVersion,
+} from "./kernel-client.js";
+
+export interface PluginRecordSeed {
+  objectType: string;
+  data: RecordData;
+}
 
 export interface GodmodePluginManifest {
   id: string;
   version: string;
   name: string;
   engine?: string;
+  /** Kernel client contract required by executable Bridge/web plugin code. */
+  kernelApiVersion?: KernelClientApiVersion;
   description?: string;
   departments?: string[];
   native?: {
@@ -20,12 +36,98 @@ export interface GodmodePluginManifest {
     entry: string;
   };
   tenantMigrations?: string[];
+  /** ObjectType definitions shipped by the plugin (registered before tenant:install). */
+  objectTypes?: ObjectTypeDef[];
+  /** Optional Record seeds applied after ObjectTypes register (upsert by id). */
+  records?: PluginRecordSeed[];
 }
 
 const MANIFEST_FILE = "godmode.plugin.json";
 
 export function manifestPath(pluginRoot: string): string {
   return path.join(pluginRoot, MANIFEST_FILE);
+}
+
+function parseObjectTypes(raw: unknown, pluginId: string): ObjectTypeDef[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ObjectTypeDef[] = [];
+  for (const [index, item] of raw.entries()) {
+    if (!item || typeof item !== "object") {
+      throw new Error(`Invalid plugin manifest (${pluginId}): objectTypes[${index}] must be an object`);
+    }
+    const ot = item as ObjectTypeDef;
+    const operations =
+      ot.operations ??
+      (ot.storage?.kind === "native"
+        ? (["list", "get", "create", "update", "delete"] as const)
+        : (["list", "get"] as const));
+    const writable = operations.some((operation) =>
+      ["create", "update", "delete"].includes(operation)
+    );
+    const permissions =
+      ot.permissions ??
+      [
+        { role: "viewer" as const, read: true },
+        {
+          role: "editor" as const,
+          read: true,
+          create: writable,
+          update: writable,
+          delete: writable,
+        },
+        {
+          role: "owner" as const,
+          read: true,
+          create: writable,
+          update: writable,
+          delete: writable,
+        },
+        {
+          role: "intelligence" as const,
+          read: true,
+          create: writable,
+          update: writable,
+          delete: writable,
+        },
+      ];
+    const owned: ObjectTypeDef = {
+      ...ot,
+      contractVersion: ot.contractVersion ?? 1,
+      operations: [...operations],
+      permissions,
+      pluginId,
+    };
+    const errors = validateObjectTypeDef(owned);
+    if (errors.length) {
+      throw new Error(
+        `Invalid plugin manifest (${pluginId}): ObjectType ${String(ot.name)}: ${errors.join("; ")}`
+      );
+    }
+    out.push(owned);
+  }
+  return out.length ? out : undefined;
+}
+
+function parseRecordSeeds(raw: unknown): PluginRecordSeed[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PluginRecordSeed[] = [];
+  for (const [index, item] of raw.entries()) {
+    if (!item || typeof item !== "object") {
+      throw new Error(`Invalid record seed at index ${index}`);
+    }
+    const r = item as Record<string, unknown>;
+    if (typeof r.objectType !== "string" || !r.data || typeof r.data !== "object") {
+      throw new Error(`Invalid record seed at index ${index}: objectType and data required`);
+    }
+    if (r.data && (r.data as Record<string, unknown>).id == null) {
+      throw new Error(`Invalid record seed at index ${index}: deterministic data.id required`);
+    }
+    out.push({
+      objectType: r.objectType,
+      data: r.data as RecordData,
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest {
@@ -42,6 +144,14 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
   if (typeof m.name !== "string" || !m.name.trim()) {
     throw new Error(`Invalid plugin manifest (${m.id}): name required`);
   }
+  if (
+    m.kernelApiVersion !== undefined &&
+    m.kernelApiVersion !== KERNEL_CLIENT_API_VERSION
+  ) {
+    throw new Error(
+      `Invalid plugin manifest (${m.id}): unsupported kernelApiVersion ${String(m.kernelApiVersion)}; host supports ${KERNEL_CLIENT_API_VERSION}`
+    );
+  }
   const bridge = m.bridge as Record<string, unknown> | undefined;
   const web = m.web as Record<string, unknown> | undefined;
   if (bridge && typeof bridge.entry !== "string") {
@@ -51,11 +161,16 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     throw new Error(`Invalid plugin manifest (${m.id}): web.entry must be string`);
   }
   const native = m.native as Record<string, unknown> | undefined;
+  const id = m.id.trim();
   return {
-    id: m.id.trim(),
+    id,
     version: m.version.trim(),
     name: m.name.trim(),
     engine: typeof m.engine === "string" ? m.engine : undefined,
+    kernelApiVersion:
+      m.kernelApiVersion === KERNEL_CLIENT_API_VERSION
+        ? KERNEL_CLIENT_API_VERSION
+        : undefined,
     description: typeof m.description === "string" ? m.description : undefined,
     departments: Array.isArray(m.departments)
       ? m.departments.filter((d): d is string => typeof d === "string")
@@ -73,6 +188,8 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     tenantMigrations: Array.isArray(m.tenantMigrations)
       ? m.tenantMigrations.filter((x): x is string => typeof x === "string")
       : undefined,
+    objectTypes: parseObjectTypes(m.objectTypes, id),
+    records: parseRecordSeeds(m.records),
   };
 }
 

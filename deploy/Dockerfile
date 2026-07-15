@@ -18,6 +18,7 @@ COPY packages/ packages/
 RUN npm ci --omit=dev -w @godmode/bridge \
   && apk del python3 make g++
 COPY --from=build /app/packages/flow-core/dist packages/flow-core/dist
+COPY --from=build /app/packages/kernel/dist packages/kernel/dist
 COPY --from=build /app/packages/plugin-api/dist packages/plugin-api/dist
 COPY --from=build /app/packages/plugin-host/dist packages/plugin-host/dist
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist

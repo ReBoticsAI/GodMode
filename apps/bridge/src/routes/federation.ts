@@ -1,17 +1,125 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { randomUUID } from "node:crypto";
-import { config } from "../config.js";
-import { getCoreDb } from "../core-db.js";
+import { getCoreDb, type CoreDatabase } from "../core-db.js";
 import { getPluginHost } from "@godmode/plugin-host";
-import { createShareGrant } from "../services/share-service.js";
-import type { MarketplaceListingKind, ShareGrantRole } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
 } from "../services/auth/middleware.js";
+import {
+  executeCollectionAction,
+  KernelError,
+} from "../kernel/record-api.js";
 
 function scEnqueue(line: string, chartbookKey?: string): string {
   return getPluginHost().enqueueScLine!(line, chartbookKey);
+}
+
+interface FederationGrant {
+  id: string;
+  owner_tenant_id: string;
+  resource_kind: string;
+  resource_id: string;
+  grantee_user_id: string | null;
+  grantee_tenant_id: string | null;
+  role: string;
+  expires_at: string | null;
+}
+
+export class FederationAuthorizationError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+function federationGrantForToken(
+  core: CoreDatabase,
+  token: string
+): FederationGrant {
+  const grant = core
+    .prepare(
+      `SELECT id, owner_tenant_id, resource_kind, resource_id,
+              grantee_user_id, grantee_tenant_id, role, expires_at
+       FROM share_grants
+       WHERE federation_token=?
+       LIMIT 1`
+    )
+    .get(token) as FederationGrant | undefined;
+  if (!grant) {
+    throw new FederationAuthorizationError(403, "Invalid federation token");
+  }
+  const expiresAt = grant.expires_at ? Date.parse(grant.expires_at) : NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new FederationAuthorizationError(403, "Federation token expired");
+  }
+  return grant;
+}
+
+export function authorizeFederationScCommand(
+  core: CoreDatabase,
+  token: string,
+  binding: {
+    verb: string;
+    resourceKind: string;
+    resourceId: string;
+    ownerTenantId: string;
+    targetTenantId: string;
+  }
+): FederationGrant {
+  const grant = federationGrantForToken(core, token);
+  if (binding.verb !== "execute") {
+    throw new FederationAuthorizationError(403, "Federation verb not permitted");
+  }
+  if (
+    !["department", "division"].includes(grant.resource_kind) ||
+    !["editor", "owner"].includes(grant.role)
+  ) {
+    throw new FederationAuthorizationError(403, "Federation capability not permitted");
+  }
+  if (
+    grant.resource_kind !== binding.resourceKind ||
+    grant.resource_id !== binding.resourceId ||
+    grant.owner_tenant_id !== binding.ownerTenantId
+  ) {
+    throw new FederationAuthorizationError(403, "Federation token resource mismatch");
+  }
+  if (grant.grantee_tenant_id !== binding.targetTenantId) {
+    throw new FederationAuthorizationError(403, "Federation target tenant mismatch");
+  }
+  return grant;
+}
+
+const SC_COMMANDS = new Set([
+  "ADD", "REMOVE", "WIRE", "ENABLE", "FLATTEN", "RECALC", "PING",
+  "SET_DOM_LEVELS", "STATE", "DISCOVER", "WIRETAP", "BACKTEST_SIM",
+  "BACKTEST_RESET_STATS", "BACKTEST_TEARDOWN", "REPLAY_START",
+  "REPLAY_STOP", "REPLAY_STOP_ALL", "REPLAY_PAUSE", "LIST_CHARTS",
+  "REPLAY_SET_SPEED", "BACKTEST_AUTO_REPLAY", "SET_TRADE_SIMULATION_MODE",
+  "SET_CHART_TRADE_MODE", "SET_AUTO_TRADING_ENABLED",
+  "SET_CHART_TRADE_ACCOUNT", "SET_CHART_DAYS_TO_LOAD",
+  "SET_CHART_UPDATE_INTERVAL", "SET_CHART_SYMBOL", "GET_TRADE_LIST",
+  "SET_STUDY_INPUT", "STUDY_INPUTS_DUMP", "REMOVE_ALL", "LIST_STUDIES",
+]);
+
+export function validateScCommandLine(line: unknown): string {
+  if (typeof line !== "string") {
+    throw new FederationAuthorizationError(400, "SC command line required");
+  }
+  const normalized = line.trim();
+  if (
+    !normalized ||
+    normalized.length > 4096 ||
+    /[\r\n\0]/.test(normalized)
+  ) {
+    throw new FederationAuthorizationError(400, "Malformed SC command");
+  }
+  const command = normalized.split("|", 1)[0]!;
+  if (!SC_COMMANDS.has(command)) {
+    throw new FederationAuthorizationError(400, "SC command not permitted");
+  }
+  return normalized;
 }
 
 function federationAuth(req: Request, res: Response, next: NextFunction): void {
@@ -21,30 +129,16 @@ function federationAuth(req: Request, res: Response, next: NextFunction): void {
     res.status(401).json({ error: "Federation token required" });
     return;
   }
-  const core = getCoreDb();
-  const grant = core
-    .prepare(
-      `SELECT id FROM share_grants WHERE federation_token=? LIMIT 1`
-    )
-    .get(token);
-  const conn = core
-    .prepare(
-      `SELECT id FROM bridge_connections WHERE remote_bridge_token=? LIMIT 1`
-    )
-    .get(token);
-  const peer = core
-    .prepare(`SELECT id FROM peer_connections WHERE federation_token=? LIMIT 1`)
-    .get(token);
-  const invite = core
-    .prepare(
-      `SELECT id FROM federated_share_invites WHERE invite_token=? AND status='accepted' LIMIT 1`
-    )
-    .get(token);
-  if (!grant && !conn && !peer && !invite) {
-    res.status(403).json({ error: "Invalid federation token" });
-    return;
+  try {
+    federationGrantForToken(getCoreDb(), token);
+    next();
+  } catch (err) {
+    if (err instanceof FederationAuthorizationError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
   }
-  next();
 }
 
 /**
@@ -80,54 +174,38 @@ export function createFederationRouter(deps: {
     res.json({ invite: payload });
   });
 
-  router.post("/invites/:token/accept", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+  router.post("/invites/:token/accept", attachAuthContext, requireAuth, async (req, res) => {
     const token = String(req.params.token);
-    const invite = core
-      .prepare(`SELECT * FROM federated_share_invites WHERE invite_token=? AND status='pending'`)
-      .get(token) as Record<string, unknown> | undefined;
-    if (!invite) {
-      res.status(404).json({ error: "Invite not found or already accepted" });
+    const { granteeTenantId } = req.body ?? {};
+    if (!granteeTenantId) {
+      res.status(400).json({ error: "granteeTenantId required" });
       return;
     }
-    const expiresAt = invite.expires_at ? Date.parse(String(invite.expires_at)) : NaN;
-    if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
-      res.status(410).json({ error: "Invite expired" });
-      return;
+    try {
+      const result = await executeCollectionAction(
+        getCoreDb(),
+        "FederatedShareInvite",
+        "accept",
+        {
+          invite_token: token,
+          grantee_tenant_id: String(granteeTenantId),
+        },
+        {
+          tenantId: String(granteeTenantId),
+          userId: req.user!.id,
+          isAdmin: req.user!.isAdmin,
+          role: req.tenantRole ?? "viewer",
+          source: "http",
+        }
+      );
+      res.json(result);
+    } catch (err) {
+      if (err instanceof KernelError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
-    const callerEmail = req.user?.email?.trim().toLowerCase() ?? "";
-    const inviteeEmail = String(invite.invitee_email ?? "").trim().toLowerCase();
-    if (!callerEmail || callerEmail !== inviteeEmail) {
-      res.status(403).json({ error: "Invite is bound to a different account email" });
-      return;
-    }
-    const {
-      granteeUserId,
-      granteeTenantId,
-      granteeEmail,
-      granteeDisplayName,
-      granteeBridgeUrl,
-    } = req.body ?? {};
-    if (!granteeUserId || !granteeTenantId) {
-      res.status(400).json({ error: "granteeUserId and granteeTenantId required" });
-      return;
-    }
-    const federationToken = randomUUID();
-    const grantId = createShareGrant(core, {
-      ownerTenantId: String(invite.owner_tenant_id),
-      ownerUserId: String(invite.owner_user_id),
-      resourceKind: invite.resource_kind as MarketplaceListingKind,
-      resourceId: String(invite.resource_id),
-      granteeUserId: String(granteeUserId),
-      granteeTenantId: String(granteeTenantId),
-      role: (invite.role as ShareGrantRole) ?? "viewer",
-      bridgeUrl: config.federation.publicUrl,
-      federationToken,
-    });
-    core.prepare(
-      `UPDATE federated_share_invites SET status='accepted' WHERE invite_token=?`
-    ).run(token);
-    res.json({ grantId, federationToken, ownerBridgeUrl: config.federation.publicUrl });
   });
 
   router.use(federationAuth);
@@ -141,24 +219,40 @@ export function createFederationRouter(deps: {
     const body = (req.body ?? {}) as {
       line?: string;
       chartbookKey?: string;
-      chartNumber?: number;
-      deployId?: string;
+      resourceKind?: string;
+      resourceId?: string;
+      ownerTenantId?: string;
+      targetTenantId?: string;
     };
-    if (typeof body.line === "string" && body.line.trim()) {
-      const file = scEnqueue(body.line.trim(), body.chartbookKey);
-      res.json({ ok: true, verb: req.params.verb, enqueued: body.line.trim(), file });
-      return;
+    const token = String(req.headers.authorization).slice(7).trim();
+    try {
+      for (const [name, value] of Object.entries({
+        resourceKind: body.resourceKind,
+        resourceId: body.resourceId,
+        ownerTenantId: body.ownerTenantId,
+        targetTenantId: body.targetTenantId,
+      })) {
+        if (typeof value !== "string" || !value.trim()) {
+          throw new FederationAuthorizationError(400, `${name} required`);
+        }
+      }
+      authorizeFederationScCommand(getCoreDb(), token, {
+        verb: String(req.params.verb ?? "").toLowerCase(),
+        resourceKind: body.resourceKind!,
+        resourceId: body.resourceId!,
+        ownerTenantId: body.ownerTenantId!,
+        targetTenantId: body.targetTenantId!,
+      });
+      const line = validateScCommandLine(body.line);
+      const file = scEnqueue(line, body.chartbookKey);
+      res.json({ ok: true, verb: "execute", enqueued: line, file });
+    } catch (err) {
+      if (err instanceof FederationAuthorizationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
-    const verb = String(req.params.verb ?? "").toUpperCase();
-    if (verb === "ADD" && body.chartNumber && body.deployId) {
-      const dllFunc = String((body as { dllFunc?: string }).dllFunc ?? "");
-      scEnqueue(`ADD|${body.chartNumber}|${dllFunc}|${body.deployId}`, body.chartbookKey);
-      res.json({ ok: true, verb, mode: "add" });
-      return;
-    }
-    res.status(400).json({
-      error: "Provide { line } or ADD payload { chartNumber, dllFunc, deployId }",
-    });
   });
 
   router.get("/market/:symbol", (req, res) => {

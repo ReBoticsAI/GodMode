@@ -4,15 +4,12 @@ import { Router } from "express";
 import type { CoreDatabase } from "../core-db.js";
 import { pluginRuntime } from "../plugins/runtime.js";
 import {
-  installPluginForTenant,
   installedPluginIdsForTenant,
   isPluginEnabledForTenant,
   listAvailablePlugins,
   listInstalledPlugins,
-  uninstallPluginForTenant,
 } from "../plugins/plugin-install.js";
 import { listPluginManifestsForWeb } from "../plugins/loader.js";
-import { requireTenantRole, attachAuthContext, requireAuth } from "../services/auth/middleware.js";
 
 function safeSharedExportName(exportName: string): string | null {
   if (exportName.includes("/") || exportName.includes("\\") || exportName.includes("..")) {
@@ -250,48 +247,6 @@ export function createPluginsRouter(coreDb: CoreDatabase): Router {
       available: listAvailablePlugins(),
       loaded: pluginRuntime.loaded.map((p) => p.manifest.id),
     });
-  });
-
-  router.post("/install", requireTenantRole("owner"), async (req, res) => {
-    try {
-      const tenantId = req.tenantId;
-      if (!tenantId) {
-        res.status(400).json({ error: "tenant required" });
-        return;
-      }
-      const pluginId = String(req.body?.pluginId ?? "").trim();
-      if (!pluginId) {
-        res.status(400).json({ error: "pluginId required" });
-        return;
-      }
-      await installPluginForTenant(coreDb, tenantId, pluginId, req.body?.pluginRoot);
-      res.json({ ok: true, pluginId });
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : "install failed",
-      });
-    }
-  });
-
-  router.post("/uninstall", requireTenantRole("owner"), async (req, res) => {
-    try {
-      const tenantId = req.tenantId;
-      if (!tenantId) {
-        res.status(400).json({ error: "tenant required" });
-        return;
-      }
-      const pluginId = String(req.body?.pluginId ?? "").trim();
-      if (!pluginId) {
-        res.status(400).json({ error: "pluginId required" });
-        return;
-      }
-      await uninstallPluginForTenant(coreDb, tenantId, pluginId);
-      res.json({ ok: true, pluginId });
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : "uninstall failed",
-      });
-    }
   });
 
   return router;

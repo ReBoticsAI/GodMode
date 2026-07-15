@@ -1,10 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
-import type { CoreDatabase, MarketplaceListingKind, ShareGrantRole } from "../core-db.js";
+import {
+  createSharedChatSession,
+  type CoreDatabase,
+  type MarketplaceListingKind,
+  type ShareGrantRole,
+} from "../core-db.js";
 import { getLocalConnection } from "./bridge-connections.js";
 import { config } from "../config.js";
 import { getTenantDb } from "../tenant-registry.js";
 import type { AppDatabase } from "../db.js";
 import { emitEvent } from "./event-bus.js";
+import { getAgent } from "./agents/agents-db.js";
+import { getShareBroker } from "../ws-broker.js";
+import { exportEntity } from "./portability.js";
 
 const ROLE_RANK: Record<ShareGrantRole, number> = {
   viewer: 1,
@@ -17,6 +25,139 @@ export class ShareError extends Error {
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
+  }
+}
+
+/**
+ * Promote an owned chat to the collaborative session registry used by the
+ * protocol read path. This is the single policy-enforcing command for both
+ * kernel actions and any future transport-specific carriers.
+ */
+export function shareChatSession(
+  core: CoreDatabase,
+  input: {
+    db: AppDatabase;
+    chatId: string;
+    agentId: string;
+    tenantId?: string;
+    userId?: string;
+  }
+): {
+  ok: true;
+  session: {
+    id: string;
+    chatId: string;
+    agentId: string;
+    homeTenantId: string;
+    createdByUserId: string;
+    createdAt: string;
+    isHome: true;
+  };
+} {
+  const { db, chatId, agentId, tenantId, userId } = input;
+  if (!tenantId || !userId) {
+    throw new ShareError(401, "Authenticated tenant and user required");
+  }
+  const chat = db
+    .prepare(
+      `SELECT id FROM ai_chats
+       WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
+    )
+    .get(chatId, userId);
+  if (!chat) {
+    throw new ShareError(404, "Chat not found in your workspace");
+  }
+  const canUseAgent =
+    Boolean(getAgent(db, agentId)) ||
+    Boolean(
+      resolveShareAccess(core, {
+        userId,
+        tenantId,
+        resourceKind: "agent",
+        resourceId: agentId,
+        minRole: "viewer",
+      })
+    );
+  if (!canUseAgent) throw new ShareError(404, "Agent not found");
+
+  const session = createSharedChatSession(core, {
+    id: uuidv4(),
+    chatId,
+    homeTenantId: tenantId,
+    agentId,
+    createdByUserId: userId,
+  });
+  const payload = {
+    type: "chat_session_shared",
+    data: { chatId, agentId, homeTenantId: session.home_tenant_id },
+    timestamp: Date.now(),
+  };
+  getShareBroker().broadcastResource("agent", agentId, payload);
+  getShareBroker().broadcastTenant(tenantId, payload);
+  return {
+    ok: true,
+    session: {
+      id: session.id,
+      chatId: session.chat_id,
+      agentId: session.agent_id,
+      homeTenantId: session.home_tenant_id,
+      createdByUserId: session.created_by_user_id,
+      createdAt: session.created_at,
+      isHome: true,
+    },
+  };
+}
+
+function assertGrantAuthority(
+  core: CoreDatabase,
+  opts: {
+    ownerTenantId: string;
+    ownerUserId: string;
+    resourceKind: MarketplaceListingKind;
+    resourceId: string;
+  }
+): void {
+  const membership = core
+    .prepare(
+      `SELECT role FROM tenant_memberships
+       WHERE tenant_id=? AND user_id=?`
+    )
+    .get(opts.ownerTenantId, opts.ownerUserId) as
+    | { role: "viewer" | "editor" | "owner" }
+    | undefined;
+  if (!membership || membership.role === "viewer") {
+    throw new ShareError(403, "Caller cannot share resources from this tenant");
+  }
+
+  if (
+    opts.resourceKind === "user_calendar" ||
+    opts.resourceKind === "user_tasks"
+  ) {
+    if (opts.resourceId !== opts.ownerUserId) {
+      throw new ShareError(403, "Caller does not own this user resource");
+    }
+    return;
+  }
+
+  if (opts.resourceKind === "model" || opts.resourceKind === "inference") {
+    const endpoint = core
+      .prepare(
+        `SELECT 1 FROM inference_endpoints
+         WHERE id=? AND owner_tenant_id=? AND owner_user_id=? AND status='active'`
+      )
+      .get(opts.resourceId, opts.ownerTenantId, opts.ownerUserId);
+    if (!endpoint) throw new ShareError(404, "Share resource not found");
+    return;
+  }
+
+  try {
+    exportEntity(
+      getTenantDb(opts.ownerTenantId),
+      opts.resourceKind,
+      opts.resourceId
+    );
+  } catch {
+    throw new ShareError(404, "Share resource not found");
   }
 }
 
@@ -34,20 +175,37 @@ export function createShareGrant(
     bridgeUrl?: string | null;
     /** Federation token the grantee presents to the owner's Bridge. */
     federationToken?: string | null;
+    expiresAt?: string | null;
   }
 ): string {
   if (!opts.granteeUserId && !opts.granteeTenantId) {
     throw new ShareError(400, "grantee user or tenant required");
   }
+  if (
+    opts.role !== undefined &&
+    !Object.prototype.hasOwnProperty.call(ROLE_RANK, opts.role)
+  ) {
+    throw new ShareError(400, "invalid share role");
+  }
+  assertGrantAuthority(core, opts);
   const id = uuidv4();
-  const bridgeUrl = opts.bridgeUrl ?? config.auth.publicUrl;
-  const federationToken = opts.federationToken ?? uuidv4();
+  const federationToken =
+    opts.federationToken === undefined ? null : opts.federationToken;
+  const bridgeUrl =
+    federationToken && opts.bridgeUrl === undefined
+      ? config.auth.publicUrl
+      : (opts.bridgeUrl ?? null);
+  const expiresAt = federationToken
+    ? (opts.expiresAt ??
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
+    : (opts.expiresAt ?? null);
   void getLocalConnection(core, opts.ownerTenantId);
   core.prepare(
     `INSERT INTO share_grants
        (id, owner_tenant_id, owner_user_id, resource_kind, resource_id,
-        grantee_user_id, grantee_tenant_id, role, bridge_url, federation_token)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        grantee_user_id, grantee_tenant_id, role, bridge_url, federation_token,
+        expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     opts.ownerTenantId,
@@ -58,7 +216,8 @@ export function createShareGrant(
     opts.granteeTenantId ?? null,
     opts.role ?? "viewer",
     bridgeUrl,
-    federationToken
+    federationToken,
+    expiresAt
   );
   emitEvent(
     {
@@ -129,10 +288,16 @@ export function resolveShareAccess(
     minRole?: ShareGrantRole;
   }
 ): { ownerTenantId: string; role: ShareGrantRole; db: AppDatabase } | null {
+  const hasExpiresAt = (
+    core.prepare(`PRAGMA table_info(share_grants)`).all() as Array<{
+      name: string;
+    }>
+  ).some((column) => column.name === "expires_at");
   const grants = core
     .prepare(
       `SELECT * FROM share_grants
        WHERE resource_kind=? AND resource_id=?
+         ${hasExpiresAt ? "AND (expires_at IS NULL OR expires_at > datetime('now'))" : ""}
          AND (grantee_user_id=? OR grantee_tenant_id=?)`
     )
     .all(opts.resourceKind, opts.resourceId, opts.userId, opts.tenantId) as Array<{

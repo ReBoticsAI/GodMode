@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { registerMigration, addCol } from "./db-migrations.js";
+import { registerMigration, addCol, tableExists } from "./db-migrations.js";
 import { encryptSecret, decryptSecret } from "./holdings/crypto-box.js";
 
 const MIGRATION_VERSION = 1;
@@ -16,7 +16,8 @@ function migratePluginKnowledgeV2(db: Database.Database): void {
 
 function migrateV1(db: Database.Database): void {
   // --- Hot-path indexes ---
-  db.exec(`
+  if (tableExists(db, "ai_project_cards")) {
+    db.exec(`
     CREATE INDEX IF NOT EXISTS ai_project_cards_by_project
       ON ai_project_cards(project_id, sort_order);
     CREATE INDEX IF NOT EXISTS ai_project_cards_by_column
@@ -25,7 +26,8 @@ function migrateV1(db: Database.Database): void {
       ON ai_project_cards(parent_card_id, sort_order);
     CREATE INDEX IF NOT EXISTS ai_project_cards_by_agent_due
       ON ai_project_cards(assigned_agent_id, due_at);
-  `);
+    `);
+  }
 
   const hasPmSignals = db
     .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='pm_signals'`)
@@ -104,10 +106,14 @@ function migrateV1(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS ai_prompts_agent_kind ON ai_prompts(agent_id, kind);
   `);
 
-  addCol(db, "ai_artifacts", "content", "TEXT");
-  addCol(db, "ai_memories", "embedding_model", "TEXT");
-  addCol(db, "ai_memories", "valid_from", "TEXT");
-  addCol(db, "ai_memories", "valid_until", "TEXT");
+  if (tableExists(db, "ai_artifacts")) {
+    addCol(db, "ai_artifacts", "content", "TEXT");
+  }
+  if (tableExists(db, "ai_memories")) {
+    addCol(db, "ai_memories", "embedding_model", "TEXT");
+    addCol(db, "ai_memories", "valid_from", "TEXT");
+    addCol(db, "ai_memories", "valid_until", "TEXT");
+  }
 
   // FTS5 for hybrid RAG keyword leg
   db.exec(`
@@ -162,6 +168,7 @@ export function ensureCapabilityTables(db: Database.Database): void {
 }
 
 function migrateEncryptSecrets(db: Database.Database): void {
+  if (!tableExists(db, "ai_secrets")) return;
   const rows = db
     .prepare(`SELECT id, value FROM ai_secrets`)
     .all() as Array<{ id: string; value: string }>;
@@ -204,7 +211,7 @@ export interface PlatformEventInput {
 export function insertEvent(db: Database.Database, evt: PlatformEventInput): void {
   const seq = nextEventSeq(db);
   db.prepare(
-    `INSERT INTO events (id, seq, type, actor_agent_id, subject, payload_json, dispatched)
+    `INSERT INTO events (id, seq, ts, type, actor_agent_id, subject, payload_json, dispatched)
      VALUES (?, ?, datetime('now'), ?, ?, ?, ?, 0)`
   ).run(
     evt.id,

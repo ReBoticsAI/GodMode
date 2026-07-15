@@ -29,8 +29,10 @@ Documentation for installing, using, and extending GodMode.
 |-------|-------------|
 | [../DEPLOY.md](../DEPLOY.md) | Docker hub/client deployment |
 | [architecture.md](architecture.md) | System design and data model |
+| [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) | Canonical durable ObjectType, Record, action, adapter, tenancy, recovery, and protocol-exception contract |
 | [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md) | Build and install plugins (contributors) |
 | [multi-tenant-model.md](multi-tenant-model.md) | Core vs tenant databases (contributors) |
+| [KERNEL_MIGRATION_MATRIX.md](KERNEL_MIGRATION_MATRIX.md) | Audited mutation-route and AI-tool migration inventory |
 
 ## Project
 

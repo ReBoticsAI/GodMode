@@ -56,6 +56,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
 | **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
+| **ObjectType Records** | `/records/:objectType` | Metadata-driven list/form pages and declared actions for core and installed-plugin domains. |
 
 ## Chat modes and commands
 
@@ -72,6 +73,24 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 - **LLM backends:** local llama.cpp (spawned or `LLAMA_EXTERNAL` attach), Cursor Cloud, or provider keys in Vault.
 - **Multi-agent org:** scoped permissions, tool allowlists, and structure-linked agents.
 - **Workspace growth:** Intelligence can create departments, wiki pages, tasks, and automations from chat.
-- **Plugins:** optional domain packs register bridge routes, web pages, and install hooks without forking core.
+- **ObjectType kernel:** authenticated web, agent, plugin, and HTTP consumers
+  discover explicit Record CRUD and named actions across 72 audited ObjectTypes;
+  exact-parity adapters preserve domain services and side effects behind the
+  single durable mutation boundary.
+- **Durable execution:** asynchronous actions enforce retries/backoff, timeout,
+  declared cancellation, scoped idempotency, leases, and replay-safe recovery;
+  declared events retain per-consumer receipts.
+- **Plugins:** optional domain packs register ObjectTypes, actions, bridge routes,
+  web pages, and install hooks without forking core through a versioned kernel
+  client.
+- **Completed cutover:** strict audits report zero legacy routes/callers,
+  unmatched callers, and direct entry-point writes. WebSocket/token streams,
+  binary transfer, ephemeral presence, and other reviewed wire-level exceptions
+  remain specialized rather than being mislabeled as Record CRUD.
+- **Cross-database safety:** plugin/acquisition sagas resume idempotently across
+  core and tenant SQLite files, while shared-resource adapters enforce the exact
+  grant and owner database.
+- **Generic structure pages:** `StructureNode.object_type` selects the Record
+  renderer; `segment` remains the URL component.
 
-See [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).

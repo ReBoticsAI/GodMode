@@ -5,6 +5,11 @@ import { config } from "./config.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { backfillWelcomeWikiPages } from "./services/welcome-wiki.js";
 import { ensurePlatformGroups } from "./services/platform-groups.js";
+import {
+  addCol,
+  runMigrations,
+  type Migration,
+} from "./services/db-migrations.js";
 
 function ensurePlatformGroupsTables(db: CoreDatabase): void {
   ensurePlatformGroups(db);
@@ -171,6 +176,7 @@ export interface CoreShareGrant {
   role: ShareGrantRole;
   bridge_url: string | null;
   federation_token: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -290,6 +296,55 @@ export function initCoreDb(): CoreDatabase {
     CREATE INDEX IF NOT EXISTS marketplace_purchases_buyer_idx
       ON marketplace_purchases(buyer_user_id, created_at DESC);
 
+    -- Durable coordinator for clone acquisitions that span core + one tenant DB.
+    -- Each database commits only its owned writes, audit, and outbox atomically;
+    -- receipts allow the coordinator to safely resume after process failure.
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_operations (
+      id TEXT PRIMARY KEY,
+      idempotency_key TEXT NOT NULL,
+      listing_id TEXT NOT NULL,
+      buyer_user_id TEXT NOT NULL,
+      buyer_tenant_id TEXT NOT NULL,
+      listing_bundle_json TEXT NOT NULL,
+      listing_title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      imported_kind TEXT,
+      imported_id TEXT,
+      purchase_id TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      UNIQUE (buyer_tenant_id, buyer_user_id, idempotency_key)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_acquisition_status_idx
+      ON marketplace_acquisition_operations(status, updated_at);
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_steps (
+      operation_id TEXT NOT NULL,
+      step_name TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (operation_id, step_name)
+    );
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_audit (
+      id TEXT PRIMARY KEY,
+      operation_id TEXT NOT NULL,
+      owner_database TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_outbox (
+      id TEXT PRIMARY KEY,
+      operation_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      published_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS share_grants (
       id TEXT PRIMARY KEY,
       owner_tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -299,6 +354,7 @@ export function initCoreDb(): CoreDatabase {
       grantee_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       grantee_tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
       role TEXT NOT NULL DEFAULT 'viewer',
+      expires_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       CHECK (
@@ -620,18 +676,8 @@ export function initCoreDb(): CoreDatabase {
       ON wiki_revisions(page_id, created_at DESC);
   `);
 
-  ensureUsersIsAdminColumn(db);
-  ensureUsersPasswordHashColumn(db);
-  ensureUserProfileExtendedColumns(db);
-  ensureMarketplaceListingEconomyColumns(db);
-  ensureShareGrantFederationColumns(db);
-  ensureDmAgentColumns(db);
-  ensureDmMembersAgentFkFix(db);
-  ensureHooksRunWorkflowAction(db);
-  ensureWikiPerTenantSlugIndexes(db);
-  ensureOssPlatformV2Tables(db);
+  runMigrations(db, CORE_MIGRATIONS);
   ensurePlatformGroupsTables(db);
-  ensureWikiSearchAndProposals(db);
 
   backfillWelcomeWikiPages(db);
 
@@ -650,6 +696,43 @@ export function initCoreDb(): CoreDatabase {
   return db;
 }
 
+export const CORE_MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: "core_user_columns_v1", up: ensureCoreUserColumns },
+  { version: 2, name: "core_marketplace_columns_v1", up: ensureCoreMarketplaceColumns },
+  { version: 3, name: "core_dm_agent_columns_v1", up: ensureDmAgentColumns },
+  {
+    version: 4,
+    name: "core_hooks_workflow_action_v1",
+    up: ensureHooksRunWorkflowAction,
+    foreignKeysOff: true,
+  },
+  {
+    version: 5,
+    name: "core_dm_members_agent_fk_v1",
+    up: ensureDmMembersAgentFkFix,
+    foreignKeysOff: true,
+  },
+  {
+    version: 6,
+    name: "core_wiki_tenant_slugs_v1",
+    up: ensureWikiPerTenantSlugIndexes,
+    foreignKeysOff: true,
+  },
+  { version: 7, name: "core_wiki_search_v1", up: ensureWikiSearchAndProposals },
+  { version: 8, name: "core_oss_platform_v2", up: ensureOssPlatformV2Tables },
+];
+
+function ensureCoreUserColumns(db: CoreDatabase): void {
+  ensureUsersIsAdminColumn(db);
+  ensureUsersPasswordHashColumn(db);
+  ensureUserProfileExtendedColumns(db);
+}
+
+function ensureCoreMarketplaceColumns(db: CoreDatabase): void {
+  ensureMarketplaceListingEconomyColumns(db);
+  ensureShareGrantFederationColumns(db);
+}
+
 /**
  * Idempotent migration: databases created before the `run_workflow` hook action
  * existed carry a CHECK constraint that rejects it. SQLite cannot alter a CHECK
@@ -663,11 +746,8 @@ function ensureHooksRunWorkflowAction(db: CoreDatabase): void {
     .get() as { sql?: string } | undefined;
   if (!row?.sql || row.sql.includes("'run_workflow'")) return;
 
-  const wasOn = db.pragma("foreign_keys", { simple: true }) === 1;
-  db.pragma("foreign_keys = OFF");
-  try {
-    db.exec(`
-      BEGIN;
+  db.exec(`
+      DROP TABLE IF EXISTS hooks_new;
       CREATE TABLE hooks_new (
         id TEXT PRIMARY KEY,
         owner_kind TEXT NOT NULL CHECK (owner_kind IN ('user', 'agent')),
@@ -693,30 +773,18 @@ function ensureHooksRunWorkflowAction(db: CoreDatabase): void {
       CREATE INDEX IF NOT EXISTS hooks_owner_idx ON hooks(owner_kind, owner_id);
       CREATE INDEX IF NOT EXISTS hooks_event_idx
         ON hooks(trigger_kind, enabled, event_type);
-      COMMIT;
-    `);
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  } finally {
-    db.pragma(`foreign_keys = ${wasOn ? "ON" : "OFF"}`);
-  }
+  `);
 }
 
 /** Idempotent migration for databases created before is_admin existed. */
 function ensureUsersIsAdminColumn(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === "is_admin")) {
-    db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
-  }
+  addCol(db, "users", "is_admin", "INTEGER NOT NULL DEFAULT 0");
 }
 
 /** Idempotent migration for extended user_profiles columns. */
 function ensureUserProfileExtendedColumns(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(user_profiles)").all() as Array<{ name: string }>;
-  const has = (name: string) => cols.some((c) => c.name === name);
   const add = (name: string, def: string) => {
-    if (!has(name)) db.exec(`ALTER TABLE user_profiles ADD COLUMN "${name}" ${def}`);
+    addCol(db, "user_profiles", name, def);
   };
   add("emoji", "TEXT");
   add("birthday", "TEXT");
@@ -731,43 +799,18 @@ function ensureUserProfileExtendedColumns(db: CoreDatabase): void {
 
 /** Idempotent migration for databases created before password_hash existed. */
 function ensureUsersPasswordHashColumn(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === "password_hash")) {
-    db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT");
-  }
+  addCol(db, "users", "password_hash", "TEXT");
 }
 
 /** Idempotent migration for marketplace economy columns. */
 function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(marketplace_listings)").all() as Array<{
-    name: string;
-  }>;
-  const has = (name: string) => cols.some((c) => c.name === name);
-  if (!has("delivery_mode")) {
-    db.exec(
-      "ALTER TABLE marketplace_listings ADD COLUMN delivery_mode TEXT NOT NULL DEFAULT 'clone'"
-    );
-  }
-  if (!has("pricing_model")) {
-    db.exec(
-      "ALTER TABLE marketplace_listings ADD COLUMN pricing_model TEXT NOT NULL DEFAULT 'one_time'"
-    );
-  }
-  if (!has("price_period")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN price_period TEXT");
-  }
-  if (!has("meter_unit")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN meter_unit TEXT");
-  }
-  if (!has("meter_rate")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN meter_rate INTEGER");
-  }
-  if (!has("license")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN license TEXT");
-  }
-  if (!has("inference_endpoint_id")) {
-    db.exec("ALTER TABLE marketplace_listings ADD COLUMN inference_endpoint_id TEXT");
-  }
+  addCol(db, "marketplace_listings", "delivery_mode", "TEXT NOT NULL DEFAULT 'clone'");
+  addCol(db, "marketplace_listings", "pricing_model", "TEXT NOT NULL DEFAULT 'one_time'");
+  addCol(db, "marketplace_listings", "price_period", "TEXT");
+  addCol(db, "marketplace_listings", "meter_unit", "TEXT");
+  addCol(db, "marketplace_listings", "meter_rate", "INTEGER");
+  addCol(db, "marketplace_listings", "license", "TEXT");
+  addCol(db, "marketplace_listings", "inference_endpoint_id", "TEXT");
 }
 
 /**
@@ -777,37 +820,12 @@ function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
  */
 /** Idempotent migration: mixed human+agent conversation members and agent senders. */
 function ensureDmAgentColumns(db: CoreDatabase): void {
-  const memberCols = db
-    .prepare("PRAGMA table_info(dm_conversation_members)")
-    .all() as Array<{ name: string }>;
-  const memberHas = (name: string) => memberCols.some((c) => c.name === name);
-  if (!memberHas("member_kind")) {
-    db.exec(
-      `ALTER TABLE dm_conversation_members ADD COLUMN member_kind TEXT NOT NULL DEFAULT 'user'`
-    );
-  }
-  if (!memberHas("agent_id")) {
-    db.exec(`ALTER TABLE dm_conversation_members ADD COLUMN agent_id TEXT`);
-  }
-  if (!memberHas("agent_tenant_id")) {
-    db.exec(`ALTER TABLE dm_conversation_members ADD COLUMN agent_tenant_id TEXT`);
-  }
-
-  const msgCols = db.prepare("PRAGMA table_info(dm_messages)").all() as Array<{
-    name: string;
-  }>;
-  const msgHas = (name: string) => msgCols.some((c) => c.name === name);
-  if (!msgHas("sender_kind")) {
-    db.exec(
-      `ALTER TABLE dm_messages ADD COLUMN sender_kind TEXT NOT NULL DEFAULT 'user'`
-    );
-  }
-  if (!msgHas("sender_agent_id")) {
-    db.exec(`ALTER TABLE dm_messages ADD COLUMN sender_agent_id TEXT`);
-  }
-  if (!msgHas("sender_agent_tenant_id")) {
-    db.exec(`ALTER TABLE dm_messages ADD COLUMN sender_agent_tenant_id TEXT`);
-  }
+  addCol(db, "dm_conversation_members", "member_kind", "TEXT NOT NULL DEFAULT 'user'");
+  addCol(db, "dm_conversation_members", "agent_id", "TEXT");
+  addCol(db, "dm_conversation_members", "agent_tenant_id", "TEXT");
+  addCol(db, "dm_messages", "sender_kind", "TEXT NOT NULL DEFAULT 'user'");
+  addCol(db, "dm_messages", "sender_agent_id", "TEXT");
+  addCol(db, "dm_messages", "sender_agent_tenant_id", "TEXT");
 }
 
 /**
@@ -823,11 +841,8 @@ function ensureDmMembersAgentFkFix(db: CoreDatabase): void {
     .all() as Array<{ table: string }>;
   if (!fks.some((f) => f.table === "users")) return;
 
-  const wasOn = db.pragma("foreign_keys", { simple: true }) === 1;
-  db.pragma("foreign_keys = OFF");
-  try {
-    db.exec(`
-      BEGIN;
+  db.exec(`
+      DROP TABLE IF EXISTS dm_conversation_members_new;
       CREATE TABLE dm_conversation_members_new (
         conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
         user_id TEXT NOT NULL,
@@ -850,14 +865,7 @@ function ensureDmMembersAgentFkFix(db: CoreDatabase): void {
       ALTER TABLE dm_conversation_members_new RENAME TO dm_conversation_members;
       CREATE INDEX IF NOT EXISTS dm_conversation_members_user_idx
         ON dm_conversation_members(user_id, conversation_id);
-      COMMIT;
-    `);
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  } finally {
-    db.pragma(`foreign_keys = ${wasOn ? "ON" : "OFF"}`);
-  }
+  `);
 }
 
 /**
@@ -872,7 +880,8 @@ function ensureWikiPerTenantSlugIndexes(db: CoreDatabase): void {
   if (migrated) return;
 
   db.exec(`
-    CREATE TABLE wiki_pages__migrated (
+      DROP TABLE IF EXISTS wiki_pages__migrated;
+      CREATE TABLE wiki_pages__migrated (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       space TEXT,
@@ -894,21 +903,15 @@ function ensureWikiPerTenantSlugIndexes(db: CoreDatabase): void {
       ON wiki_pages(tenant_id, visibility, updated_at DESC);
     CREATE UNIQUE INDEX wiki_pages_tenant_visibility_slug_idx
       ON wiki_pages(tenant_id, visibility, slug);
-    CREATE UNIQUE INDEX wiki_pages_external_slug_idx
-      ON wiki_pages(slug) WHERE visibility = 'external';
+      CREATE UNIQUE INDEX wiki_pages_external_slug_idx
+        ON wiki_pages(slug) WHERE visibility = 'external';
   `);
 }
 
 /** Wiki hybrid RAG (FTS + embeddings) and staged synthesize proposals. */
 function ensureWikiSearchAndProposals(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(wiki_pages)").all() as Array<{ name: string }>;
-  const has = (name: string) => cols.some((c) => c.name === name);
-  if (!has("embedding")) {
-    db.exec("ALTER TABLE wiki_pages ADD COLUMN embedding BLOB");
-  }
-  if (!has("embedding_dim")) {
-    db.exec("ALTER TABLE wiki_pages ADD COLUMN embedding_dim INTEGER");
-  }
+  addCol(db, "wiki_pages", "embedding", "BLOB");
+  addCol(db, "wiki_pages", "embedding_dim", "INTEGER");
 
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
@@ -939,22 +942,11 @@ function ensureWikiSearchAndProposals(db: CoreDatabase): void {
 }
 
 function ensureShareGrantFederationColumns(db: CoreDatabase): void {
-  const cols = db.prepare("PRAGMA table_info(share_grants)").all() as Array<{
-    name: string;
-  }>;
-  const has = (name: string) => cols.some((c) => c.name === name);
-  if (!has("bridge_url")) {
-    db.exec("ALTER TABLE share_grants ADD COLUMN bridge_url TEXT");
-  }
-  if (!has("federation_token")) {
-    db.exec("ALTER TABLE share_grants ADD COLUMN federation_token TEXT");
-  }
-  if (!has("grantee_email")) {
-    db.exec("ALTER TABLE share_grants ADD COLUMN grantee_email TEXT");
-  }
-  if (!has("grantee_peer_connection_id")) {
-    db.exec("ALTER TABLE share_grants ADD COLUMN grantee_peer_connection_id TEXT");
-  }
+  addCol(db, "share_grants", "bridge_url", "TEXT");
+  addCol(db, "share_grants", "federation_token", "TEXT");
+  addCol(db, "share_grants", "grantee_email", "TEXT");
+  addCol(db, "share_grants", "grantee_peer_connection_id", "TEXT");
+  addCol(db, "share_grants", "expires_at", "TEXT");
 }
 
 /** OSS v2: catalog installs, peer federation, support routing, onboarding. */
@@ -980,6 +972,21 @@ function ensureOssPlatformV2Tables(db: CoreDatabase): void {
       installed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS catalog_installs_tenant_idx ON catalog_installs(tenant_id, installed_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tenant_plugins (
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      plugin_id TEXT NOT NULL,
+      version TEXT NOT NULL,
+      installed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      plugin_root TEXT,
+      state TEXT NOT NULL DEFAULT 'active',
+      desired_state TEXT NOT NULL DEFAULT 'active',
+      last_error TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (tenant_id, plugin_id)
+    );
+    CREATE INDEX IF NOT EXISTS tenant_plugins_tenant_idx
+      ON tenant_plugins(tenant_id, installed_at);
 
     CREATE TABLE IF NOT EXISTS peer_connections (
       id TEXT PRIMARY KEY,
@@ -1015,21 +1022,14 @@ function ensureOssPlatformV2Tables(db: CoreDatabase): void {
     CREATE INDEX IF NOT EXISTS federated_share_invites_token_idx ON federated_share_invites(invite_token);
   `);
 
-  const ticketCols = db.prepare("PRAGMA table_info(support_tickets)").all() as Array<{
-    name: string;
-  }>;
-  const ticketHas = (name: string) => ticketCols.some((c) => c.name === name);
-  if (!ticketHas("target_kind")) {
-    db.exec(
-      `ALTER TABLE support_tickets ADD COLUMN target_kind TEXT NOT NULL DEFAULT 'resource_owner'`
-    );
-  }
-  if (!ticketHas("shared_grant_id")) {
-    db.exec(`ALTER TABLE support_tickets ADD COLUMN shared_grant_id TEXT`);
-  }
-  if (!ticketHas("owner_user_id")) {
-    db.exec(`ALTER TABLE support_tickets ADD COLUMN owner_user_id TEXT`);
-  }
+  addCol(
+    db,
+    "support_tickets",
+    "target_kind",
+    "TEXT NOT NULL DEFAULT 'resource_owner'"
+  );
+  addCol(db, "support_tickets", "shared_grant_id", "TEXT");
+  addCol(db, "support_tickets", "owner_user_id", "TEXT");
 }
 
 export function getCoreDb(): CoreDatabase {

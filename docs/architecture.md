@@ -10,6 +10,47 @@ GodMode is a **local-first personal OS**: a React dashboard talks to a Node.js B
 | Bridge | Node.js + Express + SQLite | REST/WebSocket API, auth, tenant routing, AI orchestration |
 | Connector | Node.js (optional) | Local runtime for hardware-bound marketplace plugins |
 | Plugins | npm packages / marketplace installs | Domain extensions registered at Bridge and Web boot |
+| Kernel | `@godmode/kernel` + Bridge `kernel/` | Metadata ObjectTypes → storage adapters / native tables → Record CRUD tools + UI |
+
+## ObjectType kernel
+
+GodMode extends in-place via **ObjectTypes** (not DocTypes). The production
+registration audit discovers 72 ObjectTypes, including `StructureNode`.
+
+```mermaid
+flowchart LR
+  Consumers[Web, agents, plugins, HTTP clients]
+  Auth[Authentication and tenant resolution]
+  Kernel[ObjectType registry and dispatcher]
+  Adapters[Service-backed adapters]
+  Native[Native ObjectType storage]
+  Services[Authoritative domain services]
+  Databases[(core and tenant SQLite)]
+  Consumers --> Auth --> Kernel
+  Kernel --> Adapters --> Services --> Databases
+  Kernel --> Native --> Databases
+```
+
+Core and plugin definitions declare fields, policies, explicit CRUD operations,
+and named actions. The Bridge validates and registers them, then binds either an
+adapter or additive native storage. Metadata drives generic Record routes,
+generated AI tools, capability discovery, and web list/form pages.
+
+Service-backed adapters preserve existing business rules and side effects.
+The strict coverage and direct-write audits report zero legacy routes, legacy
+callers, unmatched mutation callers, direct entry-point writes, or
+static/generated tool collisions. Five domain routes remain as verified kernel
+delegates. Exact parity tests require every declared core CRUD operation and
+action to have a production adapter handler.
+
+Durable async actions run through tenant-aware workers with leases, retries,
+timeouts, cancellation, scoped idempotency, and replay-safe restart recovery.
+Declared events use leases and per-consumer durable receipts. Live chat
+WebSocket/token streaming and DM binary transfer remain specialized protocols;
+their durable effects are kernel-visible, but bytes and streams are not Records.
+
+See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) for the complete action,
+security, tenancy, storage, and compatibility contract.
 
 ## Data storage
 
@@ -51,17 +92,32 @@ Physical file separation provides tenant isolation; most tenant tables omit a re
 sequenceDiagram
   participant Browser
   participant Bridge
+  participant Kernel as ObjectType kernel
+  participant Service as Adapter/service
   participant CoreDb as core.sqlite
   participant TenantDb as tenant.sqlite
 
   Browser->>Bridge: HTTP /api/... + session cookie
   Bridge->>CoreDb: Resolve user session
   Bridge->>CoreDb: Validate tenant membership
-  Bridge->>TenantDb: Open workspace DB
+  Bridge->>Kernel: OperationContext + CRUD/action
+  Kernel->>Service: authorized validated dispatch
+  Service->>CoreDb: declared core-scoped operation
+  Service->>TenantDb: declared tenant-scoped operation
   Bridge->>Browser: JSON response
 ```
 
-Every authenticated request carries `{ userId, tenantId, role }`. Handlers use `getReqTenantDb(req)` — never a global operator database for tenant-scoped data.
+Every kernel request carries an `OperationContext` derived from authenticated
+user, tenant, role, source, confirmation, request/idempotency keys, version, and
+installed-plugin context. Handlers use `getReqTenantDb(req)` — never a global
+operator database for tenant-scoped data.
+
+Cross-database workflows do not claim atomicity across SQLite files.
+Marketplace clone acquisition and plugin lifecycle use durable, idempotent saga
+steps with core/tenant audit and outbox state so interruption can resume safely.
+Shared-resource adapters resolve the exact active grant and owner database:
+viewers read, editors mutate the owner's record, and invalid or guessed access
+fails closed.
 
 WebSocket clients pass `?tenantId=` because browsers cannot set custom headers on the upgrade.
 
@@ -122,17 +178,30 @@ Plugins ship a manifest (`godmode.plugin.json`) and register:
 
 - Bridge routes and tools
 - Web UI bundles (loaded from `/api/plugins/:id/web.js`)
-- Optional migrations and seed data
+- ObjectTypes, executable adapters/actions, and seed Records
+- Optional lifecycle hooks and declared migration metadata
 
-Discovery order:
+Plugin path discovery order:
 
-1. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
-2. Optional `GODMODE_PLUGIN_PATH` env var
-3. Per-tenant `tenant_plugins` (**Marketplace** install/uninstall)
+1. Optional `GODMODE_PLUGIN_PATH` env var
+2. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
 
 Intelligence can also **scaffold → build → install** plugins from chat ([PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md)).
 
-See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+Kernel registration is ownership-safe and tenant visibility follows
+`tenant_plugins`; installation is distinct from path discovery. Custom plugin
+Express routes remain responsible for their own installed-plugin checks. See
+[PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+
+Bridge and web plugins receive the versioned kernel client API (`apiVersion: 1`).
+Executable manifests can declare `kernelApiVersion`; unsupported future
+versions fail validation. The coordinated ecosystem migration was delivered
+through
+[godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
+[godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
+and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2);
+private domain plugins were migrated in their own repositories. All coordinated
+external migrations merged before ecosystem-wide cutover was declared complete.
 
 ## Deployment modes
 

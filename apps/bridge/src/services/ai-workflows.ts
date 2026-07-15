@@ -54,6 +54,7 @@ export interface WorkflowGraph {
 
 export interface AiWorkflow {
   id: string;
+  agent_id: string | null;
   name: string;
   config: WorkflowGraph;
   enabled: number;
@@ -63,6 +64,7 @@ export interface AiWorkflow {
 
 interface WorkflowRow {
   id: string;
+  agent_id: string | null;
   name: string;
   config_json: string;
   enabled: number;
@@ -80,6 +82,7 @@ function rowToWorkflow(row: WorkflowRow): AiWorkflow {
   }
   return {
     id: row.id,
+    agent_id: row.agent_id,
     name: row.name,
     config,
     enabled: row.enabled,
@@ -91,7 +94,7 @@ function rowToWorkflow(row: WorkflowRow): AiWorkflow {
 export function listWorkflows(db: AppDatabase): AiWorkflow[] {
   const rows = db
     .prepare(
-      `SELECT id, name, config_json, enabled, created_at, updated_at
+      `SELECT id, agent_id, name, config_json, enabled, created_at, updated_at
        FROM ai_workflows ORDER BY updated_at DESC`
     )
     .all() as WorkflowRow[];
@@ -101,7 +104,7 @@ export function listWorkflows(db: AppDatabase): AiWorkflow[] {
 export function getWorkflow(db: AppDatabase, id: string): AiWorkflow | null {
   const row = db
     .prepare(
-      `SELECT id, name, config_json, enabled, created_at, updated_at
+      `SELECT id, agent_id, name, config_json, enabled, created_at, updated_at
        FROM ai_workflows WHERE id = ?`
     )
     .get(id) as WorkflowRow | undefined;
@@ -110,20 +113,37 @@ export function getWorkflow(db: AppDatabase, id: string): AiWorkflow | null {
 
 export function createWorkflow(
   db: AppDatabase,
-  input: { name: string; config?: WorkflowGraph; enabled?: boolean }
+  input: {
+    name: string;
+    agentId?: string | null;
+    config?: WorkflowGraph;
+    enabled?: boolean;
+  }
 ): AiWorkflow {
   const id = uuidv4();
   const config: WorkflowGraph = input.config ?? { nodes: [], edges: [] };
   db.prepare(
-    `INSERT INTO ai_workflows (id, name, config_json, enabled) VALUES (?, ?, ?, ?)`
-  ).run(id, input.name, JSON.stringify(config), input.enabled === false ? 0 : 1);
+    `INSERT INTO ai_workflows (id, agent_id, name, config_json, enabled)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    input.agentId ?? null,
+    input.name,
+    JSON.stringify(config),
+    input.enabled === false ? 0 : 1
+  );
   return getWorkflow(db, id)!;
 }
 
 export function updateWorkflow(
   db: AppDatabase,
   id: string,
-  patch: { name?: string; config?: WorkflowGraph; enabled?: boolean }
+  patch: {
+    agentId?: string | null;
+    name?: string;
+    config?: WorkflowGraph;
+    enabled?: boolean;
+  }
 ): AiWorkflow | null {
   if (!getWorkflow(db, id)) return null;
   if (patch.name != null)
@@ -131,6 +151,10 @@ export function updateWorkflow(
       String(patch.name),
       id
     );
+  if (patch.agentId !== undefined)
+    db.prepare(
+      `UPDATE ai_workflows SET agent_id = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(patch.agentId, id);
   if (patch.config != null)
     db.prepare(
       `UPDATE ai_workflows SET config_json = ?, updated_at = datetime('now') WHERE id = ?`
@@ -144,6 +168,73 @@ export function updateWorkflow(
 
 export function deleteWorkflow(db: AppDatabase, id: string): boolean {
   return db.prepare(`DELETE FROM ai_workflows WHERE id = ?`).run(id).changes > 0;
+}
+
+export interface WorkflowComment {
+  id: string;
+  workflow_id: string;
+  author: "user" | "agent";
+  body: string;
+  created_at: string;
+}
+
+export function listWorkflowComments(
+  db: AppDatabase,
+  workflowId?: string
+): WorkflowComment[] {
+  return (workflowId
+    ? db
+        .prepare(
+          `SELECT id, workflow_id, author, body, created_at
+           FROM ai_workflow_comments WHERE workflow_id = ?
+           ORDER BY created_at ASC`
+        )
+        .all(workflowId)
+    : db
+        .prepare(
+          `SELECT id, workflow_id, author, body, created_at
+           FROM ai_workflow_comments ORDER BY created_at DESC`
+        )
+        .all()) as WorkflowComment[];
+}
+
+export function getWorkflowComment(
+  db: AppDatabase,
+  id: string
+): WorkflowComment | null {
+  return (
+    (db
+      .prepare(
+        `SELECT id, workflow_id, author, body, created_at
+         FROM ai_workflow_comments WHERE id = ?`
+      )
+      .get(id) as WorkflowComment | undefined) ?? null
+  );
+}
+
+export function createWorkflowComment(
+  db: AppDatabase,
+  input: {
+    workflowId: string;
+    author?: "user" | "agent";
+    body: string;
+  }
+): WorkflowComment {
+  if (!getWorkflow(db, input.workflowId)) {
+    throw Object.assign(new Error("Workflow not found"), { status: 404 });
+  }
+  const id = uuidv4();
+  db.prepare(
+    `INSERT INTO ai_workflow_comments (id, workflow_id, author, body)
+     VALUES (?, ?, ?, ?)`
+  ).run(id, input.workflowId, input.author ?? "user", input.body);
+  return getWorkflowComment(db, id)!;
+}
+
+export function deleteWorkflowComment(db: AppDatabase, id: string): boolean {
+  return db
+    .prepare(`DELETE FROM ai_workflow_comments WHERE id = ?`)
+    .run(id).changes > 0;
 }
 
 export interface WorkflowRunResult {
