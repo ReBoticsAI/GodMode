@@ -42,7 +42,7 @@ The mutation-route audit permits exactly five narrow exceptions:
 - `POST /api/auth/logout` — session-cookie invalidation;
 - `POST /api/analytics/timeseries/query` — read-only analytical query with a
   structured POST body;
-- `POST /api/federation/sc/:` — authenticated external Sierra Chart command
+- `POST /api/federation/sc/:` — authenticated external charting command
   transport with no local durable mutation;
 - `POST /api/dm/conversations/:/typing` — ephemeral presence with no durable
   mutation.

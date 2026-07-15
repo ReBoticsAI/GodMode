@@ -39,7 +39,7 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     id: "federation-command-transport",
     methods: ["POST"],
     pathPattern: "/api/federation/sc/:",
-    rationale: "Authenticated external Sierra Chart command transport performs no local durable mutation.",
+    rationale: "Authenticated external charting command transport performs no local durable mutation.",
     authenticatedDomainMutations: "none",
   },
   {

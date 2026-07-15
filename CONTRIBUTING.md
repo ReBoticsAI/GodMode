@@ -50,11 +50,10 @@ kernel coverage baseline and contract tests.
 - When mutation routes, callers, tools, or exceptions change, update the audit
   fixtures/tests and `docs/KERNEL_MIGRATION_MATRIX.md`.
 - Plugin ecosystem cutover is coordinated with
-  [godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
-  [godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
   [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
   [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
   and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
+  Private domain-plugin migrations are coordinated in their own repositories.
   Do not claim ecosystem-wide completion until those external PRs merge.
 
 ## What we are looking for (roadmap themes)

@@ -26,13 +26,12 @@ For Intelligence to operate like a Cursor-style engineering agent on a real git 
 Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-git), [godmode-plugin-github](https://github.com/ReBoticsAI/godmode-plugin-github).
 
 The durable-kernel updates are tracked in
-[godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
-[godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
 [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1)
 and
 [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1).
 The official catalog's Record-bundle migration is
 [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
+Private domain-plugin migrations are coordinated in their own repositories.
 They are external dependencies of ecosystem-wide cutover and may remain open
 after the core repository is complete.
 
