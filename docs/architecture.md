@@ -196,12 +196,11 @@ Express routes remain responsible for their own installed-plugin checks. See
 Bridge and web plugins receive the versioned kernel client API (`apiVersion: 1`).
 Executable manifests can declare `kernelApiVersion`; unsupported future
 versions fail validation. The coordinated migration also depends on
-[godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
-[godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
 [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
 [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
 and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2);
-these external PRs must merge before claiming ecosystem-wide cutover.
+private domain plugins are coordinated in their own repositories. These
+external PRs must merge before claiming ecosystem-wide cutover.
 
 ## Deployment modes
 

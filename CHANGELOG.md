@@ -58,11 +58,10 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
   and AI-tool migration inventory
 - Coordinated ecosystem migrations remain external dependencies:
-  [godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
-  [godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
   [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
   [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
-  and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2)
+  [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2),
+  and private domain-plugin PRs coordinated separately
 
 ## [0.1.0] - 2026-06-29
 

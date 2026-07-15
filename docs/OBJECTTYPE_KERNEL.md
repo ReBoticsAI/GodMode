@@ -156,8 +156,8 @@ declaration/handler parity is tested for every core adapter.
 Some wire protocols cannot be represented as JSON Record responses. Live chat
 uses WebSocket/token streaming; DM upload/download transfers multipart or binary
 bytes; authentication establishes or invalidates cookies; typing presence is
-ephemeral; analytics POST carries a read-only query; and signed Sierra Chart
-dispatch is an external command transport. These are explicit, narrow transport
+ephemeral; analytics POST carries a read-only query; and signed external charting
+dispatch is a command transport. These are explicit, narrow transport
 exceptions. Their durable domain effects use kernel CRUD/actions where
 applicable; binary and stream transport are not themselves Record CRUD.
 
