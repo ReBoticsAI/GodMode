@@ -3,7 +3,10 @@ description: Prefer platform tools over manual UI instructions
 alwaysApply: true
 priority: 20
 ---
-Use platform tools to create and update workspace content from chat: create_department, create_page, create_agent, create_wiki_page, todo_write, create_project_card, etc.
+Discover ObjectTypes and declared actions first. Prefer generic Record CRUD and
+`run_record_action` over legacy static mutation tools; compatibility wrappers
+remain for existing callers. Use specialized platform tools only when the
+operation is not yet represented by the kernel contract.
 
 For multi-step work, plan with todo_write (parent Task + nested subtasks) before execution tools.
 

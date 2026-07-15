@@ -10,6 +10,41 @@ GodMode is a **local-first personal OS**: a React dashboard talks to a Node.js B
 | Bridge | Node.js + Express + SQLite | REST/WebSocket API, auth, tenant routing, AI orchestration |
 | Connector | Node.js (optional) | Local runtime for hardware-bound marketplace plugins |
 | Plugins | npm packages / marketplace installs | Domain extensions registered at Bridge and Web boot |
+| Kernel | `@godmode/kernel` + Bridge `kernel/` | Metadata ObjectTypes → storage adapters / native tables → Record CRUD tools + UI |
+
+## ObjectType kernel
+
+GodMode extends in-place via **ObjectTypes** (not DocTypes). The deployed core
+registry contains 54 ObjectTypes, including `StructureNode`.
+
+```mermaid
+flowchart LR
+  Consumers[Web, agents, plugins, HTTP clients]
+  Auth[Authentication and tenant resolution]
+  Kernel[ObjectType registry and dispatcher]
+  Adapters[Service-backed adapters]
+  Native[Native ObjectType storage]
+  Services[Authoritative domain services]
+  Databases[(core and tenant SQLite)]
+  Consumers --> Auth --> Kernel
+  Kernel --> Adapters --> Services --> Databases
+  Kernel --> Native --> Databases
+```
+
+Core and plugin definitions declare fields, policies, explicit CRUD operations,
+and named actions. The Bridge validates and registers them, then binds either an
+adapter or additive native storage. Metadata drives generic Record routes,
+generated AI tools, capability discovery, and web list/form pages.
+
+Service-backed adapters preserve existing business rules and side effects.
+Structure compatibility routes already delegate legacy mutations into the same
+dispatcher. The coverage inventory assigns migration targets to the remaining
+legacy routes, while telemetry measures callers. Live chat token streaming
+remains a specialized protocol, although its durable lifecycle state is
+kernel-visible.
+
+See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) for the complete action,
+security, tenancy, storage, and compatibility contract.
 
 ## Data storage
 
@@ -51,17 +86,25 @@ Physical file separation provides tenant isolation; most tenant tables omit a re
 sequenceDiagram
   participant Browser
   participant Bridge
+  participant Kernel as ObjectType kernel
+  participant Service as Adapter/service
   participant CoreDb as core.sqlite
   participant TenantDb as tenant.sqlite
 
   Browser->>Bridge: HTTP /api/... + session cookie
   Bridge->>CoreDb: Resolve user session
   Bridge->>CoreDb: Validate tenant membership
-  Bridge->>TenantDb: Open workspace DB
+  Bridge->>Kernel: OperationContext + CRUD/action
+  Kernel->>Service: authorized validated dispatch
+  Service->>CoreDb: core-scoped operation, when declared
+  Service->>TenantDb: tenant-scoped operation, when declared
   Bridge->>Browser: JSON response
 ```
 
-Every authenticated request carries `{ userId, tenantId, role }`. Handlers use `getReqTenantDb(req)` — never a global operator database for tenant-scoped data.
+Every kernel request carries an `OperationContext` derived from authenticated
+user, tenant, role, source, confirmation, request/idempotency keys, version, and
+installed-plugin context. Handlers use `getReqTenantDb(req)` — never a global
+operator database for tenant-scoped data.
 
 WebSocket clients pass `?tenantId=` because browsers cannot set custom headers on the upgrade.
 
@@ -122,17 +165,20 @@ Plugins ship a manifest (`godmode.plugin.json`) and register:
 
 - Bridge routes and tools
 - Web UI bundles (loaded from `/api/plugins/:id/web.js`)
-- Optional migrations and seed data
+- ObjectTypes, executable adapters/actions, and seed Records
+- Optional lifecycle hooks and declared migration metadata
 
-Discovery order:
+Plugin path discovery order:
 
-1. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
-2. Optional `GODMODE_PLUGIN_PATH` env var
-3. Per-tenant `tenant_plugins` (**Marketplace** install/uninstall)
+1. Optional `GODMODE_PLUGIN_PATH` env var
+2. Marketplace-registered paths in `platform_meta.marketplace.plugin_paths`
 
 Intelligence can also **scaffold → build → install** plugins from chat ([PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md)).
 
-See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+Kernel registration is ownership-safe and tenant visibility follows
+`tenant_plugins`; installation is distinct from path discovery. Custom plugin
+Express routes remain responsible for their own installed-plugin checks. See
+[PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
 
 ## Deployment modes
 
