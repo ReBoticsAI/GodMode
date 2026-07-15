@@ -10,6 +10,8 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
    `use_skill('object-types')`.
 3. `scaffold_plugin` creates `godmode.plugin.json`, `src/bridge.ts`, `src/web.ts`, and package.json under `plugins/<id>/`.
 4. Bridge plugin exports `register(api)`; web plugin exports `registerWeb(api)`.
+   Executable manifests declare `kernelApiVersion: 1`; Bridge/web clients expose
+   `api.kernel.apiVersion === 1`.
    Service-backed ObjectTypes use
    `api.objectTypes.register(definition, adapter)` and implement every declared
    CRUD operation/action.
@@ -17,8 +19,9 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
 6. `install_plugin` registers owned ObjectTypes before seeding Records, loads the
    plugin, and enables it for the tenant. Custom routes must enforce tenant and
    installed-plugin checks. No Bridge restart for tools / tenant:install.
-7. Declare strict action input/output schemas, roles, confirmation, idempotency,
-   concurrency, execution mode, and sensitive paths; verify tenant isolation.
+7. Declare strict action input/output/error schemas, roles, confirmation,
+   idempotency, concurrency, retry, timeout, cancellation, execution mode, and
+   sensitive paths; verify terminal `OperationRun` state and tenant isolation.
    Native storage is tenant-local and additive-only; uninstall retains native
    tables and Records.
 8. Optional: add catalog entry via Official PR or Unofficial catalog URL.

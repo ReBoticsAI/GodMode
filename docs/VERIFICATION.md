@@ -130,7 +130,7 @@ See [MARKETPLACE.md](./MARKETPLACE.md#official-devtools-plugins-git--github).
 Run the automated gate before deployment:
 
 ```bash
-npm run audit:kernel
+npm run audit:kernel:strict
 npm run typecheck
 npm test
 npm run build --workspace @godmode/bridge
@@ -138,20 +138,29 @@ npm run build --workspace @godmode/web
 ```
 
 `npm run test:gate` runs the package build, typecheck, kernel audit, and test
-suite together.
+suite together. At the completion baseline, strict audit output must report:
+
+- 15 mutation routes: 3 kernel Record, 2 kernel action, 5 kernel-delegated,
+  5 protocol exceptions;
+- 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers;
+- 0 direct SQL/filesystem writes in audited entry points;
+- 72 ObjectTypes, 75 static tools, 335 generated tool candidates, and
+  0 static/generated collisions.
 
 Then validate the production deployment manually:
 
 1. Build the production Docker image and confirm `/api/health` returns `ok`.
 2. Sign in and inspect `/api/object-types` and `/api/kernel/capabilities`; the
-   core registry should expose 54 ObjectTypes including `StructureNode`.
+   deployed registry should expose the 72 audited core ObjectTypes including
+   `StructureNode`, plus the ObjectTypes from plugins installed for that tenant.
 3. Create, update, read, list, and delete a disposable Record through a supported
    ObjectType. Confirm unsupported operations are rejected.
 4. Execute a lifecycle action and verify invalid input, missing role, and missing
    confirmation are rejected.
-5. Start an asynchronous action and inspect its `OperationRun`. Cancellation
-   metadata is not yet generically enforced, so verify the specific adapter's
-   behavior and do not treat `cancellable` as a host guarantee.
+5. Start asynchronous actions and inspect their `OperationRun` rows. Verify
+   timeout, retry/backoff, max-attempt exhaustion, declared cancellation,
+   idempotent replay, and restart/expired-lease recovery. Confirm replay-unsafe
+   interrupted work fails with `KERNEL_REPLAY_UNSAFE`.
 6. Install a plugin with ObjectTypes, confirm its navigation and Records appear
    only for that tenant, uninstall it, and confirm the runtime visibility is
    removed while native data remains available for reinstall/recovery.
@@ -159,10 +168,72 @@ Then validate the production deployment manually:
    action from the web UI.
 8. Confirm live chat still streams tokens; streaming is a protocol exception,
    not a normal Record action response.
-9. Inspect legacy mutation telemetry. Retire a compatibility shim only after
-   parity and sustained zero-use evidence.
+9. Upload and download a DM attachment and confirm authorized binary transfer
+   still works. Do not describe multipart or byte-stream transport as Record
+   CRUD.
+10. Trigger a declared durable event, fail one named consumer, then retry.
+    Confirm completed consumer receipts are skipped and the unfinished consumer
+    resumes.
+11. With two tenants, verify a shared-resource viewer can read but cannot
+    mutate, an editor writes the owner's database, and revoked, expired,
+    wrong-kind, clone, and guessed-ID access fails closed.
+12. Interrupt a marketplace clone acquisition between core and tenant steps,
+    repeat it with the same idempotency key, and confirm the saga resumes to one
+    import and one purchase.
 
-The Z440 production smoke is manual; Playwright is not part of CI.
+### Z440 revision and image identity
+
+Run this from the Z440 checkout before the manual browser pass. Do not infer the
+deployed revision from a branch name or container creation time.
+
+```powershell
+$ExpectedRevision = "<reviewed-full-sha>"
+if ((git rev-parse HEAD).Trim() -ne $ExpectedRevision) {
+  throw "Z440 checkout is not the reviewed revision"
+}
+if (git status --porcelain) {
+  throw "Z440 checkout has uncommitted files"
+}
+
+docker compose -f deploy/docker-compose.prod.yml build --no-cache godmode
+$BuiltImage = (docker compose -f deploy/docker-compose.prod.yml images -q godmode).Trim()
+if (-not $BuiltImage) { throw "No built GodMode image ID" }
+
+docker compose -f deploy/docker-compose.prod.yml up -d --force-recreate godmode
+$Container = (docker compose -f deploy/docker-compose.prod.yml ps -q godmode).Trim()
+$RunningImage = (docker inspect --format '{{.Image}}' $Container).Trim()
+if ($RunningImage -ne $BuiltImage) {
+  throw "Running container image does not match the reviewed revision"
+}
+
+git rev-parse HEAD
+docker image inspect $BuiltImage --format 'image={{.Id}} created={{.Created}}'
+docker inspect --format 'container={{.Id}} image={{.Image}} started={{.State.StartedAt}}' $Container
+Invoke-RestMethod http://127.0.0.1/api/health
+```
+
+Record the full 40-character revision, immutable image ID, and running
+container image ID with the test evidence.
+
+### Browser regression checklist
+
+The Z440 browser pass is manual; Playwright is not part of CI. Mark each item
+only after a human or browser agent verifies the running image:
+
+- sign up/sign in, tenant switch, and first-run wizard;
+- Home, Structure, Wiki, Tasks, Calendar, Notifications, Vault, Bank, Support,
+  Shared, Marketplace, Agents/Pipeline, and Settings load without console or
+  network errors;
+- Intelligence chat streams tokens and executes a generated Record/action tool;
+- generic Record list/form create, edit, action, and delete flows;
+- viewer/editor shared-resource behavior across two tenants;
+- plugin install, navigation, Record/action use, uninstall, and reinstall;
+- DM text, typing presence, attachment upload, and binary download;
+- page refresh and Bridge restart preserve completed durable state and recover
+  eligible async work.
+
+This checklist is pending until the parent task records browser confirmation; an
+updated document or passing automated tests alone do not establish completion.
 
 See [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md).
 

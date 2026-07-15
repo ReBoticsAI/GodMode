@@ -129,9 +129,16 @@ plugin is installed. See
 [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
 Authenticated data consumers discover explicit CRUD operations and named actions
-through the ObjectType kernel. Existing domain services remain authoritative
-behind adapters, so the migration standardizes dispatch without duplicating
-business logic. Live chat token streaming is an intentional transport exception.
+through the ObjectType kernel. The strict audit currently discovers 72
+ObjectTypes and reports zero legacy routes/callers, unmatched mutation callers,
+or direct entry-point writes. Existing domain services remain authoritative
+behind exact-parity adapters, so all durable mutations share one enforced
+dispatch boundary without duplicating business logic.
+
+Durable asynchronous actions enforce leases, retries, timeouts, cancellation,
+idempotency, and restart recovery. Declared events use per-consumer durable
+receipts. Live WebSocket/token streams and authorized binary transfer remain
+intentional specialized transports; the stream or bytes are not Record CRUD.
 See [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
 
 ## Quick start
@@ -238,7 +245,7 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 |-----------|------|------|
 | Web dashboard | `apps/web` | React UI  -  Chat panel, structure, productivity |
 | Bridge | `apps/bridge` | REST/WebSocket API, auth, multi-tenant SQLite |
-| ObjectType kernel | `packages/kernel`, `apps/bridge/src/kernel` | Metadata registry, policies, Record CRUD/actions, native storage, generated tools |
+| ObjectType kernel | `packages/kernel`, `apps/bridge/src/kernel` | Enforced durable dispatch, policies, Record CRUD/actions, async recovery, events, native storage, generated tools |
 | Connector | `apps/connector` | Local runtime for hardware-bound marketplace plugins |
 | Plugin API | `packages/plugin-api` | Plugin manifest and register contracts |
 | Plugin host | `packages/plugin-host` | Runtime facades for plugins |

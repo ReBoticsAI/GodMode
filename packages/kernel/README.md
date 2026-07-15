@@ -41,15 +41,26 @@ the public metadata/action contract.
 
 Actions declare collection/record target, effect, schemas, roles, confirmation,
 idempotency, concurrency, execution mode, cancellation, redaction, and events.
-The Bridge dispatcher validates and enforces supported metadata before invoking
-the adapter. Asynchronous work is represented by durable `OperationRun` Records.
-Retry, timeout, `errorSchema`, custom concurrency version fields, bulk semantics,
-and strict `cancellable` enforcement are currently descriptive metadata rather
-than generic dispatcher behavior.
+The Bridge dispatcher validates and enforces action input/output/error schemas,
+roles, confirmation, idempotency/expiry, custom concurrency version fields,
+redaction, and durable event append before invoking the adapter. Asynchronous
+work is represented by durable `OperationRun` Records and generically enforces
+leases, declared retries/backoff, timeout, cancellation eligibility, and
+replay-safe recovery. Declared bulk execution remains unsupported until an
+adapter provides its dedicated shape; deprecation metadata is descriptive.
+
+The strict repository audit currently discovers 72 ObjectTypes, 335 generated
+tool candidates, and 75 static tools, with zero legacy routes/callers, unmatched
+mutation callers, direct audited entry-point writes, or tool collisions. Core
+contract tests require exact CRUD/action declaration-handler parity.
 
 Every operation requires an `OperationContext`; consumers must not bypass tenant,
 role, confirmation, or installed-plugin checks. Plugin custom routes sit outside
 generic dispatch and enforce those boundaries themselves.
+
+Bridge and web plugins receive a versioned typed kernel client
+(`apiVersion: 1`). Executable manifests may require `kernelApiVersion: 1`;
+unsupported future versions are rejected rather than guessed.
 
 The complete host behavior, routes, compatibility policy, and current
 limitations are documented in

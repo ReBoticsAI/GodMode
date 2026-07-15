@@ -1,104 +1,74 @@
 # Kernel migration matrix
 
-This document is the human-readable companion to
-`scripts/audit-kernel-coverage.mjs`. The script is the authoritative,
-machine-readable baseline: it statically scans every TypeScript file in
-`apps/bridge/src/routes` and `apps/bridge/src/kernel/routes.ts` for Express
-`post`, `put`, `patch`, and `delete` declarations.
+This is the human-readable companion to `scripts/audit-kernel-coverage.mjs` and
+`scripts/audit-kernel-direct-writes.mjs`. The scripts discover the current
+TypeScript route, caller, ObjectType, AI-tool, and durable-write surface; there
+is no hand-maintained route baseline.
 
-The baseline currently covers 195 mutation-verb declarations:
+At the completion baseline, `npm run audit:kernel:strict` reports:
 
-- **Kernel Record API:** 3 dynamic create/update/delete routes.
-- **Kernel action API:** 2 dynamic declared-action routes (collection and
-  record target).
-- **Compatibility shims:** 165 legacy or domain-specific routes with an
-  ObjectType/action migration target.
-- **Protocol exceptions:** 25 routes whose boundary is not Record CRUD.
+- **15 mutation routes:** 3 kernel Record routes, 2 kernel action routes,
+  5 domain routes that delegate to the kernel, and 5 protocol exceptions;
+- **0 legacy routes, 0 legacy callers, and 0 unmatched mutation callers** in
+  web, scripts, connectors, or checked-in plugins;
+- **0 direct SQL or filesystem writes** in audited entry points;
+- **72 ObjectTypes** discovered from production declarations;
+- **75 static AI tools**, **335 generated tool candidates**, and
+  **0 static/generated collisions**.
 
-The audit rejects both additions and removals. A route cannot disappear,
-change verb/path, or be added until its baseline entry is deliberately updated
-with one of the four classifications and a target or rationale. It also rejects
-mutation declarations whose path is not a static string, so dynamic routing
-cannot bypass review.
+The strict audit is the completion gate. A new authenticated durable mutation
+must dispatch through declared ObjectType CRUD/action behavior; a new static
+tool, caller, direct write, or specialized transport must remain discoverable
+and pass strict classification and parity checks.
 
-`compatibility-shim` is the audit classification for a concrete migration
-target; it does not mean every classified handler already delegates through the
-kernel. Structure mutations currently do, while the remaining targets stay
-measured until cutover.
+## Enforced domain boundary
 
-## Domain coverage
+All durable domain mutations now enter through the kernel. The five
+domain-specific mutation routes that remain are thin transport delegates with
+static, validated ObjectType/action targets; they are not compatibility shims.
+Authoritative services remain behind adapters, and exact adapter parity tests
+require every declared CRUD operation and action to have a handler and reject
+every undeclared one.
 
-- **Platform structure (17 declarations):** legacy departments, divisions,
-  pages, and nodes target `StructureNode` Records and declared structure
-  actions. The generic kernel routes are the replacement boundary.
-- **Intelligence and automation (75 declarations):** memories, rules, skills,
-  artifacts, agents, workflows, schedules, queues, datasets, chats, projects,
-  and calendar operations target their registered ObjectTypes or explicit
-  actions.
-- **Identity and administration (17 declarations):** user/tenant membership
-  mutations target `User`, `Tenant`, and `TenantMembership`; authentication and
-  billing control-plane operations and onboarding remain protocol exceptions.
-- **Collaboration and knowledge (40 declarations):** shares, direct messages,
-  notifications, support, wiki, hooks/events, and personal productivity target
-  the corresponding registered read models and service-backed ObjectTypes.
-- **Marketplace, finance, and connectivity (41 declarations):** catalog,
-  listing, entitlement, holding, bridge, and peer routes have explicit domain
-  targets; remote execution and network orchestration remain protocol
-  exceptions.
-- **Kernel-native boundary (5 declarations):** dynamic Record create, update,
-  delete, and both declared action execution targets are classified directly as
-  `kernel-record` or `kernel-action`.
+The direct-write audit covers Bridge routes, plugin entry points, scripts,
+Connector entry points, bootstrap, and AI tool execution. Versioned migrations
+and adapter implementations are the intentional write owners.
 
-These counts describe route declarations, not unique public URLs. For example,
-`routes/hooks.ts` contains two routers that each declare `POST /`; the baseline
-tracks declaration occurrence so neither is silently collapsed.
+## Specialized protocol exceptions
 
-## Protocol exceptions
+The mutation-route audit permits exactly five narrow exceptions:
 
-Protocol exceptions are intentionally narrow and include a rationale in the
-machine baseline:
+- `POST /api/auth/login` — credential verification and session-cookie creation;
+- `POST /api/auth/logout` — session-cookie invalidation;
+- `POST /api/analytics/timeseries/query` — read-only analytical query with a
+  structured POST body;
+- `POST /api/federation/sc/:` — authenticated external Sierra Chart command
+  transport with no local durable mutation;
+- `POST /api/dm/conversations/:/typing` — ephemeral presence with no durable
+  mutation.
 
-- authentication/session/credential flows and first-run onboarding;
-- platform-admin billing configuration and provider checks;
-- federation, Tailscale, peer invitations, and signed remote dispatch;
-- inference execution and endpoint provisioning;
-- external calendar/email synchronization;
-- plugin install/uninstall lifecycle operations;
-- the read-only analytical SQL endpoint, which uses POST to carry a structured
-  query body.
-
-An exception does not imply weaker authorization. It means the operation is a
-control-plane, compute, transport, or executable-lifecycle command rather than
-durable ObjectType Record CRUD.
+The full protocol registry also documents health, WebSocket negotiation, and
+authorized DM binary upload/download. Multipart bytes, byte streams, WebSocket
+frames, signed external command transport, ephemeral presence, and read-only
+query transport are not Record CRUD. Their durable domain effects are
+kernel-delegated where applicable; the transport itself remains specialized.
 
 ## AI tool inventory
 
-The same audit inventories the static `AI_TOOL_REGISTRY` without importing or
-executing Bridge runtime code.
+The audit parses `AI_TOOL_REGISTRY` without importing Bridge runtime code.
+Seven generic tools provide ObjectType discovery, CRUD, and action execution:
+`list_object_types`, `list_records`, `get_record`, `create_record`,
+`update_record`, `delete_record`, and `run_record_action`. Per-ObjectType tools
+are generated from the 72 discovered definitions, producing 335 current
+candidates. The remaining 75 static tools cover non-generated platform,
+transport, and operational capabilities. Runtime plugin tools remain
+tenant/plugin scoped and outside the static count.
 
-- All 104 explicit static tools must appear in one of 10 named non-kernel
-  domain groups. A newly added static tool fails the audit until grouped.
-- The 7 generic kernel tools are separately marked:
-  `list_object_types`, `list_records`, `get_record`, `create_record`,
-  `update_record`, `delete_record`, and `run_record_action`.
-- The audit requires both kernel registration paths:
-  `genericObjectTypeToolDefs()` and `objectTypeAutoToolDefs(coreNames)`.
-  Per-ObjectType tools remain generated from registered ObjectTypes rather than
-  being copied into a stale hand-maintained list.
-- Plugin tools are runtime registrations and are outside the static registry
-  baseline; their registration path remains tenant/plugin scoped.
+## Changing the boundary
 
-## Updating the inventory
-
-When a mutation route changes, update the embedded route baseline in
-`scripts/audit-kernel-coverage.mjs` in the same change. Use:
-
-- `kernel-record` for generic Record create/update/delete;
-- `kernel-action` for an action declared by an ObjectType adapter;
-- `compatibility-shim` for a legacy/domain route with a concrete migration
-  target;
-- `protocol-exception` only with a concise explanation of why Record/action
-  semantics do not fit.
-
-Do not place credentials, request bodies, tokens, endpoint secrets, or customer
-data in this inventory.
+Run `npm run audit:kernel:strict` for any route, caller, tool, ObjectType,
+adapter, migration, plugin, Connector, or durable-write change. Add a protocol
+exception only when the wire protocol itself cannot be expressed as JSON Record
+CRUD/action semantics, include a narrow rationale, and keep durable effects
+behind kernel dispatch. Never put credentials, request bodies, tokens, endpoint
+secrets, or customer data in audit metadata.

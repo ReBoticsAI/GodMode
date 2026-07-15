@@ -4,9 +4,15 @@ alwaysApply: true
 priority: 20
 ---
 Discover ObjectTypes and declared actions first. Prefer generic Record CRUD and
-`run_record_action` over legacy static mutation tools; compatibility wrappers
-remain for existing callers. Use specialized platform tools only when the
-operation is not yet represented by the kernel contract.
+`run_record_action` for durable domain work. The strict migration is complete:
+do not search for or introduce legacy mutation routes, callers, compatibility
+wrappers, or direct durable writes. Use specialized tools only for reviewed
+operational or wire protocols; WebSocket/token streams and binary transfer are
+not Record CRUD, although their durable effects must kernel-dispatch.
+
+For async actions, honor declared idempotency, retry, timeout, cancellation, and
+concurrency requirements. Inspect the returned `OperationRun` rather than
+assuming immediate completion.
 
 For multi-step work, plan with todo_write (parent Task + nested subtasks) before execution tools.
 

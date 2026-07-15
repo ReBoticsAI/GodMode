@@ -29,6 +29,8 @@ Minimum before exposing Bridge to a network:
 4. `AUTH_ALLOW_SIGNUP=false` or `AUTH_INVITE_CODES` on public hubs
 5. CORS locked to your `WEB_ORIGIN`
 6. Install plugins only from sources you trust
+7. Run `npm run audit:kernel:strict`; production durable mutations must have
+   zero legacy routes/callers, unmatched callers, and direct entry-point writes
 
 ## Related
 

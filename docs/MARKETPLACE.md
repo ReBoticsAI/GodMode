@@ -25,6 +25,17 @@ For Intelligence to operate like a Cursor-style engineering agent on a real git 
 
 Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-git), [godmode-plugin-github](https://github.com/ReBoticsAI/godmode-plugin-github).
 
+The durable-kernel updates are tracked in
+[godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
+[godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
+[godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1)
+and
+[godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1).
+The official catalog's Record-bundle migration is
+[GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
+They are external dependencies of ecosystem-wide cutover and may remain open
+after the core repository is complete.
+
 ## Unofficial sources
 
 **Marketplace → Unofficial** is the single place to install plugins for your workspace:
@@ -36,17 +47,19 @@ Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-
 Use **Marketplace → Installed** to review workspace plugins, uninstall, or remove registered local paths.
 
 Plugin ObjectTypes and generated Record/action tools are visible only in
-workspaces where the plugin is installed. Installation atomically validates and
-replaces owned definitions before applying seed Records; lifecycle state, tenant
-hooks, and knowledge import are separate durable compensated steps. Uninstall
-removes runtime visibility and plugin-owned knowledge, but deliberately retains
-native ObjectType tables and tenant Records for reinstall or recovery. It is not
-a data erasure operation; export or delete retained data explicitly when
-required.
+workspaces where the plugin is installed. Installation validates and atomically
+replaces owned definitions, then records lifecycle state, seed, hook, and
+knowledge steps durably with compensation/recovery across core and tenant
+databases. It does not claim a cross-SQLite transaction. Uninstall removes
+runtime visibility and plugin-owned knowledge, but deliberately retains native
+ObjectType tables and tenant Records for reinstall or recovery. It is not a data
+erasure operation; export or delete retained data explicitly when required.
 
 A manifest-only plugin can ship native `objectTypes` and seed `records` without
 a `bridge.entry`. Executable adapters, actions, hooks, tools, or custom routes
-require Bridge code.
+require Bridge code. Bridge and web plugins use the versioned kernel client
+(`apiVersion: 1`); executable manifests may declare `kernelApiVersion: 1`, and a
+future unsupported version is rejected at validation.
 
 Plugin Bridge code runs with host privileges. Install only trusted sources,
 review requested routes/actions and secret fields, and remember that custom
@@ -136,6 +149,12 @@ See [CONTRIBUTING.md](https://github.com/ReBoticsAI/GodMode-Marketplace/blob/mai
 |------|----------|
 | `clone` | Downloads `bundle.json` and imports via portability |
 | `plugin` | Clones `pluginRepo` (or uses `pluginLocalPath`) and registers with Bridge |
+
+Clone acquisition is a durable, idempotent saga across `core.sqlite` and the
+buyer tenant database. Operation registration, tenant import, purchase
+recording, and completion are independently recorded with audit/outbox rows.
+Retrying the same idempotency key resumes the operation without duplicating the
+import or purchase.
 
 Live access to resources is **Shared only**, not sold through Marketplace.
 

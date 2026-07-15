@@ -8,8 +8,8 @@ Use this skill for **everyday workspace setup**. Stay in native tools; do not sc
 **Do here (Tier 1):**
 1. `read_wiki_page` / `list_wiki_pages` when the user asks how something works.
 2. Structure shells: prefer `create_record` with
-   `objectType: StructureNode`; department/division/page tools are legacy
-   compatibility wrappers for **non-functional** org labels only.
+   `objectType: StructureNode`; department/division/page tools are specialized
+   UX conveniences whose durable effects dispatch through the same kernel.
 3. `list_object_types` / `use_skill('object-types')` discovers existing durable
    shapes. Defining a new ObjectType is Tier 2 plugin work.
 4. `create_agent` for specialists; link via structure when appropriate.

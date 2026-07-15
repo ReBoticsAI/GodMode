@@ -14,8 +14,8 @@ GodMode is a **local-first personal OS**: a React dashboard talks to a Node.js B
 
 ## ObjectType kernel
 
-GodMode extends in-place via **ObjectTypes** (not DocTypes). The deployed core
-registry contains 54 ObjectTypes, including `StructureNode`.
+GodMode extends in-place via **ObjectTypes** (not DocTypes). The production
+registration audit discovers 72 ObjectTypes, including `StructureNode`.
 
 ```mermaid
 flowchart LR
@@ -37,11 +37,17 @@ adapter or additive native storage. Metadata drives generic Record routes,
 generated AI tools, capability discovery, and web list/form pages.
 
 Service-backed adapters preserve existing business rules and side effects.
-Structure compatibility routes already delegate legacy mutations into the same
-dispatcher. The coverage inventory assigns migration targets to the remaining
-legacy routes, while telemetry measures callers. Live chat token streaming
-remains a specialized protocol, although its durable lifecycle state is
-kernel-visible.
+The strict coverage and direct-write audits report zero legacy routes, legacy
+callers, unmatched mutation callers, direct entry-point writes, or
+static/generated tool collisions. Five domain routes remain as verified kernel
+delegates. Exact parity tests require every declared core CRUD operation and
+action to have a production adapter handler.
+
+Durable async actions run through tenant-aware workers with leases, retries,
+timeouts, cancellation, scoped idempotency, and replay-safe restart recovery.
+Declared events use leases and per-consumer durable receipts. Live chat
+WebSocket/token streaming and DM binary transfer remain specialized protocols;
+their durable effects are kernel-visible, but bytes and streams are not Records.
 
 See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) for the complete action,
 security, tenancy, storage, and compatibility contract.
@@ -96,8 +102,8 @@ sequenceDiagram
   Bridge->>CoreDb: Validate tenant membership
   Bridge->>Kernel: OperationContext + CRUD/action
   Kernel->>Service: authorized validated dispatch
-  Service->>CoreDb: core-scoped operation, when declared
-  Service->>TenantDb: tenant-scoped operation, when declared
+  Service->>CoreDb: declared core-scoped operation
+  Service->>TenantDb: declared tenant-scoped operation
   Bridge->>Browser: JSON response
 ```
 
@@ -105,6 +111,13 @@ Every kernel request carries an `OperationContext` derived from authenticated
 user, tenant, role, source, confirmation, request/idempotency keys, version, and
 installed-plugin context. Handlers use `getReqTenantDb(req)` — never a global
 operator database for tenant-scoped data.
+
+Cross-database workflows do not claim atomicity across SQLite files.
+Marketplace clone acquisition and plugin lifecycle use durable, idempotent saga
+steps with core/tenant audit and outbox state so interruption can resume safely.
+Shared-resource adapters resolve the exact active grant and owner database:
+viewers read, editors mutate the owner's record, and invalid or guessed access
+fails closed.
 
 WebSocket clients pass `?tenantId=` because browsers cannot set custom headers on the upgrade.
 
@@ -179,6 +192,16 @@ Kernel registration is ownership-safe and tenant visibility follows
 `tenant_plugins`; installation is distinct from path discovery. Custom plugin
 Express routes remain responsible for their own installed-plugin checks. See
 [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+
+Bridge and web plugins receive the versioned kernel client API (`apiVersion: 1`).
+Executable manifests can declare `kernelApiVersion`; unsupported future
+versions fail validation. The coordinated migration also depends on
+[godmode-plugin-sierra#1](https://github.com/ReBoticsAI/godmode-plugin-sierra/pull/1),
+[godmode-plugin-polymarket#1](https://github.com/ReBoticsAI/godmode-plugin-polymarket/pull/1),
+[godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
+[godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),
+and [GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2);
+these external PRs must merge before claiming ecosystem-wide cutover.
 
 ## Deployment modes
 

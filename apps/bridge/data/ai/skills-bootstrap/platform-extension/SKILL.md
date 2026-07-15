@@ -9,11 +9,13 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
    `api.objectTypes.register(definition, adapter)` for service-backed CRUD or
    named actions and implement every declared capability. See skill
    `object-types`.
+   Executable bridge/web clients declare `kernelApiVersion: 1` and use the
+   versioned `api.kernel` client.
 4. Use `scaffold_plugin` with a kebab-case id and human name. Files land under `plugins/<id>/` inside the coding root.
 5. Implement bridge/web entries → `build_plugin` → `install_plugin`.
 6. For public packs, run `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
 7. Custom Express routes must enforce authentication, tenant membership, and
    installed-plugin visibility explicitly. Advanced mounts after boot may still
    need a Bridge restart — prefer tools + ObjectTypes + tenant hooks in v1.
-8. Verify discovery, representative Record/action calls, adapter parity, and
-   tenant isolation after install.
+8. Verify discovery, representative Record/action calls, exact adapter parity,
+   async terminal/recovery behavior, and tenant isolation after install.
