@@ -10,6 +10,10 @@ import { registerPageKinds } from "../kernel/kind-registry.js";
 
 /** Register ObjectTypes from a plugin manifest (idempotent overwrite by name). */
 export function registerPluginObjectTypes(manifest: GodmodePluginManifest): void {
+  // Executable plugins register adapter-backed definitions through
+  // api.objectTypes.register(). A manifest with no declarative ObjectTypes must
+  // not erase those live registrations during lifecycle reconciliation.
+  if (manifest.objectTypes === undefined) return;
   const defs = (manifest.objectTypes ?? []).map((ot) => ({
     ...ot,
     pluginId: ot.pluginId ?? manifest.id,
