@@ -13,6 +13,9 @@ export default defineConfig({
     ],
     environment: "node",
     globals: false,
+    // Several suites exercise the singleton core database and its migrations.
+    // Serial files prevent independent workers from racing the same schema.
+    fileParallelism: false,
     restoreMocks: true,
   },
   resolve: {
