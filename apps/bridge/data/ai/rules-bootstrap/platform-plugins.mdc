@@ -6,11 +6,18 @@ priority: 25
 When the user needs **durable platform surface** OR **integration/API/hardware behavior**:
 
 1. **Plugin first:** `use_skill('platform-extension')` then `scaffold_plugin` — do not only mutate tenant DB with `create_department`.
-2. **Structure via install hook:** seed departments/divisions/pages in the plugin's `tenant:install` handler; run `install_plugin` so structure appears after install.
-3. Install private plugins via Marketplace, `GODMODE_PLUGIN_PATH`, or a local catalog — see `docs/MARKETPLACE.md`.
-4. After scaffold: `build_plugin`, set `GODMODE_PLUGIN_PATH`, restart Bridge, `install_plugin`.
-5. Kanban/hook operational loops use `platform-self-loop` inside existing surface.
+2. **ObjectTypes first:** use manifest-native definitions for straightforward
+   CRUD; register executable adapters and declared actions for service-backed
+   behavior. Implement every declared capability. Structure shells =
+   `StructureNode` Records. Vocabulary: ObjectType / Field / Record (not
+   DocType).
+3. **Structure via install:** seed StructureNode Records in `records` or `tenant:install`; run `install_plugin`.
+4. Install private plugins via Marketplace, `GODMODE_PLUGIN_PATH`, or a local catalog — see `docs/MARKETPLACE.md`.
+5. After scaffold: `build_plugin` → `install_plugin` (no restart for tools / ObjectTypes / tenant:install).
+6. Kanban/hook operational loops use `platform-self-loop` inside existing surface.
+7. Plugin ObjectTypes are tenant-visible only when installed. Custom routes must
+   enforce authentication, tenancy, and installation checks explicitly.
 
-**Examples:** YouTube division with API → plugin with tenant:install; wiki-only notes → Tier 1 wiki tools; compiled domain extension → Tier 2 plugin + native coding tools.
+**Examples:** Accounting domain → plugin with ObjectTypes + optional bridge tools; wiki-only notes → Tier 1 wiki tools.
 
-See `docs/PLUGIN_AUTHORING.md` and skill `plugin-authoring`.
+See `docs/PLUGIN_AUTHORING.md`, `@godmode/kernel`, and skills `plugin-authoring` / `object-types`.

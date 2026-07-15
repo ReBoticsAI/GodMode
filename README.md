@@ -60,11 +60,15 @@ flowchart TB
   subgraph client [Your machine]
     Web[Web Dashboard React]
     Bridge[Bridge API Node.js]
+    Kernel[ObjectType kernel]
+    Services[Authoritative services and adapters]
     CoreDb[(core.sqlite users and tenants)]
     TenantDb[(tenant.sqlite per workspace)]
     Web -->|REST and WebSocket| Bridge
-    Bridge --> CoreDb
-    Bridge --> TenantDb
+    Bridge --> Kernel
+    Kernel --> Services
+    Services --> CoreDb
+    Services --> TenantDb
   end
   subgraph intelligence [Intelligence loop]
     User[You] --> Chat[Chat panel]
@@ -120,6 +124,12 @@ flowchart LR
 ```
 
 Core ships as a complete personal OS. Plugins add domain packs without forking the platform. See [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
+
+Authenticated data consumers discover explicit CRUD operations and named actions
+through the ObjectType kernel. Existing domain services remain authoritative
+behind adapters, so the migration standardizes dispatch without duplicating
+business logic. Live chat token streaming is an intentional transport exception.
+See [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
 
 ## Quick start
 
@@ -225,6 +235,7 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 |-----------|------|------|
 | Web dashboard | `apps/web` | React UI  -  Chat panel, structure, productivity |
 | Bridge | `apps/bridge` | REST/WebSocket API, auth, multi-tenant SQLite |
+| ObjectType kernel | `packages/kernel`, `apps/bridge/src/kernel` | Metadata registry, policies, Record CRUD/actions, native storage, generated tools |
 | Connector | `apps/connector` | Local runtime for hardware-bound marketplace plugins |
 | Plugin API | `packages/plugin-api` | Plugin manifest and register contracts |
 | Plugin host | `packages/plugin-host` | Runtime facades for plugins |
@@ -244,7 +255,7 @@ Full documentation index: **[docs/README.md](docs/README.md)**
 |---|---|
 | **Get started** | [GETTING_STARTED](docs/GETTING_STARTED.md) · [ONBOARDING](docs/ONBOARDING.md) · [FEATURES](docs/FEATURES.md) · [LOCAL_LLM](docs/LOCAL_LLM.md) · [CURSOR](docs/CURSOR_SUBSCRIPTION.md) |
 | **Use GodMode** | [AGENT_MEMORY](docs/AGENT_MEMORY.md) · [MARKETPLACE](docs/MARKETPLACE.md) · [SHARED_FEDERATION](docs/SHARED_FEDERATION.md) · [CONFIGURATION](docs/CONFIGURATION.md) · [SECURITY](docs/SECURITY.md) |
-| **Deploy & extend** | [DEPLOY](DEPLOY.md) · [architecture](docs/architecture.md) · [PLUGIN_AUTHORING](docs/PLUGIN_AUTHORING.md) (contributors) |
+| **Deploy & extend** | [DEPLOY](DEPLOY.md) · [architecture](docs/architecture.md) · [ObjectType kernel](docs/OBJECTTYPE_KERNEL.md) · [PLUGIN_AUTHORING](docs/PLUGIN_AUTHORING.md) (contributors) |
 | **Project** | [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) (includes roadmap themes) |
 
 ## License

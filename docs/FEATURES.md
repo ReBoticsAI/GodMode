@@ -56,6 +56,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
 | **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
+| **ObjectType Records** | `/records/:objectType` | Metadata-driven list/form pages and declared actions for core and installed-plugin domains. |
 
 ## Chat modes and commands
 
@@ -72,6 +73,12 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 - **LLM backends:** local llama.cpp (spawned or `LLAMA_EXTERNAL` attach), Cursor Cloud, or provider keys in Vault.
 - **Multi-agent org:** scoped permissions, tool allowlists, and structure-linked agents.
 - **Workspace growth:** Intelligence can create departments, wiki pages, tasks, and automations from chat.
-- **Plugins:** optional domain packs register bridge routes, web pages, and install hooks without forking core.
+- **ObjectType kernel:** authenticated web, agent, plugin, and HTTP consumers
+  discover explicit Record CRUD and named actions; adapters preserve existing
+  domain services and side effects.
+- **Plugins:** optional domain packs register ObjectTypes, actions, bridge routes,
+  web pages, and install hooks without forking core.
+- **Compatibility:** legacy mutation shims remain measurable during cutover; live
+  chat token streaming is an explicit transport exception.
 
-See [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).

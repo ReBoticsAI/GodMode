@@ -29,6 +29,29 @@ OSS core uses **email/password + HttpOnly session cookies** only. There is no OA
 | DuckDB analytics | SQL against attached timeseries | Platform admin only; SELECT-only subset |
 | Markdown rendering | `javascript:` links in assistant/wiki output | URL scheme allowlist in web UI |
 
+## ObjectType kernel boundary
+
+Generic Record routes do not replace authentication or domain authorization.
+Each call receives an `OperationContext` containing tenant, user, role, source,
+installed plugin IDs, confirmation state, request/idempotency key, and expected
+version where applicable.
+
+The dispatcher applies tenant visibility and ObjectType access policy, declared
+operation/action roles, confirmation, JSON Schema validation, idempotency, and
+optimistic concurrency before invoking an adapter. Adapters and authoritative
+services remain responsible for resource-level checks and domain invariants.
+Secret fields and declared sensitive action paths are redacted from audit data.
+Asynchronous actions retain auditable `OperationRun` state.
+
+Plugin ObjectTypes are visible only when their owner is installed for the active
+tenant. This protection does not automatically wrap a plugin's custom Express
+routes; plugin authors must authenticate, resolve the tenant, and check
+installation explicitly. Plugin Bridge code still runs with host privileges.
+
+Native ObjectType uninstall retains physical tables and Records to avoid
+destructive data loss. Operators must include core and tenant SQLite files in
+backups and handle erasure requirements explicitly.
+
 ## Reporting
 
 Open a private security advisory on GitHub for vulnerabilities in the public core. Do not commit secrets, wallet keys, or operator `.env` files.

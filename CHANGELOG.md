@@ -10,6 +10,14 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 
 ### Added
 
+- **ObjectType metadata kernel** — 54 core ObjectTypes; explicit CRUD and named
+  action contracts; service-backed and native adapters; mandatory operation
+  context, access policies, confirmation, idempotency, concurrency, redaction,
+  durable declared-action events, and asynchronous `OperationRun` tracking
+- **Kernel consumers and plugin lifecycle** — generic Record/action HTTP routes,
+  generated AI tools, capability discovery, metadata-driven web list/form UI,
+  ownership-safe tenant-scoped plugin registration with durable lifecycle
+  state/compensation and seed Records, and telemetry-backed migration targets
 - **Per-workspace FirstRunWizard** — onboarding (Welcome → LLM → Ready) is tenant-scoped; hub installs never share platform-wide completion flags
 - **`LLAMA_EXTERNAL` attach mode** — Bridge attaches to a host-managed `llama-server` (no spawn/kill inside Docker); hub external LLM compose example
 - **Unified Intelligence model catalog** — picker lists local GGUFs, Cursor subscription models, cloud providers, and shared/remote endpoints
@@ -27,6 +35,9 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - ~5s black screen after production sign-in
 - Embedding-only GGUFs (e.g. EmbeddingGemma) excluded from the Intelligence chat model picker
 - Vault Cursor Connect status (named `cursor_api_key` counts as connected; model-list errors no longer clear Connected)
+- Structure Record listing now returns child plugin nodes when no parent filter is
+  requested; Structure action compatibility calls send the kernel's flat input
+  body
 
 ### Documentation
 
@@ -34,6 +45,8 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - [CURSOR_SUBSCRIPTION.md](docs/CURSOR_SUBSCRIPTION.md) — Auto vs named Cursor models
 - [AGENT_MEMORY.md](docs/AGENT_MEMORY.md) — memory layers and embeddings
 - Marketplace Docker hub notes; onboarding / verification updates
+- [OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md) — canonical architecture,
+  action contract, tenancy, compatibility strategy, and current limitations
 
 ## [0.1.0] - 2026-06-29
 

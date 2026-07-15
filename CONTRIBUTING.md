@@ -18,14 +18,25 @@ Fresh clone = **personal OS only** (Intelligence, wiki, tasks, structure). Copy 
 
 `DEPLOYMENT_MODE=local` (default) is for local development. **Authentication is required by default** (`AUTH_ALLOW_ANONYMOUS=false` in `.env.example`). Set `AUTH_ALLOW_ANONYMOUS=true` only for headless local tooling — never on a network-exposed host.
 
-Run `npm run audit:oss` before release-related PRs.
+Run `npm run audit:oss` before release-related PRs. Changes to authenticated
+mutations, AI tools, ObjectTypes, adapters, or actions must also update the
+kernel coverage baseline and contract tests.
 
 ## Pull requests
 
 - Keep changes focused; match existing code style.
-- Run `npm run typecheck` before submitting.
+- Run `npm run audit:kernel`, `npm run typecheck`, and `npm test` before
+  submitting; build affected production workspaces.
 - Do not commit secrets (`.env`, API keys, wallet keys).
 - Domain-specific integrations belong in **external plugin repos**, not the public core tree.
+- Declare ObjectType operations/actions explicitly and keep adapter
+  implementations, schemas, roles, confirmation, idempotency, concurrency,
+  redaction, and event behavior consistent with the metadata.
+- Preserve the authenticated `OperationContext` and tenant/plugin visibility;
+  custom plugin routes require explicit install checks.
+- Document protocol exceptions rather than disguising transport or control-plane
+  operations as Record CRUD. See
+  [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
 
 ## What we are looking for (roadmap themes)
 

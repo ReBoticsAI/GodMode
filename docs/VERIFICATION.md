@@ -125,6 +125,49 @@ See [MARKETPLACE.md](./MARKETPLACE.md#official-devtools-plugins-git--github).
 
 ---
 
+## 8. ObjectType kernel regression checks
+
+Run the automated gate before deployment:
+
+```bash
+npm run audit:kernel
+npm run typecheck
+npm test
+npm run build --workspace @godmode/bridge
+npm run build --workspace @godmode/web
+```
+
+`npm run test:gate` runs the package build, typecheck, kernel audit, and test
+suite together.
+
+Then validate the production deployment manually:
+
+1. Build the production Docker image and confirm `/api/health` returns `ok`.
+2. Sign in and inspect `/api/object-types` and `/api/kernel/capabilities`; the
+   core registry should expose 54 ObjectTypes including `StructureNode`.
+3. Create, update, read, list, and delete a disposable Record through a supported
+   ObjectType. Confirm unsupported operations are rejected.
+4. Execute a lifecycle action and verify invalid input, missing role, and missing
+   confirmation are rejected.
+5. Start an asynchronous action and inspect its `OperationRun`. Cancellation
+   metadata is not yet generically enforced, so verify the specific adapter's
+   behavior and do not treat `cancellable` as a host guarantee.
+6. Install a plugin with ObjectTypes, confirm its navigation and Records appear
+   only for that tenant, uninstall it, and confirm the runtime visibility is
+   removed while native data remains available for reinstall/recovery.
+7. Exercise Structure navigation, generic Record list/form pages, and a declared
+   action from the web UI.
+8. Confirm live chat still streams tokens; streaming is a protocol exception,
+   not a normal Record action response.
+9. Inspect legacy mutation telemetry. Retire a compatibility shim only after
+   parity and sustained zero-use evidence.
+
+The Z440 production smoke is manual; Playwright is not part of CI.
+
+See [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md).
+
+---
+
 ## Related docs
 
 - [MARKETPLACE.md](./MARKETPLACE.md)
@@ -135,5 +178,6 @@ See [MARKETPLACE.md](./MARKETPLACE.md#official-devtools-plugins-git--github).
 - [LOCAL_LLM.md](./LOCAL_LLM.md)
 - [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)
 - [AGENT_MEMORY.md](./AGENT_MEMORY.md)
+- [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md)
 - [../CHANGELOG.md](../CHANGELOG.md)
 - [../CONTRIBUTING.md](../CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes)

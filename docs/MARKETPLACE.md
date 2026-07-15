@@ -35,6 +35,20 @@ Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-
 
 Use **Marketplace → Installed** to review workspace plugins, uninstall, or remove registered local paths.
 
+Plugin ObjectTypes and generated Record/action tools are visible only in
+workspaces where the plugin is installed. Installation atomically validates and
+replaces owned definitions before applying seed Records; lifecycle state, tenant
+hooks, and knowledge import are separate durable compensated steps. Uninstall
+removes runtime visibility and plugin-owned knowledge, but deliberately retains
+native ObjectType tables and tenant Records for reinstall or recovery. It is not
+a data erasure operation; export or delete retained data explicitly when
+required.
+
+Plugin Bridge code runs with host privileges. Install only trusted sources,
+review requested routes/actions and secret fields, and remember that custom
+Express routes must enforce authentication, tenant membership, and installed
+plugin checks themselves.
+
 Each unofficial catalog must expose a `catalog/index.json` compatible with the official schema.
 
 You can point at a **local file catalog** (never leaves your machine):
@@ -45,7 +59,7 @@ file:///C:/Users/you/my-catalog/catalog/index.json
 
 ## Private plugins
 
-Three supported paths for plugins that are not public on GitHub:
+Four supported paths for plugins that are not public on GitHub:
 
 ### 1. Local folder in the UI (recommended)
 
@@ -86,7 +100,7 @@ GODMODE_PLUGIN_PATH=C:\dev\godmode-plugin-mine
 
 Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins on this machine**.
 
-Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart required for tools / `tenant:install`.
+Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart is required for tools, live ObjectType/adapter registration, Record seeds, or `tenant:install`.
 
 ## Docker hub notes
 
