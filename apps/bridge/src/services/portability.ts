@@ -6,8 +6,12 @@ import { agentArtifactsDir, config } from "../config.js";
 import type { MarketplaceListingKind } from "../core-db.js";
 import { readStructure, structureNodesToLegacy } from "./structure.js";
 import { getAgent } from "./agents/agents-db.js";
+import {
+  createSystemOperationContext,
+  seedRecords,
+} from "../kernel/record-api.js";
 
-export type PortableKind = MarketplaceListingKind;
+export type PortableKind = MarketplaceListingKind | "record";
 
 export interface PortableBundle {
   version: 1;
@@ -91,9 +95,55 @@ export function importEntity(
       return { kind: "bundle", newId: importBundle(db, bundle) };
     case "connector_package":
       return { kind: "connector_package", newId: importConnectorPackage(db, bundle) };
+    case "record":
+      return { kind: "record", newId: importRecord(db, bundle) };
     default:
       throw new Error(`Unsupported import kind: ${bundle.kind}`);
   }
+}
+
+const PORTABLE_RECORD_OBJECT_TYPES = new Set([
+  "StructureNode",
+  "Agent",
+  "Skill",
+]);
+
+function importRecord(db: AppDatabase, bundle: PortableBundle): string {
+  const record = (bundle.data as { record?: unknown }).record;
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    throw new Error("Portable Record requires data.record");
+  }
+  const candidate = record as {
+    id?: unknown;
+    objectType?: unknown;
+    data?: unknown;
+  };
+  if (
+    typeof candidate.id !== "string" ||
+    !candidate.id.trim() ||
+    typeof candidate.objectType !== "string" ||
+    !PORTABLE_RECORD_OBJECT_TYPES.has(candidate.objectType) ||
+    !candidate.data ||
+    typeof candidate.data !== "object" ||
+    Array.isArray(candidate.data)
+  ) {
+    throw new Error("Invalid or unsupported portable Record");
+  }
+  const data = candidate.data as Record<string, unknown>;
+  if (data.id !== candidate.id) {
+    throw new Error("Portable Record id must match data.id");
+  }
+  const agentId =
+    typeof data.agent_id === "string" && data.agent_id.trim()
+      ? data.agent_id
+      : "system";
+  const [imported] = seedRecords(
+    db,
+    [{ objectType: candidate.objectType, data }],
+    createSystemOperationContext({ agentId })
+  );
+  if (!imported) throw new Error("Portable Record import produced no Record");
+  return imported.id;
 }
 
 function exportAgent(db: AppDatabase, id: string): PortableBundle {
