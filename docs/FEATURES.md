@@ -80,5 +80,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
   web pages, and install hooks without forking core.
 - **Compatibility:** legacy mutation shims remain measurable during cutover; live
   chat token streaming is an explicit transport exception.
+- **Generic structure pages:** `StructureNode.object_type` selects the Record
+  renderer; `segment` remains the URL component.
 
 See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).

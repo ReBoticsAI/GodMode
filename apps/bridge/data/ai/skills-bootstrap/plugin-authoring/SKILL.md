@@ -19,5 +19,7 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
    installed-plugin checks. No Bridge restart for tools / tenant:install.
 7. Declare strict action input/output schemas, roles, confirmation, idempotency,
    concurrency, execution mode, and sensitive paths; verify tenant isolation.
+   Native storage is tenant-local and additive-only; uninstall retains native
+   tables and Records.
 8. Optional: add catalog entry via Official PR or Unofficial catalog URL.
 9. When **Git** / **GitHub** Official plugins are installed, ship code changes with `git_status` → `git_add` → `git_commit` → `git_push` → `gh_pr_create`.

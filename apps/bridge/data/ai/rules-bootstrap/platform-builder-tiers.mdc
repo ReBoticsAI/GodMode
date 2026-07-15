@@ -21,6 +21,8 @@ New ObjectTypes, routes, web UI areas, Bridge tools, department types, external 
   for straightforward CRUD; add executable adapters/actions when service logic
   is required. Never only `create_department` for functional domains.
 - Seed org structure as StructureNode Records, then `build_plugin` → `install_plugin`.
+- Prefer generated ObjectType CRUD/action tools before adding static mutation
+  tools.
 - **Implement the code yourself** with read_file, grep, edit_file, run_terminal when metadata is not enough.
 - Verify action schemas/policies, implementation parity, tenant isolation, and
   custom-route authentication before claiming completion.

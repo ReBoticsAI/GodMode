@@ -26,6 +26,7 @@ OSS core uses **email/password + HttpOnly session cookies** only. There is no OA
 | Federation API token | Remote command injection if token leaks | Rotate tokens; restrict network access |
 | First signup admin | Race on internet-exposed fresh installs | Use invite codes or pre-seed `INITIAL_ADMINS` |
 | Plugin bundles (`/api/plugins/*/web.js`) | Proprietary JS exposure | Requires authenticated tenant + installed plugin |
+| Generic Records/actions (`/api/records/*`) | Cross-tenant or overbroad mutation | OperationContext, access/action policy, adapter scoping |
 | DuckDB analytics | SQL against attached timeseries | Platform admin only; SELECT-only subset |
 | Markdown rendering | `javascript:` links in assistant/wiki output | URL scheme allowlist in web UI |
 
@@ -42,6 +43,10 @@ optimistic concurrency before invoking an adapter. Adapters and authoritative
 services remain responsible for resource-level checks and domain invariants.
 Secret fields and declared sensitive action paths are redacted from audit data.
 Asynchronous actions retain auditable `OperationRun` state.
+
+Ordinary callers cannot forge `source: "system"`; trusted system dispatch
+requires an internal capability. Retry, timeout, error-schema, and strict
+cancellation metadata are not yet generic enforcement boundaries.
 
 Plugin ObjectTypes are visible only when their owner is installed for the active
 tenant. This protection does not automatically wrap a plugin's custom Express

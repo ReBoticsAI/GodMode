@@ -120,10 +120,13 @@ flowchart LR
   Plugin[Domain plugin repo]
   Core --> PluginHost
   PluginHost -->|discover at runtime| Plugin
-  Plugin -->|registers routes tools UI| Core
+  Plugin -->|registers ObjectTypes actions routes tools UI| Core
 ```
 
-Core ships as a complete personal OS. Plugins add domain packs without forking the platform. See [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
+Core ships as a complete personal OS. Plugins add domain packs without forking
+the platform. Plugin ObjectTypes are discoverable only for tenants where the
+plugin is installed. See
+[docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
 Authenticated data consumers discover explicit CRUD operations and named actions
 through the ObjectType kernel. Existing domain services remain authoritative

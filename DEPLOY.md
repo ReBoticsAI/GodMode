@@ -80,6 +80,9 @@ or space-reclamation operation. Verify `/api/health`, ObjectType discovery,
 plugin navigation, a representative Record action, and legacy endpoint telemetry
 after deployment; see [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
+Startup reconciles installed-plugin ObjectTypes and seeds before serving tenant
+traffic. Include `/api/kernel/capabilities` in the post-deploy smoke check.
+
 ## Intelligence on hub
 
 New tenants get Intelligence with `backend=provider` (OpenAI-compatible). Users add API keys in **Vault → Secrets** and configure the provider in **Agents → Pipeline**.

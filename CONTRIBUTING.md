@@ -25,8 +25,9 @@ kernel coverage baseline and contract tests.
 ## Pull requests
 
 - Keep changes focused; match existing code style.
-- Run `npm run audit:kernel`, `npm run typecheck`, and `npm test` before
-  submitting; build affected production workspaces.
+- Run `npm run test:gate` before submitting kernel or route changes.
+  `npm run audit:kernel` and `npm run test:objecttypes` are available as focused
+  checks; build affected production workspaces.
 - Do not commit secrets (`.env`, API keys, wallet keys).
 - Domain-specific integrations belong in **external plugin repos**, not the public core tree.
 - Declare ObjectType operations/actions explicitly and keep adapter
@@ -37,6 +38,9 @@ kernel coverage baseline and contract tests.
 - Document protocol exceptions rather than disguising transport or control-plane
   operations as Record CRUD. See
   [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
+- When mutation routes change, update both
+  `scripts/audit-kernel-coverage.mjs` and
+  `docs/KERNEL_MIGRATION_MATRIX.md`.
 
 ## What we are looking for (roadmap themes)
 

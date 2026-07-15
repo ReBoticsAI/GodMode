@@ -9,6 +9,7 @@ Share live resources (divisions, agents, models, plugin-backed pages) across sep
 Grants live in `core.sqlite`. Share by user email from any resource's share UI.
 Share grants and other durable collaboration state are kernel Records dispatched
 with tenant/user context and adapter-level authorization.
+The local models are `ShareGrant`, `BridgeConnection`, and `PeerConnection`.
 
 ## Cross-home (Tailscale)
 
@@ -27,6 +28,7 @@ remain transport/control-plane protocol exceptions rather than generic Record
 CRUD. That classification does not weaken authentication or authorization:
 durable local state still uses kernel Records/actions and remote requests retain
 their token, tenant, grant, and ownership checks.
+ObjectType authorization alone never authorizes remote federation dispatch.
 
 ## Health
 
