@@ -3,6 +3,12 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { ensureTenantPluginsStorage } from "../../services/plugin-lifecycle.js";
 import { listInstalledPlugins } from "../../plugins/plugin-install.js";
+import { registerPluginObjectTypes } from "../plugin-object-types.js";
+import {
+  getObjectType,
+  registerObjectType,
+  unregisterObjectType,
+} from "../registry.js";
 
 function source(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -85,5 +91,28 @@ describe("plugin lifecycle kernel boundary", () => {
     expect(listInstalledPlugins(db, "tenant-b").map((row) => row.plugin_id)).toEqual([
       "beta",
     ]);
+  });
+
+  it("preserves executable ObjectTypes when a manifest has no declarative definitions", () => {
+    registerObjectType({
+      name: "ExecutablePluginRecord",
+      label: "Executable Plugin Record",
+      pluginId: "executable-plugin-test",
+      contractVersion: 1,
+      storage: { kind: "adapter", adapterId: "executable-plugin-test" },
+      fields: [{ name: "id", label: "Id", fieldType: "Data" }],
+      operations: ["list"],
+      permissions: [{ role: "owner", read: true }],
+    });
+
+    registerPluginObjectTypes({
+      id: "executable-plugin-test",
+      name: "Executable Plugin Test",
+      version: "1.0.0",
+      bridge: { entry: "dist/bridge.js" },
+    });
+
+    expect(getObjectType("ExecutablePluginRecord")).toBeTruthy();
+    unregisterObjectType("ExecutablePluginRecord");
   });
 });
