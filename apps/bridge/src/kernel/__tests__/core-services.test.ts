@@ -43,6 +43,10 @@ describe("core service ObjectType adapters", () => {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE ai_workflow_comments (
+        id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, author TEXT NOT NULL,
+        body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
       CREATE TABLE ai_projects (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT, agent_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -125,6 +129,30 @@ describe("core service ObjectType adapters", () => {
     });
   });
 
+  it("persists workflow comments through the workflow service", () => {
+    const workflow = createRecord(
+      db,
+      "Workflow",
+      { name: "Reviewed", config_json: { nodes: [], edges: [] } },
+      ctx
+    );
+    const comment = createRecord(
+      db,
+      "WorkflowComment",
+      { workflow_id: workflow.id, author: "user", body: "Ship this" },
+      ctx
+    );
+    expect(comment.data).toMatchObject({
+      workflow_id: workflow.id,
+      author: "user",
+      body: "Ship this",
+    });
+    deleteRecord(db, "WorkflowComment", comment.id, ctx);
+    expect(() => getRecord(db, "WorkflowComment", comment.id, ctx)).toThrow(
+      /record not found/i
+    );
+  });
+
   it("uses the authoritative Agent service and protects built-ins", () => {
     const agent = createRecord(
       db,
@@ -138,8 +166,14 @@ describe("core service ObjectType adapters", () => {
       is_template: false,
     });
     expect(
-      updateRecord(db, "Agent", agent.id, { team: "Operations" }, ctx).data.team
-    ).toBe("Operations");
+      updateRecord(
+        db,
+        "Agent",
+        agent.id,
+        { team: "Operations" },
+        ctx
+      ).data
+    ).toMatchObject({ team: "Operations" });
   });
 
   it("scopes productivity edits to the active user", () => {
@@ -169,5 +203,7 @@ describe("core service ObjectType adapters", () => {
         userId: "another-user",
       })
     ).toThrow(/not found/i);
+    deleteRecord(db, "TaskCard", card.id, ctx);
+    expect(() => getRecord(db, "TaskCard", card.id, ctx)).toThrow(/not found/i);
   });
 });

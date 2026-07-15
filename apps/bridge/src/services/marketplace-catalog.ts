@@ -7,16 +7,18 @@ import { getCoreDb, type CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { importEntity, type PortableBundle } from "./portability.js";
 import {
-  installPluginForTenant,
   listAvailablePlugins,
   listInstalledPlugins,
-  uninstallPluginForTenant,
 } from "../plugins/plugin-install.js";
-import { appendPluginPath } from "../plugins/activate-plugin.js";
-import { loadPluginFromRoot } from "../plugins/loader.js";
 import { pluginRuntime } from "../plugins/runtime.js";
 import { bridgeEntryExists, ensurePluginBuilt } from "./plugin-build.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
+import {
+  activatePluginForTenant,
+  installPluginForTenant,
+  persistPluginPath,
+  uninstallPluginForTenant,
+} from "./plugin-lifecycle.js";
 
 export type CatalogInstallType = "clone" | "plugin";
 
@@ -345,12 +347,12 @@ export async function registerLocalPluginFolder(
     await ensurePluginBuilt(pluginRoot);
   }
 
-  appendPluginPath(core, pluginRoot);
-  await loadPluginFromRoot(pluginRoot);
-
   let installed = false;
   if (opts?.installForTenant !== false) {
-    await installPluginForTenant(core, tenantId, manifest.id, pluginRoot);
+    await activatePluginForTenant(core, tenantId, pluginRoot, {
+      buildIfNeeded: false,
+      installForTenant: true,
+    });
     installed = true;
 
     const installId = uuidv4();
@@ -366,7 +368,7 @@ export async function registerLocalPluginFolder(
       "plugin",
       `local://${pluginRoot}`
     );
-  }
+  } else persistPluginPath(core, pluginRoot);
 
   return {
     pluginId: manifest.id,
@@ -407,7 +409,11 @@ export async function installDiscoveredPlugin(
     );
   }
   if (!pluginRuntime.hasPlugin(pluginId)) {
-    await loadPluginFromRoot(available.pluginRoot);
+    await activatePluginForTenant(core, tenantId, available.pluginRoot, {
+      buildIfNeeded: false,
+      installForTenant: true,
+    });
+    return;
   }
   await installPluginForTenant(core, tenantId, pluginId, available.pluginRoot);
 }
@@ -466,10 +472,16 @@ async function installPluginEntry(
     }
   }
 
-  appendPluginPath(core, target);
-  const loadResult = await loadPluginFromRoot(target);
-  await installPluginForTenant(core, tenantId, loadResult.pluginId, target);
-  return { pluginId: loadResult.pluginId, pluginRoot: target, restartRequired: false, built };
+  const activation = await activatePluginForTenant(core, tenantId, target, {
+    buildIfNeeded: false,
+    installForTenant: true,
+  });
+  return {
+    pluginId: activation.pluginId,
+    pluginRoot: target,
+    restartRequired: false,
+    built,
+  };
 }
 
 function authenticatedGitCloneUrl(repo: string): string {

@@ -5,6 +5,10 @@ import {
   type ObjectTypeDef,
   type RecordData,
 } from "@godmode/kernel";
+import {
+  KERNEL_CLIENT_API_VERSION,
+  type KernelClientApiVersion,
+} from "./kernel-client.js";
 
 export interface PluginRecordSeed {
   objectType: string;
@@ -16,6 +20,8 @@ export interface GodmodePluginManifest {
   version: string;
   name: string;
   engine?: string;
+  /** Kernel client contract required by executable Bridge/web plugin code. */
+  kernelApiVersion?: KernelClientApiVersion;
   description?: string;
   departments?: string[];
   native?: {
@@ -138,6 +144,14 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
   if (typeof m.name !== "string" || !m.name.trim()) {
     throw new Error(`Invalid plugin manifest (${m.id}): name required`);
   }
+  if (
+    m.kernelApiVersion !== undefined &&
+    m.kernelApiVersion !== KERNEL_CLIENT_API_VERSION
+  ) {
+    throw new Error(
+      `Invalid plugin manifest (${m.id}): unsupported kernelApiVersion ${String(m.kernelApiVersion)}; host supports ${KERNEL_CLIENT_API_VERSION}`
+    );
+  }
   const bridge = m.bridge as Record<string, unknown> | undefined;
   const web = m.web as Record<string, unknown> | undefined;
   if (bridge && typeof bridge.entry !== "string") {
@@ -153,6 +167,10 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     version: m.version.trim(),
     name: m.name.trim(),
     engine: typeof m.engine === "string" ? m.engine : undefined,
+    kernelApiVersion:
+      m.kernelApiVersion === KERNEL_CLIENT_API_VERSION
+        ? KERNEL_CLIENT_API_VERSION
+        : undefined,
     description: typeof m.description === "string" ? m.description : undefined,
     departments: Array.isArray(m.departments)
       ? m.departments.filter((d): d is string => typeof d === "string")

@@ -1,4 +1,11 @@
 import type { ComponentType, ReactNode } from "react";
+import type {
+  ListRecordsResult,
+  ObjectTypeDef,
+  RecordData,
+  RecordRow,
+} from "@godmode/kernel";
+import type { KernelClientApiVersion } from "./kernel-client.js";
 
 export interface PluginRouteDef {
   path: string;
@@ -30,8 +37,50 @@ export interface PluginRedirectDef {
   to: string;
 }
 
+export interface WebKernelActionOptions {
+  id?: string;
+  confirmationId?: string;
+  idempotencyKey?: string;
+  expectedVersion?: string;
+}
+
+export interface WebKernelClient {
+  readonly apiVersion: KernelClientApiVersion;
+  listObjectTypes(): Promise<ObjectTypeDef[]>;
+  listRecords(
+    objectType: string,
+    query?: {
+      limit?: number;
+      offset?: number;
+      filters?: Record<string, unknown>;
+      sort?: string;
+      direction?: "asc" | "desc";
+    }
+  ): Promise<ListRecordsResult>;
+  getRecord(objectType: string, id: string): Promise<RecordRow>;
+  createRecord(objectType: string, data: RecordData): Promise<RecordRow>;
+  updateRecord(
+    objectType: string,
+    id: string,
+    data: RecordData,
+    expectedVersion?: string
+  ): Promise<RecordRow>;
+  deleteRecord(
+    objectType: string,
+    id: string,
+    expectedVersion?: string
+  ): Promise<void>;
+  runAction(
+    objectType: string,
+    action: string,
+    input: RecordData,
+    options?: WebKernelActionOptions
+  ): Promise<unknown>;
+}
+
 export interface GodModeWebPluginApi {
   readonly manifest: { id: string; version: string; name: string };
+  readonly kernel: WebKernelClient;
 
   routes: {
     register(routes: PluginRouteDef[]): void;

@@ -4,8 +4,12 @@ import type { AppDatabase } from "../../db.js";
 import { getCoreDb } from "../../core-db.js";
 import {
   createWorkflow,
+  createWorkflowComment,
+  deleteWorkflowComment,
   deleteWorkflow,
+  getWorkflowComment,
   getWorkflow,
+  listWorkflowComments,
   listWorkflows,
   updateWorkflow,
 } from "../../services/ai-workflows.js";
@@ -282,6 +286,53 @@ export const workflowServiceAdapter: RecordAdapter = {
   },
 };
 
+function workflowCommentRecord(
+  def: ObjectTypeDef,
+  row: NonNullable<ReturnType<typeof getWorkflowComment>>
+): RecordRow {
+  return record(def, row.id, {
+    workflow_id: row.workflow_id,
+    author: row.author,
+    body: row.body,
+    created_at: row.created_at,
+  });
+}
+
+export const workflowCommentServiceAdapter: RecordAdapter = {
+  id: "workflow_comment_service",
+  list(db, def, query) {
+    const workflowId =
+      typeof query.filters?.workflow_id === "string"
+        ? query.filters.workflow_id
+        : query.parentId ?? undefined;
+    const result = page(listWorkflowComments(db, workflowId), query);
+    return {
+      objectType: def.name,
+      records: result.rows.map((row) => workflowCommentRecord(def, row)),
+      total: result.total,
+    };
+  },
+  get(db, def, id) {
+    const row = getWorkflowComment(db, id);
+    return row ? workflowCommentRecord(def, row) : null;
+  },
+  create(db, def, data) {
+    return workflowCommentRecord(
+      def,
+      createWorkflowComment(db, {
+        workflowId: requiredText(data, "workflow_id"),
+        author: data.author === "agent" ? "agent" : "user",
+        body: requiredText(data, "body"),
+      })
+    );
+  },
+  delete(db, _def, id) {
+    if (!deleteWorkflowComment(db, id)) {
+      notFound("Workflow comment not found");
+    }
+  },
+};
+
 function workflowRunRecord(
   def: ObjectTypeDef,
   row: Record<string, unknown>
@@ -533,6 +584,92 @@ export const agentServiceAdapter: RecordAdapter = {
     }
   },
   actions: {
+    create_configured(db, def, _id, input) {
+      return agentRecord(
+        def,
+        createAgent(db, {
+          name: requiredText(input, "name"),
+          description:
+            typeof input.description === "string" ? input.description : undefined,
+          icon: typeof input.icon === "string" ? input.icon : undefined,
+          backend: typeof input.backend === "string" ? (input.backend as never) : undefined,
+          systemPrompt:
+            typeof input.system_prompt === "string" ? input.system_prompt : undefined,
+          sampling:
+            input.sampling && typeof input.sampling === "object"
+              ? (input.sampling as never)
+              : undefined,
+          thinking:
+            input.thinking && typeof input.thinking === "object"
+              ? (input.thinking as never)
+              : undefined,
+          toolAllow:
+            input.tool_allow === null || Array.isArray(input.tool_allow)
+              ? (input.tool_allow as string[] | null)
+              : undefined,
+          autoApprove: Array.isArray(input.auto_approve)
+            ? input.auto_approve.map(String)
+            : undefined,
+          modelPath:
+            input.model_path === undefined
+              ? undefined
+              : (input.model_path as string | null),
+          adapterIds: Array.isArray(input.adapter_ids)
+            ? input.adapter_ids.map(String)
+            : undefined,
+          config:
+            input.config && typeof input.config === "object"
+              ? (input.config as Record<string, unknown>)
+              : undefined,
+          parentId:
+            input.parent_id === undefined
+              ? undefined
+              : (input.parent_id as string | null),
+          team: input.team === undefined ? undefined : (input.team as string | null),
+        })
+      );
+    },
+    update_config(db, def, id, input) {
+      const row = updateAgent(db, id, {
+        name: typeof input.name === "string" ? input.name : undefined,
+        description:
+          input.description === undefined ? undefined : (input.description as string | null),
+        icon: input.icon === undefined ? undefined : (input.icon as string | null),
+        backend: typeof input.backend === "string" ? (input.backend as never) : undefined,
+        enabled: input.enabled === undefined ? undefined : Boolean(input.enabled),
+        systemPrompt:
+          typeof input.system_prompt === "string" ? input.system_prompt : undefined,
+        sampling:
+          input.sampling && typeof input.sampling === "object"
+            ? (input.sampling as never)
+            : undefined,
+        thinking:
+          input.thinking && typeof input.thinking === "object"
+            ? (input.thinking as never)
+            : undefined,
+        toolAllow:
+          input.tool_allow === null || Array.isArray(input.tool_allow)
+            ? (input.tool_allow as string[] | null)
+            : undefined,
+        autoApprove: Array.isArray(input.auto_approve)
+          ? input.auto_approve.map(String)
+          : undefined,
+        modelPath:
+          input.model_path === undefined ? undefined : (input.model_path as string | null),
+        adapterIds: Array.isArray(input.adapter_ids)
+          ? input.adapter_ids.map(String)
+          : undefined,
+        config:
+          input.config && typeof input.config === "object"
+            ? (input.config as Record<string, unknown>)
+            : undefined,
+        parentId:
+          input.parent_id === undefined ? undefined : (input.parent_id as string | null),
+        team: input.team === undefined ? undefined : (input.team as string | null),
+      });
+      if (!row) notFound("Agent not found");
+      return agentRecord(def, row);
+    },
     clone(db, def, id, input) {
       const source = getAgent(db, id);
       if (!source) notFound("Agent not found");

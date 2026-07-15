@@ -103,6 +103,15 @@ export function withKernelEventBus(ctx: OperationContext): OperationContext {
 }
 
 export function registerRecordAdapter(adapter: RecordAdapter): void {
+  const unsupported = adapter as RecordAdapter & {
+    bulk?: unknown;
+    bulkActions?: unknown;
+  };
+  if (unsupported.bulk != null || unsupported.bulkActions != null) {
+    throw new Error(
+      `Record adapter ${adapter.id} declares unsupported bulk operations`
+    );
+  }
   if (adapters.has(adapter.id)) {
     throw new Error(`Record adapter already registered: ${adapter.id}`);
   }

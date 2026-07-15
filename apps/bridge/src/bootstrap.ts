@@ -6,7 +6,7 @@ import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
 import "dotenv/config";
 import { config } from "./config.js";
-import { initCoreDb } from "./core-db.js";
+import { initCoreDb, listAllTenantIds } from "./core-db.js";
 import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.js";
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
@@ -16,11 +16,15 @@ import { createMarketplaceCatalogRouter } from "./routes/marketplace-catalog.js"
 import { createNetworkRouter } from "./routes/network.js";
 import { createOnboardingRouter } from "./routes/onboarding.js";
 import { createSharesRouter } from "./routes/shares.js";
+import { shareChatSession } from "./services/share-service.js";
 import { createDmRouter } from "./routes/dm.js";
 import { createUserProductivityRouter } from "./routes/user-productivity.js";
 import { createConnectionsRouter } from "./routes/connections.js";
 import { legacyEndpointTelemetry } from "./services/legacy-endpoint-telemetry.js";
-import { configureRuntimeAdapterServices } from "./kernel/adapters/runtime.js";
+import {
+  assertRuntimeAdapterServicesConfigured,
+  configureRuntimeAdapterServices,
+} from "./kernel/adapters/runtime.js";
 import { createFederationRouter } from "./routes/federation.js";
 import { createInferenceRouter } from "./routes/inference.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
@@ -57,7 +61,7 @@ import { startDbMaintenance } from "./services/db-maintenance.js";
 import { startRetentionScheduler } from "./services/retention.js";
 import { startMarketplaceBillingScheduler } from "./services/marketplace-billing.js";
 import { refreshPeerHealth } from "./services/federation-peers.js";
-import { startEventsRelay } from "./services/events-relay.js";
+import { startTenantEventsRelay } from "./services/events-relay.js";
 import {
   initTimeseriesStore,
   backfillSqliteTimeseries,
@@ -66,7 +70,6 @@ import {
 } from "./services/timeseries-store.js";
 import { backfillMemoryFts } from "./services/vector-rag.js";
 import { createWorkerPool } from "./services/worker-pool.js";
-import { loadPluginsFromEnv } from "./plugins/loader.js";
 import { initPluginHost } from "./plugins/plugin-host-bridge.js";
 import { pluginRuntime } from "./plugins/runtime.js";
 import { getPluginHost } from "@godmode/plugin-host";
@@ -74,18 +77,16 @@ import { createCoreApiRouter } from "./routes/api-core.js";
 import {
   createKernelRouter,
   createSystemOperationContext,
+  executeCollectionAction,
+  assertCoreObjectTypeBootstrapComplete,
   materializeAllNativeTypes,
+  OperationRunWorker,
+  processClaimedOperationRun,
   recoverInterruptedOperationRuns,
   registerCoreObjectTypes,
   setKernelEventBus,
 } from "./kernel/index.js";
 import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plugins.js";
-import {
-  ensureOperatorPluginsInstalled,
-  ensureTenantPluginsTable,
-  reconcileInstalledPluginObjectTypes,
-  syncInstalledPluginKnowledge,
-} from "./plugins/plugin-install.js";
 
 export async function startBridge(): Promise<void> {
 const coreDb = initCoreDb();
@@ -95,12 +96,37 @@ repairNonOperatorTenantStructure(coreDb);
 removeLegacyLifeDepartmentFromPersonalTenants(coreDb);
 const db: AppDatabase = getTenantDb(operatorTenantId);
 pinTenantDb(operatorTenantId);
+const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => {
+  return listAllTenantIds(coreDb).map((tenantId) => ({
+    tenantId,
+    get db() {
+      return getTenantDb(tenantId);
+    },
+  }));
+};
 registerCoreObjectTypes();
 materializeAllNativeTypes(db, createSystemOperationContext());
-recoverInterruptedOperationRuns(db);
+for (const tenant of tenantDatabases()) {
+  try {
+    recoverInterruptedOperationRuns(tenant.db);
+  } catch (error) {
+    console.warn(
+      `[kernel] recovery failed for tenant ${tenant.tenantId}:`,
+      error instanceof Error ? error.message : error
+    );
+  }
+}
 
 initPluginHost();
-const pluginLoad = await loadPluginsFromEnv();
+const lifecycleContext = () =>
+  createSystemOperationContext({ tenantId: operatorTenantId });
+const pluginLoad = (await executeCollectionAction(
+  db,
+  "CatalogInstall",
+  "load_runtime",
+  {},
+  lifecycleContext()
+)) as { loaded: string[]; errors: Array<{ path: string; error: string }> };
 if (pluginLoad.loaded.length === 0) {
   console.log("[plugins] none loaded — personal OS only (set GODMODE_PLUGIN_PATH or install from Marketplace)");
 } else {
@@ -113,10 +139,13 @@ for (const err of pluginLoad.errors) {
 const bus = new EventEmitter();
 setKernelEventBus(bus);
 pluginRuntime.configure({ operatorTenantId, bus });
-ensureTenantPluginsTable(coreDb);
-await ensureOperatorPluginsInstalled(coreDb, operatorTenantId, db);
-reconcileInstalledPluginObjectTypes(coreDb);
-syncInstalledPluginKnowledge(coreDb, operatorTenantId);
+await executeCollectionAction(
+  db,
+  "CatalogInstall",
+  "reconcile_runtime",
+  { operator_tenant_id: operatorTenantId },
+  lifecycleContext()
+);
 
 const hasSierra = pluginRuntime.hasPlugin("sierra-chart");
 
@@ -153,7 +182,7 @@ startRetentionScheduler(db);
 if (config.isHub) {
   startMarketplaceBillingScheduler();
 }
-startEventsRelay(db, bus);
+const stopEventsRelay = startTenantEventsRelay(tenantDatabases, bus);
 const workerPool = createWorkerPool();
 
 void initTimeseriesStore().then(async (ts) => {
@@ -192,25 +221,10 @@ const aiQueueWorker = new AiQueueWorker(db, llmManager, {
   bus,
   embeddings: embeddingManager,
 });
-configureRuntimeAdapterServices({
-  llm: llmManager,
-  queue: aiQueueWorker,
-  training: aiTraining,
-  async sendMessage() {
-    throw Object.assign(
-      new Error("Chat streaming remains available through the authorized protocol endpoint"),
-      { status: 501 }
-    );
-  },
-  async syncIntegration() {
-    return {
-      ok: true,
-      queued: true,
-      message:
-        "Integration sync queued through the configured provider scheduler",
-    };
-  },
-});
+const operationRunWorker = new OperationRunWorker(
+  tenantDatabases,
+  processClaimedOperationRun
+);
 if (hasSierra) {
   getPluginHost().registerAutonomousRunnerKick?.((reason) => {
     if (aiQueueWorker.hasPendingOrRunningWorkflow("autonomous-task-runner")) return;
@@ -225,6 +239,32 @@ const aiScheduler = new AiScheduler(db, bus, aiQueueWorker);
 registerAiScheduler(aiScheduler);
 const reflectionService = new ReflectionService(db, bus, llmManager, aiQueueWorker);
 const memoryMaintenance = new MemoryMaintenanceService(db, bus, aiQueueWorker);
+configureRuntimeAdapterServices({
+  llm: llmManager,
+  queue: aiQueueWorker,
+  training: aiTraining,
+  embeddings: embeddingManager,
+  memoryMaintenance,
+  shareChat(input) {
+    return shareChatSession(coreDb, {
+      db: input.db,
+      chatId: input.chatId,
+      agentId: input.agentId,
+      tenantId: input.context.tenantId,
+      userId: input.context.userId,
+    });
+  },
+  async syncIntegration() {
+    return {
+      ok: true,
+      queued: true,
+      message:
+        "Integration sync queued through the configured provider scheduler",
+    };
+  },
+});
+assertRuntimeAdapterServicesConfigured();
+assertCoreObjectTypeBootstrapComplete();
 
 // Self-discovering engines: provision per-department subagents, rules, skills,
 // tools, context, and seed memory. Reconcile at boot (safety net) and on the
@@ -381,6 +421,7 @@ server.listen(config.port, config.host, () => {
     }
   })();
   aiQueueWorker.start();
+  operationRunWorker.start();
   aiScheduler.start();
   reflectionService.start();
   memoryMaintenance.start();
@@ -419,6 +460,8 @@ server.listen(config.port, config.host, () => {
 });
 
 function gracefulShutdown() {
+  stopEventsRelay();
+  operationRunWorker.stop();
   workerPool.shutdown();
   stopScheduler();
   aiScheduler.stop();

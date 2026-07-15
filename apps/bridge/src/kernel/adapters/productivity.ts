@@ -6,11 +6,16 @@ import type {
   RecordRow,
 } from "@godmode/kernel";
 import type { AppDatabase } from "../../db.js";
+import type { ShareGrantRole } from "../../core-db.js";
 import {
   advanceSubtaskOnResultComment,
   reconcileParentProgress,
 } from "../../services/card-progress.js";
 import { ensureUserProject } from "../../services/user-productivity.js";
+import {
+  assertShareRole,
+  resolveShareAccess,
+} from "../../services/share-service.js";
 import { broadcastCardActivity } from "../../ws-broker.js";
 import type {
   OperationContext,
@@ -67,6 +72,54 @@ function requiredText(data: RecordData, name: string): string {
     badRequest(`${name} required`);
   }
   return value.trim();
+}
+
+interface ProductivityAccess {
+  db: AppDatabase;
+  ownerUserId: string;
+  ownerTenantId: string;
+  role: ShareGrantRole;
+}
+
+function sharedAccesses(
+  ctx: OperationContext,
+  resourceKind: "user_calendar" | "user_tasks"
+): ProductivityAccess[] {
+  if (!ctx.data?.coreDb || !ctx.userId || !ctx.tenantId) return [];
+  const resources = ctx.data.coreDb
+    .prepare(
+      `SELECT DISTINCT resource_id
+       FROM share_grants
+       WHERE resource_kind=?
+         AND (grantee_user_id=? OR grantee_tenant_id=?)`
+    )
+    .all(resourceKind, ctx.userId, ctx.tenantId) as Array<{
+    resource_id: string;
+  }>;
+  const accesses: ProductivityAccess[] = [];
+  for (const { resource_id: ownerUserId } of resources) {
+    const access = resolveShareAccess(ctx.data.coreDb, {
+      userId: ctx.userId,
+      tenantId: ctx.tenantId,
+      resourceKind,
+      resourceId: ownerUserId,
+      minRole: "viewer",
+    });
+    if (access) {
+      accesses.push({
+        ...access,
+        ownerUserId,
+      });
+    }
+  }
+  return accesses;
+}
+
+function routedContext(
+  ctx: OperationContext,
+  access: ProductivityAccess
+): OperationContext {
+  return { ...ctx, tenantId: access.ownerTenantId };
 }
 
 const WRITE_ACTION_ROLES = ["editor", "owner", "intelligence"] as const;
@@ -222,31 +275,62 @@ function calendarRow(
     .get(id, userId) as Record<string, unknown> | undefined;
 }
 
+function calendarAccess(
+  db: AppDatabase,
+  id: string,
+  ctx: OperationContext,
+  write = false
+): { access: ProductivityAccess; row: Record<string, unknown> } | null {
+  const userId = requireUser(ctx);
+  const local = calendarRow(db, id, userId);
+  if (local) {
+    return {
+      access: {
+        db,
+        ownerUserId: userId,
+        ownerTenantId: ctx.tenantId ?? "",
+        role: "owner",
+      },
+      row: local,
+    };
+  }
+  for (const access of sharedAccesses(ctx, "user_calendar")) {
+    const row = calendarRow(access.db, id, access.ownerUserId);
+    if (!row) continue;
+    if (write) assertShareRole(access.role, "editor");
+    return { access, row };
+  }
+  return null;
+}
+
 export const calendarEventServiceAdapter: RecordAdapter = {
   id: "calendar_event_service",
   list(db, def, query, ctx) {
     const userId = requireUser(ctx);
     const { limit, offset } = paging(query);
-    const rows = db
+    const localRows = db
       .prepare(
         `SELECT * FROM ai_calendar_events WHERE user_id=?
-         ORDER BY start_at ASC LIMIT ? OFFSET ?`
+         ORDER BY start_at ASC`
       )
-      .all(userId, limit, offset) as Record<string, unknown>[];
-    const total = (
-      db
-        .prepare(`SELECT COUNT(*) AS c FROM ai_calendar_events WHERE user_id=?`)
-        .get(userId) as { c: number }
-    ).c;
+      .all(userId) as Record<string, unknown>[];
+    const rows = [
+      ...localRows,
+      ...sharedAccesses(ctx, "user_calendar").flatMap((access) =>
+        access.db
+          .prepare(`SELECT * FROM ai_calendar_events WHERE user_id=?`)
+          .all(access.ownerUserId) as Record<string, unknown>[]
+      ),
+    ].sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
     return {
       objectType: def.name,
-      records: rows.map((row) => record(def, row)),
-      total,
+      records: rows.slice(offset, offset + limit).map((row) => record(def, row)),
+      total: rows.length,
     };
   },
   get(db, def, id, ctx) {
-    const row = calendarRow(db, id, requireUser(ctx));
-    return row ? record(def, row) : null;
+    const resolved = calendarAccess(db, id, ctx);
+    return resolved ? record(def, resolved.row) : null;
   },
   create(db, def, data, ctx) {
     const userId = requireUser(ctx);
@@ -273,8 +357,9 @@ export const calendarEventServiceAdapter: RecordAdapter = {
     return record(def, calendarRow(db, id, userId)!);
   },
   update(db, def, id, data, ctx) {
-    const userId = requireUser(ctx);
-    if (!calendarRow(db, id, userId)) notFound("CalendarEvent");
+    const resolved = calendarAccess(db, id, ctx, true);
+    if (!resolved) notFound("CalendarEvent");
+    const { access } = resolved;
     const sets: string[] = [];
     const values: unknown[] = [];
     for (const [name, value] of Object.entries(data)) {
@@ -284,32 +369,38 @@ export const calendarEventServiceAdapter: RecordAdapter = {
     }
     if (sets.length) {
       sets.push(`updated_at=datetime('now')`);
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_calendar_events SET ${sets.join(", ")} WHERE id=? AND user_id=?`
-      ).run(...values, id, userId);
+      ).run(...values, id, access.ownerUserId);
     }
-    return record(def, calendarRow(db, id, userId)!);
+    return record(
+      def,
+      calendarRow(access.db, id, access.ownerUserId)!
+    );
   },
   delete(db, _def, id, ctx) {
-    const result = db
+    const resolved = calendarAccess(db, id, ctx, true);
+    if (!resolved) notFound("CalendarEvent");
+    const result = resolved.access.db
       .prepare(`DELETE FROM ai_calendar_events WHERE id=? AND user_id=?`)
-      .run(id, requireUser(ctx));
+      .run(id, resolved.access.ownerUserId);
     if (!result.changes) notFound("CalendarEvent");
   },
   actions: {
     transition(db, def, id, input, ctx) {
-      const userId = requireUser(ctx);
-      if (!calendarRow(db, id, userId)) notFound("CalendarEvent");
+      const resolved = calendarAccess(db, id, ctx, true);
+      if (!resolved) notFound("CalendarEvent");
+      const { access } = resolved;
       const status = requiredText(input, "status");
       if (!["scheduled", "completed", "cancelled"].includes(status)) {
         badRequest("invalid calendar status");
       }
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_calendar_events
          SET status=?, updated_at=datetime('now')
          WHERE id=? AND user_id=?`
-      ).run(status, id, userId);
-      return record(def, calendarRow(db, id, userId)!);
+      ).run(status, id, access.ownerUserId);
+      return record(def, calendarRow(access.db, id, access.ownerUserId)!);
     },
   },
 };
@@ -337,6 +428,47 @@ function cardRow(
   return db
     .prepare(`SELECT * FROM ai_project_cards WHERE id=? AND project_id=?`)
     .get(id, projectId) as Record<string, unknown> | undefined;
+}
+
+function existingUserProject(db: AppDatabase, userId: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT id FROM ai_projects WHERE user_id=? ORDER BY created_at ASC LIMIT 1`
+    )
+    .get(userId) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+function taskAccess(
+  db: AppDatabase,
+  id: string,
+  ctx: OperationContext,
+  write = false
+): { access: ProductivityAccess; projectId: string; row: Record<string, unknown> } | null {
+  const userId = requireUser(ctx);
+  const localProjectId = ensureUserProject(userId, db);
+  const local = cardRow(db, id, localProjectId);
+  if (local) {
+    return {
+      access: {
+        db,
+        ownerUserId: userId,
+        ownerTenantId: ctx.tenantId ?? "",
+        role: "owner",
+      },
+      projectId: localProjectId,
+      row: local,
+    };
+  }
+  for (const access of sharedAccesses(ctx, "user_tasks")) {
+    const projectId = existingUserProject(access.db, access.ownerUserId);
+    if (!projectId) continue;
+    const row = cardRow(access.db, id, projectId);
+    if (!row) continue;
+    if (write) assertShareRole(access.role, "editor");
+    return { access, projectId, row };
+  }
+  return null;
 }
 
 function canonicalColumnExists(db: AppDatabase, columnId: string): boolean {
@@ -384,9 +516,10 @@ function appendScopedComment(
   input: RecordData,
   ctx: OperationContext
 ): RecordRow {
-  const projectId = ensureUserProject(requireUser(ctx), db);
-  const card = cardRow(db, cardId, projectId);
-  if (!card) notFound("TaskCard");
+  const resolved = taskAccess(db, cardId, ctx, true);
+  if (!resolved) notFound("TaskCard");
+  const { access, projectId, row: card } = resolved;
+  const targetCtx = routedContext(ctx, access);
   const body = requiredText(input, "body");
   const kind =
     input.kind === undefined ? null : requiredText(input, "kind");
@@ -395,18 +528,27 @@ function appendScopedComment(
   }
   const author = ctx.source === "agent" || ctx.agentId ? "agent" : "user";
   const commentId = uuidv4();
-  db.prepare(
+  access.db.prepare(
     `INSERT INTO ai_card_comments (id, card_id, author, body, kind)
      VALUES (?, ?, ?, ?, ?)`
   ).run(commentId, cardId, author, body, kind);
 
   if (author === "agent" && kind === "result") {
-    advanceSubtaskOnResultComment(db, cardId, ctx.tenantId);
+    advanceSubtaskOnResultComment(access.db, cardId, targetCtx.tenantId);
   } else if (author === "agent" && card.parent_card_id) {
-    reconcileParentProgress(db, String(card.parent_card_id), ctx.tenantId);
+    reconcileParentProgress(
+      access.db,
+      String(card.parent_card_id),
+      targetCtx.tenantId
+    );
   }
-  notifyCardMutation(db, cardRow(db, cardId, projectId)!, ctx, "comment");
-  const row = db
+  notifyCardMutation(
+    access.db,
+    cardRow(access.db, cardId, projectId)!,
+    targetCtx,
+    "comment"
+  );
+  const row = access.db
     .prepare(`SELECT * FROM ai_card_comments WHERE id=? AND card_id=?`)
     .get(commentId, cardId) as Record<string, unknown>;
   return record(def, row);
@@ -415,28 +557,36 @@ function appendScopedComment(
 export const taskCardServiceAdapter: RecordAdapter = {
   id: "task_card_service",
   list(db, def, query, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
+    const userId = requireUser(ctx);
+    const projectId = ensureUserProject(userId, db);
     const { limit, offset } = paging(query);
-    const rows = db
+    const localRows = db
       .prepare(
         `SELECT * FROM ai_project_cards WHERE project_id=?
-         ORDER BY sort_order ASC LIMIT ? OFFSET ?`
+         ORDER BY sort_order ASC`
       )
-      .all(projectId, limit, offset) as Record<string, unknown>[];
-    const total = (
-      db
-        .prepare(`SELECT COUNT(*) AS c FROM ai_project_cards WHERE project_id=?`)
-        .get(projectId) as { c: number }
-    ).c;
+      .all(projectId) as Record<string, unknown>[];
+    const rows = [...localRows];
+    for (const access of sharedAccesses(ctx, "user_tasks")) {
+      const sharedProjectId = existingUserProject(access.db, access.ownerUserId);
+      if (!sharedProjectId) continue;
+      rows.push(
+        ...(access.db
+          .prepare(
+            `SELECT * FROM ai_project_cards WHERE project_id=? ORDER BY sort_order ASC`
+          )
+          .all(sharedProjectId) as Record<string, unknown>[])
+      );
+    }
     return {
       objectType: def.name,
-      records: rows.map((row) => record(def, row)),
-      total,
+      records: rows.slice(offset, offset + limit).map((row) => record(def, row)),
+      total: rows.length,
     };
   },
   get(db, def, id, ctx) {
-    const row = cardRow(db, id, ensureUserProject(requireUser(ctx), db));
-    return row ? record(def, row) : null;
+    const resolved = taskAccess(db, id, ctx);
+    return resolved ? record(def, resolved.row) : null;
   },
   create(db, def, data, ctx) {
     const projectId = ensureUserProject(requireUser(ctx), db);
@@ -478,8 +628,9 @@ export const taskCardServiceAdapter: RecordAdapter = {
     return record(def, cardRow(db, id, projectId)!);
   },
   update(db, def, id, data, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
-    if (!cardRow(db, id, projectId)) notFound("TaskCard");
+    const resolved = taskAccess(db, id, ctx, true);
+    if (!resolved) notFound("TaskCard");
+    const { access, projectId } = resolved;
     const sets: string[] = [];
     const values: unknown[] = [];
     for (const [name, raw] of Object.entries(data)) {
@@ -495,33 +646,35 @@ export const taskCardServiceAdapter: RecordAdapter = {
     }
     if (sets.length) {
       sets.push(`updated_at=datetime('now')`);
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_project_cards SET ${sets.join(", ")} WHERE id=? AND project_id=?`
       ).run(...values, id, projectId);
     }
-    return record(def, cardRow(db, id, projectId)!);
+    return record(def, cardRow(access.db, id, projectId)!);
   },
   delete(db, _def, id, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
-    const result = db
+    const resolved = taskAccess(db, id, ctx, true);
+    if (!resolved) notFound("TaskCard");
+    const result = resolved.access.db
       .prepare(`DELETE FROM ai_project_cards WHERE id=? AND project_id=?`)
-      .run(id, projectId);
+      .run(id, resolved.projectId);
     if (!result.changes) notFound("TaskCard");
   },
   actions: {
     move(db, def, id, input, ctx) {
-      const projectId = ensureUserProject(requireUser(ctx), db);
-      const current = cardRow(db, id, projectId);
-      if (!current) notFound("TaskCard");
+      const resolved = taskAccess(db, id, ctx, true);
+      if (!resolved) notFound("TaskCard");
+      const { access, projectId, row: current } = resolved;
+      const targetCtx = routedContext(ctx, access);
       const columnId = requiredText(input, "column_id");
-      if (!canonicalColumnExists(db, columnId)) {
+      if (!canonicalColumnExists(access.db, columnId)) {
         badRequest("unknown project column");
       }
       let sortOrder: number;
       if (input.sort_order === undefined) {
         sortOrder =
           (
-            db
+            access.db
               .prepare(
                 `SELECT COALESCE(MAX(sort_order), -1) AS value
                  FROM ai_project_cards WHERE project_id=? AND column_id=?`
@@ -538,39 +691,50 @@ export const taskCardServiceAdapter: RecordAdapter = {
         columnId === "done" && !["accepted", "done", "cancelled"].includes(String(current.status ?? ""))
           ? "done"
           : current.status;
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_project_cards
          SET column_id=?, sort_order=?, status=?, updated_at=datetime('now')
          WHERE id=? AND project_id=?`
       ).run(columnId, sortOrder, impliedStatus ?? null, id, projectId);
-      const updated = cardRow(db, id, projectId)!;
+      const updated = cardRow(access.db, id, projectId)!;
       if (updated.parent_card_id) {
-        reconcileParentProgress(db, String(updated.parent_card_id), ctx.tenantId);
+        reconcileParentProgress(
+          access.db,
+          String(updated.parent_card_id),
+          targetCtx.tenantId
+        );
       }
-      notifyCardMutation(db, updated, ctx, "card_updated");
+      notifyCardMutation(access.db, updated, targetCtx, "card_updated");
       return record(def, updated);
     },
     assign(db, def, id, input, ctx) {
-      const projectId = ensureUserProject(requireUser(ctx), db);
-      if (!cardRow(db, id, projectId)) notFound("TaskCard");
+      const resolved = taskAccess(db, id, ctx, true);
+      if (!resolved) notFound("TaskCard");
+      const { access, projectId } = resolved;
       const raw = input.assigned_agent_id;
       if (raw !== null && (typeof raw !== "string" || !raw.trim())) {
         badRequest("assigned_agent_id must be non-empty text or null");
       }
       const assignedAgentId = raw === null ? null : raw.trim();
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_project_cards
          SET assigned_agent_id=?, updated_at=datetime('now')
          WHERE id=? AND project_id=?`
       ).run(assignedAgentId, id, projectId);
-      const updated = cardRow(db, id, projectId)!;
-      notifyCardMutation(db, updated, ctx, "card_updated");
+      const updated = cardRow(access.db, id, projectId)!;
+      notifyCardMutation(
+        access.db,
+        updated,
+        routedContext(ctx, access),
+        "card_updated"
+      );
       return record(def, updated);
     },
     transition(db, def, id, input, ctx) {
-      const projectId = ensureUserProject(requireUser(ctx), db);
-      const current = cardRow(db, id, projectId);
-      if (!current) notFound("TaskCard");
+      const resolved = taskAccess(db, id, ctx, true);
+      if (!resolved) notFound("TaskCard");
+      const { access, projectId, row: current } = resolved;
+      const targetCtx = routedContext(ctx, access);
       const status = requiredText(input, "status");
       const columnByStatus: Record<string, string | undefined> = {
         pending: "backlog",
@@ -588,16 +752,20 @@ export const taskCardServiceAdapter: RecordAdapter = {
         badRequest("invalid card status");
       }
       const columnId = columnByStatus[status] ?? String(current.column_id);
-      db.prepare(
+      access.db.prepare(
         `UPDATE ai_project_cards
          SET status=?, column_id=?, updated_at=datetime('now')
          WHERE id=? AND project_id=?`
       ).run(status, columnId, id, projectId);
-      const updated = cardRow(db, id, projectId)!;
+      const updated = cardRow(access.db, id, projectId)!;
       if (updated.parent_card_id) {
-        reconcileParentProgress(db, String(updated.parent_card_id), ctx.tenantId);
+        reconcileParentProgress(
+          access.db,
+          String(updated.parent_card_id),
+          targetCtx.tenantId
+        );
       }
-      notifyCardMutation(db, updated, ctx, "card_updated");
+      notifyCardMutation(access.db, updated, targetCtx, "card_updated");
       return record(def, updated);
     },
     add_comment(db, _def, id, input, ctx) {
@@ -658,20 +826,6 @@ export const cardCommentServiceAdapter: RecordAdapter = {
       )
       .get(id, projectId) as Record<string, unknown> | undefined;
     return row ? record(def, row) : null;
-  },
-  create(db, def, data, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
-    const cardId = String(data.card_id ?? "");
-    if (!cardRow(db, cardId, projectId)) notFound("TaskCard");
-    const id = typeof data.id === "string" && data.id ? data.id : uuidv4();
-    db.prepare(
-      `INSERT INTO ai_card_comments (id, card_id, author, body)
-       VALUES (?, ?, ?, ?)`
-    ).run(id, cardId, data.author ?? "user", data.body);
-    const row = db
-      .prepare(`SELECT * FROM ai_card_comments WHERE id=?`)
-      .get(id) as Record<string, unknown>;
-    return record(def, row);
   },
   actions: {
     add_comment(db, def, _id, input, ctx) {

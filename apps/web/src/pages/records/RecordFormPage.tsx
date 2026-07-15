@@ -4,6 +4,7 @@ import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createRecordApi,
   deleteRecordApi,
@@ -11,6 +12,7 @@ import {
   fetchRecord,
   runRecordActionApi,
   updateRecordApi,
+  waitForOperationRun,
   type FieldDefClient,
   type ObjectTypeClient,
 } from "@/lib/object-types-api";
@@ -75,6 +77,7 @@ export function RecordFormPage({
     Record<string, Record<string, string>>
   >({});
   const [status, setStatus] = useState<string | null>(null);
+  const [recordVersion, setRecordVersion] = useState<string | undefined>();
   const canSave =
     !!def &&
     (!def.operations ||
@@ -103,6 +106,7 @@ export function RecordFormPage({
             initial[f.name] =
               v == null ? "" : typeof v === "string" ? v : JSON.stringify(v);
           }
+          setRecordVersion(row.version);
         }
         setValues(initial);
         setError(null);
@@ -145,7 +149,13 @@ export function RecordFormPage({
           `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(created.id)}`
         );
       } else if (recordId) {
-        await updateRecordApi(objectType, recordId, data);
+        const updated = await updateRecordApi(
+          objectType,
+          recordId,
+          data,
+          recordVersion
+        );
+        setRecordVersion(updated.version);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -157,6 +167,7 @@ export function RecordFormPage({
   async function refreshRecord() {
     if (!objectType || !recordId || !def || isNew) return;
     const row = await fetchRecord(objectType, recordId);
+    setRecordVersion(row.version);
     const next: Record<string, string> = {};
     for (const field of formFields(def)) {
       const value = row.data[field.name];
@@ -178,7 +189,7 @@ export function RecordFormPage({
     setSaving(true);
     setError(null);
     try {
-      await deleteRecordApi(objectType, recordId);
+      await deleteRecordApi(objectType, recordId, recordVersion);
       navigate(`/records/${encodeURIComponent(objectType)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -230,14 +241,30 @@ export function RecordFormPage({
           action.effect && action.effect !== "read"
             ? crypto.randomUUID()
             : undefined,
+        expectedVersion: recordVersion,
       });
-      setStatus(
+      if (
         result &&
-          typeof result === "object" &&
-          "operationRunId" in result
-          ? `${action.label} accepted`
-          : `${action.label} completed`
-      );
+        typeof result === "object" &&
+        "operationRunId" in result
+      ) {
+        const operationRunId = String(
+          (result as { operationRunId: unknown }).operationRunId
+        );
+        setStatus(`${action.label} accepted; waiting for completion…`);
+        const run = await waitForOperationRun(operationRunId);
+        if (run.status === "failed") {
+          throw new Error(
+            run.errorMessage ?? `${action.label} failed (${run.errorCode ?? "unknown"})`
+          );
+        }
+        if (run.status === "cancelled") {
+          throw new Error(`${action.label} was cancelled`);
+        }
+        setStatus(`${action.label} completed`);
+      } else {
+        setStatus(`${action.label} completed`);
+      }
       if (!isNew) await refreshRecord();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -290,7 +317,13 @@ export function RecordFormPage({
         {status}
       </p>
       {def && (
-        <div className="grid max-w-xl gap-4">
+        <form
+          className="grid max-w-xl gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onSave();
+          }}
+        >
           {formFields(def).map((f) => (
             <div key={f.name} className="grid gap-1.5">
               <Label htmlFor={f.name}>
@@ -300,6 +333,8 @@ export function RecordFormPage({
               {f.fieldType === "Select" && f.options?.length ? (
                 <select
                   id={f.name}
+                  name={f.name}
+                  required={f.required}
                   className="border-input bg-background h-9 rounded-md border px-3 text-sm"
                   value={values[f.name] ?? ""}
                   disabled={!canSave}
@@ -317,6 +352,8 @@ export function RecordFormPage({
               ) : (
                 <Input
                   id={f.name}
+                  name={f.name}
+                  required={f.required}
                   value={values[f.name] ?? ""}
                   disabled={!canSave}
                   onChange={(e) =>
@@ -329,7 +366,10 @@ export function RecordFormPage({
               )}
             </div>
           ))}
-        </div>
+          <button type="submit" className="sr-only">
+            Save changes
+          </button>
+        </form>
       )}
       {!isNew && def?.actions?.length ? (
         <section className="mt-8 grid max-w-xl gap-4" aria-labelledby="record-actions">
@@ -360,19 +400,89 @@ export function RecordFormPage({
                     <Label htmlFor={`action-${action.name}-${name}`}>
                       {typeof schema.title === "string" ? schema.title : name}
                     </Label>
-                    <Input
-                      id={`action-${action.name}-${name}`}
-                      value={actionValues[action.name]?.[name] ?? ""}
-                      onChange={(event) =>
-                        setActionValues((current) => ({
-                          ...current,
-                          [action.name]: {
-                            ...current[action.name],
-                            [name]: event.target.value,
-                          },
-                        }))
-                      }
-                    />
+                    {schema.type === "boolean" ? (
+                      <select
+                        id={`action-${action.name}-${name}`}
+                        name={name}
+                        className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                        value={actionValues[action.name]?.[name] ?? ""}
+                        onChange={(event) =>
+                          setActionValues((current) => ({
+                            ...current,
+                            [action.name]: {
+                              ...current[action.name],
+                              [name]: event.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">—</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    ) : Array.isArray(schema.enum) ? (
+                      <select
+                        id={`action-${action.name}-${name}`}
+                        name={name}
+                        className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                        value={actionValues[action.name]?.[name] ?? ""}
+                        onChange={(event) =>
+                          setActionValues((current) => ({
+                            ...current,
+                            [action.name]: {
+                              ...current[action.name],
+                              [name]: event.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">—</option>
+                        {schema.enum.map((option) => (
+                          <option key={String(option)} value={String(option)}>
+                            {String(option)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : schema.type === "object" || schema.type === "array" ? (
+                      <Textarea
+                        id={`action-${action.name}-${name}`}
+                        name={name}
+                        value={actionValues[action.name]?.[name] ?? ""}
+                        onChange={(event) =>
+                          setActionValues((current) => ({
+                            ...current,
+                            [action.name]: {
+                              ...current[action.name],
+                              [name]: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    ) : (
+                      <Input
+                        id={`action-${action.name}-${name}`}
+                        name={name}
+                        type={
+                          schema.type === "integer" || schema.type === "number"
+                            ? "number"
+                            : "text"
+                        }
+                        required={
+                          Array.isArray(action.inputSchema?.required) &&
+                          action.inputSchema.required.includes(name)
+                        }
+                        value={actionValues[action.name]?.[name] ?? ""}
+                        onChange={(event) =>
+                          setActionValues((current) => ({
+                            ...current,
+                            [action.name]: {
+                              ...current[action.name],
+                              [name]: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    )}
                   </div>
                 ))}
                 <Button

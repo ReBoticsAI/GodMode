@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -13,6 +14,8 @@ import {
 import {
   fetchObjectType,
   fetchRecords,
+  runRecordActionApi,
+  waitForOperationRun,
   type ObjectTypeClient,
   type RecordRowClient,
 } from "@/lib/object-types-api";
@@ -58,6 +61,12 @@ export function RecordListPage({
   const [rows, setRows] = useState<RecordRowClient[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const limit = 50;
 
   useEffect(() => {
     if (!objectType) {
@@ -74,13 +83,18 @@ export function RecordListPage({
         if (ot.operations && !ot.operations.includes("list")) {
           throw new Error(`Listing ${ot.labelPlural ?? ot.label} is disabled`);
         }
-        const list = await fetchRecords(objectType);
+        const list = await fetchRecords(objectType, {
+          limit,
+          offset,
+          filters,
+        });
         return [ot, list] as const;
       })
       .then(([ot, list]) => {
         if (cancelled) return;
         setDef(ot);
         setRows(list.records);
+        setTotal(list.total);
         setError(null);
       })
       .catch((err: Error) => {
@@ -92,11 +106,63 @@ export function RecordListPage({
     return () => {
       cancelled = true;
     };
-  }, [objectType]);
+  }, [objectType, offset, filters]);
 
   const listFields = (def?.fields ?? []).filter(
     (f) => f.inList !== false && f.fieldType !== "JSON"
   );
+  const collectionActions = (def?.actions ?? []).filter(
+    (action) => action.target === "collection"
+  );
+
+  async function runCollectionAction(
+    action: NonNullable<ObjectTypeClient["actions"]>[number]
+  ) {
+    const properties =
+      action.inputSchema?.properties &&
+      typeof action.inputSchema.properties === "object"
+        ? Object.keys(action.inputSchema.properties)
+        : [];
+    if (properties.length) {
+      setError(
+        `${action.label} requires input; use its dedicated domain UI until the schema form is available here.`
+      );
+      return;
+    }
+    const confirmed =
+      action.confirm === true || action.confirmation?.required === true;
+    if (confirmed && !window.confirm(`Run ${action.label}?`)) return;
+    setError(null);
+    setActionStatus(`${action.label} running…`);
+    try {
+      const result = await runRecordActionApi(objectType!, action.name, {}, {
+        confirmed,
+        idempotencyKey:
+          action.effect && action.effect !== "read"
+            ? crypto.randomUUID()
+            : undefined,
+      });
+      if (
+        result &&
+        typeof result === "object" &&
+        "operationRunId" in result
+      ) {
+        const run = await waitForOperationRun(
+          String((result as { operationRunId: unknown }).operationRunId)
+        );
+        if (run.status !== "succeeded") {
+          throw new Error(run.errorMessage ?? `${action.label} ${run.status}`);
+        }
+      }
+      setActionStatus(`${action.label} completed`);
+      const list = await fetchRecords(objectType!, { limit, offset, filters });
+      setRows(list.records);
+      setTotal(list.total);
+    } catch (err) {
+      setActionStatus(null);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   return (
     <Page>
@@ -119,7 +185,51 @@ export function RecordListPage({
       />
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
       {error && <p className="text-destructive text-sm">{error}</p>}
+      <p aria-live="polite" className="text-muted-foreground text-sm">
+        {actionStatus}
+      </p>
       {!loading && !error && def && (
+        <>
+        {listFields.length > 0 && (
+          <form
+            className="mb-4 flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setOffset(0);
+              setFilters(draftFilters);
+            }}
+          >
+            {listFields.slice(0, 3).map((field) => (
+              <label key={field.name} className="grid gap-1 text-sm">
+                <span>{field.label}</span>
+                <Input
+                  name={field.name}
+                  value={draftFilters[field.name] ?? ""}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      [field.name]: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ))}
+            <Button type="submit" variant="outline">Apply filters</Button>
+          </form>
+        )}
+        {collectionActions.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2" aria-label="Collection actions">
+            {collectionActions.map((action) => (
+              <Button
+                key={action.name}
+                variant={action.effect === "destructive" ? "destructive" : "outline"}
+                onClick={() => void runCollectionAction(action)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
@@ -160,6 +270,30 @@ export function RecordListPage({
             ))}
           </TableBody>
         </Table>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <p className="text-muted-foreground text-sm">
+            {total === 0
+              ? "0 records"
+              : `${offset + 1}–${Math.min(offset + limit, total)} of ${total}`}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={offset === 0}
+              onClick={() => setOffset((value) => Math.max(0, value - limit))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              disabled={offset + limit >= total}
+              onClick={() => setOffset((value) => value + limit)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+        </>
       )}
     </Page>
   );

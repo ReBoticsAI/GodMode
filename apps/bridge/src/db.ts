@@ -1,14 +1,19 @@
 import fs from "node:fs";
 import Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import { config } from "./config.js";
 import { seedIntelligenceAgent, removeDeprecatedBuiltinAgents, ensureAgentPrincipalDefaults, ensureIntelligenceDescription, ensureIntelligenceCodeAccess, ensureIntelligenceLocalBackendWhenExternalLlm, ensureAgentDescriptions, ensureAgentReflectionDefaults, ensureAgentAutoApproveDefaults, ensureSpecialistCodeAccess } from "./services/agents/agents-db.js";
-import { createSchedule } from "./services/ai-scheduler.js";
 import { configureDbPragmas, logDbConfig, runForeignKeyCheck } from "./services/db-config.js";
-import { runPendingMigrations } from "./services/db-migrations.js";
+import {
+  addCol as addColumn,
+  registerMigration,
+  runPendingMigrations,
+} from "./services/db-migrations.js";
 import { registerDataManagementMigrations, ensureCapabilityTables } from "./services/data-management-migration.js";
 import { registerStructureNodesMigration, cleanupProvisionedStructureAgents } from "./services/structure-nodes-migration.js";
 import { registerStructureRegroupMigration } from "./services/structure-regroup-migration.js";
 import { registerGroupTabsMigration } from "./services/group-tabs-migration.js";
+import { registerScLevelsMigration } from "./services/sc-levels-migration.js";
 
 /**
  * Canonical autonomous task-runner workflow graph (executor-shaped). Stored in
@@ -187,6 +192,10 @@ export function migrateTenantDb(db: Database.Database): void {
   registerStructureNodesMigration();
   registerStructureRegroupMigration();
   registerGroupTabsMigration();
+  registerScLevelsMigration();
+  for (const migration of TENANT_BOOT_MIGRATIONS) {
+    registerMigration(migration.version, migration.name, migration.up);
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS playbooks (
@@ -483,21 +492,6 @@ export function migrateTenantDb(db: Database.Database): void {
       ON structure_nodes(parent_id, sort_order);
   `);
 
-  try {
-    db.exec(`ALTER TABLE structure_nodes ADD COLUMN object_type TEXT`);
-  } catch {
-    /* already migrated */
-  }
-
-  migrateTradeMirrorSchema(db);
-  migrateUnifiedDataSchema(db);
-  migrateScLevelsKey(db);
-  migrateScLevelsStyle(db);
-  migrateBacktestNativeSchema(db);
-  migratePlaybookGraphSchema(db);
-  migrateArchiveLessonsSchema(db);
-  createHoldingsSchema(db);
-
   runPendingMigrations(db);
   ensureCapabilityTables(db);
   cleanupProvisionedStructureAgents(db);
@@ -510,6 +504,20 @@ export function migrateTenantDb(db: Database.Database): void {
 }
 
 export type AppDatabase = Database.Database;
+
+export const TENANT_BOOT_MIGRATIONS = [
+  { version: 7, name: "structure_object_type_v1", up: migrateStructureObjectType },
+  { version: 8, name: "trade_mirror_columns_v1", up: migrateTradeMirrorSchema },
+  { version: 9, name: "unified_data_schema_v1", up: migrateUnifiedDataSchema },
+  { version: 10, name: "backtest_native_schema_v1", up: migrateBacktestNativeSchema },
+  { version: 11, name: "playbook_graph_schema_v1", up: migratePlaybookGraphSchema },
+  { version: 12, name: "archive_lessons_schema_v1", up: migrateArchiveLessonsSchema },
+  { version: 13, name: "holdings_schema_v1", up: createHoldingsSchema },
+] as const;
+
+function migrateStructureObjectType(db: Database.Database): void {
+  addColumn(db, "structure_nodes", "object_type", "TEXT");
+}
 
 function createHoldingsSchema(db: Database.Database): void {
   db.exec(`
@@ -556,11 +564,7 @@ function createHoldingsSchema(db: Database.Database): void {
 
 function migrateArchiveLessonsSchema(db: Database.Database): void {
   const addCol = (table: string, col: string, def: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
-    } catch {
-      /* exists */
-    }
+    addColumn(db, table, col, def);
   };
 
   addCol("playbook_signal_state", "metadata_json", "TEXT");
@@ -634,20 +638,12 @@ function migrateArchiveLessonsSchema(db: Database.Database): void {
 }
 
 function migratePlaybookGraphSchema(db: Database.Database): void {
-  try {
-    db.exec(`ALTER TABLE playbooks ADD COLUMN graph_json TEXT`);
-  } catch {
-    /* exists */
-  }
+  addColumn(db, "playbooks", "graph_json", "TEXT");
 }
 
 function migrateBacktestNativeSchema(db: Database.Database): void {
   const addCol = (table: string, col: string, def: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
-    } catch {
-      /* exists */
-    }
+    addColumn(db, table, col, def);
   };
 
   addCol("backtest_runs", "trade_account", "TEXT");
@@ -682,58 +678,9 @@ function migrateBacktestNativeSchema(db: Database.Database): void {
   `);
 }
 
-function migrateScLevelsKey(db: Database.Database): void {
-  // Rebuild sc_levels if it still uses the legacy (symbol,label) PK.
-  // Each external source (chart, study, subgraph) now owns its own row.
-  try {
-    const cols = db
-      .prepare("PRAGMA table_info(sc_levels)")
-      .all() as Array<{ name: string }>;
-    const hasSourceKey = cols.some((c) => c.name === "source_key");
-    if (hasSourceKey) return;
-    db.exec(`
-      DROP TABLE IF EXISTS sc_levels;
-      CREATE TABLE sc_levels (
-        symbol TEXT NOT NULL,
-        source_key TEXT NOT NULL,
-        label TEXT NOT NULL,
-        price REAL NOT NULL,
-        kind TEXT,
-        chart_number INTEGER,
-        study_id INTEGER,
-        subgraph_index INTEGER,
-        color TEXT,
-        line_width INTEGER,
-        ts TEXT,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (symbol, source_key)
-      );
-      CREATE INDEX IF NOT EXISTS sc_levels_by_symbol ON sc_levels(symbol, price DESC);
-    `);
-  } catch (err) {
-    console.warn("[migrate] sc_levels rebuild failed", err);
-  }
-}
-
-function migrateScLevelsStyle(db: Database.Database): void {
-  const addCol = (col: string, def: string) => {
-    try {
-      db.exec(`ALTER TABLE sc_levels ADD COLUMN ${col} ${def}`);
-    } catch {
-      /* column exists */
-    }
-  };
-  addCol("color", "TEXT");
-  addCol("line_width", "INTEGER");
-}
-
 function migrateTradeMirrorSchema(db: Database.Database): void {
   const addCol = (table: string, col: string, def: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
-    } catch {
-      /* column exists */
-    }
+    addColumn(db, table, col, def);
   };
 
   addCol("sc_trades", "commission_usd", "REAL");
@@ -768,11 +715,7 @@ function migrateTradeMirrorSchema(db: Database.Database): void {
 
 function migrateUnifiedDataSchema(db: Database.Database): void {
   const addCol = (table: string, col: string, def: string) => {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
-    } catch {
-      /* exists */
-    }
+    addColumn(db, table, col, def);
   };
 
   db.exec(`
@@ -1112,27 +1055,21 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   addCol("sc_trades", "source_acsil", "INTEGER NOT NULL DEFAULT 0");
   addCol("sc_trades", "source_file", "INTEGER NOT NULL DEFAULT 0");
   addCol("sc_trades", "backtest_run_id", "TEXT");
-  try {
-    db.exec(
-      `CREATE INDEX IF NOT EXISTS sc_trades_by_backtest ON sc_trades(backtest_run_id, close_time)`
-    );
-  } catch {
-    /* optional */
-  }
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS sc_trades_by_backtest ON sc_trades(backtest_run_id, close_time)`
+  );
 
-  try {
-    const chartCols = db
-      .prepare(`PRAGMA table_info(sc_charts)`)
-      .all() as Array<{ name: string; pk: number }>;
-    const pkCols = chartCols.filter((c) => c.pk > 0);
-    if (!chartCols.some((c) => c.name === "chartbook_key")) {
-      db.exec(
-        `ALTER TABLE sc_charts ADD COLUMN chartbook_key TEXT NOT NULL DEFAULT 'Platform'`
-      );
-    }
-    if (pkCols.length === 1 && pkCols[0]?.name === "chart_number") {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS sc_charts_v2 (
+  const chartCols = db
+    .prepare(`PRAGMA table_info(sc_charts)`)
+    .all() as Array<{ name: string; pk: number }>;
+  const pkCols = chartCols.filter((c) => c.pk > 0);
+  if (!chartCols.some((c) => c.name === "chartbook_key")) {
+    addColumn(db, "sc_charts", "chartbook_key", "TEXT NOT NULL DEFAULT 'Platform'");
+  }
+  if (pkCols.length === 1 && pkCols[0]?.name === "chart_number") {
+    db.exec(`
+        DROP TABLE IF EXISTS sc_charts_v2;
+        CREATE TABLE sc_charts_v2 (
           chartbook_key TEXT NOT NULL,
           chart_number INTEGER NOT NULL,
           name TEXT NOT NULL,
@@ -1150,9 +1087,6 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
         DROP TABLE sc_charts;
         ALTER TABLE sc_charts_v2 RENAME TO sc_charts;
       `);
-    }
-  } catch {
-    /* optional */
   }
 
   addCol("backtest_runs", "chartbook_key", "TEXT");
@@ -1404,11 +1338,7 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS ai_knowledge_packs_name_idx ON ai_knowledge_packs(name);
   `);
-  try {
-    db.prepare(`UPDATE ai_memories SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
-  } catch {
-    /* optional */
-  }
+  db.prepare(`UPDATE ai_memories SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_agent_rule_state (
@@ -1485,23 +1415,18 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   // Copy legacy global rule/skill enable state into the root agent's per-agent
   // tables on first run so Intelligence keeps its current toggles. Never overwrites
   // existing per-agent rows.
-  try {
-    db.prepare(
-      `INSERT OR IGNORE INTO ai_agent_rule_state (agent_id, rule_id, enabled, priority_override, updated_at)
+  db.prepare(
+    `INSERT OR IGNORE INTO ai_agent_rule_state (agent_id, rule_id, enabled, priority_override, updated_at)
        SELECT 'intelligence', rule_id, enabled, priority_override, updated_at FROM ai_rule_state`
-    ).run();
-    db.prepare(
-      `INSERT OR IGNORE INTO ai_agent_skill_state (agent_id, skill_id, enabled, last_used_at, updated_at)
+  ).run();
+  db.prepare(
+    `INSERT OR IGNORE INTO ai_agent_skill_state (agent_id, skill_id, enabled, last_used_at, updated_at)
        SELECT 'intelligence', skill_id, enabled, last_used_at, updated_at FROM ai_skill_state`
-    ).run();
-  } catch {
-    /* optional */
-  }
+  ).run();
 
   // Seed default project + columns if empty
-  try {
-    const proj = db.prepare(`SELECT id FROM ai_projects LIMIT 1`).get();
-    if (!proj) {
+  const proj = db.prepare(`SELECT id FROM ai_projects LIMIT 1`).get();
+  if (!proj) {
       db.prepare(`INSERT INTO ai_projects (id, name) VALUES ('default', 'Intelligence Projects')`).run();
       const cols = [
         ["backlog", "Backlog", 0],
@@ -1514,9 +1439,6 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
           `INSERT INTO ai_project_columns (id, project_id, name, sort_order) VALUES (?, 'default', ?, ?)`
         ).run(id, name, order);
       }
-    }
-  } catch {
-    /* optional */
   }
 
   // Seed the canonical autonomous task-runner workflow (idempotent). It is the
@@ -1524,18 +1446,14 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   // subtasks → review → comments → address → accept → done. Left enabled so the
   // user can run it from the queue / attach a cron schedule; no schedule is
   // auto-created to avoid surprising autonomous activity.
-  try {
-    const existing = db
+  const existing = db
       .prepare(`SELECT id FROM ai_workflows WHERE id = 'autonomous-task-runner'`)
       .get();
-    if (!existing) {
+  if (!existing) {
       db.prepare(
         `INSERT INTO ai_workflows (id, name, config_json, enabled)
          VALUES ('autonomous-task-runner', 'Autonomous Task Runner', ?, 1)`
       ).run(JSON.stringify(AUTONOMOUS_TASK_RUNNER_GRAPH));
-    }
-  } catch {
-    /* optional */
   }
 
   addCol("ai_project_cards", "prompt", "TEXT");
@@ -1561,22 +1479,14 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   // Per-user personal calendar/tasks (scoped by user_id in owner workspace tenant DB).
   addCol("ai_calendar_events", "user_id", "TEXT");
   addCol("ai_projects", "user_id", "TEXT");
-  try {
-    db.exec(`
+  db.exec(`
       CREATE INDEX IF NOT EXISTS ai_calendar_events_user_idx
         ON ai_calendar_events(user_id, start_at);
       CREATE INDEX IF NOT EXISTS ai_projects_user_idx
         ON ai_projects(user_id);
     `);
-  } catch {
-    /* optional */
-  }
-  try {
-    db.prepare(`UPDATE ai_workflows SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
-    db.prepare(`UPDATE ai_projects SET agent_id = 'intelligence' WHERE agent_id IS NULL AND user_id IS NULL`).run();
-  } catch {
-    /* optional */
-  }
+  db.prepare(`UPDATE ai_workflows SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
+  db.prepare(`UPDATE ai_projects SET agent_id = 'intelligence' WHERE agent_id IS NULL AND user_id IS NULL`).run();
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_agents (
@@ -1660,6 +1570,35 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       PRIMARY KEY (key, actor_id, object_type, record_id, action_name)
     );
 
+    -- Tenant-owned half of cross-database marketplace clone acquisitions.
+    -- The import receipt, audit row, and outbox event commit with the import.
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_imports (
+      operation_id TEXT PRIMARY KEY,
+      buyer_tenant_id TEXT NOT NULL,
+      listing_id TEXT NOT NULL,
+      imported_kind TEXT NOT NULL,
+      imported_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_audit (
+      id TEXT PRIMARY KEY,
+      operation_id TEXT NOT NULL,
+      owner_database TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS marketplace_acquisition_outbox (
+      id TEXT PRIMARY KEY,
+      operation_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      published_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS kernel_operation_runs (
       id TEXT PRIMARY KEY,
       tenant_id TEXT,
@@ -1702,38 +1641,45 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   addCol("ai_agents", "parent_id", "TEXT");
   addCol("ai_agents", "team", "TEXT");
 
-  try {
-    migrateRootAgentMoneyAiToIntelligence(db);
-    seedIntelligenceAgent(db);
-    removeDeprecatedBuiltinAgents(db);
-    ensureAgentPrincipalDefaults(db);
-    ensureIntelligenceDescription(db);
-    ensureIntelligenceCodeAccess(db);
-    ensureIntelligenceLocalBackendWhenExternalLlm(db);
-    ensureSpecialistCodeAccess(db);
-    ensureAgentReflectionDefaults(db);
-    ensureAgentAutoApproveDefaults(db);
-    ensureAgentDescriptions(db);
-    ensureAutonomousTaskRunnerSchedule(db);
-    ensureLlmAutoStartIfModelSet(db);
-  } catch {
-    /* optional */
-  }
+  migrateRootAgentMoneyAiToIntelligence(db);
+  seedIntelligenceAgent(db);
+  removeDeprecatedBuiltinAgents(db);
+  ensureAgentPrincipalDefaults(db);
+  ensureIntelligenceDescription(db);
+  ensureIntelligenceCodeAccess(db);
+  ensureIntelligenceLocalBackendWhenExternalLlm(db);
+  ensureSpecialistCodeAccess(db);
+  ensureAgentReflectionDefaults(db);
+  ensureAgentAutoApproveDefaults(db);
+  ensureAgentDescriptions(db);
+  ensureAutonomousTaskRunnerSchedule(db);
+  ensureLlmAutoStartIfModelSet(db);
 
   addCol("sc_positions", "position_key", "TEXT");
   addCol("sc_positions", "source_dtc", "INTEGER NOT NULL DEFAULT 0");
   addCol("sc_positions", "source_acsil", "INTEGER NOT NULL DEFAULT 0");
+  addCol("ai_artifacts", "content", "TEXT");
+  addCol("ai_memories", "embedding_model", "TEXT");
+  addCol("ai_memories", "valid_from", "TEXT");
+  addCol("ai_memories", "valid_until", "TEXT");
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS ai_project_cards_by_project
+      ON ai_project_cards(project_id, sort_order);
+    CREATE INDEX IF NOT EXISTS ai_project_cards_by_column
+      ON ai_project_cards(column_id, sort_order);
+    CREATE INDEX IF NOT EXISTS ai_project_cards_by_parent
+      ON ai_project_cards(parent_card_id, sort_order);
+    CREATE INDEX IF NOT EXISTS ai_project_cards_by_agent_due
+      ON ai_project_cards(assigned_agent_id, due_at);
+  `);
 
   db.prepare(
     `UPDATE sc_positions SET position_key = playbook_id WHERE position_key IS NULL`
   ).run();
-  try {
-    db.prepare(`UPDATE sc_fills SET source_acsil = 1 WHERE source = 'acsil'`).run();
-    db.prepare(`UPDATE sc_trades SET source_acsil = 1 WHERE source = 'acsil'`).run();
-    db.prepare(`UPDATE sc_positions SET source_acsil = 1`).run();
-  } catch {
-    /* optional */
-  }
+  db.prepare(`UPDATE sc_fills SET source_acsil = 1 WHERE source = 'acsil'`).run();
+  db.prepare(`UPDATE sc_trades SET source_acsil = 1 WHERE source = 'acsil'`).run();
+  db.prepare(`UPDATE sc_positions SET source_acsil = 1`).run();
 
   const fkViolations = runForeignKeyCheck(db);
   if (fkViolations.length > 0) {
@@ -1751,12 +1697,10 @@ function ensureAutonomousTaskRunnerSchedule(db: AppDatabase): void {
     .prepare(`SELECT id FROM ai_schedules WHERE workflow_id = 'autonomous-task-runner' LIMIT 1`)
     .get();
   if (existing) return;
-  createSchedule(db, {
-    workflowId: "autonomous-task-runner",
-    cronExpr: "*/30 * * * *",
-    timezone: "America/Denver",
-    enabled: true,
-  });
+  db.prepare(
+    `INSERT INTO ai_schedules (id, workflow_id, cron_expr, timezone, enabled)
+     VALUES (?, 'autonomous-task-runner', '*/30 * * * *', 'America/Denver', 1)`
+  ).run(uuidv4());
 }
 
 function ensureLlmAutoStartIfModelSet(db: AppDatabase): void {

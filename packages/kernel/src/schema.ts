@@ -3,7 +3,7 @@ import type { FieldDef, FieldType, ObjectTypeDef } from "./types.js";
 const NAME_RE = /^[A-Z][A-Za-z0-9]*$/;
 const FIELD_RE = /^[a-z][a-z0-9_]*$/;
 const ROLES = new Set(["viewer", "editor", "owner", "intelligence"]);
-const ACTION_TARGETS = new Set(["record", "collection", "bulk"]);
+const ACTION_TARGETS = new Set(["record", "collection"]);
 const ACTION_EFFECTS = new Set(["read", "write", "destructive", "external"]);
 const ACTION_EXECUTIONS = new Set(["sync", "async"]);
 
@@ -62,8 +62,27 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
   if (def.storage?.kind === "native" && def.database === "core") {
     errors.push("native ObjectTypes must be tenant-local");
   }
+  if (def.database != null && !["tenant", "core"].includes(def.database)) {
+    errors.push("database must be tenant or core");
+  }
   if (def.contractVersion != null && (!Number.isInteger(def.contractVersion) || def.contractVersion < 1)) {
     errors.push("contractVersion must be a positive integer");
+  }
+  if (def.schemaVersion != null && (!Number.isInteger(def.schemaVersion) || def.schemaVersion < 1)) {
+    errors.push("schemaVersion must be a positive integer");
+  }
+  if (def.versionField) {
+    const versionField = def.fields?.find((field) => field.name === def.versionField);
+    if (!versionField) errors.push(`versionField is not a declared field: ${def.versionField}`);
+    else if (versionField.secret) errors.push("versionField must not be secret");
+  }
+  if (
+    def.deprecated &&
+    (!Number.isInteger(def.deprecated.since) ||
+      def.deprecated.since < 1 ||
+      !def.deprecated.message?.trim())
+  ) {
+    errors.push("deprecated requires a positive since version and message");
   }
   const permissionRoles = new Set<string>();
   for (const permission of def.permissions ?? []) {
@@ -92,7 +111,9 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
     }
     actionNames.add(action.name);
     if (!action.label?.trim()) errors.push(`action ${action.name} label required`);
-    if (action.target && !ACTION_TARGETS.has(action.target)) {
+    if (!action.target) {
+      errors.push(`action ${action.name} must declare target`);
+    } else if (!ACTION_TARGETS.has(action.target)) {
       errors.push(`action ${action.name} has invalid target`);
     }
     if (action.effect && !ACTION_EFFECTS.has(action.effect)) {
@@ -123,6 +144,33 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
     ) {
       errors.push(`action ${action.name} retry.maxAttempts must be positive`);
     }
+    if (action.retry?.backoffMs != null && (!Number.isFinite(action.retry.backoffMs) || action.retry.backoffMs < 0)) {
+      errors.push(`action ${action.name} retry.backoffMs must be non-negative`);
+    }
+    if (
+      action.retry?.retryableErrorCodes &&
+      new Set(action.retry.retryableErrorCodes).size !==
+        action.retry.retryableErrorCodes.length
+    ) {
+      errors.push(`action ${action.name} retryable error codes must be unique`);
+    }
+    if (action.timeoutMs != null && (!Number.isFinite(action.timeoutMs) || action.timeoutMs <= 0)) {
+      errors.push(`action ${action.name} timeoutMs must be positive`);
+    }
+    if (
+      action.confirmation?.ttlSeconds != null &&
+      (!Number.isFinite(action.confirmation.ttlSeconds) ||
+        action.confirmation.ttlSeconds <= 0)
+    ) {
+      errors.push(`action ${action.name} confirmation ttlSeconds must be positive`);
+    }
+    if (
+      action.idempotency?.ttlSeconds != null &&
+      (!Number.isFinite(action.idempotency.ttlSeconds) ||
+        action.idempotency.ttlSeconds <= 0)
+    ) {
+      errors.push(`action ${action.name} idempotency ttlSeconds must be positive`);
+    }
     if (action.concurrency?.required && action.target === "collection") {
       errors.push(`collection action ${action.name} cannot require record concurrency`);
     }
@@ -137,6 +185,25 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
     }
     if (action.execution === "async" && action.cancellable == null) {
       errors.push(`async action ${action.name} must declare cancellable`);
+    }
+    if (action.execution === "sync" && action.cancellable != null) {
+      errors.push(`sync action ${action.name} cannot declare cancellable`);
+    }
+    if (
+      action.deprecated &&
+      (!Number.isInteger(action.deprecated.since) ||
+        action.deprecated.since < 1 ||
+        !action.deprecated.message?.trim())
+    ) {
+      errors.push(`action ${action.name} deprecated metadata is invalid`);
+    }
+    if (action.concurrency?.versionField) {
+      const versionField = def.fields.find(
+        (field) => field.name === action.concurrency?.versionField
+      );
+      if (!versionField || versionField.secret) {
+        errors.push(`action ${action.name} concurrency versionField is invalid`);
+      }
     }
   }
   return errors;

@@ -29,10 +29,18 @@ export {
   createSystemOperationContext,
   cancelOperationRun,
   recoverInterruptedOperationRuns,
+  processClaimedOperationRun,
   seedRecords,
   materializeAllNativeTypes,
   ensureObjectTypeStorage,
 } from "./record-api.js";
+
+export {
+  OperationRunWorker,
+  claimOperationRun,
+  ensureOperationRunTables,
+  type OperationRunRow,
+} from "./operation-run-worker.js";
 
 export {
   genericObjectTypeToolDefs,
@@ -58,4 +66,7 @@ export {
   applyPluginObjectTypeSeeds,
 } from "./plugin-object-types.js";
 
-export { registerCoreObjectTypes } from "./core-object-types.js";
+export {
+  assertCoreObjectTypeBootstrapComplete,
+  registerCoreObjectTypes,
+} from "./core-object-types.js";

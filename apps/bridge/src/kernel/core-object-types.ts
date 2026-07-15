@@ -1,5 +1,10 @@
 import type { ObjectTypeDef } from "@godmode/kernel";
-import { registerRecordAdapter } from "./adapter-registry.js";
+import {
+  getRecordAdapter,
+  hasRecordAdapter,
+  registerRecordAdapter,
+  type RecordAdapter,
+} from "./adapter-registry.js";
 import { createSqlReadAdapter } from "./adapters/sql-read.js";
 import {
   agentServiceAdapter,
@@ -9,6 +14,7 @@ import {
   scheduleServiceAdapter,
   wikiPageServiceAdapter,
   wikiRevisionServiceAdapter,
+  workflowCommentServiceAdapter,
   workflowServiceAdapter,
   workflowRunServiceAdapter,
 } from "./adapters/core-services.js";
@@ -28,6 +34,8 @@ import {
   wikiProposalServiceAdapter,
 } from "./adapters/content.js";
 import { platformActionAdapters } from "./adapters/platform-actions.js";
+import { identityAdminAdapters } from "./adapters/identity-admin.js";
+import { platformConfigAdapters } from "./adapters/platform-config.js";
 import { AUTOMATION_SPECS } from "./domains/automation.js";
 import { COLLABORATION_SPECS } from "./domains/collaboration.js";
 import { CONNECTIVITY_SUPPORT_SPECS } from "./domains/connectivity-support.js";
@@ -45,7 +53,8 @@ import {
   type BuiltinSpec,
 } from "./domains/shared.js";
 import { runtimeAdapters } from "./adapters/runtime.js";
-import { registerObjectType } from "./registry.js";
+import { structureNodeAdapter } from "./adapters/structure-node.js";
+import { listObjectTypes, registerObjectType } from "./registry.js";
 
 const DOMAIN_SPECS: BuiltinSpec[] = [
   ...PLATFORM_SPECS,
@@ -60,10 +69,11 @@ const DOMAIN_SPECS: BuiltinSpec[] = [
   ...RUNTIME_SPECS,
 ];
 
-const SPEC_REGISTRATION_ORDER = [
+export const CORE_OBJECT_TYPE_NAMES = [
   "Notification",
   "Artifact",
   "WorkflowRun",
+  "WorkflowComment",
   "HookRun",
   "PlatformEvent",
   "ActionLog",
@@ -92,8 +102,12 @@ const SPEC_REGISTRATION_ORDER = [
   "Hook",
   "User",
   "UserProfile",
+  "UserCredential",
   "Tenant",
   "TenantMembership",
+  "TenantProvisioningRun",
+  "PlatformBillingConfig",
+  "TenantOnboardingConfig",
   "ShareGrant",
   "MarketplaceListing",
   "MarketplaceEntitlement",
@@ -106,18 +120,40 @@ const SPEC_REGISTRATION_ORDER = [
   "SupportMessage",
   "DirectConversation",
   "DirectMessage",
+  "DmBlob",
+  "FederatedShareInvite",
+  "PlatformGroup",
+  "PlatformGroupMember",
   "ChatSession",
   "ChatMessage",
+  "ModelAdapter",
+  "EmbeddingRuntime",
+  "CapabilityIndex",
+  "IntelligenceSettings",
+  "PromptFlow",
+  "VaultSecret",
+  "ProviderCredential",
   "ModelRuntime",
   "PromptQueueJob",
   "Dataset",
+  "MemoryMaintenance",
+  "AutonomousRuntime",
   "TrainingJob",
   "InferenceRuntime",
   "IntegrationRuntime",
 ] as const;
 
 const SPECS_BY_NAME = new Map(DOMAIN_SPECS.map((spec) => [spec.name, spec]));
-const SPECS = SPEC_REGISTRATION_ORDER.map((name) => {
+if (
+  SPECS_BY_NAME.size !== DOMAIN_SPECS.length ||
+  SPECS_BY_NAME.size !== CORE_OBJECT_TYPE_NAMES.length ||
+  CORE_OBJECT_TYPE_NAMES.some((name) => !SPECS_BY_NAME.has(name))
+) {
+  throw new Error(
+    "Core ObjectType declaration set does not exactly match the production registration set"
+  );
+}
+const SPECS = CORE_OBJECT_TYPE_NAMES.map((name) => {
   const spec = SPECS_BY_NAME.get(name);
   if (!spec) throw new Error(`Missing core object type spec: ${name}`);
   return spec;
@@ -130,6 +166,7 @@ const SERVICE_ADAPTERS = new Map(
     agentServiceAdapter,
     assignmentServiceAdapter,
     workflowServiceAdapter,
+    workflowCommentServiceAdapter,
     workflowRunServiceAdapter,
     scheduleServiceAdapter,
     hookServiceAdapter,
@@ -147,13 +184,86 @@ const SERVICE_ADAPTERS = new Map(
     ruleServiceAdapter,
     skillServiceAdapter,
     wikiProposalServiceAdapter,
+    ...identityAdminAdapters,
+    ...platformConfigAdapters,
     ...platformActionAdapters,
     ...runtimeAdapters,
   ].map((adapter) => [adapter.id, adapter])
 );
 
+const RECORD_OPERATIONS = [
+  "list",
+  "get",
+  "create",
+  "update",
+  "delete",
+] as const;
+
+function assertAdapterParity(def: ObjectTypeDef, adapter: RecordAdapter): void {
+  const declaredOperations = [...(def.operations ?? [])].sort();
+  const implementedOperations = RECORD_OPERATIONS.filter(
+    (operation) => typeof adapter[operation] === "function"
+  ).sort();
+  if (
+    declaredOperations.length !== implementedOperations.length ||
+    declaredOperations.some(
+      (operation, index) => operation !== implementedOperations[index]
+    )
+  ) {
+    throw new Error(
+      `ObjectType ${def.name} operation parity mismatch for adapter ${adapter.id}: declared [${declaredOperations.join(", ")}], implemented [${implementedOperations.join(", ")}]`
+    );
+  }
+  const declaredActions = (def.actions ?? [])
+    .map((action) => action.name)
+    .sort();
+  const implementedActions = Object.keys(adapter.actions ?? {}).sort();
+  if (
+    declaredActions.length !== implementedActions.length ||
+    declaredActions.some(
+      (action, index) => action !== implementedActions[index]
+    )
+  ) {
+    throw new Error(
+      `ObjectType ${def.name} action parity mismatch for adapter ${adapter.id}: declared [${declaredActions.join(", ")}], implemented [${implementedActions.join(", ")}]`
+    );
+  }
+}
+
+export function assertCoreObjectTypeBootstrapComplete(): void {
+  const definitions = listObjectTypes().filter((def) => !def.pluginId);
+  const expectedNames = ["StructureNode", ...CORE_OBJECT_TYPE_NAMES].sort();
+  const actualNames = definitions.map((def) => def.name).sort();
+  if (
+    expectedNames.length !== actualNames.length ||
+    expectedNames.some((name, index) => name !== actualNames[index])
+  ) {
+    throw new Error(
+      `Core ObjectType bootstrap mismatch: expected [${expectedNames.join(", ")}], registered [${actualNames.join(", ")}]`
+    );
+  }
+  for (const def of definitions) {
+    if (def.storage.kind !== "adapter") {
+      throw new Error(`Core ObjectType ${def.name} is not adapter-backed`);
+    }
+    const adapter = getRecordAdapter(def.storage.adapterId);
+    if (!adapter) {
+      throw new Error(
+        `Core ObjectType ${def.name} has no registered adapter ${def.storage.adapterId}`
+      );
+    }
+    assertAdapterParity(def, adapter);
+  }
+}
+
 export function registerCoreObjectTypes(): void {
-  if (registered) return;
+  if (registered) {
+    assertCoreObjectTypeBootstrapComplete();
+    return;
+  }
+  if (!hasRecordAdapter(structureNodeAdapter.id)) {
+    registerRecordAdapter(structureNodeAdapter);
+  }
   for (const spec of SPECS) {
     let objectFields = buildFields(
       spec.fields,
@@ -223,22 +333,10 @@ export function registerCoreObjectTypes(): void {
     };
     const adapter =
       SERVICE_ADAPTERS.get(spec.id) ?? createSqlReadAdapter(spec);
-    for (const operation of def.operations ?? []) {
-      if (typeof adapter[operation] !== "function") {
-        throw new Error(
-          `ObjectType ${def.name} declares ${operation} but adapter ${adapter.id} does not implement it`
-        );
-      }
-    }
-    for (const action of def.actions ?? []) {
-      if (typeof adapter.actions?.[action.name] !== "function") {
-        throw new Error(
-          `ObjectType ${def.name} declares action ${action.name} but adapter ${adapter.id} does not implement it`
-        );
-      }
-    }
+    assertAdapterParity(def, adapter);
     registerRecordAdapter(adapter);
     registerObjectType(def);
   }
   registered = true;
+  assertCoreObjectTypeBootstrapComplete();
 }

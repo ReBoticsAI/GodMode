@@ -11,6 +11,8 @@ import {
   updateNode,
 } from "../../services/structure.js";
 import type { RecordAdapter } from "../adapter-registry.js";
+import { writeStructureGraphLayout } from "../../services/structure-graph-service.js";
+import type { StructureGraphLayout } from "@godmode/flow-core";
 
 function nodeToRecord(n: {
   id: string;
@@ -229,6 +231,11 @@ export const structureNodeAdapter: RecordAdapter = {
         kind: "node",
         parentId,
       });
+      return { ok: true };
+    },
+    save_layout(db, _def, _id, input, ctx) {
+      writeStructureGraphLayout(db, input.layout as unknown as StructureGraphLayout);
+      ctx.bus?.emit("structure.layout.updated", {});
       return { ok: true };
     },
   },

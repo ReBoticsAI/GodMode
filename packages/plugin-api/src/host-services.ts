@@ -52,6 +52,18 @@ export interface PluginHostServices {
   createPluginRouter(): IRouter;
   getTimeseriesStore(): {
     analyticsQuery(sql: string): Promise<unknown[]>;
+    append(
+      dataset:
+        | "ticks"
+        | "quotes"
+        | "depth"
+        | "footprint"
+        | "bars"
+        | "pm_book"
+        | "pm_price",
+      symbol: string,
+      row: Record<string, string | number | boolean | null>
+    ): void;
   };
   bootstrapTradingDepartment(db: TenantDb): void;
   bridgeFetch(path: string, init?: RequestInit): Promise<Response>;

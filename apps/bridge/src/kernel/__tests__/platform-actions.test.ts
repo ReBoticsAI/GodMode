@@ -6,6 +6,7 @@ import {
   bridgeConnectionAdapter,
   catalogSourceAdapter,
   financeConnectionAdapter,
+  marketplaceListingAdapter,
   peerConnectionAdapter,
   platformActionAdapterRegistrations,
 } from "../adapters/platform-actions.js";
@@ -50,26 +51,117 @@ function context(
 
 describe("platform action adapters", () => {
   it("reports stable registration IDs and named actions", () => {
-    expect(platformActionAdapterRegistrations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          adapterId: "share_grant_read",
-          actions: expect.arrayContaining(["grant", "revoke"]),
-        }),
-        expect.objectContaining({
-          adapterId: "dm_message_read",
-          actions: ["send"],
-        }),
-        expect.objectContaining({
-          adapterId: "marketplace_listing_read",
-          actions: expect.arrayContaining(["acquire_live", "publish", "archive"]),
-        }),
-        expect.objectContaining({
-          adapterId: "finance_connection_service",
-          actions: expect.arrayContaining(["add_manual", "connect_external"]),
-        }),
-      ])
-    );
+    expect(platformActionAdapterRegistrations).toEqual([
+      {
+        objectType: "ShareGrant",
+        adapterId: "share_grant_read",
+        actions: ["grant", "revoke", "share_model", "clone_shared"],
+      },
+      {
+        objectType: "FederatedShareInvite",
+        adapterId: "federated_share_invite_service",
+        actions: ["accept"],
+      },
+      {
+        objectType: "DirectConversation",
+        adapterId: "dm_conversation_read",
+        actions: ["start", "mark_read", "add_member", "remove_member", "share"],
+      },
+      {
+        objectType: "DirectMessage",
+        adapterId: "dm_message_read",
+        actions: ["send"],
+      },
+      {
+        objectType: "DmBlob",
+        adapterId: "dm_blob_service",
+        actions: ["upload"],
+      },
+      {
+        objectType: "SupportTicket",
+        adapterId: "support_ticket_read",
+        actions: ["open", "reply", "set_status"],
+      },
+      {
+        objectType: "SupportMessage",
+        adapterId: "support_message_read",
+        actions: ["reply"],
+      },
+      {
+        objectType: "CatalogSource",
+        adapterId: "catalog_source_read",
+        actions: ["add", "remove", "fetch_external"],
+      },
+      {
+        objectType: "CatalogInstall",
+        adapterId: "catalog_install_read",
+        actions: [
+          "activate_plugin_path",
+          "install_entry",
+          "install_plugin",
+          "register_local_plugin",
+          "unregister_local_plugin",
+          "uninstall_plugin",
+          "load_runtime",
+          "reconcile_runtime",
+        ],
+      },
+      {
+        objectType: "MarketplaceListing",
+        adapterId: "marketplace_listing_read",
+        actions: [
+          "acquire",
+          "acquire_live",
+          "publish",
+          "archive",
+          "export_portable",
+          "import_portable",
+        ],
+      },
+      {
+        objectType: "MarketplaceEntitlement",
+        adapterId: "marketplace_entitlement_read",
+        actions: ["cancel"],
+      },
+      {
+        objectType: "BridgeConnection",
+        adapterId: "bridge_connection_read",
+        actions: ["register", "touch", "probe_remote"],
+      },
+      {
+        objectType: "PeerConnection",
+        adapterId: "peer_connection_read",
+        actions: ["enable_tailscale", "invite", "accept", "refresh_health"],
+      },
+      {
+        objectType: "InferenceEndpoint",
+        adapterId: "inference_endpoint_read",
+        actions: ["publish", "run_remote"],
+      },
+      {
+        objectType: "FinanceConnection",
+        adapterId: "finance_connection_service",
+        actions: [
+          "configure_moralis",
+          "configure_paypal",
+          "preview_crypto",
+          "add_manual",
+          "disconnect",
+          "connect_external",
+          "refresh_external",
+        ],
+      },
+      {
+        objectType: "PlatformGroup",
+        adapterId: "platform_group_service",
+        actions: [],
+      },
+      {
+        objectType: "PlatformGroupMember",
+        adapterId: "platform_group_member_service",
+        actions: ["add", "remove"],
+      },
+    ]);
   });
 
   it("scopes catalog sources to the authenticated user", () => {
@@ -141,7 +233,59 @@ describe("platform action adapters", () => {
     expect(bridgeConnectionAdapter.get!(db, def, connection.id, ctxA)).not.toBeNull();
   });
 
-  it("keeps peer network operations explicit and disabled", () => {
+  it("publishes and archives tenant-owned live listings", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE marketplace_listings (
+        id TEXT PRIMARY KEY, seller_user_id TEXT NOT NULL, seller_tenant_id TEXT NOT NULL,
+        kind TEXT NOT NULL, resource_id TEXT NOT NULL, title TEXT NOT NULL,
+        description TEXT, price_credits INTEGER NOT NULL, bundle_json TEXT NOT NULL,
+        visibility TEXT NOT NULL, status TEXT NOT NULL, delivery_mode TEXT,
+        pricing_model TEXT, price_period TEXT, meter_unit TEXT, meter_rate REAL,
+        license TEXT, inference_endpoint_id TEXT, created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    const def = definition("MarketplaceListing", [
+      "id",
+      "seller_user_id",
+      "seller_tenant_id",
+      "kind",
+      "resource_id",
+      "title",
+      "delivery_mode",
+      "status",
+    ]);
+    const ctx = context(db);
+    const listing = marketplaceListingAdapter.actions!.publish(
+      db,
+      def,
+      "",
+      {
+        kind: "agent",
+        resource_id: "agent-live",
+        title: "Live Agent",
+        delivery_mode: "live",
+      },
+      ctx
+    ) as { id: string; data: Record<string, unknown> };
+
+    expect(listing.data).toMatchObject({
+      seller_user_id: "user-a",
+      seller_tenant_id: "tenant-a",
+      status: "active",
+    });
+    const archived = marketplaceListingAdapter.actions!.archive(
+      db,
+      def,
+      listing.id,
+      {},
+      ctx
+    ) as { data: Record<string, unknown> };
+    expect(archived.data.status).toBe("archived");
+  });
+
+  it("validates peer invitation input instead of returning 501", () => {
     const db = new Database(":memory:");
     expect(() =>
       peerConnectionAdapter.actions!.invite(
@@ -151,10 +295,10 @@ describe("platform action adapters", () => {
         {},
         context(db)
       )
-    ).toThrow(/not available through the kernel/i);
+    ).toThrow(/email required/i);
   });
 
-  it("supports only local manual finance connection operations", () => {
+  it("supports manual finance and validates external provider input", async () => {
     const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE holdings_connections (
@@ -214,8 +358,8 @@ describe("platform action adapters", () => {
       balance: 25,
       balance_cad: 25,
     });
-    expect(() =>
+    await expect(
       financeConnectionAdapter.actions!.connect_external(db, def, "", {}, ctx)
-    ).toThrow(/not available through the kernel/i);
+    ).rejects.toThrow(/provider required/i);
   });
 });

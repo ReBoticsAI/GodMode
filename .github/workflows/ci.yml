@@ -18,6 +18,7 @@ jobs:
       - run: npm run build:packages
       - run: npm run typecheck
       - run: npm run audit:kernel
+      - run: npm run test:audit
       - run: npm test
       - run: npm run build -w @godmode/bridge
       - run: npm run build -w @godmode/web

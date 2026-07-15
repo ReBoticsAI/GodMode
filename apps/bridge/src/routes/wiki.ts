@@ -74,31 +74,6 @@ export function createWikiRouter(embeddings?: EmbeddingManager): Router {
     });
   });
 
-  router.post("/proposals/:id/approve", (req, res) => {
-    const scope = resolveScope(req.user!.id);
-    const result = approveWikiProposal(paramId(req.params.id), {
-      authorUserId: req.user!.id,
-      scope,
-      embedder: embeddings?.isEmbedderReady()
-        ? embeddings.getEmbeddingClient()
-        : null,
-    });
-    if (!result.ok) {
-      res.status(400).json({ error: result.error ?? "Approve failed" });
-      return;
-    }
-    res.json(result);
-  });
-
-  router.post("/proposals/:id/reject", (req, res) => {
-    const ok = rejectWikiProposal(paramId(req.params.id));
-    if (!ok) {
-      res.status(404).json({ error: "Proposal not found or not pending" });
-      return;
-    }
-    res.json({ ok: true });
-  });
-
   router.get("/pages", (req, res) => {
     const scope = resolveScope(req.user!.id);
     const visibility = req.query.visibility as WikiVisibility | undefined;
@@ -124,71 +99,6 @@ export function createWikiRouter(embeddings?: EmbeddingManager): Router {
       const page = getPageBySlug(slug, scope);
       const backlinks = getBacklinksForPage(page.id, scope);
       res.json({ page, backlinks });
-    } catch (err) {
-      if (err instanceof WikiError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.post("/pages", (req, res) => {
-    const userId = req.user!.id;
-    const tenantId = getUserOwnerTenantId(userId);
-    const b = req.body ?? {};
-    try {
-      const page = createPage({
-        tenantId,
-        authorUserId: userId,
-        title: String(b.title ?? ""),
-        bodyMarkdown: typeof b.bodyMarkdown === "string" ? b.bodyMarkdown : "",
-        space: b.space ?? null,
-        visibility: b.visibility === "external" ? "external" : "internal",
-        slug: typeof b.slug === "string" ? b.slug : undefined,
-      });
-      res.status(201).json({ page });
-    } catch (err) {
-      if (err instanceof WikiError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.patch("/pages/:id", (req, res) => {
-    const scope = resolveScope(req.user!.id);
-    const b = req.body ?? {};
-    try {
-      const page = updatePage(
-        paramId(req.params.id),
-        {
-          title: b.title,
-          bodyMarkdown: b.bodyMarkdown,
-          space: b.space,
-          visibility:
-            b.visibility === "internal" || b.visibility === "external"
-              ? b.visibility
-              : undefined,
-        },
-        scope
-      );
-      res.json({ page });
-    } catch (err) {
-      if (err instanceof WikiError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.delete("/pages/:id", (req, res) => {
-    const scope = resolveScope(req.user!.id);
-    try {
-      deletePage(paramId(req.params.id), scope);
-      res.json({ ok: true });
     } catch (err) {
       if (err instanceof WikiError) {
         res.status(err.status).json({ error: err.message });

@@ -130,7 +130,6 @@ import {
   listInstalledPlugins,
   installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
-import { activatePluginForTenant } from "../plugins/activate-plugin.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
 import { indexMemory, removeMemoryFromIndex } from "./embeddings/memory-embeddings.js";
@@ -214,6 +213,553 @@ function kernelOperationContext(ctx: ToolExecContext): OperationContext {
   };
 }
 
+type KernelToolDispatcher = typeof executeKernelTool;
+let kernelToolDispatcher: KernelToolDispatcher = executeKernelTool;
+
+/** Test seam used to prove static mutation aliases cannot bypass the kernel. */
+export function setKernelToolDispatcherForTests(
+  dispatcher?: KernelToolDispatcher
+): void {
+  kernelToolDispatcher = dispatcher ?? executeKernelTool;
+}
+
+function dispatchKernelTool(
+  ctx: ToolExecContext,
+  name: string,
+  args: Record<string, unknown>,
+  db: AppDatabase = ctx.db
+): unknown | Promise<unknown> | undefined {
+  return kernelToolDispatcher(
+    db,
+    name,
+    args,
+    kernelOperationContext(ctx)
+  );
+}
+
+type StaticKernelAliasResult =
+  | { handled: false }
+  | { handled: true; result: unknown };
+
+function value(args: Record<string, unknown>, ...names: string[]): unknown {
+  for (const name of names) {
+    if (args[name] !== undefined) return args[name];
+  }
+  return undefined;
+}
+
+function dispatchedRecordId(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const id = (result as { id?: unknown }).id;
+  return id == null ? undefined : String(id);
+}
+
+/**
+ * Temporary semantic aliases used by persisted prompts/workflows. Every alias
+ * translates to canonical Record CRUD/action dispatch; none may write a
+ * database or call a domain service directly.
+ */
+async function executeStaticKernelAlias(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolExecContext
+): Promise<StaticKernelAliasResult> {
+  const create = (objectType: string, data: Record<string, unknown>) =>
+    dispatchKernelTool(ctx, "create_record", { objectType, data });
+  const update = (
+    objectType: string,
+    id: unknown,
+    data: Record<string, unknown>
+  ) => dispatchKernelTool(ctx, "update_record", { objectType, id, data });
+  const action = (
+    objectType: string,
+    id: unknown,
+    actionName: string,
+    input: Record<string, unknown>
+  ) =>
+    dispatchKernelTool(ctx, "run_record_action", {
+      objectType,
+      id: id ?? "",
+      action: actionName,
+      input,
+    });
+
+  switch (name) {
+    case "remember": {
+      const data = {
+        text: value(args, "text"),
+        category: value(args, "category"),
+        scope: ctx.chatId ? "chat" : "global",
+        chat_id: ctx.chatId ?? null,
+        source: "model",
+      };
+      const created = await create("Memory", data);
+      let contributed = false;
+      if (ctx.contributeDb && ctx.contributeDb !== ctx.db) {
+        await dispatchKernelTool(
+          ctx,
+          "create_record",
+          {
+            objectType: "Memory",
+            data: { ...data, scope: "global", chat_id: null },
+          },
+          ctx.contributeDb
+        );
+        contributed = true;
+      }
+      return {
+        handled: true,
+        result:
+          created && typeof created === "object"
+            ? { ...created, contributed }
+            : { result: created, contributed },
+      };
+    }
+    case "save_artifact":
+      return {
+        handled: true,
+        result: await create("Artifact", {
+          name: value(args, "name"),
+          content: value(args, "content"),
+          kind: value(args, "kind"),
+          mime_type: value(args, "mimeType", "mime_type"),
+          description: value(args, "description"),
+          source: "agent",
+        }),
+      };
+    case "create_project_card": {
+      const created = await create("TaskCard", {
+        title: value(args, "title"),
+        description: value(args, "description"),
+        prompt: value(args, "prompt"),
+        priority: value(args, "priority"),
+        tags_json: value(args, "tags", "tags_json"),
+        assigned_agent_id:
+          value(args, "assignedAgentId", "assigned_agent_id") ??
+          ctx.activeAgentId,
+      });
+      const id = dispatchedRecordId(created);
+      const columnId = value(args, "columnId", "column_id");
+      const result =
+        id && columnId !== undefined
+          ? await action("TaskCard", id, "move", { column_id: columnId })
+          : created;
+      return {
+        handled: true,
+        result,
+      };
+    }
+    case "move_project_card":
+      return {
+        handled: true,
+        result: await action(
+          "TaskCard",
+          value(args, "cardId", "id"),
+          "move",
+          {
+            column_id: value(args, "columnId", "column_id"),
+            ...(value(args, "sortOrder", "sort_order") !== undefined
+              ? { sort_order: value(args, "sortOrder", "sort_order") }
+              : {}),
+          }
+        ),
+      };
+    case "set_card_priority":
+      return {
+        handled: true,
+        result: await update("TaskCard", value(args, "cardId", "id"), {
+          priority: value(args, "priority"),
+        }),
+      };
+    case "create_subtask": {
+      const parentId = value(args, "parentCardId", "parent_card_id");
+      const parent = (await dispatchKernelTool(ctx, "get_record", {
+        objectType: "TaskCard",
+        id: parentId,
+      })) as { data?: Record<string, unknown> } | null | undefined;
+      const created = await create("TaskCard", {
+        title: value(args, "title"),
+        description: value(args, "description"),
+        prompt: value(args, "prompt"),
+        parent_card_id: parentId,
+        priority: parent?.data?.priority ?? 2,
+        status: "working",
+      });
+      const id = dispatchedRecordId(created);
+      const result = id
+        ? await action("TaskCard", id, "move", {
+            column_id:
+              value(args, "columnId", "column_id") ?? "in_progress",
+          })
+        : created;
+      return {
+        handled: true,
+        result,
+      };
+    }
+    case "comment_card":
+    case "add_card_comment":
+      return {
+        handled: true,
+        result: await action(
+          "TaskCard",
+          value(
+            args,
+            "cardId",
+            "id",
+            "card_id",
+            "cardID",
+            "subtaskId",
+            "subtask_id",
+            "card"
+          ),
+          "add_comment",
+          {
+            body: value(args, "body", "comment", "note", "text", "message", "content"),
+            ...(value(args, "kind") !== undefined
+              ? { kind: value(args, "kind") }
+              : {}),
+          }
+        ),
+      };
+    case "create_user_calendar_event":
+      return {
+        handled: true,
+        result: await create("CalendarEvent", {
+          title: value(args, "title"),
+          start_at: value(args, "start_at"),
+          end_at: value(args, "end_at"),
+          kind: value(args, "kind"),
+          description: value(args, "description"),
+          location: value(args, "location"),
+          all_day: value(args, "all_day"),
+        }),
+      };
+    case "create_user_task": {
+      const created = await create("TaskCard", {
+        title: value(args, "title"),
+        description: value(args, "description"),
+        due_at: value(args, "dueAt", "due_at"),
+        priority: value(args, "priority"),
+      });
+      const id = dispatchedRecordId(created);
+      const columnId = value(args, "columnId", "column_id");
+      const result =
+        id && columnId !== undefined
+          ? await action("TaskCard", id, "move", { column_id: columnId })
+          : created;
+      return {
+        handled: true,
+        result,
+      };
+    }
+    case "assign_agent":
+      return {
+        handled: true,
+        result: await action(
+          "Agent",
+          value(args, "agentId", "id"),
+          "assign",
+          {
+            scope_type: value(args, "scopeType", "scope_type"),
+            scope_id: value(args, "scopeId", "scope_id"),
+            role: value(args, "role") ?? "viewer",
+          }
+        ),
+      };
+    case "set_agent_role": {
+      const scopeId = value(args, "scopeId", "scope_id");
+      return {
+        handled: true,
+        result: await update("AgentAssignment", scopeId, {
+          role: value(args, "role"),
+        }),
+      };
+    }
+    case "update_card": {
+      const id = value(args, "cardId", "id");
+      let result: unknown = { ok: true, unchanged: true };
+      const columnId = value(args, "columnId", "column_id");
+      if (columnId !== undefined) {
+        result = await action("TaskCard", id, "move", {
+          column_id: columnId,
+        });
+      }
+      const data: Record<string, unknown> = {};
+      for (const [source, target] of [
+        ["title", "title"],
+        ["description", "description"],
+        ["priority", "priority"],
+        ["assignedAgentId", "assigned_agent_id"],
+      ] as const) {
+        if (args[source] !== undefined) data[target] = args[source];
+      }
+      if (args.status !== undefined) {
+        result = await action("TaskCard", id, "transition", {
+          status: args.status,
+        });
+      }
+      if (Object.keys(data).length) result = await update("TaskCard", id, data);
+      return { handled: true, result };
+    }
+    case "todo_write": {
+      const todos = normalizeTodoItems(args);
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const scope = ctx.chatId ?? `agent-${agentId}`;
+      const cards: Array<{ id: string; status: string; parentId?: string }> = [];
+      const keepIds = new Set<string>();
+      const keyOf = (todo: NormalizedTodo): string =>
+        todo.id?.trim() ||
+        todo.content
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .slice(0, 48);
+      const lane = (
+        status: NormalizedTodo["status"]
+      ): { columnId: string; cardStatus: string } => {
+        if (status === "in_progress") {
+          return { columnId: "in_progress", cardStatus: "working" };
+        }
+        if (status === "completed") {
+          return { columnId: "done", cardStatus: "accepted" };
+        }
+        if (status === "cancelled") {
+          return { columnId: "done", cardStatus: "cancelled" };
+        }
+        return { columnId: "backlog", cardStatus: "pending" };
+      };
+      const writeTodo = async (
+        todo: NormalizedTodo,
+        index: number,
+        parentId: string | null
+      ): Promise<void> => {
+        const id = parentId
+          ? `${parentId}__${keyOf(todo)}`
+          : `todo_${scope}_${keyOf(todo)}`;
+        const { columnId, cardStatus } = lane(todo.status);
+        const existing = await dispatchKernelTool(ctx, "get_record", {
+          objectType: "TaskCard",
+          id,
+        });
+        const data = {
+          title: todo.content,
+          status: cardStatus,
+          priority: todo.priority ?? 2,
+          parent_card_id: parentId,
+          linked_chat_id: ctx.chatId ?? null,
+          assigned_agent_id: agentId,
+        };
+        if (existing) {
+          await update("TaskCard", id, data);
+        } else {
+          await create("TaskCard", { id, ...data });
+        }
+        await action("TaskCard", id, "move", {
+          column_id: columnId,
+          sort_order: index,
+        });
+        keepIds.add(id);
+        cards.push({
+          id,
+          status: todo.status,
+          ...(parentId ? { parentId } : {}),
+        });
+        for (const [childIndex, child] of (todo.subtasks ?? []).entries()) {
+          await writeTodo(child, childIndex, id);
+        }
+        if (!parentId && todo.subtasks?.length && todo.auto !== false) {
+          await update("TaskCard", id, {
+            tags_json: ["auto"],
+            context_json: {
+              __auto: {
+                autoTicks: 0,
+                doneSeen: 0,
+                noProgressTicks: 0,
+                maxTaskTicks:
+                  todo.maxTaskTicks ??
+                  (Number.isFinite(Number(args.maxTaskTicks))
+                    ? Number(args.maxTaskTicks)
+                    : 200),
+              },
+            },
+          });
+        }
+      };
+      for (const [index, todo] of todos.entries()) {
+        await writeTodo(todo, index, null);
+      }
+      if (args.merge !== true) {
+        const listed = (await dispatchKernelTool(ctx, "list_records", {
+          objectType: "TaskCard",
+          limit: 500,
+        })) as
+          | { records?: Array<{ id: string; data?: Record<string, unknown> }> }
+          | undefined;
+        for (const row of listed?.records ?? []) {
+          if (
+            row.id.startsWith(`todo_${scope}_`) &&
+            !keepIds.has(row.id) &&
+            row.data?.status !== "cancelled"
+          ) {
+            await action("TaskCard", row.id, "transition", {
+              status: "cancelled",
+            });
+          }
+        }
+      }
+      return {
+        handled: true,
+        result: { ok: true, count: cards.length, cards },
+      };
+    }
+    case "mark_notification_read": {
+      if (args.markAll === true) {
+        return {
+          handled: true,
+          result: await action("Notification", "", "mark_all_read", {}),
+        };
+      }
+      const results = [];
+      for (const id of Array.isArray(args.ids) ? args.ids : []) {
+        results.push(await action("Notification", id, "mark_read", {}));
+      }
+      return { handled: true, result: { marked: results.length, results } };
+    }
+    case "revoke_share_grant":
+      return {
+        handled: true,
+        result: await action(
+          "ShareGrant",
+          value(args, "grantId", "id"),
+          "revoke",
+          {}
+        ),
+      };
+    case "share_model": {
+      const granteeUserId = resolveGranteeUserId(getCoreDb(), args);
+      if (!granteeUserId) {
+        throw new Error("granteeUserId or granteeEmail required");
+      }
+      const modelPath = String(value(args, "modelPath", "base_model_path") ?? "");
+      const endpoint = (await create("InferenceEndpoint", {
+        name:
+          value(args, "name") ??
+          modelPath.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "") ??
+          "Shared model",
+        base_model_path: modelPath,
+      })) as { id?: string } | undefined;
+      if (!endpoint?.id) throw new Error("Inference endpoint creation failed");
+      return {
+        handled: true,
+        result: await action("ShareGrant", "", "grant", {
+          resource_kind: "model",
+          resource_id: endpoint.id,
+          grantee_user_id: granteeUserId,
+          role: "viewer",
+        }),
+      };
+    }
+    case "run_workflow": {
+      const workflowId = value(args, "workflowId", "id");
+      const triggerInput =
+        typeof args.input === "string"
+          ? args.input
+          : args.input == null
+            ? undefined
+            : JSON.stringify(args.input);
+      return {
+        handled: true,
+        result: await action("Workflow", workflowId, "run", {
+          ...(triggerInput !== undefined
+            ? { trigger_input: triggerInput }
+            : {}),
+          ...(ctx.activeTaskCardId ? { card_id: ctx.activeTaskCardId } : {}),
+        }),
+      };
+    }
+    case "reply_support_ticket":
+      return {
+        handled: true,
+        result: await action(
+          "SupportTicket",
+          value(args, "ticketId", "id"),
+          "reply",
+          { body: value(args, "body") }
+        ),
+      };
+    case "update_support_ticket":
+      return {
+        handled: true,
+        result: await action(
+          "SupportTicket",
+          value(args, "ticketId", "id"),
+          "set_status",
+          { status: value(args, "status") }
+        ),
+      };
+    case "send_message":
+      return {
+        handled: true,
+        result: await action("DirectMessage", "", "send", {
+          conversation_id: value(args, "conversationId", "conversation_id"),
+          body_text: value(args, "body", "body_text"),
+        }),
+      };
+    case "create_conversation":
+      return {
+        handled: true,
+        result: await action("DirectConversation", "", "start", {
+          kind: args.kind === "group" ? "group" : "direct",
+          title: value(args, "title"),
+          member_user_ids: value(args, "memberUserIds", "member_user_ids"),
+        }),
+      };
+    case "create_holding":
+      return {
+        handled: true,
+        result: await action("FinanceConnection", "", "add_manual", {
+          category: value(args, "category"),
+          provider: value(args, "provider"),
+          label: value(args, "label"),
+          currency: value(args, "currency"),
+          balance: value(args, "balance"),
+        }),
+      };
+    case "refresh_holdings":
+      return {
+        handled: true,
+        result: await action(
+          "FinanceConnection",
+          value(args, "connectionId", "id"),
+          "refresh_external",
+          {}
+        ),
+      };
+    case "create_listing":
+      return {
+        handled: true,
+        result: await action("MarketplaceListing", "", "publish", {
+          kind: value(args, "kind"),
+          resource_id: value(args, "resourceId", "resource_id"),
+          title: value(args, "title"),
+          description: value(args, "description"),
+          price_credits: value(args, "priceCredits", "price_credits"),
+          delivery_mode: value(args, "deliveryMode", "delivery_mode"),
+        }),
+      };
+    case "install_catalog_entry":
+      return {
+        handled: true,
+        result: await action("CatalogInstall", "", "install_entry", {
+          entry_id: value(args, "entryId", "entry_id"),
+          source_catalog: value(args, "sourceCatalog", "source_catalog"),
+        }),
+      };
+    default:
+      return { handled: false };
+  }
+}
+
 function toolMode(name: string): "auto" | "confirm" | null {
   const core = AI_TOOL_REGISTRY.find((t) => t.name === name);
   if (core) return core.mode;
@@ -247,63 +793,6 @@ export interface NormalizedTodo {
   auto?: boolean;
   /** Per-task tick budget for long-running autonomous work. */
   maxTaskTicks?: number;
-}
-
-/** Parent tasks with nested subtasks are autonomous Kanban runs — tag + init ticks. */
-export function bootstrapAutonomousParentCard(
-  db: AppDatabase,
-  cardId: string,
-  opts?: { maxTaskTicks?: number; force?: boolean }
-): void {
-  const row = db
-    .prepare(`SELECT tags_json, context_json FROM ai_project_cards WHERE id = ?`)
-    .get(cardId) as { tags_json: string | null; context_json: string | null } | undefined;
-  if (!row) return;
-
-  let tags: string[] = [];
-  try {
-    tags = row.tags_json ? (JSON.parse(row.tags_json) as string[]) : [];
-  } catch {
-    tags = [];
-  }
-  const hasAuto =
-    tags.includes("auto") ||
-    (row.tags_json != null && row.tags_json.includes("auto"));
-  if (!hasAuto || opts?.force) {
-    if (!tags.includes("auto")) tags.push("auto");
-    db.prepare(
-      `UPDATE ai_project_cards SET tags_json = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(JSON.stringify(tags), cardId);
-  }
-
-  let ctx: Record<string, unknown> = {};
-  try {
-    ctx = row.context_json ? JSON.parse(row.context_json) : {};
-  } catch {
-    ctx = {};
-  }
-  const auto = (ctx.__auto ?? {}) as Record<string, unknown>;
-  const needsMeta =
-    auto.maxTaskTicks == null ||
-    auto.autoTicks == null ||
-    auto.noProgressTicks == null;
-  if (needsMeta || opts?.force) {
-    const budget =
-      opts?.maxTaskTicks != null && opts.maxTaskTicks > 0
-        ? opts.maxTaskTicks
-        : Number(auto.maxTaskTicks) > 0
-          ? Number(auto.maxTaskTicks)
-          : 200;
-    ctx.__auto = {
-      autoTicks: Number(auto.autoTicks ?? 0),
-      doneSeen: Number(auto.doneSeen ?? 0),
-      noProgressTicks: Number(auto.noProgressTicks ?? 0),
-      maxTaskTicks: budget,
-    };
-    db.prepare(
-      `UPDATE ai_project_cards SET context_json = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(JSON.stringify(ctx), cardId);
-  }
 }
 
 /** Map a free-form status / column hint to a canonical todo status. */
@@ -654,37 +1143,21 @@ export async function executeTool(
     const pluginResult = await executePluginTool(name, args, pluginExecCtx(ctx));
     if (pluginResult !== undefined) return pluginResult;
   }
-  switch (name) {
-    case "remember": {
-      const text = String(args.text ?? "").trim();
-      if (!text) throw new Error("text required");
-      const id = uuidv4();
-      const category = args.category ? String(args.category) : null;
-      const agentId = ctx.activeAgentId ?? "intelligence";
-      ctx.db
-        .prepare(
-          `INSERT INTO ai_memories (id, scope, chat_id, agent_id, text, category, source)
-           VALUES (?, ?, ?, ?, ?, ?, 'model')`
-        )
-        .run(id, ctx.chatId ? "chat" : "global", ctx.chatId ?? null, agentId, text, category);
-      indexMemory(ctx.db, ctx.embedder, id, text);
-      // Contribute back to the agent owner's engine DB when enabled. The chat
-      // itself lives in the actor's work DB, so the mirrored copy is stored as a
-      // global (non-chat-scoped) memory the owner's agent can reuse.
-      let contributed = false;
-      if (ctx.contributeDb && ctx.contributeDb !== ctx.db) {
-        const mirrorId = uuidv4();
-        ctx.contributeDb
-          .prepare(
-            `INSERT INTO ai_memories (id, scope, chat_id, agent_id, text, category, source)
-             VALUES (?, 'global', NULL, ?, ?, ?, 'model')`
-          )
-          .run(mirrorId, agentId, text, category);
-        indexMemory(ctx.contributeDb, ctx.embedder, mirrorId, text);
-        contributed = true;
-      }
-      return { ok: true, id, contributed };
+  // Canonical generated tools always dispatch before legacy switch aliases.
+  // This is the static-tool cutover: an identically named old implementation
+  // can no longer shadow kernel CRUD/action dispatch.
+  if (isKernelToolName(name)) {
+    try {
+      const result = await dispatchKernelTool(ctx, name, args);
+      if (result !== undefined) return result;
+    } catch (err) {
+      if (err instanceof KernelError) throw new Error(err.message);
+      throw err;
     }
+  }
+  const staticAlias = await executeStaticKernelAlias(name, args, ctx);
+  if (staticAlias.handled) return staticAlias.result;
+  switch (name) {
     case "use_skill": {
       // The model is inconsistent about the arg name; accept every alias it has
       // emitted (skillId/id/skill/name) so a correct call never dead-ends on a
@@ -838,62 +1311,6 @@ export async function executeTool(
       const ok = deleteArtifact(ctx.db, ctx.activeAgentId ?? "intelligence", id);
       return { ok };
     }
-    case "create_project_card": {
-      const projectId = String(args.projectId ?? "default");
-      const columnId = String(args.columnId ?? "backlog");
-      const title = String(args.title ?? "Untitled");
-      const id = uuidv4();
-      const maxOrder = ctx.db
-        .prepare(
-          `SELECT COALESCE(MAX(sort_order), -1) as m FROM ai_project_cards WHERE column_id = ?`
-        )
-        .get(columnId) as { m: number };
-      // Priority (1=high,2=med,3=low) and tags are optional; tags accept an
-      // array or comma string. Tagging a card "auto" opts it into the
-      // autonomous executor's Task queue.
-      const priority = Number.isFinite(Number(args.priority))
-        ? Number(args.priority)
-        : 2;
-      const tagsJson =
-        args.tags != null
-          ? JSON.stringify(
-              Array.isArray(args.tags)
-                ? args.tags
-                : String(args.tags)
-                    .split(",")
-                    .map((t) => t.trim())
-                    .filter(Boolean)
-            )
-          : null;
-      ctx.db
-        .prepare(
-          `INSERT INTO ai_project_cards (id, project_id, column_id, title, description, priority, tags_json, prompt, assigned_agent_id, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          id,
-          projectId,
-          columnId,
-          title,
-          args.description ? String(args.description) : null,
-          priority,
-          tagsJson,
-          args.prompt ? String(args.prompt) : null,
-          args.assignedAgentId ? String(args.assignedAgentId) : ctx.activeAgentId ?? null,
-          maxOrder.m + 1
-        );
-      return { ok: true, id };
-    }
-    case "move_project_card": {
-      const cardId = String(args.cardId ?? "");
-      const columnId = String(args.columnId ?? "");
-      ctx.db
-        .prepare(
-          `UPDATE ai_project_cards SET column_id = ?, updated_at = datetime('now') WHERE id = ?`
-        )
-        .run(columnId, cardId);
-      return { ok: true };
-    }
     case "list_project_cards": {
       const clauses: string[] = ["1=1"];
       const params: unknown[] = [];
@@ -936,57 +1353,6 @@ export async function executeTool(
       const rows = ctx.db.prepare(sql).all(...params);
       return rows;
     }
-    case "set_card_priority": {
-      const cardId = String(args.cardId ?? "");
-      const priority = Number(args.priority);
-      if (!cardId || !Number.isFinite(priority)) {
-        throw new Error("cardId and numeric priority required");
-      }
-      ctx.db
-        .prepare(
-          `UPDATE ai_project_cards SET priority = ?, updated_at = datetime('now') WHERE id = ?`
-        )
-        .run(priority, cardId);
-      return { ok: true };
-    }
-    case "create_subtask": {
-      const parentCardId = String(args.parentCardId ?? "");
-      if (!parentCardId) throw new Error("parentCardId required");
-      const parent = ctx.db
-        .prepare(
-          `SELECT project_id, column_id, priority FROM ai_project_cards WHERE id = ?`
-        )
-        .get(parentCardId) as
-        | { project_id: string; column_id: string; priority: number }
-        | undefined;
-      if (!parent) throw new Error(`Parent card not found: ${parentCardId}`);
-      const id = uuidv4();
-      const columnId = args.columnId ? String(args.columnId) : "in_progress";
-      const maxOrder = ctx.db
-        .prepare(
-          `SELECT COALESCE(MAX(sort_order), -1) as m FROM ai_project_cards WHERE column_id = ?`
-        )
-        .get(columnId) as { m: number };
-      ctx.db
-        .prepare(
-          `INSERT INTO ai_project_cards
-             (id, project_id, column_id, title, description, prompt, parent_card_id, priority, status, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          id,
-          parent.project_id,
-          columnId,
-          String(args.title ?? "Subtask"),
-          args.description ? String(args.description) : null,
-          args.prompt ? String(args.prompt) : null,
-          parentCardId,
-          parent.priority ?? 2,
-          "working",
-          maxOrder.m + 1
-        );
-      return { ok: true, id };
-    }
     case "list_subtasks": {
       const parentCardId = String(args.parentCardId ?? "");
       if (!parentCardId) throw new Error("parentCardId required");
@@ -1001,62 +1367,6 @@ export async function executeTool(
         (r) => r.column_id === "done" || r.status === "accepted"
       ).length;
       return { subtasks: rows, total, done, open: total - done };
-    }
-    case "comment_card":
-    case "add_card_comment": {
-      const cardId = String(
-        args.cardId ??
-          args.id ??
-          args.card_id ??
-          args.cardID ??
-          args.subtaskId ??
-          args.subtask_id ??
-          args.card ??
-          ""
-      );
-      const body = String(
-        args.body ??
-          args.comment ??
-          args.note ??
-          args.text ??
-          args.message ??
-          args.content ??
-          ""
-      ).trim();
-      if (!cardId) throw new Error("cardId required (the card/subtask id to comment on)");
-      if (!body)
-        throw new Error(
-          "body required — pass the note text in `body` (a non-empty sentence describing what you did/the result). A card id with only a `kind` is not enough."
-        );
-      const author = args.author === "user" ? "user" : "agent";
-      // Audit-log category for the entry (note | action | result | issue).
-      const kind =
-        args.kind != null && String(args.kind).trim()
-          ? String(args.kind).trim()
-          : null;
-      const id = uuidv4();
-      ctx.db
-        .prepare(
-          `INSERT INTO ai_card_comments (id, card_id, author, body, kind) VALUES (?, ?, ?, ?, ?)`
-        )
-        .run(id, cardId, author, body, kind);
-      if (author === "agent" && kind === "result") {
-        advanceSubtaskOnResultComment(ctx.db, cardId, ctx.tenantId);
-      } else if (author === "agent") {
-        const row = ctx.db
-          .prepare(`SELECT parent_card_id FROM ai_project_cards WHERE id = ?`)
-          .get(cardId) as { parent_card_id: string | null } | undefined;
-        if (row?.parent_card_id) {
-          reconcileParentProgress(ctx.db, row.parent_card_id, ctx.tenantId);
-        }
-      }
-      broadcastCardActivity(ctx.tenantId, {
-        cardId,
-        agentId: ctx.activeAgentId ?? null,
-        chatId: ctx.chatId ?? null,
-        reason: "comment",
-      });
-      return { ok: true, id };
     }
     case "list_card_comments": {
       const cardId = String(args.cardId ?? "");
@@ -1094,34 +1404,6 @@ export async function executeTool(
         .all(...params);
       return rows;
     }
-    case "create_user_calendar_event": {
-      const userId = ctx.userId;
-      if (!userId) throw new Error("Authenticated user required");
-      const title = String(args.title ?? "").trim();
-      const startAt = String(args.start_at ?? "").trim();
-      if (!title || !startAt) throw new Error("title and start_at required");
-      const db = getUserOwnerTenantDb(userId);
-      const id = uuidv4();
-      const kind = ["event", "task", "appointment"].includes(String(args.kind))
-        ? String(args.kind)
-        : "event";
-      db.prepare(
-        `INSERT INTO ai_calendar_events
-           (id, agent_id, user_id, kind, title, description, start_at, end_at, all_day, location, status)
-         VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')`
-      ).run(
-        id,
-        userId,
-        kind,
-        title,
-        args.description ? String(args.description) : null,
-        startAt,
-        args.end_at ? String(args.end_at) : null,
-        args.all_day ? 1 : 0,
-        args.location ? String(args.location) : null
-      );
-      return { ok: true, id };
-    }
     case "list_user_tasks": {
       const userId = ctx.userId;
       if (!userId) throw new Error("Authenticated user required");
@@ -1146,72 +1428,6 @@ export async function executeTool(
         )
         .all(...params);
       return rows;
-    }
-    case "create_user_task": {
-      const userId = ctx.userId;
-      if (!userId) throw new Error("Authenticated user required");
-      const title = String(args.title ?? "").trim();
-      if (!title) throw new Error("title required");
-      const db = getUserOwnerTenantDb(userId);
-      const pid = ensureUserProject(userId, db);
-      const columnId = args.columnId ? String(args.columnId) : "backlog";
-      const maxOrder = db
-        .prepare(
-          `SELECT COALESCE(MAX(sort_order), -1) as m FROM ai_project_cards WHERE column_id = ? AND project_id = ?`
-        )
-        .get(columnId, pid) as { m: number };
-      const id = uuidv4();
-      db.prepare(
-        `INSERT INTO ai_project_cards (id, project_id, column_id, title, description, due_at, priority, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        id,
-        pid,
-        columnId,
-        title,
-        args.description ? String(args.description) : null,
-        args.dueAt ? String(args.dueAt) : null,
-        args.priority != null ? Number(args.priority) : 2,
-        maxOrder.m + 1
-      );
-      return { ok: true, id };
-    }
-    case "update_card": {
-      const cardId = String(args.cardId ?? "");
-      if (!cardId) throw new Error("cardId required");
-      const sets: string[] = [];
-      const params: unknown[] = [];
-      if (args.columnId != null) {
-        sets.push("column_id = ?");
-        params.push(String(args.columnId));
-      }
-      if (args.status != null) {
-        sets.push("status = ?");
-        params.push(String(args.status));
-      }
-      if (args.title != null) {
-        sets.push("title = ?");
-        params.push(String(args.title));
-      }
-      if (args.description != null) {
-        sets.push("description = ?");
-        params.push(String(args.description));
-      }
-      if (args.priority != null) {
-        sets.push("priority = ?");
-        params.push(Number(args.priority));
-      }
-      if (args.assignedAgentId != null) {
-        sets.push("assigned_agent_id = ?");
-        params.push(String(args.assignedAgentId));
-      }
-      if (!sets.length) return { ok: true, unchanged: true };
-      sets.push("updated_at = datetime('now')");
-      params.push(cardId);
-      ctx.db
-        .prepare(`UPDATE ai_project_cards SET ${sets.join(", ")} WHERE id = ?`)
-        .run(...params);
-      return { ok: true };
     }
     case "create_skill": {
       const name = String(args.name ?? "").trim();
@@ -1296,112 +1512,6 @@ export async function executeTool(
         delegationDepth: ctx.delegationDepth ?? 0,
       });
       return { agentId, answer };
-    }
-    case "todo_write": {
-      // Todos are the source of truth on the agent's Kanban board: each item is
-      // persisted as a card so progress survives the chat. The chat still
-      // renders a live checklist from this tool's args (the route turns it into
-      // a 'todos' part). Re-running upserts by deterministic id so the same list
-      // updates existing cards instead of duplicating.
-      const todos = normalizeTodoItems(args);
-      const agentId = ctx.activeAgentId ?? "intelligence";
-      const projectId = ensureAgentProject(agentId, ctx.db);
-      const scope = ctx.chatId ?? `agent-${agentId}`;
-      const defaultMaxTaskTicks = Number.isFinite(Number(args.maxTaskTicks))
-        ? Number(args.maxTaskTicks)
-        : undefined;
-      const lane = (status: string): { columnId: string; cardStatus: string } => {
-        switch (status) {
-          case "in_progress":
-            return { columnId: "in_progress", cardStatus: "working" };
-          case "completed":
-            return { columnId: "done", cardStatus: "accepted" };
-          case "cancelled":
-            return { columnId: "done", cardStatus: "cancelled" };
-          default:
-            return { columnId: "backlog", cardStatus: "pending" };
-        }
-      };
-      const upsert = ctx.db.prepare(
-        `INSERT INTO ai_project_cards
-           (id, project_id, column_id, title, status, priority, sort_order,
-            linked_chat_id, assigned_agent_id, parent_card_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           column_id = excluded.column_id,
-           title = excluded.title,
-           status = excluded.status,
-           priority = excluded.priority,
-           sort_order = excluded.sort_order,
-           parent_card_id = excluded.parent_card_id,
-           updated_at = datetime('now')`
-      );
-      const cards: Array<{ id: string; status: string; parentId?: string }> = [];
-      const keepIds: string[] = [];
-      const keyOf = (todo: NormalizedTodo): string =>
-        todo.id != null && String(todo.id).trim()
-          ? String(todo.id).trim()
-          : String(todo.content ?? "")
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .slice(0, 48);
-      const writeCard = (
-        todo: NormalizedTodo,
-        index: number,
-        parentCardId: string | null
-      ): void => {
-        const content = String(todo.content ?? "").trim();
-        if (!content) return;
-        const status = String(todo.status ?? "pending");
-        const base = `todo_${scope}_${keyOf(todo)}`;
-        const cardId = parentCardId ? `${parentCardId}__${keyOf(todo)}` : base;
-        const { columnId, cardStatus } = lane(status);
-        // Subtasks inherit the parent's priority; top-level todos default to med.
-        const priority = Number.isFinite(Number(todo.priority))
-          ? Number(todo.priority)
-          : 2;
-        upsert.run(
-          cardId,
-          projectId,
-          columnId,
-          content,
-          cardStatus,
-          priority,
-          index,
-          ctx.chatId ?? null,
-          agentId,
-          parentCardId
-        );
-        cards.push({ id: cardId, status, ...(parentCardId ? { parentId: parentCardId } : {}) });
-        keepIds.push(cardId);
-        const childTodos = todo.subtasks ?? [];
-        childTodos.forEach((child, childIndex) => writeCard(child, childIndex, cardId));
-        if (!parentCardId && childTodos.length > 0 && todo.auto !== false) {
-          bootstrapAutonomousParentCard(ctx.db, cardId, {
-            maxTaskTicks: todo.maxTaskTicks ?? defaultMaxTaskTicks,
-          });
-        }
-      };
-      todos.forEach((todo, index) => writeCard(todo, index, null));
-      // Full-list semantics: when not merging, retire previously-tracked todo
-      // cards for this scope that dropped out of the latest list.
-      if (args.merge !== true) {
-        const placeholders = keepIds.map(() => "?").join(",");
-        const notIn = keepIds.length ? ` AND id NOT IN (${placeholders})` : "";
-        ctx.db
-          .prepare(
-            `UPDATE ai_project_cards
-             SET column_id = 'done', status = 'cancelled', updated_at = datetime('now')
-             WHERE project_id = ? AND id LIKE ? AND status != 'cancelled'${notIn}`
-          )
-          .run(projectId, `todo_${scope}_%`, ...keepIds);
-      }
-      broadcastCardActivity(ctx.tenantId, {
-        agentId,
-        chatId: ctx.chatId ?? null,
-        reason: "todo_write",
-      });
-      return { ok: true, projectId, count: cards.length, cards };
     }
     case "ask_cursor_agent": {
       const prompt = String(args.prompt ?? "").trim();
@@ -1831,22 +1941,6 @@ export async function executeTool(
         priority: 2,
       });
       return { jobId, workflowId, status: "enqueued" };
-    }
-    case "create_workflow": {
-      const name = String(args.name ?? "").trim();
-      if (!name) throw new Error("name required");
-      const agentId = String(args.agentId ?? ctx.activeAgentId ?? "intelligence");
-      const wf = createWorkflow(ctx.db, {
-        name,
-        config: (args.config as WorkflowGraph | undefined) ?? undefined,
-        enabled: args.enabled === false ? false : true,
-      });
-      ctx.db
-        .prepare(`UPDATE ai_workflows SET agent_id = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(agentId, wf.id);
-      reloadAiSchedules();
-      scheduleCapabilityRebuild(ctx.db, agentId);
-      return { ...wf, agentId };
     }
     case "update_workflow": {
       const id = String(args.id ?? "");
@@ -2452,40 +2546,6 @@ export async function executeTool(
       return { listings: rows };
     }
 
-    case "create_listing": {
-      if (!ctx.userId || !ctx.tenantId) throw new Error("user and tenant required");
-      const kind = String(args.kind ?? "");
-      const resourceId = args.resourceId ? String(args.resourceId) : undefined;
-      const delivery = String(args.deliveryMode ?? "clone");
-      let bundleJson = "{}";
-      let title = String(args.title ?? kind);
-      if (delivery === "clone" && resourceId) {
-        const bundle = exportEntity(ctx.db, kind as MarketplaceListingKind, resourceId);
-        title = String(args.title ?? bundle.title);
-        bundleJson = JSON.stringify(bundle);
-      }
-      const id = uuidv4();
-      getCoreDb()
-        .prepare(
-          `INSERT INTO marketplace_listings
-             (id, seller_user_id, seller_tenant_id, kind, resource_id, title, description,
-              price_credits, bundle_json, visibility, status, delivery_mode, pricing_model)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', 'active', ?, 'one_time')`
-        )
-        .run(
-          id,
-          ctx.userId,
-          ctx.tenantId,
-          kind,
-          resourceId ?? id,
-          title,
-          args.description ? String(args.description) : null,
-          Number(args.priceCredits ?? 0),
-          bundleJson,
-          delivery
-        );
-      return { id };
-    }
 
     case "install_catalog_entry": {
       if (!ctx.userId || !ctx.tenantId || !ctx.db) throw new Error("user, tenant, and db required");
@@ -2526,13 +2586,17 @@ export async function executeTool(
         typeof args.pluginRoot === "string" && args.pluginRoot.trim()
           ? path.resolve(args.pluginRoot.trim())
           : defaultPluginRoot(pluginId, { tenantId: ctx.tenantId });
-      const result = await activatePluginForTenant(
-        getCoreDb(),
-        ctx.tenantId,
-        pluginRoot,
-        { buildIfNeeded: true, installForTenant: true }
-      );
-      return { ok: true, ...result };
+      const result = await dispatchKernelTool(ctx, "run_record_action", {
+        objectType: "CatalogInstall",
+        id: "",
+        action: "activate_plugin_path",
+        input: {
+          path: pluginRoot,
+          build_if_needed: true,
+          install_for_tenant: true,
+        },
+      });
+      return { ok: true, result };
     }
 
     case "build_plugin": {

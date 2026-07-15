@@ -31,6 +31,8 @@ export interface ObjectTypeClient {
     confirmation?: { required: boolean; ttlSeconds?: number };
     inputSchema?: Record<string, unknown>;
     outputSchema?: Record<string, unknown>;
+    roles?: Array<"viewer" | "editor" | "owner" | "intelligence">;
+    cancellable?: boolean;
   }>;
 }
 
@@ -38,6 +40,16 @@ export interface RecordRowClient {
   id: string;
   objectType: string;
   data: Record<string, unknown>;
+  version?: string;
+}
+
+export interface OperationRunClient {
+  id: string;
+  status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+  progress?: number;
+  result?: unknown;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export async function fetchObjectTypes(): Promise<ObjectTypeClient[]> {
@@ -51,8 +63,21 @@ export async function fetchObjectType(name: string): Promise<ObjectTypeClient> {
 
 export async function fetchRecords(
   objectType: string,
-  opts?: { parentId?: string | null; limit?: number }
-): Promise<{ records: RecordRowClient[]; total: number }> {
+  opts?: {
+    parentId?: string | null;
+    limit?: number;
+    offset?: number;
+    sort?: string;
+    direction?: "asc" | "desc";
+    filters?: Record<string, unknown>;
+  }
+): Promise<{
+  objectType?: string;
+  records: RecordRowClient[];
+  total: number;
+  limit?: number;
+  offset?: number;
+}> {
   const q = new URLSearchParams();
   if (opts && "parentId" in (opts ?? {})) {
     q.set(
@@ -61,6 +86,12 @@ export async function fetchRecords(
     );
   }
   if (opts?.limit != null) q.set("limit", String(opts.limit));
+  if (opts?.offset != null) q.set("offset", String(opts.offset));
+  if (opts?.sort) q.set("sort", opts.sort);
+  if (opts?.direction) q.set("direction", opts.direction);
+  for (const [name, value] of Object.entries(opts?.filters ?? {})) {
+    if (value != null && value !== "") q.set(`filters[${name}]`, String(value));
+  }
   const qs = q.toString();
   return api(
     `/records/${encodeURIComponent(objectType)}${qs ? `?${qs}` : ""}`
@@ -89,12 +120,14 @@ export async function createRecordApi(
 export async function updateRecordApi(
   objectType: string,
   id: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  expectedVersion?: string
 ): Promise<RecordRowClient> {
   return api(
     `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
     {
       method: "PUT",
+      headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
       body: JSON.stringify({ data }),
     }
   );
@@ -102,11 +135,15 @@ export async function updateRecordApi(
 
 export async function deleteRecordApi(
   objectType: string,
-  id: string
+  id: string,
+  expectedVersion?: string
 ): Promise<void> {
   await api(
     `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
-    { method: "DELETE" }
+    {
+      method: "DELETE",
+      headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
+    }
   );
 }
 
@@ -118,6 +155,7 @@ export async function runRecordActionApi(
     id?: string;
     confirmationId?: string;
     idempotencyKey?: string;
+    expectedVersion?: string;
     confirmed?: boolean;
   }
 ): Promise<unknown> {
@@ -130,6 +168,9 @@ export async function runRecordActionApi(
   }
   if (opts?.idempotencyKey) {
     headers["Idempotency-Key"] = opts.idempotencyKey;
+  }
+  if (opts?.expectedVersion) {
+    headers["If-Match"] = opts.expectedVersion;
   }
   try {
     const response = await api<{ result: unknown }>(target, {
@@ -154,6 +195,46 @@ export async function runRecordActionApi(
       ...opts,
       confirmationId,
       confirmed: false,
+    });
+  }
+}
+
+export async function fetchOperationRun(id: string): Promise<OperationRunClient> {
+  const row = await fetchRecord("OperationRun", id);
+  return {
+    id: row.id,
+    status: String(row.data.status) as OperationRunClient["status"],
+    progress:
+      typeof row.data.progress === "number" ? row.data.progress : undefined,
+    result: row.data.result_json,
+    errorCode:
+      typeof row.data.error_code === "string" ? row.data.error_code : undefined,
+    errorMessage:
+      typeof row.data.error_message === "string"
+        ? row.data.error_message
+        : undefined,
+  };
+}
+
+export async function waitForOperationRun(
+  id: string,
+  opts: { signal?: AbortSignal; intervalMs?: number } = {}
+): Promise<OperationRunClient> {
+  const intervalMs = Math.max(opts.intervalMs ?? 750, 100);
+  for (;;) {
+    opts.signal?.throwIfAborted();
+    const run = await fetchOperationRun(id);
+    if (["succeeded", "failed", "cancelled"].includes(run.status)) return run;
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(resolve, intervalMs);
+      opts.signal?.addEventListener(
+        "abort",
+        () => {
+          window.clearTimeout(timer);
+          reject(opts.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+        },
+        { once: true }
+      );
     });
   }
 }

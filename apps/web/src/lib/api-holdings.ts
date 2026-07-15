@@ -1,4 +1,11 @@
 import { api } from "../api";
+import {
+  createRecordApi,
+  deleteRecordApi,
+  runRecordActionApi,
+  waitForOperationRun,
+  type RecordRowClient,
+} from "./object-types-api";
 
 export type HoldingCategory = "bank" | "wallet" | "exchange" | "paypal" | "manual";
 
@@ -40,6 +47,49 @@ export interface HoldingsListResponse {
   netWorthCad: number;
 }
 
+function holdingDto(row: RecordRowClient): HoldingConnection {
+  return {
+    id: row.id,
+    category: row.data.category as HoldingCategory,
+    provider: String(row.data.provider ?? ""),
+    label: String(row.data.label ?? ""),
+    currency: String(row.data.currency ?? "CAD"),
+    reference: (row.data.reference as string | null) ?? null,
+    status: row.data.status as HoldingConnection["status"],
+    externalId: (row.data.external_id as string | null) ?? null,
+    balance: Number(row.data.balance ?? 0),
+    balanceCad: Number(row.data.balance_cad ?? 0),
+    breakdown: row.data.breakdown_json ?? null,
+    lastSyncedAt: (row.data.last_synced_at as string | null) ?? null,
+    createdAt: String(row.data.created_at ?? ""),
+  };
+}
+
+async function financeAction<T>(
+  action: string,
+  input: Record<string, unknown>,
+  id?: string
+): Promise<T> {
+  const result = await runRecordActionApi("FinanceConnection", action, input, {
+    id,
+    confirmed: true,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (
+    result &&
+    typeof result === "object" &&
+    "status" in result &&
+    result.status === "accepted" &&
+    "operationRunId" in result &&
+    typeof result.operationRunId === "string"
+  ) {
+    const run = await waitForOperationRun(result.operationRunId);
+    if (run.status === "failed") throw new Error(run.errorMessage ?? "Finance action failed");
+    return run.result as T;
+  }
+  return result as T;
+}
+
 export interface CryptoPortfolio {
   address: string;
   totalUsd: number;
@@ -57,10 +107,7 @@ export function fetchHoldings(): Promise<HoldingsListResponse> {
 }
 
 export function saveMoralisConfig(apiKey: string): Promise<{ ok: boolean }> {
-  return api("/financial/config/moralis", {
-    method: "POST",
-    body: JSON.stringify({ apiKey }),
-  });
+  return financeAction("configure_moralis", { api_key: apiKey });
 }
 
 export function savePayPalConfig(body: {
@@ -68,9 +115,10 @@ export function savePayPalConfig(body: {
   clientSecret: string;
   env: "sandbox" | "live";
 }): Promise<{ ok: boolean; env: string }> {
-  return api("/financial/config/paypal", {
-    method: "POST",
-    body: JSON.stringify(body),
+  return financeAction("configure_paypal", {
+    client_id: body.clientId,
+    client_secret: body.clientSecret,
+    env: body.env,
   });
 }
 
@@ -82,28 +130,33 @@ export function createManualConnection(body: {
   currency: string;
   reference?: string;
 }): Promise<HoldingConnection> {
-  return api("/financial/connections", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return createRecordApi("FinanceConnection", {
+    category: body.category,
+    provider: body.provider,
+    label: body.label,
+    balance: body.balance,
+    balance_cad: body.balance,
+    currency: body.currency,
+    reference: body.reference,
+    status: "active",
+  }).then(holdingDto);
 }
 
 export function deleteConnection(id: string): Promise<{ ok: boolean; netWorthCad: number }> {
-  return api(`/financial/connections/${id}`, { method: "DELETE" });
+  return deleteRecordApi("FinanceConnection", id)
+    .then(fetchHoldings)
+    .then((holdings) => ({ ok: true, netWorthCad: holdings.netWorthCad }));
 }
 
 export function refreshConnection(id: string): Promise<HoldingConnection> {
-  return api(`/financial/connections/${id}/refresh`, { method: "POST" });
+  return financeAction<RecordRowClient>("refresh_external", {}, id).then(holdingDto);
 }
 
 export function previewCryptoBalance(
   address: string,
   chains?: string[]
 ): Promise<CryptoPortfolio> {
-  return api("/financial/crypto/balance", {
-    method: "POST",
-    body: JSON.stringify({ address, chains }),
-  });
+  return financeAction("preview_crypto", { address, chains });
 }
 
 export function connectCryptoWallet(body: {
@@ -112,9 +165,31 @@ export function connectCryptoWallet(body: {
   label?: string;
   chains?: string[];
 }): Promise<{ connection: HoldingConnection; portfolio: CryptoPortfolio }> {
-  return api("/financial/crypto/connect", {
-    method: "POST",
-    body: JSON.stringify(body),
+  return financeAction<RecordRowClient>("connect_external", {
+    provider: "crypto",
+    address: body.address,
+    wallet_provider: body.provider,
+    label: body.label,
+    chains: body.chains,
+  }).then((row) => {
+    const connection = holdingDto(row);
+    const tokens =
+      connection.breakdown &&
+      typeof connection.breakdown === "object" &&
+      "tokens" in connection.breakdown &&
+      Array.isArray(connection.breakdown.tokens)
+        ? (connection.breakdown.tokens as TokenBreakdown[])
+        : [];
+    return {
+      connection,
+      portfolio: {
+        address: body.address,
+        totalUsd: connection.balance,
+        totalCad: connection.balanceCad,
+        tokens,
+        chains: body.chains ?? [],
+      },
+    };
   });
 }
 
@@ -122,9 +197,19 @@ export function connectPayPal(label?: string): Promise<{
   connection: HoldingConnection;
   balance: { total: number; currency: string; totalCad: number };
 }> {
-  return api("/financial/paypal/connect", {
-    method: "POST",
-    body: JSON.stringify({ label }),
+  return financeAction<RecordRowClient>("connect_external", {
+    provider: "paypal",
+    label,
+  }).then((row) => {
+    const connection = holdingDto(row);
+    return {
+      connection,
+      balance: {
+        total: connection.balance,
+        currency: connection.currency,
+        totalCad: connection.balanceCad,
+      },
+    };
   });
 }
 

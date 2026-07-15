@@ -23,45 +23,5 @@ export function createOnboardingRouter(llm: LlmManager): Router {
     res.json({ ollama, localModels });
   });
 
-  router.post("/llm/local", async (req, res) => {
-    const model = String(req.body?.modelPath ?? req.body?.model ?? "");
-    if (!model) {
-      res.status(400).json({ error: "modelPath required" });
-      return;
-    }
-    const db = req.tenantDb;
-    if (!db) {
-      res.status(400).json({ error: "No active workspace" });
-      return;
-    }
-    try {
-      await llm.start(model);
-      markLlmReady(db);
-      res.json({ ok: true, status: llm.getStatus() });
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  router.post("/llm/cloud-ready", (req, res) => {
-    const db = req.tenantDb;
-    if (!db) {
-      res.status(400).json({ error: "No active workspace" });
-      return;
-    }
-    markLlmReady(db);
-    res.json({ ok: true });
-  });
-
-  router.post("/complete", (req, res) => {
-    const db = req.tenantDb;
-    if (!db) {
-      res.status(400).json({ error: "No active workspace" });
-      return;
-    }
-    markOnboardingComplete(db);
-    res.json({ ok: true });
-  });
-
   return router;
 }

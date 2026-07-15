@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { AppDatabase } from "../db.js";
-import { AI_TOOL_REGISTRY, isToolVisibleForAgent } from "./ai-tools-registry.js";
+import {
+  AI_TOOL_REGISTRY,
+  isToolVisibleForAgent,
+  listVisibleTools,
+} from "./ai-tools-registry.js";
 import { listAiSkills } from "./ai-skills.js";
 import { getWorkflow } from "./ai-workflows.js";
 import { listObjectTypes } from "../kernel/registry.js";
@@ -129,7 +133,10 @@ function toolVisible(db: AppDatabase, agentId: string, toolName: string): boolea
 export function buildCapabilityDocs(db: AppDatabase, agentId: string): CapabilityDoc[] {
   const docs: CapabilityDoc[] = [];
 
-  for (const tool of AI_TOOL_REGISTRY) {
+  // Index the effective registry, including generated ObjectType tools. The
+  // previous static-only loop omitted canonical CRUD/action tools after the
+  // cutover and kept advertising definitions that could shadow them.
+  for (const tool of listVisibleTools(db, agentId)) {
     if (!toolVisible(db, agentId, tool.name)) continue;
     const meta = TOOL_WHEN_TO_USE[tool.name];
     const whenToUse = meta?.when ?? tool.description;
