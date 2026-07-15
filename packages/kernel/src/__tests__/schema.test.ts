@@ -43,4 +43,38 @@ describe("ObjectType schema", () => {
     expect(perObjectTypeToolNames("Address").list).toBe("list_addresses");
     expect(perObjectTypeToolNames("Category").list).toBe("list_categories");
   });
+
+  it("rejects unsupported bulk actions and invalid runtime metadata", () => {
+    const errors = validateObjectTypeDef({
+      name: "RuntimeContract",
+      label: "Runtime Contract",
+      storage: { kind: "adapter", adapterId: "runtime" },
+      database: "invalid" as "tenant",
+      schemaVersion: 0,
+      versionField: "missing",
+      operations: ["get"],
+      fields: [{ name: "id", label: "Id", fieldType: "Data" }],
+      actions: [
+        {
+          name: "archive",
+          label: "Archive",
+          target: "bulk",
+          effect: "write",
+          execution: "async",
+          roles: ["owner"],
+          timeoutMs: 0,
+        },
+      ],
+    });
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        "database must be tenant or core",
+        "schemaVersion must be a positive integer",
+        "versionField is not a declared field: missing",
+        "action archive has invalid target",
+        "action archive timeoutMs must be positive",
+        "async action archive must declare cancellable",
+      ])
+    );
+  });
 });

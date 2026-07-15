@@ -13,8 +13,14 @@ export {
 } from "./engine.js";
 
 export {
+  KERNEL_CLIENT_API_VERSION,
+  type KernelClientApiVersion,
+} from "./kernel-client.js";
+
+export {
   type GodModePluginApi,
   type GodModePluginRegister,
+  type PluginKernelClient,
   type PluginBootContext,
   type PluginHookName,
   type PluginTenantContext,
@@ -29,6 +35,8 @@ export {
 export {
   type GodModeWebPluginApi,
   type GodModeWebPluginRegister,
+  type WebKernelActionOptions,
+  type WebKernelClient,
   type PluginPageKindDef,
   type PluginRedirectDef,
   type PluginRootProviderDef,

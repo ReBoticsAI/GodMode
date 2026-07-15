@@ -9,6 +9,16 @@ import type {
   PluginShellChrome,
   PluginShellSlot,
 } from "@godmode/plugin-api";
+import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
+import {
+  createRecordApi,
+  deleteRecordApi,
+  fetchObjectTypes,
+  fetchRecord,
+  fetchRecords,
+  runRecordActionApi,
+  updateRecordApi,
+} from "@/lib/object-types-api";
 
 export interface LoadedWebPlugin {
   id: string;
@@ -34,6 +44,40 @@ class WebPluginRuntime {
 
     const api: GodModeWebPluginApi = {
       manifest,
+      kernel: {
+        apiVersion: KERNEL_CLIENT_API_VERSION,
+        async listObjectTypes() {
+          return (await fetchObjectTypes()) as never;
+        },
+        async listRecords(objectType, query) {
+          const result = await fetchRecords(objectType, query);
+          return {
+            objectType: result.objectType ?? objectType,
+            records: result.records,
+            total: result.total,
+          } as never;
+        },
+        async getRecord(objectType, id) {
+          return (await fetchRecord(objectType, id)) as never;
+        },
+        async createRecord(objectType, data) {
+          return (await createRecordApi(objectType, data)) as never;
+        },
+        async updateRecord(objectType, id, data, expectedVersion) {
+          return (await updateRecordApi(
+            objectType,
+            id,
+            data,
+            expectedVersion
+          )) as never;
+        },
+        async deleteRecord(objectType, id, expectedVersion) {
+          await deleteRecordApi(objectType, id, expectedVersion);
+        },
+        async runAction(objectType, action, input, options) {
+          return runRecordActionApi(objectType, action, input, options);
+        },
+      },
       routes: {
         register(defs) {
           routes.push(...defs);

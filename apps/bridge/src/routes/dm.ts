@@ -10,6 +10,7 @@ import {
 } from "../services/auth/middleware.js";
 import {
   addConversationMember,
+  assertConversationMember,
   createConversation,
   createMessage,
   DmError,
@@ -30,12 +31,15 @@ import {
   BlobStoreError,
   getDmBlob,
   readDmBlobBytes,
-  storeDmBlob,
 } from "../services/blob-store.js";
 import { getShareBroker } from "../ws-broker.js";
 import { isUserOnline } from "../services/presence.js";
 import { createNotification } from "../services/notification-service.js";
 import { emitEvent } from "../services/event-bus.js";
+import {
+  executeCollectionAction,
+  KernelError,
+} from "../kernel/record-api.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -58,6 +62,29 @@ function broadcastDm(
   for (const userId of memberUserIds) {
     broker.broadcastToRoom(`user:${userId}`, payload);
   }
+}
+
+export function authorizeTypingEvent(
+  core: ReturnType<typeof getCoreDb>,
+  conversationId: string,
+  authenticatedUserId: string,
+  body: unknown
+): string[] {
+  assertConversationMember(core, conversationId, authenticatedUserId);
+  const input =
+    body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : {};
+  for (const field of ["userId", "senderUserId", "sender_user_id"]) {
+    const claimed = input[field];
+    if (
+      claimed !== undefined &&
+      (typeof claimed !== "string" || claimed !== authenticatedUserId)
+    ) {
+      throw new DmError("Typing sender does not match authenticated user", 403);
+    }
+  }
+  return listConversationMemberUserIds(core, conversationId);
 }
 
 export interface DmRouterDeps {
@@ -83,59 +110,6 @@ export function createDmRouter(deps: DmRouterDeps): Router {
   router.get("/conversations", (req, res) => {
     const conversations = listConversationsForUser(getCoreDb(), req.user!.id);
     res.json({ conversations });
-  });
-
-  router.post("/conversations", resolveTenant, (req, res) => {
-    const { kind, title, memberUserIds, memberEmails, memberAgents } = req.body ?? {};
-    const core = getCoreDb();
-    const userId = req.user!.id;
-    const tenantId = req.tenantId!;
-    const ids = new Set<string>(
-      Array.isArray(memberUserIds)
-        ? memberUserIds.filter((id: unknown) => typeof id === "string")
-        : []
-    );
-
-    if (Array.isArray(memberEmails)) {
-      for (const email of memberEmails) {
-        if (typeof email !== "string") continue;
-        const found = lookupUserByEmail(core, email, userId);
-        if (found) ids.add(found.id);
-      }
-    }
-
-    const agents = Array.isArray(memberAgents)
-      ? memberAgents
-          .filter(
-            (a: unknown) =>
-              a &&
-              typeof a === "object" &&
-              typeof (a as { agentId?: string }).agentId === "string"
-          )
-          .map((a: { agentId: string; agentTenantId?: string }) => ({
-            agentId: a.agentId,
-            agentTenantId: a.agentTenantId ?? tenantId,
-          }))
-      : [];
-
-    try {
-      const conversation = createConversation(core, {
-        creatorUserId: userId,
-        kind: kind === "group" ? "group" : "direct",
-        title: typeof title === "string" ? title : null,
-        memberUserIds: Array.from(ids),
-        memberAgents: agents,
-      });
-      const memberIds = listConversationMemberUserIds(core, conversation.id);
-      broadcastDm(conversation.id, "dm_conversation_created", { conversation }, memberIds);
-      res.status(201).json({ conversation });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
   });
 
   router.get("/conversations/:id", (req, res) => {
@@ -175,212 +149,17 @@ export function createDmRouter(deps: DmRouterDeps): Router {
     }
   });
 
-  router.post("/conversations/:id/messages", resolveTenant, (req, res) => {
-    const { bodyText, attachments } = req.body ?? {};
-    const core = getCoreDb();
-    const userId = req.user!.id;
-    const tenantId = req.tenantId!;
-    const conversationId = paramId(req.params.id);
-    try {
-      const message = createMessage(core, {
-        conversationId,
-        senderUserId: userId,
-        bodyText: typeof bodyText === "string" ? bodyText : "",
-        attachments: Array.isArray(attachments) ? attachments : [],
-      });
-      const memberIds = listConversationMemberUserIds(core, conversationId);
-      broadcastDm(conversationId, "dm_message", { message, conversationId }, memberIds);
-
-      const senderName = message.sender?.displayName ?? "Someone";
-      const preview =
-        typeof bodyText === "string" && bodyText.trim()
-          ? bodyText.trim().slice(0, 140)
-          : "Sent an attachment";
-      for (const memberId of memberIds) {
-        if (memberId === userId || isUserOnline(memberId)) continue;
-        createNotification({
-          recipientKind: "user",
-          recipientId: memberId,
-          category: "dm",
-          title: `New message from ${senderName}`,
-          body: preview,
-          link: "/?conversation=" + conversationId,
-          resourceKind: "conversation",
-          resourceId: conversationId,
-        });
-      }
-
-      emitEvent({
-        type: "dm.message.created",
-        actor: { kind: "user", id: userId },
-        tenantId,
-        payload: {
-          conversationId,
-          messageId: message.id,
-          senderUserId: userId,
-          senderDisplayName: senderName,
-          text: typeof bodyText === "string" ? bodyText : "",
-        },
-      });
-
-      const text = typeof bodyText === "string" ? bodyText.trim() : "";
-      if (text) {
-        scheduleAgentResponses(
-          { llm: deps.llm, bridgePort: deps.bridgePort },
-          {
-            core,
-            conversationId,
-            messageText: text,
-            senderUserId: userId,
-            senderDisplayName: message.sender?.displayName ?? "User",
-            tenantId,
-          }
-        );
-      }
-
-      res.status(201).json({ message });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.post("/conversations/:id/read", (req, res) => {
-    const { messageId } = req.body ?? {};
-    const core = getCoreDb();
-    const userId = req.user!.id;
-    const conversationId = paramId(req.params.id);
-    try {
-      markConversationRead(
-        core,
-        conversationId,
-        userId,
-        typeof messageId === "string" ? messageId : undefined
-      );
-      const memberIds = listConversationMemberUserIds(core, conversationId);
-      broadcastDm(
-        conversationId,
-        "dm_read",
-        { conversationId, userId, messageId: messageId ?? null },
-        memberIds
-      );
-      res.json({ ok: true });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.post("/conversations/:id/members", (req, res) => {
-    const { userId: newUserId, email } = req.body ?? {};
-    const core = getCoreDb();
-    const actorId = req.user!.id;
-    const conversationId = paramId(req.params.id);
-    try {
-      let targetId = typeof newUserId === "string" ? newUserId : undefined;
-      if (!targetId && typeof email === "string") {
-        const found = lookupUserByEmail(core, email, actorId);
-        if (!found) {
-          res.status(404).json({ error: "User not found" });
-          return;
-        }
-        targetId = found.id;
-      }
-      if (!targetId) {
-        res.status(400).json({ error: "userId or email required" });
-        return;
-      }
-      const member = addConversationMember(core, conversationId, actorId, targetId);
-      const memberIds = listConversationMemberUserIds(core, conversationId);
-      broadcastDm(
-        conversationId,
-        "dm_member_added",
-        { conversationId, member },
-        memberIds
-      );
-      res.status(201).json({ member });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.delete("/conversations/:id/members/:userId", (req, res) => {
-    const core = getCoreDb();
-    const conversationId = paramId(req.params.id);
-    try {
-      removeConversationMember(
-        core,
-        conversationId,
-        req.user!.id,
-        paramId(req.params.userId)
-      );
-      const memberIds = listConversationMemberUserIds(core, conversationId);
-      broadcastDm(
-        conversationId,
-        "dm_member_removed",
-        { conversationId, userId: paramId(req.params.userId) },
-        memberIds
-      );
-      res.json({ ok: true });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.post("/conversations/:id/share", resolveTenant, (req, res) => {
-    const { resourceKind, resourceId, role } = req.body ?? {};
-    if (typeof resourceKind !== "string" || typeof resourceId !== "string") {
-      res.status(400).json({ error: "resourceKind and resourceId required" });
-      return;
-    }
-    const core = getCoreDb();
-    const conversationId = paramId(req.params.id);
-    try {
-      const grants = shareResourceToConversation(core, {
-        conversationId,
-        actorUserId: req.user!.id,
-        actorTenantId: req.tenantId!,
-        resourceKind: resourceKind as MarketplaceListingKind,
-        resourceId,
-        role: (role as ShareGrantRole) ?? "viewer",
-      });
-      const memberIds = listConversationMemberUserIds(core, conversationId);
-      broadcastDm(
-        conversationId,
-        "dm_share",
-        { conversationId, resourceKind, resourceId, grants },
-        memberIds
-      );
-      res.json({ grants });
-    } catch (err) {
-      if (err instanceof DmError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
-  });
-
   router.post("/conversations/:id/typing", (req, res) => {
     const core = getCoreDb();
     const conversationId = paramId(req.params.id);
     const userId = req.user!.id;
     try {
-      const memberIds = listConversationMemberUserIds(core, conversationId);
+      const memberIds = authorizeTypingEvent(
+        core,
+        conversationId,
+        userId,
+        req.body
+      );
       broadcastDm(
         conversationId,
         "dm_typing",
@@ -388,24 +167,47 @@ export function createDmRouter(deps: DmRouterDeps): Router {
         memberIds
       );
       res.json({ ok: true });
-    } catch {
-      res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof DmError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
   });
 
-  router.post("/uploads", upload.single("file"), (req, res) => {
+  router.post("/uploads", upload.single("file"), async (req, res) => {
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: "file required" });
       return;
     }
     try {
-      const blob = storeDmBlob(getCoreDb(), {
-        ownerUserId: req.user!.id,
-        filename: file.originalname || "upload",
-        mime: file.mimetype || "application/octet-stream",
-        buffer: file.buffer,
-      });
+      const uploaded = await executeCollectionAction(
+        getCoreDb(),
+        "DmBlob",
+        "upload",
+        {
+          filename: file.originalname || "upload",
+          mime: file.mimetype || "application/octet-stream",
+          buffer: file.buffer,
+        },
+        {
+          tenantId: req.tenantId,
+          userId: req.user!.id,
+          isAdmin: req.user!.isAdmin,
+          role: req.tenantRole ?? "viewer",
+          source: "http",
+        }
+      ) as {
+        data: {
+          id: string;
+          filename: string;
+          mime: string;
+          size: number;
+        };
+      };
+      const blob = uploaded.data;
       res.status(201).json({
         blob: {
           id: blob.id,
@@ -416,8 +218,8 @@ export function createDmRouter(deps: DmRouterDeps): Router {
         },
       });
     } catch (err) {
-      if (err instanceof BlobStoreError) {
-        res.status(400).json({ error: err.message });
+      if (err instanceof KernelError || err instanceof BlobStoreError) {
+        res.status(err instanceof KernelError ? err.status : 400).json({ error: err.message });
         return;
       }
       throw err;

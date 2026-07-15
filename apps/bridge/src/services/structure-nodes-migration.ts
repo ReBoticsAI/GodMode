@@ -44,7 +44,12 @@ export function cleanupProvisionedStructureAgents(db: Database.Database): void {
 
   db.transaction(() => {
     if (hasAssignments) {
-      db.prepare(`DELETE FROM ai_agent_assignments`).run();
+      db.prepare(
+        `DELETE FROM ai_agent_assignments
+         WHERE agent_id LIKE 'dept-%'
+            OR agent_id LIKE 'div-%'
+            OR agent_id LIKE 'page-%'`
+      ).run();
     }
     db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'dept-%'`).run();
     db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'div-%'`).run();
@@ -56,7 +61,7 @@ export function cleanupProvisionedStructureAgents(db: Database.Database): void {
   );
 }
 
-function migrateStructureNodes(db: Database.Database): void {
+export function migrateStructureNodes(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS structure_nodes (
       id            TEXT PRIMARY KEY,
@@ -76,11 +81,6 @@ function migrateStructureNodes(db: Database.Database): void {
       ON structure_nodes(parent_id, sort_order);
   `);
 
-  const existing = (
-    db.prepare(`SELECT COUNT(*) AS c FROM structure_nodes`).get() as { c: number }
-  ).c;
-  if (existing > 0) return;
-
   const hasLegacy = db
     .prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name='departments'`
@@ -98,6 +98,11 @@ function migrateStructureNodes(db: Database.Database): void {
       (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order)
     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
   `);
+  const nodeExists = db.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`);
+  const insertNodeIfMissing = (...values: Parameters<typeof insertNode.run>): void => {
+    if (nodeExists.get(values[0])) return;
+    insertNode.run(...values);
+  };
 
   const depts = db
     .prepare(
@@ -155,7 +160,7 @@ function migrateStructureNodes(db: Database.Database): void {
   db.transaction(() => {
     for (const dept of depts) {
       const segment = dept.base_path.replace(/^\//, "") || dept.id;
-      insertNode.run(
+      insertNodeIfMissing(
         dept.id,
         null,
         dept.label,
@@ -173,7 +178,7 @@ function migrateStructureNodes(db: Database.Database): void {
         const indexPage = divPages.find((p) => p.segment === "");
         const kind = indexPage?.page_kind ?? "placeholder";
 
-        insertNode.run(
+        insertNodeIfMissing(
           divNodeId,
           dept.id,
           div.label,
@@ -187,7 +192,7 @@ function migrateStructureNodes(db: Database.Database): void {
 
         for (const page of divPages.filter((p) => p.segment !== "")) {
           const pageNodeId = `${dept.id}-${div.id}-${page.id}`;
-          insertNode.run(
+          insertNodeIfMissing(
             pageNodeId,
             divNodeId,
             page.label,
@@ -202,9 +207,26 @@ function migrateStructureNodes(db: Database.Database): void {
       }
     }
 
-    db.prepare(`DELETE FROM ai_agent_assignments`).run();
-    db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'dept-%'`).run();
-    db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'div-%'`).run();
-    db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'page-%'`).run();
+    const hasAssignments = db
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_agent_assignments'`
+      )
+      .get();
+    if (hasAssignments) {
+      db.prepare(
+        `DELETE FROM ai_agent_assignments
+         WHERE agent_id LIKE 'dept-%'
+            OR agent_id LIKE 'div-%'
+            OR agent_id LIKE 'page-%'`
+      ).run();
+    }
+    const hasAgents = db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_agents'`)
+      .get();
+    if (hasAgents) {
+      db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'dept-%'`).run();
+      db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'div-%'`).run();
+      db.prepare(`DELETE FROM ai_agents WHERE id LIKE 'page-%'`).run();
+    }
   })();
 }

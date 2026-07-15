@@ -33,6 +33,11 @@ import {
   listNativeRecords,
   updateNativeRecord,
 } from "./native-storage.js";
+import {
+  ensureOperationRunTables,
+  recoverLeasedOperationRuns,
+  type OperationRunRow,
+} from "./operation-run-worker.js";
 
 export class KernelError extends Error {
   status: number;
@@ -98,11 +103,32 @@ function withDataContext(
   return {
     ...ctx,
     data: {
-      tenantDb: db,
-      coreDb: getCoreDb(),
+      tenantDb: ctx.data?.tenantDb ?? db,
+      coreDb: ctx.data?.coreDb ?? getCoreDb(),
       declaredDatabase: def.database ?? "tenant",
     },
   };
+}
+
+function declaredDatabase(
+  db: AppDatabase,
+  def: ObjectTypeDef,
+  ctx?: OperationContext
+): AppDatabase {
+  if (def.database === "core") return ctx?.data?.coreDb ?? getCoreDb();
+  return ctx?.data?.tenantDb ?? db;
+}
+
+function auditDatabaseForObject(
+  db: AppDatabase,
+  objectType: string,
+  ctx: OperationContext
+): AppDatabase {
+  try {
+    return declaredDatabase(db, requireOt(objectType, ctx), ctx);
+  } catch {
+    return db;
+  }
 }
 
 function auditMutation(
@@ -142,18 +168,38 @@ function auditMutation(
     `INSERT INTO platform_action_log (agent_id, action, scope, payload_hash, result)
      VALUES (?, ?, ?, ?, ?)`
   ).run(agentId, action, ctx.tenantId ?? null, payloadHash, result);
-  insertEvent(db, {
-    id: randomUUID(),
-    type: "platform.action",
-    actorAgentId: agentId,
-    subject: ctx.tenantId ?? null,
-    payload: {
-      action,
-      result,
-      payloadHash,
-      requestId: ctx.requestId,
-    },
-  });
+  const eventPayload = {
+    action,
+    result,
+    payloadHash,
+    requestId: ctx.requestId,
+  };
+  const eventColumns = new Set(
+    (db.prepare(`PRAGMA table_info(events)`).all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  );
+  if (eventColumns.has("seq")) {
+    insertEvent(db, {
+      id: randomUUID(),
+      type: "platform.action",
+      actorAgentId: agentId,
+      subject: ctx.tenantId ?? null,
+      payload: eventPayload,
+    });
+  } else {
+    db.prepare(
+      `INSERT INTO events
+       (id, type, actor_kind, actor_id, tenant_id, payload_json)
+       VALUES (?, 'platform.action', ?, ?, ?, ?)`
+    ).run(
+      randomUUID(),
+      ctx.agentId ? "agent" : ctx.userId ? "user" : "system",
+      ctx.agentId ?? ctx.userId ?? null,
+      ctx.tenantId ?? null,
+      JSON.stringify(eventPayload)
+    );
+  }
 }
 
 function stableJson(value: unknown): string {
@@ -231,25 +277,44 @@ function projectRow(
     const field = fields.get(name);
     if (field && !field.secret) data[name] = value;
   }
-  return { id: String(policyRow.id), objectType: def.name, data };
+  return {
+    id: String(policyRow.id),
+    objectType: def.name,
+    data,
+    version: resourceVersion(policyRow, def.versionField),
+  };
 }
 
-function resourceVersion(row: RecordRow | null | undefined): string | undefined {
+function resourceVersion(
+  row: RecordRow | null | undefined,
+  versionField?: string
+): string | undefined {
   const value =
+    row?.version ??
+    (versionField ? row?.data[versionField] : undefined) ??
     row?.data.version ??
     row?.data.updated_at ??
     row?.data.revision ??
     undefined;
-  return value == null ? undefined : String(value);
+  if (value == null) {
+    return row
+      ? inputHash({ id: row.id, data: row.data }).slice(0, 32)
+      : undefined;
+  }
+  const opaque = String(value);
+  return /^[\x21\x23-\x7e]+$/.test(opaque)
+    ? opaque
+    : inputHash(opaque).slice(0, 32);
 }
 
 function requireExpectedVersion(
   row: RecordRow | null | undefined,
-  ctx: OperationContext
+  ctx: OperationContext,
+  versionField?: string
 ): void {
   if (!ctx.expectedVersion) return;
   const expected = ctx.expectedVersion.replace(/^W\//, "").replace(/^"|"$/g, "");
-  const actual = resourceVersion(row);
+  const actual = resourceVersion(row, versionField);
   if (!actual || actual !== expected) {
     throw new KernelError(412, "Resource version does not match If-Match", {
       code: "KERNEL_VERSION_CONFLICT",
@@ -465,7 +530,7 @@ export function listRecords(
     const adapter = getRecordAdapter(def.storage.adapterId);
     if (!adapter?.list) throw new KernelError(405, `list is not supported for ${objectType}`);
     authorize(adapter, "list", def, ctx);
-    const result = adapter.list(db, def, query, ctx);
+    const result = adapter.list(declaredDatabase(db, def, ctx), def, query, ctx);
     return {
       ...result,
       records: result.records.map((row) => projectRow(def, row, ctx, adapter)),
@@ -496,7 +561,7 @@ export function getRecord(
   if (def.storage.kind === "adapter") {
     const adapter = getRecordAdapter(def.storage.adapterId);
     if (!adapter?.get) throw new KernelError(405, `get is not supported for ${objectType}`);
-    row = adapter.get(db, def, id, ctx);
+    row = adapter.get(declaredDatabase(db, def, ctx), def, id, ctx);
     authorize(adapter, "get", def, ctx, row);
     if (row) row = projectRow(def, row, ctx, adapter);
   } else if (def.storage.kind === "native") {
@@ -525,9 +590,15 @@ function createRecordImpl(
       const adapter = getRecordAdapter(def.storage.adapterId);
       if (!adapter?.create) throw new KernelError(405, `create is not supported for ${objectType}`);
       authorize(adapter, "create", def, ctx);
-      const row = db.transaction(() => {
-        const created = adapter.create!(db, def, validated, ctx);
-        auditMutation(db, ctx, `object.create.${objectType}`, {
+      const ownershipDb = declaredDatabase(db, def, ctx);
+      const row = ownershipDb.transaction(() => {
+        const created = adapter.create!(
+          ownershipDb,
+          def,
+          validated,
+          ctx
+        );
+        auditMutation(ownershipDb, ctx, `object.create.${objectType}`, {
           recordId: created.id,
         });
         return created;
@@ -560,10 +631,7 @@ function createRecordImpl(
     }
   } catch (err) {
     if (err && typeof err === "object" && "status" in err) {
-      throw new KernelError(
-        Number((err as { status: number }).status),
-        err instanceof Error ? err.message : "error"
-      );
+      throw normalizeKernelError(err);
     }
     throw err;
   }
@@ -580,7 +648,7 @@ export function createRecord(
     return createRecordImpl(db, objectType, data, ctx);
   } catch (error) {
     throw auditKernelFailure(
-      db,
+      auditDatabaseForObject(db, objectType, ctx),
       ctx,
       `object.create.${objectType}`,
       { data },
@@ -605,12 +673,20 @@ function updateRecordImpl(
     if (def.storage.kind === "adapter") {
       const adapter = getRecordAdapter(def.storage.adapterId);
       if (!adapter?.update) throw new KernelError(405, `update is not supported for ${objectType}`);
-      const current = adapter.get?.(db, def, id, ctx) ?? null;
-      authorize(adapter, "update", def, ctx, current);
-      requireExpectedVersion(current, ctx);
-      const row = db.transaction(() => {
-        const updated = adapter.update!(db, def, id, validated, ctx);
-        auditMutation(db, ctx, `object.update.${objectType}`, { recordId: id });
+      const ownershipDb = declaredDatabase(db, def, ctx);
+      const row = ownershipDb.transaction(() => {
+        const current =
+          adapter.get?.(ownershipDb, def, id, ctx) ?? null;
+        authorize(adapter, "update", def, ctx, current);
+        requireExpectedVersion(current, ctx, def.versionField);
+        const updated = adapter.update!(
+          ownershipDb,
+          def,
+          id,
+          validated,
+          ctx
+        );
+        auditMutation(ownershipDb, ctx, `object.update.${objectType}`, { recordId: id });
         return updated;
       })();
       ctx.bus?.emit("object.record.updated", {
@@ -623,9 +699,14 @@ function updateRecordImpl(
       return projectRow(def, row, ctx, adapter);
     }
     if (def.storage.kind === "native") {
-      requireExpectedVersion(getNativeRecord(db, def, id), ctx);
       const row = db.transaction(() => {
-        const updated = updateNativeRecord(db, def, id, validated);
+        const updated = updateNativeRecord(
+          db,
+          def,
+          id,
+          validated,
+          ctx.expectedVersion
+        );
         auditMutation(db, ctx, `object.update.${objectType}`, { recordId: id });
         return updated;
       })();
@@ -640,10 +721,7 @@ function updateRecordImpl(
     }
   } catch (err) {
     if (err && typeof err === "object" && "status" in err) {
-      throw new KernelError(
-        Number((err as { status: number }).status),
-        err instanceof Error ? err.message : "error"
-      );
+      throw normalizeKernelError(err);
     }
     throw err;
   }
@@ -661,7 +739,7 @@ export function updateRecord(
     return updateRecordImpl(db, objectType, id, data, ctx);
   } catch (error) {
     throw auditKernelFailure(
-      db,
+      auditDatabaseForObject(db, objectType, ctx),
       ctx,
       `object.update.${objectType}`,
       { recordId: id, data },
@@ -684,12 +762,14 @@ function deleteRecordImpl(
     if (def.storage.kind === "adapter") {
       const adapter = getRecordAdapter(def.storage.adapterId);
       if (!adapter?.delete) throw new KernelError(405, `delete is not supported for ${objectType}`);
-      const current = adapter.get?.(db, def, id, ctx) ?? null;
-      authorize(adapter, "delete", def, ctx, current);
-      requireExpectedVersion(current, ctx);
-      db.transaction(() => {
-        adapter.delete!(db, def, id, ctx);
-        auditMutation(db, ctx, `object.delete.${objectType}`, { recordId: id });
+      const ownershipDb = declaredDatabase(db, def, ctx);
+      ownershipDb.transaction(() => {
+        const current =
+          adapter.get?.(ownershipDb, def, id, ctx) ?? null;
+        authorize(adapter, "delete", def, ctx, current);
+        requireExpectedVersion(current, ctx, def.versionField);
+        adapter.delete!(ownershipDb, def, id, ctx);
+        auditMutation(ownershipDb, ctx, `object.delete.${objectType}`, { recordId: id });
       })();
       ctx.bus?.emit("object.record.deleted", {
         objectType,
@@ -701,9 +781,8 @@ function deleteRecordImpl(
       return;
     }
     if (def.storage.kind === "native") {
-      requireExpectedVersion(getNativeRecord(db, def, id), ctx);
       db.transaction(() => {
-        deleteNativeRecord(db, def, id);
+        deleteNativeRecord(db, def, id, ctx.expectedVersion);
         auditMutation(db, ctx, `object.delete.${objectType}`, { recordId: id });
       })();
       ctx.bus?.emit("object.record.deleted", {
@@ -717,10 +796,7 @@ function deleteRecordImpl(
     }
   } catch (err) {
     if (err && typeof err === "object" && "status" in err) {
-      throw new KernelError(
-        Number((err as { status: number }).status),
-        err instanceof Error ? err.message : "error"
-      );
+      throw normalizeKernelError(err);
     }
     throw err;
   }
@@ -737,7 +813,7 @@ export function deleteRecord(
     deleteRecordImpl(db, objectType, id, ctx);
   } catch (error) {
     throw auditKernelFailure(
-      db,
+      auditDatabaseForObject(db, objectType, ctx),
       ctx,
       `object.delete.${objectType}`,
       { recordId: id },
@@ -749,6 +825,7 @@ export function deleteRecord(
 const confirmationGrants = new Map<
   string,
   {
+    tenantId: string;
     actorId: string;
     objectType: string;
     recordId: string;
@@ -765,38 +842,7 @@ function actorId(ctx: OperationContext): string {
 }
 
 function ensureActionTables(db: AppDatabase): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS kernel_action_idempotency (
-      key TEXT NOT NULL,
-      actor_id TEXT NOT NULL,
-      object_type TEXT NOT NULL,
-      record_id TEXT NOT NULL,
-      action_name TEXT NOT NULL,
-      input_hash TEXT NOT NULL,
-      status TEXT NOT NULL,
-      result_json TEXT,
-      expires_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY (key, actor_id, object_type, record_id, action_name)
-    );
-    CREATE TABLE IF NOT EXISTS kernel_operation_runs (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT,
-      actor_id TEXT NOT NULL,
-      object_type TEXT NOT NULL,
-      record_id TEXT,
-      action_name TEXT NOT NULL,
-      status TEXT NOT NULL,
-      progress REAL,
-      result_json TEXT,
-      error_code TEXT,
-      error_message TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    );
-  `);
+  ensureOperationRunTables(db);
 }
 
 function requireActionPermission(
@@ -813,6 +859,28 @@ function requireActionPermission(
   if (!action.roles?.includes(ctx.role)) {
     throw new KernelError(403, `${ctx.role} cannot run ${def.name}.${action.name}`, {
       code: "KERNEL_ACTION_FORBIDDEN",
+    });
+  }
+  if (
+    def.accessPolicy === "platform-admin" &&
+    !ctx.isAdmin &&
+    ctx.role !== "intelligence"
+  ) {
+    throw new KernelError(403, "Platform administrator access required", {
+      code: "KERNEL_ADMIN_REQUIRED",
+    });
+  }
+  if (
+    ["tenant-member", "tenant-local"].includes(def.accessPolicy ?? "") &&
+    !ctx.tenantId
+  ) {
+    throw new KernelError(403, "Tenant membership context required", {
+      code: "KERNEL_TENANT_REQUIRED",
+    });
+  }
+  if (def.accessPolicy === "user-private" && !ctx.userId) {
+    throw new KernelError(403, "User principal required", {
+      code: "KERNEL_USER_REQUIRED",
     });
   }
 }
@@ -837,10 +905,14 @@ function requireConfirmation(
     return;
   }
   const hash = inputHash(input);
+  for (const [grantId, candidate] of confirmationGrants) {
+    if (candidate.expiresAt <= Date.now()) confirmationGrants.delete(grantId);
+  }
   const id = ctx.confirmationId;
   const grant = id ? confirmationGrants.get(id) : undefined;
   if (
     grant &&
+    grant.tenantId === (ctx.tenantId ?? "") &&
     grant.actorId === actorId(ctx) &&
     grant.objectType === objectType &&
     grant.recordId === recordId &&
@@ -854,6 +926,7 @@ function requireConfirmation(
   }
   const confirmationId = randomUUID();
   confirmationGrants.set(confirmationId, {
+    tenantId: ctx.tenantId ?? "",
     actorId: actorId(ctx),
     objectType,
     recordId,
@@ -874,7 +947,8 @@ async function executeRecordActionImpl(
   id: string,
   actionName: string,
   input: RecordData,
-  ctx: OperationContext
+  ctx: OperationContext,
+  expectedTarget: "record" | "collection"
 ): Promise<unknown> {
   ctx = withKernelEventBus(requireContext(ctx));
   const def = requireOt(objectType, ctx);
@@ -882,6 +956,22 @@ async function executeRecordActionImpl(
   const action = def.actions?.find((item) => item.name === actionName);
   if (!action) {
     throw new KernelError(404, `Unknown ${objectType} action: ${actionName}`);
+  }
+  if (action.target !== expectedTarget) {
+    throw new KernelError(
+      405,
+      `${objectType}.${actionName} is a ${action.target ?? "misconfigured"} action`,
+      { code: "KERNEL_ACTION_TARGET_MISMATCH" }
+    );
+  }
+  if (action.deprecated) {
+    throw new KernelError(410, action.deprecated.message, {
+      code: "KERNEL_ACTION_DEPRECATED",
+      details: {
+        since: action.deprecated.since,
+        replacement: action.deprecated.replacement,
+      },
+    });
   }
   if (def.storage.kind !== "adapter") {
     throw new KernelError(405, `${objectType} actions require a service adapter`);
@@ -892,8 +982,15 @@ async function executeRecordActionImpl(
     throw new KernelError(501, `${objectType} action is not implemented: ${actionName}`);
   }
   requireActionPermission(action, def, ctx);
-  const current = action.target === "collection" ? null : adapter?.get?.(db, def, id, ctx) ?? null;
-  if (action.target !== "collection" && !current) {
+  // All kernel receipts, audit rows, and outbox events live with the object
+  // type's authoritative database. A caller tenant transaction cannot cover a
+  // core adapter write.
+  const ownershipDb = declaredDatabase(db, def, ctx);
+  const current =
+    expectedTarget === "collection"
+      ? null
+      : adapter?.get?.(ownershipDb, def, id, ctx) ?? null;
+  if (expectedTarget === "record" && !current) {
     throw new KernelError(404, `${objectType} record not found: ${id}`);
   }
   authorize(adapter, "action", def, ctx, current, action);
@@ -902,9 +999,15 @@ async function executeRecordActionImpl(
       code: "KERNEL_IF_MATCH_REQUIRED",
     });
   }
-  if (action.concurrency?.required) requireExpectedVersion(current, ctx);
+  if (action.concurrency?.required) {
+    requireExpectedVersion(
+      current,
+      ctx,
+      action.concurrency.versionField ?? def.versionField
+    );
+  }
   validateSchema(action.inputSchema, input, `${objectType}.${actionName} input`);
-  ensureActionTables(db);
+  ensureActionTables(ownershipDb);
 
   const hash = inputHash(input);
   const idem = action.idempotency;
@@ -914,13 +1017,41 @@ async function executeRecordActionImpl(
     });
   }
   if (ctx.idempotencyKey) {
-    const existing = db
+    ownershipDb.prepare(
+      `DELETE FROM kernel_action_idempotency
+       WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+         AND record_id=? AND action_name=?
+         AND status IN ('succeeded', 'failed', 'cancelled')
+         AND expires_at IS NOT NULL AND expires_at <= datetime('now')`
+    ).run(
+      ctx.tenantId ?? "",
+      ctx.idempotencyKey,
+      actorId(ctx),
+      objectType,
+      id,
+      actionName
+    );
+    const existing = ownershipDb
       .prepare(
-        `SELECT input_hash, status, result_json FROM kernel_action_idempotency
-         WHERE key=? AND actor_id=? AND object_type=? AND record_id=? AND action_name=?`
+        `SELECT input_hash, status, result_json, error_json
+         FROM kernel_action_idempotency
+         WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+           AND record_id=? AND action_name=?`
       )
-      .get(ctx.idempotencyKey, actorId(ctx), objectType, id, actionName) as
-      | { input_hash: string; status: string; result_json: string | null }
+      .get(
+        ctx.tenantId ?? "",
+        ctx.idempotencyKey,
+        actorId(ctx),
+        objectType,
+        id,
+        actionName
+      ) as
+      | {
+          input_hash: string;
+          status: string;
+          result_json: string | null;
+          error_json: string | null;
+        }
       | undefined;
     if (existing) {
       if (existing.input_hash !== hash) {
@@ -930,6 +1061,27 @@ async function executeRecordActionImpl(
       }
       if (existing.status === "succeeded") {
         return existing.result_json ? JSON.parse(existing.result_json) : null;
+      }
+      if (existing.status === "pending") {
+        if (existing.result_json) return JSON.parse(existing.result_json);
+        throw new KernelError(409, "Action is being durably queued", {
+          code: "KERNEL_ACTION_IN_PROGRESS",
+          retryable: true,
+        });
+      }
+      if (existing.status === "failed") {
+        throw new KernelError(409, "Previous idempotent action failed", {
+          code: "KERNEL_IDEMPOTENT_ACTION_FAILED",
+          details: existing.error_json ? JSON.parse(existing.error_json) : undefined,
+        });
+      }
+      if (existing.status === "cancelled") {
+        throw new KernelError(409, "Previous idempotent action was cancelled", {
+          code: "KERNEL_IDEMPOTENT_ACTION_CANCELLED",
+          details: existing.error_json
+            ? JSON.parse(existing.error_json)
+            : undefined,
+        });
       }
       throw new KernelError(409, "Action already in progress", {
         code: "KERNEL_ACTION_IN_PROGRESS",
@@ -942,21 +1094,28 @@ async function executeRecordActionImpl(
       id,
       input,
       ctx,
-      resourceVersion(current)
+      resourceVersion(
+        current,
+        action.concurrency?.versionField ?? def.versionField
+      )
     );
-    db.prepare(
-      `INSERT INTO kernel_action_idempotency
-       (key, actor_id, object_type, record_id, action_name, input_hash, status, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'running', datetime('now', ?))`
-    ).run(
-      ctx.idempotencyKey,
-      actorId(ctx),
-      objectType,
-      id,
-      actionName,
-      hash,
-      `+${idem?.ttlSeconds ?? 86400} seconds`
-    );
+    if (action.execution !== "async") {
+      ownershipDb.prepare(
+        `INSERT INTO kernel_action_idempotency
+         (tenant_id, key, actor_id, object_type, record_id, action_name,
+          input_hash, status, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'running', datetime('now', ?))`
+      ).run(
+        ctx.tenantId ?? "",
+        ctx.idempotencyKey,
+        actorId(ctx),
+        objectType,
+        id,
+        actionName,
+        hash,
+        `+${idem?.ttlSeconds ?? 86400} seconds`
+      );
+    }
   } else {
     requireConfirmation(
       action,
@@ -964,120 +1123,92 @@ async function executeRecordActionImpl(
       id,
       input,
       ctx,
-      resourceVersion(current)
+      resourceVersion(
+        current,
+        action.concurrency?.versionField ?? def.versionField
+      )
     );
   }
 
   if (action.execution === "async") {
     const operationRunId = randomUUID();
-    const controller = new AbortController();
-    operationControllers.set(operationRunId, controller);
-    db.prepare(
-      `INSERT INTO kernel_operation_runs
-       (id, tenant_id, actor_id, object_type, record_id, action_name, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`
-    ).run(operationRunId, ctx.tenantId ?? null, actorId(ctx), objectType, id || null, actionName);
-    queueMicrotask(async () => {
-      try {
-        db.prepare(
-          `UPDATE kernel_operation_runs SET status='running', updated_at=datetime('now') WHERE id=?`
-        ).run(operationRunId);
-        const raw = await handler(db, def, id, input, {
-          ...ctx,
-          signal: controller.signal,
-        });
-        if (controller.signal.aborted) return;
-        validateSchema(action.outputSchema, raw, `${objectType}.${actionName} output`);
-        const result = redactActionOutput(raw, action);
-        db.transaction(() => {
-          db.prepare(
-            `UPDATE kernel_operation_runs
-             SET status='succeeded', result_json=?, updated_at=datetime('now'), finished_at=datetime('now')
-             WHERE id=?`
-          ).run(JSON.stringify(result ?? null), operationRunId);
-          if (ctx.idempotencyKey) {
-            db.prepare(
-              `UPDATE kernel_action_idempotency
-               SET status='succeeded', result_json=?, updated_at=datetime('now')
-               WHERE key=? AND actor_id=? AND object_type=? AND record_id=? AND action_name=?`
-            ).run(
-              JSON.stringify({ status: "accepted", operationRunId }),
-              ctx.idempotencyKey,
-              actorId(ctx),
-              objectType,
-              id,
-              actionName
-            );
-          }
-          auditMutation(db, ctx, `object.action.${objectType}.${actionName}`, {
-            recordId: id,
-            operationRunId,
-            input: redactActionInput(input, action),
-          });
-          appendDeclaredActionEvents(
-            db,
-            ctx,
-            action,
-            objectType,
-            id,
-            result
-          );
-        })();
-        emitAction(ctx, objectType, id, actionName, operationRunId);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        const normalized = normalizeKernelError(error);
-        db.transaction(() => {
-          db.prepare(
-            `UPDATE kernel_operation_runs
-             SET status='failed', error_code=?, error_message=?, updated_at=datetime('now'), finished_at=datetime('now')
-             WHERE id=?`
-          ).run(normalized.code, normalized.message, operationRunId);
-          if (ctx.idempotencyKey) {
-            db.prepare(
-              `UPDATE kernel_action_idempotency
-               SET status='failed', updated_at=datetime('now')
-               WHERE key=? AND actor_id=? AND object_type=? AND record_id=? AND action_name=?`
-            ).run(
-              ctx.idempotencyKey,
-              actorId(ctx),
-              objectType,
-              id,
-              actionName
-            );
-          }
-          auditMutation(
-            db,
-            ctx,
-            `object.action.${objectType}.${actionName}`,
-            { recordId: id, operationRunId, errorCode: normalized.code },
-            "error"
-          );
-        })();
-      } finally {
-        operationControllers.delete(operationRunId);
+    const accepted = { status: "accepted", operationRunId } as const;
+    ownershipDb.transaction(() => {
+      if (ctx.idempotencyKey) {
+        ownershipDb.prepare(
+          `INSERT INTO kernel_action_idempotency
+           (tenant_id, key, actor_id, object_type, record_id, action_name,
+            input_hash, status, result_json, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL)`
+        ).run(
+          ctx.tenantId ?? "",
+          ctx.idempotencyKey,
+          actorId(ctx),
+          objectType,
+          id,
+          actionName,
+          hash,
+          JSON.stringify(accepted)
+        );
       }
-    });
-    return { status: "accepted", operationRunId };
+      ownershipDb.prepare(
+        `INSERT INTO kernel_operation_runs
+         (id, tenant_id, actor_id, object_type, record_id, action_name,
+          input_json, context_json, idempotency_key, idempotency_ttl_seconds,
+          status, max_attempts, timeout_ms, cancellable, recovery_safe)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+      ).run(
+        operationRunId,
+        ctx.tenantId ?? null,
+        actorId(ctx),
+        objectType,
+        id || null,
+        actionName,
+        JSON.stringify(input),
+        JSON.stringify({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          isAdmin: ctx.isAdmin,
+          role: ctx.role,
+          agentId: ctx.agentId,
+          source: ctx.source,
+          requestId: ctx.requestId,
+          idempotencyKey: ctx.idempotencyKey,
+          installedPluginIds: [...(ctx.installedPluginIds ?? [])],
+        }),
+        ctx.idempotencyKey ?? null,
+        ctx.idempotencyKey ? (idem?.ttlSeconds ?? 86400) : null,
+        action.retry?.maxAttempts ?? 1,
+        action.timeoutMs ?? null,
+        action.cancellable ? 1 : 0,
+        (ctx.idempotencyKey && action.idempotency) ||
+          (action.retry?.maxAttempts ?? 1) > 1
+          ? 1
+          : 0
+      );
+    })();
+    return accepted;
   }
 
   try {
-    const raw = await handler(db, def, id, input, ctx);
+    const raw = await handler(ownershipDb, def, id, input, ctx);
     validateSchema(action.outputSchema, raw, `${objectType}.${actionName} output`);
     const result = redactActionOutput(raw, action);
-    db.transaction(() => {
-      auditMutation(db, ctx, `object.action.${objectType}.${actionName}`, {
+    ownershipDb.transaction(() => {
+      auditMutation(ownershipDb, ctx, `object.action.${objectType}.${actionName}`, {
         recordId: id,
         input: redactActionInput(input, action),
       });
-      appendDeclaredActionEvents(db, ctx, action, objectType, id, result);
+      appendDeclaredActionEvents(ownershipDb, ctx, action, objectType, id, result);
       if (ctx.idempotencyKey) {
-        db.prepare(
+        ownershipDb.prepare(
           `UPDATE kernel_action_idempotency
            SET status='succeeded', result_json=?, updated_at=datetime('now')
-           WHERE key=? AND actor_id=? AND object_type=? AND record_id=? AND action_name=?`
+           WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+             AND record_id=? AND action_name=?`
         ).run(
           JSON.stringify(result ?? null),
+          ctx.tenantId ?? "",
           ctx.idempotencyKey,
           actorId(ctx),
           objectType,
@@ -1089,13 +1220,44 @@ async function executeRecordActionImpl(
     emitAction(ctx, objectType, id, actionName);
     return result;
   } catch (error) {
-    if (ctx.idempotencyKey) {
-      db.prepare(
-        `UPDATE kernel_action_idempotency SET status='failed', updated_at=datetime('now')
-         WHERE key=? AND actor_id=? AND object_type=? AND record_id=? AND action_name=?`
-      ).run(ctx.idempotencyKey, actorId(ctx), objectType, id, actionName);
+    let normalized = normalizeKernelError(error);
+    const errorPayload = {
+      code: normalized.code,
+      message: normalized.message,
+      retryable: normalized.retryable,
+      details: normalized.details,
+    };
+    if (action.errorSchema) {
+      try {
+        validateSchema(
+          action.errorSchema,
+          errorPayload,
+          `${objectType}.${actionName} error`
+        );
+      } catch (schemaError) {
+        normalized = new KernelError(500, "Action returned an invalid error", {
+          code: "KERNEL_ERROR_SCHEMA_INVALID",
+          details: normalizeKernelError(schemaError).details,
+        });
+      }
     }
-    throw normalizeKernelError(error);
+    if (ctx.idempotencyKey) {
+      ownershipDb.prepare(
+        `UPDATE kernel_action_idempotency
+         SET status='failed', error_json=?, updated_at=datetime('now')
+         WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+           AND record_id=? AND action_name=?`
+      ).run(
+        JSON.stringify(errorPayload),
+        ctx.tenantId ?? "",
+        ctx.idempotencyKey,
+        actorId(ctx),
+        objectType,
+        id,
+        actionName
+      );
+    }
+    throw normalized;
   }
 }
 
@@ -1114,14 +1276,16 @@ export async function executeRecordAction(
       id,
       actionName,
       input,
-      ctx
+      ctx,
+      "record"
     );
   } catch (error) {
     const normalized = normalizeKernelError(error);
     try {
-      db.transaction(() => {
+      const auditDb = declaredDatabase(db, requireOt(objectType, ctx), ctx);
+      auditDb.transaction(() => {
         auditMutation(
-          db,
+          auditDb,
           requireContext(ctx),
           `object.action.${objectType}.${actionName}`,
           {
@@ -1141,6 +1305,314 @@ export async function executeRecordAction(
   }
 }
 
+export async function processClaimedOperationRun(
+  db: AppDatabase,
+  run: OperationRunRow,
+  leaseOwner: string
+): Promise<void> {
+  ensureActionTables(db);
+  let stored: Partial<OperationContext> & { installedPluginIds?: string[] };
+  try {
+    stored = JSON.parse(run.context_json || "{}") as Partial<OperationContext> & {
+      installedPluginIds?: string[];
+    };
+  } catch (error) {
+    finishOperationFailure(
+      db,
+      run,
+      leaseOwner,
+      undefined,
+      createSystemOperationContext({ tenantId: run.tenant_id ?? undefined }),
+      new KernelError(500, "Queued action context is corrupt", {
+        code: "KERNEL_OPERATION_CONTEXT_CORRUPT",
+        details: error instanceof Error ? error.message : error,
+      })
+    );
+    return;
+  }
+  let ctx: OperationContext =
+    !stored.source || stored.source === "system"
+      ? createSystemOperationContext(stored)
+      : {
+          role: stored.role ?? "viewer",
+          source: stored.source ?? "system",
+          tenantId: stored.tenantId ?? run.tenant_id ?? undefined,
+          userId: stored.userId,
+          isAdmin: stored.isAdmin,
+          agentId: stored.agentId,
+          requestId: stored.requestId,
+          idempotencyKey: stored.idempotencyKey ?? run.idempotency_key ?? undefined,
+          installedPluginIds: new Set(stored.installedPluginIds ?? []),
+        };
+  ctx = withKernelEventBus(ctx);
+  let def: ObjectTypeDef;
+  try {
+    def = requireOt(run.object_type, ctx);
+    ctx = withDataContext(db, def, ctx);
+  } catch (error) {
+    finishOperationFailure(db, run, leaseOwner, undefined, ctx, error);
+    return;
+  }
+  const action = def.actions?.find((item) => item.name === run.action_name);
+  const adapter =
+    def.storage.kind === "adapter"
+      ? getRecordAdapter(def.storage.adapterId)
+      : undefined;
+  const handler = adapter?.actions?.[run.action_name];
+  if (!action || action.target === "bulk" || !handler) {
+    const error = new KernelError(501, "Queued action is no longer implemented", {
+      code: "KERNEL_ACTION_UNAVAILABLE",
+    });
+    finishOperationFailure(db, run, leaseOwner, action, ctx, error);
+    return;
+  }
+  let input: RecordData;
+  try {
+    input = JSON.parse(run.input_json || "{}") as RecordData;
+  } catch (error) {
+    finishOperationFailure(
+      db,
+      run,
+      leaseOwner,
+      action,
+      ctx,
+      new KernelError(500, "Queued action input is corrupt", {
+        code: "KERNEL_OPERATION_INPUT_CORRUPT",
+        details: error instanceof Error ? error.message : error,
+      })
+    );
+    return;
+  }
+  const controller = new AbortController();
+  operationControllers.set(run.id, controller);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const heartbeat = setInterval(() => {
+    const renewed = db.prepare(
+      `UPDATE kernel_operation_runs
+       SET lease_expires_at=datetime('now', '+60 seconds'),
+           updated_at=datetime('now')
+       WHERE id=? AND status='running' AND lease_owner=?`
+    ).run(run.id, leaseOwner);
+    if (renewed.changes !== 1) controller.abort();
+  }, 20_000);
+  heartbeat.unref?.();
+  try {
+    const work = Promise.resolve(
+      handler(declaredDatabase(db, def, ctx), def, run.record_id ?? "", input, {
+        ...ctx,
+        signal: controller.signal,
+      })
+    );
+    const raw =
+      run.timeout_ms && run.timeout_ms > 0
+        ? await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => {
+                controller.abort();
+                reject(
+                  new KernelError(504, "Action timed out", {
+                    code: "KERNEL_ACTION_TIMEOUT",
+                    retryable: true,
+                  })
+                );
+              }, run.timeout_ms!);
+              timeout.unref?.();
+            }),
+          ])
+        : await work;
+    if (controller.signal.aborted) return;
+    validateSchema(
+      action.outputSchema,
+      raw,
+      `${run.object_type}.${run.action_name} output`
+    );
+    const result = redactActionOutput(raw, action);
+    const committed = db.transaction(() => {
+      const completed = db.prepare(
+        `UPDATE kernel_operation_runs
+         SET status='succeeded', result_json=?, error_code=NULL,
+             error_message=NULL, error_json=NULL, lease_owner=NULL,
+             lease_expires_at=NULL, updated_at=datetime('now'),
+             finished_at=datetime('now')
+         WHERE id=? AND status='running' AND lease_owner=?`
+      ).run(JSON.stringify(result ?? null), run.id, leaseOwner);
+      if (completed.changes !== 1) return false;
+      if (run.idempotency_key) {
+        const finalized = db.prepare(
+          `UPDATE kernel_action_idempotency
+           SET status='succeeded', result_json=?, error_json=NULL,
+               expires_at=datetime('now', ?), updated_at=datetime('now')
+           WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+             AND record_id=? AND action_name=? AND status='pending'`
+        ).run(
+          JSON.stringify(result ?? null),
+          `+${run.idempotency_ttl_seconds ?? 86400} seconds`,
+          run.tenant_id ?? "",
+          run.idempotency_key,
+          run.actor_id,
+          run.object_type,
+          run.record_id ?? "",
+          run.action_name
+        );
+        if (finalized.changes !== 1) {
+          throw new KernelError(
+            500,
+            "OperationRun idempotency record could not be finalized",
+            { code: "KERNEL_IDEMPOTENCY_FINALIZE_FAILED" }
+          );
+        }
+      }
+      auditMutation(
+        db,
+        ctx,
+        `object.action.${run.object_type}.${run.action_name}`,
+        {
+          recordId: run.record_id,
+          operationRunId: run.id,
+          input: redactActionInput(input, action),
+        }
+      );
+      appendDeclaredActionEvents(
+        db,
+        ctx,
+        action,
+        run.object_type,
+        run.record_id ?? "",
+        result
+      );
+      return true;
+    })();
+    if (!committed) return;
+    emitAction(
+      ctx,
+      run.object_type,
+      run.record_id ?? "",
+      run.action_name,
+      run.id
+    );
+  } catch (error) {
+    if (!controller.signal.aborted || error instanceof KernelError) {
+      finishOperationFailure(db, run, leaseOwner, action, ctx, error);
+    }
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    clearInterval(heartbeat);
+    operationControllers.delete(run.id);
+  }
+}
+
+function finishOperationFailure(
+  db: AppDatabase,
+  run: OperationRunRow,
+  leaseOwner: string,
+  action: ActionDef | undefined,
+  ctx: OperationContext,
+  error: unknown
+): void {
+  let normalized = normalizeKernelError(error);
+  let payload = {
+    code: normalized.code,
+    message: normalized.message,
+    retryable: normalized.retryable,
+    details: normalized.details,
+  };
+  if (action?.errorSchema) {
+    try {
+      validateSchema(
+        action.errorSchema,
+        payload,
+        `${run.object_type}.${run.action_name} error`
+      );
+    } catch (schemaError) {
+      normalized = new KernelError(500, "Action returned an invalid error", {
+        code: "KERNEL_ERROR_SCHEMA_INVALID",
+        details: normalizeKernelError(schemaError).details,
+      });
+      payload = {
+        code: normalized.code,
+        message: normalized.message,
+        retryable: false,
+        details: normalized.details,
+      };
+    }
+  }
+  const retryCodes = action?.retry?.retryableErrorCodes ?? [];
+  const retryable =
+    run.attempt < run.max_attempts &&
+    (normalized.retryable || retryCodes.includes(normalized.code));
+  const backoffMs = action?.retry?.backoffMs ?? 0;
+  db.transaction(() => {
+    const updated = db.prepare(
+      `UPDATE kernel_operation_runs
+       SET status=?, error_code=?, error_message=?, error_json=?,
+           next_attempt_at=${
+             retryable ? "datetime('now', ?)" : "NULL"
+           },
+           lease_owner=NULL, lease_expires_at=NULL, updated_at=datetime('now'),
+           finished_at=${retryable ? "NULL" : "datetime('now')"}
+       WHERE id=? AND status='running' AND lease_owner=?`
+    );
+    const info = retryable
+      ? updated.run(
+          "retrying",
+          normalized.code,
+          normalized.message,
+          JSON.stringify(payload),
+          `+${Math.max(0, backoffMs) / 1000} seconds`,
+          run.id,
+          leaseOwner
+        )
+      : updated.run(
+          "failed",
+          normalized.code,
+          normalized.message,
+          JSON.stringify(payload),
+          run.id,
+          leaseOwner
+        );
+    if (info.changes !== 1) return;
+    if (!retryable) {
+      if (run.idempotency_key) {
+        const finalized = db.prepare(
+          `UPDATE kernel_action_idempotency
+           SET status='failed', result_json=NULL, error_json=?,
+               expires_at=datetime('now', ?), updated_at=datetime('now')
+           WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+             AND record_id=? AND action_name=? AND status='pending'`
+        ).run(
+          JSON.stringify(payload),
+          `+${run.idempotency_ttl_seconds ?? 86400} seconds`,
+          run.tenant_id ?? "",
+          run.idempotency_key,
+          run.actor_id,
+          run.object_type,
+          run.record_id ?? "",
+          run.action_name
+        );
+        if (finalized.changes !== 1) {
+          throw new KernelError(
+            500,
+            "OperationRun idempotency failure could not be finalized",
+            { code: "KERNEL_IDEMPOTENCY_FINALIZE_FAILED" }
+          );
+        }
+      }
+      auditMutation(
+        db,
+        ctx,
+        `object.action.${run.object_type}.${run.action_name}`,
+        {
+          recordId: run.record_id,
+          operationRunId: run.id,
+          errorCode: normalized.code,
+        },
+        "error"
+      );
+    }
+  })();
+}
+
 export function cancelOperationRun(
   db: AppDatabase,
   operationRunId: string,
@@ -1150,10 +1622,22 @@ export function cancelOperationRun(
   ensureActionTables(db);
   const row = db
     .prepare(
-      `SELECT tenant_id, actor_id, status FROM kernel_operation_runs WHERE id=?`
+      `SELECT tenant_id, actor_id, object_type, record_id, action_name,
+              idempotency_key, idempotency_ttl_seconds, status, cancellable
+       FROM kernel_operation_runs WHERE id=?`
     )
     .get(operationRunId) as
-    | { tenant_id: string | null; actor_id: string; status: string }
+    | {
+        tenant_id: string | null;
+        actor_id: string;
+        object_type: string;
+        record_id: string | null;
+        action_name: string;
+        idempotency_key: string | null;
+        idempotency_ttl_seconds: number | null;
+        status: string;
+        cancellable: number;
+      }
     | undefined;
   if (!row) throw new KernelError(404, `OperationRun not found: ${operationRunId}`);
   if (
@@ -1169,44 +1653,103 @@ export function cancelOperationRun(
   if (ctx.tenantId && row.tenant_id && ctx.tenantId !== row.tenant_id) {
     throw new KernelError(404, `OperationRun not found: ${operationRunId}`);
   }
-  if (!["pending", "running"].includes(row.status)) return false;
+  if (!row.cancellable) {
+    throw new KernelError(409, "This operation is not cancellable", {
+      code: "KERNEL_OPERATION_NOT_CANCELLABLE",
+    });
+  }
+  if (!["pending", "running", "retrying"].includes(row.status)) return false;
   operationControllers.get(operationRunId)?.abort();
-  db.transaction(() => {
-    db.prepare(
+  return db.transaction(() => {
+    const errorJson = JSON.stringify({
+      code: "KERNEL_OPERATION_CANCELLED",
+      message: "Operation cancelled",
+      retryable: false,
+    });
+    const cancelled = db.prepare(
       `UPDATE kernel_operation_runs
-       SET status='cancelled', updated_at=datetime('now'), finished_at=datetime('now')
-       WHERE id=?`
-    ).run(operationRunId);
+       SET status='cancelled', error_code='KERNEL_OPERATION_CANCELLED',
+           error_message='Operation cancelled', error_json=?,
+           lease_owner=NULL, lease_expires_at=NULL,
+           updated_at=datetime('now'), finished_at=datetime('now')
+       WHERE id=? AND status IN ('pending', 'running', 'retrying')`
+    ).run(errorJson, operationRunId);
+    if (cancelled.changes !== 1) return false;
+    if (row.idempotency_key) {
+      const finalized = db.prepare(
+        `UPDATE kernel_action_idempotency
+         SET status='cancelled', result_json=NULL, error_json=?,
+             expires_at=datetime('now', ?), updated_at=datetime('now')
+         WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
+           AND record_id=? AND action_name=? AND status='pending'`
+      ).run(
+        errorJson,
+        `+${row.idempotency_ttl_seconds ?? 86400} seconds`,
+        row.tenant_id ?? "",
+        row.idempotency_key,
+        row.actor_id,
+        row.object_type,
+        row.record_id ?? "",
+        row.action_name
+      );
+      if (finalized.changes !== 1) {
+        throw new KernelError(
+          500,
+          "OperationRun cancellation idempotency could not be finalized",
+          { code: "KERNEL_IDEMPOTENCY_FINALIZE_FAILED" }
+        );
+      }
+    }
     auditMutation(db, ctx, "object.action.OperationRun.cancel", {
       operationRunId,
     });
+    return true;
   })();
-  return true;
 }
 
 export function recoverInterruptedOperationRuns(db: AppDatabase): number {
   ensureActionTables(db);
-  return db
-    .prepare(
-      `UPDATE kernel_operation_runs
-       SET status='failed',
-           error_code='KERNEL_RESTART_INTERRUPTED',
-           error_message='Bridge restarted before this operation completed',
-           updated_at=datetime('now'),
-           finished_at=datetime('now')
-       WHERE status IN ('pending', 'running')`
-    )
-    .run().changes;
+  const recovered = recoverLeasedOperationRuns(db, true);
+  return recovered.requeued + recovered.failed;
 }
 
-export function executeCollectionAction(
+export async function executeCollectionAction(
   db: AppDatabase,
   objectType: string,
   actionName: string,
   input: RecordData,
   ctx: OperationContext
 ): Promise<unknown> {
-  return executeRecordAction(db, objectType, "", actionName, input, ctx);
+  try {
+    return await executeRecordActionImpl(
+      db,
+      objectType,
+      "",
+      actionName,
+      input,
+      ctx,
+      "collection"
+    );
+  } catch (error) {
+    const normalized = normalizeKernelError(error);
+    try {
+      const auditDb = declaredDatabase(db, requireOt(objectType, ctx), ctx);
+      auditDb.transaction(() => {
+        auditMutation(
+          auditDb,
+          requireContext(ctx),
+          `object.action.${objectType}.${actionName}`,
+          { input, errorCode: normalized.code },
+          normalized.status === 401 || normalized.status === 403
+            ? "denied"
+            : "error"
+        );
+      })();
+    } catch {
+      // Preserve the operation error if the audit store is unavailable.
+    }
+    throw normalized;
+  }
 }
 
 function emitAction(
@@ -1283,10 +1826,20 @@ function redactActionOutput(output: unknown, action: ActionDef): unknown {
 function normalizeKernelError(error: unknown): KernelError {
   if (error instanceof KernelError) return error;
   if (error && typeof error === "object" && "status" in error) {
+    const value = error as {
+      status: number;
+      code?: string;
+      details?: unknown;
+      retryable?: boolean;
+    };
     return new KernelError(
-      Number((error as { status: number }).status),
+      Number(value.status),
       error instanceof Error ? error.message : "Kernel operation failed",
-      { code: "KERNEL_ADAPTER_ERROR" }
+      {
+        code: value.code ?? "KERNEL_ADAPTER_ERROR",
+        details: value.details,
+        retryable: value.retryable,
+      }
     );
   }
   return new KernelError(

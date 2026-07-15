@@ -82,6 +82,38 @@ export function touchBridgeConnection(core: CoreDatabase, id: string): void {
   ).run(id);
 }
 
+export async function probeBridgeConnection(
+  core: CoreDatabase,
+  connection: CoreBridgeConnection,
+  signal?: AbortSignal
+): Promise<{ ok: boolean; status: number; detail?: unknown }> {
+  if (connection.mode === "local") {
+    touchBridgeConnection(core, connection.id);
+    return { ok: true, status: 200, detail: { mode: "local" } };
+  }
+  if (!connection.remote_bridge_url) {
+    throw new Error("Remote bridge URL is not configured");
+  }
+  const url = `${connection.remote_bridge_url.replace(/\/$/, "")}/api/health`;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (connection.remote_bridge_token) {
+    headers.Authorization = `Bearer ${connection.remote_bridge_token}`;
+  }
+  const response = await fetch(url, { headers, signal });
+  const body = await response.text();
+  let detail: unknown = body;
+  try {
+    detail = body ? JSON.parse(body) : null;
+  } catch {}
+  core.prepare(
+    `UPDATE bridge_connections
+     SET status=?, last_seen_at=CASE WHEN ? THEN datetime('now') ELSE last_seen_at END,
+         updated_at=datetime('now')
+     WHERE id=?`
+  ).run(response.ok ? "active" : "error", response.ok ? 1 : 0, connection.id);
+  return { ok: response.ok, status: response.status, detail };
+}
+
 export function deleteBridgeConnection(core: CoreDatabase, id: string): boolean {
   return (
     core.prepare(`DELETE FROM bridge_connections WHERE id = ?`).run(id).changes > 0

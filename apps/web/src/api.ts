@@ -6,6 +6,14 @@ import {
   writeSessionToken,
   writeTenantId,
 } from "./lib/storage-keys";
+import {
+  createRecordApi,
+  deleteRecordApi,
+  runRecordActionApi,
+  updateRecordApi,
+  waitForOperationRun,
+  type RecordRowClient,
+} from "./lib/object-types-api";
 
 const API_BASE = "/api";
 
@@ -50,234 +58,7 @@ export class ApiError extends Error {
   }
 }
 
-interface ApiRewrite {
-  path: string;
-  options: RequestInit;
-  transform?: (payload: unknown) => unknown;
-}
-
-function jsonBody(options?: RequestInit): Record<string, unknown> {
-  if (typeof options?.body !== "string") return {};
-  try {
-    const value = JSON.parse(options.body);
-    return value && typeof value === "object"
-      ? (value as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function structureNodeData(
-  body: Record<string, unknown>,
-  parentId?: string | null
-): Record<string, unknown> {
-  return {
-    id: body.id,
-    parent_id:
-      parentId !== undefined
-        ? parentId
-        : body.parentId === undefined
-          ? undefined
-          : body.parentId,
-    label: body.label,
-    icon: body.icon,
-    segment: body.segment,
-    kind: body.kind ?? body.pageKind,
-    object_type: body.objectType,
-    right_sidebar: body.rightSidebar,
-  };
-}
-
-function kernelizeStructureMutation(
-  path: string,
-  options?: RequestInit
-): ApiRewrite {
-  const method = (options?.method ?? "GET").toUpperCase();
-  if (!["POST", "PUT", "DELETE"].includes(method)) {
-    return { path, options: options ?? {} };
-  }
-  const body = jsonBody(options);
-  const request = (nextPath: string, nextMethod: string, data?: unknown) => ({
-    path: nextPath,
-    options: {
-      ...options,
-      method: nextMethod,
-      body: data === undefined ? undefined : JSON.stringify(data),
-    },
-  });
-  let match: RegExpMatchArray | null;
-
-  if (method === "POST" && path === "/departments") {
-    return {
-      ...request("/records/StructureNode", "POST", {
-        data: structureNodeData(body, null),
-      }),
-      transform: (payload) => ({
-        id: body.id,
-        label: body.label,
-        icon: body.icon,
-        ...((payload as { data?: object })?.data ?? {}),
-      }),
-    };
-  }
-  if ((match = path.match(/^\/departments\/([^/]+)$/))) {
-    const id = encodeURIComponent(match[1]!);
-    if (method === "DELETE") {
-      return request(`/records/StructureNode/${id}`, "DELETE");
-    }
-    return {
-      ...request(`/records/StructureNode/${id}`, "PUT", {
-        data: structureNodeData(body),
-      }),
-      transform: () => ({ ok: true }),
-    };
-  }
-  if (
-    method === "POST" &&
-    (match = path.match(/^\/departments\/([^/]+)\/divisions$/))
-  ) {
-    const parent = decodeURIComponent(match[1]!);
-    return {
-      ...request("/records/StructureNode", "POST", {
-        data: structureNodeData(body, parent),
-      }),
-      transform: (payload) => ({
-        id: body.id,
-        label: body.label,
-        icon: body.icon,
-        ...((payload as { data?: object })?.data ?? {}),
-      }),
-    };
-  }
-  if ((match = path.match(/^\/divisions\/([^/]+)\/([^/]+)$/))) {
-    const id = encodeURIComponent(
-      `${decodeURIComponent(match[1]!)}-${decodeURIComponent(match[2]!)}`
-    );
-    if (method === "DELETE") {
-      return request(`/records/StructureNode/${id}`, "DELETE");
-    }
-    return {
-      ...request(`/records/StructureNode/${id}`, "PUT", {
-        data: structureNodeData(body),
-      }),
-      transform: () => ({ ok: true }),
-    };
-  }
-  if (
-    method === "POST" &&
-    (match = path.match(/^\/divisions\/([^/]+)\/([^/]+)\/pages$/))
-  ) {
-    const parent = `${decodeURIComponent(match[1]!)}-${decodeURIComponent(
-      match[2]!
-    )}`;
-    return {
-      ...request("/records/StructureNode", "POST", {
-        data: structureNodeData(body, parent),
-      }),
-      transform: (payload) => ({
-        id: body.id,
-        ...((payload as { data?: object })?.data ?? {}),
-      }),
-    };
-  }
-  if ((match = path.match(/^\/pages\/([^/]+)\/([^/]+)\/([^/]+)$/))) {
-    const id = encodeURIComponent(
-      `${decodeURIComponent(match[1]!)}-${decodeURIComponent(
-        match[2]!
-      )}-${decodeURIComponent(match[3]!)}`
-    );
-    if (method === "DELETE") {
-      return request(`/records/StructureNode/${id}`, "DELETE");
-    }
-    return {
-      ...request(`/records/StructureNode/${id}`, "PUT", {
-        data: structureNodeData(body),
-      }),
-      transform: () => ({ ok: true }),
-    };
-  }
-  if (method === "POST" && path === "/nodes") {
-    return {
-      ...request("/records/StructureNode", "POST", {
-        data: structureNodeData(body),
-      }),
-      transform: (payload) => {
-        const row = payload as { id?: string; data?: Record<string, unknown> };
-        return {
-          id: row.id,
-          parentId: row.data?.parent_id ?? null,
-          label: row.data?.label,
-          icon: row.data?.icon,
-          segment: row.data?.segment,
-          kind: row.data?.kind,
-          objectType: row.data?.object_type ?? null,
-          rightSidebar: row.data?.right_sidebar ?? null,
-          agentId: row.data?.agent_id ?? null,
-          builtIn: row.data?.built_in,
-          sortOrder: row.data?.sort_order,
-          tabs: row.data?.tabs_json,
-          path: row.data?.path,
-        };
-      },
-    };
-  }
-  if ((match = path.match(/^\/nodes\/([^/]+)$/))) {
-    const id = encodeURIComponent(decodeURIComponent(match[1]!));
-    if (method === "DELETE") {
-      return request(`/records/StructureNode/${id}`, "DELETE");
-    }
-    return {
-      ...request(`/records/StructureNode/${id}`, "PUT", {
-        data: structureNodeData(body),
-      }),
-      transform: () => ({ ok: true }),
-    };
-  }
-  if ((match = path.match(/^\/nodes\/([^/]+)\/agent$/))) {
-    const id = encodeURIComponent(decodeURIComponent(match[1]!));
-    return {
-      ...request(
-        `/records/StructureNode/${id}/actions/set_agent`,
-        "POST",
-        {
-          agent_id: method === "DELETE" ? null : (body.agentId ?? null),
-        }
-      ),
-      transform: () => ({ ok: true }),
-    };
-  }
-  if (method === "POST" && path === "/structure/reorder") {
-    let parentId = body.parentId;
-    let orderedIds = Array.isArray(body.orderedIds) ? body.orderedIds : [];
-    if (parentId === undefined) {
-      parentId =
-        body.kind === "department"
-          ? null
-          : body.kind === "division"
-            ? body.departmentId
-            : `${body.departmentId}-${body.divisionId}`;
-      if (typeof parentId === "string" && body.kind !== "department") {
-        orderedIds = orderedIds.map((id) =>
-          String(id).startsWith(`${parentId}-`) ? id : `${parentId}-${id}`
-        );
-      }
-    }
-    return {
-      ...request("/records/StructureNode/actions/reorder", "POST", {
-        parent_id: parentId,
-        ordered_ids: orderedIds,
-      }),
-      transform: () => ({ ok: true }),
-    };
-  }
-  return { path, options: options ?? {} };
-}
-
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const rewritten = kernelizeStructureMutation(path, options);
-  path = rewritten.path;
-  options = rewritten.options;
   const tenantId = getActiveTenantId();
   const { headers: callerHeaders, ...rest } = options ?? {};
   const headers = new Headers(callerHeaders);
@@ -322,10 +103,62 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       typeof error === "string" ? error : res.statusText
     );
   }
-  const payload = await res.json();
-  return (rewritten.transform
-    ? rewritten.transform(payload)
-    : payload) as T;
+  return (await res.json()) as T;
+}
+
+function rowDto<T>(row: RecordRowClient): T {
+  return { id: row.id, ...row.data } as T;
+}
+
+async function createDto<T>(
+  objectType: string,
+  data: Record<string, unknown>
+): Promise<T> {
+  return rowDto<T>(await createRecordApi(objectType, data));
+}
+
+async function updateDto<T>(
+  objectType: string,
+  id: string,
+  data: Record<string, unknown>
+): Promise<T> {
+  return rowDto<T>(await updateRecordApi(objectType, id, data));
+}
+
+async function deleteDto(objectType: string, id: string): Promise<{ ok: boolean }> {
+  await deleteRecordApi(objectType, id);
+  return { ok: true };
+}
+
+async function actionDto<T>(
+  objectType: string,
+  action: string,
+  input: Record<string, unknown>,
+  id?: string,
+  confirmed = false
+): Promise<T> {
+  const result = await runRecordActionApi(objectType, action, input, {
+    id,
+    confirmed,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (
+    result &&
+    typeof result === "object" &&
+    "status" in result &&
+    result.status === "accepted" &&
+    "operationRunId" in result &&
+    typeof result.operationRunId === "string"
+  ) {
+    const run = await waitForOperationRun(result.operationRunId);
+    if (run.status === "failed") {
+      throw new ApiError(500, run.errorMessage ?? "Kernel action failed", {
+        code: run.errorCode,
+      });
+    }
+    return run.result as T;
+  }
+  return result as T;
 }
 
 export interface SessionStatus {
@@ -496,47 +329,9 @@ export const fetchScCharts = () =>
     chartbooks?: Array<{ chartbookKey: string; name: string; path: string }>;
     backtestChartbookKey?: string;
   }>("/sc-charts");
-export const refreshScCharts = () =>
-  api<{ ok: boolean; requestId: string }>("/sc-charts/refresh", { method: "POST" });
-export const selectBacktestCharts = (charts: number[]) =>
-  api<{ ok: boolean; configured: number[] }>("/sc-charts/select", {
-    method: "POST",
-    body: JSON.stringify({ charts }),
-  });
-
 export const fetchBacktests = () => api<BacktestRun[]>("/backtests");
 export const fetchBacktestDetail = (id: string) =>
   api<{ run: BacktestRun; trades: BacktestTrade[] }>(`/backtests/${id}`);
-export const startBacktest = (body: {
-  playbookId: string;
-  simOnly?: boolean;
-  paramsOverride?: Record<string, unknown>;
-  daysToLoad?: number;
-  startDate?: string;
-  endDate?: string;
-  baseline?: boolean;
-  chartUpdateIntervalMs?: number;
-  useContinuousContract?: boolean;
-  replayMode?: ReplayModeOption;
-  chartsToReplay?: ChartsToReplayOption;
-  processingStepSeconds?: number;
-  replaySpeed?: number;
-  tradeAccount?: string;
-}) =>
-  api<{ runId: string; status: string }>("/backtests", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-export const cancelBacktest = (id: string) =>
-  api<{ ok: boolean }>(`/backtests/${id}/cancel`, { method: "POST" });
-export const startBacktestSweep = (body: {
-  playbookId: string;
-  axes: SweepParamAxis[];
-}) =>
-  api<{ sweepId: string; runIds: string[] }>("/backtests/sweep", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
 export const fetchSweepRuns = (sweepId: string) =>
   api<BacktestRun[]>(`/backtests/sweep/${sweepId}`);
 
@@ -580,15 +375,6 @@ export const fetchOrderLifecycle = (playbookId?: string, limit = 100) =>
   api<OrderLifecycleRow[]>(
     `/order-lifecycle?limit=${limit}${playbookId ? `&playbookId=${encodeURIComponent(playbookId)}` : ""}`
   );
-
-export const updateStudySettings = (body: {
-  playbookId: string;
-  settings: Array<{ inputIdx: number; inputName?: string; value: number }>;
-}) =>
-  api<{ ok: boolean; reloadRequired: boolean }>("/study-settings", {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
 
 /* ------------------------------- Intelligence ------------------------------- */
 
@@ -850,10 +636,11 @@ export const fetchAiPromptFlow = (agentId?: string) => {
 };
 
 export const updateAiPromptFlow = (config: AiPromptFlowConfig, agentId?: string) =>
-  api<{ config: AiPromptFlowConfig; assembled: AiAssembledPrompt }>("/ai/prompt-flow", {
-    method: "PUT",
-    body: JSON.stringify({ config, agentId }),
-  });
+  updateDto<{ config: AiPromptFlowConfig; assembled: AiAssembledPrompt }>(
+    "PromptFlow",
+    "default",
+    { config, agent_id: agentId ?? "intelligence" }
+  );
 
 export const fetchAiMemories = (
   chatId?: string,
@@ -869,7 +656,7 @@ export const fetchAiMemories = (
 };
 
 export const approveAiMemory = (id: string) =>
-  api<AiMemory>(`/ai/memories/${id}/approve`, { method: "POST" });
+  actionDto<RecordRowClient>("Memory", "approve", {}, id, true).then(rowDto<AiMemory>);
 
 export const createAiMemory = (body: {
   text: string;
@@ -878,16 +665,22 @@ export const createAiMemory = (body: {
   category?: string;
   agentId?: string;
 }) =>
-  api<AiMemory>("/ai/memories", { method: "POST", body: JSON.stringify(body) });
+  createDto<AiMemory>("Memory", {
+    text: body.text,
+    scope: body.scope,
+    chat_id: body.chatId,
+    category: body.category,
+    agent_id: body.agentId,
+  });
 
 export const updateAiMemory = (
   id: string,
   patch: { text?: string; enabled?: boolean; category?: string }
 ) =>
-  api<AiMemory>(`/ai/memories/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+  updateDto<AiMemory>("Memory", id, patch);
 
 export const deleteAiMemory = (id: string) =>
-  api<{ ok: boolean }>(`/ai/memories/${id}`, { method: "DELETE" });
+  deleteDto("Memory", id);
 
 export const fetchAiRules = (agentId?: string) =>
   api<{ rules: AiRule[] }>(
@@ -898,19 +691,20 @@ export const updateAiRuleState = (
   id: string,
   patch: { enabled?: boolean; priorityOverride?: number | null; agentId?: string }
 ) =>
-  api<{ rules: AiRule[] }>(`/ai/rules/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  updateDto<AiRule>("Rule", id, {
+    enabled: patch.enabled,
+    priority: patch.priorityOverride,
+    agent_id: patch.agentId,
+  }).then((rule) => ({ rules: [rule] }));
 
 export const approveAiRule = (id: string, agentId?: string) => {
-  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
-  return api<{ rules: AiRule[] }>(`/ai/rules/${id}/approve${qs}`, { method: "POST" });
+  return actionDto<RecordRowClient>("Rule", "approve", { agent_id: agentId }, id, true)
+    .then((row) => ({ rules: [rowDto<AiRule>(row)] }));
 };
 
 export const rejectAiRule = (id: string, agentId?: string) => {
-  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
-  return api<{ ok: boolean; rules: AiRule[] }>(`/ai/rules/${id}${qs}`, { method: "DELETE" });
+  return actionDto<{ ok: boolean }>("Rule", "reject", { agent_id: agentId }, id, true)
+    .then(() => ({ ok: true, rules: [] }));
 };
 
 export const fetchAiSkills = (includeBody?: boolean, agentId?: string) => {
@@ -926,19 +720,17 @@ export const updateAiSkillState = (
   enabled: boolean,
   agentId?: string
 ) =>
-  api<{ skills: AiSkill[] }>(`/ai/skills/${id}`, {
-    method: "PUT",
-    body: JSON.stringify({ enabled, agentId }),
-  });
+  updateDto<AiSkill>("Skill", id, { enabled, agent_id: agentId })
+    .then((skill) => ({ skills: [skill] }));
 
 export const approveAiSkill = (id: string, agentId?: string) => {
-  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
-  return api<{ skills: AiSkill[] }>(`/ai/skills/${id}/approve${qs}`, { method: "POST" });
+  return actionDto<RecordRowClient>("Skill", "approve", { agent_id: agentId }, id, true)
+    .then((row) => ({ skills: [rowDto<AiSkill>(row)] }));
 };
 
 export const rejectAiSkill = (id: string, agentId?: string) => {
-  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
-  return api<{ ok: boolean; skills: AiSkill[] }>(`/ai/skills/${id}${qs}`, { method: "DELETE" });
+  return actionDto<{ ok: boolean }>("Skill", "reject", { agent_id: agentId }, id, true)
+    .then(() => ({ ok: true, skills: [] }));
 };
 
 export const fetchAiArtifacts = (agentId?: string, limit?: number) => {
@@ -967,36 +759,48 @@ export const createAiArtifact = (body: {
   mimeType?: string;
   description?: string;
 }) =>
-  api<AiArtifact>("/ai/artifacts", { method: "POST", body: JSON.stringify(body) });
+  createDto<AiArtifact>("Artifact", {
+    name: body.name,
+    content: body.content,
+    agent_id: body.agentId,
+    kind: body.kind,
+    mime_type: body.mimeType,
+    description: body.description,
+  });
 
-export const deleteAiArtifact = (id: string, agentId?: string) =>
-  api<{ ok: boolean }>(
-    agentId
-      ? `/ai/artifacts/${id}?agentId=${encodeURIComponent(agentId)}`
-      : `/ai/artifacts/${id}`,
-    { method: "DELETE" }
-  );
+export const deleteAiArtifact = (id: string, agentId?: string) => {
+  void agentId;
+  return deleteDto("Artifact", id);
+};
 
 export const fetchAiCommands = () => api<{ commands: AiChatCommand[] }>("/ai/commands");
 
 export const fetchAiToolsRegistry = (agentId = "intelligence") =>
   api<{ tools: AiToolDef[] }>(`/ai/tools?agentId=${encodeURIComponent(agentId)}`);
 export const updateAiSettings = (patch: Partial<AiSettings>) =>
-  api<AiSettings>("/ai/settings", {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  updateDto<AiSettings>("IntelligenceSettings", "default", patch);
 export const startAiModel = (modelPath?: string) =>
-  api<AiStatus>("/ai/start", {
-    method: "POST",
-    body: JSON.stringify({ modelPath }),
-  });
-export const stopAiModel = () => api<AiStatus>("/ai/stop", { method: "POST" });
+  modelPath
+    ? actionDto(
+        "ModelRuntime",
+        "select_model",
+        { model_id: `local:${modelPath}` },
+        "runtime",
+        true
+      ).then(fetchAiStatus)
+    : actionDto<AiStatus>("ModelRuntime", "start", {}, "runtime", true);
+export const stopAiModel = () =>
+  actionDto<AiStatus>("ModelRuntime", "stop", {}, "runtime", true);
 export const restartAiModel = (modelPath?: string) =>
-  api<AiStatus>("/ai/restart", {
-    method: "POST",
-    body: JSON.stringify({ modelPath }),
-  });
+  modelPath
+    ? actionDto(
+        "ModelRuntime",
+        "select_model",
+        { model_id: `local:${modelPath}` },
+        "runtime",
+        true
+      ).then(fetchAiStatus)
+    : actionDto<AiStatus>("ModelRuntime", "restart", {}, "runtime", true);
 
 /* --------------------------- EMBEDDING ENGINE --------------------------- */
 
@@ -1049,20 +853,23 @@ export const fetchEmbeddingStatus = () =>
 export const fetchEmbeddingActivity = () =>
   api<EmbeddingEngineActivity>("/ai/embeddings/activity");
 export const setEmbeddingEnabled = (enabled: boolean) =>
-  api<EmbeddingEngineStatus>("/ai/embeddings/enabled", {
-    method: "POST",
-    body: JSON.stringify({ enabled }),
-  });
+  actionDto<EmbeddingEngineStatus>(
+    "EmbeddingRuntime",
+    "set_enabled",
+    { enabled },
+    "runtime",
+    true
+  );
 export const startEmbeddingEngine = () =>
-  api<EmbeddingEngineStatus>("/ai/embeddings/start", { method: "POST" });
+  actionDto<EmbeddingEngineStatus>("EmbeddingRuntime", "start", {}, "runtime", true);
 export const stopEmbeddingEngine = () =>
-  api<EmbeddingEngineStatus>("/ai/embeddings/stop", { method: "POST" });
+  actionDto<EmbeddingEngineStatus>("EmbeddingRuntime", "stop", {}, "runtime", true);
 
 export const fetchAiChats = () => api<AiChat[]>("/ai/chats");
 export const createAiChat = (title?: string) =>
-  api<AiChat>("/ai/chats", { method: "POST", body: JSON.stringify({ title }) });
+  createDto<AiChat>("ChatSession", { title });
 export const deleteAiChat = (id: string) =>
-  api<{ ok: boolean }>(`/ai/chats/${id}`, { method: "DELETE" });
+  deleteDto("ChatSession", id);
 export const fetchAiMessages = (chatId: string) =>
   api<AiStoredMessage[]>(`/ai/chats/${chatId}/messages`);
 
@@ -1084,10 +891,13 @@ export const fetchChatSession = (chatId: string) =>
 
 /** Promote a chat to a shared session so collaborators can join it live. */
 export const startSharedChatSession = (chatId: string, agentId: string) =>
-  api<{ ok: boolean; session: SharedChatSession }>(`/ai/chats/${chatId}/share`, {
-    method: "POST",
-    body: JSON.stringify({ agentId }),
-  });
+  actionDto<{ ok: boolean; session: SharedChatSession }>(
+    "ChatSession",
+    "share",
+    { agent_id: agentId },
+    chatId,
+    true
+  );
 
 export interface AiChatHistoryTurn {
   role: string;
@@ -1371,10 +1181,17 @@ export function runInference(body: {
   messages: Array<{ role: string; content: string }>;
   sampling?: Record<string, number>;
 }) {
-  return api<InferenceRunResult>("/inference/run", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<InferenceRunResult>(
+    "InferenceRuntime",
+    "run_inference",
+    {
+      endpoint_id: body.endpointId,
+      messages: body.messages,
+      sampling: body.sampling,
+    },
+    undefined,
+    true
+  );
 }
 
 export interface AiAgent {
@@ -1469,10 +1286,11 @@ export interface AiLoraAdapter {
 }
 
 export const confirmAiTool = (toolCallId: string, approved: boolean) =>
-  api<{ ok: boolean }>("/ai/chat/confirm-tool", {
-    method: "POST",
-    body: JSON.stringify({ toolCallId, approved }),
-  });
+  actionDto<{ ok: boolean }>(
+    "ChatSession",
+    "confirm_tool",
+    { tool_call_id: toolCallId, approved }
+  );
 
 export const fetchAiAdapters = () => api<{ adapters: AiAdapter[] }>("/ai/adapters");
 export const createAiAdapter = (body: {
@@ -1481,13 +1299,23 @@ export const createAiAdapter = (body: {
   description?: string;
   domain?: string;
   defaultScale?: number;
-}) => api<AiAdapter>("/ai/adapters", { method: "POST", body: JSON.stringify(body) });
+}) => createDto<AiAdapter>("ModelAdapter", {
+  name: body.name,
+  path: body.path,
+  description: body.description,
+  domain: body.domain,
+  default_scale: body.defaultScale,
+});
 export const updateAiAdapter = (
   id: string,
   patch: { enabled?: boolean; defaultScale?: number; description?: string }
-) => api<AiAdapter>(`/ai/adapters/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+) => updateDto<AiAdapter>("ModelAdapter", id, {
+  enabled: patch.enabled,
+  default_scale: patch.defaultScale,
+  description: patch.description,
+});
 export const deleteAiAdapter = (id: string) =>
-  api<{ ok: boolean }>(`/ai/adapters/${id}`, { method: "DELETE" });
+  deleteDto("ModelAdapter", id);
 
 export interface AiDataset {
   id: string;
@@ -1527,7 +1355,12 @@ export const createAiDataset = (body: {
   domain?: string;
   path: string;
   rowCount?: number;
-}) => api<AiDataset>("/ai/datasets", { method: "POST", body: JSON.stringify(body) });
+}) => actionDto<AiDataset>("Dataset", "import_dataset", {
+  name: body.name,
+  domain: body.domain,
+  path: body.path,
+  row_count: body.rowCount,
+}, undefined, true);
 
 export interface AiDatasetSource {
   source: string;
@@ -1565,7 +1398,13 @@ export const buildAiDataset = (body: {
   source: string;
   chatIds?: string[];
   limit?: number;
-}) => api<AiDataset>("/ai/datasets/build", { method: "POST", body: JSON.stringify(body) });
+}) => actionDto<AiDataset>("Dataset", "build_dataset", {
+  name: body.name,
+  domain: body.domain,
+  source: body.source,
+  chat_ids: body.chatIds,
+  limit: body.limit,
+}, undefined, true);
 
 export const fetchAiTrainingJobs = () => api<{ jobs: AiTrainingJob[] }>("/ai/training/jobs");
 
@@ -1582,25 +1421,26 @@ export const createAiTrainingJob = (body: {
   learningRate?: number;
   loraRank?: number;
 }) =>
-  api<{ id: string; job: AiTrainingJob }>("/ai/training/jobs", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  actionDto<{ id: string; job: AiTrainingJob }>("TrainingJob", "enqueue", {
+    adapter_name: body.adapterName,
+    domain: body.domain,
+    description: body.description,
+    dataset_path: body.datasetPath,
+    dataset_id: body.datasetId,
+    base_model: body.baseModel,
+    epochs: body.epochs,
+    learning_rate: body.learningRate,
+    lora_rank: body.loraRank,
+  }, undefined, true);
 
 export const cancelAiTrainingJob = (id: string) =>
-  api<{ ok: boolean }>(`/ai/training/jobs/${id}/cancel`, { method: "POST" });
+  actionDto<{ ok: boolean }>("TrainingJob", "cancel", {}, id, true);
 
 export const fetchAiLoraAdapters = () => api<AiLoraAdapter[]>("/ai/lora-adapters");
-export const updateAiLoraAdapters = (adapters: Array<{ id: number; scale: number }>) =>
-  api<AiLoraAdapter[]>("/ai/lora-adapters", {
-    method: "POST",
-    body: JSON.stringify(adapters),
-  });
-
 export const fetchAiQueue = () => api<{ jobs: AiQueueJob[] }>("/ai/queue");
 export const fetchAiAgents = () => api<{ agents: AiAgent[] }>("/ai/agents");
 export const fetchAiAgent = (id: string) => api<AiAgent>(`/ai/agents/${id}`);
-export const createAiAgent = (body: {
+export const createAiAgent = async (body: {
   name: string;
   description?: string;
   icon?: string;
@@ -1615,16 +1455,54 @@ export const createAiAgent = (body: {
   modelPath?: string | null;
   adapterIds?: string[];
   config?: Record<string, unknown>;
-}) => api<AiAgent>("/ai/agents", { method: "POST", body: JSON.stringify(body) });
-export const cloneAiAgent = (id: string, name: string) =>
-  api<AiAgent>(`/ai/agents/${id}/clone`, {
-    method: "POST",
-    body: JSON.stringify({ name }),
+}) => {
+  if (body.cloneFromId) {
+    return cloneAiAgent(body.cloneFromId, body.name);
+  }
+  const row = await actionDto<RecordRowClient>("Agent", "create_configured", {
+    name: body.name,
+    description: body.description,
+    icon: body.icon,
+    backend: body.backend,
+    system_prompt: body.systemPrompt,
+    sampling: body.sampling,
+    thinking: body.thinking,
+    tool_allow: body.toolAllow,
+    auto_approve: body.autoApprove,
+    model_path: body.modelPath,
+    adapter_ids: body.adapterIds,
+    config: body.config,
+    parent_id: body.parentId,
   });
-export const updateAiAgent = (id: string, patch: Partial<AiAgent> & Record<string, unknown>) =>
-  api<AiAgent>(`/ai/agents/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+  return fetchAiAgent(row.id);
+};
+export const cloneAiAgent = (id: string, name: string) =>
+  actionDto<RecordRowClient>("Agent", "clone", { name }, id)
+    .then((row) => fetchAiAgent(row.id));
+export const updateAiAgent = (
+  id: string,
+  patch: Partial<AiAgent> & Record<string, unknown>
+) => {
+  return actionDto<RecordRowClient>("Agent", "update_config", {
+    name: patch.name,
+    description: patch.description,
+    icon: patch.icon,
+    backend: patch.backend,
+    enabled: patch.enabled,
+    system_prompt: patch.systemPrompt,
+    sampling: patch.sampling,
+    thinking: patch.thinking,
+    tool_allow: patch.toolAllow,
+    auto_approve: patch.autoApprove,
+    model_path: patch.modelPath,
+    adapter_ids: patch.adapterIds,
+    config: patch.config,
+    parent_id: patch.parentId,
+    team: patch.team,
+  }, id).then(() => fetchAiAgent(id));
+};
 export const deleteAiAgent = (id: string) =>
-  api<{ ok: boolean }>(`/ai/agents/${id}`, { method: "DELETE" });
+  deleteDto("Agent", id);
 
 export interface AgentTypedProfile {
   // Agent-specific fields
@@ -1671,15 +1549,17 @@ export const createAgentApiKeyAccount = (
   agentId: string,
   body: { provider: string; apiKey: string; label?: string }
 ) =>
-  api<{ account: AiAgentAccount }>(`/ai/agents/${agentId}/accounts/apikey`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  createDto<AiAgentAccount>("ProviderCredential", {
+    agent_id: agentId,
+    provider: body.provider,
+    api_key: body.apiKey,
+    label: body.label,
+  }).then((account) => ({ account }));
 
-export const revokeAgentAccount = (agentId: string, accountId: string) =>
-  api<{ ok: boolean }>(`/ai/agents/${agentId}/accounts/${accountId}`, {
-    method: "DELETE",
-  });
+export const revokeAgentAccount = (agentId: string, accountId: string) => {
+  void agentId;
+  return deleteDto("ProviderCredential", accountId);
+};
 
 export interface AgentReflectionConfig {
   enabled: boolean;
@@ -1710,15 +1590,22 @@ export const patchAgentReflection = (
   agentId: string,
   patch: Partial<AgentReflectionConfig>
 ) =>
-  api<{ reflection: AgentReflectionConfig }>(`/ai/agents/${agentId}/reflection`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  actionDto<{ reflection: AgentReflectionConfig }>(
+    "Agent",
+    "configure_reflection",
+    patch as Record<string, unknown>,
+    agentId,
+    true
+  );
 
 export const runAgentReflection = (agentId: string) =>
-  api<{ ok: boolean; jobId: string }>(`/ai/agents/${agentId}/reflection/run`, {
-    method: "POST",
-  });
+  actionDto<{ ok: boolean; jobId: string }>(
+    "Agent",
+    "run_reflection",
+    {},
+    agentId,
+    true
+  );
 
 export const fetchReflectionProposals = (
   agentId: string,
@@ -1729,10 +1616,10 @@ export const fetchReflectionProposals = (
   );
 
 export const approveReflectionProposal = (id: string) =>
-  api<{ ok: boolean }>(`/ai/reflection/proposals/${id}/approve`, { method: "POST" });
+  actionDto<{ ok: boolean }>("ReflectionProposal", "approve", {}, id, true);
 
 export const rejectReflectionProposal = (id: string) =>
-  api<{ ok: boolean }>(`/ai/reflection/proposals/${id}/reject`, { method: "POST" });
+  actionDto<{ ok: boolean }>("ReflectionProposal", "reject", {}, id, true);
 
 export type AiAssignmentRole = "viewer" | "editor" | "owner";
 export interface AiAgentAssignment {
@@ -1753,14 +1640,24 @@ export const setAgentAssignment = (
   scopeId: string,
   agentId: string | null,
   role?: AiAssignmentRole
-) =>
-  api<{ ok: boolean; assignment: AiAgentAssignment | null }>(
-    "/ai/agents/assignments",
-    {
-      method: "PUT",
-      body: JSON.stringify({ scopeType, scopeId, agentId, role }),
-    }
-  );
+) => {
+  if (!agentId) {
+    return deleteRecordApi("AgentAssignment", scopeId).then(() => ({
+      ok: true,
+      assignment: null,
+    }));
+  }
+  return actionDto<RecordRowClient>(
+    "Agent",
+    "assign",
+    { scope_type: scopeType, scope_id: scopeId, role },
+    agentId,
+    true
+  ).then((row) => ({
+    ok: true,
+    assignment: rowDto<AiAgentAssignment>(row),
+  }));
+};
 
 export interface PlatformActionLogRow {
   id: number;
@@ -1787,9 +1684,9 @@ export const resolveAgentForPage = (loc: {
 };
 export const fetchAiSecrets = () => api<{ secrets: AiSecret[] }>("/ai/secrets");
 export const createAiSecret = (name: string, value: string) =>
-  api<AiSecret>("/ai/secrets", { method: "POST", body: JSON.stringify({ name, value }) });
+  createDto<AiSecret>("VaultSecret", { name, value });
 export const deleteAiSecret = (id: string) =>
-  api<{ ok: boolean }>(`/ai/secrets/${id}`, { method: "DELETE" });
+  deleteDto("VaultSecret", id);
 
 export interface CursorAuthStatus {
   connected: boolean;
@@ -1806,19 +1703,28 @@ export interface CursorModelOption {
 
 export const fetchCursorStatus = () => api<CursorAuthStatus>("/ai/cursor/status");
 export const connectCursorApiKey = (apiKey: string) =>
-  api<{ ok: boolean; status: CursorAuthStatus }>("/ai/cursor/api-key", {
-    method: "POST",
-    body: JSON.stringify({ apiKey }),
-  });
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "cursor",
+    label: "Cursor subscription",
+    api_key: apiKey,
+  })
+    .then(fetchCursorStatus)
+    .then((status) => ({ ok: true, status }));
 export const disconnectCursorApiKey = () =>
-  api<{ ok: boolean; status: CursorAuthStatus }>("/ai/cursor/api-key", { method: "DELETE" });
+  deleteRecordApi("ProviderCredential", "cursor-api-key")
+    .then(fetchCursorStatus)
+    .then((status) => ({ ok: true, status }));
 export const fetchCursorModels = () =>
   api<{ models: CursorModelOption[] }>("/ai/cursor/models");
 export const applyCursorToIntelligence = (model = "auto") =>
-  api<{ ok: boolean }>("/ai/cursor/use-for-intelligence", {
-    method: "POST",
-    body: JSON.stringify({ model }),
-  });
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `cursor:${model}` },
+    "runtime",
+    true
+  );
 
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
@@ -1845,21 +1751,36 @@ export const selectIntelligenceModel = (body: {
   endpointId?: string;
   apiKeyRef?: string;
 }) =>
-  api<{ ok: true; active: CatalogModel }>("/ai/select-model", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  actionDto<{ ok: true; active: CatalogModel }>(
+    "ModelRuntime",
+    "select_model",
+    {
+      model_id:
+        body.source === "local"
+          ? `local:${body.path}`
+          : body.source === "remote"
+            ? `remote:${body.endpointId}`
+            : body.source === "cursor"
+              ? `cursor:${body.model}`
+              : `provider:${body.provider ?? "openai"}:${body.model}`,
+    },
+    "runtime",
+    true
+  );
 
 export const truncateAiChat = (chatId: string, afterMessageId: string) =>
-  api<{ deleted: number }>(`/ai/chats/${chatId}/truncate`, {
-    method: "POST",
-    body: JSON.stringify({ afterMessageId }),
-  });
+  actionDto<{ deleted: number }>(
+    "ChatSession",
+    "truncate",
+    { after_message_id: afterMessageId },
+    chatId,
+    true
+  );
 
-export const deleteAiChatMessage = (chatId: string, messageId: string) =>
-  api<{ ok: boolean }>(`/ai/chats/${chatId}/messages/${messageId}`, {
-    method: "DELETE",
-  });
+export const deleteAiChatMessage = (chatId: string, messageId: string) => {
+  void chatId;
+  return deleteDto("ChatMessage", messageId);
+};
 
 export interface AiRepoMentionPath {
   path: string;
@@ -1877,19 +1798,30 @@ export const enqueueAiJob = (body: {
   priority?: number;
   context?: Record<string, unknown>;
   adapterIds?: string[];
-}) => api<AiQueueJob>("/ai/queue", { method: "POST", body: JSON.stringify(body) });
+}) => actionDto<AiQueueJob>("PromptQueueJob", "enqueue", {
+  prompt: body.prompt,
+  workflow_id: body.workflowId,
+  priority: body.priority,
+  context: body.context,
+  adapter_ids: body.adapterIds,
+}, undefined, true);
 export const cancelAiQueueJob = (id: string) =>
-  api<{ ok: boolean }>(`/ai/queue/${id}/cancel`, { method: "POST" });
+  actionDto<{ ok: boolean }>("PromptQueueJob", "cancel", {}, id, true);
 export const fetchAiWorkflows = (agentId = "intelligence") =>
   api<{ workflows: AiWorkflow[] }>(
     `/ai/workflows?agentId=${encodeURIComponent(agentId)}`
   );
 export const updateAiWorkflow = (id: string, patch: { name?: string; config?: unknown; enabled?: boolean }) =>
-  api<AiWorkflow>(`/ai/workflows/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+  updateDto<AiWorkflow>("Workflow", id, {
+    name: patch.name,
+    config_json: patch.config,
+    enabled: patch.enabled,
+  });
 export const createAiWorkflow = (name: string, config?: unknown, agentId = "intelligence") =>
-  api<AiWorkflow>("/ai/workflows", {
-    method: "POST",
-    body: JSON.stringify({ name, config: config ?? { nodes: [], edges: [], triggers: [] }, agentId }),
+  createDto<AiWorkflow>("Workflow", {
+    name,
+    config_json: config ?? { nodes: [], edges: [], triggers: [] },
+    agent_id: agentId,
   });
 
 export const fetchActiveAgents = () =>
@@ -1922,12 +1854,15 @@ export const resumeWorkflowRun = (
   decision: "approve" | "request_changes",
   comments?: string
 ) =>
-  api<{ ok: boolean }>(`/ai/workflows/runs/${id}/resume`, {
-    method: "POST",
-    body: JSON.stringify({ decision, comments }),
-  });
+  actionDto<{ ok: boolean }>(
+    "WorkflowRun",
+    "resume",
+    { decision, comments },
+    id,
+    true
+  );
 export const cancelWorkflowRun = (id: string) =>
-  api<{ ok: boolean }>(`/ai/workflows/runs/${id}/cancel`, { method: "POST" });
+  actionDto<{ ok: boolean }>("WorkflowRun", "cancel", {}, id, true);
 
 export const fetchAiSchedules = () => api<{ schedules: AiSchedule[] }>("/ai/schedules");
 export const createAiSchedule = (body: {
@@ -1935,7 +1870,12 @@ export const createAiSchedule = (body: {
   cronExpr: string;
   timezone?: string;
   enabled?: boolean;
-}) => api<AiSchedule>("/ai/schedules", { method: "POST", body: JSON.stringify(body) });
+}) => createDto<AiSchedule>("Schedule", {
+  workflow_id: body.workflowId,
+  cron_expr: body.cronExpr,
+  timezone: body.timezone,
+  enabled: body.enabled,
+});
 export const fetchAiProjects = (agentId = "intelligence") =>
   api<AiProjectsSnapshot>(`/ai/projects?agentId=${encodeURIComponent(agentId)}`);
 export const createProjectCard = (body: {
@@ -1953,12 +1893,28 @@ export const createProjectCard = (body: {
   status?: string;
   assignedAgentId?: string;
 }) =>
-  api<AiProjectCard>("/ai/projects/cards", { method: "POST", body: JSON.stringify(body) });
-export const moveProjectCard = (id: string, columnId: string, sortOrder?: number) =>
-  api<AiProjectCard>(`/ai/projects/cards/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ columnId, sortOrder }),
+  createDto<AiProjectCard>("TaskCard", {
+    project_id: body.projectId,
+    agent_id: body.agentId,
+    column_id: body.columnId,
+    title: body.title,
+    description: body.description,
+    prompt: body.prompt,
+    context_json: body.contextJson,
+    tags_json: body.tags,
+    due_at: body.dueAt,
+    priority: body.priority,
+    parent_card_id: body.parentCardId,
+    status: body.status,
+    assigned_agent_id: body.assignedAgentId,
   });
+export const moveProjectCard = (id: string, columnId: string, sortOrder?: number) =>
+  actionDto<RecordRowClient>(
+    "TaskCard",
+    "move",
+    { column_id: columnId, sort_order: sortOrder },
+    id
+  ).then(rowDto<AiProjectCard>);
 export const updateProjectCard = (
   id: string,
   patch: {
@@ -1976,27 +1932,58 @@ export const updateProjectCard = (
     assignedAgentId?: string | null;
   }
 ) =>
-  api<AiProjectCard>(`/ai/projects/cards/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
+  updateDto<AiProjectCard>("TaskCard", id, {
+    title: patch.title,
+    description: patch.description,
+    prompt: patch.prompt,
+    context_json: patch.contextJson,
+    tags_json: patch.tags,
+    due_at: patch.dueAt,
+    priority: patch.priority,
+    parent_card_id: patch.parentCardId,
+    assigned_agent_id: patch.assignedAgentId,
+  }).then(async (card) => {
+    if (patch.columnId) {
+      card = rowDto<AiProjectCard>(
+        await actionDto<RecordRowClient>(
+          "TaskCard",
+          "move",
+          { column_id: patch.columnId, sort_order: patch.sortOrder },
+          id
+        )
+      );
+    }
+    if (patch.status) {
+      card = rowDto<AiProjectCard>(
+        await actionDto<RecordRowClient>(
+          "TaskCard",
+          "transition",
+          { status: patch.status },
+          id
+        )
+      );
+    }
+    return card;
   });
 export const deleteProjectCard = (id: string) =>
-  api<{ ok: boolean }>(`/ai/projects/cards/${id}`, { method: "DELETE" });
+  deleteDto("TaskCard", id);
 export const fetchCardSubtasks = (id: string) =>
   api<AiCardSubtasks>(`/ai/projects/cards/${id}/subtasks`);
 export const fetchCardComments = (id: string) =>
   api<{ comments: AiCardComment[] }>(`/ai/projects/cards/${id}/comments`);
 export const addCardComment = (id: string, body: string, author: "user" | "agent" = "user") =>
-  api<AiCardComment>(`/ai/projects/cards/${id}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ body, author }),
-  });
+  actionDto<RecordRowClient>("CardComment", "add_comment", {
+    card_id: id,
+    body,
+    author,
+  }).then(rowDto<AiCardComment>);
 export const fetchWorkflowComments = (id: string) =>
   api<{ comments: AiWorkflowComment[] }>(`/ai/workflows/${id}/comments`);
 export const addWorkflowComment = (id: string, body: string, author: "user" | "agent" = "user") =>
-  api<AiWorkflowComment>(`/ai/workflows/${id}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ body, author }),
+  createDto<AiWorkflowComment>("WorkflowComment", {
+    workflow_id: id,
+    body,
+    author,
   });
 
 /* ------------------------------ AI CALENDAR ----------------------------- */
@@ -2043,9 +2030,18 @@ export const createCalendarEvent = (body: {
   linked_run_id?: string;
   status?: string;
 }) =>
-  api<AiCalendarEvent>("/ai/calendar/events", {
-    method: "POST",
-    body: JSON.stringify(body),
+  createDto<AiCalendarEvent>("CalendarEvent", {
+    agent_id: body.agentId,
+    kind: body.kind,
+    title: body.title,
+    description: body.description,
+    start_at: body.start_at,
+    end_at: body.end_at,
+    all_day: body.all_day,
+    location: body.location,
+    linked_card_id: body.linked_card_id,
+    linked_run_id: body.linked_run_id,
+    status: body.status,
   });
 
 export const updateCalendarEvent = (
@@ -2061,13 +2057,10 @@ export const updateCalendarEvent = (
     status?: string;
   }
 ) =>
-  api<AiCalendarEvent>(`/ai/calendar/events/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  updateDto<AiCalendarEvent>("CalendarEvent", id, patch);
 
 export const deleteCalendarEvent = (id: string) =>
-  api<{ ok: boolean }>(`/ai/calendar/events/${id}`, { method: "DELETE" });
+  deleteDto("CalendarEvent", id);
 
 export const fetchCalendarActivity = (
   agentId = "intelligence",
@@ -2111,10 +2104,7 @@ export const createUserCalendarEvent = (body: {
   linked_run_id?: string;
   status?: string;
 }) =>
-  api<AiCalendarEvent>("/user/calendar/events", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  createDto<AiCalendarEvent>("CalendarEvent", body);
 
 export const updateUserCalendarEvent = (
   id: string,
@@ -2129,13 +2119,10 @@ export const updateUserCalendarEvent = (
     status?: string;
   }
 ) =>
-  api<AiCalendarEvent>(`/user/calendar/events/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  updateDto<AiCalendarEvent>("CalendarEvent", id, patch);
 
 export const deleteUserCalendarEvent = (id: string) =>
-  api<{ ok: boolean }>(`/user/calendar/events/${id}`, { method: "DELETE" });
+  deleteDto("CalendarEvent", id);
 
 export const fetchUserCalendarActivity = (
   range?: { from?: string; to?: string },
@@ -2174,16 +2161,27 @@ export const createUserProjectCard = (body: {
   status?: string;
   assignedAgentId?: string;
 }) =>
-  api<AiProjectCard>("/user/projects/cards", {
-    method: "POST",
-    body: JSON.stringify(body),
+  createDto<AiProjectCard>("TaskCard", {
+    column_id: body.columnId,
+    title: body.title,
+    description: body.description,
+    prompt: body.prompt,
+    context_json: body.contextJson,
+    tags_json: body.tags,
+    due_at: body.dueAt,
+    priority: body.priority,
+    parent_card_id: body.parentCardId,
+    status: body.status,
+    assigned_agent_id: body.assignedAgentId,
   });
 
 export const moveUserProjectCard = (id: string, columnId: string, sortOrder?: number) =>
-  api<AiProjectCard>(`/user/projects/cards/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ columnId, sortOrder }),
-  });
+  actionDto<RecordRowClient>(
+    "TaskCard",
+    "move",
+    { column_id: columnId, sort_order: sortOrder },
+    id
+  ).then(rowDto<AiProjectCard>);
 
 export const updateUserProjectCard = (
   id: string,
@@ -2202,13 +2200,10 @@ export const updateUserProjectCard = (
     assignedAgentId?: string | null;
   }
 ) =>
-  api<AiProjectCard>(`/user/projects/cards/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  updateProjectCard(id, patch);
 
 export const deleteUserProjectCard = (id: string) =>
-  api<{ ok: boolean }>(`/user/projects/cards/${id}`, { method: "DELETE" });
+  deleteDto("TaskCard", id);
 
 export const fetchUserCardSubtasks = (id: string, userId?: string) => {
   const q = userId ? `?userId=${encodeURIComponent(userId)}` : "";
@@ -2226,11 +2221,8 @@ export const addUserCardComment = (
   author: "user" | "agent" = "user",
   userId?: string
 ) => {
-  const q = userId ? `?userId=${encodeURIComponent(userId)}` : "";
-  return api<AiCardComment>(`/user/projects/cards/${id}/comments${q}`, {
-    method: "POST",
-    body: JSON.stringify({ body, author }),
-  });
+  void userId;
+  return addCardComment(id, body, author);
 };
 
 export function slugifyStructureId(raw: string): string {
@@ -2251,9 +2243,12 @@ export async function createStructureDepartment(body: {
   label: string;
   icon?: string;
 }) {
-  return api<{ id: string; label: string; icon: string }>("/departments", {
-    method: "POST",
-    body: JSON.stringify(body),
+  return createDto<{ id: string; label: string; icon: string }>("StructureNode", {
+    id: body.id,
+    parent_id: null,
+    label: body.label,
+    icon: body.icon,
+    kind: "department",
   });
 }
 
@@ -2261,23 +2256,25 @@ export async function updateStructureDepartment(
   id: string,
   patch: { label?: string; icon?: string }
 ) {
-  return api<{ ok: boolean }>(`/departments/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  await updateRecordApi("StructureNode", id, patch);
+  return { ok: true };
 }
 
 export async function deleteStructureDepartment(id: string) {
-  return api<{ ok: boolean }>(`/departments/${id}`, { method: "DELETE" });
+  return deleteDto("StructureNode", id);
 }
 
 export async function createStructureDivision(
   departmentId: string,
   body: { id: string; label: string; icon?: string; rightSidebar?: string | null }
 ) {
-  return api<{ id: string }>(`/departments/${departmentId}/divisions`, {
-    method: "POST",
-    body: JSON.stringify(body),
+  return createDto<{ id: string }>("StructureNode", {
+    id: body.id,
+    parent_id: departmentId,
+    label: body.label,
+    icon: body.icon,
+    kind: "division",
+    right_sidebar: body.rightSidebar,
   });
 }
 
@@ -2286,16 +2283,16 @@ export async function updateStructureDivision(
   divisionId: string,
   patch: { label?: string; icon?: string; rightSidebar?: string | null }
 ) {
-  return api<{ ok: boolean }>(`/divisions/${departmentId}/${divisionId}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
+  await updateRecordApi("StructureNode", `${departmentId}-${divisionId}`, {
+    label: patch.label,
+    icon: patch.icon,
+    right_sidebar: patch.rightSidebar,
   });
+  return { ok: true };
 }
 
 export async function deleteStructureDivision(departmentId: string, divisionId: string) {
-  return api<{ ok: boolean }>(`/divisions/${departmentId}/${divisionId}`, {
-    method: "DELETE",
-  });
+  return deleteDto("StructureNode", `${departmentId}-${divisionId}`);
 }
 
 export async function createStructurePage(
@@ -2303,9 +2300,13 @@ export async function createStructurePage(
   divisionId: string,
   body: { id: string; label: string; icon?: string; segment?: string }
 ) {
-  return api<{ id: string }>(`/divisions/${departmentId}/${divisionId}/pages`, {
-    method: "POST",
-    body: JSON.stringify(body),
+  return createDto<{ id: string }>("StructureNode", {
+    id: body.id,
+    parent_id: `${departmentId}-${divisionId}`,
+    label: body.label,
+    icon: body.icon,
+    segment: body.segment,
+    kind: "page",
   });
 }
 
@@ -2315,10 +2316,12 @@ export async function updateStructurePage(
   pageId: string,
   patch: { label?: string; icon?: string; segment?: string }
 ) {
-  return api<{ ok: boolean }>(`/pages/${departmentId}/${divisionId}/${pageId}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  await updateRecordApi(
+    "StructureNode",
+    `${departmentId}-${divisionId}-${pageId}`,
+    patch
+  );
+  return { ok: true };
 }
 
 export async function deleteStructurePage(
@@ -2326,9 +2329,7 @@ export async function deleteStructurePage(
   divisionId: string,
   pageId: string
 ) {
-  return api<{ ok: boolean }>(`/pages/${departmentId}/${divisionId}/${pageId}`, {
-    method: "DELETE",
-  });
+  return deleteDto("StructureNode", `${departmentId}-${divisionId}-${pageId}`);
 }
 
 /* --------------------- Flattened structure node helpers --------------------- */
@@ -2359,23 +2360,15 @@ export async function createStructureNode(body: {
   rightSidebar?: string | null;
   objectType?: string | null;
 }) {
-  const row = await api<{
-    id: string;
-    data: Record<string, unknown>;
-  }>("/records/StructureNode", {
-    method: "POST",
-    body: JSON.stringify({
-      data: {
-        id: body.id,
-        parent_id: body.parentId ?? null,
-        label: body.label,
-        icon: body.icon ?? "folder",
-        segment: body.segment,
-        kind: body.kind,
-        right_sidebar: body.rightSidebar,
-        object_type: body.objectType,
-      },
-    }),
+  const row = await createRecordApi("StructureNode", {
+    id: body.id,
+    parent_id: body.parentId ?? null,
+    label: body.label,
+    icon: body.icon ?? "folder",
+    segment: body.segment,
+    kind: body.kind,
+    right_sidebar: body.rightSidebar,
+    object_type: body.objectType,
   });
   return {
     id: row.id,
@@ -2406,31 +2399,23 @@ export async function updateStructureNode(
     objectType?: string | null;
   }
 ) {
-  return api(`/records/StructureNode/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      data: {
-        ...(patch.label !== undefined ? { label: patch.label } : {}),
-        ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
-        ...(patch.segment !== undefined ? { segment: patch.segment } : {}),
-        ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
-        ...(patch.rightSidebar !== undefined
-          ? { right_sidebar: patch.rightSidebar }
-          : {}),
-        ...(patch.parentId !== undefined ? { parent_id: patch.parentId } : {}),
-        ...(patch.objectType !== undefined
-          ? { object_type: patch.objectType }
-          : {}),
-      },
-    }),
+  return updateRecordApi("StructureNode", id, {
+    ...(patch.label !== undefined ? { label: patch.label } : {}),
+    ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+    ...(patch.segment !== undefined ? { segment: patch.segment } : {}),
+    ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
+    ...(patch.rightSidebar !== undefined
+      ? { right_sidebar: patch.rightSidebar }
+      : {}),
+    ...(patch.parentId !== undefined ? { parent_id: patch.parentId } : {}),
+    ...(patch.objectType !== undefined
+      ? { object_type: patch.objectType }
+      : {}),
   });
 }
 
 export async function deleteStructureNode(id: string) {
-  return api<{ ok: boolean }>(
-    `/records/StructureNode/${encodeURIComponent(id)}`,
-    { method: "DELETE" }
-  );
+  return deleteDto("StructureNode", id);
 }
 
 /** Move a node under a new parent (or to top-level with `null`). */
@@ -2442,9 +2427,9 @@ export async function reorderStructureNodes(
   parentId: string | null,
   orderedIds: string[]
 ) {
-  return api<{ ok: boolean }>("/structure/reorder", {
-    method: "POST",
-    body: JSON.stringify({ parentId, orderedIds }),
+  return actionDto<{ ok: boolean }>("StructureNode", "reorder", {
+    parent_id: parentId,
+    ordered_ids: orderedIds,
   });
 }
 
@@ -2463,21 +2448,14 @@ export async function fetchStructureGraph() {
 }
 
 export async function saveStructureGraphLayout(layout: StructureGraphLayoutDto) {
-  return api<{ ok: boolean }>("/structure/graph/layout", {
-    method: "PUT",
-    body: JSON.stringify({ layout }),
-  });
+  return actionDto<{ ok: boolean }>("StructureNode", "save_layout", { layout });
 }
 
 /** Attach (or detach with `null`) an agent on a structure node. */
 export async function setNodeAgent(nodeId: string, agentId: string | null) {
-  if (agentId) {
-    return api<{ ok: boolean }>(`/nodes/${nodeId}/agent`, {
-      method: "POST",
-      body: JSON.stringify({ agentId }),
-    });
-  }
-  return api<{ ok: boolean }>(`/nodes/${nodeId}/agent`, { method: "DELETE" });
+  return actionDto<{ ok: boolean }>("StructureNode", "set_agent", {
+    agent_id: agentId,
+  }, nodeId);
 }
 
 export function connectWebSocket(onMessage: (data: unknown) => void): () => void {
@@ -2623,21 +2601,24 @@ export interface AdminUpdateUserInput {
 }
 
 export function createAdminUser(input: AdminCreateUserInput) {
-  return api<{ user: AdminUserRow }>("/admin/users", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return actionDto<RecordRowClient>("User", "create_account", {
+    email: input.email,
+    password: input.password,
+    display_name: input.displayName,
+    is_admin: input.isAdmin,
+  }, undefined, true).then((row) => ({ user: rowDto<AdminUserRow>(row) }));
 }
 
 export function updateAdminUser(userId: string, input: AdminUpdateUserInput) {
-  return api<{ user: AdminUserRow }>(`/admin/users/${userId}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
+  return updateDto<AdminUserRow>("User", userId, {
+    email: input.email,
+    display_name: input.displayName,
+    is_admin: input.isAdmin,
+  }).then((user) => ({ user }));
 }
 
 export function deleteAdminUser(userId: string) {
-  return api<{ ok: boolean }>(`/admin/users/${userId}`, { method: "DELETE" });
+  return deleteDto("User", userId);
 }
 
 export function createAdminTenantForUser(
@@ -2645,30 +2626,33 @@ export function createAdminTenantForUser(
   name: string,
   slug?: string
 ) {
-  return api<{ tenant: { id: string; name: string; slug: string }; user: AdminUserRow }>(
-    `/admin/users/${userId}/tenants`,
-    {
-      method: "POST",
-      body: JSON.stringify({ name, slug }),
+  return createDto<{ id: string; name: string; slug: string }>("Tenant", {
+    name,
+    slug,
+    owner_user_id: userId,
+  }).then(async (tenant) => {
+    const { users } = await fetchUsers();
+    const user = users.find((candidate) => candidate.id === userId);
+    if (!user) {
+      throw new ApiError(404, "Tenant owner was not returned after provisioning");
     }
-  );
+    return { tenant, user };
+  });
 }
 
 export function updateAdminTenant(
   tenantId: string,
   input: { name?: string; slug?: string }
 ) {
-  return api<{ tenant: { id: string; name: string; slug: string; isOperator: boolean } }>(
-    `/admin/tenants/${tenantId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }
-  );
+  return updateDto<{ id: string; name: string; slug: string; isOperator: boolean }>(
+    "Tenant",
+    tenantId,
+    input
+  ).then((tenant) => ({ tenant }));
 }
 
 export function deleteAdminTenant(tenantId: string) {
-  return api<{ ok: boolean }>(`/admin/tenants/${tenantId}`, { method: "DELETE" });
+  return deleteDto("Tenant", tenantId);
 }
 
 export function fetchAuthTenants() {
@@ -2676,10 +2660,7 @@ export function fetchAuthTenants() {
 }
 
 export function createAuthTenant(name: string, slug?: string) {
-  return api<{ id: string; slug: string }>("/auth/tenants", {
-    method: "POST",
-    body: JSON.stringify({ name, slug }),
-  });
+  return createDto<{ id: string; slug: string }>("Tenant", { name, slug });
 }
 
 export function logoutAuth() {
@@ -2731,10 +2712,33 @@ export function fetchProfile() {
 }
 
 export function updateProfile(patch: UserProfileUpdate) {
-  return api<{ profile: UserProfile }>("/auth/profile", {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  return fetchProfile().then(({ profile: current }) =>
+    updateDto<UserProfile>("UserProfile", current.id, {
+      display_name: patch.displayName,
+      avatar_url: patch.avatarUrl,
+      headline: patch.headline,
+      bio: patch.bio,
+      pronouns: patch.pronouns,
+      location: patch.location,
+      timezone: patch.timezone,
+      phone: patch.phone,
+      company: patch.company,
+      job_title: patch.jobTitle,
+      website: patch.website,
+      twitter: patch.twitter,
+      github: patch.github,
+      linkedin: patch.linkedin,
+      emoji: patch.emoji,
+      birthday: patch.birthday,
+      languages: patch.languages,
+      interests: patch.interests,
+      values: patch.values,
+      goals: patch.goals,
+      personality_notes: patch.personalityNotes,
+      decision_style: patch.decisionStyle,
+      risk_tolerance: patch.riskTolerance,
+    }).then((profile) => ({ profile }))
+  );
 }
 
 /* --------------------------- Bridge connections --------------------------- */
@@ -2763,14 +2767,16 @@ export function createBridgeConnection(input: {
   remoteBridgeUrl?: string;
   remoteBridgeToken?: string;
 }) {
-  return api<{ connection: BridgeConnection }>("/connections", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return actionDto<RecordRowClient>("BridgeConnection", "register", {
+    label: input.label,
+    mode: input.mode,
+    remote_bridge_url: input.remoteBridgeUrl,
+    remote_bridge_token: input.remoteBridgeToken,
+  }, undefined, true).then((row) => ({ connection: rowDto<BridgeConnection>(row) }));
 }
 
 export function deleteBridgeConnection(id: string) {
-  return api<{ ok: boolean }>(`/connections/${id}`, { method: "DELETE" });
+  return deleteDto("BridgeConnection", id);
 }
 
 /* ----------------------------- Marketplace ----------------------------- */
@@ -2876,21 +2882,21 @@ export function fetchUnofficialCatalog() {
 }
 
 export function addCatalogSource(name: string, url: string) {
-  return api<{ id: string }>("/marketplace/catalog/sources", {
-    method: "POST",
-    body: JSON.stringify({ name, url }),
-  });
+  return actionDto<{ id: string }>("CatalogSource", "add", { name, url });
 }
 
 export function removeCatalogSource(id: string) {
-  return api<{ ok: boolean }>(`/marketplace/catalog/sources/${id}`, { method: "DELETE" });
+  return actionDto<{ ok: boolean }>("CatalogSource", "remove", {}, id, true);
 }
 
 export function installCatalogEntry(entryId: string, sourceCatalog?: string) {
-  return api<Record<string, unknown>>(`/marketplace/catalog/install/${entryId}`, {
-    method: "POST",
-    body: JSON.stringify({ sourceCatalog }),
-  });
+  return actionDto<Record<string, unknown>>(
+    "CatalogInstall",
+    "install_entry",
+    { entry_id: entryId, source_catalog: sourceCatalog },
+    undefined,
+    true
+  );
 }
 
 export function fetchInstalledCatalog() {
@@ -2903,38 +2909,44 @@ export function fetchInstalledCatalog() {
 }
 
 export function registerLocalPlugin(path: string) {
-  return api<{
+  return actionDto<{
     pluginId: string;
     pluginRoot: string;
     name: string;
     version: string;
     installed: boolean;
     built: boolean;
-  }>("/marketplace/catalog/local-plugins", {
-    method: "POST",
-    body: JSON.stringify({ path }),
-  });
+  }>("CatalogInstall", "register_local_plugin", { path }, undefined, true);
 }
 
 export function removeLocalPlugin(path: string) {
-  return api<{ ok: boolean }>("/marketplace/catalog/local-plugins", {
-    method: "DELETE",
-    body: JSON.stringify({ path }),
-  });
+  return actionDto<{ ok: boolean }>(
+    "CatalogInstall",
+    "unregister_local_plugin",
+    { path },
+    undefined,
+    true
+  );
 }
 
 export function installWorkspacePlugin(pluginId: string) {
-  return api<{ ok: boolean; pluginId: string }>("/marketplace/catalog/plugins/install", {
-    method: "POST",
-    body: JSON.stringify({ pluginId }),
-  });
+  return actionDto<{ ok: boolean; pluginId: string }>(
+    "CatalogInstall",
+    "install_plugin",
+    { plugin_id: pluginId },
+    undefined,
+    true
+  );
 }
 
 export function uninstallWorkspacePlugin(pluginId: string) {
-  return api<{ ok: boolean; pluginId: string }>("/marketplace/catalog/plugins/uninstall", {
-    method: "POST",
-    body: JSON.stringify({ pluginId }),
-  });
+  return actionDto<{ ok: boolean; pluginId: string }>(
+    "CatalogInstall",
+    "uninstall_plugin",
+    { plugin_id: pluginId },
+    undefined,
+    true
+  );
 }
 
 export function fetchNetworkStatus() {
@@ -2942,9 +2954,10 @@ export function fetchNetworkStatus() {
 }
 
 export function enableTailscaleFederation() {
-  return api<{ federationUrl: string | null; error?: string }>("/network/tailscale/enable", {
-    method: "POST",
-  });
+  return actionDto<{
+    federationUrl: string | null;
+    error?: string;
+  }>("PeerConnection", "enable_tailscale", {}, undefined, true);
 }
 
 export function fetchNetworkPeers() {
@@ -2952,35 +2965,29 @@ export function fetchNetworkPeers() {
 }
 
 export function inviteNetworkPeer(email: string, remoteBridgeUrl?: string) {
-  return api<{ inviteId: string }>("/network/peers/invite", {
-    method: "POST",
-    body: JSON.stringify({ email, remoteBridgeUrl }),
-  });
+  return actionDto<{ inviteId: string }>("PeerConnection", "invite", {
+    email,
+    remote_bridge_url: remoteBridgeUrl,
+  }, undefined, true);
 }
 
 export function refreshNetworkPeers() {
-  return api<{ peers: Array<Record<string, unknown>> }>("/network/peers/refresh", {
-    method: "POST",
-  });
-}
-
-export function createFederatedShareInvite(body: {
-  resourceKind: string;
-  resourceId: string;
-  inviteeEmail: string;
-  role?: string;
-}) {
-  return api<{ inviteId: string; inviteToken: string; inviteUrl: string }>(
-    "/network/share-invites",
-    { method: "POST", body: JSON.stringify(body) }
+  return actionDto<{ peers: Array<Record<string, unknown>> }>(
+    "PeerConnection",
+    "refresh_health",
+    {}
   );
 }
 
 export function acceptFederatedShareInvite(inviteToken: string, ownerBridgeUrl: string) {
-  return api<Record<string, unknown>>("/network/share-invites/accept", {
-    method: "POST",
-    body: JSON.stringify({ inviteToken, ownerBridgeUrl }),
-  });
+  void ownerBridgeUrl;
+  return actionDto<Record<string, unknown>>(
+    "FederatedShareInvite",
+    "accept",
+    { invite_token: inviteToken },
+    undefined,
+    true
+  );
 }
 
 export function fetchBridgeHealth() {
@@ -3005,18 +3012,31 @@ export function fetchOnboardingDetect() {
 }
 
 export function startOnboardingLocalLlm(modelPath: string) {
-  return api<{ ok: boolean }>("/onboarding/llm/local", {
-    method: "POST",
-    body: JSON.stringify({ modelPath }),
-  });
+  return actionDto(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `local:${modelPath}` },
+    "runtime",
+    true
+  ).then(() => ({ ok: true }));
 }
 
 export function markOnboardingCloudReady() {
-  return api<{ ok: boolean }>("/onboarding/llm/cloud-ready", { method: "POST" });
+  return actionDto<RecordRowClient>(
+    "TenantOnboardingConfig",
+    "mark_llm_ready",
+    {},
+    getActiveTenantId() ?? undefined
+  ).then(() => ({ ok: true }));
 }
 
 export function completeOnboarding() {
-  return api<{ ok: boolean }>("/onboarding/complete", { method: "POST" });
+  return actionDto<RecordRowClient>(
+    "TenantOnboardingConfig",
+    "complete",
+    {},
+    getActiveTenantId() ?? undefined
+  ).then(() => ({ ok: true }));
 }
 
 export function fetchMarketplaceWallet() {
@@ -3036,38 +3056,6 @@ export function fetchMarketplaceBillingConfig() {
   return api<MarketplaceBillingConfig>("/marketplace/billing/config");
 }
 
-export interface MarketplaceCheckoutResult {
-  mode: "stripe" | "dev";
-  clientSecret?: string;
-  id?: string;
-  usdCents?: number;
-  credits: number;
-  publishableKey?: string | null;
-}
-
-export function checkoutMarketplaceCredits(usdCents: number) {
-  return api<MarketplaceCheckoutResult>("/marketplace/wallet/checkout", {
-    method: "POST",
-    body: JSON.stringify({ usdCents }),
-  });
-}
-
-export function confirmMarketplacePurchase(opts: {
-  amount: number;
-  paymentIntentId?: string;
-  usdCents?: number;
-}) {
-  return api<{ balance: number }>("/marketplace/wallet/purchase", {
-    method: "POST",
-    body: JSON.stringify(opts),
-  });
-}
-
-/** @deprecated Use checkoutMarketplaceCredits + confirmMarketplacePurchase */
-export function purchaseMarketplaceCredits(amount: number) {
-  return confirmMarketplacePurchase({ amount });
-}
-
 export interface PlatformBillingConfig {
   configured: boolean;
   publishableKey: string | null;
@@ -3084,16 +3072,27 @@ export function updateAdminBillingConfig(body: {
   publishableKey?: string;
   creditsPerUsd?: number;
 }) {
-  return api<PlatformBillingConfig>("/admin/billing", {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
+  return actionDto<RecordRowClient>(
+    "PlatformBillingConfig",
+    "configure",
+    {
+      secret_key: body.secretKey,
+      publishable_key: body.publishableKey,
+      credits_per_usd: body.creditsPerUsd,
+    },
+    "platform-billing",
+    true
+  ).then(rowDto<PlatformBillingConfig>);
 }
 
 export function testAdminBillingConnection() {
-  return api<{ ok: boolean; detail?: string }>("/admin/billing/test", {
-    method: "POST",
-  });
+  return actionDto<{ ok: boolean; detail?: string }>(
+    "PlatformBillingConfig",
+    "test_connection",
+    {},
+    "platform-billing",
+    true
+  );
 }
 
 export interface WorkspaceTemplateNode {
@@ -3132,10 +3131,21 @@ export function createMarketplaceListing(body: {
   inferenceEndpointId?: string;
   bundleChildren?: unknown[];
 }) {
-  return api<{ id: string }>("/marketplace/listings", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ id: string }>("MarketplaceListing", "publish", {
+    kind: body.kind,
+    resource_id: body.resourceId,
+    title: body.title,
+    description: body.description,
+    price_credits: body.priceCredits,
+    delivery_mode: body.deliveryMode,
+    pricing_model: body.pricingModel,
+    price_period: body.pricePeriod,
+    meter_unit: body.meterUnit,
+    meter_rate: body.meterRate,
+    license: body.license,
+    inference_endpoint_id: body.inferenceEndpointId,
+    bundle_children: body.bundleChildren,
+  }, undefined, true);
 }
 
 export function fetchMyMarketplaceListings() {
@@ -3147,9 +3157,13 @@ export function fetchMarketplaceEntitlements() {
 }
 
 export function cancelMarketplaceEntitlement(entitlementId: string) {
-  return api<{ ok: boolean }>(`/marketplace/entitlements/${entitlementId}/cancel`, {
-    method: "POST",
-  });
+  return actionDto<{ ok: boolean }>(
+    "MarketplaceEntitlement",
+    "cancel",
+    {},
+    entitlementId,
+    true
+  );
 }
 
 export function fetchInferenceEndpoints() {
@@ -3164,35 +3178,42 @@ export function createInferenceEndpoint(body: {
   meterRate?: number;
   capacityHint?: number;
 }) {
-  return api<{ id: string }>("/marketplace/inference/endpoints", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ id: string }>("InferenceEndpoint", "publish", {
+    name: body.name,
+    base_model_path: body.baseModelPath,
+    adapter_ids_json: body.adapterIds,
+    meter_unit: body.meterUnit,
+    meter_rate: body.meterRate,
+    capacity_hint: body.capacityHint,
+  }, undefined, true);
 }
 
 export function acquireMarketplaceListing(listingId: string) {
-  return api<{
+  return actionDto<{
     ok: boolean;
     mode: "clone" | "live";
     import?: { kind: string; newId: string };
     entitlementId?: string;
     shareGrantId?: string;
     balance: number;
-  }>(`/marketplace/listings/${listingId}/acquire`, { method: "POST" });
+  }>("MarketplaceListing", "acquire", {}, listingId, true);
 }
 
 export function exportPortableEntity(kind: string, resourceId: string) {
-  return api<{ bundle: unknown }>("/marketplace/export", {
-    method: "POST",
-    body: JSON.stringify({ kind, resourceId }),
+  return actionDto<{ bundle: unknown }>("MarketplaceListing", "export_portable", {
+    kind,
+    resource_id: resourceId,
   });
 }
 
 export function importPortableBundle(bundle: unknown) {
-  return api<{ ok: boolean; kind: string; newId: string }>("/marketplace/import", {
-    method: "POST",
-    body: JSON.stringify({ bundle }),
-  });
+  return actionDto<{ ok: boolean; kind: string; newId: string }>(
+    "MarketplaceListing",
+    "import_portable",
+    { bundle } as Record<string, unknown>,
+    undefined,
+    true
+  );
 }
 
 /* ----------------------------- Sharing ----------------------------- */
@@ -3258,14 +3279,17 @@ export function createShareGrant(body: {
   granteeTenantId?: string;
   role?: string;
 }) {
-  return api<{ id: string }>("/shares/", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ id: string }>("ShareGrant", "grant", {
+    resource_kind: body.resourceKind,
+    resource_id: body.resourceId,
+    grantee_user_id: body.granteeUserId,
+    grantee_tenant_id: body.granteeTenantId,
+    role: body.role,
+  }, undefined, true);
 }
 
 export function revokeShareGrant(grantId: string) {
-  return api<{ ok: boolean }>(`/shares/${grantId}`, { method: "DELETE" });
+  return actionDto<{ ok: boolean }>("ShareGrant", "revoke", {}, grantId, true);
 }
 
 /** A model shared with the current user for FREE inference. */
@@ -3285,10 +3309,18 @@ export function shareModel(body: {
   granteeEmail?: string;
   name?: string;
 }) {
-  return api<{ id: string; endpointId: string }>("/shares/model", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ id: string; endpointId: string }>(
+    "ShareGrant",
+    "share_model",
+    {
+      model_path: body.modelPath,
+      grantee_user_id: body.granteeUserId,
+      grantee_email: body.granteeEmail,
+      name: body.name,
+    },
+    undefined,
+    true
+  );
 }
 
 /** Models shared WITH me (incoming free `model` grants). */
@@ -3297,9 +3329,12 @@ export function fetchSharedModels() {
 }
 
 export function cloneSharedResource(kind: string, resourceId: string) {
-  return api<{ ok: boolean; kind: string; newId: string }>(
-    `/shares/clone/${kind}/${encodeURIComponent(resourceId)}`,
-    { method: "POST" }
+  return actionDto<{ ok: boolean; kind: string; newId: string }>(
+    "ShareGrant",
+    "clone_shared",
+    { kind, resource_id: resourceId },
+    undefined,
+    true
   );
 }
 
@@ -3420,10 +3455,11 @@ export function createDmConversation(body: {
   memberEmails?: string[];
   memberAgents?: Array<{ agentId: string; agentTenantId?: string }>;
 }) {
-  return api<{ conversation: DmConversation }>("/dm/conversations", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<RecordRowClient>("DirectConversation", "start", {
+    kind: body.kind,
+    title: body.title,
+    member_user_ids: body.memberUserIds,
+  }).then((row) => ({ conversation: rowDto<DmConversation>(row) }));
 }
 
 export function fetchDmMessages(
@@ -3443,29 +3479,34 @@ export function sendDmMessage(
   conversationId: string,
   body: { bodyText?: string; attachments?: DmAttachmentInput[] }
 ) {
-  return api<{ message: DmMessage }>(
-    `/dm/conversations/${conversationId}/messages`,
-    { method: "POST", body: JSON.stringify(body) }
-  );
+  return actionDto<RecordRowClient>("DirectMessage", "send", {
+    conversation_id: conversationId,
+    body_text: body.bodyText,
+    attachments: body.attachments,
+  }).then((row) => ({ message: rowDto<DmMessage>(row) }));
 }
 
 export function markDmConversationRead(
   conversationId: string,
   messageId?: string
 ) {
-  return api<{ ok: boolean }>(`/dm/conversations/${conversationId}/read`, {
-    method: "POST",
-    body: JSON.stringify({ messageId }),
-  });
+  return actionDto<{ ok: boolean }>(
+    "DirectConversation",
+    "mark_read",
+    { message_id: messageId },
+    conversationId
+  );
 }
 
 export function addDmConversationMember(
   conversationId: string,
   body: { userId?: string; email?: string }
 ) {
-  return api<{ member: DmConversationMember }>(
-    `/dm/conversations/${conversationId}/members`,
-    { method: "POST", body: JSON.stringify(body) }
+  return actionDto<{ member: DmConversationMember }>(
+    "DirectConversation",
+    "add_member",
+    { user_id: body.userId },
+    conversationId
   );
 }
 
@@ -3473,9 +3514,12 @@ export function removeDmConversationMember(
   conversationId: string,
   userId: string
 ) {
-  return api<{ ok: boolean }>(
-    `/dm/conversations/${conversationId}/members/${userId}`,
-    { method: "DELETE" }
+  return actionDto<{ ok: boolean }>(
+    "DirectConversation",
+    "remove_member",
+    { user_id: userId },
+    conversationId,
+    true
   );
 }
 
@@ -3487,12 +3531,13 @@ export function shareDmResource(
     role?: "viewer" | "editor" | "owner";
   }
 ) {
-  return api<{
+  return actionDto<{
     grants: Array<{ granteeUserId: string; grantId: string }>;
-  }>(`/dm/conversations/${conversationId}/share`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  }>("DirectConversation", "share", {
+    resource_kind: body.resourceKind,
+    resource_id: body.resourceId,
+    role: body.role,
+  }, conversationId, true);
 }
 
 export function sendDmTyping(conversationId: string) {
@@ -3554,23 +3599,28 @@ export function fetchNotificationUnreadCount() {
 }
 
 export function markNotificationsRead(input: { ids?: string[]; all?: boolean }) {
-  return api<{ updated: number; unreadCount: number }>("/notifications/read", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  if (input.all) {
+    return actionDto<{ changed: number }>(
+      "Notification",
+      "mark_all_read",
+      {}
+    ).then(({ changed }) => ({ updated: changed, unreadCount: 0 }));
+  }
+  return Promise.all(
+    (input.ids ?? []).map((id) =>
+      actionDto("Notification", "mark_read", {}, id)
+    )
+  ).then((rows) => ({ updated: rows.length, unreadCount: 0 }));
 }
 
 export function deleteNotification(id: string) {
-  return api<{ ok: boolean; unreadCount: number }>(`/notifications/${id}`, {
-    method: "DELETE",
-  });
+  return deleteDto("Notification", id).then(() => ({ ok: true, unreadCount: 0 }));
 }
 
 export function clearNotifications(input: { readOnly?: boolean } = {}) {
-  return api<{ deleted: number; unreadCount: number }>("/notifications/clear", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return actionDto<{ deleted: number }>("Notification", "clear", {
+    read_only: input.readOnly,
+  }).then(({ deleted }) => ({ deleted, unreadCount: 0 }));
 }
 
 /* ----------------------------- Automations (Hooks) ----------------------------- */
@@ -3643,21 +3693,39 @@ export function fetchHooks() {
 }
 
 export function createHook(body: CreateHookBody) {
-  return api<{ hook: Hook }>("/hooks/", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return createDto<Hook>("Hook", {
+    owner_kind: body.ownerKind,
+    owner_id: body.ownerId,
+    name: body.name,
+    enabled: body.enabled,
+    trigger_kind: body.triggerKind,
+    event_type: body.eventType,
+    schedule_cron: body.scheduleCron,
+    condition_json: body.conditionJson,
+    action_kind: body.actionKind,
+    action_config_json: body.actionConfigJson,
+    require_approval: body.requireApproval,
+  }).then((hook) => ({ hook }));
 }
 
 export function updateHook(id: string, body: Partial<CreateHookBody>) {
-  return api<{ hook: Hook }>(`/hooks/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  return updateDto<Hook>("Hook", id, {
+    owner_kind: body.ownerKind,
+    owner_id: body.ownerId,
+    name: body.name,
+    enabled: body.enabled,
+    trigger_kind: body.triggerKind,
+    event_type: body.eventType,
+    schedule_cron: body.scheduleCron,
+    condition_json: body.conditionJson,
+    action_kind: body.actionKind,
+    action_config_json: body.actionConfigJson,
+    require_approval: body.requireApproval,
+  }).then((hook) => ({ hook }));
 }
 
 export function deleteHook(id: string) {
-  return api<{ ok: boolean }>(`/hooks/${id}`, { method: "DELETE" });
+  return deleteDto("Hook", id);
 }
 
 export function fetchHookRuns(id: string) {
@@ -3665,11 +3733,11 @@ export function fetchHookRuns(id: string) {
 }
 
 export function approveHookRun(runId: string) {
-  return api<{ ok: boolean }>(`/hooks/runs/${runId}/approve`, { method: "POST" });
+  return actionDto<{ ok: boolean }>("HookRun", "approve", {}, runId, true);
 }
 
 export function rejectHookRun(runId: string) {
-  return api<{ ok: boolean }>(`/hooks/runs/${runId}/reject`, { method: "POST" });
+  return actionDto<{ ok: boolean }>("HookRun", "reject", {}, runId, true);
 }
 
 export function fetchEvents(limit?: number) {
@@ -3721,14 +3789,12 @@ export function createSupportTicket(body: {
   targetKind?: "platform_github" | "platform_admin" | "resource_owner";
   sharedGrantId?: string | null;
   ownerUserId?: string | null;
-}) {
-  return api<{ ticket?: SupportTicket; redirectUrl?: string; kind?: string }>(
-    "/support/tickets",
-    {
-      method: "POST",
-      body: JSON.stringify(body),
-    }
-  );
+}): Promise<{ ticket?: SupportTicket; redirectUrl?: string; kind?: string }> {
+  return actionDto<RecordRowClient>("SupportTicket", "open", {
+    subject: body.subject,
+    body: body.body,
+    category: body.category,
+  }).then((row) => ({ ticket: rowDto<SupportTicket>(row) }));
 }
 
 export function fetchOwnerSupportTickets() {
@@ -3751,10 +3817,10 @@ export function fetchSupportTicket(id: string) {
 }
 
 export function postSupportMessage(id: string, body: string) {
-  return api<{ message: SupportMessage }>(`/support/tickets/${id}/messages`, {
-    method: "POST",
-    body: JSON.stringify({ body }),
-  });
+  return actionDto<RecordRowClient>("SupportMessage", "reply", {
+    ticket_id: id,
+    body,
+  }).then((row) => ({ message: rowDto<SupportMessage>(row) }));
 }
 
 export function fetchSupportGroup() {
@@ -3771,10 +3837,12 @@ export function addSupportGroupMember(body: {
   memberId: string;
   tenantId?: string | null;
 }) {
-  return api<{ member: SupportGroupMember }>("/support/group/members", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ member: SupportGroupMember }>("PlatformGroupMember", "add", {
+    group_id: "support",
+    member_kind: body.memberKind,
+    member_id: body.memberId,
+    tenant_id: body.tenantId,
+  }, undefined, true);
 }
 
 export function removeSupportGroupMember(body: {
@@ -3782,10 +3850,12 @@ export function removeSupportGroupMember(body: {
   memberId: string;
   tenantId?: string | null;
 }) {
-  return api<{ ok: boolean }>("/support/group/members", {
-    method: "DELETE",
-    body: JSON.stringify(body),
-  });
+  return actionDto<{ ok: boolean }>("PlatformGroupMember", "remove", {
+    group_id: "support",
+    member_kind: body.memberKind,
+    member_id: body.memberId,
+    tenant_id: body.tenantId,
+  }, undefined, true);
 }
 
 export function fetchAdminSupportTickets(status?: SupportTicketStatus) {
@@ -3797,10 +3867,8 @@ export function updateAdminSupportTicket(
   id: string,
   body: { status?: SupportTicketStatus; priority?: string | null }
 ) {
-  return api<{ ticket: SupportTicket }>(`/support/admin/tickets/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  return actionDto<RecordRowClient>("SupportTicket", "set_status", body, id)
+    .then((row) => ({ ticket: rowDto<SupportTicket>(row) }));
 }
 
 /* ----------------------------- Wiki ----------------------------- */
@@ -3850,10 +3918,13 @@ export function createWikiPage(body: {
   visibility?: WikiVisibility;
   slug?: string;
 }) {
-  return api<{ page: WikiPage }>("/wiki/pages", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  return createDto<WikiPage>("WikiPage", {
+    title: body.title,
+    body_markdown: body.bodyMarkdown,
+    space: body.space,
+    visibility: body.visibility,
+    slug: body.slug,
+  }).then((page) => ({ page }));
 }
 
 export function updateWikiPage(
@@ -3865,14 +3936,16 @@ export function updateWikiPage(
     visibility?: WikiVisibility;
   }
 ) {
-  return api<{ page: WikiPage }>(`/wiki/pages/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  return updateDto<WikiPage>("WikiPage", id, {
+    title: body.title,
+    body_markdown: body.bodyMarkdown,
+    space: body.space,
+    visibility: body.visibility,
+  }).then((page) => ({ page }));
 }
 
 export function deleteWikiPage(id: string) {
-  return api<{ ok: boolean }>(`/wiki/pages/${id}`, { method: "DELETE" });
+  return deleteDto("WikiPage", id);
 }
 
 export interface WikiPageProposal {
@@ -3898,13 +3971,15 @@ export function fetchWikiProposals(status: "pending" | "all" = "pending") {
 }
 
 export function approveWikiProposal(id: string) {
-  return api<{ ok: boolean; pageId?: string }>(`/wiki/proposals/${id}/approve`, {
-    method: "POST",
-  });
+  return actionDto<{ ok: boolean; pageId?: string }>(
+    "WikiProposal",
+    "approve",
+    {},
+    id,
+    true
+  );
 }
 
 export function rejectWikiProposal(id: string) {
-  return api<{ ok: boolean }>(`/wiki/proposals/${id}/reject`, {
-    method: "POST",
-  });
+  return actionDto<{ ok: boolean }>("WikiProposal", "reject", {}, id, true);
 }

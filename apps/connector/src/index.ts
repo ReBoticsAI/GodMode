@@ -8,6 +8,10 @@ const port = Number(process.env.CONNECTOR_PORT ?? 3950);
 const cfg: ConnectorConfig = {
   bridgeUrl,
   federationToken: token,
+  resourceKind: process.env.FEDERATION_RESOURCE_KIND ?? "",
+  resourceId: process.env.FEDERATION_RESOURCE_ID ?? "",
+  ownerTenantId: process.env.FEDERATION_OWNER_TENANT_ID ?? "",
+  targetTenantId: process.env.FEDERATION_TARGET_TENANT_ID ?? "",
   manifest: {
     id: process.env.CONNECTOR_ID ?? "generic",
     title: process.env.CONNECTOR_TITLE ?? "GodMode Local Connector",

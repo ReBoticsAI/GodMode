@@ -13,6 +13,12 @@ export async function federationExecuteRemote(
   remoteUrl: string,
   remoteToken: string,
   line: string,
+  binding: {
+    resourceKind: string;
+    resourceId: string;
+    ownerTenantId: string;
+    targetTenantId: string;
+  },
   chartbookKey?: string
 ): Promise<FederationExecuteResult> {
   const base = remoteUrl.replace(/\/$/, "");
@@ -22,7 +28,7 @@ export async function federationExecuteRemote(
       Authorization: `Bearer ${remoteToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ line, chartbookKey }),
+    body: JSON.stringify({ line, chartbookKey, ...binding }),
   });
   const body = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
@@ -64,6 +70,7 @@ export async function federationHealthRemote(
 export type ScDispatchContext = {
   resolved: ResolvedConnection;
   line: string;
+  targetTenantId: string;
   chartbookKey?: string;
   localEnqueue: (line: string, chartbookKey?: string) => string;
 };
@@ -75,6 +82,12 @@ export async function dispatchScLine(ctx: ScDispatchContext): Promise<Federation
       ctx.resolved.remoteUrl,
       ctx.resolved.remoteToken,
       ctx.line,
+      {
+        resourceKind: ctx.resolved.resourceKind,
+        resourceId: ctx.resolved.resourceId,
+        ownerTenantId: ctx.resolved.ownerTenantId,
+        targetTenantId: ctx.targetTenantId,
+      },
       ctx.chartbookKey
     );
   }

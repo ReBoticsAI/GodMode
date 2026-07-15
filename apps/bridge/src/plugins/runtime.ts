@@ -13,6 +13,7 @@ import type {
   PluginRecordAdapter,
   PluginRecordContext,
 } from "@godmode/plugin-api";
+import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
 import { getPluginHost } from "@godmode/plugin-host";
 import { registerPageKinds } from "../kernel/kind-registry.js";
 import {
@@ -25,6 +26,16 @@ import {
   registerObjectType,
   unregisterObjectType,
 } from "../kernel/registry.js";
+import {
+  createRecord,
+  deleteRecord,
+  executeCollectionAction,
+  executeRecordAction,
+  getRecord,
+  listRecords,
+  updateRecord,
+} from "../kernel/record-api.js";
+import { getTenantDb } from "../tenant-registry.js";
 
 type HookHandler = (ctx: PluginBootContext & PluginTenantContext) => void | Promise<void>;
 
@@ -188,10 +199,78 @@ export class PluginRuntime {
     const self = this;
     const pluginId = manifest.id;
     const host = getPluginHost();
+    const kernelContext = (ctx: PluginRecordContext): OperationContext => ({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      agentId: ctx.activeAgentId,
+      role: ctx.role,
+      source: "plugin",
+      requestId: ctx.requestId,
+      idempotencyKey: ctx.idempotencyKey,
+      expectedVersion: ctx.expectedVersion,
+      confirmationId: ctx.confirmationId,
+      installedPluginIds: new Set([pluginId]),
+      signal: ctx.signal,
+      bus: self.config?.bus,
+    });
+    const kernelDb = (ctx: PluginRecordContext) =>
+      host.getTenantDb(ctx.tenantId) as AppDatabase;
     const api: GodModePluginApi = {
       manifest: { id: manifest.id, version: manifest.version, name: manifest.name },
       pluginRoot,
       host,
+      kernel: {
+        apiVersion: KERNEL_CLIENT_API_VERSION,
+        list(objectType, query, ctx) {
+          return listRecords(
+            kernelDb(ctx),
+            objectType,
+            query,
+            kernelContext(ctx)
+          );
+        },
+        get(objectType, id, ctx) {
+          return getRecord(kernelDb(ctx), objectType, id, kernelContext(ctx));
+        },
+        create(objectType, data, ctx) {
+          return createRecord(
+            kernelDb(ctx),
+            objectType,
+            data,
+            kernelContext(ctx)
+          );
+        },
+        update(objectType, id, data, ctx) {
+          return updateRecord(
+            kernelDb(ctx),
+            objectType,
+            id,
+            data,
+            kernelContext(ctx)
+          );
+        },
+        delete(objectType, id, ctx) {
+          deleteRecord(kernelDb(ctx), objectType, id, kernelContext(ctx));
+        },
+        async runAction(objectType, action, input, ctx, id) {
+          return id
+            ? executeRecordAction(
+                kernelDb(ctx),
+                objectType,
+                id,
+                action,
+                input,
+                kernelContext(ctx)
+              )
+            : executeCollectionAction(
+                kernelDb(ctx),
+                objectType,
+                action,
+                input,
+                kernelContext(ctx)
+              );
+        },
+      },
       routes: {
         mount(path: string, router: IRouter) {
           self.routers.push({ path, router });
@@ -248,6 +327,9 @@ export class PluginRuntime {
             role: ctx.role,
             source: ctx.source,
             requestId: ctx.requestId,
+            idempotencyKey: ctx.idempotencyKey,
+            expectedVersion: ctx.expectedVersion,
+            confirmationId: ctx.confirmationId,
             signal: ctx.signal,
           });
           const adapter: RecordAdapter = {
@@ -346,7 +428,21 @@ export class PluginRuntime {
         },
       },
       async installTenant(tenantId: string, userId?: string) {
-        await self.installPluginForTenant(pluginId, tenantId, userId);
+        await executeCollectionAction(
+          getTenantDb(tenantId),
+          "CatalogInstall",
+          "install_plugin",
+          { plugin_id: pluginId },
+          {
+            tenantId,
+            userId,
+            agentId: userId ? undefined : `plugin:${pluginId}`,
+            role: "owner",
+            source: "plugin",
+            installedPluginIds: new Set([pluginId]),
+            bus: self.config?.bus,
+          }
+        );
       },
     };
     return api;

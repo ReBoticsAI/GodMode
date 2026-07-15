@@ -51,6 +51,12 @@ interface BuildOptions {
   limit?: number;
 }
 
+export interface ImportDatasetOptions {
+  name: string;
+  domain?: string;
+  examples: DatasetExample[];
+}
+
 const SOURCE_LABELS: Record<DatasetSource, string> = {
   chats: "Intelligence chats",
   workflows: "Workflow runs",
@@ -284,6 +290,53 @@ export class AiDatasetBuilder {
     const all = this.buildExamples(source, opts);
     const limit = opts.limit && opts.limit > 0 ? opts.limit : 50;
     return { examples: all.slice(0, limit), total: all.length };
+  }
+
+  /**
+   * Import caller-supplied chat examples into managed JSONL storage. The
+   * service validates and rewrites the payload instead of registering an
+   * arbitrary filesystem path.
+   */
+  importDataset(opts: ImportDatasetOptions): DatasetRow {
+    const name = opts.name.trim();
+    if (!name) throw new Error("name required");
+    if (!Array.isArray(opts.examples) || opts.examples.length === 0) {
+      throw new Error("examples required");
+    }
+    const examples = opts.examples.map((example, index) => {
+      if (!Array.isArray(example?.messages) || example.messages.length === 0) {
+        throw new Error(`examples[${index}].messages required`);
+      }
+      return {
+        messages: example.messages.map((message, messageIndex) => {
+          const role = String(message?.role ?? "").trim();
+          const content = String(message?.content ?? "").trim();
+          if (!role || !content) {
+            throw new Error(
+              `examples[${index}].messages[${messageIndex}] requires role and content`
+            );
+          }
+          return { role, content };
+        }),
+      };
+    });
+
+    const dir = config.ai.datasetsDir;
+    fs.mkdirSync(dir, { recursive: true });
+    const id = uuidv4();
+    const filePath = path.join(dir, `${slug(name)}-${id.slice(0, 8)}.jsonl`);
+    fs.writeFileSync(
+      filePath,
+      examples.map((example) => JSON.stringify(example)).join("\n") + "\n",
+      "utf8"
+    );
+    this.db
+      .prepare(
+        `INSERT INTO ai_datasets (id, name, domain, path, row_count)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(id, name, opts.domain?.trim() || null, filePath, examples.length);
+    return this.db.prepare(`SELECT * FROM ai_datasets WHERE id = ?`).get(id) as DatasetRow;
   }
 
   buildDataset(opts: BuildOptions): DatasetRow {

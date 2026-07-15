@@ -73,11 +73,35 @@ describe("record API", () => {
       checked: true,
       meta: { answer: 42 },
     });
-    updateRecord(db, def.name, "one", { status: "done" }, owner);
+    expect(created.version).toBe("1");
+    const updated = updateRecord(
+      db,
+      def.name,
+      "one",
+      { status: "done" },
+      { ...owner, expectedVersion: created.version }
+    );
+    expect(updated.version).toBe("2");
+    expect(() =>
+      updateRecord(
+        db,
+        def.name,
+        "one",
+        { status: "open" },
+        { ...owner, expectedVersion: created.version }
+      )
+    ).toThrowError(/version conflict/);
     createRecord(db, def.name, { id: "two", title: "Two" }, owner);
-    expect(listRecords(db, def.name, { limit: 1, offset: 1 }, owner)).toMatchObject({
+    expect(
+      listRecords(
+        db,
+        def.name,
+        { limit: 1, offset: 1, sort: "id", direction: "desc" },
+        owner
+      )
+    ).toMatchObject({
       total: 2,
-      records: [{ id: "two" }],
+      records: [{ id: "one" }],
     });
     deleteRecord(db, def.name, "one", owner);
     expect(() => getRecord(db, def.name, "one", owner)).toThrowError(KernelError);

@@ -170,6 +170,73 @@ export function deleteWorkflow(db: AppDatabase, id: string): boolean {
   return db.prepare(`DELETE FROM ai_workflows WHERE id = ?`).run(id).changes > 0;
 }
 
+export interface WorkflowComment {
+  id: string;
+  workflow_id: string;
+  author: "user" | "agent";
+  body: string;
+  created_at: string;
+}
+
+export function listWorkflowComments(
+  db: AppDatabase,
+  workflowId?: string
+): WorkflowComment[] {
+  return (workflowId
+    ? db
+        .prepare(
+          `SELECT id, workflow_id, author, body, created_at
+           FROM ai_workflow_comments WHERE workflow_id = ?
+           ORDER BY created_at ASC`
+        )
+        .all(workflowId)
+    : db
+        .prepare(
+          `SELECT id, workflow_id, author, body, created_at
+           FROM ai_workflow_comments ORDER BY created_at DESC`
+        )
+        .all()) as WorkflowComment[];
+}
+
+export function getWorkflowComment(
+  db: AppDatabase,
+  id: string
+): WorkflowComment | null {
+  return (
+    (db
+      .prepare(
+        `SELECT id, workflow_id, author, body, created_at
+         FROM ai_workflow_comments WHERE id = ?`
+      )
+      .get(id) as WorkflowComment | undefined) ?? null
+  );
+}
+
+export function createWorkflowComment(
+  db: AppDatabase,
+  input: {
+    workflowId: string;
+    author?: "user" | "agent";
+    body: string;
+  }
+): WorkflowComment {
+  if (!getWorkflow(db, input.workflowId)) {
+    throw Object.assign(new Error("Workflow not found"), { status: 404 });
+  }
+  const id = uuidv4();
+  db.prepare(
+    `INSERT INTO ai_workflow_comments (id, workflow_id, author, body)
+     VALUES (?, ?, ?, ?)`
+  ).run(id, input.workflowId, input.author ?? "user", input.body);
+  return getWorkflowComment(db, id)!;
+}
+
+export function deleteWorkflowComment(db: AppDatabase, id: string): boolean {
+  return db
+    .prepare(`DELETE FROM ai_workflow_comments WHERE id = ?`)
+    .run(id).changes > 0;
+}
+
 export interface WorkflowRunResult {
   ok: boolean;
   output: string;

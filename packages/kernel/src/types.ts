@@ -143,6 +143,14 @@ export interface ObjectTypeDef {
   schemaVersion?: number;
   /** Database containing adapter records. Native ObjectTypes are tenant-local. */
   database?: "tenant" | "core";
+  /** Field used as the stable resource version for conditional mutations. */
+  versionField?: string;
+  /** Contract-level deprecation metadata. */
+  deprecated?: {
+    since: number;
+    message: string;
+    replacement?: string;
+  };
   /** Operations exposed through generic Record APIs. */
   operations?: Array<"list" | "get" | "create" | "update" | "delete">;
   /** Named domain operations implemented by an adapter (moves, approvals, runs). */
@@ -156,6 +164,8 @@ export interface RecordRow {
   id: string;
   objectType: string;
   data: RecordData;
+  /** Stable opaque version used for ETags and conditional mutations. */
+  version?: string;
 }
 
 export interface ListRecordsResult {

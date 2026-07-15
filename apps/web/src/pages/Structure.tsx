@@ -10,11 +10,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  api,
+  createStructureDivision,
   createStructureNode,
+  createStructurePage,
+  deleteStructureDepartment,
+  deleteStructureDivision,
+  deleteStructurePage,
   fetchAiAgents,
   fetchAgentAssignments,
   setAgentAssignment,
+  updateStructureDepartment,
+  updateStructureDivision,
+  updateStructurePage,
   type AiAgent,
   type AiAgentAssignment,
   type AiAssignmentRole,
@@ -559,10 +566,7 @@ function DepartmentRow({
         <InlineLabelEditor
           value={department.label}
           onSave={async (next) => {
-            await api(`/departments/${department.id}`, {
-              method: "PUT",
-              body: JSON.stringify({ label: next }),
-            });
+            await updateStructureDepartment(department.id, { label: next });
             await reload();
           }}
         />
@@ -584,10 +588,7 @@ function DepartmentRow({
           <IconEditButton
             value={department.icon}
             onChange={async (next) => {
-              await api(`/departments/${department.id}`, {
-                method: "PUT",
-                body: JSON.stringify({ icon: next }),
-              });
+              await updateStructureDepartment(department.id, { icon: next });
               await reload();
             }}
           />
@@ -603,9 +604,7 @@ function DepartmentRow({
               )
                 return;
               try {
-                await api(`/departments/${department.id}`, {
-                  method: "DELETE",
-                });
+                await deleteStructureDepartment(department.id);
                 toast.success("Department deleted");
                 await reload();
               } catch (err) {
@@ -833,10 +832,7 @@ function DivisionRow({
         <InlineLabelEditor
           value={division.label}
           onSave={async (next) => {
-            await api(`/divisions/${dept.id}/${division.id}`, {
-              method: "PUT",
-              body: JSON.stringify({ label: next }),
-            });
+            await updateStructureDivision(dept.id, division.id, { label: next });
             await reload();
           }}
         />
@@ -858,11 +854,8 @@ function DivisionRow({
             checked={division.rightSidebar === "price"}
             onCheckedChange={async (checked) => {
               try {
-                await api(`/divisions/${dept.id}/${division.id}`, {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    rightSidebar: checked ? "price" : null,
-                  }),
+                await updateStructureDivision(dept.id, division.id, {
+                  rightSidebar: checked ? "price" : null,
                 });
                 await reload();
               } catch (err) {
@@ -881,10 +874,7 @@ function DivisionRow({
           <IconEditButton
             value={division.icon}
             onChange={async (next) => {
-              await api(`/divisions/${dept.id}/${division.id}`, {
-                method: "PUT",
-                body: JSON.stringify({ icon: next }),
-              });
+              await updateStructureDivision(dept.id, division.id, { icon: next });
               await reload();
             }}
           />
@@ -900,9 +890,7 @@ function DivisionRow({
               )
                 return;
               try {
-                await api(`/divisions/${dept.id}/${division.id}`, {
-                  method: "DELETE",
-                });
+                await deleteStructureDivision(dept.id, division.id);
                 toast.success("Division deleted");
                 await reload();
               } catch (err) {
@@ -946,14 +934,11 @@ function CreateDivisionDialog({
   const submit = async () => {
     setBusy(true);
     try {
-      await api(`/departments/${dept.id}/divisions`, {
-        method: "POST",
-        body: JSON.stringify({
-          id,
-          label,
-          icon,
-          rightSidebar: rightSidebar ? "price" : null,
-        }),
+      await createStructureDivision(dept.id, {
+        id,
+        label,
+        icon,
+        rightSidebar: rightSidebar ? "price" : null,
       });
       toast.success("Division created");
       reset();
@@ -1184,9 +1169,8 @@ function PageRow({
         <InlineLabelEditor
           value={page.label}
           onSave={async (next) => {
-            await api(`/pages/${dept.id}/${division.id}/${page.id}`, {
-              method: "PUT",
-              body: JSON.stringify({ label: next }),
+            await updateStructurePage(dept.id, division.id, page.id, {
+              label: next,
             });
             await reload();
           }}
@@ -1208,9 +1192,8 @@ function PageRow({
           <IconEditButton
             value={page.icon}
             onChange={async (next) => {
-              await api(`/pages/${dept.id}/${division.id}/${page.id}`, {
-                method: "PUT",
-                body: JSON.stringify({ icon: next }),
+              await updateStructurePage(dept.id, division.id, page.id, {
+                icon: next,
               });
               await reload();
             }}
@@ -1222,9 +1205,7 @@ function PageRow({
             onClick={async () => {
               if (!confirm(`Delete page "${page.label}"?`)) return;
               try {
-                await api(`/pages/${dept.id}/${division.id}/${page.id}`, {
-                  method: "DELETE",
-                });
+                await deleteStructurePage(dept.id, division.id, page.id);
                 toast.success("Page deleted");
                 await reload();
               } catch (err) {
@@ -1274,9 +1255,11 @@ function CreatePageDialog({
   const submit = async () => {
     setBusy(true);
     try {
-      await api(`/divisions/${dept.id}/${division.id}/pages`, {
-        method: "POST",
-        body: JSON.stringify({ id, label, icon, segment }),
+      await createStructurePage(dept.id, division.id, {
+        id,
+        label,
+        icon,
+        segment,
       });
       toast.success("Page created");
       reset();

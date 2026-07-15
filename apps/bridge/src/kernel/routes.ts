@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
 import type { AppDatabase } from "../db.js";
-import { requireTenantRole } from "../services/auth/middleware.js";
 import { getCoreDb } from "../core-db.js";
 import { installedPluginIdsForTenant } from "../plugins/plugin-install.js";
 import { listPageKinds, isRegisteredPageKind } from "./kind-registry.js";
@@ -27,7 +26,6 @@ export function createKernelRouter(
 ): Router {
   const router = Router();
   const tdb = (req: Request): AppDatabase => req.tenantDb ?? operatorDb;
-  const requireEditor = requireTenantRole("editor");
   const context = (req: Request): OperationContext => ({
     tenantId: req.tenantId,
     userId: req.user?.id,
@@ -44,13 +42,11 @@ export function createKernelRouter(
     ),
   });
 
-  router.use((req, res, next) => {
-    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
-      next();
-      return;
-    }
-    requireEditor(req, res, next);
-  });
+  const etag = (value: unknown): string =>
+    `"${createHash("sha256")
+      .update(JSON.stringify(value))
+      .digest("base64url")
+      .slice(0, 32)}"`;
 
   const handleErr = (err: unknown, res: import("express").Response): void => {
     if (err instanceof KernelError || err instanceof StructureError) {
@@ -69,15 +65,17 @@ export function createKernelRouter(
   };
 
   router.get("/object-types", (req, res) => {
-    res.json({ objectTypes: listVisibleObjectTypes(context(req)) });
+    const payload = { objectTypes: listVisibleObjectTypes(context(req)) };
+    res.set("ETag", etag(payload)).json(payload);
   });
 
   router.get("/kernel/capabilities", (req, res) => {
-    res.json({
+    const payload = {
       contractVersion: 1,
       objectTypes: listVisibleObjectTypes(context(req)),
       protocolExceptions: PROTOCOL_EXCEPTIONS,
-    });
+    };
+    res.set("ETag", etag(payload)).json(payload);
   });
 
   router.get("/object-types/:name", (req, res) => {
@@ -88,7 +86,7 @@ export function createKernelRouter(
       res.status(404).json({ error: "ObjectType not found" });
       return;
     }
-    res.json(def);
+    res.set("ETag", etag(def)).json(def);
   });
 
   router.get("/page-kinds", (_req, res) => {
@@ -114,16 +112,15 @@ export function createKernelRouter(
         req.query.direction === "asc" || req.query.direction === "desc"
           ? req.query.direction
           : undefined;
-      res.json(
-        listRecords(tdb(req), req.params.objectType, {
+      const result = listRecords(tdb(req), req.params.objectType, {
           parentId,
           limit: Number.isFinite(limit) ? limit : undefined,
           offset: Number.isFinite(offset) ? offset : undefined,
           filters,
           sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
           direction,
-        }, context(req))
-      );
+        }, context(req));
+      res.set("ETag", etag(result)).json(result);
     } catch (err) {
       handleErr(err, res);
     }
@@ -131,7 +128,13 @@ export function createKernelRouter(
 
   router.get("/records/:objectType/:id", (req, res) => {
     try {
-      res.json(getRecord(tdb(req), req.params.objectType, req.params.id, context(req)));
+      const row = getRecord(
+        tdb(req),
+        req.params.objectType,
+        req.params.id,
+        context(req)
+      );
+      res.set("ETag", `"${row.version}"`).json(row);
     } catch (err) {
       handleErr(err, res);
     }
@@ -152,7 +155,7 @@ export function createKernelRouter(
         throw new KernelError(400, `Unknown page kind: ${String(data.kind)}`);
       }
       const row = createRecord(tdb(req), req.params.objectType, data, context(req));
-      res.status(201).json(row);
+      res.set("ETag", `"${row.version}"`).status(201).json(row);
     } catch (err) {
       handleErr(err, res);
     }
@@ -172,9 +175,14 @@ export function createKernelRouter(
       ) {
         throw new KernelError(400, `Unknown page kind: ${String(data.kind)}`);
       }
-      res.json(
-        updateRecord(tdb(req), req.params.objectType, req.params.id, data, context(req))
+      const row = updateRecord(
+        tdb(req),
+        req.params.objectType,
+        req.params.id,
+        data,
+        context(req)
       );
+      res.set("ETag", `"${row.version}"`).json(row);
     } catch (err) {
       handleErr(err, res);
     }

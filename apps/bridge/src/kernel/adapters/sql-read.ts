@@ -1,6 +1,5 @@
 import type { AppDatabase } from "../../db.js";
 import type { ObjectTypeDef, RecordData, RecordRow } from "@godmode/kernel";
-import { getCoreDb } from "../../core-db.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -24,10 +23,13 @@ function ident(value: string): string {
 }
 
 function sourceDb(
-  tenantDb: AppDatabase,
-  options: SqlReadAdapterOptions
+  declaredDb: AppDatabase,
+  _options: SqlReadAdapterOptions
 ): AppDatabase {
-  return options.database === "core" ? getCoreDb() : tenantDb;
+  // record-api resolves ObjectType.database before dispatch. Always use that
+  // authoritative handle so injected core databases and tenant isolation are
+  // preserved instead of re-opening a process-global singleton here.
+  return declaredDb;
 }
 
 function scopeClause(

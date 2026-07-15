@@ -30,6 +30,7 @@ export function ensureNativeTable(db: AppDatabase, def: ObjectTypeDef): string {
       return `${quoteIdent(f.name)} ${sqlType(f)}${required}`;
     });
   cols.unshift(`id TEXT PRIMARY KEY`);
+  cols.push(`_kernel_version INTEGER NOT NULL DEFAULT 1`);
   cols.push(`created_at TEXT NOT NULL DEFAULT (datetime('now'))`);
   cols.push(`updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
   db.exec(
@@ -42,6 +43,12 @@ export function ensureNativeTable(db: AppDatabase, def: ObjectTypeDef): string {
       }>
     ).map((r) => r.name)
   );
+  if (!existing.has("_kernel_version")) {
+    db.exec(
+      `ALTER TABLE ${quoteIdent(table)} ADD COLUMN _kernel_version INTEGER NOT NULL DEFAULT 1`
+    );
+    existing.add("_kernel_version");
+  }
   for (const field of def.fields) {
     if (
       field.name === "id" ||
@@ -101,7 +108,13 @@ function rowToRecord(
   def: ObjectTypeDef,
   row: Record<string, unknown>
 ): RecordRow {
-  const { id, created_at: _c, updated_at: _u, ...rest } = row;
+  const {
+    id,
+    created_at: _c,
+    updated_at: _u,
+    _kernel_version,
+    ...rest
+  } = row;
   const data: RecordData = { id: String(id) };
   for (const field of def.fields) {
     if (field.name === "id" || field.secret || !(field.name in rest)) continue;
@@ -111,6 +124,7 @@ function rowToRecord(
     id: String(id),
     objectType: def.name,
     data,
+    version: String(_kernel_version ?? 1),
   };
 }
 
@@ -219,7 +233,8 @@ export function updateNativeRecord(
   db: AppDatabase,
   def: ObjectTypeDef,
   id: string,
-  data: RecordData
+  data: RecordData,
+  expectedVersion?: string
 ): RecordRow {
   const table = ensureNativeTable(db, def);
   const existing = getNativeRecord(db, def, id);
@@ -240,9 +255,22 @@ export function updateNativeRecord(
   if (sets.length === 0) return existing;
   sets.push(`updated_at=datetime('now')`);
   vals.push(id);
-  db.prepare(
-    `UPDATE ${quoteIdent(table)} SET ${sets.join(", ")} WHERE id=?`
+  sets.push(`_kernel_version=_kernel_version+1`);
+  const normalizedExpected = expectedVersion
+    ?.replace(/^W\//, "")
+    .replace(/^"|"$/g, "");
+  if (normalizedExpected) vals.push(Number(normalizedExpected));
+  const info = db.prepare(
+    `UPDATE ${quoteIdent(table)} SET ${sets.join(", ")} WHERE id=?${
+      normalizedExpected ? " AND _kernel_version=?" : ""
+    }`
   ).run(...vals);
+  if (info.changes === 0) {
+    throw Object.assign(new Error("resource version conflict"), {
+      status: 412,
+      code: "KERNEL_VERSION_CONFLICT",
+    });
+  }
   const row = getNativeRecord(db, def, id);
   if (!row) throw new Error("failed to read updated record");
   return row;
@@ -251,11 +279,30 @@ export function updateNativeRecord(
 export function deleteNativeRecord(
   db: AppDatabase,
   def: ObjectTypeDef,
-  id: string
+  id: string,
+  expectedVersion?: string
 ): void {
   const table = ensureNativeTable(db, def);
-  const info = db.prepare(`DELETE FROM ${quoteIdent(table)} WHERE id=?`).run(id);
+  const normalizedExpected = expectedVersion
+    ?.replace(/^W\//, "")
+    .replace(/^"|"$/g, "");
+  const info = db
+    .prepare(
+      `DELETE FROM ${quoteIdent(table)} WHERE id=?${
+        normalizedExpected ? " AND _kernel_version=?" : ""
+      }`
+    )
+    .run(
+      id,
+      ...(normalizedExpected ? [Number(normalizedExpected)] : [])
+    );
   if (info.changes === 0) {
+    if (getNativeRecord(db, def, id)) {
+      throw Object.assign(new Error("resource version conflict"), {
+        status: 412,
+        code: "KERNEL_VERSION_CONFLICT",
+      });
+    }
     throw Object.assign(new Error("record not found"), { status: 404 });
   }
 }

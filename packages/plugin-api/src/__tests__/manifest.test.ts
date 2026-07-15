@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseGodmodePluginManifest } from "../index.js";
+import {
+  KERNEL_CLIENT_API_VERSION,
+  parseGodmodePluginManifest,
+} from "../index.js";
 
 describe("plugin ObjectType manifests", () => {
   it("accepts metadata-only plugins", () => {
@@ -35,5 +38,25 @@ describe("plugin ObjectType manifests", () => {
         objectTypes: [{ name: "bad-name", fields: [] }],
       })
     ).toThrow(/ObjectType|objectTypes/);
+  });
+
+  it("negotiates the versioned kernel client contract", () => {
+    expect(
+      parseGodmodePluginManifest({
+        id: "kernel-plugin",
+        name: "Kernel Plugin",
+        version: "1.0.0",
+        kernelApiVersion: KERNEL_CLIENT_API_VERSION,
+      }).kernelApiVersion
+    ).toBe(KERNEL_CLIENT_API_VERSION);
+
+    expect(() =>
+      parseGodmodePluginManifest({
+        id: "future-plugin",
+        name: "Future Plugin",
+        version: "1.0.0",
+        kernelApiVersion: KERNEL_CLIENT_API_VERSION + 1,
+      })
+    ).toThrow(/unsupported kernelApiVersion/);
   });
 });
