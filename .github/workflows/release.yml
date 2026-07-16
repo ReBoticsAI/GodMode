@@ -1,13 +1,17 @@
 name: Unified release
 
 on:
+  # Nightly publish at 12:00 America/Denver (06:00 UTC during MDT; 05:00 would be
+  # winter MST — we pin MDT midnight so summer matches local midnight).
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
   push:
-    branches: [main]
     tags: ["v[0-9]*.[0-9]*.[0-9]*"]
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-${{ github.event_name == 'push' && github.ref || 'nightly' }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
