@@ -23,6 +23,7 @@
   "build": {
     "appId": "ai.rebotics.godmode",
     "productName": "GodMode",
+    "executableName": "GodMode",
     "copyright": "Copyright © ReBotics AI",
     "electronVersion": "37.10.3",
     "directories": {
