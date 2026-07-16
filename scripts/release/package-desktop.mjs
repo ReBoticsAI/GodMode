@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rename, rm, access } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import {
@@ -6,6 +6,15 @@ import {
   installerExtensionFromFilename,
 } from "./artifact-names.mjs";
 import { hostPlatformLabel, stageRuntime } from "./stage-runtime.mjs";
+
+async function exists(target) {
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const outputDirectory = process.argv[2] ?? "release-out";
 const version = process.env.RELEASE_VERSION;
@@ -35,8 +44,17 @@ await stageRuntime({
 
 await rm(runtimeDest, { recursive: true, force: true });
 await mkdir(runtimeDest, { recursive: true });
-await cp(stage, runtimeDest, { recursive: true });
+await cp(stage, runtimeDest, { recursive: true, dereference: true });
 await rm(stage, { recursive: true, force: true });
+
+// electron-builder honors .gitignore and would omit node_modules from extraResources.
+// Stage deps under _node_modules; after-pack.cjs renames them back inside the app.
+const runtimeNodeModules = path.join(runtimeDest, "node_modules");
+const runtimeBundledModules = path.join(runtimeDest, "_node_modules");
+if (await exists(runtimeNodeModules)) {
+  await rm(runtimeBundledModules, { recursive: true, force: true });
+  await rename(runtimeNodeModules, runtimeBundledModules);
+}
 
 await rm(updateDest, { recursive: true, force: true });
 await mkdir(updateDest, { recursive: true });
@@ -52,6 +70,8 @@ const builderArgs = [
   "@godmode/desktop",
   "--",
   `-c.extraMetadata.version=${electronVersion}`,
+  // Avoid NSIS install dir "@godmodedesktop" from the scoped package name.
+  "-c.extraMetadata.name=GodMode",
   "--publish",
   "never",
 ];

@@ -63,8 +63,10 @@
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "GodMode"
     },
+    "afterPack": "./after-pack.cjs",
     "mac": {
       "target": [
         "dmg"

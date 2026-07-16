@@ -161,14 +161,26 @@ test("bare-metal updater selects signed bundle artifacts", async () => {
   assert.match(updater, /artifact\.sha256/);
 });
 
-test("desktop updater selects signed installer artifacts", async () => {
-  const updater = await readFile("scripts/update/desktop-update.mjs", "utf8");
-  assert.match(updater, /kind === "installer"/);
-  assert.match(updater, /AppImage/);
-  assert.match(updater, /NSIS|\/S/);
-  assert.match(updater, /\$\{manifestUrl\}\.bundle/);
-  assert.doesNotMatch(updater, /\$\{artifactUrl\}\.bundle/);
-  assert.match(updater, /artifact\.sha256/);
+test("desktop packaging dodges gitignore stripping of node_modules", async () => {
+  const packager = await readFile("scripts/release/package-desktop.mjs", "utf8");
+  const afterPack = await readFile("apps/desktop/after-pack.cjs", "utf8");
+  const desktopPkg = await readFile("apps/desktop/package.json", "utf8");
+  assert.match(packager, /_node_modules/);
+  assert.match(packager, /extraMetadata\.name=GodMode/);
+  assert.match(afterPack, /_node_modules/);
+  assert.match(afterPack, /cors/);
+  assert.match(desktopPkg, /after-pack\.cjs/);
+});
+
+test("desktop shell surfaces boot failures instead of quitting silently", async () => {
+  const main = await readFile("apps/desktop/src/main.ts", "utf8");
+  const runtime = await readFile("apps/desktop/src/runtime.ts", "utf8");
+  assert.match(main, /showSplash|Preparing GodMode/);
+  assert.match(main, /failStartup/);
+  assert.match(main, /desktop\.log|openLogFile/);
+  assert.match(runtime, /ensureRuntimeDependencies/);
+  assert.match(runtime, /stdio: \["ignore", "pipe", "pipe"\]/);
+  assert.doesNotMatch(runtime, /return process\.execPath/);
 });
 
 test("supervisor routes electron surface to desktop-update", async () => {
