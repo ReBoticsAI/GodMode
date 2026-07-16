@@ -1,0 +1,78 @@
+{
+  "name": "@godmode/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GodMode desktop shell (Electron)",
+  "author": "ReBotics AI",
+  "main": "dist/main.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "npm run build && electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.7.3"
+  },
+  "build": {
+    "appId": "ai.rebotics.godmode",
+    "productName": "GodMode",
+    "copyright": "Copyright © ReBotics AI",
+    "directories": {
+      "output": "../../release-out/desktop",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/runtime",
+        "to": "runtime"
+      },
+      {
+        "from": "resources/update",
+        "to": "update"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "GodMode-Setup-${version}-windows-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "artifactName": "GodMode-${version}-darwin-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "artifactName": "GodMode-${version}-linux-${arch}.${ext}"
+    }
+  }
+}

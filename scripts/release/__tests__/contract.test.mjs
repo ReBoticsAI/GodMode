@@ -116,10 +116,59 @@ test("host updaters snapshot stopped writers and retain rollback paths", async (
   assert.match(powershell, /\$oldImage/);
 });
 
+test("accepts desktop installer artifacts alongside bare-metal bundles", () => {
+  const manifest = fixture({
+    artifacts: [
+      ...fixture().artifacts,
+      {
+        name: "GodMode-Setup-1.2.3-windows-x64.exe",
+        kind: "installer",
+        platform: "windows-x64",
+        version: "v1.2.3",
+        commit,
+        sha256: digest,
+        size: 20,
+      },
+      {
+        name: "GodMode-1.2.3-darwin-arm64.dmg",
+        kind: "installer",
+        platform: "darwin-arm64",
+        version: "v1.2.3",
+        commit,
+        sha256: digest,
+        size: 21,
+      },
+      {
+        name: "GodMode-1.2.3-linux-x64.AppImage",
+        kind: "installer",
+        platform: "linux-x64",
+        version: "v1.2.3",
+        commit,
+        sha256: digest,
+        size: 22,
+      },
+    ],
+  });
+  assert.deepEqual(validateManifest(manifest), []);
+});
+
 test("bare-metal updater selects signed bundle artifacts", async () => {
   const updater = await readFile("scripts/update/bare-metal-update.mjs", "utf8");
   assert.match(updater, /kind === "bundle"/);
   assert.doesNotMatch(updater, /kind === "bare-metal"/);
+});
+
+test("desktop updater selects signed installer artifacts", async () => {
+  const updater = await readFile("scripts/update/desktop-update.mjs", "utf8");
+  assert.match(updater, /kind === "installer"/);
+  assert.match(updater, /AppImage/);
+  assert.match(updater, /NSIS|\/S/);
+});
+
+test("supervisor routes electron surface to desktop-update", async () => {
+  const supervisor = await readFile("scripts/update/supervisor.mjs", "utf8");
+  assert.match(supervisor, /INSTALLATION_SURFACE === "electron"/);
+  assert.match(supervisor, /desktop-update\.mjs/);
 });
 
 test("supervisor and bridge share restart_to_apply paths", async () => {

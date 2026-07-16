@@ -1,14 +1,26 @@
 # Getting started
 
-GodMode is a local-first personal OS. This guide walks from clone to your first Intelligence chat.
+GodMode is a local-first personal OS. Pick the path that matches how you want to run it.
 
-## Requirements
+## Download (recommended for most users)
+
+Install the desktop app from [GitHub Releases](https://github.com/ReBoticsAI/GodMode/releases):
+
+- **Windows** — `GodMode-Setup-*-windows-x64.exe`
+- **macOS** — `GodMode-*-darwin-arm64.dmg` or `darwin-x64.dmg`
+- **Linux** — `GodMode-*-linux-x64.AppImage` (or `.deb`)
+
+Open the app, create an account, and use **Admin → Updates** when a new release is available. No Docker or Node install required. See [RELEASES.md](./RELEASES.md).
+
+## Developer clone
+
+### Requirements
 
 - Node.js 22.13+
 - npm 10+
 - Windows, macOS, or Linux
 
-## Install
+### Install
 
 ```powershell
 git clone https://github.com/ReBoticsAI/GodMode.git
@@ -20,9 +32,9 @@ npm run dev
 ```
 
 This clone-and-`npm run dev` path is the developer installation channel. It
-does not self-update. Supported Docker and bare-metal release installations use
-signed artifacts and surface stable/nightly release checks under
-**Admin → Updates** for platform administrators.
+does not self-update. Supported desktop, Docker, and bare-metal release
+installations use signed artifacts and surface stable/nightly release checks
+under **Admin → Updates** for platform administrators.
 
 | Service | URL |
 |---------|-----|

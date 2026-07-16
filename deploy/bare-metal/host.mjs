@@ -14,7 +14,8 @@ process.env.NODE_ENV = "production";
 process.env.GODMODE_VERSION = String(release.version);
 process.env.GODMODE_COMMIT = String(release.commit);
 process.env.INSTALLATION_SURFACE =
-  process.platform === "win32" ? "windows_bare_metal" : "linux_bare_metal";
+  process.env.INSTALLATION_SURFACE ??
+  (process.platform === "win32" ? "windows_bare_metal" : "linux_bare_metal");
 process.env.BRIDGE_HOST = "127.0.0.1";
 process.env.BRIDGE_PORT = String(bridgePort);
 const bridge = spawn(process.execPath, [path.join(root, "apps", "bridge", "dist", "index.js")], {
