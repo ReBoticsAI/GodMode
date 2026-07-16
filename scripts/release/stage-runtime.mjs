@@ -92,6 +92,18 @@ export async function stageRuntime({
     await cp(path.join(stageDir, "packages", name), installed, { recursive: true });
   }
 
+  // Never ship the Electron workspace into the Bridge runtime. It contains
+  // resources/runtime and would recurse into itself while packaging (7-Zip OOM).
+  await rm(path.join(stageDir, "node_modules", "@godmode", "desktop"), {
+    recursive: true,
+    force: true,
+  });
+  // Web UI is served from apps/web/dist; the workspace package is not required.
+  await rm(path.join(stageDir, "node_modules", "@godmode", "web"), {
+    recursive: true,
+    force: true,
+  });
+
   if (!includeServices) {
     // Drop Electron packaging tooling if present; desktop runtime is Bridge+web only.
     const nm = path.join(stageDir, "node_modules");
