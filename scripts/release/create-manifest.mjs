@@ -33,14 +33,29 @@ for (const relativeName of files) {
   const details = await stat(file);
   if (!details.isFile()) continue;
   const normalizedName = relativeName.replaceAll("\\", "/");
-  const platform = normalizedName.includes("linux-x64")
-    ? "linux-x64"
-    : normalizedName.includes("windows-x64")
-      ? "windows-x64"
-      : "multi";
-  const kind = normalizedName.includes("sbom") ? "sbom" : normalizedName.includes("provenance") ? "provenance" : "bundle";
+  const baseName = path.basename(normalizedName);
+  const platform = normalizedName.includes("darwin-arm64")
+    ? "darwin-arm64"
+    : normalizedName.includes("darwin-x64")
+      ? "darwin-x64"
+      : normalizedName.includes("linux-x64") || normalizedName.includes("linux-amd64")
+        ? "linux-x64"
+        : normalizedName.includes("windows-x64")
+          ? "windows-x64"
+          : "multi";
+  const lower = baseName.toLowerCase();
+  const kind = lower.includes("sbom")
+    ? "sbom"
+    : lower.includes("provenance")
+      ? "provenance"
+      : lower.endsWith(".exe") ||
+          lower.endsWith(".dmg") ||
+          lower.endsWith(".appimage") ||
+          lower.endsWith(".deb")
+        ? "installer"
+        : "bundle";
   artifacts.push({
-    name: path.basename(normalizedName),
+    name: baseName,
     kind,
     platform,
     version,

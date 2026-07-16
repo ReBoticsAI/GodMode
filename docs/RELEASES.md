@@ -7,7 +7,8 @@ GodMode publishes one tested revision through two channels:
   changelog entry agree.
 
 Each release contains a canonical manifest, immutable GHCR image digest,
-Linux/Windows bare-metal bundles, checksums, SBOMs, provenance, and Sigstore
+Linux/Windows bare-metal bundles, desktop installers (Windows NSIS, macOS DMG,
+Linux AppImage + `.deb`), checksums, SBOMs, provenance, and Sigstore
 verification bundles. Tags such as `latest` or a channel name are discovery
 aliases only; installation and rollback always record immutable digests and
 artifact hashes.
@@ -75,6 +76,31 @@ readiness succeeds.
 
 Developer clones run with `npm run dev` and intentionally do not self-update.
 Do not update a production installation with a mutable `git pull`.
+
+## Desktop installations (Electron)
+
+Non-technical users should install the signed desktop app from GitHub Releases:
+
+| OS | Artifact |
+|----|----------|
+| Windows | `GodMode-Setup-<version>-windows-x64.exe` (NSIS) |
+| macOS | `GodMode-<version>-darwin-arm64.dmg` or `darwin-x64.dmg` |
+| Linux | `GodMode-<version>-linux-x64.AppImage` (preferred) or `.deb` |
+
+The Electron shell boots the same Bridge + web runtime as bare-metal, binds only
+on loopback, stores SQLite under the OS app data directory, and starts a local
+update supervisor so **Admin → Updates** can download, Sigstore-verify, and
+apply the matching `installer` artifact.
+
+Set these GitHub Actions secrets for **stable** signed desktop builds:
+
+| Secret | Purpose |
+|--------|---------|
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Windows Authenticode |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | macOS notarization |
+
+Nightly desktop builds may ship unsigned when those secrets are absent; Linux
+installers always carry Sigstore blob signatures like other release artifacts.
 
 ## Snapshot and rollback rules
 

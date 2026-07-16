@@ -13,7 +13,10 @@ import {
   ensureReleaseTables,
   pluginCompatibility,
   reconcileInstalledVersion,
+  releaseArtifactKind,
+  releasePlatform,
   selectRelease,
+  selectReleaseArtifact,
   validateSigstoreManifest,
   validateSignedManifest,
   type ReleaseManifest,
@@ -181,6 +184,59 @@ describe("release flow", () => {
     await expect(
       validateSigstoreManifest(JSON.stringify(malicious), {} as never, (async () => ({})) as never)
     ).rejects.toThrow(/schema/i);
+  });
+
+  it("selects installer artifacts for the electron surface", () => {
+    expect(releasePlatform("win32", "x64")).toBe("windows-x64");
+    expect(releasePlatform("darwin", "arm64")).toBe("darwin-arm64");
+    expect(releasePlatform("linux", "x64")).toBe("linux-x64");
+    const previous = process.env.INSTALLATION_SURFACE;
+    process.env.INSTALLATION_SURFACE = "electron";
+    expect(releaseArtifactKind()).toBe("installer");
+    const artifacts = [
+      {
+        name: "godmode-v1.2.0-windows-x64.zip",
+        kind: "bundle",
+        platform: "windows-x64",
+        sha256: "a".repeat(64),
+        size: 1,
+      },
+      {
+        name: "GodMode-Setup-1.2.0-windows-x64.exe",
+        kind: "installer",
+        platform: "windows-x64",
+        sha256: "b".repeat(64),
+        size: 2,
+      },
+      {
+        name: "GodMode-1.2.0-linux-x64.AppImage",
+        kind: "installer",
+        platform: "linux-x64",
+        sha256: "c".repeat(64),
+        size: 3,
+      },
+      {
+        name: "GodMode-1.2.0-linux-x64.deb",
+        kind: "installer",
+        platform: "linux-x64",
+        sha256: "d".repeat(64),
+        size: 4,
+      },
+    ];
+    expect(
+      selectReleaseArtifact(artifacts, {
+        platform: "windows-x64",
+        kind: "installer",
+      })?.name
+    ).toBe("GodMode-Setup-1.2.0-windows-x64.exe");
+    expect(
+      selectReleaseArtifact(artifacts, {
+        platform: "linux-x64",
+        kind: "installer",
+      })?.name
+    ).toBe("GodMode-1.2.0-linux-x64.AppImage");
+    if (previous === undefined) delete process.env.INSTALLATION_SURFACE;
+    else process.env.INSTALLATION_SURFACE = previous;
   });
 
   it("selects the newest eligible release for the configured channel", () => {
