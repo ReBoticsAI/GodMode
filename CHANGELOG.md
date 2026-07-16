@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — see [CONTRIBUTING.md](CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes) for planned themes.
+## [0.9.0] - 2026-07-16
+
+First broadly shippable release after the 0.1.0 foundation: durable ObjectType
+kernel cutover, signed unified releases, Electron desktop installers, and
+Intelligence/memory upgrades. Windows, macOS, and Linux desktop install flows
+were validated against the preceding nightly.
 
 ### Added
 
@@ -57,6 +62,9 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - Structure Record listing now returns child plugin nodes when no parent filter is
   requested; Structure action compatibility calls send the kernel's flat input
   body
+- Desktop runtime packaging — stage Bridge `node_modules`, macOS afterPack
+  Resources path, and exclude `@godmode/desktop` / `@godmode/web` from staged
+  runtimes so Windows NSIS and macOS launches succeed
 
 ### Documentation
 
@@ -92,5 +100,6 @@ First public release of GodMode — a local-first personal OS.
 - **Docker deployment** — client and production compose stacks
 - Documentation — [Getting started](docs/GETTING_STARTED.md), [Configuration](docs/CONFIGURATION.md), and [Features](docs/FEATURES.md)
 
-[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0
 [0.1.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.1.0

@@ -1,7 +1,7 @@
 # GodMode
 
 [![CI](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml/badge.svg)](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.1.0)
+[![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
 **Local-first personal OS** with built-in Intelligence, multi-agent org chart, wiki, tasks, calendar, vault, and automations. Run it on your PC  -  your data stays in SQLite on your machine.
