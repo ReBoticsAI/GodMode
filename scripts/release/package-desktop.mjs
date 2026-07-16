@@ -55,6 +55,10 @@ if (process.platform === "win32") {
   builderArgs.push("--win", "--x64");
 } else if (process.platform === "darwin") {
   builderArgs.push("--mac", process.arch === "arm64" ? "--arm64" : "--x64");
+  // Force unsigned nightlies even if a blank CSC_LINK leaks into the env.
+  if (process.env.CSC_IDENTITY_AUTO_DISCOVERY === "false") {
+    builderArgs.push("-c.mac.identity=null");
+  }
 } else {
   builderArgs.push("--linux", "--x64");
 }
