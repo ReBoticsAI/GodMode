@@ -1,5 +1,6 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { platformFromArtifactName } from "./artifact-names.mjs";
 import { channelForVersion, RELEASE_SCHEMA, sha256File, validateManifest } from "./contract.mjs";
 
 const [artifactDirectory, output = "release-manifest.json"] = process.argv.slice(2);
@@ -22,9 +23,34 @@ try {
 if (metadata.version && metadata.version !== version) throw new Error("Bundle version differs from release version");
 if (metadata.commit && metadata.commit !== commit) throw new Error("Bundle commit differs from release commit");
 
-const ignored = new Set(["release-manifest.json", "release-manifest.json.bundle", "SHA256SUMS", "SHA256SUMS.bundle", "release-metadata.json"]);
+const ignored = new Set([
+  "release-manifest.json",
+  "release-manifest.json.bundle",
+  "SHA256SUMS",
+  "SHA256SUMS.bundle",
+  "release-metadata.json",
+]);
+
+function isPrimaryArtifact(relativeName) {
+  const baseName = path.basename(relativeName);
+  const lower = baseName.toLowerCase();
+  if (ignored.has(baseName) || ignored.has(lower)) return false;
+  if (lower.endsWith(".bundle")) return false;
+  if (lower.includes("sbom") || lower.includes("provenance") || lower.includes("verification")) {
+    return false;
+  }
+  return (
+    lower.endsWith(".exe") ||
+    lower.endsWith(".dmg") ||
+    lower.endsWith(".appimage") ||
+    lower.endsWith(".deb") ||
+    lower.endsWith(".tar.gz") ||
+    lower.endsWith(".zip")
+  );
+}
+
 const files = (await readdir(artifactDirectory, { recursive: true }))
-  .filter((name) => !ignored.has(name) && !name.endsWith(".bundle"))
+  .filter((name) => isPrimaryArtifact(name))
   .sort();
 
 const artifacts = [];
@@ -34,26 +60,15 @@ for (const relativeName of files) {
   if (!details.isFile()) continue;
   const normalizedName = relativeName.replaceAll("\\", "/");
   const baseName = path.basename(normalizedName);
-  const platform = normalizedName.includes("darwin-arm64")
-    ? "darwin-arm64"
-    : normalizedName.includes("darwin-x64")
-      ? "darwin-x64"
-      : normalizedName.includes("linux-x64") || normalizedName.includes("linux-amd64")
-        ? "linux-x64"
-        : normalizedName.includes("windows-x64")
-          ? "windows-x64"
-          : "multi";
+  const platform = platformFromArtifactName(baseName);
   const lower = baseName.toLowerCase();
-  const kind = lower.includes("sbom")
-    ? "sbom"
-    : lower.includes("provenance")
-      ? "provenance"
-      : lower.endsWith(".exe") ||
-          lower.endsWith(".dmg") ||
-          lower.endsWith(".appimage") ||
-          lower.endsWith(".deb")
-        ? "installer"
-        : "bundle";
+  const kind =
+    lower.endsWith(".exe") ||
+    lower.endsWith(".dmg") ||
+    lower.endsWith(".appimage") ||
+    lower.endsWith(".deb")
+      ? "installer"
+      : "bundle";
   artifacts.push({
     name: baseName,
     kind,

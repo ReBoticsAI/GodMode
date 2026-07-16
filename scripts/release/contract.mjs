@@ -130,7 +130,10 @@ export function validateManifest(manifest, expected = {}) {
       if (artifact?.version !== manifest.version) errors.push(`${artifact?.name ?? "artifact"} version must equal manifest version`);
     }
     for (const platform of ["linux-x64", "windows-x64"]) {
-      if (![...names].some((name) => name.includes(platform))) errors.push(`missing ${platform} bundle`);
+      const hasBundle = manifest.artifacts.some(
+        (artifact) => artifact?.kind === "bundle" && artifact?.platform === platform
+      );
+      if (!hasBundle) errors.push(`missing ${platform} bundle`);
     }
   }
   if (expected.version && manifest.version !== expected.version) errors.push("unexpected version");

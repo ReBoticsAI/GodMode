@@ -12,13 +12,19 @@ Merges to `main` run the normal CI checks only; they do **not** publish
 installers or GHCR images. That keeps day-to-day PR volume from queuing
 hour-long multi-OS builds.
 
-Each release contains a canonical manifest, immutable GHCR image digest
-(multi-arch `linux/amd64` + `linux/arm64`, built on native runners),
-Linux/Windows bare-metal bundles, desktop installers (Windows NSIS, macOS DMG,
-Linux AppImage + `.deb`), checksums, SBOMs, provenance, and Sigstore
-verification bundles. Tags such as `latest` or a channel name are discovery
-aliases only; installation and rollback always record immutable digests and
-artifact hashes.
+Each release lists a small set of downloadable assets:
+
+- desktop installers (Windows NSIS, macOS DMG, Linux AppImage + `.deb`);
+- Linux/Windows bare-metal archives;
+- `release-manifest.json` and its Sigstore `release-manifest.json.bundle`;
+- optional `godmode-verification-<version>.tar.gz` (SBOMs, provenance, checksums,
+  and per-file Sigstore bundles for auditors).
+
+Updaters verify the **signed manifest**, then check each download’s **sha256**
+against that manifest. Per-installer `.bundle` files are not required on the
+release page. Tags such as `latest` or a channel name are discovery aliases
+only; installation and rollback always record immutable digests and artifact
+hashes.
 
 ## Installation update records
 
@@ -90,9 +96,12 @@ Non-technical users should install the signed desktop app from GitHub Releases:
 
 | OS | Artifact |
 |----|----------|
-| Windows | `GodMode-Setup-<version>-windows-x64.exe` (NSIS) |
-| macOS | `GodMode-<version>-darwin-arm64.dmg` or `darwin-x64.dmg` |
-| Linux | `GodMode-<version>-linux-x64.AppImage` (preferred) or `.deb` |
+| Windows | `godmode-windows-desktop-<version>.exe` (NSIS) |
+| macOS Apple Silicon | `godmode-macos-arm64-desktop-<version>.dmg` |
+| macOS Intel | `godmode-macos-intel-desktop-<version>.dmg` |
+| Linux | `godmode-linux-desktop-<version>.AppImage` (preferred) or `.deb` |
+| Bare-metal Linux | `godmode-linux-bare-metal-<version>.tar.gz` |
+| Bare-metal Windows | `godmode-windows-bare-metal-<version>.zip` |
 
 The Electron shell boots the same Bridge + web runtime as bare-metal, binds only
 on loopback, stores SQLite under the OS app data directory, and starts a local
@@ -107,7 +116,8 @@ Set these GitHub Actions secrets for **stable** signed desktop builds:
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | macOS notarization |
 
 Nightly desktop builds may ship unsigned when those secrets are absent; Linux
-installers always carry Sigstore blob signatures like other release artifacts.
+installers are still covered by the signed release manifest (and optional
+per-file Sigstore bundles inside the verification archive).
 
 ## Snapshot and rollback rules
 

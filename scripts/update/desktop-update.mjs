@@ -144,16 +144,11 @@ try {
   }
   const artifactUrl = new URL(artifact.name, manifestUrl).href;
   const installerPath = path.join(temporary, artifact.name);
-  const artifactBundle = `${installerPath}.bundle`;
-  await Promise.all([
-    download(artifactUrl, installerPath),
-    download(`${artifactUrl}.bundle`, artifactBundle),
-  ]);
+  await download(artifactUrl, installerPath);
   const digest = createHash("sha256")
     .update(await readFile(installerPath))
     .digest("hex");
   if (digest !== artifact.sha256) throw new Error("Desktop installer hash mismatch");
-  verifyBlob(installerPath, artifactBundle);
 
   if (process.platform === "win32") {
     await applyWindows(installerPath);
