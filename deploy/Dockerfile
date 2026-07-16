@@ -10,6 +10,8 @@ COPY . .
 RUN npm run build:packages && npm run build -w @godmode/web && npm run build -w @godmode/bridge
 
 FROM node:22-alpine AS runtime
+ARG GODMODE_VERSION=0.1.0
+ARG GODMODE_COMMIT=unknown
 RUN apk add --no-cache nginx python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -25,6 +27,8 @@ COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
 ENV NODE_ENV=production
+ENV GODMODE_VERSION=${GODMODE_VERSION}
+ENV GODMODE_COMMIT=${GODMODE_COMMIT}
 ENV DEPLOYMENT_MODE=hub
 ENV BRIDGE_HOST=127.0.0.1
 ENV BRIDGE_PORT=3847

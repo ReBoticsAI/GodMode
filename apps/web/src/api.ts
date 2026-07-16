@@ -14,6 +14,7 @@ import {
   waitForOperationRun,
   type RecordRowClient,
 } from "./lib/object-types-api";
+import { randomId } from "./lib/random-id";
 
 const API_BASE = "/api";
 
@@ -140,7 +141,7 @@ async function actionDto<T>(
   const result = await runRecordActionApi(objectType, action, input, {
     id,
     confirmed,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
   });
   if (
     result &&

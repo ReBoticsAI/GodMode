@@ -40,7 +40,7 @@ kernel coverage baseline and contract tests.
 - Document protocol exceptions rather than disguising transport or control-plane
   operations as Record CRUD. See
   [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
-- The current strict baseline is 72 ObjectTypes, 75 static tools, 335 generated
+- The current strict baseline is 74 ObjectTypes, 75 static tools, 346 generated
   candidates, 5 protocol exceptions, and zero legacy routes/callers, unmatched
   callers, direct writes, or tool collisions. Do not reintroduce migration debt.
 - Protocol exceptions are wire-level only: authentication cookies, read-only

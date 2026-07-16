@@ -15,6 +15,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "update-readiness",
+    methods: ["GET"],
+    pathPattern: "/api/update/readiness",
+    rationale:
+      "Host updater deep-readiness diagnostic authenticated by a dedicated local supervisor token.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "authentication-login",
     methods: ["POST"],
     pathPattern: "/api/auth/login",

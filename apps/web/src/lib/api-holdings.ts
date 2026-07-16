@@ -6,6 +6,7 @@ import {
   waitForOperationRun,
   type RecordRowClient,
 } from "./object-types-api";
+import { randomId } from "./random-id";
 
 export type HoldingCategory = "bank" | "wallet" | "exchange" | "paypal" | "manual";
 
@@ -73,7 +74,7 @@ async function financeAction<T>(
   const result = await runRecordActionApi("FinanceConnection", action, input, {
     id,
     confirmed: true,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
   });
   if (
     result &&

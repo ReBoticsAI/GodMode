@@ -69,13 +69,14 @@ This matches **Marketplace → Unofficial**. Custom Express routes registered vi
 }
 ```
 
-- `engine` — semver range checked against host (`@godmode/plugin-api` `GODMODE_ENGINE_VERSION`)
+- `engine` — semver range checked against host (`@godmode/plugin-api` `GODMODE_ENGINE_VERSION`). Executable plugins (`bridge` / `web` entry) **must** declare `engine` so release preflight can refuse incompatible platform updates.
 - `kernelApiVersion` — executable kernel client contract; current Bridge/web
   clients expose version `1`, and unsupported future versions fail validation
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
 - `records` — declarative Record seeds applied on tenant install (before / with `tenant:install`). Structure shells should prefer seeding `StructureNode` Records here when possible.
+- Platform releases do **not** auto-update marketplace plugins unless the signed release manifest pins a coordinated plugin artifact.
 - Manifest-native ObjectTypes receive native storage and generic CRUD from
   metadata. Service-backed behavior requires an executable Bridge registration
   that supplies an adapter and implements every declared operation/action.

@@ -16,6 +16,7 @@ import {
   type FieldDefClient,
   type ObjectTypeClient,
 } from "@/lib/object-types-api";
+import { randomId } from "@/lib/random-id";
 import { useStructure } from "@/lib/structure-context";
 import type { DepartmentNode, PageNode } from "@/lib/navigation";
 
@@ -239,7 +240,7 @@ export function RecordFormPage({
         confirmed: needsConfirmation,
         idempotencyKey:
           action.effect && action.effect !== "read"
-            ? crypto.randomUUID()
+            ? randomId()
             : undefined,
         expectedVersion: recordVersion,
       });

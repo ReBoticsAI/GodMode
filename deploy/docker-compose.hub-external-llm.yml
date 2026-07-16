@@ -10,13 +10,11 @@
 #   4. Start host llama-server on :8081 (see docs/LOCAL_LLM.md)
 #   4b. Optional: host EmbeddingGemma on :8082 with EMBEDDINGS_* (agent memory RAG)
 #   5. Optional: clone a plugin under ./plugins/my-plugin (built dist/)
-#   6. docker compose -f docker-compose.hub-external-llm.yml up -d --build
+#   6. Set GODMODE_IMAGE to the verified release digest, then run docker compose up -d
 #   7. Open http://localhost:8080 — Marketplace → Unofficial path e.g. /plugins/my-plugin
 services:
   godmode:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
+    image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}
     ports:
       - "8080:80"
     env_file:
@@ -30,6 +28,7 @@ services:
     environment:
       - PLATFORM_DATA_DIR=/data
       - DEPLOYMENT_MODE=hub
+      - INSTALLATION_SURFACE=private_hub
       - BRIDGE_HOST=127.0.0.1
       - AUTH_ALLOW_ANONYMOUS=false
       - AUTH_ALLOW_SIGNUP=true

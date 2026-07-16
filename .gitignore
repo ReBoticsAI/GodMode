@@ -50,6 +50,8 @@ apps/bridge/data/**/artifacts/
 **/.env
 **/.env.*
 !**/.env.example
+!deploy/.env.client.example
+!deploy/.env.production.example
 *.pem
 *.key
 *.pfx

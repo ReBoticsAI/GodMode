@@ -2,11 +2,11 @@
 # Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to your public domain.
 services:
   godmode:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
+    image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}
     ports:
       - "80:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env.production
     volumes:
@@ -14,6 +14,7 @@ services:
     environment:
       - PLATFORM_DATA_DIR=/data
       - DEPLOYMENT_MODE=hub
+      - INSTALLATION_SURFACE=saas
       - BRIDGE_HOST=127.0.0.1
       - AUTH_ALLOW_ANONYMOUS=false
       - AUTH_ALLOW_SIGNUP=false

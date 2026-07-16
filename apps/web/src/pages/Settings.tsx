@@ -117,7 +117,7 @@ export default function Settings() {
     <Page>
       <PageHeader
         title="Settings"
-        description="Personal preferences for your account."
+        description="Account, appearance, and session settings."
       />
       <div className="flex flex-col gap-4">
         <AccountCard />

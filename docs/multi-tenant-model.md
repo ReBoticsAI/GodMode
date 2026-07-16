@@ -22,6 +22,7 @@ Global platform state shared across all workspaces:
 | `platform_meta` | Bootstrap flags |
 | `legacy_endpoint_usage` | Historical upgrade telemetry; strict audit has no legacy callers |
 | `marketplace_acquisition_operations`, steps/audit/outbox | Durable cross-DB acquisition saga |
+| `releases`, `installation_update_state`, history/attempts/snapshots/receipts | Signed release discovery, deduplicated notification, update and rollback evidence |
 
 Legacy `oauth_accounts` rows may exist from older installs; OSS core no longer writes to this table.
 

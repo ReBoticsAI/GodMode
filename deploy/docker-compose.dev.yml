@@ -1,0 +1,17 @@
+# Explicit source-build path for local development only.
+services:
+  godmode-dev:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      PLATFORM_DATA_DIR: /data
+      DEPLOYMENT_MODE: client
+      AUTH_ALLOW_ANONYMOUS: "true"
+    volumes:
+      - godmode-dev-data:/data
+
+volumes:
+  godmode-dev-data:

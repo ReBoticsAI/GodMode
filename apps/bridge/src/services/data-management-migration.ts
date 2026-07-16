@@ -249,6 +249,38 @@ export function listUndispatchedEvents(
   subject: string | null;
   payload_json: string;
 }> {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(events)").all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  );
+  if (!columns.has("dispatched")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS core_event_relay_dispatch (
+        event_id TEXT PRIMARY KEY,
+        dispatched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    return db
+      .prepare(
+        `SELECT e.id, e.rowid AS seq, e.created_at AS ts, e.type,
+                CASE WHEN e.actor_kind='agent' THEN e.actor_id ELSE NULL END AS actor_agent_id,
+                e.tenant_id AS subject, COALESCE(e.payload_json, '{}') AS payload_json
+         FROM events e
+         LEFT JOIN core_event_relay_dispatch d ON d.event_id=e.id
+         WHERE d.event_id IS NULL
+         ORDER BY e.rowid ASC LIMIT ?`
+      )
+      .all(limit) as Array<{
+      id: string;
+      seq: number;
+      ts: string;
+      type: string;
+      actor_agent_id: string | null;
+      subject: string | null;
+      payload_json: string;
+    }>;
+  }
   return db
     .prepare(
       `SELECT id, seq, ts, type, actor_agent_id, subject, payload_json
@@ -267,6 +299,20 @@ export function listUndispatchedEvents(
 
 export function markEventsDispatched(db: Database.Database, ids: string[]): void {
   if (ids.length === 0) return;
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(events)").all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  );
+  if (!columns.has("dispatched")) {
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO core_event_relay_dispatch (event_id) VALUES (?)"
+    );
+    db.transaction(() => {
+      for (const id of ids) insert.run(id);
+    })();
+    return;
+  }
   const placeholders = ids.map(() => "?").join(",");
   db.prepare(`UPDATE events SET dispatched = 1 WHERE id IN (${placeholders})`).run(...ids);
 }

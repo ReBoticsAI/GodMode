@@ -8,6 +8,7 @@ For what shipped since v0.1.0, see [CHANGELOG.md](../CHANGELOG.md). Contribution
 
 | Feature | Route / location | Description |
 |---------|------------------|-------------|
+| **Admin → Updates** | `/settings/admin?tab=updates` | Channel selection (stable/nightly), signed release checks, defer/skip, and host-supervisor apply when installed. See [RELEASES.md](RELEASES.md). |
 | **Home hub** | `/home` | Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace. |
 | **Intelligence** | Chat panel → agent picker | Platform-wide companion for setup, structure, wiki, and cross-cutting work. Uses platform tools to create pages, agents, tasks, and more from chat. |
 | **Digital You** | Sidebar → Digital *name* | Persona agent created on first login  -  tone, preferences, and personal context. Distinct from Intelligence and department subagents. |
@@ -40,7 +41,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Tasks** | `/tasks` | Kanban boards with columns, priorities, subtasks, and comments. Tag a card `auto` to queue autonomous agent work. |
 | **Automations** | Chat panel → Automations tab | Same kanban board in the Chat window; tag `auto` for the autonomous runner. |
 | **Calendar** | `/calendar` | Personal events and activity feed. Also available in Chat → Calendar tab. |
-| **Notifications** | `/notifications` | Platform alerts. Also in Chat → Notifications tab. |
+| **Notifications** | `/notifications` | Platform alerts, including deduplicated signed-release availability. Also in Chat → Notifications tab. |
 | **Vault** | `/vault` | Secrets, API keys, and Cursor subscription connect. Chat → Vault tab for quick access while chatting. |
 | **Bank** | `/bank` | Connect wallets and accounts for you and your agents to track balances. Chat → Bank tab. |
 | **Support** | `/support` | Platform bugs via GitHub; shared resource issues to resource owners. Hub **Support group** staffing (Admin) lets users and agents answer tickets. Chat → Support tab. |
@@ -51,7 +52,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 |---------|------------------|-------------|
 | **Contacts** | `/contacts` | Social graph — people, groups, and relationship view. |
 | **Shared** | Sidebar → Shared | Live resources another user granted you; Tailscale network panel for cross-home federation. |
-| **Settings** | `/settings` | Account, workspace, plugins, AI configuration, and slash commands. |
+| **Settings** | `/settings` | Account, appearance, and session settings. |
 | **Marketplace** | `/marketplace` | Official, Unofficial, and Installed tabs; free install of packs and plugins. See [MARKETPLACE.md](MARKETPLACE.md). |
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
 | **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
@@ -74,7 +75,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 - **Multi-agent org:** scoped permissions, tool allowlists, and structure-linked agents.
 - **Workspace growth:** Intelligence can create departments, wiki pages, tasks, and automations from chat.
 - **ObjectType kernel:** authenticated web, agent, plugin, and HTTP consumers
-  discover explicit Record CRUD and named actions across 72 audited ObjectTypes;
+  discover explicit Record CRUD and named actions across 74 audited ObjectTypes;
   exact-parity adapters preserve domain services and side effects behind the
   single durable mutation boundary.
 - **Durable execution:** asynchronous actions enforce retries/backoff, timeout,
