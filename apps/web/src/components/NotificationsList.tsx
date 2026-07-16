@@ -29,6 +29,7 @@ const CATEGORY_TONE: Record<string, string> = {
   hook: "bg-amber-500/15 text-amber-400",
   support: "bg-violet-500/15 text-violet-400",
   share: "bg-emerald-500/15 text-emerald-400",
+  update: "bg-sky-500/15 text-sky-400",
   system: "bg-muted text-muted-foreground",
 };
 
@@ -135,12 +136,12 @@ export function NotificationsList({ compact = false }: { compact?: boolean }) {
               <li key={n.id} className="group relative">
                 <button
                   type="button"
-                  aria-label="Dismiss notification"
+                  aria-label={`Dismiss ${n.title}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     void removeOne(n.id);
                   }}
-                  className="absolute right-1.5 top-1.5 z-10 rounded p-0.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                  className="absolute right-1.5 top-1.5 z-10 rounded p-0.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -177,7 +178,14 @@ export function NotificationsList({ compact = false }: { compact?: boolean }) {
                     </Badge>
                   </div>
                   {n.body && !compact && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                    <p
+                      className={cn(
+                        "text-xs text-muted-foreground",
+                        n.category === "update"
+                          ? "line-clamp-6 whitespace-pre-wrap"
+                          : "line-clamp-2"
+                      )}
+                    >
                       {n.body}
                     </p>
                   )}

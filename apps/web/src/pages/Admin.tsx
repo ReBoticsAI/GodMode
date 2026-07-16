@@ -49,6 +49,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StructureAdminPanel } from "@/pages/StructureAdminPanel";
 import { AdminUsersPanel } from "@/pages/admin/AdminUsersPanel";
+import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,8 +84,8 @@ export default function Admin() {
         title="Admin"
         description={
           isHub
-            ? "Billing, workspace template, users, and support."
-            : "Workspace template, users, and support."
+            ? "Billing, updates, workspace template, users, and support."
+            : "Updates, workspace template, users, and support."
         }
       />
 
@@ -95,6 +96,7 @@ export default function Admin() {
       >
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
+          <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="template">Workspace template</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="support">Support</TabsTrigger>
@@ -105,6 +107,9 @@ export default function Admin() {
             <AdminBillingTab />
           </TabsContent>
         ) : null}
+        <TabsContent value="updates" className="mt-4">
+          <UpdatesCard />
+        </TabsContent>
         <TabsContent value="template" className="mt-4">
           <StructureAdminPanel />
         </TabsContent>

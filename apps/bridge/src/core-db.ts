@@ -720,6 +720,7 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   },
   { version: 7, name: "core_wiki_search_v1", up: ensureWikiSearchAndProposals },
   { version: 8, name: "core_oss_platform_v2", up: ensureOssPlatformV2Tables },
+  { version: 9, name: "core_release_flow_v1", up: ensureReleaseFlowTables },
 ];
 
 function ensureCoreUserColumns(db: CoreDatabase): void {
@@ -1030,6 +1031,114 @@ function ensureOssPlatformV2Tables(db: CoreDatabase): void {
   );
   addCol(db, "support_tickets", "shared_grant_id", "TEXT");
   addCol(db, "support_tickets", "owner_user_id", "TEXT");
+}
+
+/** Installation-scoped release discovery, durable state, history, and snapshots. */
+function ensureReleaseFlowTables(db: CoreDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS releases (
+      id TEXT PRIMARY KEY,
+      version TEXT NOT NULL UNIQUE,
+      channel TEXT NOT NULL,
+      manifest_json TEXT NOT NULL,
+      artifact_url TEXT NOT NULL,
+      artifact_sha256 TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      discovered_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS installation_update_state (
+      id TEXT PRIMARY KEY CHECK (id='installation'),
+      installation_uuid TEXT NOT NULL,
+      current_version TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'stable',
+      auto_check INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'idle',
+      available_release_id TEXT,
+      downloaded_path TEXT,
+      skipped_version TEXT,
+      deferred_until TEXT,
+      manifest_url TEXT,
+      manifest_etag TEXT,
+      last_checked_at TEXT,
+      last_error TEXT,
+      poll_min_ms INTEGER NOT NULL DEFAULT 14400000,
+      poll_max_ms INTEGER NOT NULL DEFAULT 28800000,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS installation_update_history (
+      id TEXT PRIMARY KEY,
+      release_id TEXT,
+      from_version TEXT NOT NULL,
+      to_version TEXT,
+      action TEXT NOT NULL,
+      actor_id TEXT,
+      detail_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS release_notification_receipts (
+      release_id TEXT NOT NULL,
+      recipient_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (release_id, recipient_id)
+    );
+    CREATE TABLE IF NOT EXISTS release_snapshots (
+      id TEXT PRIMARY KEY,
+      release_id TEXT,
+      location TEXT NOT NULL,
+      status TEXT NOT NULL,
+      lock_json TEXT NOT NULL,
+      diagnostics_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS release_application_attempts (
+      id TEXT PRIMARY KEY,
+      release_id TEXT NOT NULL,
+      snapshot_id TEXT,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      actor_id TEXT,
+      supervisor_attempt_id TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS release_rollback_evidence (
+      id TEXT PRIMARY KEY,
+      attempt_id TEXT NOT NULL,
+      prior_version TEXT NOT NULL,
+      prior_image_digest TEXT,
+      snapshot_id TEXT,
+      restored INTEGER NOT NULL DEFAULT 0,
+      evidence_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  addCol(
+    db,
+    "installation_update_state",
+    "auto_check",
+    "INTEGER NOT NULL DEFAULT 1"
+  );
+  const releaseChannel =
+    process.env.UPDATE_CHANNEL === "nightly" ? "nightly" : "stable";
+  const defaultManifestUrl =
+    releaseChannel === "nightly"
+      ? "https://github.com/ReBoticsAI/GodMode/releases/download/nightly/release-manifest.json"
+      : "https://github.com/ReBoticsAI/GodMode/releases/latest/download/release-manifest.json";
+  db.prepare(
+    `INSERT OR IGNORE INTO installation_update_state
+      (id, installation_uuid, current_version, channel, manifest_url,
+       poll_min_ms, poll_max_ms)
+     VALUES ('installation', ?, ?, ?, ?, ?, ?)`
+  ).run(
+    uuidv4(),
+    process.env.GODMODE_VERSION ?? "0.1.0",
+    releaseChannel,
+    process.env.UPDATE_MANIFEST_URL ?? defaultManifestUrl,
+    Number(process.env.UPDATE_POLL_MIN_MS ?? 14_400_000),
+    Number(process.env.UPDATE_POLL_MAX_MS ?? 28_800_000)
+  );
 }
 
 export function getCoreDb(): CoreDatabase {

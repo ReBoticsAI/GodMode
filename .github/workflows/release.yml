@@ -1,0 +1,281 @@
+name: Unified release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      ref: ${{ github.sha }}
+
+  metadata:
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.release.outputs.channel }}
+      commit: ${{ steps.release.outputs.commit }}
+      image: ${{ steps.release.outputs.image }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require verified annotated stable tag
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          read -r object_type object_sha <<<"$tag_object"
+          [[ "$object_type" == "tag" ]] || {
+            echo "Stable releases require an annotated signed tag, not a lightweight tag" >&2
+            exit 1
+          }
+          verified=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" --jq '.verification.verified')
+          [[ "$verified" == "true" ]] || {
+            echo "Stable release tag signature is not verified by GitHub" >&2
+            exit 1
+          }
+          node scripts/release/validate-stable-tag.mjs "$TAG"
+      - id: release
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Stable tags must be exactly vX.Y.Z" >&2
+              exit 1
+            }
+            version="$REF_NAME"
+            channel=stable
+          else
+            base=$(node -p "'v' + require('./package.json').version")
+            version="${base}-nightly.$(date -u +%Y%m%d).${SHA:0:12}"
+            channel=nightly
+          fi
+          {
+            echo "version=$version"
+            echo "channel=$channel"
+            echo "commit=$SHA"
+            echo "image=ghcr.io/${REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            GODMODE_VERSION=${{ needs.metadata.outputs.version }}
+            GODMODE_COMMIT=${{ needs.metadata.outputs.commit }}
+          tags: |
+            ${{ needs.metadata.outputs.image }}:${{ needs.metadata.outputs.version }}
+            ${{ needs.metadata.outputs.image }}:sha-${{ needs.metadata.outputs.commit }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.metadata.outputs.commit }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign immutable image digest
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          IMAGE: ${{ needs.metadata.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+
+  bare-metal:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-x64
+            extension: tar.gz
+          - runner: windows-latest
+            platform: windows-x64
+            extension: zip
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Build runtime
+        run: |
+          npm run build:packages
+          npm run build -w @godmode/bridge
+          npm run build -w @godmode/web
+          npm prune --omit=dev
+      - name: Package bare-metal runtime
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+        run: node scripts/release/package-bare-metal.mjs ${{ matrix.platform }} release-out
+      - name: Smoke bare-metal runtime
+        run: node scripts/release/smoke-bare-metal.mjs release-out/godmode-${{ needs.metadata.outputs.version }}-${{ matrix.platform }}.${{ matrix.extension }}
+      - name: Generate bundle SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: release-out
+          format: spdx-json
+          output-file: release-out/godmode-${{ needs.metadata.outputs.version }}-${{ matrix.platform }}.sbom.spdx.json
+          upload-artifact: false
+      - name: Generate provenance statement
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          node -e 'const fs=require("fs"); const p=`release-out/godmode-${process.env.RELEASE_VERSION}-${process.env.PLATFORM}.provenance.json`; fs.writeFileSync(p, JSON.stringify({_type:"https://in-toto.io/Statement/v1",subject:[{name:`godmode-${process.env.PLATFORM}`,digest:{gitCommit:process.env.RELEASE_COMMIT}}],predicateType:"https://slsa.dev/provenance/v1",predicate:{buildDefinition:{buildType:"https://github.com/ReBoticsAI/GodMode/.github/workflows/release.yml",externalParameters:{version:process.env.RELEASE_VERSION,platform:process.env.PLATFORM}},runDetails:{builder:{id:"https://github.com/actions/runner"}}}},null,2)+"\n")'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bare-metal-${{ matrix.platform }}
+          path: release-out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [metadata, image, bare-metal]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bare-metal-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create release manifest and checksums
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+          RELEASE_PUBLISHED_AT: ${{ github.event.head_commit.timestamp }}
+          IMAGE_REPOSITORY: ${{ needs.metadata.outputs.image }}
+          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          node scripts/release/create-manifest.mjs release-assets release-assets/release-manifest.json
+          cd release-assets
+          sha256sum godmode-* release-manifest.json > SHA256SUMS
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign manifest and checksums
+        working-directory: release-assets
+        run: |
+          for artifact in godmode-*; do
+            cosign sign-blob --yes --bundle "$artifact.bundle" "$artifact"
+          done
+          cosign sign-blob --yes --bundle release-manifest.json.bundle release-manifest.json
+          cosign sign-blob --yes --bundle SHA256SUMS.bundle SHA256SUMS
+      - id: attest
+        name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release-assets/godmode-*
+            release-assets/release-manifest.json
+            release-assets/SHA256SUMS
+      - name: Include GitHub provenance bundle
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE_PATH" release-assets/github-provenance.sigstore.json
+      - name: Preserve immutable stable release assets
+        if: needs.metadata.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Stable release $VERSION already exists; refusing to overwrite immutable assets" >&2
+            exit 1
+          fi
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          CHANNEL: ${{ needs.metadata.outputs.channel }}
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --target "$COMMIT" --title "GodMode $VERSION")
+          if [[ "$CHANNEL" == "nightly" ]]; then
+            args+=(--prerelease --notes "Automated nightly release for $COMMIT")
+          else
+            args+=(--generate-notes --latest)
+          fi
+          gh release create "$VERSION" "${args[@]}"
+          gh release upload "$VERSION" release-assets/* --repo "$GITHUB_REPOSITORY"
+      - name: Publish nightly channel pointer
+        if: needs.metadata.outputs.channel == 'nightly'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view nightly --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create nightly \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$COMMIT" \
+              --title "GodMode nightly channel" \
+              --prerelease \
+              --notes "Mutable discovery pointer. Verify its signed manifest and use only immutable versioned artifacts."
+          fi
+          gh release upload nightly \
+            release-assets/release-manifest.json \
+            release-assets/release-manifest.json.bundle \
+            release-assets/SHA256SUMS \
+            release-assets/SHA256SUMS.bundle \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"

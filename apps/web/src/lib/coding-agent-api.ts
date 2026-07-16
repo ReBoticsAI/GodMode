@@ -4,6 +4,7 @@ import {
   type RecordRowClient,
   waitForOperationRun,
 } from "./object-types-api";
+import { randomId } from "./random-id";
 
 export type CodingAgentObjectType =
   | "ChatSession"
@@ -41,7 +42,7 @@ export async function runCodingAgentAction<T>(
   const result = await runRecordActionApi(objectType, action, input, {
     id: options.id,
     confirmed: options.confirmed,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
   });
   if (options.waitForCompletion && isOperationRun(result)) {
     return waitForOperationRun(result.operationRunId, { signal: options.signal });

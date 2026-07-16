@@ -11,6 +11,7 @@ import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.j
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { createUpdateRouter } from "./routes/update.js";
 import { createMarketplaceRouter } from "./routes/marketplace.js";
 import { createMarketplaceCatalogRouter } from "./routes/marketplace-catalog.js";
 import { createNetworkRouter } from "./routes/network.js";
@@ -87,9 +88,14 @@ import {
   setKernelEventBus,
 } from "./kernel/index.js";
 import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plugins.js";
+import {
+  reconcileInstalledVersion,
+  ReleasePoller,
+} from "./services/release-flow.js";
 
 export async function startBridge(): Promise<void> {
 const coreDb = initCoreDb();
+reconcileInstalledVersion(coreDb);
 const { operatorTenantId } = ensurePlatformBootstrap();
 ensureInitialAdmins(coreDb);
 repairNonOperatorTenantStructure(coreDb);
@@ -104,9 +110,13 @@ const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => {
     },
   }));
 };
+const kernelDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => [
+  { tenantId: "core", db: coreDb },
+  ...tenantDatabases(),
+];
 registerCoreObjectTypes();
 materializeAllNativeTypes(db, createSystemOperationContext());
-for (const tenant of tenantDatabases()) {
+for (const tenant of kernelDatabases()) {
   try {
     recoverInterruptedOperationRuns(tenant.db);
   } catch (error) {
@@ -182,7 +192,7 @@ startRetentionScheduler(db);
 if (config.isHub) {
   startMarketplaceBillingScheduler();
 }
-const stopEventsRelay = startTenantEventsRelay(tenantDatabases, bus);
+const stopEventsRelay = startTenantEventsRelay(kernelDatabases, bus);
 const workerPool = createWorkerPool();
 
 void initTimeseriesStore().then(async (ts) => {
@@ -222,9 +232,10 @@ const aiQueueWorker = new AiQueueWorker(db, llmManager, {
   embeddings: embeddingManager,
 });
 const operationRunWorker = new OperationRunWorker(
-  tenantDatabases,
+  kernelDatabases,
   processClaimedOperationRun
 );
+const releasePoller = new ReleasePoller(coreDb);
 if (hasSierra) {
   getPluginHost().registerAutonomousRunnerKick?.((reason) => {
     if (aiQueueWorker.hasPendingOrRunningWorkflow("autonomous-task-runner")) return;
@@ -309,6 +320,7 @@ app.get("/api/health", (_req, res) => {
     client: config.isClient,
   });
 });
+app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
 app.use("/api/marketplace", createMarketplaceRouter());
 app.use("/api/marketplace/catalog", createMarketplaceCatalogRouter());
@@ -422,6 +434,7 @@ server.listen(config.port, config.host, () => {
   })();
   aiQueueWorker.start();
   operationRunWorker.start();
+  releasePoller.start();
   aiScheduler.start();
   reflectionService.start();
   memoryMaintenance.start();
@@ -462,6 +475,7 @@ server.listen(config.port, config.host, () => {
 function gracefulShutdown() {
   stopEventsRelay();
   operationRunWorker.stop();
+  releasePoller.stop();
   workerPool.shutdown();
   stopScheduler();
   aiScheduler.stop();

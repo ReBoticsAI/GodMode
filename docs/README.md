@@ -20,6 +20,7 @@ Documentation for installing, using, and extending GodMode.
 | [MARKETPLACE.md](MARKETPLACE.md) | Install packs and plugins from catalogs |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
+| [RELEASES.md](RELEASES.md) | Signed channels, updates, snapshots, and rollback |
 | [SECURITY.md](SECURITY.md) | Threat model and hardening |
 | [VERIFICATION.md](VERIFICATION.md) | Post-install checklist |
 

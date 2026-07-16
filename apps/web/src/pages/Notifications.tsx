@@ -6,7 +6,7 @@ export default function Notifications() {
     <Page>
       <PageHeader
         title="Notifications"
-        description="Activity from messages, automations, support, and shares."
+        description="Activity from messages, automations, support, shares, and platform releases."
       />
       <div className="mx-auto h-[calc(100vh-12rem)] w-full max-w-2xl">
         <NotificationsList />

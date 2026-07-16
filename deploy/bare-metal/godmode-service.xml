@@ -1,0 +1,13 @@
+<service>
+  <id>GodMode</id>
+  <name>GodMode</name>
+  <description>GodMode bare-metal host</description>
+  <executable>%BASE%\bin\node.exe</executable>
+  <arguments>%BASE%\bin\host.mjs</arguments>
+  <workingdirectory>%BASE%</workingdirectory>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+</service>
