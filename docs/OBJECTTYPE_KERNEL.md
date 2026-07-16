@@ -41,7 +41,7 @@ There are two storage models:
    changing the type of a field requires an explicit migration outside the
    generic materializer.
 
-The strict static audit discovers 72 deployed ObjectTypes, including
+The strict static audit discovers 74 deployed ObjectTypes, including
 `StructureNode`. All authenticated durable-domain mutations cross this kernel
 boundary. Service-backed adapters preserve authoritative business logic; that
 implementation choice does not create a second mutation path.
@@ -144,9 +144,17 @@ rejected during manifest validation.
 `StructureNode.object_type` chooses generic Record rendering; `segment` remains
 the URL segment.
 
+The release subsystem follows the same boundary. `Release` exposes verified
+read-only release metadata, while singleton `InstallationUpdateState` owns
+administrator/system actions for discovery, configuration, download, defer,
+skip, preflight, snapshot, and host-supervisor handoff. Network and filesystem
+work uses durable `OperationRun` execution. The privileged supervisor replaces
+containers or services outside Bridge and returns update/rollback evidence to
+the kernel state machine.
+
 ## Completed migration and protocol exceptions
 
-At the completion baseline, the strict audits discover 72 core ObjectTypes and
+At the completion baseline, the strict audits discover 74 core ObjectTypes and
 report 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers, and 0
 direct writes in audited entry points. Tenant registries can expose additional
 ObjectTypes from installed executable or declarative plugins. Five domain

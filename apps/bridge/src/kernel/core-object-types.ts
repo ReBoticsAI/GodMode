@@ -24,6 +24,7 @@ import {
   taskCardServiceAdapter,
 } from "./adapters/productivity.js";
 import { operationRunAdapter } from "./adapters/operation-runs.js";
+import { releaseAdapters } from "./adapters/release.js";
 import {
   artifactServiceAdapter,
   memoryServiceAdapter,
@@ -78,6 +79,8 @@ export const CORE_OBJECT_TYPE_NAMES = [
   "PlatformEvent",
   "ActionLog",
   "OperationRun",
+  "Release",
+  "InstallationUpdateState",
   "FinanceConnection",
   "BalanceSnapshot",
   "BankLedgerEntry",
@@ -177,6 +180,7 @@ const SERVICE_ADAPTERS = new Map(
     cardCommentServiceAdapter,
     calendarEventServiceAdapter,
     operationRunAdapter,
+    ...releaseAdapters,
     artifactServiceAdapter,
     memoryServiceAdapter,
     notificationServiceAdapter,

@@ -1,0 +1,48 @@
+name: Promote stable release to SaaS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Verified stable release tag (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+concurrency:
+  group: godmode-saas-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: startsWith(inputs.version, 'v')
+    environment: production
+    runs-on: [self-hosted, linux, godmode-saas]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+      - uses: sigstore/cosign-installer@v3
+      - name: Promote immutable release with snapshot rehearsal
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          GODMODE_COMPOSE_FILE: ${{ vars.GODMODE_COMPOSE_FILE || 'deploy/docker-compose.prod.yml' }}
+          GODMODE_HEALTH_URL: ${{ vars.GODMODE_HEALTH_URL || 'http://127.0.0.1/api/update/readiness' }}
+          GODMODE_SNAPSHOT_DIR: ${{ vars.GODMODE_SNAPSHOT_DIR || '/var/backups/godmode' }}
+          UPDATE_READINESS_TOKEN: ${{ secrets.UPDATE_READINESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          release_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION"
+          scripts/update/godmode-update.sh \
+            "$release_url" \
+            "$GODMODE_COMPOSE_FILE" \
+            "$GODMODE_SNAPSHOT_DIR" \
+            "$GODMODE_HEALTH_URL" \
+            "${{ vars.GODMODE_ENV_FILE || '.env' }}"

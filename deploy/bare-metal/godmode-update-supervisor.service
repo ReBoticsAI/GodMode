@@ -1,0 +1,20 @@
+[Unit]
+Description=GodMode host update supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=INSTALLATION_SURFACE=linux_bare_metal
+EnvironmentFile=-/etc/godmode/update.env
+WorkingDirectory=/opt/godmode
+ExecStart=/opt/godmode/current/bin/node /opt/godmode/current/update/supervisor.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

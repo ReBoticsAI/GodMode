@@ -131,6 +131,9 @@ Run the automated gate before deployment:
 
 ```bash
 npm run audit:kernel:strict
+npm run audit:oss
+npm run test:audit
+npm run test:release
 npm run typecheck
 npm test
 npm run build --workspace @godmode/bridge
@@ -144,14 +147,14 @@ suite together. At the completion baseline, strict audit output must report:
   5 protocol exceptions;
 - 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers;
 - 0 direct SQL/filesystem writes in audited entry points;
-- 72 ObjectTypes, 75 static tools, 335 generated tool candidates, and
+- 74 ObjectTypes, 75 static tools, 346 generated tool candidates, and
   0 static/generated collisions.
 
 Then validate the production deployment manually:
 
 1. Build the production Docker image and confirm `/api/health` returns `ok`.
 2. Sign in and inspect `/api/object-types` and `/api/kernel/capabilities`; the
-   deployed registry should expose the 72 audited core ObjectTypes including
+   deployed registry should expose the 74 audited core ObjectTypes including
    `StructureNode`, plus the ObjectTypes from plugins installed for that tenant.
 3. Create, update, read, list, and delete a disposable Record through a supported
    ObjectType. Confirm unsupported operations are rejected.
@@ -183,31 +186,24 @@ Then validate the production deployment manually:
 
 ### Z440 revision and image identity
 
-Run this from the Z440 checkout before the manual browser pass. Do not infer the
-deployed revision from a branch name or container creation time.
+Run this on the Z440 before the manual browser pass. Do not infer the deployed
+revision from a mutable image tag or container creation time.
 
 ```powershell
-$ExpectedRevision = "<reviewed-full-sha>"
-if ((git rev-parse HEAD).Trim() -ne $ExpectedRevision) {
-  throw "Z440 checkout is not the reviewed revision"
-}
-if (git status --porcelain) {
-  throw "Z440 checkout has uncommitted files"
-}
-
-docker compose -f deploy/docker-compose.prod.yml build --no-cache godmode
-$BuiltImage = (docker compose -f deploy/docker-compose.prod.yml images -q godmode).Trim()
-if (-not $BuiltImage) { throw "No built GodMode image ID" }
-
+$ExpectedRevision = "<release-manifest-full-sha>"
+$ExpectedImage = "ghcr.io/reboticsai/godmode@sha256:<release-manifest-digest>"
+$env:GODMODE_IMAGE = $ExpectedImage
+docker pull $ExpectedImage
 docker compose -f deploy/docker-compose.prod.yml up -d --force-recreate godmode
 $Container = (docker compose -f deploy/docker-compose.prod.yml ps -q godmode).Trim()
 $RunningImage = (docker inspect --format '{{.Image}}' $Container).Trim()
-if ($RunningImage -ne $BuiltImage) {
-  throw "Running container image does not match the reviewed revision"
+$ExpectedImageId = (docker image inspect $ExpectedImage --format '{{.Id}}').Trim()
+if ($RunningImage -ne $ExpectedImageId) {
+  throw "Running container image does not match the signed release digest"
 }
 
-git rev-parse HEAD
-docker image inspect $BuiltImage --format 'image={{.Id}} created={{.Created}}'
+Write-Output "release revision=$ExpectedRevision"
+docker image inspect $ExpectedImage --format 'image={{.Id}} created={{.Created}}'
 docker inspect --format 'container={{.Id}} image={{.Image}} started={{.State.StartedAt}}' $Container
 Invoke-RestMethod http://127.0.0.1/api/health
 ```
@@ -231,6 +227,18 @@ only after a human or browser agent verifies the running image:
 - DM text, typing presence, attachment upload, and binary download;
 - page refresh and Bridge restart preserve completed durable state and recover
   eligible async work.
+- Admin → Updates shows the installed version, deployment surface, selected
+  stable/nightly channel, and last-check state only to platform admins;
+- a signed newer manifest creates exactly one update notification, while
+  repeated ETag/304 checks do not duplicate it;
+- defer, skip, check, download, and supported apply actions use kernel
+  confirmations/idempotency and survive a Bridge restart;
+- Docker and bare-metal update rehearsals create and verify a complete snapshot,
+  report deep readiness, and either commit the expected release identity or
+  restore the prior runtime/data snapshot after a forced failure;
+- an offline signed release bundle imports successfully, while a changed hash,
+  invalid signature, incompatible schema, incompatible plugin, or insufficient
+  disk-space preflight fails closed.
 
 This checklist is pending until the parent task records browser confirmation; an
 updated document or passing automated tests alone do not establish completion.
@@ -250,5 +258,6 @@ See [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md).
 - [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)
 - [AGENT_MEMORY.md](./AGENT_MEMORY.md)
 - [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md)
+- [RELEASES.md](./RELEASES.md)
 - [../CHANGELOG.md](../CHANGELOG.md)
 - [../CONTRIBUTING.md](../CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes)

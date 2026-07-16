@@ -49,7 +49,7 @@ leases, declared retries/backoff, timeout, cancellation eligibility, and
 replay-safe recovery. Declared bulk execution remains unsupported until an
 adapter provides its dedicated shape; deprecation metadata is descriptive.
 
-The strict repository audit currently discovers 72 ObjectTypes, 335 generated
+The strict repository audit currently discovers 74 ObjectTypes, 346 generated
 tool candidates, and 75 static tools, with zero legacy routes/callers, unmatched
 mutation callers, direct audited entry-point writes, or tool collisions. Core
 contract tests require exact CRUD/action declaration-handler parity.

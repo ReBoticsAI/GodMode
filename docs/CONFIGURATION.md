@@ -46,6 +46,27 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `FEDERATION_TOKEN` | empty | Shared secret for peer Bridge API |
 | `FEDERATION_PUBLIC_URL` | Bridge URL | Public base URL for remote peers |
 
+## Releases and updates
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GODMODE_VERSION` | package version | Immutable installed platform version |
+| `GODMODE_IMAGE` | release compose default | Digest-pinned GHCR image consumed by production compose |
+| `INSTALLATION_SURFACE` | `developer_source` | `saas`, `private_hub`, `docker`, `linux_bare_metal`, `windows_bare_metal`, or unsupported developer source |
+| `UPDATE_CHANNEL` | `stable` | Release channel: `stable` or `nightly` |
+| `UPDATE_MANIFEST_URL` | official channel URL | HTTPS release manifest override |
+| `UPDATE_FETCH_TIMEOUT_MS` | `10000` | Manifest request timeout |
+| `UPDATE_POLL_MIN_MS` | `14400000` | Minimum randomized automatic-check interval |
+| `UPDATE_POLL_MAX_MS` | `28800000` | Maximum randomized automatic-check interval |
+| `UPDATE_SNAPSHOT_DIR` | sibling of platform data | External destination for coordinated update snapshots |
+| `UPDATE_READINESS_TOKEN` | empty | Dedicated bearer token for the host updater's deep-readiness endpoint |
+| `UPDATE_SUPERVISOR_URL` | empty | Optional authenticated local host-supervisor endpoint for one-click apply |
+| `UPDATE_SUPERVISOR_TOKEN` | empty | Independent bearer token shared only with that host supervisor |
+
+Publisher identity and trust-root settings are documented in
+[RELEASES.md](./RELEASES.md). Production update checks must remain disabled
+unless a trusted signature-verification policy is configured.
+
 ## Hub-only (SaaS)
 
 | Variable | Description |

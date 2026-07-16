@@ -15,7 +15,8 @@ GodMode is a **local-first personal OS**: a React dashboard talks to a Node.js B
 ## ObjectType kernel
 
 GodMode extends in-place via **ObjectTypes** (not DocTypes). The production
-registration audit discovers 72 ObjectTypes, including `StructureNode`.
+registration audit discovers 74 ObjectTypes, including `StructureNode`,
+`Release`, and `InstallationUpdateState`.
 
 ```mermaid
 flowchart LR
@@ -212,6 +213,25 @@ external migrations merged before ecosystem-wide cutover was declared complete.
 | Client | `client` | Personal Docker; marketplace via `CLOUD_HUB_URL` |
 
 See [DEPLOY.md](../DEPLOY.md) for Docker compose layouts.
+
+## Release and update control plane
+
+GitHub Actions validates one commit, publishes immutable OCI and bare-metal
+artifacts, signs their canonical release manifest, and updates the selected
+stable/nightly discovery channel. Installations poll that data with ETag caching
+and store discovered releases plus singleton installation state in the core
+database.
+
+`Release` is read-only release metadata. `InstallationUpdateState` exposes
+administrator/system kernel actions for checks, policy, download, preflight,
+snapshot, defer/skip, and supported apply/restart handoff. Core `OperationRun`
+workers make asynchronous checks and downloads recoverable; update events create
+deduplicated Notification records.
+
+Binary/container replacement remains outside Bridge's privilege boundary. A
+host updater or SaaS deployment environment verifies the same manifest, creates
+a coordinated snapshot, stages the immutable artifact, and commits only after
+deep readiness succeeds. See [RELEASES.md](RELEASES.md).
 
 ## Security boundaries
 

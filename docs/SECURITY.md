@@ -27,6 +27,8 @@ OSS core uses **email/password + HttpOnly session cookies** only. There is no OA
 | First signup admin | Race on internet-exposed fresh installs | Use invite codes or pre-seed `INITIAL_ADMINS` |
 | Plugin bundles (`/api/plugins/*/web.js`) | Proprietary JS exposure | Requires authenticated tenant + installed plugin |
 | Generic Records/actions (`/api/records/*`) | Cross-tenant or overbroad mutation | OperationContext, access/action policy, adapter scoping |
+| Release manifests and update artifacts | Supply-chain execution or downgrade | Signed manifests, immutable digests, compatibility bounds, administrator confirmation |
+| Host update supervisor | Privileged container/service replacement | Dedicated authenticated local-host IPC; never expose the Docker socket to Bridge |
 | DuckDB analytics | SQL against attached timeseries | Platform admin only; SELECT-only subset |
 | Markdown rendering | `javascript:` links in assistant/wiki output | URL scheme allowlist in web UI |
 
@@ -66,6 +68,32 @@ installation explicitly. Plugin Bridge code still runs with host privileges.
 Native ObjectType uninstall retains physical tables and Records to avoid
 destructive data loss. Operators must include core and tenant SQLite files in
 backups and handle erasure requirements explicitly.
+
+## Release and updater trust
+
+Only GitHub Actions runs that complete the full validation gate may publish a
+nightly or stable release manifest. A manifest is data, never a command script:
+the updater accepts only known fields and verifies its signature, channel,
+version, commit, artifact digest/hash, engine/kernel compatibility, schema
+bounds, and rollback class before staging anything.
+
+Bridge does not receive the Docker socket or operating-system service-manager
+privileges. Docker and bare-metal replacement is performed by the separately
+installed host updater over a dedicated authenticated local-host endpoint, or by an administrator
+running the printed verified command. Update application requires a complete,
+integrity-checked snapshot outside the active data directory and a successful
+post-start readiness check. Invalid signatures, revoked metadata, unavailable
+rollback paths, incompatible plugins, and failed snapshot verification must
+fail closed.
+
+Keyless signatures are accepted only for the pinned GitHub Actions issuer and
+GodMode release-workflow identity. Sigstore's TUF-distributed trust root and
+transparency evidence support certificate/root rotation without trusting a key
+shipped beside the artifact. Offline imports require the complete verification
+bundle captured at publication time. A compromised workflow identity or
+repository requires disabling update polling, revoking affected releases, and
+publishing fresh artifacts after the GitHub/Sigstore incident is resolved; never
+replace the pinned identity with an arbitrary repository wildcard.
 
 Multipart upload/download, WebSocket/token streams, cookie establishment,
 ephemeral presence, read-only analytical POST, and signed external command

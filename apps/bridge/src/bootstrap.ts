@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
+import { timingSafeEqual } from "node:crypto";
 import "dotenv/config";
 import { config } from "./config.js";
 import { initCoreDb, listAllTenantIds } from "./core-db.js";
@@ -87,9 +88,15 @@ import {
   setKernelEventBus,
 } from "./kernel/index.js";
 import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plugins.js";
+import {
+  reconcileInstalledVersion,
+  readinessDiagnostics,
+  ReleasePoller,
+} from "./services/release-flow.js";
 
 export async function startBridge(): Promise<void> {
 const coreDb = initCoreDb();
+reconcileInstalledVersion(coreDb);
 const { operatorTenantId } = ensurePlatformBootstrap();
 ensureInitialAdmins(coreDb);
 repairNonOperatorTenantStructure(coreDb);
@@ -104,9 +111,13 @@ const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => {
     },
   }));
 };
+const kernelDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => [
+  { tenantId: "core", db: coreDb },
+  ...tenantDatabases(),
+];
 registerCoreObjectTypes();
 materializeAllNativeTypes(db, createSystemOperationContext());
-for (const tenant of tenantDatabases()) {
+for (const tenant of kernelDatabases()) {
   try {
     recoverInterruptedOperationRuns(tenant.db);
   } catch (error) {
@@ -182,7 +193,7 @@ startRetentionScheduler(db);
 if (config.isHub) {
   startMarketplaceBillingScheduler();
 }
-const stopEventsRelay = startTenantEventsRelay(tenantDatabases, bus);
+const stopEventsRelay = startTenantEventsRelay(kernelDatabases, bus);
 const workerPool = createWorkerPool();
 
 void initTimeseriesStore().then(async (ts) => {
@@ -222,9 +233,10 @@ const aiQueueWorker = new AiQueueWorker(db, llmManager, {
   embeddings: embeddingManager,
 });
 const operationRunWorker = new OperationRunWorker(
-  tenantDatabases,
+  kernelDatabases,
   processClaimedOperationRun
 );
+const releasePoller = new ReleasePoller(coreDb);
 if (hasSierra) {
   getPluginHost().registerAutonomousRunnerKick?.((reason) => {
     if (aiQueueWorker.hasPendingOrRunningWorkflow("autonomous-task-runner")) return;
@@ -307,6 +319,25 @@ app.get("/api/health", (_req, res) => {
     deploymentMode: config.deploymentMode,
     hub: config.isHub,
     client: config.isClient,
+  });
+});
+app.get("/api/update/readiness", (req, res) => {
+  const configured = process.env.UPDATE_READINESS_TOKEN ?? "";
+  const presented = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+  const authorized =
+    configured.length > 0 &&
+    configured.length === presented.length &&
+    timingSafeEqual(Buffer.from(configured), Buffer.from(presented));
+  if (!authorized) {
+    res.status(401).json({ ok: false, error: "Update readiness token required" });
+    return;
+  }
+  const diagnostics = readinessDiagnostics(coreDb);
+  res.json({
+    ok: diagnostics.every((item) => !item.blocking || item.ok),
+    version: process.env.GODMODE_VERSION ?? "0.1.0",
+    commit: process.env.GODMODE_COMMIT ?? "unknown",
+    diagnostics,
   });
 });
 app.use("/api/auth", createAuthRouter());
@@ -422,6 +453,7 @@ server.listen(config.port, config.host, () => {
   })();
   aiQueueWorker.start();
   operationRunWorker.start();
+  releasePoller.start();
   aiScheduler.start();
   reflectionService.start();
   memoryMaintenance.start();
@@ -462,6 +494,7 @@ server.listen(config.port, config.host, () => {
 function gracefulShutdown() {
   stopEventsRelay();
   operationRunWorker.stop();
+  releasePoller.stop();
   workerPool.shutdown();
   stopScheduler();
   aiScheduler.stop();

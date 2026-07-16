@@ -18,8 +18,10 @@
     "audit:kernel:strict": "node scripts/audit-kernel-strict.mjs",
     "test": "vitest run",
     "test:audit": "node --test scripts/__tests__/audit-kernel.test.mjs",
+    "test:release": "node --test scripts/release/__tests__/*.test.mjs",
+    "release:verify": "node scripts/release/verify-release.mjs",
     "test:objecttypes": "vitest run packages/kernel/src packages/plugin-api/src apps/bridge/src/kernel apps/web/src",
-    "test:gate": "npm run build:packages && npm run typecheck && npm run audit:kernel && npm run test:audit && npm test",
+    "test:gate": "npm run build:packages && npm run typecheck && npm run audit:kernel:strict && npm run audit:oss && npm run test:audit && npm run test:release && npm test",
     "seed:demo": "node scripts/seed-readme-demo.mjs",
     "plugins": "tsx scripts/godmode-plugins-cli.ts"
   },

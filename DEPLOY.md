@@ -27,11 +27,13 @@ Open http://localhost:5173 and sign up with email and password.
    - `AUTH_SESSION_SECRET` (32+ random bytes)
    - `AUTH_ALLOW_SIGNUP=false` or `AUTH_INVITE_CODES` for controlled onboarding
    - Stripe keys via **Admin → Billing** after first login (or `STRIPE_SECRET_KEY` env fallback)
-2. Build and run:
+2. Resolve the desired stable release to its signed immutable GHCR digest, set
+   `GODMODE_IMAGE` in the host environment, then pull and run:
 
 ```bash
 cd deploy
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
@@ -54,11 +56,12 @@ On VPS staging, point `-BaseUrl` at your internal Bridge URL (nginx → `127.0.0
 
 1. Copy `deploy/.env.client.example` → `deploy/.env.client`.
 2. Set `CLOUD_HUB_URL` to the **official** hub domain (marketplace authority).
-3. Run:
+3. Set `GODMODE_IMAGE` to the verified immutable release digest and run:
 
 ```bash
 cd deploy
-docker compose -f docker-compose.client.yml up -d --build
+docker compose -f docker-compose.client.yml pull
+docker compose -f docker-compose.client.yml up -d
 ```
 
 Open http://localhost:8080. Sign in with email and password. Workspace data stays on your machine; credits and marketplace listings come from the hub.
@@ -71,9 +74,11 @@ That volume also contains native ObjectType tables, durable operation/audit
 state (including leases, retries, cancellation, idempotency, and recovery),
 event-consumer receipts, cross-database acquisition saga/outbox rows, and
 Intelligence-authored plugins. Back up the entire platform data directory before
-image upgrades, plugin lifecycle changes, or ObjectType schema changes. A safe
-backup captures `core.sqlite`, every tenant SQLite database (using SQLite's
-backup mechanism or while writers are stopped), and tenant plugin workspaces.
+image upgrades, plugin lifecycle changes, or ObjectType schema changes. The
+release updater coordinates SQLite backups for `core.sqlite` and every tenant
+database, captures tenant workspaces and plugin locks, verifies integrity and
+hashes, and stores the snapshot outside the active data volume before
+replacement.
 
 Native ObjectType evolution is additive only. Plugin uninstall removes runtime
 visibility but retains native tables and Records, so uninstall is not an erasure
@@ -99,12 +104,23 @@ The production image does not run CUDA. Run `llama-server` on the host and attac
 
 ```bash
 cd deploy
-docker compose -f docker-compose.hub-external-llm.yml up -d --build
+docker compose -f docker-compose.hub-external-llm.yml pull
+docker compose -f docker-compose.hub-external-llm.yml up -d
 ```
 
 Requires `LLAMA_EXTERNAL=true`, a models bind-mount, and `host.docker.internal` → host gateway. See [docs/LOCAL_LLM.md](docs/LOCAL_LLM.md) for a recommended Gemma 4 26B / 16 GB GPU profile.
 
 Optional: mount `./plugins:/plugins` and install via **Marketplace → Unofficial** using a container path such as `/plugins/my-plugin`. See [docs/MARKETPLACE.md](docs/MARKETPLACE.md#docker-hub-notes).
+
+## Releases and updates
+
+Nightly and stable artifacts are built from one validated commit. Production
+compose files consume only digest-pinned images; the source-build path lives in
+`deploy/docker-compose.dev.yml` and is not an update channel. Administrators can
+review signed releases under **Admin → Updates** or apply them with the
+host-side helper without granting Bridge access to Docker or the OS service
+manager. See [docs/RELEASES.md](docs/RELEASES.md) for signing, snapshots,
+readiness, rollback, bare-metal bundles, and offline updates.
 
 ## Hardware-bound marketplace plugins
 

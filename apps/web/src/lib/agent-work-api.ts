@@ -5,6 +5,7 @@ import {
   updateRecordApi,
   type RecordRowClient,
 } from "./object-types-api";
+import { randomId } from "./random-id";
 
 export type AgentWorkObjectType =
   | "Agent"
@@ -54,6 +55,6 @@ export function runAgentWorkAction<T>(
   return runRecordActionApi(objectType, action, input, {
     id,
     confirmed,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomId(),
   }) as Promise<T>;
 }

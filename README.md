@@ -129,7 +129,7 @@ plugin is installed. See
 [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
 Authenticated data consumers discover explicit CRUD operations and named actions
-through the ObjectType kernel. The strict audit currently discovers 72
+through the ObjectType kernel. The strict audit currently discovers 74
 ObjectTypes and reports zero legacy routes/callers, unmatched mutation callers,
 or direct entry-point writes. Existing domain services remain authoritative
 behind exact-parity adapters, so all durable mutations share one enforced
@@ -255,7 +255,10 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 
 **Local mode** (default) runs Bridge and Web on your workstation  -  ideal for personal use.
 
-For Docker hub/client deployments, see [DEPLOY.md](DEPLOY.md). Architecture details: [docs/architecture.md](docs/architecture.md).
+For Docker hub/client and signed bare-metal deployments, see
+[DEPLOY.md](DEPLOY.md). Release channels and safe updates are documented in
+[docs/RELEASES.md](docs/RELEASES.md). Architecture details:
+[docs/architecture.md](docs/architecture.md).
 
 ## Documentation
 
@@ -264,7 +267,7 @@ Full documentation index: **[docs/README.md](docs/README.md)**
 | | |
 |---|---|
 | **Get started** | [GETTING_STARTED](docs/GETTING_STARTED.md) · [ONBOARDING](docs/ONBOARDING.md) · [FEATURES](docs/FEATURES.md) · [LOCAL_LLM](docs/LOCAL_LLM.md) · [CURSOR](docs/CURSOR_SUBSCRIPTION.md) |
-| **Use GodMode** | [AGENT_MEMORY](docs/AGENT_MEMORY.md) · [MARKETPLACE](docs/MARKETPLACE.md) · [SHARED_FEDERATION](docs/SHARED_FEDERATION.md) · [CONFIGURATION](docs/CONFIGURATION.md) · [SECURITY](docs/SECURITY.md) |
+| **Use GodMode** | [AGENT_MEMORY](docs/AGENT_MEMORY.md) · [MARKETPLACE](docs/MARKETPLACE.md) · [SHARED_FEDERATION](docs/SHARED_FEDERATION.md) · [CONFIGURATION](docs/CONFIGURATION.md) · [RELEASES](docs/RELEASES.md) · [SECURITY](docs/SECURITY.md) |
 | **Deploy & extend** | [DEPLOY](DEPLOY.md) · [architecture](docs/architecture.md) · [ObjectType kernel](docs/OBJECTTYPE_KERNEL.md) · [PLUGIN_AUTHORING](docs/PLUGIN_AUTHORING.md) (contributors) |
 | **Project** | [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) (includes roadmap themes) |
 

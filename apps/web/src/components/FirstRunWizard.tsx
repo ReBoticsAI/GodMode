@@ -156,6 +156,13 @@ export function FirstRunWizard({ open, onFinished }: Props) {
               <Button variant="outline" onClick={() => void useCloud()} disabled={loading}>
                 Use cloud API (Vault)
               </Button>
+              <Button
+                variant="ghost"
+                onClick={() => void finish()}
+                disabled={loading}
+              >
+                Skip for now
+              </Button>
             </DialogFooter>
           </>
         ) : null}
