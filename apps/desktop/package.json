@@ -4,6 +4,7 @@
   "private": true,
   "description": "GodMode desktop shell (Electron)",
   "author": "ReBotics AI",
+  "homepage": "https://github.com/ReBoticsAI/GodMode",
   "main": "dist/main.js",
   "type": "module",
   "scripts": {
@@ -70,13 +71,14 @@
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
-    },    "linux": {
+    },
+    "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
       "category": "Office",
-      "artifactName": "GodMode-${version}-linux-${arch}.${ext}"
+      "artifactName": "GodMode-${version}-linux-x64.${ext}"
     },
     "publish": null
   }
