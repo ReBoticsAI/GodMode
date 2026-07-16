@@ -36,6 +36,7 @@
     },
     "files": [
       "dist/**/*",
+      "preload.cjs",
       "package.json"
     ],
     "extraResources": [

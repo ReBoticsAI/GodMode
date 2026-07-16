@@ -31,7 +31,13 @@ const root = process.cwd();
 const desktopRoot = path.join(root, "apps", "desktop");
 const runtimeDest = path.join(desktopRoot, "resources", "runtime");
 const updateDest = path.join(desktopRoot, "resources", "update");
-const stage = path.join(desktopRoot, ".stage-runtime");
+// Prefer a fresh temp stage so leftover locked files under apps/desktop/.stage-runtime
+// (Windows AV / prior electron copies) cannot block packaging.
+const stage = path.join(
+  root,
+  "release-out",
+  `.desktop-stage-${process.pid}-${Date.now()}`
+);
 
 await stageRuntime({
   platform,
@@ -43,8 +49,9 @@ await stageRuntime({
 });
 
 await rm(runtimeDest, { recursive: true, force: true });
-await mkdir(runtimeDest, { recursive: true });
-await cp(stage, runtimeDest, { recursive: true, dereference: true });
+await mkdir(path.dirname(runtimeDest), { recursive: true });
+// Copy stage directory onto runtimeDest path (replace), not into an existing folder.
+await cp(stage, runtimeDest, { recursive: true });
 await rm(stage, { recursive: true, force: true });
 
 // electron-builder honors .gitignore and would omit node_modules from extraResources.
@@ -63,9 +70,10 @@ for (const name of ["supervisor.mjs", "desktop-update.mjs", "bare-metal-update.m
 }
 
 const electronVersion = version.replace(/^v/, "");
+const packDirOnly = process.env.DESKTOP_PACK_DIR === "1";
 const builderArgs = [
   "run",
-  "dist",
+  packDirOnly ? "pack" : "dist",
   "-w",
   "@godmode/desktop",
   "--",

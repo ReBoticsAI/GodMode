@@ -38,18 +38,41 @@ export async function stageRuntime({
   await rm(stageDir, { recursive: true, force: true });
   await mkdir(path.join(stageDir, "bin"), { recursive: true });
 
-  const copy = (source, destination, options = {}) =>
+  const copy = (source, destination) =>
     cp(path.join(root, source), path.join(stageDir, destination), {
       recursive: true,
-      // Flatten npm workspace / nested symlinks so packaged runtimes are portable.
-      dereference: true,
-      ...options,
+      // Keep links/junctions as-is for speed; @godmode workspaces are replaced below.
+      verbatimSymlinks: true,
     });
+
+  const skipPackagingTooling = !includeServices;
+  const nodeModulesSource = path.join(root, "node_modules");
+  const nodeModulesDest = path.join(stageDir, "node_modules");
+  await mkdir(nodeModulesDest, { recursive: true });
+  const nmEntries = await import("node:fs/promises").then(({ readdir }) =>
+    readdir(nodeModulesSource)
+  );
+  const skipNames = new Set([
+    "electron",
+    "electron-builder",
+    "electron-publish",
+    "electron-winstaller",
+    "app-builder-bin",
+    "app-builder-lib",
+    "@electron",
+  ]);
 
   await Promise.all([
     copy("package.json", "package.json"),
     copy("package-lock.json", "package-lock.json"),
-    copy("node_modules", "node_modules"),
+    ...nmEntries
+      .filter((entry) => !(skipPackagingTooling && (skipNames.has(entry) || /^electron/i.test(entry))))
+      .map((entry) =>
+        cp(path.join(nodeModulesSource, entry), path.join(nodeModulesDest, entry), {
+          recursive: true,
+          verbatimSymlinks: true,
+        })
+      ),
     copy("apps/bridge/package.json", "apps/bridge/package.json"),
     copy("apps/bridge/dist", "apps/bridge/dist"),
     copy("apps/web/dist", "apps/web/dist"),

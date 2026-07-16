@@ -178,7 +178,7 @@ function createWindow(url: string): void {
     show: false,
     title: "GodMode",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(appRoot, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
