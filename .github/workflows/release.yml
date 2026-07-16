@@ -251,7 +251,8 @@ jobs:
             platform: windows-x64
           - runner: macos-latest
             platform: darwin-arm64
-          - runner: macos-13
+          # macos-13 is retired; Intel x64 builds use macos-15-intel (last GH-hosted Intel image).
+          - runner: macos-15-intel
             platform: darwin-x64
           - runner: ubuntu-latest
             platform: linux-x64
