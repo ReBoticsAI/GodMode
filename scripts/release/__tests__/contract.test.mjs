@@ -171,6 +171,12 @@ test("supervisor routes electron surface to desktop-update", async () => {
   assert.match(supervisor, /desktop-update\.mjs/);
 });
 
+test("bare-metal smoke enforces a hard startup deadline", async () => {
+  const smoke = await readFile("scripts/release/smoke-bare-metal.mjs", "utf8");
+  assert.match(smoke, /SMOKE_TIMEOUT_MS/);
+  assert.match(smoke, /killTree|SIGKILL|taskkill/);
+});
+
 test("supervisor and bridge share restart_to_apply paths", async () => {
   const supervisor = await readFile("scripts/update/supervisor.mjs", "utf8");
   const bridge = await readFile("apps/bridge/src/services/release-flow.ts", "utf8");
