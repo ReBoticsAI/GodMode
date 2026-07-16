@@ -165,12 +165,14 @@ test("desktop packaging dodges gitignore stripping of node_modules", async () =>
   const packager = await readFile("scripts/release/package-desktop.mjs", "utf8");
   const afterPack = await readFile("apps/desktop/after-pack.cjs", "utf8");
   const desktopPkg = await readFile("apps/desktop/package.json", "utf8");
+  const stage = await readFile("scripts/release/stage-runtime.mjs", "utf8");
   assert.match(packager, /_node_modules/);
   assert.match(packager, /extraMetadata\.name=GodMode/);
   assert.match(afterPack, /_node_modules/);
   assert.match(afterPack, /cors/);
   assert.match(afterPack, /Contents.*Resources|electronPlatformName === "darwin"/);
   assert.match(desktopPkg, /after-pack\.cjs/);
+  assert.match(stage, /@godmode", "desktop"/);
 });
 
 test("desktop shell surfaces boot failures instead of quitting silently", async () => {
