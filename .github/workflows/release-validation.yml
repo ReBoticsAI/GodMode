@@ -29,6 +29,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Build workspace packages
+        run: npm run build:packages
       - name: Validate release contract
         run: npm run test:release
       - name: Enforce architecture and OSS boundaries
@@ -40,7 +42,6 @@ jobs:
         run: npm test
       - name: Build release inputs
         run: |
-          npm run build:packages
           npm run typecheck
           npm run build -w @godmode/bridge
           npm run build -w @godmode/web
