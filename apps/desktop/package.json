@@ -16,14 +16,15 @@
   "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "electron": "^37.2.0",
-    "electron-builder": "^26.0.12",
+    "electron": "37.10.3",
+    "electron-builder": "26.15.3",
     "typescript": "^5.7.3"
   },
   "build": {
     "appId": "ai.rebotics.godmode",
     "productName": "GodMode",
     "copyright": "Copyright © ReBotics AI",
+    "electronVersion": "37.10.3",
     "directories": {
       "output": "../../release-out/desktop",
       "buildResources": "build"
@@ -73,6 +74,7 @@
       ],
       "category": "Office",
       "artifactName": "GodMode-${version}-linux-${arch}.${ext}"
-    }
+    },
+    "publish": null
   }
 }
