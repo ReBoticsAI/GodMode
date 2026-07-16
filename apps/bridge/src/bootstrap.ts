@@ -4,7 +4,6 @@ import fs from "node:fs";
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
-import { timingSafeEqual } from "node:crypto";
 import "dotenv/config";
 import { config } from "./config.js";
 import { initCoreDb, listAllTenantIds } from "./core-db.js";
@@ -12,6 +11,7 @@ import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.j
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { createUpdateRouter } from "./routes/update.js";
 import { createMarketplaceRouter } from "./routes/marketplace.js";
 import { createMarketplaceCatalogRouter } from "./routes/marketplace-catalog.js";
 import { createNetworkRouter } from "./routes/network.js";
@@ -90,7 +90,6 @@ import {
 import { createPluginsRouter, createPluginsManifestHandler } from "./routes/plugins.js";
 import {
   reconcileInstalledVersion,
-  readinessDiagnostics,
   ReleasePoller,
 } from "./services/release-flow.js";
 
@@ -321,25 +320,7 @@ app.get("/api/health", (_req, res) => {
     client: config.isClient,
   });
 });
-app.get("/api/update/readiness", (req, res) => {
-  const configured = process.env.UPDATE_READINESS_TOKEN ?? "";
-  const presented = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
-  const authorized =
-    configured.length > 0 &&
-    configured.length === presented.length &&
-    timingSafeEqual(Buffer.from(configured), Buffer.from(presented));
-  if (!authorized) {
-    res.status(401).json({ ok: false, error: "Update readiness token required" });
-    return;
-  }
-  const diagnostics = readinessDiagnostics(coreDb);
-  res.json({
-    ok: diagnostics.every((item) => !item.blocking || item.ok),
-    version: process.env.GODMODE_VERSION ?? "0.1.0",
-    commit: process.env.GODMODE_COMMIT ?? "unknown",
-    diagnostics,
-  });
-});
+app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
 app.use("/api/marketplace", createMarketplaceRouter());
 app.use("/api/marketplace/catalog", createMarketplaceCatalogRouter());
