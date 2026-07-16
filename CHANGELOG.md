@@ -34,8 +34,8 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - **Four-layer agent memory** — working history, semantic memories + hybrid RAG, episodic distill, procedural skills gate; wiki hybrid RAG and synthesize proposals; hub EmbeddingGemma attach (`EMBEDDINGS_*` / `EMBEDDINGS_EXTERNAL`)
 - **Intelligence plugin pipeline** — `scaffold_plugin` → `build_plugin` → `install_plugin` on local and hub (tools load without Bridge restart)
 - **Support group staffing** — Admin configures users and agents who answer hub/shared support tickets
-- **Unified signed release flow** — green `main` commits publish nightly
-  artifacts, verified `vX.Y.Z` tags publish stable releases, and one canonical
+- **Unified signed release flow** — scheduled Mountain-Time nightlies plus
+  verified `vX.Y.Z` tags publish stable releases; one canonical
   manifest binds GHCR digests, Windows/Linux bundles, desktop installers
   (Electron), checksums, SBOMs, and provenance to the same revision
 - **Electron desktop app** (`apps/desktop`) — local-only windowed shell that
