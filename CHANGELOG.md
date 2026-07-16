@@ -36,8 +36,11 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - **Support group staffing** — Admin configures users and agents who answer hub/shared support tickets
 - **Unified signed release flow** — green `main` commits publish nightly
   artifacts, verified `vX.Y.Z` tags publish stable releases, and one canonical
-  manifest binds GHCR digests, Windows/Linux bundles, checksums, SBOMs, and
-  provenance to the same revision
+  manifest binds GHCR digests, Windows/Linux bundles, desktop installers
+  (Electron), checksums, SBOMs, and provenance to the same revision
+- **Electron desktop app** (`apps/desktop`) — local-only windowed shell that
+  embeds Bridge + web, ships NSIS/DMG/AppImage/deb installers, and applies
+  signed updates through Admin → Updates
 - **Installation update kernel** — core-backed release/update Records,
   administrator actions, ETag-aware polling, deduplicated notifications,
   coordinated snapshots, readiness/preflight diagnostics, plugin lock

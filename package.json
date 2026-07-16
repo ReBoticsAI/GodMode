@@ -23,7 +23,8 @@
     "test:objecttypes": "vitest run packages/kernel/src packages/plugin-api/src apps/bridge/src/kernel apps/web/src",
     "test:gate": "npm run build:packages && npm run typecheck && npm run audit:kernel:strict && npm run audit:oss && npm run test:audit && npm run test:release && npm test",
     "seed:demo": "node scripts/seed-readme-demo.mjs",
-    "plugins": "tsx scripts/godmode-plugins-cli.ts"
+    "plugins": "tsx scripts/godmode-plugins-cli.ts",
+    "package:desktop": "node scripts/release/package-desktop.mjs"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

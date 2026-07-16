@@ -28,6 +28,14 @@ test-results/
 # Generated Sierra Chart studies (reproducible via npm run codegen)
 sierrachart/studies/playbooks/Playbook_*.cpp
 
+# Desktop Electron staging / builder output
+apps/desktop/resources/runtime/**
+!apps/desktop/resources/runtime/.gitkeep
+apps/desktop/resources/update/**
+!apps/desktop/resources/update/.gitkeep
+apps/desktop/.stage-runtime/
+release-out/
+
 # Local runtime data / databases
 *.db
 *.db-journal

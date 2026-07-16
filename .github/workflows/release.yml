@@ -181,8 +181,64 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  desktop:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows-x64
+          - runner: macos-latest
+            platform: darwin-arm64
+          - runner: macos-13
+            platform: darwin-x64
+          - runner: ubuntu-latest
+            platform: linux-x64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Build runtime and desktop shell
+        run: |
+          npm run build:packages
+          npm run build -w @godmode/bridge
+          npm run build -w @godmode/web
+          npm run build -w @godmode/desktop
+      - name: Package desktop installer
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+          DESKTOP_PLATFORM: ${{ matrix.platform }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.metadata.outputs.channel == 'stable' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/release/package-desktop.mjs release-out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: |
+            release-out/GodMode*
+            release-out/*.exe
+            release-out/*.dmg
+            release-out/*.AppImage
+            release-out/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
-    needs: [metadata, image, bare-metal]
+    needs: [metadata, image, bare-metal, desktop]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -197,6 +253,11 @@ jobs:
           pattern: bare-metal-*
           path: release-assets
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
       - name: Create release manifest and checksums
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -207,12 +268,15 @@ jobs:
         run: |
           node scripts/release/create-manifest.mjs release-assets release-assets/release-manifest.json
           cd release-assets
-          sha256sum godmode-* release-manifest.json > SHA256SUMS
+          sha256sum godmode-* GodMode-* release-manifest.json > SHA256SUMS
       - uses: sigstore/cosign-installer@v3
       - name: Sign manifest and checksums
         working-directory: release-assets
         run: |
-          for artifact in godmode-*; do
+          shopt -s nullglob
+          for artifact in godmode-* GodMode-*; do
+            [[ -f "$artifact" ]] || continue
+            [[ "$artifact" == *.bundle ]] && continue
             cosign sign-blob --yes --bundle "$artifact.bundle" "$artifact"
           done
           cosign sign-blob --yes --bundle release-manifest.json.bundle release-manifest.json
@@ -223,6 +287,7 @@ jobs:
         with:
           subject-path: |
             release-assets/godmode-*
+            release-assets/GodMode-*
             release-assets/release-manifest.json
             release-assets/SHA256SUMS
       - name: Include GitHub provenance bundle

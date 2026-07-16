@@ -57,6 +57,45 @@ const FETCH_TIMEOUT_MS = Number(process.env.UPDATE_FETCH_TIMEOUT_MS ?? 10_000);
 const MIN_POLL_MS = Number(process.env.UPDATE_POLL_MIN_MS ?? 4 * 60 * 60 * 1000);
 const MAX_POLL_MS = Number(process.env.UPDATE_POLL_MAX_MS ?? 8 * 60 * 60 * 1000);
 
+/** Host platform label used in release manifests. */
+export function releasePlatform(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch
+): string {
+  if (platform === "win32") return "windows-x64";
+  if (platform === "darwin") return arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+  return "linux-x64";
+}
+
+/** Artifact kind preferred for the current installation surface. */
+export function releaseArtifactKind(
+  surface = process.env.INSTALLATION_SURFACE ?? "developer_source"
+): "installer" | "bundle" {
+  return surface === "electron" ? "installer" : "bundle";
+}
+
+export function selectReleaseArtifact(
+  artifacts: Array<Record<string, unknown>> | undefined,
+  options?: { platform?: string; kind?: "installer" | "bundle" }
+): Record<string, unknown> | undefined {
+  const platform = options?.platform ?? releasePlatform();
+  const kind = options?.kind ?? releaseArtifactKind();
+  const list = Array.isArray(artifacts) ? artifacts : [];
+  const matches = list.filter(
+    (item) => item && item.kind === kind && item.platform === platform
+  );
+  if (!matches.length) return undefined;
+  // Prefer AppImage on Linux for one-click replace; NSIS/DMG elsewhere.
+  if (kind === "installer" && platform === "linux-x64") {
+    return (
+      matches.find((item) =>
+        String(item.name ?? "").toLowerCase().endsWith(".appimage")
+      ) ?? matches[0]
+    );
+  }
+  return matches[0];
+}
+
 function channelManifestUrl(channel: "stable" | "nightly"): string {
   const release = channel === "nightly" ? "nightly" : "latest";
   return release === "latest"
@@ -118,17 +157,26 @@ export function validateSignedManifest(raw: unknown, publicKeyText: string): Rel
   const value = (detached ? envelope.manifest : envelope) as Record<string, unknown>;
   const signature = detached ? envelope.signature : value.signature;
   const directArtifact = value.artifact as Record<string, unknown> | undefined;
-  const platform = process.platform === "win32" ? "windows-x64" : "linux-x64";
+  const platform = releasePlatform();
+  const kind = releaseArtifactKind();
   const bundledArtifact = Array.isArray(value.artifacts)
-    ? (value.artifacts.find(
-        (item) =>
-          item &&
-          typeof item === "object" &&
-          (item as Record<string, unknown>).kind === "bundle" &&
-          (item as Record<string, unknown>).platform === platform
-      ) as Record<string, unknown> | undefined)
+    ? selectReleaseArtifact(
+        value.artifacts as Array<Record<string, unknown>>,
+        { platform, kind }
+      )
     : undefined;
-  const artifact = directArtifact ?? bundledArtifact;
+  // Legacy signed manifests always used bare-metal bundles; fall back when surface is not electron.
+  const legacyBundle =
+    !bundledArtifact && kind === "bundle" && Array.isArray(value.artifacts)
+      ? (value.artifacts.find(
+          (item) =>
+            item &&
+            typeof item === "object" &&
+            (item as Record<string, unknown>).kind === "bundle" &&
+            (item as Record<string, unknown>).platform === platform
+        ) as Record<string, unknown> | undefined)
+      : undefined;
+  const artifact = directArtifact ?? bundledArtifact ?? legacyBundle;
   const artifactUrl =
     typeof artifact?.url === "string" ? artifact.url : "";
   if (
@@ -227,10 +275,16 @@ export async function validateSigstoreManifest(
   const artifacts = Array.isArray(value.artifacts)
     ? (value.artifacts as Array<Record<string, unknown>>)
     : [];
-  const platform = process.platform === "win32" ? "windows-x64" : "linux-x64";
-  const artifact = artifacts.find(
-    (item) => item.kind === "bundle" && item.platform === platform
-  );
+  const platform = releasePlatform();
+  const kind = releaseArtifactKind();
+  const matched = selectReleaseArtifact(artifacts, { platform, kind });
+  // Non-electron hosts without a native bundle (e.g. darwin) historically used
+  // the linux-x64 bare-metal bundle as the validation anchor.
+  const artifact =
+    matched ??
+    (kind === "bundle"
+      ? selectReleaseArtifact(artifacts, { platform: "linux-x64", kind: "bundle" })
+      : undefined);
   if (
     value.schema !== RELEASE_SCHEMA ||
     typeof value.version !== "string" ||
