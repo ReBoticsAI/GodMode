@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -57,7 +57,23 @@ export function ensureRuntimeDependencies(runtime: string): void {
   const modules = path.join(runtime, "node_modules");
   const staged = path.join(runtime, "_node_modules");
   if (!fs.existsSync(modules) && fs.existsSync(staged)) {
-    fs.renameSync(staged, modules);
+    try {
+      fs.renameSync(staged, modules);
+    } catch (error) {
+      // Windows Defender / indexer sometimes blocks rename; junction is enough.
+      const linked = spawnSync(
+        "cmd.exe",
+        ["/c", `mklink /J "${modules}" "${staged}"`],
+        { encoding: "utf8" }
+      );
+      if (linked.status !== 0 || !fs.existsSync(modules)) {
+        throw new Error(
+          `Unable to expose runtime dependencies at ${modules}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
   }
   const cors = path.join(modules, "cors");
   if (!fs.existsSync(cors)) {
