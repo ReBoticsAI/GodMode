@@ -104,9 +104,13 @@ Non-technical users should install the signed desktop app from GitHub Releases:
 | Bare-metal Windows | `godmode-windows-bare-metal-<version>.zip` |
 
 The Electron shell boots the same Bridge + web runtime as bare-metal, binds only
-on loopback, stores SQLite under the OS app data directory, and starts a local
-update supervisor so **Admin → Updates** can download, Sigstore-verify, and
-apply the matching `installer` artifact.
+on loopback, stores SQLite under the OS app data directory
+(`%APPDATA%\\GodMode\\data` on Windows), and starts a local update supervisor so
+**Admin → Updates** can download, Sigstore-verify, and apply the matching
+`installer` artifact.
+
+If the desktop app fails to start, check `%APPDATA%\\GodMode\\logs\\desktop.log`
+(macOS: `~/Library/Application Support/GodMode/logs/desktop.log`).
 
 Set these GitHub Actions secrets for **stable** signed desktop builds:
 

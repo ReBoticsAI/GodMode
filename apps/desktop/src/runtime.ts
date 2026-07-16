@@ -34,7 +34,6 @@ export function runtimeRoot(isPackaged: boolean, appPath: string): string {
   }
   const staged = path.join(appPath, "resources", "runtime");
   if (fs.existsSync(path.join(staged, "bin", "host.mjs"))) return staged;
-  // Dev fallback: monorepo root when resources/runtime is not staged yet.
   return path.resolve(appPath, "..", "..");
 }
 
@@ -49,7 +48,48 @@ export function nodeBinary(runtime: string): string {
   const name = process.platform === "win32" ? "node.exe" : "node";
   const bundled = path.join(runtime, "bin", name);
   if (fs.existsSync(bundled)) return bundled;
-  return process.execPath;
+  throw new Error(
+    `Bundled Node runtime missing at ${bundled}. Reinstall GodMode.`
+  );
+}
+
+export function ensureRuntimeDependencies(runtime: string): void {
+  const modules = path.join(runtime, "node_modules");
+  const staged = path.join(runtime, "_node_modules");
+  if (!fs.existsSync(modules) && fs.existsSync(staged)) {
+    fs.renameSync(staged, modules);
+  }
+  const cors = path.join(modules, "cors");
+  if (!fs.existsSync(cors)) {
+    throw new Error(
+      `Desktop runtime is missing dependencies (cors). ` +
+        `Expected packages under ${modules}. Reinstall from a newer GitHub release.`
+    );
+  }
+}
+
+export function openLogFile(userData: string): string {
+  const dir = path.join(userData, "logs");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "desktop.log");
+  fs.writeFileSync(
+    file,
+    `\n---- GodMode desktop ${new Date().toISOString()} ----\n`,
+    { flag: "a" }
+  );
+  return file;
+}
+
+export function appendLog(logFile: string | null, message: string): void {
+  if (!logFile) {
+    console.error(message);
+    return;
+  }
+  try {
+    fs.appendFileSync(logFile, `${message}\n`);
+  } catch {
+    console.error(message);
+  }
 }
 
 export async function waitForUrl(
@@ -63,9 +103,11 @@ export async function waitForUrl(
       const response = await fetch(url, {
         signal: AbortSignal.timeout(2_000),
       });
-      if (response.ok || response.status === 401 || response.status === 404) {
+      // Require a real success — 404 means static assets are missing.
+      if (response.ok || response.status === 401) {
         return;
       }
+      lastError = new Error(`HTTP ${response.status}`);
     } catch (error) {
       lastError = error;
     }
@@ -78,37 +120,68 @@ export async function waitForUrl(
   );
 }
 
+function spawnLogged(
+  command: string,
+  args: string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    logFile: string | null;
+    label: string;
+  }
+): ChildProcess {
+  const child = spawn(command, args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const forward = (chunk: Buffer, stream: "stdout" | "stderr") => {
+    const text = chunk.toString("utf8").trimEnd();
+    if (!text) return;
+    for (const line of text.split(/\r?\n/)) {
+      appendLog(options.logFile, `[${options.label}:${stream}] ${line}`);
+    }
+  };
+  child.stdout?.on("data", (chunk: Buffer) => forward(chunk, "stdout"));
+  child.stderr?.on("data", (chunk: Buffer) => forward(chunk, "stderr"));
+  return child;
+}
+
 export function spawnHost(options: {
   runtime: string;
   env: NodeJS.ProcessEnv;
+  logFile: string | null;
 }): ChildProcess {
   const node = nodeBinary(options.runtime);
   const hostScript = path.join(options.runtime, "bin", "host.mjs");
   if (!fs.existsSync(hostScript)) {
     throw new Error(`Missing host runtime at ${hostScript}`);
   }
-  return spawn(node, [hostScript], {
+  return spawnLogged(node, [hostScript], {
     cwd: options.runtime,
     env: options.env,
-    stdio: "inherit",
-    windowsHide: true,
+    logFile: options.logFile,
+    label: "host",
   });
 }
 
 export function spawnSupervisor(options: {
   updateRoot: string;
   env: NodeJS.ProcessEnv;
+  logFile: string | null;
 }): ChildProcess {
-  const node = options.env.GODMODE_NODE_BIN || process.execPath;
+  const node = options.env.GODMODE_NODE_BIN;
+  if (!node) throw new Error("GODMODE_NODE_BIN is required for the supervisor");
   const script = path.join(options.updateRoot, "supervisor.mjs");
   if (!fs.existsSync(script)) {
     throw new Error(`Missing update supervisor at ${script}`);
   }
-  return spawn(node, [script], {
+  return spawnLogged(node, [script], {
     cwd: options.updateRoot,
     env: options.env,
-    stdio: "inherit",
-    windowsHide: true,
+    logFile: options.logFile,
+    label: "supervisor",
   });
 }
 

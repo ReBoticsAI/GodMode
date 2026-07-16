@@ -38,10 +38,12 @@ export async function stageRuntime({
   await rm(stageDir, { recursive: true, force: true });
   await mkdir(path.join(stageDir, "bin"), { recursive: true });
 
-  const copy = (source, destination) =>
+  const copy = (source, destination, options = {}) =>
     cp(path.join(root, source), path.join(stageDir, destination), {
       recursive: true,
-      verbatimSymlinks: true,
+      // Flatten npm workspace / nested symlinks so packaged runtimes are portable.
+      dereference: true,
+      ...options,
     });
 
   await Promise.all([

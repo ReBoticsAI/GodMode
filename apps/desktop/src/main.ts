@@ -1,30 +1,33 @@
-import {
-  app,
-  BrowserWindow,
-  dialog,
-} from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ChildProcess } from "node:child_process";
 import {
+  appendLog,
+  ensureRuntimeDependencies,
   freePort,
+  nodeBinary,
+  openLogFile,
   runtimeRoot,
   spawnHost,
   spawnSupervisor,
   supervisorToken,
   updateScriptsRoot,
   waitForUrl,
-  nodeBinary,
 } from "./runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 let hostProcess: ChildProcess | null = null;
 let supervisorProcess: ChildProcess | null = null;
 let shuttingDown = false;
+let logFile: string | null = null;
+let bootFailed = false;
+let booting = true;
 
 function readReleaseMeta(runtime: string): { version?: string; commit?: string } {
   try {
@@ -36,9 +39,65 @@ function readReleaseMeta(runtime: string): { version?: string; commit?: string }
   }
 }
 
+function showSplash(message: string): void {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents
+      .executeJavaScript(
+        `document.getElementById("msg").textContent = ${JSON.stringify(message)}`
+      )
+      .catch(() => undefined);
+    return;
+  }
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 180,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    autoHideMenuBar: true,
+    title: "GodMode",
+    show: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  const html = `<!doctype html><html><body style="margin:0;font:15px/1.4 system-ui,Segoe UI,sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;height:100vh">
+  <div style="text-align:center;padding:24px">
+    <div style="font-size:20px;font-weight:600;margin-bottom:12px">GodMode</div>
+    <div id="msg">${message.replaceAll("<", "&lt;")}</div>
+  </div></body></html>`;
+  void splashWindow.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+  );
+  splashWindow.on("closed", () => {
+    splashWindow = null;
+  });
+}
+
+function closeSplash(): void {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+  }
+  splashWindow = null;
+}
+
+function failStartup(title: string, detail: string): void {
+  bootFailed = true;
+  appendLog(logFile, `${title}: ${detail}`);
+  const logHint = logFile ? `\n\nDetails were written to:\n${logFile}` : "";
+  dialog.showErrorBox(title, `${detail}${logHint}`);
+  stopChildren();
+  closeSplash();
+  app.quit();
+}
+
 async function boot(): Promise<string> {
   const runtime = runtimeRoot(app.isPackaged, appRoot);
   const updateRoot = updateScriptsRoot(app.isPackaged, appRoot);
+  ensureRuntimeDependencies(runtime);
   const release = readReleaseMeta(runtime);
   const [publicPort, bridgePort, supervisorPort] = await Promise.all([
     freePort(),
@@ -81,26 +140,32 @@ async function boot(): Promise<string> {
   if (release.version) env.GODMODE_VERSION = String(release.version);
   if (release.commit) env.GODMODE_COMMIT = String(release.commit);
 
-  hostProcess = spawnHost({ runtime, env });
+  appendLog(
+    logFile,
+    `Starting host runtime=${runtime} public=${publicUrl} data=${dataDir}`
+  );
+  showSplash("Starting local services…");
+
+  hostProcess = spawnHost({ runtime, env, logFile });
   hostProcess.on("exit", (code, signal) => {
-    if (shuttingDown) return;
-    console.error(`GodMode host exited (code=${code} signal=${signal})`);
-    app.quit();
+    if (shuttingDown || bootFailed) return;
+    failStartup(
+      "GodMode failed to start",
+      `The local host process exited unexpectedly (code=${code ?? "?"} signal=${signal ?? "none"}).`
+    );
   });
 
-  supervisorProcess = spawnSupervisor({ updateRoot, env });
+  supervisorProcess = spawnSupervisor({ updateRoot, env, logFile });
   supervisorProcess.on("exit", (code, signal) => {
     if (shuttingDown) return;
-    console.warn(
+    appendLog(
+      logFile,
       `Update supervisor exited (code=${code} signal=${signal}); one-click apply unavailable`
     );
   });
 
-  await waitForUrl(`${publicUrl}/api/health`).catch(async () => {
-    // health may be unauthenticated or named differently — fall back to root
-    await waitForUrl(publicUrl);
-  });
-
+  showSplash("Waiting for GodMode to become ready…");
+  await waitForUrl(`${publicUrl}/api/health`);
   return publicUrl;
 }
 
@@ -119,7 +184,20 @@ function createWindow(url: string): void {
       sandbox: true,
     },
   });
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  const showMain = () => {
+    booting = false;
+    closeSplash();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  };
+  mainWindow.once("ready-to-show", showMain);
+  // Fallback if ready-to-show never fires (some Windows GPU drivers).
+  setTimeout(showMain, 8_000);
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, validatedURL) => {
+    failStartup(
+      "GodMode failed to load",
+      `Could not load ${validatedURL} (code ${code}): ${desc}`
+    );
+  });
   void mainWindow.loadURL(url);
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -131,11 +209,7 @@ function stopChildren(): void {
   for (const child of [supervisorProcess, hostProcess]) {
     if (!child || child.killed) continue;
     try {
-      if (process.platform === "win32") {
-        child.kill();
-      } else {
-        child.kill("SIGTERM");
-      }
+      child.kill();
     } catch {
       // ignore
     }
@@ -152,25 +226,50 @@ if (!gotLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+      return;
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.focus();
     }
   });
 
   app.whenReady().then(async () => {
+    logFile = openLogFile(app.getPath("userData"));
+    process.on("uncaughtException", (error) => {
+      failStartup(
+        "GodMode crashed",
+        error instanceof Error ? error.stack ?? error.message : String(error)
+      );
+    });
+    process.on("unhandledRejection", (reason) => {
+      failStartup(
+        "GodMode crashed",
+        reason instanceof Error ? reason.stack ?? reason.message : String(reason)
+      );
+    });
+
     try {
       const devUrl = process.env.GODMODE_DEV_URL?.trim();
-      const url = devUrl || (await boot());
+      if (devUrl) {
+        createWindow(devUrl);
+        return;
+      }
+      showSplash("Preparing GodMode…");
+      const url = await boot();
+      if (bootFailed) return;
       createWindow(url);
     } catch (error) {
-      dialog.showErrorBox(
+      if (bootFailed) return;
+      failStartup(
         "GodMode failed to start",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.stack ?? error.message : String(error)
       );
-      stopChildren();
-      app.quit();
     }
   });
 
   app.on("window-all-closed", () => {
+    // Splash closes before the main window is shown; do not quit mid-boot.
+    if (booting || bootFailed) return;
     stopChildren();
     app.quit();
   });
