@@ -334,15 +334,19 @@ jobs:
         run: |
           node scripts/release/create-manifest.mjs release-assets release-assets/release-manifest.json
           cd release-assets
-          sha256sum godmode-* GodMode-* release-manifest.json > SHA256SUMS
+          shopt -s nullglob
+          primary=(GodMode-*.exe GodMode-*.dmg GodMode-*.AppImage GodMode-*.deb)
+          primary+=(godmode-*-linux-x64.tar.gz godmode-*-windows-x64.zip)
+          sha256sum "${primary[@]}" release-manifest.json > SHA256SUMS
       - uses: sigstore/cosign-installer@v3
-      - name: Sign manifest and checksums
+      - name: Sign installers, bundles, manifest, and checksums
         working-directory: release-assets
         run: |
+          set -euo pipefail
           shopt -s nullglob
-          for artifact in godmode-* GodMode-*; do
+          for artifact in GodMode-*.exe GodMode-*.dmg GodMode-*.AppImage GodMode-*.deb \
+            godmode-*-linux-x64.tar.gz godmode-*-windows-x64.zip; do
             [[ -f "$artifact" ]] || continue
-            [[ "$artifact" == *.bundle ]] && continue
             cosign sign-blob --yes --bundle "$artifact.bundle" "$artifact"
           done
           cosign sign-blob --yes --bundle release-manifest.json.bundle release-manifest.json
@@ -352,14 +356,26 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            release-assets/godmode-*
-            release-assets/GodMode-*
+            release-assets/GodMode-*.exe
+            release-assets/GodMode-*.dmg
+            release-assets/GodMode-*.AppImage
+            release-assets/GodMode-*.deb
+            release-assets/godmode-*-linux-x64.tar.gz
+            release-assets/godmode-*-windows-x64.zip
             release-assets/release-manifest.json
             release-assets/SHA256SUMS
       - name: Include GitHub provenance bundle
         env:
           BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
         run: cp "$BUNDLE_PATH" release-assets/github-provenance.sigstore.json
+      - name: Pack verification materials
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          node scripts/release/pack-verification.mjs release-assets "$VERSION"
+          cosign sign-blob --yes \
+            --bundle "release-assets/godmode-${VERSION}-verification.tar.gz.bundle" \
+            "release-assets/godmode-${VERSION}-verification.tar.gz"
       - name: Preserve immutable stable release assets
         if: needs.metadata.outputs.channel == 'stable'
         env:
@@ -379,14 +395,34 @@ jobs:
           CHANNEL: ${{ needs.metadata.outputs.channel }}
           COMMIT: ${{ needs.metadata.outputs.commit }}
         run: |
+          set -euo pipefail
+          shopt -s nullglob
           args=(--repo "$GITHUB_REPOSITORY" --target "$COMMIT" --title "GodMode $VERSION")
           if [[ "$CHANNEL" == "nightly" ]]; then
-            args+=(--prerelease --notes "Automated nightly release for $COMMIT")
+            NOTES="$(cat <<EOF
+Automated nightly release for $COMMIT
+
+Download one installer for your OS (or a bare-metal archive). Trust the signed release-manifest.json for updates. Optional godmode-*-verification.tar.gz holds SBOMs, provenance, and per-file Sigstore bundles for auditors.
+EOF
+)"
+            args+=(--prerelease --notes "$NOTES")
           else
             args+=(--generate-notes --latest)
           fi
           gh release create "$VERSION" "${args[@]}"
-          gh release upload "$VERSION" release-assets/* --repo "$GITHUB_REPOSITORY"
+          uploads=(
+            release-assets/GodMode-*.exe
+            release-assets/GodMode-*.dmg
+            release-assets/GodMode-*.AppImage
+            release-assets/GodMode-*.deb
+            release-assets/godmode-*-linux-x64.tar.gz
+            release-assets/godmode-*-windows-x64.zip
+            release-assets/godmode-*-verification.tar.gz
+            release-assets/godmode-*-verification.tar.gz.bundle
+            release-assets/release-manifest.json
+            release-assets/release-manifest.json.bundle
+          )
+          gh release upload "$VERSION" "${uploads[@]}" --repo "$GITHUB_REPOSITORY"
       - name: Publish nightly channel pointer
         if: needs.metadata.outputs.channel == 'nightly'
         env:
@@ -406,7 +442,5 @@ jobs:
           gh release upload nightly \
             release-assets/release-manifest.json \
             release-assets/release-manifest.json.bundle \
-            release-assets/SHA256SUMS \
-            release-assets/SHA256SUMS.bundle \
             --clobber \
             --repo "$GITHUB_REPOSITORY"

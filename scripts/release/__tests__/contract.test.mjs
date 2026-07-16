@@ -156,6 +156,9 @@ test("bare-metal updater selects signed bundle artifacts", async () => {
   const updater = await readFile("scripts/update/bare-metal-update.mjs", "utf8");
   assert.match(updater, /kind === "bundle"/);
   assert.doesNotMatch(updater, /kind === "bare-metal"/);
+  assert.match(updater, /\$\{manifestUrl\}\.bundle/);
+  assert.doesNotMatch(updater, /\$\{artifactUrl\}\.bundle/);
+  assert.match(updater, /artifact\.sha256/);
 });
 
 test("desktop updater selects signed installer artifacts", async () => {
@@ -163,6 +166,9 @@ test("desktop updater selects signed installer artifacts", async () => {
   assert.match(updater, /kind === "installer"/);
   assert.match(updater, /AppImage/);
   assert.match(updater, /NSIS|\/S/);
+  assert.match(updater, /\$\{manifestUrl\}\.bundle/);
+  assert.doesNotMatch(updater, /\$\{artifactUrl\}\.bundle/);
+  assert.match(updater, /artifact\.sha256/);
 });
 
 test("supervisor routes electron surface to desktop-update", async () => {
