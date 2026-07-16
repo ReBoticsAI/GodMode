@@ -48,6 +48,8 @@ const builderArgs = [
   "@godmode/desktop",
   "--",
   `-c.extraMetadata.version=${electronVersion}`,
+  "--publish",
+  "never",
 ];
 if (process.platform === "win32") {
   builderArgs.push("--win", "--x64");
