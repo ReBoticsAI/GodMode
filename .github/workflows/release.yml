@@ -1,8 +1,8 @@
 name: Unified release
 
 on:
-  # Nightly publish at 12:00 America/Denver (06:00 UTC during MDT; 05:00 would be
-  # winter MST — we pin MDT midnight so summer matches local midnight).
+  # Nightly publish at 12:00 AM America/Denver during MDT (UTC-6 → 06:00 UTC).
+  # In MST (UTC-7) the same cron is 11:00 PM local.
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
