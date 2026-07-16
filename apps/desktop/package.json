@@ -66,9 +66,11 @@
         "dmg"
       ],
       "category": "public.app-category.productivity",
-      "artifactName": "GodMode-${version}-darwin-${arch}.${ext}"
-    },
-    "linux": {
+      "artifactName": "GodMode-${version}-darwin-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },    "linux": {
       "target": [
         "AppImage",
         "deb"

@@ -278,12 +278,13 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           DESKTOP_PLATFORM: ${{ matrix.platform }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.metadata.outputs.channel == 'stable' && 'true' || 'false' }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Nightly ships unsigned; empty CSC_* secrets still confuse electron-builder on macOS.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ needs.metadata.outputs.channel == 'stable' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ needs.metadata.outputs.channel == 'stable' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ needs.metadata.outputs.channel == 'stable' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ needs.metadata.outputs.channel == 'stable' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ needs.metadata.outputs.channel == 'stable' && secrets.APPLE_TEAM_ID || '' }}
         run: node scripts/release/package-desktop.mjs release-out
       - uses: actions/upload-artifact@v4
         with:
