@@ -12,8 +12,8 @@ At the completion baseline, `npm run audit:kernel:strict` reports:
 - **0 legacy routes, 0 legacy callers, and 0 unmatched mutation callers** in
   web, scripts, connectors, or checked-in plugins;
 - **0 direct SQL or filesystem writes** in audited entry points;
-- **72 ObjectTypes** discovered from production declarations;
-- **75 static AI tools**, **335 generated tool candidates**, and
+- **74 ObjectTypes** discovered from production declarations;
+- **75 static AI tools**, **346 generated tool candidates**, and
   **0 static/generated collisions**.
 
 The strict audit is the completion gate. A new authenticated durable mutation
@@ -59,7 +59,7 @@ The audit parses `AI_TOOL_REGISTRY` without importing Bridge runtime code.
 Seven generic tools provide ObjectType discovery, CRUD, and action execution:
 `list_object_types`, `list_records`, `get_record`, `create_record`,
 `update_record`, `delete_record`, and `run_record_action`. Per-ObjectType tools
-are generated from the 72 discovered definitions, producing 335 current
+are generated from the 74 discovered definitions, producing 346 current
 candidates. The remaining 75 static tools cover non-generated platform,
 transport, and operational capabilities. Runtime plugin tools remain
 tenant/plugin scoped and outside the static count.

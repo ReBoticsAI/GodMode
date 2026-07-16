@@ -10,12 +10,12 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 
 ### Added
 
-- **Durable ObjectType kernel** — 72 ObjectTypes discovered by strict audit;
+- **Durable ObjectType kernel** — 74 ObjectTypes discovered by strict audit;
   explicit CRUD and named actions; exact declaration/adapter parity; mandatory
   operation context, access policy, confirmation, idempotency, concurrency,
   redaction, structured errors, durable events/consumer receipts, and
   asynchronous retries, timeouts, cancellation, leases, and replay-safe recovery
-- **Completed consumer cutover** — generic Record/action HTTP routes, 335
+- **Completed consumer cutover** — generic Record/action HTTP routes, 346
   generated AI-tool candidates, capability discovery, metadata-driven web
   list/form UI, 75 static tools, and strict zero legacy routes/callers, unmatched
   mutation callers, direct entry-point writes, or generated-tool collisions;
@@ -34,6 +34,14 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
 - **Four-layer agent memory** — working history, semantic memories + hybrid RAG, episodic distill, procedural skills gate; wiki hybrid RAG and synthesize proposals; hub EmbeddingGemma attach (`EMBEDDINGS_*` / `EMBEDDINGS_EXTERNAL`)
 - **Intelligence plugin pipeline** — `scaffold_plugin` → `build_plugin` → `install_plugin` on local and hub (tools load without Bridge restart)
 - **Support group staffing** — Admin configures users and agents who answer hub/shared support tickets
+- **Unified signed release flow** — green `main` commits publish nightly
+  artifacts, verified `vX.Y.Z` tags publish stable releases, and one canonical
+  manifest binds GHCR digests, Windows/Linux bundles, checksums, SBOMs, and
+  provenance to the same revision
+- **Installation update kernel** — core-backed release/update Records,
+  administrator actions, ETag-aware polling, deduplicated notifications,
+  coordinated snapshots, readiness/preflight diagnostics, plugin lock
+  compatibility, and surface-specific Docker/bare-metal update paths
 
 ### Fixed
 
@@ -57,6 +65,8 @@ Post–0.1.0 work on `main` (merged PRs #1–#15). No new version tag yet — se
   enforced action contract, tenancy, durable recovery, and protocol exceptions
 - [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
   and AI-tool migration inventory
+- [RELEASES.md](docs/RELEASES.md) — channels, artifact trust, update controls,
+  snapshots, rollback, offline verification, and plugin compatibility
 - Coordinated ecosystem migrations were completed in:
   [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
   [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),

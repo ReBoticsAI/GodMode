@@ -1,0 +1,72 @@
+name: Release validation
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or tag to validate
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or tag to validate
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Validate release contract
+        run: npm run test:release
+      - name: Enforce architecture and OSS boundaries
+        run: |
+          npm run audit:kernel:strict
+          npm run audit:oss
+          npm run test:audit
+      - name: Run repository tests
+        run: npm test
+      - name: Build release inputs
+        run: |
+          npm run build:packages
+          npm run typecheck
+          npm run build -w @godmode/bridge
+          npm run build -w @godmode/web
+      - name: Validate release compose files
+        env:
+          GODMODE_IMAGE: ghcr.io/example/godmode@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          CLOUD_HUB_URL: https://example.invalid
+        run: |
+          cp deploy/.env.production.example deploy/.env.production
+          cp deploy/.env.client.example deploy/.env.client
+          docker compose -f deploy/docker-compose.prod.yml config --quiet
+          docker compose -f deploy/docker-compose.client.yml config --quiet
+          docker compose -f deploy/docker-compose.hub-external-llm.yml config --quiet
+          docker compose -f deploy/docker-compose.dev.yml config --quiet
+      - name: Build production container
+        run: docker build -f deploy/Dockerfile -t godmode-release-validation .
+      - name: Smoke production container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name godmode-release-validation -p 18080:80 godmode-release-validation
+          trap 'docker logs godmode-release-validation || true; docker rm -f godmode-release-validation || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1

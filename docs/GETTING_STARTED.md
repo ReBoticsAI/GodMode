@@ -4,7 +4,7 @@ GodMode is a local-first personal OS. This guide walks from clone to your first 
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22.13+
 - npm 10+
 - Windows, macOS, or Linux
 
@@ -18,6 +18,11 @@ copy apps\bridge\.env.example apps\bridge\.env   # Windows
 # cp apps/bridge/.env.example apps/bridge/.env    # macOS/Linux
 npm run dev
 ```
+
+This clone-and-`npm run dev` path is the developer installation channel. It
+does not self-update. Supported Docker and bare-metal release installations use
+signed artifacts and surface stable/nightly release checks under
+**Admin → Updates** for platform administrators.
 
 | Service | URL |
 |---------|-----|
@@ -71,6 +76,7 @@ Slash commands (type `/` in the composer) include `/help`, `/clear`, and workspa
 | Agent memory / embeddings | [AGENT_MEMORY.md](./AGENT_MEMORY.md) |
 | Full env reference | [CONFIGURATION.md](./CONFIGURATION.md) |
 | Post-install checklist | [VERIFICATION.md](./VERIFICATION.md) |
+| Releases, updates, and rollback | [RELEASES.md](./RELEASES.md) |
 
 ## Demo seed (screenshots)
 

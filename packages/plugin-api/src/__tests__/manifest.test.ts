@@ -41,14 +41,13 @@ describe("plugin ObjectType manifests", () => {
   });
 
   it("negotiates the versioned kernel client contract", () => {
-    expect(
-      parseGodmodePluginManifest({
-        id: "kernel-plugin",
-        name: "Kernel Plugin",
-        version: "1.0.0",
-        kernelApiVersion: KERNEL_CLIENT_API_VERSION,
-      }).kernelApiVersion
-    ).toBe(KERNEL_CLIENT_API_VERSION);
+    const manifest = parseGodmodePluginManifest({
+      id: "kernel-plugin",
+      name: "Kernel Plugin",
+      version: "1.0.0",
+      kernelApiVersion: KERNEL_CLIENT_API_VERSION,
+    });
+    expect(manifest.kernelApiVersion).toBe(KERNEL_CLIENT_API_VERSION);
 
     expect(() =>
       parseGodmodePluginManifest({

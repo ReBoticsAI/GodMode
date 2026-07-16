@@ -1,11 +1,11 @@
 # Personal single-tenant Docker instance. Marketplace/credits proxy to official hub.
 services:
   godmode-client:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
+    image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}
     ports:
       - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env.client
     volumes:
@@ -13,6 +13,7 @@ services:
     environment:
       - PLATFORM_DATA_DIR=/data
       - DEPLOYMENT_MODE=client
+      - INSTALLATION_SURFACE=docker
       - AUTH_ALLOW_ANONYMOUS=false
       - AUTH_ALLOW_SIGNUP=false
       # Required: official hub base URL (no trailing slash)

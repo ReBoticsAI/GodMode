@@ -42,7 +42,10 @@ function excluded(relative) {
     /\.test\.[^.]+$/.test(relative) ||
     /(?:^|\/)adapters(?:\/|$)/.test(relative) ||
     /migration/i.test(path.basename(relative)) ||
-    /^scripts\/audit-kernel/.test(relative)
+    /^scripts\/audit-kernel/.test(relative) ||
+    // CI artifact builders and privileged host updaters are not application
+    // mutation entrypoints; their writes are their explicit operating contract.
+    /^scripts\/(?:release|update)\//.test(relative)
   );
 }
 
