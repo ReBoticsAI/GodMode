@@ -52,7 +52,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 |----------|---------|-------------|
 | `GODMODE_VERSION` | package version | Immutable installed platform version |
 | `GODMODE_IMAGE` | release compose default | Digest-pinned GHCR image consumed by production compose |
-| `INSTALLATION_SURFACE` | `developer_source` | `saas`, `private_hub`, `docker`, `linux_bare_metal`, `windows_bare_metal`, or unsupported developer source |
+| `INSTALLATION_SURFACE` | `developer_source` | `saas`, `private_hub`, `docker`, `linux_bare_metal`, `windows_bare_metal`, `electron`, or unsupported developer source |
 | `UPDATE_CHANNEL` | `stable` | Release channel: `stable` or `nightly` |
 | `UPDATE_MANIFEST_URL` | official channel URL | HTTPS release manifest override |
 | `UPDATE_FETCH_TIMEOUT_MS` | `10000` | Manifest request timeout |

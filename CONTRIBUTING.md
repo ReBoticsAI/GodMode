@@ -98,7 +98,7 @@ Two complementary install paths — do not collapse them into one product:
 | **Desktop Download** | Personal / `local` (or client) users on Win / macOS / Linux | Installer or portable app that runs **Bridge + UI on the machine** (SQLite stays local). Not “open a URL in Electron only” without a local runtime. |
 | **Hub PWA** | Mobile (and desktop) visitors of a public **`hub`** | Browser “Add to Home Screen” / install for the hosted site; talks to the **remote** Bridge. Lightweight offline shell OK; full offline Intelligence is out of scope. |
 
-**Desktop shape (recommended):** a thin native shell (Tauri or Electron — pick in an ADR when work starts) that (1) boots or embeds Bridge, (2) loads the web UI, (3) ships signed installers per OS, and (4) optionally pairs with the existing **Connector** for hardware-bound plugins. Docker / `npm run dev` remain supported; Download is the friendly path for non-developers.
+**Desktop shape:** Electron shell that (1) boots the bundled Bridge runtime, (2) loads the web UI in a window, (3) ships signed installers per OS, and (4) applies updates via the local supervisor + signed release manifest. Docker / `npm run dev` remain supported; Download is the friendly path for non-developers.
 
 **Hub PWA shape (recommended):** `manifest.webmanifest` + service worker for the Vite/web app behind hub nginx; install prompt when `DEPLOYMENT_MODE=hub` (or when a public base URL is set). Auth stays session/cookie based; treat the PWA as a **homescreen client of the hub**, not a second personal OS with its own SQLite on the phone.
 

@@ -24,13 +24,20 @@ function authorized(header) {
 }
 
 function updateCommand(manifestUrl) {
+  const nodeBin = process.env.GODMODE_NODE_BIN || process.execPath;
+  if (process.env.INSTALLATION_SURFACE === "electron") {
+    return {
+      command: nodeBin,
+      args: [path.join(scriptRoot, "desktop-update.mjs"), manifestUrl],
+    };
+  }
   if (
     ["windows_bare_metal", "linux_bare_metal"].includes(
       process.env.INSTALLATION_SURFACE ?? ""
     )
   ) {
     return {
-      command: process.execPath,
+      command: nodeBin,
       args: [path.join(scriptRoot, "bare-metal-update.mjs"), manifestUrl],
     };
   }

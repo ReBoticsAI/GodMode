@@ -1,0 +1,3 @@
+# Staged by scripts/release/package-desktop.mjs — do not commit runtime contents.
+*
+!.gitkeep

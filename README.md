@@ -244,6 +244,7 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 | Component | Path | Role |
 |-----------|------|------|
 | Web dashboard | `apps/web` | React UI  -  Chat panel, structure, productivity |
+| Desktop shell | `apps/desktop` | Electron installer that embeds Bridge + web for non-technical users |
 | Bridge | `apps/bridge` | REST/WebSocket API, auth, multi-tenant SQLite |
 | ObjectType kernel | `packages/kernel`, `apps/bridge/src/kernel` | Enforced durable dispatch, policies, Record CRUD/actions, async recovery, events, native storage, generated tools |
 | Connector | `apps/connector` | Local runtime for hardware-bound marketplace plugins |
@@ -255,10 +256,10 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 
 **Local mode** (default) runs Bridge and Web on your workstation  -  ideal for personal use.
 
-For Docker hub/client and signed bare-metal deployments, see
-[DEPLOY.md](DEPLOY.md). Release channels and safe updates are documented in
-[docs/RELEASES.md](docs/RELEASES.md). Architecture details:
-[docs/architecture.md](docs/architecture.md).
+For the **desktop download** (Windows / macOS / Linux installers), Docker hub/client,
+and signed bare-metal deployments, see [DEPLOY.md](DEPLOY.md). Release channels and
+safe updates are documented in [docs/RELEASES.md](docs/RELEASES.md). Architecture
+details: [docs/architecture.md](docs/architecture.md).
 
 ## Documentation
 

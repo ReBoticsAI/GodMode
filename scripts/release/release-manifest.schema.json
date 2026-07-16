@@ -122,8 +122,16 @@
         "required": ["name", "kind", "platform", "version", "commit", "sha256", "size"],
         "properties": {
           "name": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
-          "kind": { "enum": ["bundle", "sbom", "provenance"] },
-          "platform": { "enum": ["linux-x64", "windows-x64", "multi"] },
+          "kind": { "enum": ["bundle", "installer", "sbom", "provenance"] },
+          "platform": {
+            "enum": [
+              "linux-x64",
+              "windows-x64",
+              "darwin-x64",
+              "darwin-arm64",
+              "multi"
+            ]
+          },
           "version": { "type": "string" },
           "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
           "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },

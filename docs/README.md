@@ -6,7 +6,7 @@ Documentation for installing, using, and extending GodMode.
 
 | Guide | Description |
 |-------|-------------|
-| [GETTING_STARTED.md](GETTING_STARTED.md) | Clone, sign up, first Intelligence chat |
+| [GETTING_STARTED.md](GETTING_STARTED.md) | Desktop download or clone, sign up, first Intelligence chat |
 | [ONBOARDING.md](ONBOARDING.md) | FirstRunWizard and LLM setup |
 | [LOCAL_LLM.md](LOCAL_LLM.md) | llama.cpp / Gemma 4 reference profile and Docker attach |
 | [CURSOR_SUBSCRIPTION.md](CURSOR_SUBSCRIPTION.md) | Cursor Auto / named models for Intelligence (`cursor_cloud`) |
@@ -28,7 +28,7 @@ Documentation for installing, using, and extending GodMode.
 
 | Guide | Description |
 |-------|-------------|
-| [../DEPLOY.md](../DEPLOY.md) | Docker hub/client deployment |
+| [../DEPLOY.md](../DEPLOY.md) | Desktop download, Docker hub/client, and bare-metal deployment |
 | [architecture.md](architecture.md) | System design and data model |
 | [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) | Canonical durable ObjectType, Record, action, adapter, tenancy, recovery, and protocol-exception contract |
 | [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md) | Build and install plugins (contributors) |

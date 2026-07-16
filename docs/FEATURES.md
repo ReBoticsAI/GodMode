@@ -57,6 +57,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
 | **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
+| **Desktop** | `apps/desktop` | Electron shell + installers that embed Bridge + web for local personal use. |
 | **ObjectType Records** | `/records/:objectType` | Metadata-driven list/form pages and declared actions for core and installed-plugin domains. |
 
 ## Chat modes and commands

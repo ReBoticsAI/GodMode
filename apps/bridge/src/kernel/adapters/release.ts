@@ -13,6 +13,7 @@ import {
   pluginCompatibility,
   readinessDiagnostics,
   requestSupervisorAction,
+  selectReleaseArtifact,
   type ReleaseManifest,
 } from "../../services/release-flow.js";
 
@@ -54,11 +55,7 @@ function updateStateValue(db: Parameters<NonNullable<RecordAdapter["list"]>>[0])
   } catch {
     manifest = null;
   }
-  const artifact = manifest?.artifacts?.find(
-    (item) =>
-      item.kind === "bundle" &&
-      item.platform === (process.platform === "win32" ? "windows-x64" : "linux-x64")
-  );
+  const artifact = selectReleaseArtifact(manifest?.artifacts as Array<Record<string, unknown>> | undefined);
   const compatibility = manifest ? pluginCompatibility(manifest) : [];
   const supervisor = process.env.UPDATE_SUPERVISOR_URL ?? "";
   let localSupervisor = false;
@@ -76,22 +73,24 @@ function updateStateValue(db: Parameters<NonNullable<RecordAdapter["list"]>>[0])
        WHERE release_id IS ? ORDER BY created_at DESC LIMIT 1`
     )
     .get(value.available_release_id ?? null) as { status?: string } | undefined;
+  const surface = process.env.INSTALLATION_SURFACE ?? "developer_source";
   return {
     ...value,
     target_version: release?.version ?? null,
     release_notes: manifest?.releaseNotes?.summary ?? null,
     release_notes_url: manifest?.releaseNotes?.url ?? null,
-    download_size: artifact?.size ?? null,
+    download_size: typeof artifact?.size === "number" ? artifact.size : null,
     compatibility_status:
       compatibility.every((item) => item.compatible) ? "compatible" : "blocked",
     update_available: Boolean(release),
-    installation_surface:
-      process.env.INSTALLATION_SURFACE ?? "developer_source",
+    installation_surface: surface,
     backup_status: backup?.status ?? "not_created",
     can_apply: localSupervisor,
     apply_hint: localSupervisor
       ? null
-      : "Run the signed host-side godmode-update command from docs/RELEASES.md.",
+      : surface === "electron"
+        ? "Restart GodMode after installing the signed desktop update, or reinstall from the verified GitHub release."
+        : "Run the signed host-side godmode-update command from docs/RELEASES.md.",
     image_digest:
       manifest?.image && typeof manifest.image.digest === "string"
         ? manifest.image.digest

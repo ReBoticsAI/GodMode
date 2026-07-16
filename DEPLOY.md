@@ -10,7 +10,11 @@ GodMode ships in three deployment modes:
 
 ## Local (recommended for personal use)
 
-No Docker required:
+**Desktop download (non-technical):** install the signed Electron app from
+[GitHub Releases](https://github.com/ReBoticsAI/GodMode/releases) — Windows NSIS,
+macOS DMG, or Linux AppImage/`.deb`. See [docs/RELEASES.md](docs/RELEASES.md).
+
+**Developer clone** (no Docker required):
 
 ```powershell
 npm install
