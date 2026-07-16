@@ -65,16 +65,11 @@ try {
   }
   const artifactUrl = new URL(artifact.name, manifestUrl).href;
   const archive = path.join(temporary, artifact.name);
-  const artifactBundle = `${archive}.bundle`;
-  await Promise.all([
-    download(artifactUrl, archive),
-    download(`${artifactUrl}.bundle`, artifactBundle),
-  ]);
+  await download(artifactUrl, archive);
   const digest = createHash("sha256")
     .update(await readFile(archive))
     .digest("hex");
   if (digest !== artifact.sha256) throw new Error("Bare-metal artifact hash mismatch");
-  verifyBlob(archive, artifactBundle);
   const extracted = path.join(temporary, "runtime");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(extracted));
   execFileSync("tar", ["-xf", archive, "-C", extracted], { stdio: "inherit" });

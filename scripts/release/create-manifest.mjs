@@ -22,9 +22,34 @@ try {
 if (metadata.version && metadata.version !== version) throw new Error("Bundle version differs from release version");
 if (metadata.commit && metadata.commit !== commit) throw new Error("Bundle commit differs from release commit");
 
-const ignored = new Set(["release-manifest.json", "release-manifest.json.bundle", "SHA256SUMS", "SHA256SUMS.bundle", "release-metadata.json"]);
+const ignored = new Set([
+  "release-manifest.json",
+  "release-manifest.json.bundle",
+  "SHA256SUMS",
+  "SHA256SUMS.bundle",
+  "release-metadata.json",
+]);
+
+function isPrimaryArtifact(relativeName) {
+  const baseName = path.basename(relativeName);
+  const lower = baseName.toLowerCase();
+  if (ignored.has(baseName) || ignored.has(lower)) return false;
+  if (lower.endsWith(".bundle")) return false;
+  if (lower.includes("sbom") || lower.includes("provenance") || lower.includes("verification")) {
+    return false;
+  }
+  return (
+    lower.endsWith(".exe") ||
+    lower.endsWith(".dmg") ||
+    lower.endsWith(".appimage") ||
+    lower.endsWith(".deb") ||
+    lower.endsWith(".tar.gz") ||
+    lower.endsWith(".zip")
+  );
+}
+
 const files = (await readdir(artifactDirectory, { recursive: true }))
-  .filter((name) => !ignored.has(name) && !name.endsWith(".bundle"))
+  .filter((name) => isPrimaryArtifact(name))
   .sort();
 
 const artifacts = [];
@@ -44,16 +69,13 @@ for (const relativeName of files) {
           ? "windows-x64"
           : "multi";
   const lower = baseName.toLowerCase();
-  const kind = lower.includes("sbom")
-    ? "sbom"
-    : lower.includes("provenance")
-      ? "provenance"
-      : lower.endsWith(".exe") ||
-          lower.endsWith(".dmg") ||
-          lower.endsWith(".appimage") ||
-          lower.endsWith(".deb")
-        ? "installer"
-        : "bundle";
+  const kind =
+    lower.endsWith(".exe") ||
+    lower.endsWith(".dmg") ||
+    lower.endsWith(".appimage") ||
+    lower.endsWith(".deb")
+      ? "installer"
+      : "bundle";
   artifacts.push({
     name: baseName,
     kind,
