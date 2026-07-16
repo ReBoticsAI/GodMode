@@ -2,9 +2,15 @@
 
 GodMode publishes one tested revision through two channels:
 
-- **nightly** — every green commit on `main`;
+- **nightly** — scheduled every day at **12:00 AM America/Denver** (Mountain
+  Time), publishing whatever is at the tip of `main`, or on demand via the
+  **Unified release** workflow “Run workflow” button;
 - **stable** — an annotated, verified `vX.Y.Z` tag whose package versions and
   changelog entry agree.
+
+Merges to `main` run the normal CI checks only; they do **not** publish
+installers or GHCR images. That keeps day-to-day PR volume from queuing
+hour-long multi-OS builds.
 
 Each release contains a canonical manifest, immutable GHCR image digest
 (multi-arch `linux/amd64` + `linux/arm64`, built on native runners),
