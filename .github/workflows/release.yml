@@ -400,12 +400,7 @@ jobs:
           shopt -s nullglob
           args=(--repo "$GITHUB_REPOSITORY" --target "$COMMIT" --title "GodMode $VERSION")
           if [[ "$CHANNEL" == "nightly" ]]; then
-            NOTES="$(cat <<EOF
-Automated nightly release for $COMMIT
-
-Download one installer for your OS (or a bare-metal archive). Trust the signed release-manifest.json for updates. Optional godmode-verification-*.tar.gz holds SBOMs, provenance, and per-file Sigstore bundles for auditors.
-EOF
-)"
+            NOTES="Automated nightly release for ${COMMIT}. Download one installer for your OS (or a bare-metal archive). Trust the signed release-manifest.json for updates. Optional godmode-verification-*.tar.gz holds auditor materials."
             args+=(--prerelease --notes "$NOTES")
           else
             args+=(--generate-notes --latest)
