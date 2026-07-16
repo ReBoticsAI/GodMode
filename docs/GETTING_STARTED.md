@@ -6,9 +6,10 @@ GodMode is a local-first personal OS. Pick the path that matches how you want to
 
 Install the desktop app from [GitHub Releases](https://github.com/ReBoticsAI/GodMode/releases):
 
-- **Windows** — `GodMode-Setup-*-windows-x64.exe`
-- **macOS** — `GodMode-*-darwin-arm64.dmg` or `darwin-x64.dmg`
-- **Linux** — `GodMode-*-linux-x64.AppImage` (or `.deb`)
+- **Windows** — `godmode-windows-desktop-*.exe`
+- **macOS** — `godmode-macos-arm64-desktop-*.dmg` or `godmode-macos-intel-desktop-*.dmg`
+- **Linux** — `godmode-linux-desktop-*.AppImage` (or `.deb`)
+- **Bare-metal** — `godmode-linux-bare-metal-*.tar.gz` / `godmode-windows-bare-metal-*.zip`
 
 Open the app, create an account, and use **Admin → Updates** when a new release is available. No Docker or Node install required. See [RELEASES.md](./RELEASES.md).
 

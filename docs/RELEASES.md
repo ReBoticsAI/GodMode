@@ -17,8 +17,8 @@ Each release lists a small set of downloadable assets:
 - desktop installers (Windows NSIS, macOS DMG, Linux AppImage + `.deb`);
 - Linux/Windows bare-metal archives;
 - `release-manifest.json` and its Sigstore `release-manifest.json.bundle`;
-- optional `godmode-*-verification.tar.gz` (SBOMs, provenance, checksums, and
-  per-file Sigstore bundles for auditors).
+- optional `godmode-verification-<version>.tar.gz` (SBOMs, provenance, checksums,
+  and per-file Sigstore bundles for auditors).
 
 Updaters verify the **signed manifest**, then check each download’s **sha256**
 against that manifest. Per-installer `.bundle` files are not required on the
@@ -96,9 +96,12 @@ Non-technical users should install the signed desktop app from GitHub Releases:
 
 | OS | Artifact |
 |----|----------|
-| Windows | `GodMode-Setup-<version>-windows-x64.exe` (NSIS) |
-| macOS | `GodMode-<version>-darwin-arm64.dmg` or `darwin-x64.dmg` |
-| Linux | `GodMode-<version>-linux-x64.AppImage` (preferred) or `.deb` |
+| Windows | `godmode-windows-desktop-<version>.exe` (NSIS) |
+| macOS Apple Silicon | `godmode-macos-arm64-desktop-<version>.dmg` |
+| macOS Intel | `godmode-macos-intel-desktop-<version>.dmg` |
+| Linux | `godmode-linux-desktop-<version>.AppImage` (preferred) or `.deb` |
+| Bare-metal Linux | `godmode-linux-bare-metal-<version>.tar.gz` |
+| Bare-metal Windows | `godmode-windows-bare-metal-<version>.zip` |
 
 The Electron shell boots the same Bridge + web runtime as bare-metal, binds only
 on loopback, stores SQLite under the OS app data directory, and starts a local

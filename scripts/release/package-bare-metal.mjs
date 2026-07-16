@@ -1,6 +1,10 @@
 import { mkdir, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import {
+  bareMetalArchiveName,
+  bareMetalStageDirName,
+} from "./artifact-names.mjs";
 import { stageRuntime } from "./stage-runtime.mjs";
 
 const [platform, outputDirectory = "release-out"] = process.argv.slice(2);
@@ -13,7 +17,7 @@ if (!["linux-x64", "windows-x64"].includes(platform) || !version || !/^[0-9a-f]{
 }
 
 const root = process.cwd();
-const bundleName = `godmode-${version}-${platform}`;
+const bundleName = bareMetalStageDirName(platform, version);
 const stage = path.resolve(outputDirectory, bundleName);
 await stageRuntime({
   platform,
@@ -25,10 +29,7 @@ await stageRuntime({
 });
 
 await mkdir(path.resolve(outputDirectory), { recursive: true });
-const archive = path.resolve(
-  outputDirectory,
-  `${bundleName}.${platform === "windows-x64" ? "zip" : "tar.gz"}`
-);
+const archive = path.resolve(outputDirectory, bareMetalArchiveName(platform, version));
 // Always archive the versioned root directory so extractors see one runtime folder.
 const command =
   platform === "windows-x64" && process.platform === "win32"
