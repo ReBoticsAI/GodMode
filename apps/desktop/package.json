@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "GodMode desktop shell (Electron)",
-  "author": "ReBotics AI",
+  "author": {
+    "name": "ReBotics AI",
+    "email": "250840102+ReBoticsAI@users.noreply.github.com"
+  },
   "homepage": "https://github.com/ReBoticsAI/GodMode",
   "main": "dist/main.js",
   "type": "module",
