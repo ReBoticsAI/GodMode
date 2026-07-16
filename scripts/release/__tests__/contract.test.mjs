@@ -169,6 +169,7 @@ test("desktop packaging dodges gitignore stripping of node_modules", async () =>
   assert.match(packager, /extraMetadata\.name=GodMode/);
   assert.match(afterPack, /_node_modules/);
   assert.match(afterPack, /cors/);
+  assert.match(afterPack, /Contents.*Resources|electronPlatformName === "darwin"/);
   assert.match(desktopPkg, /after-pack\.cjs/);
 });
 
