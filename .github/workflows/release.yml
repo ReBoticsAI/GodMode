@@ -77,53 +77,112 @@ jobs:
 
   image:
     needs: metadata
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+          # Native arm64 avoids QEMU SIGILL (exit 132) while compiling better-sqlite3/duckdb.
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      id-token: write
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Platform pair label
+        id: prep
+        run: |
+          pair="${{ matrix.platform }}"
+          echo "pair=${pair//\//-}" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
+          provenance: mode=max
+          sbom: true
           build-args: |
             GODMODE_VERSION=${{ needs.metadata.outputs.version }}
             GODMODE_COMMIT=${{ needs.metadata.outputs.commit }}
-          tags: |
-            ${{ needs.metadata.outputs.image }}:${{ needs.metadata.outputs.version }}
-            ${{ needs.metadata.outputs.image }}:sha-${{ needs.metadata.outputs.commit }}
           labels: |
             org.opencontainers.image.revision=${{ needs.metadata.outputs.commit }}
             org.opencontainers.image.version=${{ needs.metadata.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          provenance: mode=max
-          sbom: true
+          outputs: type=image,name=${{ needs.metadata.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-digest-${{ steps.prep.outputs.pair }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image-manifest:
+    needs: [metadata, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    outputs:
+      digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-digest-*
+          path: /tmp/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: manifest
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+        run: |
+          set -euo pipefail
+          digests=()
+          for file in /tmp/digests/*; do
+            digests+=("${IMAGE}@sha256:$(basename "$file")")
+          done
+          docker buildx imagetools create \
+            -t "${IMAGE}:${VERSION}" \
+            -t "${IMAGE}:sha-${COMMIT}" \
+            "${digests[@]}"
+          digest=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{printf "%s" .Manifest.Digest}}')
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@v3
       - name: Sign immutable image digest
         env:
           COSIGN_EXPERIMENTAL: "1"
           IMAGE: ${{ needs.metadata.outputs.image }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
 
   bare-metal:
     needs: metadata
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -158,6 +217,7 @@ jobs:
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
         run: node scripts/release/package-bare-metal.mjs ${{ matrix.platform }} release-out
       - name: Smoke bare-metal runtime
+        timeout-minutes: 3
         run: node scripts/release/smoke-bare-metal.mjs release-out/godmode-${{ needs.metadata.outputs.version }}-${{ matrix.platform }}.${{ matrix.extension }}
       - name: Generate bundle SBOM
         uses: anchore/sbom-action@v0
@@ -238,7 +298,7 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [metadata, image, bare-metal, desktop]
+    needs: [metadata, image-manifest, bare-metal, desktop]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -264,7 +324,7 @@ jobs:
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_PUBLISHED_AT: ${{ github.event.head_commit.timestamp }}
           IMAGE_REPOSITORY: ${{ needs.metadata.outputs.image }}
-          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+          IMAGE_DIGEST: ${{ needs.image-manifest.outputs.digest }}
         run: |
           node scripts/release/create-manifest.mjs release-assets release-assets/release-manifest.json
           cd release-assets

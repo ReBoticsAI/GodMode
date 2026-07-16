@@ -6,7 +6,8 @@ GodMode publishes one tested revision through two channels:
 - **stable** — an annotated, verified `vX.Y.Z` tag whose package versions and
   changelog entry agree.
 
-Each release contains a canonical manifest, immutable GHCR image digest,
+Each release contains a canonical manifest, immutable GHCR image digest
+(multi-arch `linux/amd64` + `linux/arm64`, built on native runners),
 Linux/Windows bare-metal bundles, desktop installers (Windows NSIS, macOS DMG,
 Linux AppImage + `.deb`), checksums, SBOMs, provenance, and Sigstore
 verification bundles. Tags such as `latest` or a channel name are discovery
