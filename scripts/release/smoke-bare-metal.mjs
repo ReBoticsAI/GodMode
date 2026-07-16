@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const SMOKE_TIMEOUT_MS = 90_000;
+const SMOKE_TIMEOUT_MS = 8 * 60_000;
 const archive = path.resolve(process.argv[2] ?? "");
 if (!archive) throw new Error("Usage: smoke-bare-metal.mjs <bundle-archive>");
 
@@ -11,19 +11,11 @@ const temporary = await mkdtemp(path.join(os.tmpdir(), "godmode-bare-smoke-"));
 const extracted = path.join(temporary, "extracted");
 await import("node:fs/promises").then(({ mkdir }) => mkdir(extracted));
 
-const unpack =
-  process.platform === "win32" && archive.toLowerCase().endsWith(".zip")
-    ? spawnSync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          `Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${extracted.replaceAll("'", "''")}' -Force`,
-        ],
-        { stdio: "inherit" }
-      )
-    : spawnSync("tar", ["-xf", archive, "-C", extracted], { stdio: "inherit" });
+// Prefer tar on all platforms (including Windows zip); Expand-Archive is too slow
+// for full node_modules bundles and burned the previous 3-minute CI step budget.
+const unpack = spawnSync("tar", ["-xf", archive, "-C", extracted], {
+  stdio: "inherit",
+});
 if (unpack.status !== 0) throw new Error("Unable to extract bare-metal bundle");
 
 const roots = await readdir(extracted, { withFileTypes: true });
@@ -85,6 +77,7 @@ const child = spawn(node, [host], {
     GODMODE_PORT: "18081",
     BRIDGE_PORT: "13947",
     AUTH_ALLOW_ANONYMOUS: "true",
+    AUTH_SESSION_SECRET: "smoke-test-session-secret-not-for-production",
     UPDATE_CHANNEL: "stable",
   },
   stdio: "inherit",

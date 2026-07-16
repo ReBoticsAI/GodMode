@@ -217,7 +217,7 @@ jobs:
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
         run: node scripts/release/package-bare-metal.mjs ${{ matrix.platform }} release-out
       - name: Smoke bare-metal runtime
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: node scripts/release/smoke-bare-metal.mjs release-out/godmode-${{ needs.metadata.outputs.version }}-${{ matrix.platform }}.${{ matrix.extension }}
       - name: Generate bundle SBOM
         uses: anchore/sbom-action@v0
