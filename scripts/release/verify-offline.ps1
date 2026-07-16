@@ -14,7 +14,8 @@ if ((Test-Path "$Directory/SHA256SUMS") -and (Test-Path "$Directory/SHA256SUMS.b
 }
 
 Get-ChildItem -Path $Directory -File | Where-Object {
-  $_.Name -like "GodMode-*" -or ($_.Name -like "godmode-*" -and $_.Name -notlike "*-verification.tar.gz")
+  ($_.Name -like "godmode-*-desktop-*" -or $_.Name -like "godmode-*-bare-metal-*") -and
+  $_.Name -notlike "godmode-verification-*"
 } | Where-Object { $_.Extension -ne ".bundle" } | ForEach-Object {
   $bundle = "$($_.FullName).bundle"
   if (Test-Path $bundle) {

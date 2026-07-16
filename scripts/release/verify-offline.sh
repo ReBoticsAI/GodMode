@@ -20,10 +20,10 @@ if [ -f "$DIR/SHA256SUMS" ] && [ -f "$DIR/SHA256SUMS.bundle" ]; then
     --certificate-identity-regexp "$IDENTITY" \
     "$DIR/SHA256SUMS"
 fi
-for artifact in "$DIR"/GodMode-* "$DIR"/godmode-*; do
+for artifact in "$DIR"/godmode-*-desktop-* "$DIR"/godmode-*-bare-metal-*; do
   [ -f "$artifact" ] || continue
   case "$artifact" in
-    *.bundle|*-verification.tar.gz) continue ;;
+    *.bundle|*-verification.tar.gz|godmode-verification-*) continue ;;
   esac
   if [ -f "$artifact.bundle" ]; then
     cosign verify-blob --offline \

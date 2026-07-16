@@ -1,5 +1,6 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { platformFromArtifactName } from "./artifact-names.mjs";
 import { channelForVersion, RELEASE_SCHEMA, sha256File, validateManifest } from "./contract.mjs";
 
 const [artifactDirectory, output = "release-manifest.json"] = process.argv.slice(2);
@@ -59,15 +60,7 @@ for (const relativeName of files) {
   if (!details.isFile()) continue;
   const normalizedName = relativeName.replaceAll("\\", "/");
   const baseName = path.basename(normalizedName);
-  const platform = normalizedName.includes("darwin-arm64")
-    ? "darwin-arm64"
-    : normalizedName.includes("darwin-x64")
-      ? "darwin-x64"
-      : normalizedName.includes("linux-x64") || normalizedName.includes("linux-amd64")
-        ? "linux-x64"
-        : normalizedName.includes("windows-x64")
-          ? "windows-x64"
-          : "multi";
+  const platform = platformFromArtifactName(baseName);
   const lower = baseName.toLowerCase();
   const kind =
     lower.endsWith(".exe") ||

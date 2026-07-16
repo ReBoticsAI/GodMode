@@ -52,8 +52,8 @@ function fixture(overrides = {}) {
       platforms: ["linux/amd64", "linux/arm64"],
     },
     artifacts: [
-      { name: "godmode-v1.2.3-linux-x64.tar.gz", kind: "bundle", platform: "linux-x64", version: "v1.2.3", commit, sha256: digest, size: 10 },
-      { name: "godmode-v1.2.3-windows-x64.zip", kind: "bundle", platform: "windows-x64", version: "v1.2.3", commit, sha256: digest, size: 10 },
+      { name: "godmode-linux-bare-metal-v1.2.3.tar.gz", kind: "bundle", platform: "linux-x64", version: "v1.2.3", commit, sha256: digest, size: 10 },
+      { name: "godmode-windows-bare-metal-v1.2.3.zip", kind: "bundle", platform: "windows-x64", version: "v1.2.3", commit, sha256: digest, size: 10 },
     ],
     ...overrides,
   };
@@ -121,7 +121,7 @@ test("accepts desktop installer artifacts alongside bare-metal bundles", () => {
     artifacts: [
       ...fixture().artifacts,
       {
-        name: "GodMode-Setup-1.2.3-windows-x64.exe",
+        name: "godmode-windows-desktop-v1.2.3.exe",
         kind: "installer",
         platform: "windows-x64",
         version: "v1.2.3",
@@ -130,7 +130,7 @@ test("accepts desktop installer artifacts alongside bare-metal bundles", () => {
         size: 20,
       },
       {
-        name: "GodMode-1.2.3-darwin-arm64.dmg",
+        name: "godmode-macos-arm64-desktop-v1.2.3.dmg",
         kind: "installer",
         platform: "darwin-arm64",
         version: "v1.2.3",
@@ -139,7 +139,7 @@ test("accepts desktop installer artifacts alongside bare-metal bundles", () => {
         size: 21,
       },
       {
-        name: "GodMode-1.2.3-linux-x64.AppImage",
+        name: "godmode-linux-desktop-v1.2.3.AppImage",
         kind: "installer",
         platform: "linux-x64",
         version: "v1.2.3",

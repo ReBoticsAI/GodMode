@@ -193,9 +193,11 @@ jobs:
         include:
           - runner: ubuntu-latest
             platform: linux-x64
+            os: linux
             extension: tar.gz
           - runner: windows-latest
             platform: windows-x64
+            os: windows
             extension: zip
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -222,7 +224,7 @@ jobs:
         run: node scripts/release/package-bare-metal.mjs ${{ matrix.platform }} release-out
       - name: Smoke bare-metal runtime
         timeout-minutes: 15
-        run: node scripts/release/smoke-bare-metal.mjs release-out/godmode-${{ needs.metadata.outputs.version }}-${{ matrix.platform }}.${{ matrix.extension }}
+        run: node scripts/release/smoke-bare-metal.mjs release-out/godmode-${{ matrix.os }}-bare-metal-${{ needs.metadata.outputs.version }}.${{ matrix.extension }}
       - name: Generate bundle SBOM
         uses: anchore/sbom-action@v0
         with:
@@ -295,7 +297,7 @@ jobs:
         with:
           name: desktop-${{ matrix.platform }}
           path: |
-            release-out/GodMode*
+            release-out/godmode-*-desktop-*
             release-out/*.exe
             release-out/*.dmg
             release-out/*.AppImage
@@ -335,8 +337,8 @@ jobs:
           node scripts/release/create-manifest.mjs release-assets release-assets/release-manifest.json
           cd release-assets
           shopt -s nullglob
-          primary=(GodMode-*.exe GodMode-*.dmg GodMode-*.AppImage GodMode-*.deb)
-          primary+=(godmode-*-linux-x64.tar.gz godmode-*-windows-x64.zip)
+          primary=(godmode-*-desktop-*.exe godmode-*-desktop-*.dmg godmode-*-desktop-*.AppImage godmode-*-desktop-*.deb)
+          primary+=(godmode-*-bare-metal-*.tar.gz godmode-*-bare-metal-*.zip)
           sha256sum "${primary[@]}" release-manifest.json > SHA256SUMS
       - uses: sigstore/cosign-installer@v3
       - name: Sign installers, bundles, manifest, and checksums
@@ -344,8 +346,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          for artifact in GodMode-*.exe GodMode-*.dmg GodMode-*.AppImage GodMode-*.deb \
-            godmode-*-linux-x64.tar.gz godmode-*-windows-x64.zip; do
+          for artifact in godmode-*-desktop-*.exe godmode-*-desktop-*.dmg godmode-*-desktop-*.AppImage godmode-*-desktop-*.deb \
+            godmode-*-bare-metal-*.tar.gz godmode-*-bare-metal-*.zip; do
             [[ -f "$artifact" ]] || continue
             cosign sign-blob --yes --bundle "$artifact.bundle" "$artifact"
           done
@@ -356,12 +358,12 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            release-assets/GodMode-*.exe
-            release-assets/GodMode-*.dmg
-            release-assets/GodMode-*.AppImage
-            release-assets/GodMode-*.deb
-            release-assets/godmode-*-linux-x64.tar.gz
-            release-assets/godmode-*-windows-x64.zip
+            release-assets/godmode-*-desktop-*.exe
+            release-assets/godmode-*-desktop-*.dmg
+            release-assets/godmode-*-desktop-*.AppImage
+            release-assets/godmode-*-desktop-*.deb
+            release-assets/godmode-*-bare-metal-*.tar.gz
+            release-assets/godmode-*-bare-metal-*.zip
             release-assets/release-manifest.json
             release-assets/SHA256SUMS
       - name: Include GitHub provenance bundle
@@ -373,9 +375,8 @@ jobs:
           VERSION: ${{ needs.metadata.outputs.version }}
         run: |
           node scripts/release/pack-verification.mjs release-assets "$VERSION"
-          cosign sign-blob --yes \
-            --bundle "release-assets/godmode-${VERSION}-verification.tar.gz.bundle" \
-            "release-assets/godmode-${VERSION}-verification.tar.gz"
+          VERIFY="release-assets/godmode-verification-${VERSION}.tar.gz"
+          cosign sign-blob --yes --bundle "${VERIFY}.bundle" "$VERIFY"
       - name: Preserve immutable stable release assets
         if: needs.metadata.outputs.channel == 'stable'
         env:
@@ -402,7 +403,7 @@ jobs:
             NOTES="$(cat <<EOF
 Automated nightly release for $COMMIT
 
-Download one installer for your OS (or a bare-metal archive). Trust the signed release-manifest.json for updates. Optional godmode-*-verification.tar.gz holds SBOMs, provenance, and per-file Sigstore bundles for auditors.
+Download one installer for your OS (or a bare-metal archive). Trust the signed release-manifest.json for updates. Optional godmode-verification-*.tar.gz holds SBOMs, provenance, and per-file Sigstore bundles for auditors.
 EOF
 )"
             args+=(--prerelease --notes "$NOTES")
@@ -411,14 +412,14 @@ EOF
           fi
           gh release create "$VERSION" "${args[@]}"
           uploads=(
-            release-assets/GodMode-*.exe
-            release-assets/GodMode-*.dmg
-            release-assets/GodMode-*.AppImage
-            release-assets/GodMode-*.deb
-            release-assets/godmode-*-linux-x64.tar.gz
-            release-assets/godmode-*-windows-x64.zip
-            release-assets/godmode-*-verification.tar.gz
-            release-assets/godmode-*-verification.tar.gz.bundle
+            release-assets/godmode-*-desktop-*.exe
+            release-assets/godmode-*-desktop-*.dmg
+            release-assets/godmode-*-desktop-*.AppImage
+            release-assets/godmode-*-desktop-*.deb
+            release-assets/godmode-*-bare-metal-*.tar.gz
+            release-assets/godmode-*-bare-metal-*.zip
+            release-assets/godmode-verification-*.tar.gz
+            release-assets/godmode-verification-*.tar.gz.bundle
             release-assets/release-manifest.json
             release-assets/release-manifest.json.bundle
           )

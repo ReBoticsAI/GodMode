@@ -1,6 +1,7 @@
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { verificationArchiveName } from "./artifact-names.mjs";
 
 /**
  * Pack SBOM/provenance/checksums and per-artifact Sigstore bundles into one
@@ -50,7 +51,7 @@ for (const name of entries) {
   moved.push(name);
 }
 
-const outName = `godmode-${version}-verification.tar.gz`;
+const outName = verificationArchiveName(version);
 const archive = path.join(root, outName);
 const packed = spawnSync(
   "tar",

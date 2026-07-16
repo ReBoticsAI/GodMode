@@ -82,7 +82,7 @@ function signedManifest(overrides: Partial<ReleaseManifest> = {}) {
     },
     artifacts: [
       {
-        name: "godmode-v1.2.0-linux-x64.tar.gz",
+        name: "godmode-linux-bare-metal-v1.2.0.tar.gz",
         kind: "bundle",
         platform: "linux-x64",
         version: "1.2.0",
@@ -91,7 +91,7 @@ function signedManifest(overrides: Partial<ReleaseManifest> = {}) {
         size: 10,
       },
       {
-        name: "godmode-v1.2.0-windows-x64.zip",
+        name: "godmode-windows-bare-metal-v1.2.0.zip",
         kind: "bundle",
         platform: "windows-x64",
         version: "1.2.0",
@@ -195,28 +195,28 @@ describe("release flow", () => {
     expect(releaseArtifactKind()).toBe("installer");
     const artifacts = [
       {
-        name: "godmode-v1.2.0-windows-x64.zip",
+        name: "godmode-windows-bare-metal-v1.2.0.zip",
         kind: "bundle",
         platform: "windows-x64",
         sha256: "a".repeat(64),
         size: 1,
       },
       {
-        name: "GodMode-Setup-1.2.0-windows-x64.exe",
+        name: "godmode-windows-desktop-v1.2.0.exe",
         kind: "installer",
         platform: "windows-x64",
         sha256: "b".repeat(64),
         size: 2,
       },
       {
-        name: "GodMode-1.2.0-linux-x64.AppImage",
+        name: "godmode-linux-desktop-v1.2.0.AppImage",
         kind: "installer",
         platform: "linux-x64",
         sha256: "c".repeat(64),
         size: 3,
       },
       {
-        name: "GodMode-1.2.0-linux-x64.deb",
+        name: "godmode-linux-desktop-v1.2.0.deb",
         kind: "installer",
         platform: "linux-x64",
         sha256: "d".repeat(64),
@@ -228,13 +228,13 @@ describe("release flow", () => {
         platform: "windows-x64",
         kind: "installer",
       })?.name
-    ).toBe("GodMode-Setup-1.2.0-windows-x64.exe");
+    ).toBe("godmode-windows-desktop-v1.2.0.exe");
     expect(
       selectReleaseArtifact(artifacts, {
         platform: "linux-x64",
         kind: "installer",
       })?.name
-    ).toBe("GodMode-1.2.0-linux-x64.AppImage");
+    ).toBe("godmode-linux-desktop-v1.2.0.AppImage");
     if (previous === undefined) delete process.env.INSTALLATION_SURFACE;
     else process.env.INSTALLATION_SURFACE = previous;
   });

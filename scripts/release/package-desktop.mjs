@@ -1,6 +1,10 @@
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import {
+  desktopInstallerName,
+  installerExtensionFromFilename,
+} from "./artifact-names.mjs";
 import { hostPlatformLabel, stageRuntime } from "./stage-runtime.mjs";
 
 const outputDirectory = process.argv[2] ?? "release-out";
@@ -68,7 +72,6 @@ const result = spawnSync("npm", builderArgs, {
   stdio: "inherit",
   env: {
     ...process.env,
-    // electron-builder reads package version for artifact names
   },
   shell: process.platform === "win32",
 });
@@ -76,30 +79,19 @@ if (result.status !== 0) {
   throw new Error(`electron-builder failed with status ${result.status}`);
 }
 
-// Pin product version into package.json temporarily is messy; rename outputs.
 const desktopOut = path.join(root, "release-out", "desktop");
 const publishDir = path.resolve(outputDirectory);
 await mkdir(publishDir, { recursive: true });
 
 const files = await readdir(desktopOut).catch(() => []);
 for (const name of files) {
-  const lower = name.toLowerCase();
-  if (
-    !lower.endsWith(".exe") &&
-    !lower.endsWith(".dmg") &&
-    !lower.endsWith(".appimage") &&
-    !lower.endsWith(".deb") &&
-    !lower.endsWith(".zip")
-  ) {
-    continue;
-  }
+  const ext = installerExtensionFromFilename(name);
+  if (!ext || ext === "zip" || ext === "tar.gz") continue;
   const source = path.join(desktopOut, name);
-  // Prefer canonical GodMode-* names already set in electron-builder artifactName.
-  // Rewrite version segment if electron-builder used package.json 0.1.0.
-  const renamed = name.includes(electronVersion)
-    ? name
-    : name.replace(/0\.1\.0/g, electronVersion).replace(/\$\{version\}/g, electronVersion);
-  const destination = path.join(publishDir, renamed.startsWith("GodMode") ? renamed : `GodMode-${renamed}`);
+  const destination = path.join(
+    publishDir,
+    desktopInstallerName(platform, version, ext)
+  );
   await cp(source, destination);
   console.log(destination);
 }
