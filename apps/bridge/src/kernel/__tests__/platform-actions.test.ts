@@ -10,6 +10,7 @@ import {
   peerConnectionAdapter,
   platformActionAdapterRegistrations,
 } from "../adapters/platform-actions.js";
+import { acceptMarketplaceTos } from "../../services/marketplace-commerce.js";
 
 function definition(name: string, fields: string[]): ObjectTypeDef {
   return {
@@ -124,6 +125,16 @@ describe("platform action adapters", () => {
         actions: ["cancel"],
       },
       {
+        objectType: "MarketplaceOrder",
+        adapterId: "marketplace_order_read",
+        actions: ["start_checkout", "capture_paypal", "confirm_crypto"],
+      },
+      {
+        objectType: "MarketplaceSellerAccount",
+        adapterId: "marketplace_seller_account_read",
+        actions: ["accept_tos", "connect_payout", "commerce_config"],
+      },
+      {
         objectType: "BridgeConnection",
         adapterId: "bridge_connection_read",
         actions: ["register", "touch", "probe_remote"],
@@ -236,16 +247,37 @@ describe("platform action adapters", () => {
   it("publishes and archives tenant-owned live listings", () => {
     const db = new Database(":memory:");
     db.exec(`
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      INSERT INTO users (id) VALUES ('user-a');
       CREATE TABLE marketplace_listings (
         id TEXT PRIMARY KEY, seller_user_id TEXT NOT NULL, seller_tenant_id TEXT NOT NULL,
         kind TEXT NOT NULL, resource_id TEXT NOT NULL, title TEXT NOT NULL,
-        description TEXT, price_credits INTEGER NOT NULL, bundle_json TEXT NOT NULL,
+        description TEXT, price_credits INTEGER NOT NULL DEFAULT 0,
+        price_cents INTEGER NOT NULL DEFAULT 0, currency TEXT DEFAULT 'usd',
+        seller_kind TEXT DEFAULT 'user', catalog_entry_id TEXT,
+        bundle_json TEXT NOT NULL,
         visibility TEXT NOT NULL, status TEXT NOT NULL, delivery_mode TEXT,
         pricing_model TEXT, price_period TEXT, meter_unit TEXT, meter_rate REAL,
         license TEXT, inference_endpoint_id TEXT, created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
+      CREATE TABLE marketplace_bans (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, reason TEXT NOT NULL,
+        order_id TEXT, created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE marketplace_tos_acceptances (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, tos_version TEXT NOT NULL,
+        accepted_at TEXT DEFAULT (datetime('now')), UNIQUE (user_id, tos_version)
+      );
+      CREATE TABLE marketplace_seller_accounts (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
+        stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
+        payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+        tos_accepted_version TEXT, tos_accepted_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
     `);
+    acceptMarketplaceTos(db as never, "user-a");
     const def = definition("MarketplaceListing", [
       "id",
       "seller_user_id",

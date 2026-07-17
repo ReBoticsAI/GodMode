@@ -164,10 +164,14 @@ declaration/handler parity is tested for every core adapter.
 Some wire protocols cannot be represented as JSON Record responses. Live chat
 uses WebSocket/token streaming; DM upload/download transfers multipart or binary
 bytes; authentication establishes or invalidates cookies; typing presence is
-ephemeral; analytics POST carries a read-only query; and signed external charting
-dispatch is a command transport. These are explicit, narrow transport
-exceptions. Their durable domain effects use kernel CRUD/actions where
-applicable; binary and stream transport are not themselves Record CRUD.
+ephemeral; analytics POST carries a read-only query; signed external charting
+dispatch is a command transport; SaaS Stripe checkout/portal/webhooks are payment
+transport; and Marketplace Stripe/PayPal webhooks plus the public Official
+catalog JSON are commerce/catalog transport. These are explicit, narrow
+protocol exceptions. Their durable domain effects use kernel CRUD/actions where
+applicable (`MarketplaceOrder`, `MarketplaceListing`, `CatalogInstall`,
+`MarketplaceSellerAccount`); binary, stream, and provider redirects are not
+themselves Record CRUD.
 
 ## Plugin author checklist
 

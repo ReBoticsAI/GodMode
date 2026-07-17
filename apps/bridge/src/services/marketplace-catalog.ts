@@ -19,6 +19,10 @@ import {
   persistPluginPath,
   uninstallPluginForTenant,
 } from "./plugin-lifecycle.js";
+import {
+  hasPaidEntitlementForCatalogEntry,
+  MarketplaceCommerceError,
+} from "./marketplace-commerce.js";
 
 export type CatalogInstallType = "clone" | "plugin";
 
@@ -39,6 +43,10 @@ export interface CatalogEntry {
   previewPath?: string;
   sourceCatalog?: string;
   sourceName?: string;
+  /** USD cents; 0 = free. Present on SaaS Official feed. */
+  priceCents?: number;
+  currency?: string;
+  listingId?: string;
 }
 
 export interface CatalogIndex {
@@ -518,6 +526,29 @@ export async function installCatalogEntry(
   if (!found) throw new Error(`Catalog entry not found: ${opts.entryId}`);
 
   const { entry, index, catalogUrl } = found;
+  let priceCents = Number(entry.priceCents ?? 0);
+  if (!priceCents) {
+    const priced = core
+      .prepare(
+        `SELECT price_cents FROM marketplace_official_catalog WHERE entry_id=? AND status='active'`
+      )
+      .get(entry.id) as { price_cents: number } | undefined;
+    priceCents = Number(priced?.price_cents ?? 0);
+  }
+  if (priceCents > 0) {
+    if (
+      !hasPaidEntitlementForCatalogEntry(core, {
+        userId: opts.userId,
+        catalogEntryId: entry.id,
+      })
+    ) {
+      throw new MarketplaceCommerceError(
+        "Payment required before installing this Official catalog entry. Complete checkout first.",
+        402
+      );
+    }
+  }
+
   let result: Record<string, unknown>;
 
   if (entry.installType === "plugin") {

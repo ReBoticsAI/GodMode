@@ -14,6 +14,11 @@ import { createAuthRouter } from "./routes/auth.js";
 import { createUpdateRouter } from "./routes/update.js";
 import { createMarketplaceRouter } from "./routes/marketplace.js";
 import { createMarketplaceCatalogRouter } from "./routes/marketplace-catalog.js";
+import {
+  createMarketplaceCommerceRouter,
+  marketplacePayPalWebhookHandler,
+  marketplaceStripeWebhookHandler,
+} from "./routes/marketplace-commerce.js";
 import { createNetworkRouter } from "./routes/network.js";
 import { createOnboardingRouter } from "./routes/onboarding.js";
 import { createSharesRouter } from "./routes/shares.js";
@@ -318,6 +323,11 @@ if (config.isSaas) {
     express.raw({ type: "application/json" }),
     saasStripeWebhookHandler
   );
+  app.post(
+    "/api/marketplace/commerce/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    marketplaceStripeWebhookHandler
+  );
 }
 app.use(express.json({ limit: "25mb" }));
 app.use(legacyEndpointTelemetry(coreDb));
@@ -336,6 +346,13 @@ app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
 if (config.isSaas) {
   app.use("/api/saas", createSaasRouter());
+}
+app.use("/api/marketplace/commerce", createMarketplaceCommerceRouter());
+if (config.isSaas) {
+  app.post(
+    "/api/marketplace/commerce/paypal/webhook",
+    marketplacePayPalWebhookHandler
+  );
 }
 app.use("/api/marketplace", createMarketplaceRouter());
 app.use("/api/marketplace/catalog", createMarketplaceCatalogRouter());

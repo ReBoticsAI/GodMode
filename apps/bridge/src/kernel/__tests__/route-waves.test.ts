@@ -42,6 +42,8 @@ describe("legacy route wave", () => {
       "dm.ts:post:/uploads",
       "federation.ts:post:/invites/:token/accept",
       "federation.ts:post:/sc/:verb",
+      "marketplace-commerce.ts:post:/admin/official-catalog",
+      "marketplace-commerce.ts:post:/paypal/capture",
       "saas.ts:post:/checkout",
       "saas.ts:post:/portal",
     ]);

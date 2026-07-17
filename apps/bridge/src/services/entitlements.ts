@@ -8,6 +8,7 @@ import type {
 } from "../core-db.js";
 import { adjustCredits, CreditsError } from "./credits.js";
 import { createShareGrant, revokeShareGrant } from "./share-service.js";
+import { assertCanAcquireListing } from "./marketplace-commerce.js";
 
 export class EntitlementError extends Error {
   status: number;
@@ -152,32 +153,13 @@ export function acquireLiveListing(
   }
 ): { entitlementId: string; shareGrantId: string; balance: number } {
   const listing = opts.listing;
-  const price = Number(listing.price_credits ?? 0);
+  assertCanAcquireListing(core, { userId: opts.buyerUserId, listing });
   const pricingModel = String(listing.pricing_model ?? "one_time") as PricingModel;
   const pricePeriod =
     typeof listing.price_period === "string" ? listing.price_period : "month";
+  const priceCents = Number(listing.price_cents ?? 0);
 
   const tx = core.transaction(() => {
-    if (pricingModel === "one_time" || pricingModel === "subscription") {
-      adjustCredits(core, {
-        userId: opts.buyerUserId,
-        delta: -price,
-        reason: "marketplace_purchase",
-        refType: "listing",
-        refId: String(listing.id),
-      });
-      const sellerId = String(listing.seller_user_id);
-      if (sellerId !== opts.buyerUserId) {
-        adjustCredits(core, {
-          userId: sellerId,
-          delta: price,
-          reason: "marketplace_sale",
-          refType: "listing",
-          refId: String(listing.id),
-        });
-      }
-    }
-
     const shareGrantId = createShareGrant(core, {
       ownerTenantId: String(listing.seller_tenant_id),
       ownerUserId: String(listing.seller_user_id),
@@ -206,17 +188,23 @@ export function acquireLiveListing(
     core.prepare(
       `INSERT INTO marketplace_purchases
          (id, listing_id, buyer_user_id, buyer_tenant_id, price_credits)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(uuidv4(), listing.id, opts.buyerUserId, opts.buyerTenantId, price);
+       VALUES (?, ?, ?, ?, 0)`
+    ).run(uuidv4(), listing.id, opts.buyerUserId, opts.buyerTenantId);
 
-    const balance = core
-      .prepare("SELECT balance FROM credit_wallets WHERE user_id=?")
-      .get(opts.buyerUserId) as { balance: number } | undefined;
-
-    return { entitlementId, shareGrantId, balance: balance?.balance ?? 0 };
+    return {
+      entitlementId,
+      shareGrantId,
+      balance: 0,
+      priceCents,
+    };
   });
 
-  return tx();
+  const result = tx();
+  return {
+    entitlementId: result.entitlementId,
+    shareGrantId: result.shareGrantId,
+    balance: 0,
+  };
 }
 
 export function chargeSubscriptionPeriod(

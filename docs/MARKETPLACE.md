@@ -1,165 +1,57 @@
 # Marketplace
 
-GodMode installs packs from a **GitHub-backed catalog**, not an in-app credit store.
+GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cloud) supports **paid Official** items and **user-to-user** listings with real-money checkout.
 
 ![Official catalog tab](assets/readme/marketplace.png)
 
+## Product rules
+
+- **No credits** — purchases are USD (or crypto) via Stripe, PayPal, or MetaMask-compatible checkout.
+- **Official items** — merchant of record is ReBotics/GodMode; **100%** of Official revenue to the platform.
+- **User listings** — sellers connect Stripe Connect, PayPal, and/or MetaMask; platform takes **10%**.
+- **ToS** — see [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md). Chargeback ⇒ permanent Marketplace ban (no buy, no earn).
+- **Surfaces** — SaaS is the commerce authority. Local and private-hub installs pull the curated Official feed (and checkout against SaaS when an item is paid).
+
 ## Official catalog
 
-The live catalog repo: **[github.com/ReBoticsAI/GodMode-Marketplace](https://github.com/ReBoticsAI/GodMode-Marketplace)**
+Default free/OSS index (fallback):
 
-- Default index: `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/index.json`
-- Override with `MARKETPLACE_OFFICIAL_URL` (Bridge env)
-- Local dev auto-detects sibling clone: `../GodMode-Marketplace/catalog/index.json`
+- `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/index.json`
+- Override with `MARKETPLACE_OFFICIAL_URL`
+- Local sibling `../GodMode-Marketplace/catalog/index.json` auto-detected in dev
 
-Open **Marketplace → Official** to browse and install packs and plugins for free.
+On **GodMode Cloud** (`INSTALLATION_SURFACE=saas`), Official entries are curated in `marketplace_official_catalog` (admin API) and served at:
 
-### Official Devtools plugins (Git + GitHub)
+- Authenticated: `GET /api/marketplace/catalog/official`
+- Public (local/private-hub pulls): `GET /api/marketplace/commerce/catalog/official/public`
 
-For Intelligence to operate like a Cursor-style engineering agent on a real git checkout:
+Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` / `MARKETPLACE_OFFICIAL_URL` so they see ReBotics-selected prices.
 
-1. Install **Git** and **GitHub** from Official (catalog `installType: plugin`).
-2. Ensure the host has `git` and `gh` on PATH; authenticate with `gh auth login` or `GITHUB_TOKEN` / `GH_TOKEN` (never commit tokens).
-3. Coding root should be a git repository (local/operator GodMode checkout). Hub tenant sandboxes only work if they are real clones.
-4. Prefer plugin tools (`git_status`, `git_commit`, `git_push`, `gh_pr_create`, `gh_pr_checks`, …) over free-form `run_terminal` for VCS/PR work.
+Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
-Plugin repos: [godmode-plugin-git](https://github.com/ReBoticsAI/godmode-plugin-git), [godmode-plugin-github](https://github.com/ReBoticsAI/godmode-plugin-github).
+## Kernel commerce
 
-The durable-kernel updates are tracked in
-[godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1)
-and
-[godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1).
-The official catalog's Record-bundle migration was delivered through
-[GodMode-Marketplace#2](https://github.com/ReBoticsAI/GodMode-Marketplace/pull/2).
-The coordinated private domain-plugin migrations were delivered in their own
-repositories before the ecosystem-wide cutover was declared complete.
+Durable buy/sell uses ObjectTypes (see [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md)):
 
-## Unofficial sources
+| ObjectType | Actions |
+|---|---|
+| `MarketplaceListing` | `publish`, `acquire`, `archive`, … (`price_cents`) |
+| `MarketplaceOrder` | `start_checkout`, `capture_paypal`, `confirm_crypto` |
+| `MarketplaceSellerAccount` | `accept_tos`, `connect_payout`, `commerce_config` |
+| `CatalogInstall` | `install_entry` (gates paid Official entries) |
 
-**Marketplace → Unofficial** is the single place to install plugins for your workspace:
+Payment provider webhooks and the public Official JSON feed are **protocol exceptions**, not parallel Express CRUD.
 
-1. **Add local plugin folder** — paste the path to a cloned repo (must contain `godmode.plugin.json`). GodMode validates the manifest, builds if needed, registers the plugin with Bridge, and installs it for the current workspace.
-2. **Add catalog source** — third-party catalog URLs (remote or local `file://` index).
-3. **Plugins on this machine** — install or uninstall discovered plugins without leaving the UI.
+## Sell tab
 
-Use **Marketplace → Installed** to review workspace plugins, uninstall, or remove registered local paths.
+**Marketplace → Sell**: accept ToS, connect Stripe Connect / PayPal merchant id / MetaMask address, then publish listings via kernel `MarketplaceListing.publish` with `price_cents`.
 
-Plugin ObjectTypes and generated Record/action tools are visible only in
-workspaces where the plugin is installed. Installation validates and atomically
-replaces owned definitions, then records lifecycle state, seed, hook, and
-knowledge steps durably with compensation/recovery across core and tenant
-databases. It does not claim a cross-SQLite transaction. Uninstall removes
-runtime visibility and plugin-owned knowledge, but deliberately retains native
-ObjectType tables and tenant Records for reinstall or recovery. It is not a data
-erasure operation; export or delete retained data explicitly when required.
+## Unofficial / private
 
-A manifest-only plugin can ship native `objectTypes` and seed `records` without
-a `bridge.entry`. Executable adapters, actions, hooks, tools, or custom routes
-require Bridge code. Bridge and web plugins use the versioned kernel client
-(`apiVersion: 1`); executable manifests may declare `kernelApiVersion: 1`, and a
-future unsupported version is rejected at validation.
+**Marketplace → Unofficial** remains free local folders, `file://` catalogs, and third-party indexes (same schema as Official, typically `priceCents: 0`).
 
-Plugin Bridge code runs with host privileges. Install only trusted sources,
-review requested routes/actions and secret fields, and remember that custom
-Express routes must enforce authentication, tenant membership, and installed
-plugin checks themselves.
+## Related
 
-Each unofficial catalog must expose a `catalog/index.json` compatible with the official schema.
-
-You can point at a **local file catalog** (never leaves your machine):
-
-```
-file:///C:/Users/you/my-catalog/catalog/index.json
-```
-
-## Private plugins
-
-Four supported paths for plugins that are not public on GitHub:
-
-### 1. Local folder in the UI (recommended)
-
-Clone the repo anywhere on disk, then **Marketplace → Unofficial → Add local plugin folder**. No terminal or env var required.
-
-### 2. Local file catalog + `pluginLocalPath`
-
-Add an unofficial catalog URL pointing at a JSON file on disk. Entries can install from an existing directory — no git:
-
-```json
-{
-  "id": "my-private-plugin",
-  "installType": "plugin",
-  "title": "My Plugin",
-  "pluginLocalPath": "C:/dev/godmode-plugin-mine"
-}
-```
-
-The directory must contain a valid `godmode.plugin.json`.
-
-### 3. `GITHUB_TOKEN` for private HTTPS repos
-
-Set in `apps/bridge/.env`:
-
-```
-GITHUB_TOKEN=ghp_...
-```
-
-Catalog entries with `installType: "plugin"` and `pluginRepo: https://github.com/you/private-plugin.git` clone using token auth.
-
-### 4. Advanced: `GODMODE_PLUGIN_PATH`
-
-For automation or non-standard layouts, set in `apps/bridge/.env`:
-
-```
-GODMODE_PLUGIN_PATH=C:\dev\godmode-plugin-mine
-```
-
-Restart Bridge, then install from **Marketplace → Unofficial** under **Plugins on this machine**.
-
-Intelligence tools `scaffold_plugin` → `build_plugin` → `install_plugin` use the **same** activate path as Unofficial (persist path + runtime load + tenant install). Scaffolds live under the coding root at `plugins/<id>/` (on hub: under the tenant workspace on `/data`). No restart is required for tools, live ObjectType/adapter registration, Record seeds, or `tenant:install`.
-
-## Docker hub notes
-
-**Intelligence-authored plugins** persist under `/data/tenant-workspaces/<tenantId>/plugins/<id>` (already on `PLATFORM_DATA_DIR`). No extra volume is required for that pipeline.
-
-**Operator-dropped plugins** (paste a folder in Unofficial): Bridge runs **inside** the container. Paths must be visible there (for example `/plugins/my-plugin`), not a Windows `C:\...` path on your laptop.
-
-Optional host mount for shared operator plugins:
-
-```yaml
-volumes:
-  - ./plugins:/plugins
-environment:
-  # optional override; Intelligence defaults to tenant-workspace plugins/
-  - GODMODE_PLUGIN_SCAFFOLD_DIR=/plugins
-```
-
-When a plugin's `bridge.js` externalizes `@godmode/plugin-api` / `@godmode/plugin-host`, Bridge rewrites those `node_modules` entries to the image's built packages before load. You do not need a sibling GodMode checkout inside the container for those two packages.
-
-Hardware-bound plugins (desktop apps, devices) still need the **Connector** on the machine that runs that software — see `apps/connector/README.md`.
-
-## Submitting to Official
-
-See [CONTRIBUTING.md](https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md) in the marketplace repo. Intelligence can generate a manifest with `prepare_marketplace_submission`.
-
-## Install types
-
-| Type | Behavior |
-|------|----------|
-| `clone` | Downloads `bundle.json` and imports via portability |
-| `plugin` | Clones `pluginRepo` (or uses `pluginLocalPath`) and registers with Bridge |
-
-Clone bundles can contain portable `kind: "record"` children for the reviewed
-`StructureNode`, `Agent`, and `Skill` ObjectTypes. Bridge validates the nested
-Record shape and deterministic ID, rejects other ObjectTypes, and imports each
-child through kernel seed/CRUD dispatch rather than writing domain tables
-directly.
-
-Clone acquisition is a durable, idempotent saga across `core.sqlite` and the
-buyer tenant database. Operation registration, tenant import, purchase
-recording, and completion are independently recorded with audit/outbox rows.
-Retrying the same idempotency key resumes the operation without duplicating the
-import or purchase.
-
-Live access to resources is **Shared only**, not sold through Marketplace.
-
-Full walkthrough: [VERIFICATION.md](./VERIFICATION.md)
+- [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md)
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md)
