@@ -49,6 +49,9 @@ export interface CoreUser {
   is_admin: number;
   /** scrypt password hash (`scrypt$<saltHex>$<hashHex>`); null for OAuth-only users. */
   password_hash: string | null;
+  /** Platform admin can disable SaaS customer login without deleting the account. */
+  access_disabled: number;
+  last_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -201,6 +204,8 @@ export function initCoreDb(): CoreDatabase {
       avatar_url TEXT,
       is_admin INTEGER NOT NULL DEFAULT 0,
       password_hash TEXT,
+      access_disabled INTEGER NOT NULL DEFAULT 0,
+      last_seen_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -390,6 +395,30 @@ export function initCoreDb(): CoreDatabase {
       ON saas_entitlements(email);
     CREATE INDEX IF NOT EXISTS saas_entitlements_status_idx
       ON saas_entitlements(status);
+
+    -- Live Stripe subscription state for GodMode Cloud (INSTALLATION_SURFACE=saas).
+    CREATE TABLE IF NOT EXISTS saas_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
+      email TEXT,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT UNIQUE,
+      stripe_session_id TEXT,
+      plan_id TEXT,
+      price_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      current_period_end TEXT,
+      cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+      access_revoked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_user_idx
+      ON saas_subscriptions(user_id);
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_customer_idx
+      ON saas_subscriptions(stripe_customer_id);
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_status_idx
+      ON saas_subscriptions(status);
 
     -- Cross-tenant registry for opt-in collaborative chat sessions. A session's
     -- chat + artifacts live in the INITIATOR's tenant DB (home_tenant_id); other
@@ -737,12 +766,43 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   { version: 7, name: "core_wiki_search_v1", up: ensureWikiSearchAndProposals },
   { version: 8, name: "core_oss_platform_v2", up: ensureOssPlatformV2Tables },
   { version: 9, name: "core_release_flow_v1", up: ensureReleaseFlowTables },
+  { version: 10, name: "core_saas_subscriptions_v1", up: ensureSaasSubscriptionSchema },
 ];
 
 function ensureCoreUserColumns(db: CoreDatabase): void {
   ensureUsersIsAdminColumn(db);
   ensureUsersPasswordHashColumn(db);
   ensureUserProfileExtendedColumns(db);
+}
+
+/** SaaS subscription rows + user access/last-seen columns for GodMode Cloud. */
+function ensureSaasSubscriptionSchema(db: CoreDatabase): void {
+  addCol(db, "users", "access_disabled", "INTEGER NOT NULL DEFAULT 0");
+  addCol(db, "users", "last_seen_at", "TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS saas_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
+      email TEXT,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT UNIQUE,
+      stripe_session_id TEXT,
+      plan_id TEXT,
+      price_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      current_period_end TEXT,
+      cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+      access_revoked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_user_idx
+      ON saas_subscriptions(user_id);
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_customer_idx
+      ON saas_subscriptions(stripe_customer_id);
+    CREATE INDEX IF NOT EXISTS saas_subscriptions_status_idx
+      ON saas_subscriptions(status);
+  `);
 }
 
 function ensureCoreMarketplaceColumns(db: CoreDatabase): void {
