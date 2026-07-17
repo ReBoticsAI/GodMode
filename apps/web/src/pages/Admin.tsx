@@ -49,6 +49,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StructureAdminPanel } from "@/pages/StructureAdminPanel";
 import { AdminUsersPanel } from "@/pages/admin/AdminUsersPanel";
+import { AdminSaasCustomersPanel } from "@/pages/admin/AdminSaasCustomersPanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ export default function Admin() {
   const { user } = useTenant();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isHub, setIsHub] = useState(false);
+  const [isSaas, setIsSaas] = useState(false);
   const tabParam = searchParams.get("tab");
   const tab =
     tabParam === "platform" || tabParam === "structure"
@@ -70,8 +72,14 @@ export default function Admin() {
 
   useEffect(() => {
     void fetchBridgeHealth()
-      .then((h) => setIsHub(Boolean(h.hub)))
-      .catch(() => setIsHub(false));
+      .then((h) => {
+        setIsHub(Boolean(h.hub));
+        setIsSaas(Boolean(h.saas));
+      })
+      .catch(() => {
+        setIsHub(false);
+        setIsSaas(false);
+      });
   }, []);
 
   if (!user?.isAdmin) {
@@ -83,9 +91,11 @@ export default function Admin() {
       <PageHeader
         title="Admin"
         description={
-          isHub
-            ? "Billing, updates, workspace template, users, and support."
-            : "Updates, workspace template, users, and support."
+          isSaas
+            ? "Billing, SaaS customers, updates, workspace template, users, and support."
+            : isHub
+              ? "Billing, updates, workspace template, users, and support."
+              : "Updates, workspace template, users, and support."
         }
       />
 
@@ -96,6 +106,7 @@ export default function Admin() {
       >
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
+          {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
           <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="template">Workspace template</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -105,6 +116,11 @@ export default function Admin() {
         {isHub ? (
           <TabsContent value="billing" className="mt-4">
             <AdminBillingTab />
+          </TabsContent>
+        ) : null}
+        {isSaas ? (
+          <TabsContent value="saas" className="mt-4">
+            <AdminSaasCustomersPanel />
           </TabsContent>
         ) : null}
         <TabsContent value="updates" className="mt-4">

@@ -34,7 +34,8 @@ Self-hosted family/team hubs use `private_hub` and skip the paywall.
    - `WEB_PUBLIC_URL`, `AUTH_PUBLIC_URL`, `WEB_ORIGIN` to your public domain
    - `AUTH_SESSION_SECRET` (32+ random bytes)
    - `INITIAL_ADMINS` for your operator account (not paywalled)
-   - `STRIPE_SECRET_KEY`, `STRIPE_SAAS_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`
+   - `STRIPE_SECRET_KEY`, `STRIPE_SAAS_PRICE_MONTHLY`, `STRIPE_SAAS_PRICE_YEARLY`,
+     `STRIPE_WEBHOOK_SECRET` (optional legacy `STRIPE_SAAS_PRICE_ID` fallback)
    - Keep `AUTH_ALLOW_SIGNUP=false` — SaaS signup is unlocked only after Checkout
 2. Resolve the desired stable release to its signed immutable GHCR digest, set
    `GODMODE_IMAGE` in the host environment, then pull and run:
@@ -46,8 +47,21 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
-4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` →
-   `checkout.session.completed`.
+4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` with:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_failed`
+5. In Stripe → Settings → Billing → Customer portal, enable the portal so
+   Settings → **Manage subscription** can deep-link customers to cancel/update
+   payment methods.
+6. Set monthly/yearly Price IDs (`STRIPE_SAAS_PRICE_MONTHLY` /
+   `STRIPE_SAAS_PRICE_YEARLY`) for the paywall plan picker.
+
+Paid customers manage billing from **Settings → Subscription** (Stripe Customer
+Portal). Platform admins see customers under **Admin → SaaS** (plan, status,
+last seen, Stripe link, disable access). `INITIAL_ADMINS` remain paywall-exempt
+and are not blocked when a subscription lapses.
 
 **Security gate:** Do not expose a hub publicly until `AUTH_ALLOW_ANONYMOUS=false`,
 SaaS paywall or invite-only signup, and CORS locked to `WEB_ORIGIN`.

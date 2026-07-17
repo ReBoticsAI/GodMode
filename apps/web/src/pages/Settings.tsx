@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { logoutAuth } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
+import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light", Icon: SunIcon },
@@ -121,6 +122,7 @@ export default function Settings() {
       />
       <div className="flex flex-col gap-4">
         <AccountCard />
+        <SubscriptionCard />
         <AppearanceCard />
         <SessionCard />
       </div>
