@@ -122,6 +122,10 @@ export interface CoreMarketplaceListing {
   title: string;
   description: string | null;
   price_credits: number;
+  price_cents: number;
+  currency: string;
+  seller_kind: "official" | "user";
+  catalog_entry_id: string | null;
   bundle_json: string;
   visibility: string;
   status: string;
@@ -132,6 +136,40 @@ export interface CoreMarketplaceListing {
   meter_rate: number | null;
   license: string | null;
   inference_endpoint_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreMarketplaceOrder {
+  id: string;
+  listing_id: string | null;
+  catalog_entry_id: string | null;
+  buyer_user_id: string;
+  buyer_tenant_id: string;
+  seller_user_id: string | null;
+  seller_kind: "official" | "user";
+  amount_cents: number;
+  platform_fee_cents: number;
+  currency: string;
+  provider: "stripe" | "paypal" | "crypto";
+  provider_ref: string | null;
+  crypto_tx_hash: string | null;
+  status: string;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreMarketplaceSellerAccount {
+  id: string;
+  user_id: string;
+  stripe_connect_account_id: string | null;
+  paypal_merchant_id: string | null;
+  metamask_address: string | null;
+  payout_preference: "stripe" | "paypal" | "crypto" | null;
+  onboarding_status: string;
+  tos_accepted_version: string | null;
+  tos_accepted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -767,6 +805,7 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   { version: 8, name: "core_oss_platform_v2", up: ensureOssPlatformV2Tables },
   { version: 9, name: "core_release_flow_v1", up: ensureReleaseFlowTables },
   { version: 10, name: "core_saas_subscriptions_v1", up: ensureSaasSubscriptionSchema },
+  { version: 11, name: "core_marketplace_commerce_v1", up: ensureMarketplaceCommerceSchema },
 ];
 
 function ensureCoreUserColumns(db: CoreDatabase): void {
@@ -888,6 +927,98 @@ function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
   addCol(db, "marketplace_listings", "meter_rate", "INTEGER");
   addCol(db, "marketplace_listings", "license", "TEXT");
   addCol(db, "marketplace_listings", "inference_endpoint_id", "TEXT");
+}
+
+/** Paid Marketplace commerce: USD orders, seller payouts, ToS, chargeback bans. */
+function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
+  addCol(db, "marketplace_listings", "price_cents", "INTEGER NOT NULL DEFAULT 0");
+  addCol(db, "marketplace_listings", "currency", "TEXT NOT NULL DEFAULT 'usd'");
+  addCol(db, "marketplace_listings", "seller_kind", "TEXT NOT NULL DEFAULT 'user'");
+  addCol(db, "marketplace_listings", "catalog_entry_id", "TEXT");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS marketplace_seller_accounts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
+      stripe_connect_account_id TEXT,
+      paypal_merchant_id TEXT,
+      metamask_address TEXT,
+      payout_preference TEXT,
+      onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      tos_accepted_version TEXT,
+      tos_accepted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_seller_accounts_user_idx
+      ON marketplace_seller_accounts(user_id);
+
+    CREATE TABLE IF NOT EXISTS marketplace_orders (
+      id TEXT PRIMARY KEY,
+      listing_id TEXT REFERENCES marketplace_listings(id),
+      catalog_entry_id TEXT,
+      buyer_user_id TEXT NOT NULL REFERENCES users(id),
+      buyer_tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      seller_user_id TEXT REFERENCES users(id),
+      seller_kind TEXT NOT NULL DEFAULT 'official',
+      amount_cents INTEGER NOT NULL,
+      platform_fee_cents INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      provider TEXT NOT NULL,
+      provider_ref TEXT,
+      crypto_tx_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      delivered_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_orders_buyer_idx
+      ON marketplace_orders(buyer_user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS marketplace_orders_status_idx
+      ON marketplace_orders(status, updated_at);
+    CREATE INDEX IF NOT EXISTS marketplace_orders_provider_ref_idx
+      ON marketplace_orders(provider, provider_ref);
+    CREATE INDEX IF NOT EXISTS marketplace_orders_catalog_idx
+      ON marketplace_orders(catalog_entry_id, buyer_user_id, status);
+
+    CREATE TABLE IF NOT EXISTS marketplace_tos_acceptances (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      tos_version TEXT NOT NULL,
+      accepted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (user_id, tos_version)
+    );
+
+    CREATE TABLE IF NOT EXISTS marketplace_bans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
+      reason TEXT NOT NULL,
+      order_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_bans_user_idx ON marketplace_bans(user_id);
+
+    CREATE TABLE IF NOT EXISTS marketplace_official_catalog (
+      entry_id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      version TEXT,
+      author TEXT,
+      kind TEXT,
+      install_type TEXT NOT NULL,
+      tags_json TEXT,
+      bundle_path TEXT,
+      plugin_repo TEXT,
+      plugin_ref TEXT,
+      preview_path TEXT,
+      price_cents INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      listing_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 }
 
 /**

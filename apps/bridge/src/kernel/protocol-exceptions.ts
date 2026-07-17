@@ -61,6 +61,37 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-official-catalog-public",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/catalog/official/public",
+    rationale:
+      "Unauthenticated Official catalog JSON for local/private-hub pulls; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-commerce-config",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/commerce/config",
+    rationale: "Public Marketplace payment rails and ToS version; read-only.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-paypal-capture",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/commerce/paypal/capture",
+    rationale:
+      "PayPal order capture transport after buyer approval; durable paid state via marketplace services.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-admin-official-catalog",
+    methods: ["GET", "POST"],
+    pathPattern: "/api/marketplace/commerce/admin/official-catalog",
+    rationale:
+      "SaaS admin Official catalog upsert/list for ReBotics MoR pricing; not generic Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "analytics-read-query",
     methods: ["POST"],
     pathPattern: "/api/analytics/timeseries/query",

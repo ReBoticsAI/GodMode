@@ -364,6 +364,45 @@ export const config = {
         : ""),
     cacheTtlMs: Number(process.env.MARKETPLACE_CACHE_TTL_MS ?? 300_000),
     pluginsDir: path.join(appData, "marketplace-plugins"),
+    /** Marketplace ToS version buyers/sellers must accept. */
+    tosVersion: (process.env.MARKETPLACE_TOS_VERSION ?? "1").trim() || "1",
+    /**
+     * When set on SaaS, non-SaaS installs should point MARKETPLACE_OFFICIAL_URL here
+     * (public Official catalog JSON). Empty = use GitHub/local defaults above.
+     */
+    saasOfficialCatalogUrl: (process.env.MARKETPLACE_SAAS_OFFICIAL_URL ?? "").trim(),
+    payments: {
+      stripeEnabled: Boolean(
+        (process.env.STRIPE_SECRET_KEY ?? "").trim() ||
+          (process.env.STRIPE_MARKETPLACE_WEBHOOK_SECRET ?? "").trim()
+      ),
+      stripeWebhookSecret: (process.env.STRIPE_MARKETPLACE_WEBHOOK_SECRET ?? "").trim(),
+      paypalEnabled: Boolean(
+        (process.env.PAYPAL_CLIENT_ID ?? process.env.PAYPAL_MARKETPLACE_CLIENT_ID ?? "").trim() &&
+          (
+            process.env.PAYPAL_CLIENT_SECRET ??
+            process.env.PAYPAL_MARKETPLACE_CLIENT_SECRET ??
+            ""
+          ).trim()
+      ),
+      paypalClientId: (
+        process.env.PAYPAL_MARKETPLACE_CLIENT_ID ??
+        process.env.PAYPAL_CLIENT_ID ??
+        ""
+      ).trim(),
+      paypalClientSecret: (
+        process.env.PAYPAL_MARKETPLACE_CLIENT_SECRET ??
+        process.env.PAYPAL_CLIENT_SECRET ??
+        ""
+      ).trim(),
+      paypalEnv: (process.env.PAYPAL_ENV ?? "sandbox") as "sandbox" | "live",
+      paypalWebhookId: (process.env.PAYPAL_MARKETPLACE_WEBHOOK_ID ?? "").trim(),
+      cryptoTreasuryAddress: (process.env.MARKETPLACE_CRYPTO_TREASURY_ADDRESS ?? "").trim(),
+      cryptoChainId: Number(process.env.MARKETPLACE_CRYPTO_CHAIN_ID ?? 1),
+      cryptoAsset: (process.env.MARKETPLACE_CRYPTO_ASSET ?? "USDC").trim() || "USDC",
+      /** Platform Connect application fee is fixed at 10% in code. */
+      platformFeeBps: 1000,
+    },
   },
 };
 

@@ -96,10 +96,15 @@ publishing fresh artifacts after the GitHub/Sigstore incident is resolved; never
 replace the pinned identity with an arbitrary repository wildcard.
 
 Multipart upload/download, WebSocket/token streams, cookie establishment,
-ephemeral presence, read-only analytical POST, and signed external command
-transport remain explicit protocol exceptions. They must retain their own
-transport authorization, and any durable domain effect still dispatches through
-the kernel; binary and stream transport are not Record CRUD.
+ephemeral presence, read-only analytical POST, signed external command
+transport, and Marketplace/SaaS payment webhooks remain explicit protocol
+exceptions. They must retain their own transport authorization, and any durable
+domain effect still dispatches through the kernel; binary and stream transport
+are not Record CRUD.
+
+Paid Marketplace plugins are still host-privileged code once installed — review
+sources before install. Chargebacks on delivered software ban Marketplace access
+per [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md).
 
 ## Reporting
 

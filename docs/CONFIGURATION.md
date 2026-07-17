@@ -35,9 +35,17 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `GODMODE_PLUGIN_PATH` | empty | Optional advanced override: semicolon-separated plugin roots (Windows). Prefer **Marketplace → Unofficial** or Intelligence `install_plugin`. |
 | `GITHUB_TOKEN` | empty | Clone private GitHub plugin repos from Marketplace |
 | `GODMODE_PLUGIN_SCAFFOLD_DIR` | `{repo}/plugins` (local) or tenant workspace `plugins/` (hub) | Override target dir for `scaffold_plugin` |
-| `MARKETPLACE_OFFICIAL_URL` | GitHub raw index | Official catalog URL |
+| `MARKETPLACE_OFFICIAL_URL` | GitHub raw index | Official catalog URL (or SaaS public Official JSON) |
+| `MARKETPLACE_SAAS_OFFICIAL_URL` | empty | Remote SaaS Official catalog for local/private-hub price enrichment |
 | `MARKETPLACE_LOCAL_CATALOG_PATH` | auto-detect sibling | Local catalog file path |
 | `MARKETPLACE_CACHE_TTL_MS` | `300000` | Catalog cache TTL |
+| `MARKETPLACE_TOS_VERSION` | `1` | Marketplace ToS version buyers/sellers must accept |
+| `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |
+| `MARKETPLACE_CRYPTO_CHAIN_ID` | `1` | EVM chain id for crypto payments |
+| `MARKETPLACE_CRYPTO_ASSET` | `USDC` | Display asset label for crypto checkout |
+| `STRIPE_MARKETPLACE_WEBHOOK_SECRET` | empty | Stripe webhook secret for Marketplace orders (falls back to `STRIPE_WEBHOOK_SECRET`) |
+| `PAYPAL_MARKETPLACE_CLIENT_ID` / `SECRET` | holdings PayPal | PayPal app credentials for Marketplace (falls back to `PAYPAL_CLIENT_*`) |
+| `PAYPAL_MARKETPLACE_WEBHOOK_ID` | empty | Optional PayPal webhook id metadata |
 
 ## Federation
 
@@ -73,7 +81,7 @@ unless a trusted signature-verification policy is configured.
 |----------|-------------|
 | `INSTALLATION_SURFACE` | `saas` enables the paid signup paywall; `private_hub` is self-hosted multi-tenant without it |
 | `CLOUD_HUB_URL` | Official hub for client-mode marketplace |
-| `STRIPE_SECRET_KEY` | Stripe secret (paywall + marketplace credits) |
+| `STRIPE_SECRET_KEY` | Stripe secret (SaaS paywall + Marketplace Checkout) |
 | `STRIPE_SAAS_PRICE_MONTHLY` | Recurring monthly Price ID (`$9.99 USD/mo`) |
 | `STRIPE_SAAS_PRICE_YEARLY` | Recurring yearly Price ID (`$74.99 USD/yr`) |
 | `STRIPE_SAAS_PRICE_ID` | Optional single-price fallback if monthly/yearly unset |
