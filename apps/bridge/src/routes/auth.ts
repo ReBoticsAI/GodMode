@@ -39,7 +39,14 @@ import {
   consumeSaasEntitlement,
   findPendingEntitlementByStripeSession,
 } from "../services/saas-entitlements.js";
-import { resolveEntitlementForCheckoutSession } from "../services/saas-billing.js";
+import {
+  resolveEntitlementForCheckoutSession,
+} from "../services/saas-billing.js";
+import {
+  assertSaasUserMayAccess,
+  linkSubscriptionToUser,
+  touchUserLastSeen,
+} from "../services/saas-subscriptions.js";
 
 export function createAuthRouter(): Router {
   const router = Router();
@@ -71,6 +78,13 @@ export function createAuthRouter(): Router {
       return;
     }
 
+    const access = assertSaasUserMayAccess(user);
+    if (!access.ok) {
+      res.status(access.status).json({ error: access.error });
+      return;
+    }
+
+    touchUserLastSeen(user.id);
     const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
     res.setHeader(
       "Set-Cookie",
@@ -165,7 +179,13 @@ export function createAuthRouter(): Router {
         })
       ) as { id: string };
       if (config.isSaas && paidSessionId) {
-        consumeSaasEntitlement(core, paidSessionId, created.id);
+        const entitlement = consumeSaasEntitlement(core, paidSessionId, created.id);
+        linkSubscriptionToUser({
+          userId: created.id,
+          stripeSessionId: paidSessionId,
+          stripeCustomerId: entitlement.stripe_customer_id,
+          email: normalized,
+        });
       }
       const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
       const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);

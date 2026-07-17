@@ -78,8 +78,12 @@ unless a trusted signature-verification policy is configured.
 | `STRIPE_SAAS_PRICE_YEARLY` | Recurring yearly Price ID (`$74.99 USD/yr`) |
 | `STRIPE_SAAS_PRICE_ID` | Optional single-price fallback if monthly/yearly unset |
 | `STRIPE_SAAS_CHECKOUT_MODE` | `subscription` (default when plan prices set) or `payment` |
-| `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` (`checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) |
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
+
+On SaaS installs, authenticated users open Stripe Customer Portal via
+`POST /api/saas/portal` (Settings → Manage subscription). Platform admins list
+customers at `GET /api/admin/saas/customers`.
 
 Not used in local OSS installs. Private hubs ignore SaaS paywall env vars.
 

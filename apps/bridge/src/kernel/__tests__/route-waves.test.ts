@@ -31,6 +31,7 @@ function declaredRoutes(
 describe("legacy route wave", () => {
   it("exposes only the approved specialized POST transports", () => {
     expect(declaredRoutes("post|put|patch|delete")).toEqual([
+      "admin-saas.ts:post:/customers/:userId/access",
       "ai.ts:post:/chat",
       "api-core.ts:post:/analytics/timeseries/query",
       "auth.ts:post:/change-password",
@@ -42,6 +43,7 @@ describe("legacy route wave", () => {
       "federation.ts:post:/invites/:token/accept",
       "federation.ts:post:/sc/:verb",
       "saas.ts:post:/checkout",
+      "saas.ts:post:/portal",
     ]);
   });
 

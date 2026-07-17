@@ -17,6 +17,7 @@ import {
   parseSessionCookie,
   resolveSession,
 } from "./session-store.js";
+import { assertSaasUserMayAccess } from "../saas-subscriptions.js";
 
 const ROLE_RANK: Record<MembershipRole, number> = {
   viewer: 0,
@@ -43,6 +44,11 @@ export function attachAuthContext(
   for (const sessionId of collectRequestSessionIds(req)) {
     const resolved = resolveSession(core, sessionId);
     if (resolved) {
+      const access = assertSaasUserMayAccess(resolved.user);
+      if (!access.ok) {
+        // Drop revoked SaaS sessions so APIs cannot keep working after cancel.
+        continue;
+      }
       req.user = coreUserToAuth(resolved.user);
       req.sessionId = resolved.sessionId;
       break;

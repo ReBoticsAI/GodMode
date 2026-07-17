@@ -3056,6 +3056,62 @@ export function fetchSaasCheckoutStatus(sessionId: string) {
   }>(`/saas/checkout/status?session_id=${encodeURIComponent(sessionId)}`);
 }
 
+export type SaasSubscriptionPublic = {
+  planId: string | null;
+  planLabel: string | null;
+  amountLabel: string | null;
+  status: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  hasCustomer: boolean;
+};
+
+export function fetchSaasSubscription() {
+  return api<{ subscription: SaasSubscriptionPublic | null }>("/saas/subscription");
+}
+
+export function startSaasBillingPortal(input?: { returnUrl?: string }) {
+  return api<{ url: string }>("/saas/portal", {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
+  });
+}
+
+export type AdminSaasCustomerRow = {
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  isAdmin: boolean;
+  accessDisabled: boolean;
+  lastSeenAt: string | null;
+  planId: string | null;
+  priceId: string | null;
+  status: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  accessRevoked: boolean;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripeDashboardUrl: string | null;
+  createdAt: string | null;
+};
+
+export function fetchAdminSaasCustomers() {
+  return api<{ customers: AdminSaasCustomerRow[] }>("/admin/saas/customers");
+}
+
+export function setAdminSaasCustomerAccess(userId: string, disabled: boolean) {
+  return api<{ userId: string; accessDisabled: boolean }>(
+    `/admin/saas/customers/${encodeURIComponent(userId)}/access`,
+    {
+      method: "POST",
+      body: JSON.stringify({ disabled }),
+    }
+  );
+}
+
 export function fetchOnboardingStatus() {
   return api<{
     completed: boolean;

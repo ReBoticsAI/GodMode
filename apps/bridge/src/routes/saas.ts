@@ -2,11 +2,17 @@ import { Router, type Request, type Response } from "express";
 import { config } from "../config.js";
 import { rateLimit } from "../services/auth/rate-limit.js";
 import {
+  attachAuthContext,
+  requireAuth,
+} from "../services/auth/middleware.js";
+import {
+  createSaasBillingPortalSession,
   createSaasCheckoutSession,
   getSaasPaywallPublicConfig,
   handleSaasStripeWebhook,
   resolveEntitlementForCheckoutSession,
 } from "../services/saas-billing.js";
+import { getPublicSubscriptionForUser } from "../services/saas-subscriptions.js";
 
 function requireSaas(_req: Request, res: Response, next: () => void): void {
   if (!config.isSaas) {
@@ -87,6 +93,48 @@ export function createSaasRouter(): Router {
       });
     }
   });
+
+  router.get(
+    "/subscription",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    (req, res) => {
+      const sub = getPublicSubscriptionForUser(req.user!.id);
+      res.json({ subscription: sub });
+    }
+  );
+
+  router.post(
+    "/portal",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    async (req, res) => {
+      const publicBase = config.web.publicUrl.replace(/\/$/, "");
+      const returnUrl =
+        typeof req.body?.returnUrl === "string" &&
+        req.body.returnUrl.startsWith(publicBase)
+          ? req.body.returnUrl
+          : `${publicBase}/settings/platform`;
+      try {
+        const session = await createSaasBillingPortalSession({
+          userId: req.user!.id,
+          returnUrl,
+        });
+        res.json(session);
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) ? status : 500).json({
+          error: err instanceof Error ? err.message : "Portal failed",
+        });
+      }
+    }
+  );
 
   return router;
 }

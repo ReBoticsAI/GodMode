@@ -45,6 +45,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-billing-portal",
+    methods: ["POST"],
+    pathPattern: "/api/saas/portal",
+    rationale:
+      "Stripe Customer Portal session creation for SaaS subscription management; durable subscription state is synced from Stripe webhooks.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-admin-access",
+    methods: ["POST"],
+    pathPattern: "/api/admin/saas/customers/:/access",
+    rationale:
+      "Platform-admin SaaS access enable/disable for subscription ops; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "analytics-read-query",
     methods: ["POST"],
     pathPattern: "/api/analytics/timeseries/query",

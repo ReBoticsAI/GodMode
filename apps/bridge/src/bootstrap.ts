@@ -35,6 +35,7 @@ import { createWikiRouter } from "./routes/wiki.js";
 import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
+import { createAdminSaasRouter } from "./routes/admin-saas.js";
 import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
@@ -353,6 +354,9 @@ if (!config.isHub) {
 }
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
+}
+if (config.isSaas) {
+  app.use("/api/admin/saas", createAdminSaasRouter());
 }
 app.use("/api/admin", createAdminUsersRouter());
 app.use("/api/admin/workspace-template", createAdminWorkspaceTemplateRouter());
