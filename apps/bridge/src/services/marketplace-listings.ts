@@ -7,6 +7,12 @@ import type {
 } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { exportEntity, importEntity, type PortableBundle } from "./portability.js";
+import {
+  assertCanAcquireListing,
+  assertMarketplaceTosAccepted,
+  assertNotMarketplaceBanned,
+  ensureSellerAccount,
+} from "./marketplace-commerce.js";
 
 export interface PublishMarketplaceListingInput {
   sellerUserId: string;
@@ -15,7 +21,12 @@ export interface PublishMarketplaceListingInput {
   resourceId?: string;
   title?: string;
   description?: string;
+  /** @deprecated Credits removed — use priceCents. */
   priceCredits?: number;
+  priceCents?: number;
+  currency?: string;
+  sellerKind?: "official" | "user";
+  catalogEntryId?: string;
   deliveryMode?: DeliveryMode;
   pricingModel?: PricingModel;
   pricePeriod?: string;
@@ -31,6 +42,24 @@ export function publishMarketplaceListing(
   tenantDb: AppDatabase,
   input: PublishMarketplaceListingInput
 ): Record<string, unknown> {
+  assertNotMarketplaceBanned(core, input.sellerUserId);
+  assertMarketplaceTosAccepted(core, input.sellerUserId);
+
+  const sellerKind = input.sellerKind ?? "user";
+  if (sellerKind === "user") {
+    const acct = ensureSellerAccount(core, input.sellerUserId);
+    const ready =
+      acct.stripe_connect_account_id ||
+      acct.paypal_merchant_id ||
+      acct.metamask_address;
+    if (Number(input.priceCents ?? 0) > 0 && !ready) {
+      throw Object.assign(
+        new Error("Connect Stripe, PayPal, or MetaMask before publishing a paid listing"),
+        { status: 400 }
+      );
+    }
+  }
+
   const delivery = input.deliveryMode ?? "clone";
   const pricing = input.pricingModel ?? "one_time";
   let bundleJson = "{}";
@@ -62,13 +91,15 @@ export function publishMarketplaceListing(
     throw new Error("resourceId required for live listings");
   }
 
+  const priceCents = Math.max(0, Math.floor(Number(input.priceCents ?? 0)));
   const id = uuidv4();
   core.prepare(
     `INSERT INTO marketplace_listings
        (id, seller_user_id, seller_tenant_id, kind, resource_id, title, description,
-        price_credits, bundle_json, visibility, status, delivery_mode, pricing_model,
+        price_credits, price_cents, currency, seller_kind, catalog_entry_id,
+        bundle_json, visibility, status, delivery_mode, pricing_model,
         price_period, meter_unit, meter_rate, license, inference_endpoint_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', 'active', ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'public', 'active', ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.sellerUserId,
@@ -77,7 +108,10 @@ export function publishMarketplaceListing(
     input.resourceId ?? endpointId ?? id,
     title,
     input.description ?? null,
-    Number(input.priceCredits ?? 0),
+    priceCents,
+    (input.currency ?? "usd").toLowerCase(),
+    sellerKind,
+    input.catalogEntryId ?? null,
     bundleJson,
     delivery,
     pricing,
@@ -154,6 +188,7 @@ export function acquireCloneListing(
     if (String(listing.delivery_mode ?? "clone") === "live") {
       throw new Error("Live listings must be acquired as entitlements");
     }
+    assertCanAcquireListing(core, { userId: input.buyerUserId, listing });
     const operationId = uuidv4();
     core.transaction(() => {
       core.prepare(

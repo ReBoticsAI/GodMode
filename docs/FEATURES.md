@@ -53,7 +53,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Contacts** | `/contacts` | Social graph — people, groups, and relationship view. |
 | **Shared** | Sidebar → Shared | Live resources another user granted you; Tailscale network panel for cross-home federation. |
 | **Settings** | `/settings` | Account, appearance, and session settings. |
-| **Marketplace** | `/marketplace` | Official, Unofficial, and Installed tabs; free install of packs and plugins. See [MARKETPLACE.md](MARKETPLACE.md). |
+| **Marketplace** | `/marketplace` | Official / Unofficial / Installed / Sell; free and paid Official catalog; seller payouts (Stripe/PayPal/MetaMask). See [MARKETPLACE.md](MARKETPLACE.md) and [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md). |
 | **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
 | **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
 | **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
