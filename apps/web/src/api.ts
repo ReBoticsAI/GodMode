@@ -3087,6 +3087,8 @@ export type AdminSaasCustomerRow = {
   accessDisabled: boolean;
   lastSeenAt: string | null;
   planId: string | null;
+  planLabel: string | null;
+  amountLabel: string | null;
   priceId: string | null;
   status: string | null;
   currentPeriodEnd: string | null;

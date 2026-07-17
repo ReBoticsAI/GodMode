@@ -438,6 +438,8 @@ export type SaasCustomerAdminRow = {
   accessDisabled: boolean;
   lastSeenAt: string | null;
   planId: string | null;
+  planLabel: string | null;
+  amountLabel: string | null;
   priceId: string | null;
   status: string | null;
   currentPeriodEnd: string | null;
@@ -543,7 +545,11 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     });
   }
 
-  return rows.map((r) => ({
+  return rows.map((r) => {
+    const planId = typeof r.plan_id === "string" ? r.plan_id : null;
+    const priceId = typeof r.price_id === "string" ? r.price_id : null;
+    const meta = planMeta(planId ?? priceId);
+    return {
     userId: typeof r.user_id === "string" ? r.user_id : null,
     email: typeof r.email === "string" ? r.email : null,
     displayName: typeof r.display_name === "string" ? r.display_name : null,
@@ -552,8 +558,10 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     isAdmin: Boolean(r.is_admin),
     accessDisabled: Boolean(r.access_disabled),
     lastSeenAt: typeof r.last_seen_at === "string" ? r.last_seen_at : null,
-    planId: typeof r.plan_id === "string" ? r.plan_id : null,
-    priceId: typeof r.price_id === "string" ? r.price_id : null,
+    planId: meta.id ?? planId,
+    planLabel: meta.label,
+    amountLabel: meta.amountLabel,
+    priceId,
     status: typeof r.status === "string" ? r.status : null,
     currentPeriodEnd:
       typeof r.current_period_end === "string" ? r.current_period_end : null,
@@ -569,7 +577,8 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
       typeof r.stripe_customer_id === "string" ? r.stripe_customer_id : null
     ),
     createdAt: typeof r.created_at === "string" ? r.created_at : null,
-  }));
+  };
+  });
 }
 
 export function getPublicSubscriptionForUser(userId: string): {
