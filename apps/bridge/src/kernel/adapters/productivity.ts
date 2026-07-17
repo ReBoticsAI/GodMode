@@ -418,6 +418,8 @@ const CARD_WRITABLE = new Set([
   "parent_card_id",
   "status",
   "assigned_agent_id",
+  "column_id",
+  "sort_order",
 ]);
 
 function cardRow(
