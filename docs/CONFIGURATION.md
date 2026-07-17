@@ -74,8 +74,10 @@ unless a trusted signature-verification policy is configured.
 | `INSTALLATION_SURFACE` | `saas` enables the paid signup paywall; `private_hub` is self-hosted multi-tenant without it |
 | `CLOUD_HUB_URL` | Official hub for client-mode marketplace |
 | `STRIPE_SECRET_KEY` | Stripe secret (paywall + marketplace credits) |
-| `STRIPE_SAAS_PRICE_ID` | Stripe Price ID for SaaS Checkout (`INSTALLATION_SURFACE=saas`) |
-| `STRIPE_SAAS_CHECKOUT_MODE` | `payment` (default) or `subscription` |
+| `STRIPE_SAAS_PRICE_MONTHLY` | Recurring monthly Price ID (`$9.99 USD/mo`) |
+| `STRIPE_SAAS_PRICE_YEARLY` | Recurring yearly Price ID (`$74.99 USD/yr`) |
+| `STRIPE_SAAS_PRICE_ID` | Optional single-price fallback if monthly/yearly unset |
+| `STRIPE_SAAS_CHECKOUT_MODE` | `subscription` (default when plan prices set) or `payment` |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` |
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 

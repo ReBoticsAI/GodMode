@@ -47,11 +47,57 @@ export const config = {
   installationSurface,
   isSaas,
   saas: {
-    /** Stripe Price ID for seat/access Checkout (required for SaaS paywall). */
-    priceId: (process.env.STRIPE_SAAS_PRICE_ID ?? "").trim(),
-    /** `payment` (one-time) or `subscription`. */
-    checkoutMode: ((process.env.STRIPE_SAAS_CHECKOUT_MODE ?? "payment").toLowerCase() ===
-    "subscription"
+    /**
+     * Allowed Stripe Price IDs for SaaS Checkout.
+     * Prefer monthly/yearly env vars; `STRIPE_SAAS_PRICE_ID` remains a single-plan fallback.
+     */
+    plans: (() => {
+      const monthly = (process.env.STRIPE_SAAS_PRICE_MONTHLY ?? "").trim();
+      const yearly = (process.env.STRIPE_SAAS_PRICE_YEARLY ?? "").trim();
+      const legacy = (process.env.STRIPE_SAAS_PRICE_ID ?? "").trim();
+      const plans: Array<{
+        id: "monthly" | "yearly" | "default";
+        priceId: string;
+        label: string;
+        amountLabel: string;
+        interval: "month" | "year" | "one_time";
+      }> = [];
+      if (monthly) {
+        plans.push({
+          id: "monthly",
+          priceId: monthly,
+          label: "Monthly",
+          amountLabel: "$9.99/month",
+          interval: "month",
+        });
+      }
+      if (yearly) {
+        plans.push({
+          id: "yearly",
+          priceId: yearly,
+          label: "Yearly",
+          amountLabel: "$74.99/year",
+          interval: "year",
+        });
+      }
+      if (plans.length === 0 && legacy) {
+        plans.push({
+          id: "default",
+          priceId: legacy,
+          label: "GodMode Cloud",
+          amountLabel: "Paid access",
+          interval: "one_time",
+        });
+      }
+      return plans;
+    })(),
+    /** `payment` (one-time) or `subscription`. Defaults to subscription when plan prices are set. */
+    checkoutMode: ((
+      process.env.STRIPE_SAAS_CHECKOUT_MODE ??
+      ((process.env.STRIPE_SAAS_PRICE_MONTHLY || process.env.STRIPE_SAAS_PRICE_YEARLY)
+        ? "subscription"
+        : "payment")
+    ).toLowerCase() === "subscription"
       ? "subscription"
       : "payment") as "payment" | "subscription",
     webhookSecret: (process.env.STRIPE_WEBHOOK_SECRET ?? "").trim(),

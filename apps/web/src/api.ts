@@ -3022,18 +3022,29 @@ export function fetchSaasPaywall() {
     priceConfigured: boolean;
     publishableKey: string | null;
     checkoutMode: "payment" | "subscription";
+    plans: Array<{
+      id: string;
+      priceId: string;
+      label: string;
+      amountLabel: string;
+      interval: "month" | "year" | "one_time";
+    }>;
   }>("/saas/paywall");
 }
 
 export function startSaasCheckout(input?: {
   email?: string;
+  plan?: string;
   successUrl?: string;
   cancelUrl?: string;
 }) {
-  return api<{ url: string; sessionId: string }>("/saas/checkout", {
-    method: "POST",
-    body: JSON.stringify(input ?? {}),
-  });
+  return api<{ url: string; sessionId: string; planId: string; priceId: string }>(
+    "/saas/checkout",
+    {
+      method: "POST",
+      body: JSON.stringify(input ?? {}),
+    }
+  );
 }
 
 export function fetchSaasCheckoutStatus(sessionId: string) {
