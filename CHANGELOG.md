@@ -74,8 +74,6 @@ were validated against the preceding nightly.
 - Marketplace Docker hub notes; onboarding / verification updates
 - [OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md) — canonical architecture,
   enforced action contract, tenancy, durable recovery, and protocol exceptions
-- [KERNEL_MIGRATION_MATRIX.md](docs/KERNEL_MIGRATION_MATRIX.md) — governed route
-  and AI-tool migration inventory
 - [RELEASES.md](docs/RELEASES.md) — channels, artifact trust, update controls,
   snapshots, rollback, offline verification, and plugin compatibility
 - Coordinated ecosystem migrations were completed in:
