@@ -81,6 +81,7 @@ import { useIntelligence } from "@/lib/intelligence-context";
 import type { ProductivityScope } from "@/lib/productivity-scope";
 import { isUserScope, scopeReadOnly } from "@/lib/productivity-scope";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const PRIORITY_META: Record<number, { label: string; badge: string }> = {
   1: { label: "High", badge: "bg-red-500/15 text-red-400 border-red-500/30" },
@@ -973,19 +974,23 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
 
   const addCard = async () => {
     if (readOnly) return;
-    if (isUserScope(scope)) {
-      await createUserProjectCard({
-        title: "New task",
-        columnId: "backlog",
-      }).catch(() => undefined);
-    } else {
-      await createProjectCard({
-        title: "New task",
-        columnId: "backlog",
-        agentId: scope.agentId,
-      }).catch(() => undefined);
+    try {
+      if (isUserScope(scope)) {
+        await createUserProjectCard({
+          title: "New task",
+          columnId: "backlog",
+        });
+      } else {
+        await createProjectCard({
+          title: "New task",
+          columnId: "backlog",
+          agentId: scope.agentId,
+        });
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add card");
     }
-    load();
   };
 
   const openEditor = (card: AiProjectCard) => {
