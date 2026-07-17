@@ -68,6 +68,11 @@ stripe listen --forward-to http://127.0.0.1:9080/api/saas/stripe/webhook
 Open `http://<host>:9080`, sign in as `INITIAL_ADMINS`, then in a private window:
 Sign up → Continue to payment → return → create account.
 
+Prefer a CI image over a local build: after merge to `main`, **Publish SaaS image**
+pushes `ghcr.io/<org>/godmode:saas-staging` (and `sha-<commit>`). Set
+`GODMODE_IMAGE` to that digest in `.env.saas-staging` and `up -d` without `--build`.
+You can also run the workflow manually from Actions without waiting for nightly.
+
 ### Hub smoke test
 
 After the container is up, verify core endpoints:
