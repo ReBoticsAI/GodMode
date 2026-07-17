@@ -106,7 +106,12 @@ export function AdminSaasCustomersPanel() {
                       ) : null}
                     </td>
                     <td className="py-3 pr-3">
-                      {row.planId ?? "—"}
+                      {row.planLabel ?? row.planId ?? "—"}
+                      {row.amountLabel ? (
+                        <div className="text-xs text-muted-foreground">
+                          {row.amountLabel}
+                        </div>
+                      ) : null}
                       {row.currentPeriodEnd ? (
                         <div className="text-xs text-muted-foreground">
                           Period end {formatWhen(row.currentPeriodEnd)}

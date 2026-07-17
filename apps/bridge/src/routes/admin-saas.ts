@@ -9,6 +9,7 @@ import {
   listSaasCustomersForAdmin,
   setUserAccessDisabled,
 } from "../services/saas-subscriptions.js";
+import { syncMissingSaasSubscriptionsFromStripe } from "../services/saas-billing.js";
 
 export function createAdminSaasRouter(): Router {
   const router = Router();
@@ -22,7 +23,12 @@ export function createAdminSaasRouter(): Router {
     next();
   });
 
-  router.get("/customers", (_req, res) => {
+  router.get("/customers", async (_req, res) => {
+    try {
+      await syncMissingSaasSubscriptionsFromStripe();
+    } catch {
+      /* list still useful without Stripe sync */
+    }
     res.json({ customers: listSaasCustomersForAdmin() });
   });
 

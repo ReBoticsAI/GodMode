@@ -9,7 +9,10 @@ import {
 } from "./saas-entitlements.js";
 import {
   applyStripeSubscriptionObject,
+  findSubscriptionByCustomerId,
+  findSubscriptionBySessionId,
   findSubscriptionByUserId,
+  linkSubscriptionToUser,
   markSubscriptionPastDueByCustomer,
   upsertSubscriptionFromCheckout,
   type SaasSubscription,
@@ -373,3 +376,99 @@ export function handleSaasStripeWebhook(
 
   return { ok: true };
 }
+
+/**
+ * Backfill live subscription rows for entitlements that predate subscription sync.
+ * Safe to call on admin customer list; no-ops when Stripe is unset or already synced.
+ */
+export async function syncMissingSaasSubscriptionsFromStripe(): Promise<number> {
+  const secret = resolveStripeSecretKey();
+  if (!secret) return 0;
+  const core = getCoreDb();
+  const entitlements = core
+    .prepare(
+      `SELECT email, stripe_session_id, stripe_customer_id, consumed_by_user_id
+       FROM saas_entitlements
+       WHERE stripe_customer_id IS NOT NULL AND trim(stripe_customer_id) <> ''`
+    )
+    .all() as Array<{
+    email: string | null;
+    stripe_session_id: string;
+    stripe_customer_id: string;
+    consumed_by_user_id: string | null;
+  }>;
+
+  let synced = 0;
+  for (const ent of entitlements) {
+    const existing =
+      findSubscriptionByCustomerId(core, ent.stripe_customer_id) ??
+      findSubscriptionBySessionId(core, ent.stripe_session_id);
+    if (existing?.plan_id && existing.stripe_subscription_id) {
+      if (ent.consumed_by_user_id && !existing.user_id) {
+        linkSubscriptionToUser({
+          userId: ent.consumed_by_user_id,
+          stripeSessionId: ent.stripe_session_id,
+          stripeCustomerId: ent.stripe_customer_id,
+          email: ent.email,
+        });
+      }
+      continue;
+    }
+
+    const res = await fetch(
+      `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(ent.stripe_customer_id)}&status=all&limit=5`,
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    if (!res.ok) continue;
+    const body = (await res.json()) as {
+      data?: Array<Parameters<typeof applyStripeSubscriptionObject>[0]>;
+    };
+    const subs = body.data ?? [];
+    const preferred =
+      subs.find((s) => s.status === "active" || s.status === "trialing" || s.status === "past_due") ??
+      subs[0];
+    if (!preferred) {
+      // One-time payment / no subscription — still record plan from checkout session metadata if possible.
+      upsertSubscriptionFromCheckout({
+        stripeSessionId: ent.stripe_session_id,
+        email: ent.email,
+        stripeCustomerId: ent.stripe_customer_id,
+        status: "active",
+      });
+      if (ent.consumed_by_user_id) {
+        linkSubscriptionToUser({
+          userId: ent.consumed_by_user_id,
+          stripeSessionId: ent.stripe_session_id,
+          stripeCustomerId: ent.stripe_customer_id,
+          email: ent.email,
+        });
+      }
+      synced += 1;
+      continue;
+    }
+
+    const row = applyStripeSubscriptionObject(preferred);
+    if (!row) continue;
+    // Ensure session linkage for admin joins.
+    if (!row.stripe_session_id) {
+      core
+        .prepare(
+          `UPDATE saas_subscriptions
+           SET stripe_session_id=?, email=COALESCE(?, email), updated_at=datetime('now')
+           WHERE id=?`
+        )
+        .run(ent.stripe_session_id, ent.email, row.id);
+    }
+    if (ent.consumed_by_user_id) {
+      linkSubscriptionToUser({
+        userId: ent.consumed_by_user_id,
+        stripeSessionId: ent.stripe_session_id,
+        stripeCustomerId: ent.stripe_customer_id,
+        email: ent.email,
+      });
+    }
+    synced += 1;
+  }
+  return synced;
+}
+
