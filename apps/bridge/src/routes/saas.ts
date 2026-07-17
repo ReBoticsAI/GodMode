@@ -27,6 +27,12 @@ export function createSaasRouter(): Router {
   router.post("/checkout", requireSaas, limiter, async (req, res) => {
     const email =
       typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const plan =
+      typeof req.body?.plan === "string"
+        ? req.body.plan.trim()
+        : typeof req.body?.priceId === "string"
+          ? req.body.priceId.trim()
+          : "";
     const publicBase = config.web.publicUrl.replace(/\/$/, "");
     const successUrl =
       typeof req.body?.successUrl === "string" && req.body.successUrl.startsWith(publicBase)
@@ -40,6 +46,7 @@ export function createSaasRouter(): Router {
     try {
       const session = await createSaasCheckoutSession({
         email: email || undefined,
+        plan: plan || undefined,
         successUrl,
         cancelUrl,
       });

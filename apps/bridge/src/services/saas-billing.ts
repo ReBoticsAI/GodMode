@@ -8,6 +8,14 @@ import {
   type SaasEntitlement,
 } from "./saas-entitlements.js";
 
+export type SaasPlanPublic = {
+  id: string;
+  priceId: string;
+  label: string;
+  amountLabel: string;
+  interval: "month" | "year" | "one_time";
+};
+
 function stripeForm(params: Record<string, string>): URLSearchParams {
   const body = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -16,43 +24,85 @@ function stripeForm(params: Record<string, string>): URLSearchParams {
   return body;
 }
 
+export function listSaasPlans(): SaasPlanPublic[] {
+  return config.saas.plans.map((p) => ({
+    id: p.id,
+    priceId: p.priceId,
+    label: p.label,
+    amountLabel: p.amountLabel,
+    interval: p.interval,
+  }));
+}
+
+export function resolveSaasPlan(planIdOrPriceId?: string): SaasPlanPublic | undefined {
+  const plans = listSaasPlans();
+  if (!plans.length) return undefined;
+  const key = (planIdOrPriceId ?? "").trim();
+  if (!key) return plans[0];
+  return (
+    plans.find((p) => p.id === key || p.priceId === key) ??
+    undefined
+  );
+}
+
 export function getSaasPaywallPublicConfig(): {
   enabled: boolean;
   paymentsConfigured: boolean;
   priceConfigured: boolean;
   publishableKey: string | null;
   checkoutMode: "payment" | "subscription";
+  plans: SaasPlanPublic[];
 } {
   const billing = getPublicBillingConfig();
+  const plans = listSaasPlans();
   return {
     enabled: config.isSaas,
     paymentsConfigured: Boolean(resolveStripeSecretKey()),
-    priceConfigured: Boolean(config.saas.priceId),
+    priceConfigured: plans.length > 0,
     publishableKey: billing.publishableKey,
     checkoutMode: config.saas.checkoutMode,
+    plans,
   };
 }
 
 export async function createSaasCheckoutSession(opts: {
   email?: string;
+  plan?: string;
   successUrl: string;
   cancelUrl: string;
-}): Promise<{ url: string; sessionId: string }> {
+}): Promise<{ url: string; sessionId: string; planId: string; priceId: string }> {
   const secret = resolveStripeSecretKey();
-  const priceId = config.saas.priceId;
+  const plans = listSaasPlans();
   if (!secret) throw Object.assign(new Error("Stripe is not configured"), { status: 503 });
-  if (!priceId) {
-    throw Object.assign(new Error("STRIPE_SAAS_PRICE_ID is not configured"), { status: 503 });
+  if (!plans.length) {
+    throw Object.assign(
+      new Error("No SaaS plan configured (set STRIPE_SAAS_PRICE_MONTHLY / YEARLY)"),
+      { status: 503 }
+    );
+  }
+  const requested = (opts.plan ?? "").trim();
+  const plan = requested
+    ? plans.find((p) => p.id === requested || p.priceId === requested)
+    : plans[0];
+  if (!plan) {
+    throw Object.assign(new Error("Unknown plan"), { status: 400 });
   }
 
   const params: Record<string, string> = {
     mode: config.saas.checkoutMode,
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
-    "line_items[0][price]": priceId,
+    "line_items[0][price]": plan.priceId,
     "line_items[0][quantity]": "1",
     "metadata[godmode_saas]": "1",
+    "metadata[godmode_plan]": plan.id,
+    "subscription_data[metadata][godmode_saas]": "1",
+    "subscription_data[metadata][godmode_plan]": plan.id,
   };
+  if (config.saas.checkoutMode !== "subscription") {
+    delete params["subscription_data[metadata][godmode_saas]"];
+    delete params["subscription_data[metadata][godmode_plan]"];
+  }
   if (opts.email?.trim()) {
     params.customer_email = opts.email.trim().toLowerCase();
   }
@@ -76,7 +126,7 @@ export async function createSaasCheckoutSession(opts: {
       { status: 502 }
     );
   }
-  return { url: body.url, sessionId: body.id };
+  return { url: body.url, sessionId: body.id, planId: plan.id, priceId: plan.priceId };
 }
 
 /** Verify Checkout is paid and ensure a pending entitlement row exists. */

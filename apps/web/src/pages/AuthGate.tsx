@@ -69,8 +69,18 @@ export default function AuthGate() {
   const [paywallReady, setPaywallReady] = useState(false);
   const [refundAck, setRefundAck] = useState(false);
   const [checkoutMode, setCheckoutMode] = useState<"payment" | "subscription">(
-    "payment"
+    "subscription"
   );
+  const [plans, setPlans] = useState<
+    Array<{
+      id: string;
+      priceId: string;
+      label: string;
+      amountLabel: string;
+      interval: "month" | "year" | "one_time";
+    }>
+  >([]);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -85,6 +95,8 @@ export default function AuthGate() {
         return fetchSaasPaywall().then((p) => {
           setPaywallReady(p.paymentsConfigured && p.priceConfigured);
           setCheckoutMode(p.checkoutMode);
+          setPlans(p.plans ?? []);
+          setSelectedPlanId((prev) => prev || p.plans?.[0]?.id || "");
         });
       })
       .catch(() => {
@@ -174,11 +186,16 @@ export default function AuthGate() {
   };
 
   const continueToPayment = async () => {
+    if (!selectedPlanId) {
+      toast.error("Select a plan");
+      return;
+    }
     setBusy(true);
     try {
       const origin = window.location.origin;
       const { url } = await startSaasCheckout({
         email: email.trim() || undefined,
+        plan: selectedPlanId,
         successUrl: `${origin}/?saas_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/?saas_checkout=cancel`,
       });
@@ -234,11 +251,44 @@ export default function AuthGate() {
                   Hosted convenience — we run the infrastructure. Prefer to
                   self-host? The open-source local install is free.
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {checkoutMode === "subscription"
-                    ? "Billed as a subscription via Stripe Checkout."
-                    : "Billed as a one-time payment via Stripe Checkout."}
-                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Select a plan</p>
+                {plans.map((plan) => {
+                  const selected = selectedPlanId === plan.id;
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={`rounded-md border p-3 text-left transition-colors ${
+                        selected
+                          ? "border-foreground bg-muted/60"
+                          : "border-border bg-background hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-medium">{plan.label}</span>
+                        <span className="text-sm">{plan.amountLabel}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {plan.interval === "year"
+                          ? "Billed yearly via Stripe — about 2 months free vs monthly."
+                          : plan.interval === "month"
+                            ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
+                            : checkoutMode === "subscription"
+                              ? "Subscription billed via Stripe Checkout."
+                              : "One-time payment via Stripe Checkout."}
+                      </p>
+                    </button>
+                  );
+                })}
+                {plans.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No plans configured yet.
+                  </p>
+                )}
               </div>
 
               <div className="rounded-md border border-border p-3 text-left">
@@ -284,7 +334,7 @@ export default function AuthGate() {
 
               <Button
                 type="button"
-                disabled={busy || !paywallReady || !refundAck}
+                disabled={busy || !paywallReady || !refundAck || !selectedPlanId}
                 className="w-full"
                 onClick={() => void continueToPayment()}
               >
