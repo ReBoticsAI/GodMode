@@ -177,8 +177,9 @@ export async function buildPublicOfficialCatalog(
 
   const fallback = await fetchOfficialCatalog();
   return {
-    ...fallback,
-    version: Math.max(2, Number(fallback.version ?? 1)),
+    version: 2,
+    updatedAt: new Date().toISOString(),
+    repoBase: fallback.url,
     entries: fallback.entries.map((e) => ({
       ...e,
       priceCents: 0,
