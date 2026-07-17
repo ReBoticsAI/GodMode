@@ -61,22 +61,6 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
-    id: "marketplace-stripe-webhook",
-    methods: ["POST"],
-    pathPattern: "/api/marketplace/commerce/stripe/webhook",
-    rationale:
-      "Stripe webhook for Marketplace orders; durable order/entitlement updates after signature verify.",
-    authenticatedDomainMutations: "none",
-  },
-  {
-    id: "marketplace-paypal-webhook",
-    methods: ["POST"],
-    pathPattern: "/api/marketplace/commerce/paypal/webhook",
-    rationale:
-      "PayPal webhook for Marketplace orders and dispute→ban; durable order updates after verify.",
-    authenticatedDomainMutations: "none",
-  },
-  {
     id: "marketplace-official-catalog-public",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/catalog/official/public",
