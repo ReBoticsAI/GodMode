@@ -26,11 +26,16 @@ Open http://localhost:5173 and sign up with email and password.
 
 ## Hub (production SaaS)
 
+Official paid multi-tenant hub uses `INSTALLATION_SURFACE=saas` and a Stripe
+paywall: **Sign up** → choose plan → Checkout → create account (no invite codes).
+Self-hosted family/team hubs use `private_hub` and skip the paywall.
+
 1. Copy `deploy/.env.production.example` → `deploy/.env.production` and set:
    - `WEB_PUBLIC_URL`, `AUTH_PUBLIC_URL`, `WEB_ORIGIN` to your public domain
    - `AUTH_SESSION_SECRET` (32+ random bytes)
-   - `AUTH_ALLOW_SIGNUP=false` or `AUTH_INVITE_CODES` for controlled onboarding
-   - Stripe keys via **Admin → Billing** after first login (or `STRIPE_SECRET_KEY` env fallback)
+   - `INITIAL_ADMINS` for your operator account (not paywalled)
+   - `STRIPE_SECRET_KEY`, `STRIPE_SAAS_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`
+   - Keep `AUTH_ALLOW_SIGNUP=false` — SaaS signup is unlocked only after Checkout
 2. Resolve the desired stable release to its signed immutable GHCR digest, set
    `GODMODE_IMAGE` in the host environment, then pull and run:
 
@@ -41,8 +46,32 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
+4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` →
+   `checkout.session.completed`.
 
-**Security gate:** Do not expose a hub publicly until `AUTH_ALLOW_ANONYMOUS=false`, invite-only signup, and CORS locked to `WEB_ORIGIN`.
+**Security gate:** Do not expose a hub publicly until `AUTH_ALLOW_ANONYMOUS=false`,
+SaaS paywall or invite-only signup, and CORS locked to `WEB_ORIGIN`.
+
+### Test SaaS beside a private hub (e.g. Z440)
+
+Run a second compose project so family data stays on `private_hub`:
+
+```bash
+cp deploy/.env.saas-staging.example deploy/.env.saas-staging
+# edit image digest (or omit to build from tree), secrets, Stripe test keys, SAAS_HOST_PORT=9080
+cd deploy
+docker compose -p godmode-saas -f docker-compose.saas-staging.yml --env-file .env.saas-staging up -d --build
+# after a CI image digest is set in GODMODE_IMAGE, use pull instead of --build
+stripe listen --forward-to http://127.0.0.1:9080/api/saas/stripe/webhook
+```
+
+Open `http://<host>:9080`, sign in as `INITIAL_ADMINS`, then in a private window:
+Sign up → Continue to payment → return → create account.
+
+Prefer a CI image over a local build: after merge to `main`, **Publish SaaS image**
+pushes `ghcr.io/<org>/godmode:saas-staging` (and `sha-<commit>`). Set
+`GODMODE_IMAGE` to that digest in `.env.saas-staging` and `up -d` without `--build`.
+You can also run the workflow manually from Actions without waiting for nightly.
 
 ### Hub smoke test
 

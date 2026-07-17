@@ -7,8 +7,8 @@ is no hand-maintained route baseline.
 
 At the completion baseline, `npm run audit:kernel:strict` reports:
 
-- **15 mutation routes:** 3 kernel Record routes, 2 kernel action routes,
-  5 domain routes that delegate to the kernel, and 5 protocol exceptions;
+- **16 mutation routes:** 3 kernel Record routes, 2 kernel action routes,
+  5 domain routes that delegate to the kernel, and 6 protocol exceptions;
 - **0 legacy routes, 0 legacy callers, and 0 unmatched mutation callers** in
   web, scripts, connectors, or checked-in plugins;
 - **0 direct SQL or filesystem writes** in audited entry points;
@@ -36,10 +36,14 @@ and adapter implementations are the intentional write owners.
 
 ## Specialized protocol exceptions
 
-The mutation-route audit permits exactly five narrow exceptions:
+The mutation-route audit permits exactly six narrow POST exceptions in the
+specialized set below (plus health/WebSocket/DM binary transports in the full
+registry):
 
 - `POST /api/auth/login` — credential verification and session-cookie creation;
 - `POST /api/auth/logout` — session-cookie invalidation;
+- `POST /api/saas/checkout` — Stripe Checkout Session creation for SaaS paywall
+  (entitlement recorded after verified payment);
 - `POST /api/analytics/timeseries/query` — read-only analytical query with a
   structured POST body;
 - `POST /api/federation/sc/:` — authenticated external charting command

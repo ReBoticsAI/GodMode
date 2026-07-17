@@ -375,6 +375,22 @@ export function initCoreDb(): CoreDatabase {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Paid Checkout → one signup entitlement (INSTALLATION_SURFACE=saas). No invite codes.
+    CREATE TABLE IF NOT EXISTS saas_entitlements (
+      id TEXT PRIMARY KEY,
+      email TEXT,
+      stripe_session_id TEXT NOT NULL UNIQUE,
+      stripe_customer_id TEXT,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'consumed', 'revoked')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at TEXT,
+      consumed_by_user_id TEXT REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS saas_entitlements_email_idx
+      ON saas_entitlements(email);
+    CREATE INDEX IF NOT EXISTS saas_entitlements_status_idx
+      ON saas_entitlements(status);
+
     -- Cross-tenant registry for opt-in collaborative chat sessions. A session's
     -- chat + artifacts live in the INITIATOR's tenant DB (home_tenant_id); other
     -- participants route their reads/writes to that home DB. Stored in core so it

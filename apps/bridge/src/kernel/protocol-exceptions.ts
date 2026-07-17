@@ -37,6 +37,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-checkout-session",
+    methods: ["POST"],
+    pathPattern: "/api/saas/checkout",
+    rationale:
+      "Stripe Checkout Session creation for SaaS paywall; durable entitlement is recorded after verified payment (webhook or session status).",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "analytics-read-query",
     methods: ["POST"],
     pathPattern: "/api/analytics/timeseries/query",

@@ -35,6 +35,7 @@ import { createWikiRouter } from "./routes/wiki.js";
 import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
+import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
 import { setDispatcherDeps } from "./services/hook-dispatcher.js";
@@ -309,6 +310,14 @@ app.use(
     credentials: true,
   })
 );
+// Stripe webhooks need the raw body — mount before express.json().
+if (config.isSaas) {
+  app.post(
+    "/api/saas/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    saasStripeWebhookHandler
+  );
+}
 app.use(express.json({ limit: "25mb" }));
 app.use(legacyEndpointTelemetry(coreDb));
 
@@ -316,12 +325,17 @@ app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     deploymentMode: config.deploymentMode,
+    installationSurface: config.installationSurface,
     hub: config.isHub,
     client: config.isClient,
+    saas: config.isSaas,
   });
 });
 app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
+if (config.isSaas) {
+  app.use("/api/saas", createSaasRouter());
+}
 app.use("/api/marketplace", createMarketplaceRouter());
 app.use("/api/marketplace/catalog", createMarketplaceCatalogRouter());
 app.use("/api/network", createNetworkRouter());
