@@ -89,6 +89,23 @@ import {
   archiveMarketplaceListing,
   publishMarketplaceListing,
 } from "../../services/marketplace-listings.js";
+import {
+  acceptMarketplaceTos,
+  ensureSellerAccount,
+  getMarketplaceOrder,
+  getPublicCommerceConfig,
+  listOrdersForBuyer,
+  MarketplaceCommerceError,
+  updateSellerPayout,
+} from "../../services/marketplace-commerce.js";
+import {
+  capturePayPalOrder,
+  confirmCryptoPayment,
+  createOrderForListing,
+  createOrderForOfficialCatalogEntry,
+  startMarketplaceCheckout,
+} from "../../services/marketplace-payments.js";
+import { getOfficialCatalogEntryPrice } from "../../services/marketplace-official-catalog.js";
 import { exportEntity, importEntity, type PortableBundle } from "../../services/portability.js";
 import {
   addGroupMember,
@@ -765,13 +782,20 @@ export const catalogInstallAdapter: RecordAdapter = {
       );
     },
     install_entry(_db, _def, _id, input, ctx) {
-      return installCatalogEntry(ctx.data!.coreDb, ctx.data!.tenantDb, {
-        userId: requireUser(ctx),
-        tenantId: requireTenant(ctx),
-        entryId: requiredText(input, "entry_id"),
-        sourceCatalog:
-          typeof input.source_catalog === "string" ? input.source_catalog : undefined,
-      });
+      try {
+        return installCatalogEntry(ctx.data!.coreDb, ctx.data!.tenantDb, {
+          userId: requireUser(ctx),
+          tenantId: requireTenant(ctx),
+          entryId: requiredText(input, "entry_id"),
+          sourceCatalog:
+            typeof input.source_catalog === "string" ? input.source_catalog : undefined,
+        });
+      } catch (err) {
+        if (err instanceof MarketplaceCommerceError) {
+          throw httpError(err.status, err.message);
+        }
+        throw err;
+      }
     },
     async install_plugin(_db, _def, _id, input, ctx) {
       await installDiscoveredPlugin(
@@ -843,63 +867,90 @@ export const marketplaceListingAdapter: RecordAdapter = {
   },
   actions: {
     acquire(coreDb, _def, id, _input, ctx) {
-      const listing = coreDb
-        .prepare(
-          `SELECT * FROM marketplace_listings
-           WHERE id=? AND status='active' AND visibility='public'`
-        )
-        .get(id) as Record<string, unknown> | undefined;
-      if (!listing) throw httpError(404, "Listing not found");
-      if (listing.delivery_mode !== "live") {
-        return acquireCloneListing(
-          { core: coreDb, buyerTenant: ctx.data!.tenantDb },
-          {
-            listingId: id,
-            buyerUserId: requireUser(ctx),
-            buyerTenantId: requireTenant(ctx),
-            idempotencyKey: ctx.idempotencyKey!,
-          }
-        );
+      try {
+        const listing = coreDb
+          .prepare(
+            `SELECT * FROM marketplace_listings
+             WHERE id=? AND status='active' AND visibility='public'`
+          )
+          .get(id) as Record<string, unknown> | undefined;
+        if (!listing) throw httpError(404, "Listing not found");
+        if (listing.delivery_mode !== "live") {
+          return acquireCloneListing(
+            { core: coreDb, buyerTenant: ctx.data!.tenantDb },
+            {
+              listingId: id,
+              buyerUserId: requireUser(ctx),
+              buyerTenantId: requireTenant(ctx),
+              idempotencyKey: ctx.idempotencyKey!,
+            }
+          );
+        }
+        return acquireLiveListing(coreDb, {
+          listing,
+          buyerUserId: requireUser(ctx),
+          buyerTenantId: requireTenant(ctx),
+        });
+      } catch (err) {
+        if (err instanceof MarketplaceCommerceError) {
+          throw httpError(err.status, err.message);
+        }
+        throw err;
       }
-      return acquireLiveListing(coreDb, {
-        listing,
-        buyerUserId: requireUser(ctx),
-        buyerTenantId: requireTenant(ctx),
-      });
     },
     acquire_live(db, def, id, input, ctx) {
       return marketplaceListingAdapter.actions!.acquire(db, def, id, input, ctx);
     },
     publish(_db, def, _id, input, ctx) {
-      const row = publishMarketplaceListing(ctx.data!.coreDb, ctx.data!.tenantDb, {
-        sellerUserId: requireUser(ctx),
-        sellerTenantId: requireTenant(ctx),
-        kind: requiredText(input, "kind") as never,
-        resourceId:
-          typeof input.resource_id === "string" ? input.resource_id : undefined,
-        title: typeof input.title === "string" ? input.title : undefined,
-        description:
-          typeof input.description === "string" ? input.description : undefined,
-        priceCredits:
-          typeof input.price_credits === "number" ? input.price_credits : undefined,
-        deliveryMode:
-          typeof input.delivery_mode === "string" ? (input.delivery_mode as never) : undefined,
-        pricingModel:
-          typeof input.pricing_model === "string" ? (input.pricing_model as never) : undefined,
-        pricePeriod:
-          typeof input.price_period === "string" ? input.price_period : undefined,
-        meterUnit: typeof input.meter_unit === "string" ? input.meter_unit : undefined,
-        meterRate: typeof input.meter_rate === "number" ? input.meter_rate : undefined,
-        license: typeof input.license === "string" ? input.license : undefined,
-        inferenceEndpointId:
-          typeof input.inference_endpoint_id === "string"
-            ? input.inference_endpoint_id
+      try {
+        const row = publishMarketplaceListing(ctx.data!.coreDb, ctx.data!.tenantDb, {
+          sellerUserId: requireUser(ctx),
+          sellerTenantId: requireTenant(ctx),
+          kind: requiredText(input, "kind") as never,
+          resourceId:
+            typeof input.resource_id === "string" ? input.resource_id : undefined,
+          title: typeof input.title === "string" ? input.title : undefined,
+          description:
+            typeof input.description === "string" ? input.description : undefined,
+          priceCredits:
+            typeof input.price_credits === "number" ? input.price_credits : undefined,
+          priceCents:
+            typeof input.price_cents === "number"
+              ? input.price_cents
+              : typeof input.price_credits === "number"
+                ? input.price_credits
+                : undefined,
+          currency: typeof input.currency === "string" ? input.currency : undefined,
+          sellerKind:
+            input.seller_kind === "official" || input.seller_kind === "user"
+              ? input.seller_kind
+              : undefined,
+          catalogEntryId:
+            typeof input.catalog_entry_id === "string" ? input.catalog_entry_id : undefined,
+          deliveryMode:
+            typeof input.delivery_mode === "string" ? (input.delivery_mode as never) : undefined,
+          pricingModel:
+            typeof input.pricing_model === "string" ? (input.pricing_model as never) : undefined,
+          pricePeriod:
+            typeof input.price_period === "string" ? input.price_period : undefined,
+          meterUnit: typeof input.meter_unit === "string" ? input.meter_unit : undefined,
+          meterRate: typeof input.meter_rate === "number" ? input.meter_rate : undefined,
+          license: typeof input.license === "string" ? input.license : undefined,
+          inferenceEndpointId:
+            typeof input.inference_endpoint_id === "string"
+              ? input.inference_endpoint_id
+              : undefined,
+          bundleChildren: Array.isArray(input.bundle_children)
+            ? (input.bundle_children as PortableBundle[])
             : undefined,
-        bundleChildren: Array.isArray(input.bundle_children)
-          ? (input.bundle_children as PortableBundle[])
-          : undefined,
-      });
-      return record(def, row);
+        });
+        return record(def, row);
+      } catch (err) {
+        if (err instanceof MarketplaceCommerceError) {
+          throw httpError(err.status, err.message);
+        }
+        throw err;
+      }
     },
     archive(_db, def, id, _input, ctx) {
       return record(
@@ -953,6 +1004,177 @@ export const marketplaceEntitlementAdapter: RecordAdapter = {
     cancel(_db, _def, id, _input, ctx) {
       cancelEntitlement(ctx.data!.coreDb, id, requireUser(ctx));
       return { ok: true };
+    },
+  },
+};
+
+function commerceHttpError(err: unknown): never {
+  if (err instanceof MarketplaceCommerceError) {
+    throw httpError(err.status, err.message);
+  }
+  throw err;
+}
+
+export const marketplaceOrderAdapter: RecordAdapter = {
+  id: "marketplace_order_read",
+  list(_db, def, query, ctx) {
+    return result(def, listOrdersForBuyer(ctx.data!.coreDb, requireUser(ctx)), query);
+  },
+  get(_db, def, id, ctx) {
+    const row = getMarketplaceOrder(ctx.data!.coreDb, id);
+    if (!row || String(row.buyer_user_id) !== requireUser(ctx)) return null;
+    return record(def, row);
+  },
+  actions: {
+    async start_checkout(_db, def, _id, input, ctx) {
+      try {
+        const provider = requiredText(input, "provider") as "stripe" | "paypal" | "crypto";
+        if (!["stripe", "paypal", "crypto"].includes(provider)) {
+          throw httpError(400, "provider must be stripe, paypal, or crypto");
+        }
+        const successUrl = requiredText(input, "success_url");
+        const cancelUrl = requiredText(input, "cancel_url");
+        const core = ctx.data!.coreDb;
+        const userId = requireUser(ctx);
+        const tenantId = requireTenant(ctx);
+
+        let order: Record<string, unknown>;
+        if (typeof input.listing_id === "string" && input.listing_id) {
+          const listing = core
+            .prepare(
+              `SELECT * FROM marketplace_listings WHERE id=? AND status='active'`
+            )
+            .get(input.listing_id) as Record<string, unknown> | undefined;
+          if (!listing) throw httpError(404, "Listing not found");
+          order = createOrderForListing(core, {
+            listing,
+            buyerUserId: userId,
+            buyerTenantId: tenantId,
+            provider,
+          });
+          const sellerAcct =
+            String(listing.seller_kind) === "user"
+              ? ensureSellerAccount(core, String(listing.seller_user_id))
+              : null;
+          const checkout = await startMarketplaceCheckout(core, {
+            orderId: String(order.id),
+            successUrl,
+            cancelUrl,
+            stripeConnectAccountId:
+              typeof sellerAcct?.stripe_connect_account_id === "string"
+                ? sellerAcct.stripe_connect_account_id
+                : null,
+            paypalMerchantId:
+              typeof sellerAcct?.paypal_merchant_id === "string"
+                ? sellerAcct.paypal_merchant_id
+                : null,
+          });
+          return { order: record(def, getMarketplaceOrder(core, String(order.id))!), checkout };
+        }
+
+        const entryId = requiredText(input, "catalog_entry_id");
+        const priced = getOfficialCatalogEntryPrice(core, entryId);
+        if (!priced) throw httpError(404, "Official catalog entry not found");
+        order = createOrderForOfficialCatalogEntry(core, {
+          entryId,
+          priceCents: priced.priceCents,
+          currency: priced.currency,
+          buyerUserId: userId,
+          buyerTenantId: tenantId,
+          provider,
+          listingId: priced.listingId,
+        });
+        const checkout = await startMarketplaceCheckout(core, {
+          orderId: String(order.id),
+          successUrl,
+          cancelUrl,
+        });
+        return { order: record(def, getMarketplaceOrder(core, String(order.id))!), checkout };
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    async capture_paypal(_db, def, id, _input, ctx) {
+      try {
+        const order = getMarketplaceOrder(ctx.data!.coreDb, id);
+        if (!order || String(order.buyer_user_id) !== requireUser(ctx)) {
+          throw httpError(404, "Order not found");
+        }
+        const paypalId = String(order.provider_ref ?? "");
+        if (!paypalId) throw httpError(400, "Missing PayPal order id");
+        const updated = await capturePayPalOrder(ctx.data!.coreDb, paypalId);
+        return record(def, updated);
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    confirm_crypto(_db, def, id, input, ctx) {
+      try {
+        const updated = confirmCryptoPayment(ctx.data!.coreDb, {
+          orderId: id,
+          txHash: requiredText(input, "tx_hash"),
+          buyerUserId: requireUser(ctx),
+        });
+        return record(def, updated);
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+  },
+};
+
+export const marketplaceSellerAccountAdapter: RecordAdapter = {
+  id: "marketplace_seller_account_read",
+  list(_db, def, query, ctx) {
+    const row = ensureSellerAccount(ctx.data!.coreDb, requireUser(ctx));
+    return result(def, [row], query);
+  },
+  get(_db, def, id, ctx) {
+    const row = ensureSellerAccount(ctx.data!.coreDb, requireUser(ctx));
+    if (String(row.id) !== id && String(row.user_id) !== id) return null;
+    return record(def, row);
+  },
+  actions: {
+    accept_tos(_db, _def, _id, _input, ctx) {
+      try {
+        return acceptMarketplaceTos(ctx.data!.coreDb, requireUser(ctx));
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    connect_payout(_db, def, _id, input, ctx) {
+      try {
+        const pref = input.payout_preference;
+        const updated = updateSellerPayout(ctx.data!.coreDb, {
+          userId: requireUser(ctx),
+          stripeConnectAccountId:
+            typeof input.stripe_connect_account_id === "string"
+              ? input.stripe_connect_account_id
+              : input.stripe_connect_account_id === null
+                ? null
+                : undefined,
+          paypalMerchantId:
+            typeof input.paypal_merchant_id === "string"
+              ? input.paypal_merchant_id
+              : input.paypal_merchant_id === null
+                ? null
+                : undefined,
+          metamaskAddress:
+            typeof input.metamask_address === "string"
+              ? input.metamask_address
+              : input.metamask_address === null
+                ? null
+                : undefined,
+          payoutPreference:
+            pref === "stripe" || pref === "paypal" || pref === "crypto" ? pref : undefined,
+        });
+        return record(def, updated);
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    commerce_config(_db, _def, _id, _input, _ctx) {
+      return getPublicCommerceConfig();
     },
   },
 };
@@ -1468,6 +1690,8 @@ export const platformActionAdapters = [
   catalogInstallAdapter,
   marketplaceListingAdapter,
   marketplaceEntitlementAdapter,
+  marketplaceOrderAdapter,
+  marketplaceSellerAccountAdapter,
   bridgeConnectionAdapter,
   peerConnectionAdapter,
   inferenceEndpointAdapter,
@@ -1488,6 +1712,8 @@ const OBJECT_TYPE_BY_ADAPTER_ID: Record<string, string> = {
   catalog_install_read: "CatalogInstall",
   marketplace_listing_read: "MarketplaceListing",
   marketplace_entitlement_read: "MarketplaceEntitlement",
+  marketplace_order_read: "MarketplaceOrder",
+  marketplace_seller_account_read: "MarketplaceSellerAccount",
   bridge_connection_read: "BridgeConnection",
   peer_connection_read: "PeerConnection",
   inference_endpoint_read: "InferenceEndpoint",
@@ -1818,6 +2044,10 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
           title: { type: "string" },
           description: { type: "string" },
           price_credits: { type: "number" },
+          price_cents: { type: "number" },
+          currency: { type: "string" },
+          seller_kind: { enum: ["official", "user"] },
+          catalog_entry_id: { type: "string" },
           delivery_mode: { enum: ["clone", "live"] },
           pricing_model: { type: "string" },
           price_period: { type: "string" },
@@ -1852,6 +2082,56 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
     action("cancel", {
       effect: "destructive",
       confirmation: { required: true },
+    }),
+  ],
+  MarketplaceOrder: [
+    action("start_checkout", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+      inputSchema: objectSchema(
+        {
+          provider: { enum: ["stripe", "paypal", "crypto"] },
+          listing_id: { type: "string" },
+          catalog_entry_id: { type: "string" },
+          success_url: { type: "string" },
+          cancel_url: { type: "string" },
+        },
+        ["provider", "success_url", "cancel_url"]
+      ),
+    }),
+    action("capture_paypal", {
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+    }),
+    action("confirm_crypto", {
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+      inputSchema: objectSchema({ tx_hash: { type: "string" } }, ["tx_hash"]),
+    }),
+  ],
+  MarketplaceSellerAccount: [
+    action("accept_tos", {
+      target: "collection",
+      confirmation: { required: true },
+      idempotency: { required: true },
+    }),
+    action("connect_payout", {
+      target: "collection",
+      confirmation: { required: true },
+      inputSchema: objectSchema({
+        stripe_connect_account_id: { type: ["string", "null"] },
+        paypal_merchant_id: { type: ["string", "null"] },
+        metamask_address: { type: ["string", "null"] },
+        payout_preference: { enum: ["stripe", "paypal", "crypto"] },
+      }),
+    }),
+    action("commerce_config", {
+      target: "collection",
+      effect: "read",
     }),
   ],
   BridgeConnection: [

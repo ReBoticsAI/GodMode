@@ -2804,6 +2804,9 @@ export interface MarketplaceListing {
   title: string;
   description: string | null;
   price_credits: number;
+  price_cents?: number;
+  currency?: string;
+  seller_kind?: string;
   visibility: string;
   status: string;
   delivery_mode?: string;
@@ -2863,6 +2866,9 @@ export interface CatalogEntry {
   tags?: string[];
   sourceCatalog?: string;
   sourceName?: string;
+  priceCents?: number;
+  currency?: string;
+  listingId?: string;
 }
 
 export interface DiscoveredPlugin {
@@ -3240,6 +3246,9 @@ export function createMarketplaceListing(body: {
   title?: string;
   description?: string;
   priceCredits?: number;
+  priceCents?: number;
+  currency?: string;
+  sellerKind?: "official" | "user";
   deliveryMode?: "clone" | "live";
   pricingModel?: "one_time" | "subscription" | "metered";
   pricePeriod?: string;
@@ -3255,6 +3264,9 @@ export function createMarketplaceListing(body: {
     title: body.title,
     description: body.description,
     price_credits: body.priceCredits,
+    price_cents: body.priceCents,
+    currency: body.currency,
+    seller_kind: body.sellerKind,
     delivery_mode: body.deliveryMode,
     pricing_model: body.pricingModel,
     price_period: body.pricePeriod,
@@ -3264,6 +3276,95 @@ export function createMarketplaceListing(body: {
     inference_endpoint_id: body.inferenceEndpointId,
     bundle_children: body.bundleChildren,
   }, undefined, true);
+}
+
+export function acceptMarketplaceTos() {
+  return actionDto<{ tosVersion: string; acceptedAt: string }>(
+    "MarketplaceSellerAccount",
+    "accept_tos",
+    {},
+    undefined,
+    true
+  );
+}
+
+export function connectMarketplacePayout(body: {
+  stripeConnectAccountId?: string | null;
+  paypalMerchantId?: string | null;
+  metamaskAddress?: string | null;
+  payoutPreference?: "stripe" | "paypal" | "crypto";
+}) {
+  return actionDto<Record<string, unknown>>(
+    "MarketplaceSellerAccount",
+    "connect_payout",
+    {
+      stripe_connect_account_id: body.stripeConnectAccountId,
+      paypal_merchant_id: body.paypalMerchantId,
+      metamask_address: body.metamaskAddress,
+      payout_preference: body.payoutPreference,
+    },
+    undefined,
+    true
+  );
+}
+
+export function fetchMarketplaceCommerceConfig() {
+  return actionDto<{
+    tosVersion: string;
+    platformFeeBps: number;
+    providers: { stripe: boolean; paypal: boolean; crypto: boolean };
+    cryptoTreasuryAddress: string | null;
+    cryptoChainId: number;
+    cryptoAsset: string;
+  }>("MarketplaceSellerAccount", "commerce_config", {});
+}
+
+export function startMarketplaceCheckout(body: {
+  provider: "stripe" | "paypal" | "crypto";
+  listingId?: string;
+  catalogEntryId?: string;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return actionDto<{
+    order: { id: string; status: string };
+    checkout: {
+      provider: string;
+      url?: string;
+      sessionId?: string;
+      paypalOrderId?: string;
+      crypto?: {
+        treasuryAddress: string;
+        chainId: number;
+        asset: string;
+        amountCents: number;
+        orderId: string;
+        memo: string;
+      };
+    };
+  }>(
+    "MarketplaceOrder",
+    "start_checkout",
+    {
+      provider: body.provider,
+      listing_id: body.listingId,
+      catalog_entry_id: body.catalogEntryId,
+      success_url: body.successUrl,
+      cancel_url: body.cancelUrl,
+    },
+    undefined,
+    true
+  );
+}
+
+export function confirmMarketplaceCryptoPayment(orderId: string, txHash: string) {
+  return actionDto<Record<string, unknown>>(
+    "MarketplaceOrder",
+    "confirm_crypto",
+    { tx_hash: txHash },
+    orderId,
+    true
+  );
 }
 
 export function fetchMyMarketplaceListings() {

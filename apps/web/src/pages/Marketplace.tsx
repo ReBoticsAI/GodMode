@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  acceptMarketplaceTos,
   addCatalogSource,
+  confirmMarketplaceCryptoPayment,
+  connectMarketplacePayout,
   fetchInstalledCatalog,
+  fetchMarketplaceCommerceConfig,
   fetchOfficialCatalog,
   fetchUnofficialCatalog,
   installCatalogEntry,
@@ -9,6 +13,7 @@ import {
   registerLocalPlugin,
   removeCatalogSource,
   removeLocalPlugin,
+  startMarketplaceCheckout,
   uninstallWorkspacePlugin,
   type CatalogEntry,
   type DiscoveredPlugin,
@@ -42,17 +47,28 @@ function reloadAfterPluginChange(built?: boolean) {
   window.setTimeout(() => window.location.reload(), 400);
 }
 
+function formatPrice(entry: CatalogEntry): string {
+  const cents = Number(entry.priceCents ?? 0);
+  if (cents <= 0) return "Free";
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 function EntryCard({
   entry,
   installed,
   onInstall,
+  onBuy,
   installing,
+  buying,
 }: {
   entry: CatalogEntry;
   installed: boolean;
   onInstall: () => void;
+  onBuy: (provider: "stripe" | "paypal" | "crypto") => void;
   installing: boolean;
+  buying: boolean;
 }) {
+  const paid = Number(entry.priceCents ?? 0) > 0;
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -64,6 +80,7 @@ function EntryCard({
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-1">
+            <Badge variant={paid ? "default" : "secondary"}>{formatPrice(entry)}</Badge>
             {entry.sourceName ? (
               <Badge variant="outline">{entry.sourceName}</Badge>
             ) : null}
@@ -82,9 +99,41 @@ function EntryCard({
             ))}
           </div>
         ) : null}
-        <Button size="sm" onClick={onInstall} disabled={installing || installed}>
-          {installed ? "Installed" : installing ? "Installing…" : "Install"}
-        </Button>
+        {paid && !installed ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onBuy("stripe")} disabled={buying || installing}>
+              {buying ? "Starting…" : "Buy (Card)"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onBuy("paypal")}
+              disabled={buying || installing}
+            >
+              PayPal
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onBuy("crypto")}
+              disabled={buying || installing}
+            >
+              Crypto
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onInstall}
+              disabled={installing || buying}
+            >
+              {installing ? "Installing…" : "Install if owned"}
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" onClick={onInstall} disabled={installing || installed}>
+            {installed ? "Installed" : installing ? "Installing…" : "Install"}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -170,6 +219,19 @@ export default function MarketplacePage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [addingLocal, setAddingLocal] = useState(false);
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [cryptoPrompt, setCryptoPrompt] = useState<{
+    orderId: string;
+    treasuryAddress: string;
+    amountCents: number;
+    asset: string;
+    chainId: number;
+  } | null>(null);
+  const [cryptoTxHash, setCryptoTxHash] = useState("");
+  const [metamaskAddress, setMetamaskAddress] = useState("");
+  const [paypalMerchantId, setPaypalMerchantId] = useState("");
+  const [stripeConnectId, setStripeConnectId] = useState("");
+  const [tosVersion, setTosVersion] = useState("1");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -197,6 +259,9 @@ export default function MarketplacePage() {
 
   useEffect(() => {
     void reload();
+    void fetchMarketplaceCommerceConfig()
+      .then((cfg) => setTosVersion(cfg.tosVersion))
+      .catch(() => undefined);
   }, [reload]);
 
   const filterEntries = (entries: CatalogEntry[]) => {
@@ -242,6 +307,87 @@ export default function MarketplacePage() {
       toast.error(err instanceof Error ? err.message : "Install failed");
     } finally {
       setInstallingId(null);
+    }
+  };
+
+  const handleBuy = async (
+    entry: CatalogEntry,
+    provider: "stripe" | "paypal" | "crypto"
+  ) => {
+    setBuyingId(entry.id);
+    try {
+      await acceptMarketplaceTos();
+      const origin = window.location.origin;
+      const result = await startMarketplaceCheckout({
+        provider,
+        catalogEntryId: entry.id,
+        listingId: entry.listingId,
+        successUrl: `${origin}/marketplace?paid=1&entry=${encodeURIComponent(entry.id)}`,
+        cancelUrl: `${origin}/marketplace?canceled=1`,
+      });
+      if (result.checkout.url) {
+        window.location.href = result.checkout.url;
+        return;
+      }
+      if (result.checkout.crypto) {
+        setCryptoPrompt({
+          orderId: result.checkout.crypto.orderId,
+          treasuryAddress: result.checkout.crypto.treasuryAddress,
+          amountCents: result.checkout.crypto.amountCents,
+          asset: result.checkout.crypto.asset,
+          chainId: result.checkout.crypto.chainId,
+        });
+        toast.message("Send crypto to the treasury address, then paste the tx hash.");
+        return;
+      }
+      toast.success("Order ready");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setBuyingId(null);
+    }
+  };
+
+  const handleConfirmCrypto = async () => {
+    if (!cryptoPrompt || !cryptoTxHash.trim()) return;
+    try {
+      await confirmMarketplaceCryptoPayment(cryptoPrompt.orderId, cryptoTxHash.trim());
+      toast.success("Payment recorded — you can install now");
+      setCryptoPrompt(null);
+      setCryptoTxHash("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not confirm payment");
+    }
+  };
+
+  const handleAcceptTos = async () => {
+    try {
+      const result = await acceptMarketplaceTos();
+      setTosVersion(result.tosVersion);
+      toast.success(`Accepted Marketplace ToS v${result.tosVersion}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ToS acceptance failed");
+    }
+  };
+
+  const handleConnectPayout = async () => {
+    try {
+      await acceptMarketplaceTos();
+      await connectMarketplacePayout({
+        stripeConnectAccountId: stripeConnectId.trim() || null,
+        paypalMerchantId: paypalMerchantId.trim() || null,
+        metamaskAddress: metamaskAddress.trim() || null,
+        payoutPreference: metamaskAddress.trim()
+          ? "crypto"
+          : paypalMerchantId.trim()
+            ? "paypal"
+            : stripeConnectId.trim()
+              ? "stripe"
+              : undefined,
+      });
+      toast.success("Seller payout methods saved (10% platform fee on sales)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save payout methods");
     }
   };
 
@@ -316,13 +462,36 @@ export default function MarketplacePage() {
     <Page>
       <PageHeader
         title="Marketplace"
-        description="Install domain packs from catalogs or add private plugin folders from your machine."
+        description="Install Official and community packs. Paid Official items go 100% to ReBotics; user listings take a 10% platform fee. Chargebacks ban Marketplace access."
         actions={
           <Button variant="outline" size="sm" render={<a href={OFFICIAL_REPO} target="_blank" rel="noreferrer" />}>
             Submit to Official
           </Button>
         }
       />
+
+      {cryptoPrompt ? (
+        <Card className="mb-4 border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="text-base">Complete crypto payment</CardTitle>
+            <CardDescription>
+              Send {(cryptoPrompt.amountCents / 100).toFixed(2)} {cryptoPrompt.asset} (chain{" "}
+              {cryptoPrompt.chainId}) to {cryptoPrompt.treasuryAddress}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={cryptoTxHash}
+              onChange={(e) => setCryptoTxHash(e.target.value)}
+              placeholder="0x… transaction hash"
+            />
+            <Button onClick={() => void handleConfirmCrypto()}>Confirm payment</Button>
+            <Button variant="ghost" onClick={() => setCryptoPrompt(null)}>
+              Cancel
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="mb-4 flex gap-2">
         <Input
@@ -341,6 +510,7 @@ export default function MarketplacePage() {
           <TabsTrigger value="official">Official</TabsTrigger>
           <TabsTrigger value="unofficial">Unofficial</TabsTrigger>
           <TabsTrigger value="installed">Installed</TabsTrigger>
+          <TabsTrigger value="seller">Sell</TabsTrigger>
         </TabsList>
 
         <TabsContent value="official" className="mt-4">
@@ -359,7 +529,9 @@ export default function MarketplacePage() {
                   entry={entry}
                   installed={installedIds.has(entry.id)}
                   installing={installingId === entry.id}
+                  buying={buyingId === entry.id}
                   onInstall={() => void handleInstall(entry)}
+                  onBuy={(provider) => void handleBuy(entry, provider)}
                 />
               ))}
             </div>
@@ -489,7 +661,9 @@ export default function MarketplacePage() {
                     entry={entry}
                     installed={installedIds.has(entry.id)}
                     installing={installingId === entry.id}
+                    buying={false}
                     onInstall={() => void handleInstall(entry)}
+                    onBuy={() => undefined}
                   />
                 ))}
               </div>
@@ -565,6 +739,59 @@ export default function MarketplacePage() {
               </CardContent>
             </Card>
           ) : null}
+        </TabsContent>
+
+        <TabsContent value="seller" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Marketplace Terms</CardTitle>
+              <CardDescription>
+                Digital goods are final once delivered. A chargeback or payment dispute results in a
+                permanent Marketplace ban (no buying or earning). Current ToS version: {tosVersion}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => void handleAcceptTos()}>Accept Marketplace ToS</Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Seller payouts</CardTitle>
+              <CardDescription>
+                Connect at least one payout rail before publishing paid listings. Platform fee is
+                10%. Official ReBotics catalog sales are separate (100% to platform).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Stripe Connect account id</Label>
+                <Input
+                  value={stripeConnectId}
+                  onChange={(e) => setStripeConnectId(e.target.value)}
+                  placeholder="acct_…"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>PayPal merchant id</Label>
+                <Input
+                  value={paypalMerchantId}
+                  onChange={(e) => setPaypalMerchantId(e.target.value)}
+                  placeholder="PayPal merchant id"
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>MetaMask address</Label>
+                <Input
+                  value={metamaskAddress}
+                  onChange={(e) => setMetamaskAddress(e.target.value)}
+                  placeholder="0x…"
+                />
+              </div>
+              <Button className="w-fit" onClick={() => void handleConnectPayout()}>
+                Save payout methods
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </Page>
