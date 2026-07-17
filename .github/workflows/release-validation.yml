@@ -56,6 +56,8 @@ jobs:
           docker compose -f deploy/docker-compose.client.yml config --quiet
           docker compose -f deploy/docker-compose.hub-external-llm.yml config --quiet
           docker compose -f deploy/docker-compose.dev.yml config --quiet
+          cp deploy/.env.saas-staging.example deploy/.env.saas-staging
+          docker compose -f deploy/docker-compose.saas-staging.yml config --quiet
       - name: Build production container
         run: docker build -f deploy/Dockerfile -t godmode-release-validation .
       - name: Smoke production container

@@ -1,0 +1,39 @@
+# Side-by-side SaaS staging on a host that already runs a private hub.
+# Separate project name, port, and data volume — family hub stays untouched.
+#
+# After a release image exists:
+#   GODMODE_IMAGE=ghcr.io/reboticsai/godmode@sha256:... \
+#   docker compose -p godmode-saas -f docker-compose.saas-staging.yml --env-file .env.saas-staging pull
+#   docker compose -p godmode-saas -f docker-compose.saas-staging.yml --env-file .env.saas-staging up -d
+#
+# Or build from this tree:
+#   docker compose -p godmode-saas -f docker-compose.saas-staging.yml --env-file .env.saas-staging up -d --build
+#
+# Family hub (example): http://172.16.1.95:8080  (private_hub)
+# SaaS staging:         http://172.16.1.95:9080  (saas paywall)
+
+services:
+  godmode:
+    image: ${GODMODE_IMAGE:-godmode-saas-staging:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "${SAAS_HOST_PORT:-9080}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.saas-staging
+    volumes:
+      - ${SAAS_DATA_DIR:-godmode-saas-data}:/data
+    environment:
+      - PLATFORM_DATA_DIR=/data
+      - DEPLOYMENT_MODE=hub
+      - INSTALLATION_SURFACE=saas
+      - BRIDGE_HOST=127.0.0.1
+      - AUTH_ALLOW_ANONYMOUS=false
+      - AUTH_ALLOW_SIGNUP=false
+    restart: unless-stopped
+
+volumes:
+  godmode-saas-data:

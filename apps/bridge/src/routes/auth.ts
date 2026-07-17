@@ -35,6 +35,11 @@ import {
   executeRecordAction,
   KernelError,
 } from "../kernel/record-api.js";
+import {
+  consumeSaasEntitlement,
+  findPendingEntitlementByStripeSession,
+} from "../services/saas-entitlements.js";
+import { resolveEntitlementForCheckoutSession } from "../services/saas-billing.js";
 
 export function createAuthRouter(): Router {
   const router = Router();
@@ -79,18 +84,40 @@ export function createAuthRouter(): Router {
   });
 
   router.post("/signup", authLimiter, async (req, res) => {
-    if (!config.auth.allowSignup) {
+    const { email, password, name, inviteCode, checkoutSessionId } = req.body ?? {};
+    const code = typeof inviteCode === "string" ? inviteCode.trim() : "";
+    const paidSessionId =
+      typeof checkoutSessionId === "string" ? checkoutSessionId.trim() : "";
+
+    if (config.isSaas) {
+      if (!paidSessionId) {
+        res.status(403).json({
+          error: "Choose a plan and complete payment before signing up",
+        });
+        return;
+      }
+      try {
+        const entitlement = await resolveEntitlementForCheckoutSession(paidSessionId);
+        if (!entitlement || entitlement.status !== "pending") {
+          res.status(403).json({
+            error: "Payment required or already used — complete checkout, then sign up",
+          });
+          return;
+        }
+      } catch {
+        res.status(403).json({ error: "Could not verify payment" });
+        return;
+      }
+    } else if (!config.auth.allowSignup) {
       res.status(403).json({ error: "Signup is disabled; request an invite or contact the admin" });
       return;
-    }
-    const { email, password, name, inviteCode } = req.body ?? {};
-    if (config.auth.inviteCodes.length > 0) {
-      const code = typeof inviteCode === "string" ? inviteCode.trim() : "";
+    } else if (config.auth.inviteCodes.length > 0) {
       if (!code || !config.auth.inviteCodes.includes(code)) {
         res.status(403).json({ error: "Valid invite code required" });
         return;
       }
     }
+
     if (
       typeof email !== "string" ||
       typeof password !== "string" ||
@@ -105,6 +132,16 @@ export function createAuthRouter(): Router {
       typeof name === "string" && name.trim() ? name.trim() : normalized.split("@")[0];
 
     const core = getCoreDb();
+    if (config.isSaas && paidSessionId) {
+      const entitlement = findPendingEntitlementByStripeSession(core, paidSessionId);
+      if (entitlement?.email && entitlement.email !== normalized) {
+        res.status(403).json({
+          error: `This payment is for ${entitlement.email}. Sign up with that email.`,
+        });
+        return;
+      }
+    }
+
     const existing = core
       .prepare("SELECT id FROM users WHERE email=?")
       .get(normalized) as { id: string } | undefined;
@@ -127,6 +164,9 @@ export function createAuthRouter(): Router {
           requestId: req.get("X-Request-Id") || undefined,
         })
       ) as { id: string };
+      if (config.isSaas && paidSessionId) {
+        consumeSaasEntitlement(core, paidSessionId, created.id);
+      }
       const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
       const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
       res.setHeader(
@@ -140,6 +180,12 @@ export function createAuthRouter(): Router {
     } catch (err) {
       if (err instanceof KernelError) {
         res.status(err.status).json({ error: err.message });
+        return;
+      }
+      if (err && typeof err === "object" && "status" in err) {
+        res.status(Number((err as { status: number }).status) || 403).json({
+          error: err instanceof Error ? err.message : "Signup failed",
+        });
         return;
       }
       throw err;
