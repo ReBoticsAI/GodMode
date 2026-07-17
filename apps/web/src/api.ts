@@ -2569,10 +2569,23 @@ export function loginPassword(email: string, password: string) {
   });
 }
 
-export function signupPassword(email: string, password: string, name: string) {
+export function signupPassword(
+  email: string,
+  password: string,
+  name: string,
+  opts?: { inviteCode?: string; checkoutSessionId?: string }
+) {
   return api<{ user: AuthUser; sessionToken?: string }>("/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({
+      email,
+      password,
+      name,
+      ...(opts?.inviteCode ? { inviteCode: opts.inviteCode } : {}),
+      ...(opts?.checkoutSessionId
+        ? { checkoutSessionId: opts.checkoutSessionId }
+        : {}),
+    }),
   }).then((res) => {
     if (allowSessionTokenFallback && res.sessionToken) {
       clearActiveTenant();
@@ -2992,9 +3005,44 @@ export function acceptFederatedShareInvite(inviteToken: string, ownerBridgeUrl: 
 }
 
 export function fetchBridgeHealth() {
-  return api<{ ok: boolean; hub: boolean; deploymentMode: string; client?: boolean }>(
-    "/health"
-  );
+  return api<{
+    ok: boolean;
+    hub: boolean;
+    deploymentMode: string;
+    client?: boolean;
+    saas?: boolean;
+    installationSurface?: string;
+  }>("/health");
+}
+
+export function fetchSaasPaywall() {
+  return api<{
+    enabled: boolean;
+    paymentsConfigured: boolean;
+    priceConfigured: boolean;
+    publishableKey: string | null;
+    checkoutMode: "payment" | "subscription";
+  }>("/saas/paywall");
+}
+
+export function startSaasCheckout(input?: {
+  email?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+}) {
+  return api<{ url: string; sessionId: string }>("/saas/checkout", {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
+  });
+}
+
+export function fetchSaasCheckoutStatus(sessionId: string) {
+  return api<{
+    paid: boolean;
+    email: string | null;
+    status: string;
+    sessionId: string;
+  }>(`/saas/checkout/status?session_id=${encodeURIComponent(sessionId)}`);
 }
 
 export function fetchOnboardingStatus() {

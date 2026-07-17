@@ -13,7 +13,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `CORS_PERMISSIVE` | unset | Set `true` to allow any Origin in non-production (dev only) |
 | `AUTH_SESSION_SECRET` | dev placeholder | **Required in production** — random secret |
 | `AUTH_ALLOW_ANONYMOUS` | `false` | Set `true` only for headless local tooling |
-| `AUTH_ALLOW_SIGNUP` | `true` (local) | Open signup; hub defaults to invite flow |
+| `AUTH_ALLOW_SIGNUP` | `true` (local) | Open signup; hub/SaaS keep `false` (SaaS unlocks via Checkout) |
 | `AUTH_INVITE_CODES` | empty | Comma-separated codes required for hub signup |
 | `INITIAL_ADMINS` | empty | `Name:email` pairs; first signup is admin when empty |
 | `INITIAL_ADMIN_PASSWORD` | empty | Optional password for seeded admins |
@@ -71,11 +71,15 @@ unless a trusted signature-verification policy is configured.
 
 | Variable | Description |
 |----------|-------------|
+| `INSTALLATION_SURFACE` | `saas` enables the paid signup paywall; `private_hub` is self-hosted multi-tenant without it |
 | `CLOUD_HUB_URL` | Official hub for client-mode marketplace |
-| `STRIPE_SECRET_KEY` | Marketplace credits billing |
-| `STRIPE_CREDITS_PER_USD` | Credit conversion rate |
+| `STRIPE_SECRET_KEY` | Stripe secret (paywall + marketplace credits) |
+| `STRIPE_SAAS_PRICE_ID` | Stripe Price ID for SaaS Checkout (`INSTALLATION_SURFACE=saas`) |
+| `STRIPE_SAAS_CHECKOUT_MODE` | `payment` (default) or `subscription` |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` |
+| `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 
-Not used in local OSS installs.
+Not used in local OSS installs. Private hubs ignore SaaS paywall env vars.
 
 ## LLM (local inference)
 

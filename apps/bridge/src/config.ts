@@ -32,13 +32,30 @@ const corsOrigins = (process.env.WEB_ORIGIN ?? (webPublicUrl || "http://127.0.0.
 
 const isHub = deploymentMode === "hub";
 const isProduction = deploymentMode === "hub" || deploymentMode === "client";
+const installationSurface = (
+  process.env.INSTALLATION_SURFACE ?? "developer_source"
+).toLowerCase();
+/** Official paid multi-tenant hub (ReBotics SaaS). Self-hosted hubs use `private_hub`. */
+const isSaas = isHub && installationSurface === "saas";
 
 export const config = {
-  /** local = dev workstation; hub = official multi-tenant SaaS; client = personal Docker instance. */
+  /** local = dev workstation; hub = multi-tenant; client = personal Docker instance. */
   deploymentMode: deploymentMode as "local" | "hub" | "client",
   isHub,
   isClient: deploymentMode === "client",
   isProduction,
+  installationSurface,
+  isSaas,
+  saas: {
+    /** Stripe Price ID for seat/access Checkout (required for SaaS paywall). */
+    priceId: (process.env.STRIPE_SAAS_PRICE_ID ?? "").trim(),
+    /** `payment` (one-time) or `subscription`. */
+    checkoutMode: ((process.env.STRIPE_SAAS_CHECKOUT_MODE ?? "payment").toLowerCase() ===
+    "subscription"
+      ? "subscription"
+      : "payment") as "payment" | "subscription",
+    webhookSecret: (process.env.STRIPE_WEBHOOK_SECRET ?? "").trim(),
+  },
   /** Official cloud hub for marketplace/credits when running in client mode. */
   cloudHubUrl: (process.env.CLOUD_HUB_URL ?? "").replace(/\/$/, ""),
   port: Number(process.env.BRIDGE_PORT ?? 3847),
