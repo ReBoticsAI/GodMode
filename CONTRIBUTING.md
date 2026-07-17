@@ -48,7 +48,7 @@ kernel coverage baseline and contract tests.
   WebSocket/token streams, and authorized binary transfer. Durable effects must
   still kernel-dispatch; bytes and streams are not Record CRUD.
 - When mutation routes, callers, tools, or exceptions change, update the audit
-  fixtures/tests and `docs/KERNEL_MIGRATION_MATRIX.md`.
+  fixtures/tests and keep `npm run audit:kernel:strict` green.
 - The completed plugin ecosystem cutover was coordinated through
   [godmode-plugin-git#1](https://github.com/ReBoticsAI/godmode-plugin-git/pull/1),
   [godmode-plugin-github#1](https://github.com/ReBoticsAI/godmode-plugin-github/pull/1),

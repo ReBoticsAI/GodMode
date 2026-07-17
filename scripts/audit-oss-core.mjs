@@ -70,6 +70,15 @@ if (exists("docs/GodMode_Platform_Plan.md")) {
 if (exists("docs/OPERATOR_SETUP.md")) {
   errors.push("docs/OPERATOR_SETUP.md must not ship in OSS core");
 }
+if (exists("docs/TRADING_RESIDUE_AUDIT.md")) {
+  errors.push("docs/TRADING_RESIDUE_AUDIT.md must not ship in OSS core");
+}
+if (exists("docs/SALES_PITCH.md")) {
+  errors.push("docs/SALES_PITCH.md must not ship in OSS core");
+}
+if (exists("docs/KERNEL_MIGRATION_MATRIX.md")) {
+  errors.push("docs/KERNEL_MIGRATION_MATRIX.md must not ship in OSS core");
+}
 
 const BANNED_DOC_TERMS = [
   { re: /Sierra\s*Chart|SierraChart/i, label: "Sierra Chart" },
@@ -89,9 +98,6 @@ const DOC_SCAN_ALLOWLIST = new Set([
   path.normalize("apps/bridge/src/services/structure-regroup-migration.ts"),
   path.normalize("apps/bridge/src/services/platform-scope.ts"),
   path.normalize("packages/plugin-api/src/host-services.ts"),
-  // Explicit boundary/audit documents may name private plugin domains.
-  path.normalize("docs/TRADING_RESIDUE_AUDIT.md"),
-  path.normalize("docs/SALES_PITCH.md"),
 ]);
 
 function scanDocForBannedTerms(rel) {
