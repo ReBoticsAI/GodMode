@@ -31,10 +31,32 @@ import {
   publishMarketplaceListing,
 } from "../services/marketplace-listings.js";
 
-const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
-  title, description, price_credits, visibility, status,
-  delivery_mode, pricing_model, price_period, meter_unit, meter_rate,
-  license, inference_endpoint_id, created_at`;
+export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
+  title, description, price_credits, price_cents, currency, seller_kind,
+  catalog_entry_id, visibility, status, delivery_mode, pricing_model,
+  price_period, meter_unit, meter_rate, license, inference_endpoint_id,
+  created_at, updated_at`;
+
+/** Build the public Community browse query. Defaults to seller_kind=user. */
+export function buildPublicListingsSql(opts: {
+  kind?: string;
+  sellerKind?: string;
+}): { sql: string; params: unknown[] } {
+  let sql = `SELECT ${LISTING_COLS}
+             FROM marketplace_listings WHERE status='active' AND visibility='public'`;
+  const params: unknown[] = [];
+  const sellerKind = opts.sellerKind?.trim() || "user";
+  if (sellerKind !== "all") {
+    sql += ` AND seller_kind=?`;
+    params.push(sellerKind);
+  }
+  if (opts.kind) {
+    sql += ` AND kind=?`;
+    params.push(opts.kind);
+  }
+  sql += ` ORDER BY created_at DESC LIMIT 100`;
+  return { sql, params };
+}
 
 async function proxyMarketplaceToHub(
   req: Request,
@@ -85,14 +107,9 @@ export function createMarketplaceRouter(): Router {
       typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
     const kind =
       typeof req.query.kind === "string" ? req.query.kind : undefined;
-    let sql = `SELECT ${LISTING_COLS}
-               FROM marketplace_listings WHERE status='active' AND visibility='public'`;
-    const params: unknown[] = [];
-    if (kind) {
-      sql += ` AND kind=?`;
-      params.push(kind);
-    }
-    sql += ` ORDER BY created_at DESC LIMIT 100`;
+    const sellerKind =
+      typeof req.query.seller_kind === "string" ? req.query.seller_kind : undefined;
+    const { sql, params } = buildPublicListingsSql({ kind, sellerKind });
     let rows = core.prepare(sql).all(...params) as Array<Record<string, unknown>>;
     if (q) {
       rows = rows.filter(

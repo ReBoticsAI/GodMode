@@ -2927,7 +2927,9 @@ export interface MarketplaceListing {
   meter_rate?: number | null;
   license?: string | null;
   inference_endpoint_id?: string | null;
+  catalog_entry_id?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface MarketplaceEntitlement {
@@ -2958,10 +2960,15 @@ export interface InferenceEndpoint {
   created_at: string;
 }
 
-export function fetchMarketplaceListings(params?: { q?: string; kind?: string }) {
+export function fetchMarketplaceListings(params?: {
+  q?: string;
+  kind?: string;
+  sellerKind?: string;
+}) {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.kind) qs.set("kind", params.kind);
+  if (params?.sellerKind) qs.set("seller_kind", params.sellerKind);
   const suffix = qs.toString() ? `?${qs}` : "";
   return api<{ listings: MarketplaceListing[] }>(`/marketplace/listings${suffix}`);
 }
@@ -3480,6 +3487,16 @@ export function confirmMarketplaceCryptoPayment(orderId: string, txHash: string)
 
 export function fetchMyMarketplaceListings() {
   return api<{ listings: MarketplaceListing[] }>("/marketplace/my/listings");
+}
+
+export function archiveMarketplaceListing(listingId: string) {
+  return actionDto<{ id: string; status: string }>(
+    "MarketplaceListing",
+    "archive",
+    {},
+    listingId,
+    true
+  );
 }
 
 export function fetchMarketplaceEntitlements() {
