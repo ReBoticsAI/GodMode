@@ -202,6 +202,7 @@ export const userAdminAdapter: RecordAdapter = {
         typeof data.display_name === "string" ? data.display_name : undefined,
       isAdmin:
         data.is_admin === undefined ? undefined : Boolean(data.is_admin),
+      password: typeof data.password === "string" ? data.password : undefined,
     });
     return userRecord(def, user);
   },
@@ -238,6 +239,13 @@ export const userAdminAdapter: RecordAdapter = {
             : undefined,
       });
       return userRecord(def, created);
+    },
+    reset_password(core, def, id, input, ctx) {
+      requireAdmin(ctx);
+      const user = updateAdminUser(core, id, {
+        password: requiredText(input, "new_password"),
+      });
+      return userRecord(def, user);
     },
   },
 };
@@ -924,6 +932,14 @@ export const IDENTITY_ADMIN_ACTIONS: Record<string, ActionDef[]> = {
           display_name: { type: "string" },
         },
         ["email", "password"]
+      ),
+    }),
+    action("reset_password", {
+      confirmation: { required: true },
+      sensitiveInputPaths: ["new_password"],
+      inputSchema: schema(
+        { new_password: { type: "string", minLength: 6 } },
+        ["new_password"]
       ),
     }),
   ],

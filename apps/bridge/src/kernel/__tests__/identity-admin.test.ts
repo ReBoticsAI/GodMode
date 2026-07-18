@@ -228,6 +228,41 @@ describe("identity and admin ObjectType adapters", () => {
     });
   });
 
+  it("lets platform admins reset another user's password", () => {
+    const def = definition("User", "user_admin_service", [
+      "id",
+      "email",
+      "display_name",
+      "is_admin",
+    ]);
+    const before = db
+      .prepare(`SELECT password_hash FROM users WHERE id='user-b'`)
+      .get() as { password_hash: string };
+    const result = userAdminAdapter.actions!.reset_password(
+      db,
+      def,
+      "user-b",
+      { new_password: "replacement-b" },
+      context(db, { isAdmin: true, userId: "admin" })
+    );
+    expect(result.data).not.toHaveProperty("password_hash");
+    expect(result.data).not.toHaveProperty("password");
+    const after = db
+      .prepare(`SELECT password_hash FROM users WHERE id='user-b'`)
+      .get() as { password_hash: string };
+    expect(after.password_hash).not.toBe(before.password_hash);
+    expect(verifyPassword("replacement-b", after.password_hash)).toBe(true);
+    expect(() =>
+      userAdminAdapter.actions!.reset_password(
+        db,
+        def,
+        "user-b",
+        { new_password: "another-pass" },
+        context(db, { isAdmin: false, userId: "user-b" })
+      )
+    ).toThrow(/admin/i);
+  });
+
   it("isolates profiles and memberships between two tenants", () => {
     const profileDef = definition("UserProfile", "user_profile_service", [
       "id",
