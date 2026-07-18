@@ -170,7 +170,7 @@ Full walkthrough: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** · Env 
 1. **Sign up** with email and password (local auth only  -  no OAuth).
 2. Open **Chat** and select **Intelligence**. Add an LLM API key under **Vault → Secrets**, then configure the provider in **Agents → Pipeline**.
 3. Ask Intelligence to create your first department and pages, or use **Structure** once you have content.
-4. Optional: install plugins under **Marketplace → Unofficial** (see [docs/MARKETPLACE.md](docs/MARKETPLACE.md) and [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md)).
+4. Optional: install plugins under **Marketplace → Local** (see [docs/MARKETPLACE.md](docs/MARKETPLACE.md) and [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md)).
 
 ### Demo seed (screenshots / docs)
 
@@ -205,7 +205,7 @@ LLM and integration keys belong in **Vault** inside the app, not in `.env`, unle
 |------|-----------|--------|------|
 | ![OSS home](docs/assets/readme/oss-home-empty.png) | ![Contacts](docs/assets/readme/contacts-graph.png) | ![Chat modes](docs/assets/readme/chat-modes.png) | ![Plugins](docs/assets/readme/settings-plugins.png) |
 
-| Marketplace unofficial | Agents pipeline |
+| Marketplace Local | Agents pipeline |
 |------|-----------|
 | ![Marketplace](docs/assets/readme/marketplace-unofficial.png) | ![Agents](docs/assets/readme/agents-pipeline.png) |
 

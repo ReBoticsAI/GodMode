@@ -8,7 +8,7 @@ import type {
 } from "../core-db.js";
 import { adjustCredits, CreditsError } from "./credits.js";
 import { createShareGrant, revokeShareGrant } from "./share-service.js";
-import { assertCanAcquireListing } from "./marketplace-commerce.js";
+import { assertCanAcquireListing, markPaidOrdersDeliveredForListing } from "./marketplace-commerce.js";
 
 export class EntitlementError extends Error {
   status: number;
@@ -200,6 +200,12 @@ export function acquireLiveListing(
   });
 
   const result = tx();
+
+  markPaidOrdersDeliveredForListing(core, {
+    listingId: String(listing.id),
+    buyerUserId: opts.buyerUserId,
+  });
+
   return {
     entitlementId: result.entitlementId,
     shareGrantId: result.shareGrantId,
