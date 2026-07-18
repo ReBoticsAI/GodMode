@@ -2692,20 +2692,54 @@ export interface AdminUpdateUserInput {
 }
 
 export function createAdminUser(input: AdminCreateUserInput) {
-  return actionDto<RecordRowClient>("User", "create_account", {
-    email: input.email,
-    password: input.password,
-    display_name: input.displayName,
-    is_admin: input.isAdmin,
-  }, undefined, true).then((row) => ({ user: rowDto<AdminUserRow>(row) }));
+  return actionDto<RecordRowClient>(
+    "User",
+    "create_account",
+    {
+      email: input.email,
+      password: input.password,
+      display_name: input.displayName,
+      is_admin: input.isAdmin,
+    },
+    undefined,
+    true
+  ).then(async (row) => {
+    const { users } = await fetchUsers();
+    const user = users.find((candidate) => candidate.id === row.id);
+    if (!user) {
+      throw new ApiError(404, "Created user was not returned by admin list");
+    }
+    return { user };
+  });
 }
 
-export function updateAdminUser(userId: string, input: AdminUpdateUserInput) {
-  return updateDto<AdminUserRow>("User", userId, {
+export async function updateAdminUser(
+  userId: string,
+  input: AdminUpdateUserInput
+) {
+  await updateDto("User", userId, {
     email: input.email,
     display_name: input.displayName,
     is_admin: input.isAdmin,
-  }).then((user) => ({ user }));
+  });
+  if (input.password) {
+    if (input.password.length < 6) {
+      throw new ApiError(400, "password must be at least 6 characters");
+    }
+    await actionDto(
+      "User",
+      "reset_password",
+      { new_password: input.password },
+      userId,
+      true
+    );
+  }
+  const { users } = await fetchUsers();
+  const user = users.find((candidate) => candidate.id === userId);
+  if (!user) {
+    throw new ApiError(404, "Updated user was not returned by admin list");
+  }
+  return { user };
 }
 
 export function deleteAdminUser(userId: string) {

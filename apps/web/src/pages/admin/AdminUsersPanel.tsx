@@ -219,7 +219,12 @@ export function AdminUsersPanel() {
         onSaved={async (saved) => {
           await reload();
           if (userDialog?.kind === "edit") {
-            setUserDialog({ kind: "edit", user: saved });
+            // Prefer the reloaded admin list shape (includes tenants). The
+            // kernel User record DTO is incomplete and would crash the dialog.
+            const refreshed = await fetchUsers().then(
+              (r) => r.users.find((u) => u.id === saved.id) ?? saved
+            );
+            setUserDialog({ kind: "edit", user: refreshed });
           } else {
             setUserDialog(null);
           }
