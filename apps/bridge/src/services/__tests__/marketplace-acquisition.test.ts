@@ -47,6 +47,9 @@ function coreDb() {
       title TEXT NOT NULL,
       description TEXT,
       price_credits INTEGER NOT NULL DEFAULT 0,
+      price_cents INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      seller_kind TEXT NOT NULL DEFAULT 'user',
       bundle_json TEXT NOT NULL,
       visibility TEXT NOT NULL DEFAULT 'public',
       status TEXT NOT NULL DEFAULT 'active',
@@ -59,6 +62,25 @@ function coreDb() {
       buyer_tenant_id TEXT NOT NULL,
       price_credits INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE marketplace_orders (
+      id TEXT PRIMARY KEY,
+      listing_id TEXT,
+      catalog_entry_id TEXT,
+      buyer_user_id TEXT NOT NULL,
+      buyer_tenant_id TEXT NOT NULL,
+      seller_user_id TEXT,
+      seller_kind TEXT NOT NULL DEFAULT 'official',
+      amount_cents INTEGER NOT NULL,
+      platform_fee_cents INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      provider TEXT NOT NULL,
+      provider_ref TEXT,
+      crypto_tx_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      delivered_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
   db.prepare(
