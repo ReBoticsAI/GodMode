@@ -9,6 +9,8 @@ const audits = [
   "audit-kernel-coverage.mjs",
   "audit-kernel-direct-writes.mjs",
   "audit-kernel-writable.mjs",
+  "audit-kernel-ownership-parity.mjs",
+  "audit-kernel-read-write-symmetry.mjs",
 ];
 let failed = false;
 
