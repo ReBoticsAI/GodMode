@@ -11,7 +11,7 @@ GodMode core ships as a **complete personal OS** — Intelligence, wiki, tasks, 
 | **Core** | Auth, tenants, Intelligence, productivity apps, plugin platform APIs |
 | **Plugins** | Domain routes, tools, web UI, and install hooks registered at runtime |
 
-Bridge loads plugins from Marketplace-registered paths, Intelligence `install_plugin`, or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Unofficial**, **Installed**, or Intelligence `install_plugin`).
+Bridge loads plugins from Marketplace-registered paths, Intelligence `install_plugin`, or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Local**, **Installed**, or Intelligence `install_plugin`).
 
 Fresh clones run as personal OS only until you install plugins from **Marketplace** or scaffold one via Intelligence.
 
@@ -26,7 +26,7 @@ Same tools work in the monorepo and on Docker hub/client:
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools and `tenant:install`.
 
-This matches **Marketplace → Unofficial**. Custom Express routes registered via `api.routes.mount` / `server:beforeListen` after boot may still need a restart — scaffolds should prefer tools + tenant hooks.
+This matches **Marketplace → Local**. Custom Express routes registered via `api.routes.mount` / `server:beforeListen` after boot may still need a restart — scaffolds should prefer tools + tenant hooks.
 
 ## Manifest (`godmode.plugin.json`)
 
@@ -221,7 +221,7 @@ Define `import.meta.env.*` in the web build if you bundle host `@/api` code — 
 2. **Marketplace** — local folder UI, catalog install, or git clone; paths persisted in `platform_meta.marketplace.plugin_paths`
 3. `GODMODE_PLUGIN_PATH` — optional env override for advanced setups
 
-There is no automatic sibling-repo discovery in OSS core. Prefer Intelligence or **Marketplace → Unofficial**.
+There is no automatic sibling-repo discovery in OSS core. Prefer Intelligence or **Marketplace → Local**.
 
 ## Per-tenant install
 
@@ -231,7 +231,7 @@ routes on this table. A custom Express route mounted directly by plugin code doe
 not automatically inherit that check; resolve authentication, tenant membership,
 and plugin installation in the route.
 
-Install: Intelligence `install_plugin`, **Marketplace → Unofficial**, or `npm run plugins -- install <id> --tenant <uuid>`.
+Install: Intelligence `install_plugin`, **Marketplace → Local**, or `npm run plugins -- install <id> --tenant <uuid>`.
 
 Only the target plugin's `tenant:install` hook runs (not all plugins).
 

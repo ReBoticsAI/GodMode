@@ -12,6 +12,7 @@ import {
   assertMarketplaceTosAccepted,
   assertNotMarketplaceBanned,
   ensureSellerAccount,
+  markPaidOrdersDeliveredForListing,
 } from "./marketplace-commerce.js";
 
 export interface PublishMarketplaceListingInput {
@@ -312,6 +313,11 @@ export function acquireCloneListing(
     operation = getCloneAcquisitionOperation(core, operation.id);
   }
   options.fail?.("after_completed");
+
+  markPaidOrdersDeliveredForListing(core, {
+    listingId: operation.listing_id,
+    buyerUserId: operation.buyer_user_id,
+  });
 
   return {
     ok: true,

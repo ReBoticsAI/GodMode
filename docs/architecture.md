@@ -72,7 +72,7 @@ Global platform state:
 
 - **Users and sessions** — email/password auth, session cookies
 - **Tenants and memberships** — workspaces and roles
-- **Marketplace** — Official/Unofficial catalogs, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
+- **Marketplace** — Official/Local catalogs, Community user listings, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
 - **Share grants** — cross-tenant resource sharing
 - **Bridge connections** — federation between Bridge instances
 
