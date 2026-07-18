@@ -19,6 +19,10 @@ import { StructureError } from "../services/structure.js";
 import type { EventEmitter } from "node:events";
 import type { OperationContext } from "./adapter-registry.js";
 import { PROTOCOL_EXCEPTIONS } from "./protocol-exceptions.js";
+import {
+  resolveAgentIdFromRequest,
+  resolveKernelAgentScope,
+} from "./agent-scope.js";
 
 export function createKernelRouter(
   operatorDb: AppDatabase,
@@ -26,21 +30,43 @@ export function createKernelRouter(
 ): Router {
   const router = Router();
   const tdb = (req: Request): AppDatabase => req.tenantDb ?? operatorDb;
-  const context = (req: Request): OperationContext => ({
-    tenantId: req.tenantId,
-    userId: req.user?.id,
-    isAdmin: req.user?.isAdmin,
-    role: req.tenantRole ?? "viewer",
-    source: "http",
-    requestId: req.get("X-Request-Id") || randomUUID(),
-    idempotencyKey: req.get("Idempotency-Key") || undefined,
-    expectedVersion: req.get("If-Match") || undefined,
-    confirmationId: req.get("X-Kernel-Confirmation") || undefined,
-    bus: deps.bus,
-    installedPluginIds: new Set(
-      req.tenantId ? installedPluginIdsForTenant(getCoreDb(), req.tenantId) : []
-    ),
-  });
+
+  /** Tenant DB for the request, switching to the agent owner's DB when scoped. */
+  const scopedDb = (
+    req: Request,
+    minRole: "viewer" | "editor" = "viewer"
+  ): AppDatabase => {
+    const agentId = resolveAgentIdFromRequest(req);
+    if (!agentId) return tdb(req);
+    return resolveKernelAgentScope(req, agentId, minRole).db;
+  };
+
+  const context = (
+    req: Request,
+    minRole: "viewer" | "editor" = "viewer"
+  ): OperationContext => {
+    const agentId = resolveAgentIdFromRequest(req);
+    if (agentId) {
+      // Authorize before attaching — throws KernelError 404 when unauthorized.
+      resolveKernelAgentScope(req, agentId, minRole);
+    }
+    return {
+      tenantId: req.tenantId,
+      userId: req.user?.id,
+      isAdmin: req.user?.isAdmin,
+      role: req.tenantRole ?? "viewer",
+      agentId,
+      source: "http",
+      requestId: req.get("X-Request-Id") || randomUUID(),
+      idempotencyKey: req.get("Idempotency-Key") || undefined,
+      expectedVersion: req.get("If-Match") || undefined,
+      confirmationId: req.get("X-Kernel-Confirmation") || undefined,
+      bus: deps.bus,
+      installedPluginIds: new Set(
+        req.tenantId ? installedPluginIdsForTenant(getCoreDb(), req.tenantId) : []
+      ),
+    };
+  };
 
   const etag = (value: unknown): string =>
     `"${createHash("sha256")
@@ -112,14 +138,14 @@ export function createKernelRouter(
         req.query.direction === "asc" || req.query.direction === "desc"
           ? req.query.direction
           : undefined;
-      const result = listRecords(tdb(req), req.params.objectType, {
+      const result = listRecords(scopedDb(req, "viewer"), req.params.objectType, {
           parentId,
           limit: Number.isFinite(limit) ? limit : undefined,
           offset: Number.isFinite(offset) ? offset : undefined,
           filters,
           sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
           direction,
-        }, context(req));
+        }, context(req, "viewer"));
       res.set("ETag", etag(result)).json(result);
     } catch (err) {
       handleErr(err, res);
@@ -129,10 +155,10 @@ export function createKernelRouter(
   router.get("/records/:objectType/:id", (req, res) => {
     try {
       const row = getRecord(
-        tdb(req),
+        scopedDb(req, "viewer"),
         req.params.objectType,
         req.params.id,
-        context(req)
+        context(req, "viewer")
       );
       res.set("ETag", `"${row.version}"`).json(row);
     } catch (err) {
@@ -154,7 +180,12 @@ export function createKernelRouter(
       ) {
         throw new KernelError(400, `Unknown page kind: ${String(data.kind)}`);
       }
-      const row = createRecord(tdb(req), req.params.objectType, data, context(req));
+      const row = createRecord(
+        scopedDb(req, "editor"),
+        req.params.objectType,
+        data,
+        context(req, "editor")
+      );
       res.set("ETag", `"${row.version}"`).status(201).json(row);
     } catch (err) {
       handleErr(err, res);
@@ -176,11 +207,11 @@ export function createKernelRouter(
         throw new KernelError(400, `Unknown page kind: ${String(data.kind)}`);
       }
       const row = updateRecord(
-        tdb(req),
+        scopedDb(req, "editor"),
         req.params.objectType,
         req.params.id,
         data,
-        context(req)
+        context(req, "editor")
       );
       res.set("ETag", `"${row.version}"`).json(row);
     } catch (err) {
@@ -190,7 +221,12 @@ export function createKernelRouter(
 
   router.delete("/records/:objectType/:id", (req, res) => {
     try {
-      deleteRecord(tdb(req), req.params.objectType, req.params.id, context(req));
+      deleteRecord(
+        scopedDb(req, "editor"),
+        req.params.objectType,
+        req.params.id,
+        context(req, "editor")
+      );
       res.json({ ok: true });
     } catch (err) {
       handleErr(err, res);
@@ -204,11 +240,11 @@ export function createKernelRouter(
           ? (req.body as Record<string, unknown>)
           : {};
       const result = await executeCollectionAction(
-        tdb(req),
+        scopedDb(req, "editor"),
         req.params.objectType,
         req.params.action,
         input,
-        context(req)
+        context(req, "editor")
       );
       res.status(
         result &&
@@ -230,12 +266,12 @@ export function createKernelRouter(
           ? (req.body as Record<string, unknown>)
           : {};
       const result = await executeRecordAction(
-          tdb(req),
+          scopedDb(req, "editor"),
           req.params.objectType,
           req.params.id,
           req.params.action,
           input,
-          context(req)
+          context(req, "editor")
         );
       res.status(
         result &&

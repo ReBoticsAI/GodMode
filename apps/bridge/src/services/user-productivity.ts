@@ -126,21 +126,28 @@ export function userProjectId(userId: string): string {
 
 /**
  * Resolve (or lazily create) the single Kanban board project owned by an agent.
- * Mirrors the `/projects` route resolver: the root `intelligence` agent adopts
- * the legacy `default` project; other agents get a fresh project that reuses the
- * shared canonical columns (backlog/in_progress/review/done). Used by the
- * Kanban-backed `todo_write` tool so its cards land on the agent's own board.
+ * Agents are digital principals with their own workspace (tasks, calendar, memory).
+ * The root `intelligence` agent adopts the legacy `default` project; other agents
+ * get a fresh project that reuses the shared canonical columns
+ * (backlog/in_progress/review/done). Used by TaskCard Record mutations when
+ * OperationContext.agentId is set, and by the Kanban-backed `todo_write` tool.
  */
 export function ensureAgentProject(agentId: string, db: AppDatabase): string {
   const existing = db
     .prepare(`SELECT id FROM ai_projects WHERE agent_id = ? ORDER BY created_at ASC LIMIT 1`)
     .get(agentId) as { id: string } | undefined;
   if (existing) return existing.id;
-  const agent = db
-    .prepare(`SELECT name FROM ai_agents WHERE id = ?`)
-    .get(agentId) as { name: string } | undefined;
+  let agentName: string | undefined;
+  try {
+    const agent = db
+      .prepare(`SELECT name FROM ai_agents WHERE id = ?`)
+      .get(agentId) as { name: string } | undefined;
+    agentName = agent?.name;
+  } catch {
+    // Test fixtures (and rare degraded DBs) may lack ai_agents; name is cosmetic.
+  }
   const id = agentId === "intelligence" ? "default" : uuidv4();
-  const name = `${agent?.name ?? "Agent"} Tasks`;
+  const name = `${agentName ?? "Agent"} Tasks`;
   db.prepare(
     `INSERT OR IGNORE INTO ai_projects (id, name, agent_id) VALUES (?, ?, ?)`
   ).run(id, name, agentId);

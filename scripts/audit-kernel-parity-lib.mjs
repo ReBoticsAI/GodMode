@@ -32,18 +32,24 @@ export function fileText(repoRoot, relative) {
 export function httpRecordContextSetsAgentId(repoRoot) {
   const text = fileText(repoRoot, "apps/bridge/src/kernel/routes.ts");
   if (!text) return { ok: false, detail: "kernel/routes.ts missing" };
-  const contextBlock = text.match(
-    /const context\s*=\s*\(req:\s*Request\):\s*OperationContext\s*=>\s*\(([\s\S]*?)\);/
-  );
-  if (!contextBlock) {
-    return { ok: false, detail: "HTTP OperationContext factory not found" };
-  }
-  const body = contextBlock[1];
+  // Accept arrow-object or block factories, and shared resolveAgentIdFromRequest helpers.
+  const contextBlock =
+    text.match(
+      /const context\s*=\s*\([\s\S]*?\):\s*OperationContext\s*=>\s*\(([\s\S]*?)\);/
+    ) ||
+    text.match(
+      /const context\s*=\s*\([\s\S]*?\):\s*OperationContext\s*=>\s*\{([\s\S]*?)return\s*\{([\s\S]*?)\};/
+    );
+  const body = contextBlock
+    ? `${contextBlock[1] ?? ""}\n${contextBlock[2] ?? ""}`
+    : text;
   const setsAgent =
-    /\bagentId\s*:/.test(body) &&
-    (/req\.query\.agentId/.test(body) ||
+    (/\bagentId\s*:/.test(body) || /agentId,/.test(body)) &&
+    (/resolveAgentIdFromRequest/.test(text) ||
+      /req\.query\.agentId/.test(body) ||
       /req\.get\(\s*["']X-GodMode-Agent-Id["']/.test(body) ||
-      /req\.headers/.test(body));
+      /req\.headers/.test(body) ||
+      /X-GodMode-Agent-Id/.test(text));
   return {
     ok: setsAgent,
     detail: setsAgent
@@ -137,7 +143,13 @@ export function apiHelperDropsAgentId(repoRoot) {
     if (start < 0) continue;
     const slice = text.slice(start, start + 900);
     const acceptsAgentId = /agentId\??:/.test(slice);
-    const sendsAgentId = /(?<!assigned_|project_)agent_id\s*:/.test(slice);
+    const sendsAgentId =
+      /(?<!assigned_|project_)agent_id\s*:/.test(slice) ||
+      /\{\s*agentId:\s*(?:body|patch)\.agentId/.test(slice) ||
+      /agentId:\s*body\.agentId/.test(slice) ||
+      /agentId:\s*patch\.agentId/.test(slice) ||
+      /\{\s*agentId\s*\}/.test(slice) ||
+      /,\s*\{\s*agentId\s*\}/.test(slice);
     if (acceptsAgentId && !sendsAgentId) {
       drops.push({
         helper: helper.name,
@@ -272,7 +284,11 @@ export function discoverOwnershipParityFindings(repoRoot) {
   }
 
   const features = fileText(repoRoot, "docs/FEATURES.md") ?? "";
-  if (/Chat → Calendar tab/.test(features) && hasAiCalendar) {
+  if (
+    /Chat → Calendar tab/.test(features) &&
+    hasAiCalendar &&
+    findings.some((f) => f.id === "P0-cal-split")
+  ) {
     findings.push({
       id: "P1-docs-calendar-agent",
       class: "docs_lie",
@@ -307,6 +323,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
   const schema = discoverKernelSchema(repoRoot);
   const legacy = legacyAiAgentRoutes(repoRoot);
   const { allRoutes } = discoverMutationRoutes(repoRoot);
+  const adapter = productivityAdapterForcesUser(repoRoot);
+  const httpCtx = httpRecordContextSetsAgentId(repoRoot);
+  const dualTasks = adapter.ensureUserProject && adapter.ensureAgentProject;
   const rows = [];
 
   const catalog = [
@@ -315,7 +334,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/projects")),
       listUser: allRoutes.filter((r) => r.fullPath?.includes("/user/projects")),
       recordOps: schema.get("TaskCard")?.operations ?? new Set(),
-      mutatePrincipal: "user (ensureUserProject)",
+      mutatePrincipal: dualTasks
+        ? "dual (ensureUserProject | ensureAgentProject via ctx.agentId)"
+        : "user (ensureUserProject)",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: "session user",
     },
@@ -324,7 +345,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/calendar")),
       listUser: allRoutes.filter((r) => r.fullPath?.includes("/user/calendar")),
       recordOps: schema.get("CalendarEvent")?.operations ?? new Set(),
-      mutatePrincipal: "user (user_id)",
+      mutatePrincipal: dualTasks
+        ? "dual (user_id | agent_id via ctx.agentId)"
+        : "user (user_id)",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: "session user",
     },
@@ -333,7 +356,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/memor")),
       listUser: [],
       recordOps: schema.get("Memory")?.operations ?? new Set(),
-      mutatePrincipal: "ctx.agentId ?? intelligence",
+      mutatePrincipal: httpCtx.ok
+        ? "ctx.agentId (HTTP ?agentId= / header)"
+        : "ctx.agentId ?? intelligence",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: null,
     },
@@ -342,7 +367,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/rules")),
       listUser: [],
       recordOps: schema.get("Rule")?.operations ?? new Set(),
-      mutatePrincipal: "ctx.agentId ?? intelligence",
+      mutatePrincipal: httpCtx.ok
+        ? "ctx.agentId (HTTP ?agentId= / header)"
+        : "ctx.agentId ?? intelligence",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: null,
     },
@@ -351,7 +378,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/skills")),
       listUser: [],
       recordOps: schema.get("Skill")?.operations ?? new Set(),
-      mutatePrincipal: "ctx.agentId ?? intelligence",
+      mutatePrincipal: httpCtx.ok
+        ? "ctx.agentId (HTTP ?agentId= / header)"
+        : "ctx.agentId ?? intelligence",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: null,
     },
@@ -360,7 +389,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/artifact")),
       listUser: [],
       recordOps: schema.get("Artifact")?.operations ?? new Set(),
-      mutatePrincipal: "ctx.agentId ?? intelligence",
+      mutatePrincipal: httpCtx.ok
+        ? "ctx.agentId (HTTP ?agentId= / header)"
+        : "ctx.agentId ?? intelligence",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: null,
     },
@@ -369,7 +400,9 @@ export function discoverReadWriteSymmetry(repoRoot) {
       listAgent: legacy.filter((r) => r.path.includes("/workflow")),
       listUser: [],
       recordOps: schema.get("Workflow")?.operations ?? new Set(),
-      mutatePrincipal: "ctx.agentId ?? intelligence",
+      mutatePrincipal: httpCtx.ok
+        ? "ctx.agentId (HTTP ?agentId= / header)"
+        : "ctx.agentId ?? intelligence",
       listPrincipalAgent: "agentId query",
       listPrincipalUser: null,
     },
@@ -419,9 +452,10 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
       schemaToday:
         "ai_projects.agent_id AND ai_projects.user_id; cards.assigned_agent_id",
       listPath: "agent: GET /ai/projects?agentId=; user: GET /user/projects",
-      mutatePath: "Record TaskCard → ensureUserProject only",
+      mutatePath:
+        "Record TaskCard → ensureUserProject (personal) | ensureAgentProject (ctx.agentId)",
       toolPath:
-        "todo_write / create_project_card → user TaskCard + assigned_agent_id",
+        "todo_write / create_project_card → agent board when ctx.agentId set",
       webUi: "/tasks (user); Chat Automations/projects (agent scope)",
       docsClaim: "FEATURES: personal /tasks; Chat still mounts agent ProjectsBoard",
       verdict: findings.some((f) => f.id === "P0-tasks-split")
@@ -433,11 +467,10 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
     {
       domain: "productivity.calendar",
       preMigration: "agent-owned ai_calendar_events.agent_id",
-      schemaToday:
-        "agent_id + user_id columns; kernel writes user_id and agent_id=''",
+      schemaToday: "agent_id + user_id columns; dual workspace via ctx.agentId",
       listPath: "agent: GET /ai/calendar/*?agentId=; user: GET /user/calendar/*",
-      mutatePath: "Record CalendarEvent → requireUser + user_id",
-      toolPath: "agent tools use user calendar with session user",
+      mutatePath: "Record CalendarEvent → user_id OR agent_id via ctx.agentId",
+      toolPath: "agent tools use agent calendar when scoped",
       webUi: "/calendar (user); Chat Calendar tab (agent scope)",
       docsClaim: "FEATURES: personal /calendar + Chat → Calendar tab",
       verdict: findings.some((f) => f.id === "P0-cal-split")
@@ -451,9 +484,9 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
       preMigration: "agent-owned ai_memories.agent_id",
       schemaToday: "agent_id (unchanged)",
       listPath: "GET /ai/memories?agentId=",
-      mutatePath: "Record Memory; adapter agentId(ctx) ?? intelligence",
+      mutatePath: "Record Memory; adapter agentId(ctx) with HTTP ?agentId=",
       toolPath: "ctx.agentId from activeAgentId",
-      webUi: "Chat Knowledge → Memory (passes activeAgentId; stripped)",
+      webUi: "Chat Knowledge → Memory (passes activeAgentId via ?agentId=)",
       docsClaim: "FEATURES: memory attached to active agent",
       verdict: findings.some((f) => f.id === "P0-knowledge-fallback")
         ? "silent_fallback"
@@ -468,7 +501,7 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
       preMigration: "agent-owned / agent-enablement tables",
       schemaToday: "agent_id + ai_agent_*_state",
       listPath: "GET /ai/rules|skills|artifacts?agentId=",
-      mutatePath: "Record API; HTTP ctx lacks agentId",
+      mutatePath: "Record API; HTTP ctx.agentId from ?agentId=",
       toolPath: "ctx.agentId set",
       webUi: "Chat Knowledge tabs",
       docsClaim: "per active agent",
@@ -485,12 +518,13 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
       preMigration: "agent-owned ai_workflows.agent_id",
       schemaToday: "agent_id",
       listPath: "GET /ai/workflows?agentId=",
-      mutatePath:
-        "Record Workflow (agent_id writable); HTTP ctx may still default",
+      mutatePath: "Record Workflow; HTTP ctx.agentId when scoped",
       toolPath: "ctx.agentId",
       webUi: "Chat Automations",
       docsClaim: "agent automations",
-      verdict: "silent_fallback_risk",
+      verdict: findings.some((f) => f.id === "P0-ctx-agentId")
+        ? "silent_fallback_risk"
+        : "parity_ok",
       evidence: evidence.workflows ?? null,
       relatedFindings: ["P0-ctx-agentId"].filter((id) =>
         findings.some((f) => f.id === id)
@@ -581,7 +615,8 @@ export function buildDomainGapMatrix(repoRoot, evidence = {}) {
       preMigration: "n/a (pre-kernel used /ai agentId)",
       schemaToday: "OperationContext.agentId optional",
       listPath: "n/a",
-      mutatePath: "POST /api/records/* builds context without agentId",
+      mutatePath:
+        "POST /api/records/* sets ctx.agentId from ?agentId= / X-GodMode-Agent-Id",
       toolPath: "kernelOperationContext sets agentId",
       webUi: "all Record mutations",
       docsClaim: "kernel is the mutation boundary",

@@ -1103,6 +1103,7 @@ function EventDialog({
             end_at: endIso ?? null,
             all_day: allDay,
             location: location.trim() || null,
+            agentId: scope.agentId,
           });
         }
       } else if (isUserScope(scope)) {
@@ -1140,7 +1141,7 @@ function EventDialog({
       if (isUserScope(scope)) {
         await deleteUserCalendarEvent(event.id);
       } else {
-        await deleteCalendarEvent(event.id);
+        await deleteCalendarEvent(event.id, scope.agentId);
       }
       onDeleted?.();
     } finally {

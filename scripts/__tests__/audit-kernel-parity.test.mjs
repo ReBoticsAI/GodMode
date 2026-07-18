@@ -41,20 +41,35 @@ const context = (req: Request): OperationContext => ({
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("accepts HTTP OperationContext with agentId from query", () => {
+test("accepts HTTP OperationContext with resolveAgentIdFromRequest helper", () => {
   const { root, write } = fixture();
   write(
     "apps/bridge/src/kernel/routes.ts",
     `
 import type { Request } from "express";
 import type { OperationContext } from "./adapter-registry.js";
-const context = (req: Request): OperationContext => ({
-  tenantId: req.tenantId,
-  userId: req.user?.id,
-  agentId: typeof req.query.agentId === "string" ? req.query.agentId : undefined,
-  role: "viewer",
-  source: "http",
-});
+import { resolveAgentIdFromRequest } from "./agent-scope.js";
+const context = (
+  req: Request,
+  minRole: "viewer" | "editor" = "viewer"
+): OperationContext => {
+  const agentId = resolveAgentIdFromRequest(req);
+  return {
+    tenantId: req.tenantId,
+    userId: req.user?.id,
+    agentId,
+    role: "viewer",
+    source: "http",
+  };
+};
+`
+  );
+  write(
+    "apps/bridge/src/kernel/agent-scope.ts",
+    `export const GODMODE_AGENT_HEADER = "X-GodMode-Agent-Id";
+export function resolveAgentIdFromRequest(req) {
+  return req.get(GODMODE_AGENT_HEADER) || req.query.agentId;
+}
 `
   );
   const result = httpRecordContextSetsAgentId(root);
@@ -144,9 +159,10 @@ test("buildDomainGapMatrix includes core domains", () => {
   assert.ok(Array.isArray(report.symmetry));
 });
 
-test("read/write symmetry flags TaskCard split_brain on real repo", () => {
+test("read/write symmetry reports dual TaskCard ownership on real repo", () => {
   const rows = discoverReadWriteSymmetry(process.cwd());
   const tasks = rows.find((r) => r.surface === "TaskCard");
   assert.ok(tasks);
-  assert.equal(tasks.verdict, "split_brain");
+  assert.equal(tasks.verdict, "ok_or_agent_only");
+  assert.match(tasks.mutatePrincipal, /ensureAgentProject/);
 });

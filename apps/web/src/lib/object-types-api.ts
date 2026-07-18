@@ -61,6 +61,15 @@ export async function fetchObjectType(name: string): Promise<ObjectTypeClient> {
   return api<ObjectTypeClient>(`/object-types/${encodeURIComponent(name)}`);
 }
 
+/** Optional agent workspace scope for Record API calls (dual workspaces). */
+export type RecordScopeOpts = { agentId?: string };
+
+function withAgentScope(path: string, opts?: RecordScopeOpts): string {
+  if (!opts?.agentId) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}agentId=${encodeURIComponent(opts.agentId)}`;
+}
+
 export async function fetchRecords(
   objectType: string,
   opts?: {
@@ -70,6 +79,7 @@ export async function fetchRecords(
     sort?: string;
     direction?: "asc" | "desc";
     filters?: Record<string, unknown>;
+    agentId?: string;
   }
 ): Promise<{
   objectType?: string;
@@ -92,6 +102,7 @@ export async function fetchRecords(
   for (const [name, value] of Object.entries(opts?.filters ?? {})) {
     if (value != null && value !== "") q.set(`filters[${name}]`, String(value));
   }
+  if (opts?.agentId) q.set("agentId", opts.agentId);
   const qs = q.toString();
   return api(
     `/records/${encodeURIComponent(objectType)}${qs ? `?${qs}` : ""}`
@@ -100,18 +111,23 @@ export async function fetchRecords(
 
 export async function fetchRecord(
   objectType: string,
-  id: string
+  id: string,
+  opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
   return api(
-    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`
+    withAgentScope(
+      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
+      opts
+    )
   );
 }
 
 export async function createRecordApi(
   objectType: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
-  return api(`/records/${encodeURIComponent(objectType)}`, {
+  return api(withAgentScope(`/records/${encodeURIComponent(objectType)}`, opts), {
     method: "POST",
     body: JSON.stringify({ data }),
   });
@@ -121,10 +137,14 @@ export async function updateRecordApi(
   objectType: string,
   id: string,
   data: Record<string, unknown>,
-  expectedVersion?: string
+  expectedVersion?: string,
+  opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
   return api(
-    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
+    withAgentScope(
+      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
+      opts
+    ),
     {
       method: "PUT",
       headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
@@ -136,10 +156,14 @@ export async function updateRecordApi(
 export async function deleteRecordApi(
   objectType: string,
   id: string,
-  expectedVersion?: string
+  expectedVersion?: string,
+  opts?: RecordScopeOpts
 ): Promise<void> {
   await api(
-    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
+    withAgentScope(
+      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
+      opts
+    ),
     {
       method: "DELETE",
       headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
@@ -157,11 +181,15 @@ export async function runRecordActionApi(
     idempotencyKey?: string;
     expectedVersion?: string;
     confirmed?: boolean;
+    agentId?: string;
   }
 ): Promise<unknown> {
-  const target = opts?.id
-    ? `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(opts.id)}/actions/${encodeURIComponent(action)}`
-    : `/records/${encodeURIComponent(objectType)}/actions/${encodeURIComponent(action)}`;
+  const target = withAgentScope(
+    opts?.id
+      ? `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(opts.id)}/actions/${encodeURIComponent(action)}`
+      : `/records/${encodeURIComponent(objectType)}/actions/${encodeURIComponent(action)}`,
+    opts
+  );
   const headers: Record<string, string> = {};
   if (opts?.confirmationId) {
     headers["X-Kernel-Confirmation"] = opts.confirmationId;
