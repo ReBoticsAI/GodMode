@@ -518,6 +518,14 @@ function resolvedNode(node, constants, bindings = new Map(), seen = new Set()) {
     const selected = property(base, value.name.text);
     return selected ? resolvedNode(selected, constants, bindings, seen) : value;
   }
+  if (ts.isElementAccessExpression(value) && value.argumentExpression) {
+    const base = resolvedNode(value.expression, constants, bindings, seen);
+    const key = resolvedText(value.argumentExpression, constants, bindings);
+    if (key && base) {
+      const selected = property(base, key);
+      if (selected) return resolvedNode(selected, constants, bindings, seen);
+    }
+  }
   return value;
 }
 
@@ -620,6 +628,30 @@ function mappedObjectCandidates(files, constants) {
   return candidates;
 }
 
+/**
+ * When ObjectTypes declare FieldDef objects (e.g. StructureNode builtins) instead of
+ * a writable: string[] list, treat fields as writable unless inForm===false or ReadOnly.
+ */
+function writableFromFieldDefs(fieldsNode, constants, bindings) {
+  const fields = resolvedArray(fieldsNode, constants, bindings);
+  const writable = [];
+  for (const field of fields) {
+    const value = resolvedNode(field, constants, bindings);
+    if (!value || !ts.isObjectLiteralExpression(value)) continue;
+    const name = resolvedText(property(value, "name"), constants, bindings);
+    if (!name) continue;
+    const fieldType = resolvedText(property(value, "fieldType"), constants, bindings);
+    if (fieldType === "ReadOnly") continue;
+    const inFormNode = property(value, "inForm");
+    if (inFormNode) {
+      const inForm = resolvedNode(inFormNode, constants, bindings);
+      if (inForm && inForm.kind === ts.SyntaxKind.FalseKeyword) continue;
+    }
+    writable.push(name);
+  }
+  return writable;
+}
+
 export function discoverKernelSchema(repoRoot) {
   const kernelFiles = walkFiles(
     path.join(repoRoot, "apps", "bridge", "src", "kernel"),
@@ -677,10 +709,116 @@ export function discoverKernelSchema(repoRoot) {
           );
         })
         .filter(Boolean);
-      objectTypes.set(name, { operations: new Set(operations), actions: new Set(actions) });
+      const writableFields = writable
+        ? resolvedArray(writable, constants, candidate.bindings)
+            .map((item) => resolvedText(item, constants, candidate.bindings))
+            .filter(Boolean)
+        : writableFromFieldDefs(property(candidate.node, "fields"), constants, candidate.bindings);
+      const next = {
+        operations: new Set(operations),
+        actions: new Set(actions),
+        writable: new Set(writableFields),
+      };
+      const previous = objectTypes.get(name);
+      if (!previous) {
+        objectTypes.set(name, next);
+        continue;
+      }
+      // Prefer the richest writable set when the same ObjectType appears in
+      // domain specs and adapter/registration maps.
+      const mergedWritable = new Set([...previous.writable, ...next.writable]);
+      const mergedOps = new Set([...previous.operations, ...next.operations]);
+      const mergedActions = new Set([...previous.actions, ...next.actions]);
+      objectTypes.set(name, {
+        operations: mergedOps.size >= previous.operations.size ? mergedOps : previous.operations,
+        actions: mergedActions.size >= previous.actions.size ? mergedActions : previous.actions,
+        writable: mergedWritable,
+      });
   }
   return objectTypes;
 }
+
+/** Adapter-local writable Sets (CARD_WRITABLE, CALENDAR_WRITABLE, etc.). */
+export function discoverAdapterWritableSets(repoRoot) {
+  const adapterDir = path.join(repoRoot, "apps", "bridge", "src", "kernel", "adapters");
+  const files = walkFiles(adapterDir, new Set([".ts"])).filter(
+    (file) => !file.includes(`${path.sep}__tests__${path.sep}`)
+  );
+  const constants = constMap(files);
+  const sets = [];
+  for (const file of files) {
+    const source = sourceFile(file);
+    visit(source, (node) => {
+      if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+        return;
+      }
+      if (!/_WRITABLE$/.test(node.name.text) && node.name.text !== "writable") return;
+      const init = unwrap(node.initializer);
+      if (
+        !ts.isNewExpression(init) ||
+        !ts.isIdentifier(init.expression) ||
+        init.expression.text !== "Set" ||
+        !init.arguments[0]
+      ) {
+        return;
+      }
+      const fields = resolvedArray(init.arguments[0], constants, new Map())
+        .map((item) => resolvedText(item, constants, new Map()))
+        .filter(Boolean);
+      // Skip tiny inline writable=new Set inside update handlers unless named *_WRITABLE.
+      if (node.name.text === "writable" && fields.length === 0) return;
+      sets.push({
+        file: slash(path.relative(repoRoot, file)),
+        name: node.name.text,
+        fields: new Set(fields),
+      });
+    });
+  }
+  return sets;
+}
+
+/**
+ * Static createDto/updateDto object-literal payloads in apps/web/src/api.ts.
+ * Keys present in the AST are checked even when runtime JSON.stringify drops undefined.
+ */
+export function discoverClientRecordPayloads(repoRoot) {
+  const file = path.join(repoRoot, "apps", "web", "src", "api.ts");
+  if (!fs.existsSync(file)) return [];
+  const source = sourceFile(file);
+  const payloads = [];
+  visit(source, (node) => {
+    if (!ts.isCallExpression(node) || node.arguments.length < 2) return;
+    const callee = unwrap(node.expression);
+    if (!ts.isIdentifier(callee)) return;
+    if (callee.text !== "createDto" && callee.text !== "updateDto") return;
+    const objectType = staticText(node.arguments[0]);
+    if (!objectType) return;
+    const dataArg =
+      callee.text === "createDto" ? node.arguments[1] : node.arguments[2];
+    const data = unwrap(dataArg);
+    if (!data || !ts.isObjectLiteralExpression(data)) return;
+    const fields = [];
+    for (const prop of data.properties) {
+      if (!ts.isPropertyAssignment(prop)) continue;
+      if (ts.isIdentifier(prop.name)) fields.push(prop.name.text);
+      else if (ts.isStringLiteralLike(prop.name)) fields.push(prop.name.text);
+    }
+    payloads.push({
+      file: slash(path.relative(repoRoot, file)),
+      kind: callee.text,
+      objectType,
+      fields,
+      line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+    });
+  });
+  return payloads;
+}
+
+/** Map adapter WRITABLE const names onto ObjectType names when unambiguous. */
+export const ADAPTER_WRITABLE_OBJECT_TYPES = {
+  CARD_WRITABLE: "TaskCard",
+  CALENDAR_WRITABLE: "CalendarEvent",
+};
 
 function methodFromOptions(node, constants) {
   const method = staticText(property(node, "method"), constants);
