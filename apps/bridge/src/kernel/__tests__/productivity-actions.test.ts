@@ -41,11 +41,13 @@ const eventDef: ObjectTypeDef = {
   name: "CalendarEvent",
   label: "Calendar Event",
   storage: { kind: "adapter", adapterId: calendarEventServiceAdapter.id },
-  fields: ["id", "user_id", "title", "start_at", "status"].map((name) => ({
-    name,
-    label: name,
-    fieldType: "Data",
-  })),
+  fields: ["id", "agent_id", "user_id", "title", "start_at", "status"].map(
+    (name) => ({
+      name,
+      label: name,
+      fieldType: "Data",
+    })
+  ),
 };
 
 const owner = {
@@ -250,5 +252,85 @@ describe("productivity adapter actions", () => {
         { ...owner, userId: "other-user" }
       )
     ).toThrow(/CalendarEvent not found/);
+  });
+
+  it("keeps agent workspaces separate from personal user boards", () => {
+    db.exec(`
+      CREATE TABLE ai_agents (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL
+      );
+    `);
+    db.prepare(`INSERT INTO ai_agents (id, name) VALUES (?, ?)`).run(
+      "worker",
+      "Worker"
+    );
+
+    const agentCtx = { ...owner, agentId: "worker" };
+    const userCard = taskCardServiceAdapter.create!(
+      db,
+      taskDef,
+      { title: "Personal todo" },
+      owner
+    );
+    const agentCard = taskCardServiceAdapter.create!(
+      db,
+      taskDef,
+      { title: "Agent todo" },
+      agentCtx
+    );
+
+    const userProject = db
+      .prepare(`SELECT id, user_id, agent_id FROM ai_projects WHERE user_id=?`)
+      .get(owner.userId) as {
+      id: string;
+      user_id: string;
+      agent_id: string | null;
+    };
+    const agentProject = db
+      .prepare(`SELECT id, user_id, agent_id FROM ai_projects WHERE agent_id=?`)
+      .get("worker") as {
+      id: string;
+      user_id: string | null;
+      agent_id: string;
+    };
+    expect(userProject.agent_id).toBeNull();
+    expect(agentProject.user_id).toBeNull();
+    expect(userCard.data.project_id).toBe(userProject.id);
+    expect(agentCard.data.project_id).toBe(agentProject.id);
+    expect(userCard.data.project_id).not.toBe(agentCard.data.project_id);
+
+    const agentListed = taskCardServiceAdapter.list!(db, taskDef, {}, agentCtx);
+    expect(agentListed.records.map((r) => r.id)).toEqual([agentCard.id]);
+
+    const userListed = taskCardServiceAdapter.list!(db, taskDef, {}, owner);
+    expect(userListed.records.map((r) => r.id)).toEqual([userCard.id]);
+
+    const agentEvent = calendarEventServiceAdapter.create!(
+      db,
+      eventDef,
+      { title: "Agent sync", start_at: "2026-07-18T10:00:00.000Z" },
+      agentCtx
+    );
+    expect(agentEvent.data.agent_id).toBe("worker");
+    expect(agentEvent.data.user_id).toBeNull();
+
+    const userEvent = calendarEventServiceAdapter.create!(
+      db,
+      eventDef,
+      { title: "Personal sync", start_at: "2026-07-18T11:00:00.000Z" },
+      owner
+    );
+    expect(userEvent.data.user_id).toBe(owner.userId);
+
+    expect(
+      calendarEventServiceAdapter
+        .list!(db, eventDef, {}, agentCtx)
+        .records.map((r) => r.id)
+    ).toEqual([agentEvent.id]);
+    expect(
+      calendarEventServiceAdapter
+        .list!(db, eventDef, {}, owner)
+        .records.map((r) => r.id)
+    ).toEqual([userEvent.id]);
   });
 });

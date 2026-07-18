@@ -40,7 +40,7 @@ Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AG
 | **Wiki** | `/wiki` | Markdown knowledge base with spaces, internal/external visibility, and backlinks; hybrid wiki snippets can inject into chat. |
 | **Tasks** | `/tasks` | Kanban boards with columns, priorities, subtasks, and comments. Tag a card `auto` to queue autonomous agent work. |
 | **Automations** | Chat panel → Automations tab | Same kanban board in the Chat window; tag `auto` for the autonomous runner. |
-| **Calendar** | `/calendar` | Personal events and activity feed. Also available in Chat → Calendar tab. |
+| **Calendar** | `/calendar` | Personal events and activity feed. Agents also get their own calendar in Chat → Calendar tab (dual workspaces). |
 | **Notifications** | `/notifications` | Platform alerts, including deduplicated signed-release availability. Also in Chat → Notifications tab. |
 | **Vault** | `/vault` | Secrets, API keys, and Cursor subscription connect. Chat → Vault tab for quick access while chatting. |
 | **Bank** | `/bank` | Connect wallets and accounts for you and your agents to track balances. Chat → Bank tab. |

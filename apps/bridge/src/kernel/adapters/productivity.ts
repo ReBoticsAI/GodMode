@@ -11,7 +11,10 @@ import {
   advanceSubtaskOnResultComment,
   reconcileParentProgress,
 } from "../../services/card-progress.js";
-import { ensureUserProject } from "../../services/user-productivity.js";
+import {
+  ensureAgentProject,
+  ensureUserProject,
+} from "../../services/user-productivity.js";
 import {
   assertShareRole,
   resolveShareAccess,
@@ -28,6 +31,12 @@ function requireUser(ctx: OperationContext): string {
     throw Object.assign(new Error("Authenticated user required"), { status: 401 });
   }
   return ctx.userId;
+}
+
+/** Agent workspace when `ctx.agentId` is set; otherwise the caller's personal OS. */
+function productivityProjectId(db: AppDatabase, ctx: OperationContext): string {
+  if (ctx.agentId) return ensureAgentProject(ctx.agentId, db);
+  return ensureUserProject(requireUser(ctx), db);
 }
 
 function record(
@@ -265,7 +274,7 @@ const CALENDAR_WRITABLE = new Set([
   "status",
 ]);
 
-function calendarRow(
+function calendarRowByUser(
   db: AppDatabase,
   id: string,
   userId: string
@@ -275,14 +284,38 @@ function calendarRow(
     .get(id, userId) as Record<string, unknown> | undefined;
 }
 
+function calendarRowByAgent(
+  db: AppDatabase,
+  id: string,
+  agentId: string
+): Record<string, unknown> | undefined {
+  return db
+    .prepare(`SELECT * FROM ai_calendar_events WHERE id=? AND agent_id=?`)
+    .get(id, agentId) as Record<string, unknown> | undefined;
+}
+
 function calendarAccess(
   db: AppDatabase,
   id: string,
   ctx: OperationContext,
   write = false
-): { access: ProductivityAccess; row: Record<string, unknown> } | null {
+): { access: ProductivityAccess; row: Record<string, unknown>; agentId?: string } | null {
+  if (ctx.agentId) {
+    const local = calendarRowByAgent(db, id, ctx.agentId);
+    if (!local) return null;
+    return {
+      access: {
+        db,
+        ownerUserId: ctx.userId ?? "",
+        ownerTenantId: ctx.tenantId ?? "",
+        role: "owner",
+      },
+      row: local,
+      agentId: ctx.agentId,
+    };
+  }
   const userId = requireUser(ctx);
-  const local = calendarRow(db, id, userId);
+  const local = calendarRowByUser(db, id, userId);
   if (local) {
     return {
       access: {
@@ -295,7 +328,7 @@ function calendarAccess(
     };
   }
   for (const access of sharedAccesses(ctx, "user_calendar")) {
-    const row = calendarRow(access.db, id, access.ownerUserId);
+    const row = calendarRowByUser(access.db, id, access.ownerUserId);
     if (!row) continue;
     if (write) assertShareRole(access.role, "editor");
     return { access, row };
@@ -306,8 +339,21 @@ function calendarAccess(
 export const calendarEventServiceAdapter: RecordAdapter = {
   id: "calendar_event_service",
   list(db, def, query, ctx) {
-    const userId = requireUser(ctx);
     const { limit, offset } = paging(query);
+    if (ctx.agentId) {
+      const rows = db
+        .prepare(
+          `SELECT * FROM ai_calendar_events WHERE agent_id=?
+           ORDER BY start_at ASC`
+        )
+        .all(ctx.agentId) as Record<string, unknown>[];
+      return {
+        objectType: def.name,
+        records: rows.slice(offset, offset + limit).map((row) => record(def, row)),
+        total: rows.length,
+      };
+    }
+    const userId = requireUser(ctx);
     const localRows = db
       .prepare(
         `SELECT * FROM ai_calendar_events WHERE user_id=?
@@ -333,8 +379,31 @@ export const calendarEventServiceAdapter: RecordAdapter = {
     return resolved ? record(def, resolved.row) : null;
   },
   create(db, def, data, ctx) {
-    const userId = requireUser(ctx);
     const id = typeof data.id === "string" && data.id ? data.id : uuidv4();
+    if (ctx.agentId) {
+      requireUser(ctx);
+      db.prepare(
+        `INSERT INTO ai_calendar_events
+         (id, agent_id, user_id, kind, title, description, start_at, end_at,
+          all_day, location, linked_card_id, linked_run_id, status)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id,
+        ctx.agentId,
+        data.kind ?? "event",
+        data.title,
+        data.description ?? null,
+        data.start_at,
+        data.end_at ?? null,
+        data.all_day ? 1 : 0,
+        data.location ?? null,
+        data.linked_card_id ?? null,
+        data.linked_run_id ?? null,
+        data.status ?? "scheduled"
+      );
+      return record(def, calendarRowByAgent(db, id, ctx.agentId)!);
+    }
+    const userId = requireUser(ctx);
     db.prepare(
       `INSERT INTO ai_calendar_events
        (id, agent_id, user_id, kind, title, description, start_at, end_at,
@@ -354,12 +423,12 @@ export const calendarEventServiceAdapter: RecordAdapter = {
       data.linked_run_id ?? null,
       data.status ?? "scheduled"
     );
-    return record(def, calendarRow(db, id, userId)!);
+    return record(def, calendarRowByUser(db, id, userId)!);
   },
   update(db, def, id, data, ctx) {
     const resolved = calendarAccess(db, id, ctx, true);
     if (!resolved) notFound("CalendarEvent");
-    const { access } = resolved;
+    const { access, agentId } = resolved;
     const sets: string[] = [];
     const values: unknown[] = [];
     for (const [name, value] of Object.entries(data)) {
@@ -369,38 +438,58 @@ export const calendarEventServiceAdapter: RecordAdapter = {
     }
     if (sets.length) {
       sets.push(`updated_at=datetime('now')`);
-      access.db.prepare(
-        `UPDATE ai_calendar_events SET ${sets.join(", ")} WHERE id=? AND user_id=?`
-      ).run(...values, id, access.ownerUserId);
+      if (agentId) {
+        access.db.prepare(
+          `UPDATE ai_calendar_events SET ${sets.join(", ")} WHERE id=? AND agent_id=?`
+        ).run(...values, id, agentId);
+      } else {
+        access.db.prepare(
+          `UPDATE ai_calendar_events SET ${sets.join(", ")} WHERE id=? AND user_id=?`
+        ).run(...values, id, access.ownerUserId);
+      }
     }
     return record(
       def,
-      calendarRow(access.db, id, access.ownerUserId)!
+      agentId
+        ? calendarRowByAgent(access.db, id, agentId)!
+        : calendarRowByUser(access.db, id, access.ownerUserId)!
     );
   },
   delete(db, _def, id, ctx) {
     const resolved = calendarAccess(db, id, ctx, true);
     if (!resolved) notFound("CalendarEvent");
-    const result = resolved.access.db
-      .prepare(`DELETE FROM ai_calendar_events WHERE id=? AND user_id=?`)
-      .run(id, resolved.access.ownerUserId);
+    const result = resolved.agentId
+      ? resolved.access.db
+          .prepare(`DELETE FROM ai_calendar_events WHERE id=? AND agent_id=?`)
+          .run(id, resolved.agentId)
+      : resolved.access.db
+          .prepare(`DELETE FROM ai_calendar_events WHERE id=? AND user_id=?`)
+          .run(id, resolved.access.ownerUserId);
     if (!result.changes) notFound("CalendarEvent");
   },
   actions: {
     transition(db, def, id, input, ctx) {
       const resolved = calendarAccess(db, id, ctx, true);
       if (!resolved) notFound("CalendarEvent");
-      const { access } = resolved;
+      const { access, agentId } = resolved;
       const status = requiredText(input, "status");
       if (!["scheduled", "completed", "cancelled"].includes(status)) {
         badRequest("invalid calendar status");
+      }
+      if (agentId) {
+        access.db.prepare(
+          `UPDATE ai_calendar_events
+           SET status=?, updated_at=datetime('now')
+           WHERE id=? AND agent_id=?`
+        ).run(status, id, agentId);
+        return record(def, calendarRowByAgent(access.db, id, agentId)!);
       }
       access.db.prepare(
         `UPDATE ai_calendar_events
          SET status=?, updated_at=datetime('now')
          WHERE id=? AND user_id=?`
       ).run(status, id, access.ownerUserId);
-      return record(def, calendarRow(access.db, id, access.ownerUserId)!);
+      return record(def, calendarRowByUser(access.db, id, access.ownerUserId)!);
     },
   },
 };
@@ -447,6 +536,25 @@ function taskAccess(
   ctx: OperationContext,
   write = false
 ): { access: ProductivityAccess; projectId: string; row: Record<string, unknown> } | null {
+  if (ctx.agentId) {
+    const projectId = ensureAgentProject(ctx.agentId, db);
+    const local = cardRow(db, id, projectId);
+    if (local) {
+      return {
+        access: {
+          db,
+          ownerUserId: ctx.userId ?? "",
+          ownerTenantId: ctx.tenantId ?? "",
+          role: "owner",
+        },
+        projectId,
+        row: local,
+      };
+    }
+    // HTTP agent workspace is strict. Agent runtime may still comment/act on
+    // personal-user cards while carrying agentId for authorship.
+    if (ctx.source === "http") return null;
+  }
   const userId = requireUser(ctx);
   const localProjectId = ensureUserProject(userId, db);
   const local = cardRow(db, id, localProjectId);
@@ -559,9 +667,24 @@ function appendScopedComment(
 export const taskCardServiceAdapter: RecordAdapter = {
   id: "task_card_service",
   list(db, def, query, ctx) {
+    const { limit, offset } = paging(query);
+    if (ctx.agentId) {
+      requireUser(ctx);
+      const projectId = ensureAgentProject(ctx.agentId, db);
+      const rows = db
+        .prepare(
+          `SELECT * FROM ai_project_cards WHERE project_id=?
+           ORDER BY sort_order ASC`
+        )
+        .all(projectId) as Record<string, unknown>[];
+      return {
+        objectType: def.name,
+        records: rows.slice(offset, offset + limit).map((row) => record(def, row)),
+        total: rows.length,
+      };
+    }
     const userId = requireUser(ctx);
     const projectId = ensureUserProject(userId, db);
-    const { limit, offset } = paging(query);
     const localRows = db
       .prepare(
         `SELECT * FROM ai_project_cards WHERE project_id=?
@@ -591,7 +714,7 @@ export const taskCardServiceAdapter: RecordAdapter = {
     return resolved ? record(def, resolved.row) : null;
   },
   create(db, def, data, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
+    const projectId = productivityProjectId(db, ctx);
     const columnId =
       typeof data.column_id === "string" ? data.column_id : "backlog";
     const id = typeof data.id === "string" && data.id ? data.id : uuidv4();
@@ -793,7 +916,7 @@ const CARD_COMMENT_RECORD_DEF: ObjectTypeDef = {
 export const cardCommentServiceAdapter: RecordAdapter = {
   id: "card_comment_service",
   list(db, def, query, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
+    const projectId = productivityProjectId(db, ctx);
     const { limit, offset } = paging(query);
     const rows = db
       .prepare(
@@ -819,7 +942,7 @@ export const cardCommentServiceAdapter: RecordAdapter = {
     };
   },
   get(db, def, id, ctx) {
-    const projectId = ensureUserProject(requireUser(ctx), db);
+    const projectId = productivityProjectId(db, ctx);
     const row = db
       .prepare(
         `SELECT c.* FROM ai_card_comments c

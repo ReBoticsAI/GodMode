@@ -416,6 +416,7 @@ function CardEditorDialog({
           columnId: "in_progress",
           parentCardId: card.id,
           priority,
+          agentId: scope.agentId,
         });
       }
       setNewSubtask("");
@@ -435,7 +436,7 @@ function CardEditorDialog({
       if (isUserScope(scope)) {
         await updateUserProjectCard(sub.id, patch);
       } else {
-        await updateProjectCard(sub.id, patch);
+        await updateProjectCard(sub.id, { ...patch, agentId: scope.agentId });
       }
       void reloadSubtasks();
     } catch (err) {
@@ -518,7 +519,7 @@ function CardEditorDialog({
     if (isUserScope(scope)) {
       await updateUserProjectCard(card.id, patch);
     } else {
-      await updateProjectCard(card.id, patch);
+      await updateProjectCard(card.id, { ...patch, agentId: scope.agentId });
     }
   }, [card, title, description, prompt, priority, attachments, tags, assignedAgentId, scope]);
 
@@ -572,7 +573,7 @@ function CardEditorDialog({
       if (isUserScope(scope)) {
         await deleteUserProjectCard(card.id);
       } else {
-        await deleteProjectCard(card.id);
+        await deleteProjectCard(card.id, scope.agentId);
       }
       onDeleted();
       onOpenChange(false);
@@ -980,7 +981,7 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
       if (isUserScope(scope)) {
         await moveUserProjectCard(id, columnId);
       } else {
-        await moveProjectCard(id, columnId);
+        await moveProjectCard(id, columnId, undefined, scope.agentId);
       }
       load();
     } catch (err) {
