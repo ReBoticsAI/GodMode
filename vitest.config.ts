@@ -8,6 +8,8 @@ export default defineConfig({
       "packages/plugin-api/src/__tests__/**/*.test.ts",
       "apps/bridge/src/kernel/__tests__/**/*.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
+      "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
+      "apps/bridge/src/routes/__tests__/marketplace-listings-query.test.ts",
       "apps/bridge/src/services/__tests__/release-flow.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",

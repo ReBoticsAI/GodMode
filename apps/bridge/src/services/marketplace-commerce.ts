@@ -343,6 +343,22 @@ export function markOrderDelivered(core: CoreDatabase, orderId: string): void {
     .run(orderId);
 }
 
+/** After a successful acquire, move matching paid orders to delivered. */
+export function markPaidOrdersDeliveredForListing(
+  core: CoreDatabase,
+  opts: { listingId: string; buyerUserId: string }
+): void {
+  const rows = core
+    .prepare(
+      `SELECT id FROM marketplace_orders
+       WHERE listing_id=? AND buyer_user_id=? AND status='paid'`
+    )
+    .all(opts.listingId, opts.buyerUserId) as Array<{ id: string }>;
+  for (const row of rows) {
+    markOrderDelivered(core, row.id);
+  }
+}
+
 export function markOrderDisputedAndBanBuyer(
   core: CoreDatabase,
   opts: { orderId: string; reason?: string }

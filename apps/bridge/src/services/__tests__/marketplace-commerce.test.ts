@@ -7,6 +7,7 @@ import {
   isMarketplaceBanned,
   markOrderDisputedAndBanBuyer,
   markOrderPaid,
+  markPaidOrdersDeliveredForListing,
   platformFeeCents,
   updateSellerPayout,
 } from "../marketplace-commerce.js";
@@ -195,5 +196,47 @@ describe("marketplace commerce", () => {
     expect(() =>
       assertCanAcquireListing(core as never, { userId: "buyer", listing })
     ).not.toThrow();
+  });
+
+  it("marks paid orders delivered for a listing after acquire", () => {
+    acceptMarketplaceTos(core as never, "buyer");
+    acceptMarketplaceTos(core as never, "seller");
+    updateSellerPayout(core as never, {
+      userId: "seller",
+      metamaskAddress: "0x1111111111111111111111111111111111111111",
+      payoutPreference: "crypto",
+    });
+    core
+      .prepare(
+        `INSERT INTO marketplace_listings
+         (id, seller_user_id, seller_tenant_id, kind, resource_id, title, price_cents, seller_kind)
+         VALUES ('listing-1', 'seller', 't1', 'skill', 'res-1', 'Skill', 1000, 'user')`
+      )
+      .run();
+
+    const order = createMarketplaceOrder(core as never, {
+      listingId: "listing-1",
+      buyerUserId: "buyer",
+      buyerTenantId: "t1",
+      sellerUserId: "seller",
+      sellerKind: "user",
+      amountCents: 1000,
+      provider: "crypto",
+    });
+    markOrderPaid(core as never, {
+      orderId: String(order.id),
+      cryptoTxHash: "0x" + "cd".repeat(32),
+    });
+
+    markPaidOrdersDeliveredForListing(core as never, {
+      listingId: "listing-1",
+      buyerUserId: "buyer",
+    });
+
+    const updated = core
+      .prepare(`SELECT status, delivered_at FROM marketplace_orders WHERE id=?`)
+      .get(String(order.id)) as { status: string; delivered_at: string | null };
+    expect(updated.status).toBe("delivered");
+    expect(updated.delivered_at).toBeTruthy();
   });
 });

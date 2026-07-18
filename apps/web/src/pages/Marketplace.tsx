@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   acceptMarketplaceTos,
+  acquireMarketplaceListing,
   addCatalogSource,
+  archiveMarketplaceListing,
   confirmMarketplaceCryptoPayment,
   connectMarketplacePayout,
+  createMarketplaceListing,
   fetchInstalledCatalog,
   fetchMarketplaceCommerceConfig,
+  fetchMarketplaceEntitlements,
+  fetchMarketplaceListings,
+  fetchMyMarketplaceListings,
   fetchOfficialCatalog,
   fetchUnofficialCatalog,
   installCatalogEntry,
@@ -17,8 +24,14 @@ import {
   uninstallWorkspacePlugin,
   type CatalogEntry,
   type DiscoveredPlugin,
+  type MarketplaceEntitlement,
+  type MarketplaceListing,
   type TenantPluginRow,
 } from "@/api";
+import {
+  communityCheckoutBody,
+  formatMarketplaceCents,
+} from "@/lib/marketplace-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +51,32 @@ import { FolderOpenIcon, Trash2Icon } from "lucide-react";
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
 
+const LISTING_KINDS = [
+  "skill",
+  "agent",
+  "page",
+  "workflow",
+  "artifact",
+  "rule",
+  "knowledge",
+  "dataset",
+  "bundle",
+] as const;
+
+function normalizeMarketplaceTab(raw: string | null): string {
+  if (raw === "unofficial") return "local";
+  if (
+    raw === "official" ||
+    raw === "local" ||
+    raw === "community" ||
+    raw === "installed" ||
+    raw === "seller"
+  ) {
+    return raw;
+  }
+  return "official";
+}
+
 function reloadAfterPluginChange(built?: boolean) {
   if (built) {
     toast.info("Plugin was built — reloading to activate UI…");
@@ -48,9 +87,7 @@ function reloadAfterPluginChange(built?: boolean) {
 }
 
 function formatPrice(entry: CatalogEntry): string {
-  const cents = Number(entry.priceCents ?? 0);
-  if (cents <= 0) return "Free";
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatMarketplaceCents(entry.priceCents);
 }
 
 function EntryCard({
@@ -139,6 +176,67 @@ function EntryCard({
   );
 }
 
+function CommunityListingCard({
+  listing,
+  owned,
+  onAcquire,
+  onBuy,
+  busy,
+}: {
+  listing: MarketplaceListing;
+  owned: boolean;
+  onAcquire: () => void;
+  onBuy: (provider: "stripe" | "paypal" | "crypto") => void;
+  busy: boolean;
+}) {
+  const paid = Number(listing.price_cents ?? 0) > 0;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">{listing.title}</CardTitle>
+            <CardDescription className="text-xs">
+              {listing.kind} · {listing.delivery_mode ?? "clone"}
+            </CardDescription>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant={paid ? "default" : "secondary"}>
+              {formatMarketplaceCents(listing.price_cents)}
+            </Badge>
+            {owned ? <Badge variant="secondary">Owned</Badge> : null}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          {listing.description?.trim() || "No description"}
+        </p>
+        {paid && !owned ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onBuy("stripe")} disabled={busy}>
+              {busy ? "Starting…" : "Buy (Card)"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onBuy("paypal")} disabled={busy}>
+              PayPal
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onBuy("crypto")} disabled={busy}>
+              Crypto
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onAcquire} disabled={busy}>
+              Acquire if owned
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" onClick={onAcquire} disabled={busy || owned}>
+            {owned ? "Owned" : busy ? "Acquiring…" : "Acquire"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DiscoveredPluginRow({
   plugin,
   busy,
@@ -198,9 +296,15 @@ function DiscoveredPluginRow({
 }
 
 export default function MarketplacePage() {
-  const [tab, setTab] = useState("official");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState(() =>
+    normalizeMarketplaceTab(searchParams.get("tab"))
+  );
   const [official, setOfficial] = useState<CatalogEntry[]>([]);
-  const [unofficial, setUnofficial] = useState<CatalogEntry[]>([]);
+  const [localCatalog, setLocalCatalog] = useState<CatalogEntry[]>([]);
+  const [communityListings, setCommunityListings] = useState<MarketplaceListing[]>([]);
+  const [myListings, setMyListings] = useState<MarketplaceListing[]>([]);
+  const [entitlements, setEntitlements] = useState<MarketplaceEntitlement[]>([]);
   const [discovered, setDiscovered] = useState<DiscoveredPlugin[]>([]);
   const [localPaths, setLocalPaths] = useState<string[]>([]);
   const [sources, setSources] = useState<Array<{ id: string; name: string; url: string }>>(
@@ -220,6 +324,7 @@ export default function MarketplacePage() {
   const [localPath, setLocalPath] = useState("");
   const [addingLocal, setAddingLocal] = useState(false);
   const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [acquiringId, setAcquiringId] = useState<string | null>(null);
   const [cryptoPrompt, setCryptoPrompt] = useState<{
     orderId: string;
     treasuryAddress: string;
@@ -232,22 +337,46 @@ export default function MarketplacePage() {
   const [paypalMerchantId, setPaypalMerchantId] = useState("");
   const [stripeConnectId, setStripeConnectId] = useState("");
   const [tosVersion, setTosVersion] = useState("1");
+  const [platformFeeBps, setPlatformFeeBps] = useState(1000);
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [payoutReady, setPayoutReady] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishKind, setPublishKind] = useState<string>("skill");
+  const [publishTitle, setPublishTitle] = useState("");
+  const [publishDescription, setPublishDescription] = useState("");
+  const [publishPriceDollars, setPublishPriceDollars] = useState("0");
+  const [publishDelivery, setPublishDelivery] = useState<"clone" | "live">("clone");
+  const [publishResourceId, setPublishResourceId] = useState("");
+
+  const ownedListingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of entitlements) {
+      if (e.status === "active" || e.status === "cancelled") ids.add(e.listing_id);
+    }
+    return ids;
+  }, [entitlements]);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [off, unoff, inst] = await Promise.all([
+      const [off, local, inst, community, mine, ents] = await Promise.all([
         fetchOfficialCatalog(),
         fetchUnofficialCatalog(),
         fetchInstalledCatalog(),
+        fetchMarketplaceListings({ sellerKind: "user" }).catch(() => ({ listings: [] })),
+        fetchMyMarketplaceListings().catch(() => ({ listings: [] })),
+        fetchMarketplaceEntitlements().catch(() => ({ entitlements: [] })),
       ]);
       setOfficial(off.entries);
-      setUnofficial(unoff.entries);
-      setSources(unoff.sources);
-      setDiscovered(unoff.discovered);
-      setLocalPaths(unoff.localPaths);
+      setLocalCatalog(local.entries);
+      setSources(local.sources);
+      setDiscovered(local.discovered);
+      setLocalPaths(local.localPaths);
       setCatalogInstalls(inst.catalogInstalls);
       setTenantPlugins(inst.plugins);
+      setCommunityListings(community.listings);
+      setMyListings(mine.listings);
+      setEntitlements(ents.entitlements);
       const ids = new Set(inst.plugins.map((p) => p.plugin_id));
       setInstalledIds(ids);
     } catch (err) {
@@ -260,9 +389,48 @@ export default function MarketplacePage() {
   useEffect(() => {
     void reload();
     void fetchMarketplaceCommerceConfig()
-      .then((cfg) => setTosVersion(cfg.tosVersion))
+      .then((cfg) => {
+        setTosVersion(cfg.tosVersion);
+        setPlatformFeeBps(cfg.platformFeeBps);
+      })
       .catch(() => undefined);
   }, [reload]);
+
+  useEffect(() => {
+    const paid = searchParams.get("paid");
+    const canceled = searchParams.get("canceled");
+    if (paid === "1") {
+      toast.success("Payment complete — install or acquire your purchase.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("paid");
+      next.delete("entry");
+      next.delete("listing");
+      setSearchParams(next, { replace: true });
+      void reload();
+    } else if (canceled === "1") {
+      toast.message("Checkout canceled");
+      const next = new URLSearchParams(searchParams);
+      next.delete("canceled");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, reload]);
+
+  useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (raw === "unofficial") {
+      const next = new URLSearchParams(searchParams);
+      next.set("tab", "local");
+      setSearchParams(next, { replace: true });
+      setTab("local");
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleTabChange = (value: string) => {
+    setTab(value);
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", value);
+    setSearchParams(next, { replace: true });
+  };
 
   const filterEntries = (entries: CatalogEntry[]) => {
     const needle = q.trim().toLowerCase();
@@ -276,7 +444,19 @@ export default function MarketplacePage() {
   };
 
   const officialFiltered = useMemo(() => filterEntries(official), [official, q]);
-  const unofficialFiltered = useMemo(() => filterEntries(unofficial), [unofficial, q]);
+  const localFiltered = useMemo(() => filterEntries(localCatalog), [localCatalog, q]);
+  const communityFiltered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return communityListings;
+    return communityListings.filter(
+      (l) =>
+        l.title.toLowerCase().includes(needle) ||
+        String(l.description ?? "")
+          .toLowerCase()
+          .includes(needle) ||
+        l.kind.toLowerCase().includes(needle)
+    );
+  }, [communityListings, q]);
   const discoveredFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return discovered;
@@ -317,13 +497,14 @@ export default function MarketplacePage() {
     setBuyingId(entry.id);
     try {
       await acceptMarketplaceTos();
+      setTosAccepted(true);
       const origin = window.location.origin;
       const result = await startMarketplaceCheckout({
         provider,
         catalogEntryId: entry.id,
         listingId: entry.listingId,
-        successUrl: `${origin}/marketplace?paid=1&entry=${encodeURIComponent(entry.id)}`,
-        cancelUrl: `${origin}/marketplace?canceled=1`,
+        successUrl: `${origin}/marketplace?paid=1&tab=official&entry=${encodeURIComponent(entry.id)}`,
+        cancelUrl: `${origin}/marketplace?canceled=1&tab=official`,
       });
       if (result.checkout.url) {
         window.location.href = result.checkout.url;
@@ -348,11 +529,68 @@ export default function MarketplacePage() {
     }
   };
 
+  const handleCommunityBuy = async (
+    listing: MarketplaceListing,
+    provider: "stripe" | "paypal" | "crypto"
+  ) => {
+    setBuyingId(listing.id);
+    try {
+      await acceptMarketplaceTos();
+      setTosAccepted(true);
+      const origin = window.location.origin;
+      const result = await startMarketplaceCheckout(
+        communityCheckoutBody({
+          listingId: listing.id,
+          provider,
+          successUrl: `${origin}/marketplace?paid=1&tab=community&listing=${encodeURIComponent(listing.id)}`,
+          cancelUrl: `${origin}/marketplace?canceled=1&tab=community`,
+        })
+      );
+      if (result.checkout.url) {
+        window.location.href = result.checkout.url;
+        return;
+      }
+      if (result.checkout.crypto) {
+        setCryptoPrompt({
+          orderId: result.checkout.crypto.orderId,
+          treasuryAddress: result.checkout.crypto.treasuryAddress,
+          amountCents: result.checkout.crypto.amountCents,
+          asset: result.checkout.crypto.asset,
+          chainId: result.checkout.crypto.chainId,
+        });
+        toast.message("Send crypto to the treasury address, then paste the tx hash.");
+        return;
+      }
+      toast.success("Order ready");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setBuyingId(null);
+    }
+  };
+
+  const handleAcquireListing = async (listing: MarketplaceListing) => {
+    setAcquiringId(listing.id);
+    try {
+      const result = await acquireMarketplaceListing(listing.id);
+      toast.success(
+        result.mode === "live"
+          ? "Live entitlement granted"
+          : `Imported ${result.import?.kind ?? "item"}`
+      );
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Acquire failed");
+    } finally {
+      setAcquiringId(null);
+    }
+  };
+
   const handleConfirmCrypto = async () => {
     if (!cryptoPrompt || !cryptoTxHash.trim()) return;
     try {
       await confirmMarketplaceCryptoPayment(cryptoPrompt.orderId, cryptoTxHash.trim());
-      toast.success("Payment recorded — you can install now");
+      toast.success("Payment recorded — you can install or acquire now");
       setCryptoPrompt(null);
       setCryptoTxHash("");
     } catch (err) {
@@ -364,6 +602,7 @@ export default function MarketplacePage() {
     try {
       const result = await acceptMarketplaceTos();
       setTosVersion(result.tosVersion);
+      setTosAccepted(true);
       toast.success(`Accepted Marketplace ToS v${result.tosVersion}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "ToS acceptance failed");
@@ -373,6 +612,7 @@ export default function MarketplacePage() {
   const handleConnectPayout = async () => {
     try {
       await acceptMarketplaceTos();
+      setTosAccepted(true);
       await connectMarketplacePayout({
         stripeConnectAccountId: stripeConnectId.trim() || null,
         paypalMerchantId: paypalMerchantId.trim() || null,
@@ -385,9 +625,60 @@ export default function MarketplacePage() {
               ? "stripe"
               : undefined,
       });
-      toast.success("Seller payout methods saved (10% platform fee on sales)");
+      const ready = Boolean(
+        stripeConnectId.trim() || paypalMerchantId.trim() || metamaskAddress.trim()
+      );
+      setPayoutReady(ready);
+      toast.success(
+        `Seller payout methods saved (${(platformFeeBps / 100).toFixed(0)}% platform fee on sales)`
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save payout methods");
+    }
+  };
+
+  const publishPriceCents = Math.round(Number(publishPriceDollars || "0") * 100);
+  const canPublishPaid = publishPriceCents <= 0 || payoutReady;
+  const canPublish =
+    tosAccepted &&
+    canPublishPaid &&
+    publishTitle.trim().length > 0 &&
+    publishResourceId.trim().length > 0;
+
+  const handlePublish = async () => {
+    if (!canPublish) return;
+    setPublishing(true);
+    try {
+      await createMarketplaceListing({
+        kind: publishKind,
+        title: publishTitle.trim(),
+        description: publishDescription.trim() || undefined,
+        priceCents: publishPriceCents,
+        deliveryMode: publishDelivery,
+        resourceId: publishResourceId.trim() || undefined,
+        sellerKind: "user",
+      });
+      toast.success("Listing published");
+      setPublishTitle("");
+      setPublishDescription("");
+      setPublishPriceDollars("0");
+      setPublishResourceId("");
+      await reload();
+      handleTabChange("community");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleArchive = async (listingId: string) => {
+    try {
+      await archiveMarketplaceListing(listingId);
+      toast.success("Listing archived");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Archive failed");
     }
   };
 
@@ -458,11 +749,13 @@ export default function MarketplacePage() {
     }
   };
 
+  const feePercent = (platformFeeBps / 100).toFixed(0);
+
   return (
     <Page>
       <PageHeader
         title="Marketplace"
-        description="Install Official and community packs. Paid Official items go 100% to ReBotics; user listings take a 10% platform fee. Chargebacks ban Marketplace access."
+        description="Install Official packs, Local catalogs, and Community listings. Paid Official items go 100% to ReBotics; Community sales take a 10% platform fee. Chargebacks ban Marketplace access."
         actions={
           <Button variant="outline" size="sm" render={<a href={OFFICIAL_REPO} target="_blank" rel="noreferrer" />}>
             Submit to Official
@@ -505,10 +798,11 @@ export default function MarketplacePage() {
         </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="official">Official</TabsTrigger>
-          <TabsTrigger value="unofficial">Unofficial</TabsTrigger>
+          <TabsTrigger value="local">Local</TabsTrigger>
+          <TabsTrigger value="community">Community</TabsTrigger>
           <TabsTrigger value="installed">Installed</TabsTrigger>
           <TabsTrigger value="seller">Sell</TabsTrigger>
         </TabsList>
@@ -538,7 +832,7 @@ export default function MarketplacePage() {
           )}
         </TabsContent>
 
-        <TabsContent value="unofficial" className="mt-4 space-y-6">
+        <TabsContent value="local" className="mt-4 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Add local plugin folder</CardTitle>
@@ -651,13 +945,13 @@ export default function MarketplacePage() {
             </p>
           ) : null}
 
-          {unofficialFiltered.length > 0 ? (
+          {localFiltered.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium">From unofficial catalogs</p>
+              <p className="text-sm font-medium">From local catalogs</p>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {unofficialFiltered.map((entry) => (
+                {localFiltered.map((entry) => (
                   <EntryCard
-                    key={`unofficial-${entry.id}-${entry.sourceCatalog}`}
+                    key={`local-${entry.id}-${entry.sourceCatalog}`}
                     entry={entry}
                     installed={installedIds.has(entry.id)}
                     installing={installingId === entry.id}
@@ -669,6 +963,57 @@ export default function MarketplacePage() {
               </div>
             </div>
           ) : null}
+        </TabsContent>
+
+        <TabsContent value="community" className="mt-4 space-y-6">
+          {entitlements.filter((e) => e.status === "active").length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Your purchases</CardTitle>
+                <CardDescription>
+                  Live entitlements from Community (and other) listings.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm">
+                  {entitlements
+                    .filter((e) => e.status === "active")
+                    .map((e) => (
+                      <li key={e.id} className="rounded-md border px-3 py-2">
+                        <span className="font-medium">
+                          {e.listing_title ?? e.kind}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {e.delivery_mode ?? "live"} · {e.pricing_model}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading community listings…</p>
+          ) : communityFiltered.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No community listings yet — publish from Sell.
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {communityFiltered.map((listing) => (
+                <CommunityListingCard
+                  key={listing.id}
+                  listing={listing}
+                  owned={ownedListingIds.has(listing.id)}
+                  busy={buyingId === listing.id || acquiringId === listing.id}
+                  onAcquire={() => void handleAcquireListing(listing)}
+                  onBuy={(provider) => void handleCommunityBuy(listing, provider)}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="installed" className="mt-4 space-y-6">
@@ -683,7 +1028,7 @@ export default function MarketplacePage() {
             <CardContent>
               {tenantPlugins.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No plugins installed on this workspace. Use Official or Unofficial to add one.
+                  No plugins installed on this workspace. Use Official or Local to add one.
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -758,8 +1103,8 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Seller payouts</CardTitle>
               <CardDescription>
-                Connect at least one payout rail before publishing paid listings. Platform fee is
-                10%. Official ReBotics catalog sales are separate (100% to platform).
+                Connect at least one payout rail before publishing paid listings. Platform fee is{" "}
+                {feePercent}%. Official ReBotics catalog sales are separate (100% to platform).
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -790,6 +1135,139 @@ export default function MarketplacePage() {
               <Button className="w-fit" onClick={() => void handleConnectPayout()}>
                 Save payout methods
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Publish listing</CardTitle>
+              <CardDescription>
+                List a skill, agent, page, or other portable entity for Community. Free listings need
+                ToS only; paid listings need a connected payout ({feePercent}% platform fee).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              {!tosAccepted ? (
+                <p className="text-sm text-amber-700 sm:col-span-2">
+                  Accept Marketplace ToS before publishing.
+                </p>
+              ) : null}
+              {publishPriceCents > 0 && !payoutReady ? (
+                <p className="text-sm text-amber-700 sm:col-span-2">
+                  Connect a payout method before publishing a paid listing.
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                <Label htmlFor="publish-kind">Kind</Label>
+                <select
+                  id="publish-kind"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={publishKind}
+                  onChange={(e) => setPublishKind(e.target.value)}
+                >
+                  {LISTING_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="publish-delivery">Delivery</Label>
+                <select
+                  id="publish-delivery"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={publishDelivery}
+                  onChange={(e) =>
+                    setPublishDelivery(e.target.value === "live" ? "live" : "clone")
+                  }
+                >
+                  <option value="clone">clone (import copy)</option>
+                  <option value="live">live (shared entitlement)</option>
+                </select>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="publish-title">Title</Label>
+                <Input
+                  id="publish-title"
+                  value={publishTitle}
+                  onChange={(e) => setPublishTitle(e.target.value)}
+                  placeholder="My skill pack"
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="publish-desc">Description</Label>
+                <Input
+                  id="publish-desc"
+                  value={publishDescription}
+                  onChange={(e) => setPublishDescription(e.target.value)}
+                  placeholder="What buyers get"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="publish-price">Price (USD)</Label>
+                <Input
+                  id="publish-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={publishPriceDollars}
+                  onChange={(e) => setPublishPriceDollars(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="publish-resource">Source resource id</Label>
+                <Input
+                  id="publish-resource"
+                  value={publishResourceId}
+                  onChange={(e) => setPublishResourceId(e.target.value)}
+                  placeholder="Entity id to clone or share"
+                />
+              </div>
+              <Button
+                className="w-fit"
+                disabled={!canPublish || publishing}
+                onClick={() => void handlePublish()}
+              >
+                {publishing ? "Publishing…" : "Publish to Community"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">My listings</CardTitle>
+              <CardDescription>Active listings you published. Archive removes them from Community.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {myListings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No active listings yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {myListings.map((listing) => (
+                    <li
+                      key={listing.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-medium">{listing.title}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {listing.kind} · {listing.delivery_mode ?? "clone"} ·{" "}
+                          {formatMarketplaceCents(listing.price_cents)} · {listing.status}
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void handleArchive(listing.id)}
+                      >
+                        Archive
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
