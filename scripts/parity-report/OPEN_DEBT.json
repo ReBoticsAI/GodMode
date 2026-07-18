@@ -1,0 +1,10 @@
+{
+  "description": "Known product-parity P0/split-brain debt. Strict audits fail on any NEW blocking finding not listed here. Remove IDs only after the corresponding fix lands and npm run audit:kernel:parity is green without them.",
+  "recommendation": "restore_dual_model",
+  "blockingIds": [
+    "P0-cal-split",
+    "P0-ctx-agentId",
+    "P0-knowledge-fallback",
+    "P0-tasks-split"
+  ]
+}

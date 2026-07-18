@@ -1,0 +1,39 @@
+{
+    "httpContext":  {
+                        "confirmed":  true,
+                        "detail":  "kernel/routes.ts OperationContext has no agentId field."
+                    },
+    "tasks":  {
+                  "saas":  {
+                               "createCardStatus":  201,
+                               "createMemStatus":  201,
+                               "memoryAgentId":  "intelligence",
+                               "agentBoardCardsDelta":  0,
+                               "userBoardCardsDelta":  1,
+                               "splitBrainConfirmed":  true
+                           },
+                  "family":  {
+                                 "createCardStatus":  201,
+                                 "createMemStatus":  201,
+                                 "memoryAgentId":  "intelligence",
+                                 "agentBoardCardsDelta":  0,
+                                 "userBoardCardsDelta":  1,
+                                 "splitBrainConfirmed":  true
+                             },
+                  "note":  "POST /api/records/TaskCard increases user board card count, not agent board (split_brain)."
+              },
+    "memory":  {
+                   "saas":  {
+                                "createMemStatus":  201,
+                                "memoryAgentId":  "intelligence"
+                            },
+                   "family":  {
+                                  "createMemStatus":  201,
+                                  "memoryAgentId":  "intelligence"
+                              },
+                   "note":  "HTTP Memory create without OperationContext.agentId stamps agent_id=intelligence."
+               },
+    "schemaInventory":  {
+                            "note":  "Family hub tenant DBs still have agent projects (sierra-chart, user-*, intelligence) but cards live on user-* projects only."
+                        }
+}

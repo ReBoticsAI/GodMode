@@ -131,6 +131,7 @@ Run the automated gate before deployment:
 
 ```bash
 npm run audit:kernel:strict
+npm run audit:kernel:parity
 npm run audit:oss
 npm run test:audit
 npm run test:release
@@ -140,6 +141,17 @@ npm run build --workspace @godmode/bridge
 npm run build --workspace @godmode/web
 ```
 
+`npm run audit:kernel:parity` regenerates `artifacts/kernel-parity-report.{json,md}`
+(gitignored) — the product-parity gap matrix for agent vs user ownership,
+read/write split-brain, and HTTP `OperationContext.agentId` wiring. Committed
+snapshots live under `scripts/parity-report/`. Known P0 debt is listed in
+`scripts/parity-report/OPEN_DEBT.json`; strict CI fails on **new** blocking
+findings or stale debt IDs (fail-closed against regression). Clear OPEN_DEBT
+entries only after the corresponding fix lands. Do not recreate the deleted
+`docs/KERNEL_MIGRATION_MATRIX.md` (OSS ban).
+
+Default product recommendation from the re-audit: **restore dual model**
+(personal `/tasks`/`/calendar` + per-agent Chat workspaces), not collapse.
 `npm run test:gate` runs the package build, typecheck, kernel audit, and test
 suite together. At the completion baseline, strict audit output must report:
 
