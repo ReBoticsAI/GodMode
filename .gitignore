@@ -74,6 +74,7 @@ apps/bridge/data/**/artifacts/
 .last-run-id.txt
 .screenshots/
 *.sse
+artifacts/
 .cursor/debug-*.log
 .cursor/plans/
 .cursor/rules/
