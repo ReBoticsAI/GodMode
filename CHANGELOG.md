@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-18
+
+Patch release restoring dual agent/user workspaces after kernel cutover
+regressions, plus recent Tasks and marketplace hardening that landed on `main`
+after 0.9.0.
+
+### Fixed
+
+- **Dual workspaces** — agents are digital principals again with their own
+  tasks, calendar, and knowledge via Record API `?agentId=` /
+  `X-GodMode-Agent-Id`; personal `/tasks` and `/calendar` stay user-owned
+  (clears agent/user split-brain from the ObjectType cutover)
+- **Tasks “Add card”** — `TaskCard.column_id` and related writable fields;
+  board mutations surface kernel errors instead of failing silently
+- **Writable contract** — client payloads no longer send non-writable
+  `agent_id` / `project_id`; Tenant `owner_user_id` allowed; CI
+  `audit-kernel-writable` guard
+
+### Added
+
+- Marketplace paid commerce path (SaaS)
+- Kernel product-parity audit (`audit:kernel:parity`) for ownership and
+  read/write symmetry
+
 ## [0.9.0] - 2026-07-16
 
 First broadly shippable release after the 0.1.0 foundation: durable ObjectType
@@ -98,6 +122,7 @@ First public release of GodMode — a local-first personal OS.
 - **Docker deployment** — client and production compose stacks
 - Documentation — [Getting started](docs/GETTING_STARTED.md), [Configuration](docs/CONFIGURATION.md), and [Features](docs/FEATURES.md)
 
-[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0
 [0.1.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.1.0

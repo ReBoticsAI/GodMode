@@ -1,6 +1,6 @@
 {
   "name": "@godmode/connector",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "type": "module",
   "description": "Local connector for hardware-bound marketplace plugins",
