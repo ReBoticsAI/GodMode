@@ -348,25 +348,14 @@ export function markPaidOrdersDeliveredForListing(
   core: CoreDatabase,
   opts: { listingId: string; buyerUserId: string }
 ): void {
-  try {
-    const rows = core
-      .prepare(
-        `SELECT id FROM marketplace_orders
-         WHERE listing_id=? AND buyer_user_id=? AND status='paid'`
-      )
-      .all(opts.listingId, opts.buyerUserId) as Array<{ id: string }>;
-    for (const row of rows) {
-      markOrderDelivered(core, row.id);
-    }
-  } catch (err) {
-    // Minimal test DBs (and pre-commerce installs) may omit marketplace_orders.
-    if (
-      err instanceof Error &&
-      /no such table:\s*marketplace_orders/i.test(err.message)
-    ) {
-      return;
-    }
-    throw err;
+  const rows = core
+    .prepare(
+      `SELECT id FROM marketplace_orders
+       WHERE listing_id=? AND buyer_user_id=? AND status='paid'`
+    )
+    .all(opts.listingId, opts.buyerUserId) as Array<{ id: string }>;
+  for (const row of rows) {
+    markOrderDelivered(core, row.id);
   }
 }
 
