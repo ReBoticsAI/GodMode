@@ -402,23 +402,27 @@ function CardEditorDialog({
 
   const addSubtask = async () => {
     if (!card || !newSubtask.trim()) return;
-    if (isUserScope(scope)) {
-      await createUserProjectCard({
-        title: newSubtask.trim(),
-        columnId: "in_progress",
-        parentCardId: card.id,
-        priority,
-      }).catch(() => undefined);
-    } else {
-      await createProjectCard({
-        title: newSubtask.trim(),
-        columnId: "in_progress",
-        parentCardId: card.id,
-        priority,
-      }).catch(() => undefined);
+    try {
+      if (isUserScope(scope)) {
+        await createUserProjectCard({
+          title: newSubtask.trim(),
+          columnId: "in_progress",
+          parentCardId: card.id,
+          priority,
+        });
+      } else {
+        await createProjectCard({
+          title: newSubtask.trim(),
+          columnId: "in_progress",
+          parentCardId: card.id,
+          priority,
+        });
+      }
+      setNewSubtask("");
+      void reloadSubtasks();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add subtask");
     }
-    setNewSubtask("");
-    void reloadSubtasks();
   };
 
   const toggleSubtask = async (sub: AiProjectCard) => {
@@ -427,23 +431,31 @@ function CardEditorDialog({
       columnId: isDone ? "in_progress" : "done",
       status: isDone ? "working" : "accepted",
     };
-    if (isUserScope(scope)) {
-      await updateUserProjectCard(sub.id, patch).catch(() => undefined);
-    } else {
-      await updateProjectCard(sub.id, patch).catch(() => undefined);
+    try {
+      if (isUserScope(scope)) {
+        await updateUserProjectCard(sub.id, patch);
+      } else {
+        await updateProjectCard(sub.id, patch);
+      }
+      void reloadSubtasks();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update subtask");
     }
-    void reloadSubtasks();
   };
 
   const postComment = async () => {
     if (!card || !composer.trim()) return;
-    if (isUserScope(scope)) {
-      await addUserCardComment(card.id, composer.trim(), "user", userId).catch(() => undefined);
-    } else {
-      await addCardComment(card.id, composer.trim(), "user").catch(() => undefined);
+    try {
+      if (isUserScope(scope)) {
+        await addUserCardComment(card.id, composer.trim(), "user", userId);
+      } else {
+        await addCardComment(card.id, composer.trim(), "user");
+      }
+      setComposer("");
+      void reloadComments();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to post comment");
     }
-    setComposer("");
-    void reloadComments();
   };
 
   const onApprove = async () => {
@@ -536,10 +548,15 @@ function CardEditorDialog({
       setActiveAgentId(assignedAgentId || "intelligence");
       setPanelTab("chat");
       if (card.linked_workflow_id) {
-        await enqueueAiJob({
-          workflowId: card.linked_workflow_id,
-          context: { cardId: card.id, assignedAgentId: assignedAgentId || "intelligence" },
-        }).catch(() => undefined);
+        try {
+          await enqueueAiJob({
+            workflowId: card.linked_workflow_id,
+            context: { cardId: card.id, assignedAgentId: assignedAgentId || "intelligence" },
+          });
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to enqueue workflow");
+          return;
+        }
       }
       onSaved();
       onOpenChange(false);
@@ -934,7 +951,9 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
         setColumns(r.columns);
         setCards(r.cards);
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load tasks");
+      });
   }, [scope]);
 
   useEffect(() => {
@@ -957,12 +976,16 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
 
   const onMove = async (id: string, columnId: string) => {
     if (readOnly) return;
-    if (isUserScope(scope)) {
-      await moveUserProjectCard(id, columnId).catch(() => undefined);
-    } else {
-      await moveProjectCard(id, columnId).catch(() => undefined);
+    try {
+      if (isUserScope(scope)) {
+        await moveUserProjectCard(id, columnId);
+      } else {
+        await moveProjectCard(id, columnId);
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to move card");
     }
-    load();
   };
 
   const onDragEnd = (e: DragEndEvent) => {

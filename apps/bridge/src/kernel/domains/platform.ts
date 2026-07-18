@@ -274,7 +274,7 @@ export const PLATFORM_SPECS: BuiltinSpec[] = [
     table: "tenants",
     database: "core",
     scope: "tenant",
-    writable: ["name", "slug"],
+    writable: ["name", "slug", "owner_user_id"],
     required: ["name"],
     operations: ["list", "get", "create", "update", "delete"],
     actions: IDENTITY_ADMIN_ACTIONS.Tenant,
