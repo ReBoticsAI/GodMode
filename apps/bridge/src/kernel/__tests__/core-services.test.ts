@@ -206,4 +206,15 @@ describe("core service ObjectType adapters", () => {
     deleteRecord(db, "TaskCard", card.id, ctx);
     expect(() => getRecord(db, "TaskCard", card.id, ctx)).toThrow(/not found/i);
   });
+
+  it("creates TaskCards with an initial column_id", () => {
+    const card = createRecord(
+      db,
+      "TaskCard",
+      { title: "From backlog", column_id: "backlog" },
+      ctx
+    );
+    expect(card.data.title).toBe("From backlog");
+    expect(card.data.column_id).toBe("backlog");
+  });
 });
