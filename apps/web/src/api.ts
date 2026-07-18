@@ -667,11 +667,11 @@ export const createAiMemory = (body: {
   agentId?: string;
 }) =>
   createDto<AiMemory>("Memory", {
+    // agent_id is scoped from session context, not a writable Memory field.
     text: body.text,
     scope: body.scope,
     chat_id: body.chatId,
     category: body.category,
-    agent_id: body.agentId,
   });
 
 export const updateAiMemory = (
@@ -691,12 +691,14 @@ export const fetchAiRules = (agentId?: string) =>
 export const updateAiRuleState = (
   id: string,
   patch: { enabled?: boolean; priorityOverride?: number | null; agentId?: string }
-) =>
-  updateDto<AiRule>("Rule", id, {
+) => {
+  void patch.agentId;
+  return updateDto<AiRule>("Rule", id, {
+    // agent_id is scoped from session context, not a writable Rule field.
     enabled: patch.enabled,
     priority: patch.priorityOverride,
-    agent_id: patch.agentId,
   }).then((rule) => ({ rules: [rule] }));
+};
 
 export const approveAiRule = (id: string, agentId?: string) => {
   return actionDto<RecordRowClient>("Rule", "approve", { agent_id: agentId }, id, true)
@@ -720,9 +722,13 @@ export const updateAiSkillState = (
   id: string,
   enabled: boolean,
   agentId?: string
-) =>
-  updateDto<AiSkill>("Skill", id, { enabled, agent_id: agentId })
-    .then((skill) => ({ skills: [skill] }));
+) => {
+  void agentId;
+  // agent_id is scoped from session context, not a writable Skill field.
+  return updateDto<AiSkill>("Skill", id, { enabled }).then((skill) => ({
+    skills: [skill],
+  }));
+};
 
 export const approveAiSkill = (id: string, agentId?: string) => {
   return actionDto<RecordRowClient>("Skill", "approve", { agent_id: agentId }, id, true)
@@ -761,9 +767,9 @@ export const createAiArtifact = (body: {
   description?: string;
 }) =>
   createDto<AiArtifact>("Artifact", {
+    // agent_id is scoped from session context, not a writable Artifact field.
     name: body.name,
     content: body.content,
-    agent_id: body.agentId,
     kind: body.kind,
     mime_type: body.mimeType,
     description: body.description,
@@ -1895,8 +1901,7 @@ export const createProjectCard = (body: {
   assignedAgentId?: string;
 }) =>
   createDto<AiProjectCard>("TaskCard", {
-    project_id: body.projectId,
-    agent_id: body.agentId,
+    // Ownership is resolved from session context; project_id/agent_id are not writable.
     column_id: body.columnId,
     title: body.title,
     description: body.description,
@@ -2032,7 +2037,7 @@ export const createCalendarEvent = (body: {
   status?: string;
 }) =>
   createDto<AiCalendarEvent>("CalendarEvent", {
-    agent_id: body.agentId,
+    // agent_id is scoped from session context, not a writable CalendarEvent field.
     kind: body.kind,
     title: body.title,
     description: body.description,

@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-const audits = ["audit-kernel-coverage.mjs", "audit-kernel-direct-writes.mjs"];
+const audits = [
+  "audit-kernel-coverage.mjs",
+  "audit-kernel-direct-writes.mjs",
+  "audit-kernel-writable.mjs",
+];
 let failed = false;
 
 for (const audit of audits) {

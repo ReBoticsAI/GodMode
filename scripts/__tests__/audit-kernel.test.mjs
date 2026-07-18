@@ -13,6 +13,8 @@ import {
   sourceFile,
   staticText,
   validateProtocolExceptions,
+  discoverClientRecordPayloads,
+  discoverAdapterWritableSets,
 } from "../audit-kernel-lib.mjs";
 import { discoverDirectWrites } from "../audit-kernel-direct-writes.mjs";
 
@@ -158,5 +160,40 @@ test("detects SQL and filesystem writes but not reads", () => {
       { kind: "filesystem", operation: "writeFileSync" },
     ]
   );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("discovers client createDto/updateDto payload fields", () => {
+  const { root, write } = fixture();
+  write(
+    "apps/web/src/api.ts",
+    [
+      "async function createDto(objectType: string, data: Record<string, unknown>) {}",
+      "async function updateDto(objectType: string, id: string, data: Record<string, unknown>) {}",
+      'createDto("TaskCard", { title: "x", column_id: "backlog", agent_id: "intelligence" });',
+      'updateDto("Rule", "1", { enabled: true });',
+    ].join("\n")
+  );
+  const payloads = discoverClientRecordPayloads(root);
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(payloads[0].fields.sort(), ["agent_id", "column_id", "title"]);
+  assert.equal(payloads[0].objectType, "TaskCard");
+  assert.deepEqual(payloads[1].fields, ["enabled"]);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("discovers adapter WRITABLE sets", () => {
+  const { root, write } = fixture();
+  write(
+    "apps/bridge/src/kernel/adapters/productivity.ts",
+    [
+      'const CARD_WRITABLE = new Set(["title", "column_id"]);',
+      'const CALENDAR_WRITABLE = new Set(["title", "status"]);',
+    ].join("\n")
+  );
+  const sets = discoverAdapterWritableSets(root);
+  const byName = Object.fromEntries(sets.map((s) => [s.name, [...s.fields].sort()]));
+  assert.deepEqual(byName.CARD_WRITABLE, ["column_id", "title"]);
+  assert.deepEqual(byName.CALENDAR_WRITABLE, ["status", "title"]);
   fs.rmSync(root, { recursive: true, force: true });
 });

@@ -14,7 +14,7 @@
     "dev:web": "npm run dev -w @godmode/web",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "audit:oss": "node scripts/audit-oss-core.mjs",
-    "audit:kernel": "node scripts/audit-kernel-coverage.mjs && node scripts/audit-kernel-direct-writes.mjs",
+    "audit:kernel": "node scripts/audit-kernel-coverage.mjs && node scripts/audit-kernel-direct-writes.mjs && node scripts/audit-kernel-writable.mjs",
     "audit:kernel:strict": "node scripts/audit-kernel-strict.mjs",
     "test": "vitest run",
     "test:audit": "node --test scripts/__tests__/audit-kernel.test.mjs",
