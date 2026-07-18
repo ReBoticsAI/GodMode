@@ -113,21 +113,27 @@ function rowDto<T>(row: RecordRowClient): T {
 
 async function createDto<T>(
   objectType: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: { agentId?: string }
 ): Promise<T> {
-  return rowDto<T>(await createRecordApi(objectType, data));
+  return rowDto<T>(await createRecordApi(objectType, data, opts));
 }
 
 async function updateDto<T>(
   objectType: string,
   id: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: { agentId?: string }
 ): Promise<T> {
-  return rowDto<T>(await updateRecordApi(objectType, id, data));
+  return rowDto<T>(await updateRecordApi(objectType, id, data, undefined, opts));
 }
 
-async function deleteDto(objectType: string, id: string): Promise<{ ok: boolean }> {
-  await deleteRecordApi(objectType, id);
+async function deleteDto(
+  objectType: string,
+  id: string,
+  opts?: { agentId?: string }
+): Promise<{ ok: boolean }> {
+  await deleteRecordApi(objectType, id, undefined, opts);
   return { ok: true };
 }
 
@@ -136,12 +142,14 @@ async function actionDto<T>(
   action: string,
   input: Record<string, unknown>,
   id?: string,
-  confirmed = false
+  confirmed = false,
+  opts?: { agentId?: string }
 ): Promise<T> {
   const result = await runRecordActionApi(objectType, action, input, {
     id,
     confirmed,
     idempotencyKey: randomId(),
+    agentId: opts?.agentId,
   });
   if (
     result &&
@@ -666,13 +674,17 @@ export const createAiMemory = (body: {
   category?: string;
   agentId?: string;
 }) =>
-  createDto<AiMemory>("Memory", {
-    // agent_id is scoped from session context, not a writable Memory field.
-    text: body.text,
-    scope: body.scope,
-    chat_id: body.chatId,
-    category: body.category,
-  });
+  createDto<AiMemory>(
+    "Memory",
+    {
+      // Ownership via ?agentId= scope, not a writable Memory field.
+      text: body.text,
+      scope: body.scope,
+      chat_id: body.chatId,
+      category: body.category,
+    },
+    { agentId: body.agentId }
+  );
 
 export const updateAiMemory = (
   id: string,
@@ -692,22 +704,38 @@ export const updateAiRuleState = (
   id: string,
   patch: { enabled?: boolean; priorityOverride?: number | null; agentId?: string }
 ) => {
-  void patch.agentId;
-  return updateDto<AiRule>("Rule", id, {
-    // agent_id is scoped from session context, not a writable Rule field.
-    enabled: patch.enabled,
-    priority: patch.priorityOverride,
-  }).then((rule) => ({ rules: [rule] }));
+  return updateDto<AiRule>(
+    "Rule",
+    id,
+    {
+      // Ownership via ?agentId= scope, not a writable Rule field.
+      enabled: patch.enabled,
+      priority: patch.priorityOverride,
+    },
+    { agentId: patch.agentId }
+  ).then((rule) => ({ rules: [rule] }));
 };
 
 export const approveAiRule = (id: string, agentId?: string) => {
-  return actionDto<RecordRowClient>("Rule", "approve", { agent_id: agentId }, id, true)
-    .then((row) => ({ rules: [rowDto<AiRule>(row)] }));
+  return actionDto<RecordRowClient>(
+    "Rule",
+    "approve",
+    {},
+    id,
+    true,
+    { agentId }
+  ).then((row) => ({ rules: [rowDto<AiRule>(row)] }));
 };
 
 export const rejectAiRule = (id: string, agentId?: string) => {
-  return actionDto<{ ok: boolean }>("Rule", "reject", { agent_id: agentId }, id, true)
-    .then(() => ({ ok: true, rules: [] }));
+  return actionDto<{ ok: boolean }>(
+    "Rule",
+    "reject",
+    {},
+    id,
+    true,
+    { agentId }
+  ).then(() => ({ ok: true, rules: [] }));
 };
 
 export const fetchAiSkills = (includeBody?: boolean, agentId?: string) => {
@@ -723,21 +751,34 @@ export const updateAiSkillState = (
   enabled: boolean,
   agentId?: string
 ) => {
-  void agentId;
-  // agent_id is scoped from session context, not a writable Skill field.
-  return updateDto<AiSkill>("Skill", id, { enabled }).then((skill) => ({
-    skills: [skill],
-  }));
+  // Ownership via ?agentId= scope, not a writable Skill field.
+  return updateDto<AiSkill>("Skill", id, { enabled }, { agentId }).then(
+    (skill) => ({
+      skills: [skill],
+    })
+  );
 };
 
 export const approveAiSkill = (id: string, agentId?: string) => {
-  return actionDto<RecordRowClient>("Skill", "approve", { agent_id: agentId }, id, true)
-    .then((row) => ({ skills: [rowDto<AiSkill>(row)] }));
+  return actionDto<RecordRowClient>(
+    "Skill",
+    "approve",
+    {},
+    id,
+    true,
+    { agentId }
+  ).then((row) => ({ skills: [rowDto<AiSkill>(row)] }));
 };
 
 export const rejectAiSkill = (id: string, agentId?: string) => {
-  return actionDto<{ ok: boolean }>("Skill", "reject", { agent_id: agentId }, id, true)
-    .then(() => ({ ok: true, skills: [] }));
+  return actionDto<{ ok: boolean }>(
+    "Skill",
+    "reject",
+    {},
+    id,
+    true,
+    { agentId }
+  ).then(() => ({ ok: true, skills: [] }));
 };
 
 export const fetchAiArtifacts = (agentId?: string, limit?: number) => {
@@ -766,18 +807,21 @@ export const createAiArtifact = (body: {
   mimeType?: string;
   description?: string;
 }) =>
-  createDto<AiArtifact>("Artifact", {
-    // agent_id is scoped from session context, not a writable Artifact field.
-    name: body.name,
-    content: body.content,
-    kind: body.kind,
-    mime_type: body.mimeType,
-    description: body.description,
-  });
+  createDto<AiArtifact>(
+    "Artifact",
+    {
+      // Ownership via ?agentId= scope, not a writable Artifact field.
+      name: body.name,
+      content: body.content,
+      kind: body.kind,
+      mime_type: body.mimeType,
+      description: body.description,
+    },
+    { agentId: body.agentId }
+  );
 
 export const deleteAiArtifact = (id: string, agentId?: string) => {
-  void agentId;
-  return deleteDto("Artifact", id);
+  return deleteDto("Artifact", id, { agentId });
 };
 
 export const fetchAiCommands = () => api<{ commands: AiChatCommand[] }>("/ai/commands");
@@ -1900,26 +1944,37 @@ export const createProjectCard = (body: {
   status?: string;
   assignedAgentId?: string;
 }) =>
-  createDto<AiProjectCard>("TaskCard", {
-    // Ownership is resolved from session context; project_id/agent_id are not writable.
-    column_id: body.columnId,
-    title: body.title,
-    description: body.description,
-    prompt: body.prompt,
-    context_json: body.contextJson,
-    tags_json: body.tags,
-    due_at: body.dueAt,
-    priority: body.priority,
-    parent_card_id: body.parentCardId,
-    status: body.status,
-    assigned_agent_id: body.assignedAgentId,
-  });
-export const moveProjectCard = (id: string, columnId: string, sortOrder?: number) =>
+  createDto<AiProjectCard>(
+    "TaskCard",
+    {
+      // Ownership via ?agentId= → ensureAgentProject; else personal ensureUserProject.
+      column_id: body.columnId,
+      title: body.title,
+      description: body.description,
+      prompt: body.prompt,
+      context_json: body.contextJson,
+      tags_json: body.tags,
+      due_at: body.dueAt,
+      priority: body.priority,
+      parent_card_id: body.parentCardId,
+      status: body.status,
+      assigned_agent_id: body.assignedAgentId,
+    },
+    { agentId: body.agentId }
+  );
+export const moveProjectCard = (
+  id: string,
+  columnId: string,
+  sortOrder?: number,
+  agentId?: string
+) =>
   actionDto<RecordRowClient>(
     "TaskCard",
     "move",
     { column_id: columnId, sort_order: sortOrder },
-    id
+    id,
+    false,
+    { agentId }
   ).then(rowDto<AiProjectCard>);
 export const updateProjectCard = (
   id: string,
@@ -1936,26 +1991,34 @@ export const updateProjectCard = (
     parentCardId?: string | null;
     status?: string;
     assignedAgentId?: string | null;
+    agentId?: string;
   }
 ) =>
-  updateDto<AiProjectCard>("TaskCard", id, {
-    title: patch.title,
-    description: patch.description,
-    prompt: patch.prompt,
-    context_json: patch.contextJson,
-    tags_json: patch.tags,
-    due_at: patch.dueAt,
-    priority: patch.priority,
-    parent_card_id: patch.parentCardId,
-    assigned_agent_id: patch.assignedAgentId,
-  }).then(async (card) => {
+  updateDto<AiProjectCard>(
+    "TaskCard",
+    id,
+    {
+      title: patch.title,
+      description: patch.description,
+      prompt: patch.prompt,
+      context_json: patch.contextJson,
+      tags_json: patch.tags,
+      due_at: patch.dueAt,
+      priority: patch.priority,
+      parent_card_id: patch.parentCardId,
+      assigned_agent_id: patch.assignedAgentId,
+    },
+    { agentId: patch.agentId }
+  ).then(async (card) => {
     if (patch.columnId) {
       card = rowDto<AiProjectCard>(
         await actionDto<RecordRowClient>(
           "TaskCard",
           "move",
           { column_id: patch.columnId, sort_order: patch.sortOrder },
-          id
+          id,
+          false,
+          { agentId: patch.agentId }
         )
       );
     }
@@ -1965,14 +2028,16 @@ export const updateProjectCard = (
           "TaskCard",
           "transition",
           { status: patch.status },
-          id
+          id,
+          false,
+          { agentId: patch.agentId }
         )
       );
     }
     return card;
   });
-export const deleteProjectCard = (id: string) =>
-  deleteDto("TaskCard", id);
+export const deleteProjectCard = (id: string, agentId?: string) =>
+  deleteDto("TaskCard", id, { agentId });
 export const fetchCardSubtasks = (id: string) =>
   api<AiCardSubtasks>(`/ai/projects/cards/${id}/subtasks`);
 export const fetchCardComments = (id: string) =>
@@ -2036,19 +2101,23 @@ export const createCalendarEvent = (body: {
   linked_run_id?: string;
   status?: string;
 }) =>
-  createDto<AiCalendarEvent>("CalendarEvent", {
-    // agent_id is scoped from session context, not a writable CalendarEvent field.
-    kind: body.kind,
-    title: body.title,
-    description: body.description,
-    start_at: body.start_at,
-    end_at: body.end_at,
-    all_day: body.all_day,
-    location: body.location,
-    linked_card_id: body.linked_card_id,
-    linked_run_id: body.linked_run_id,
-    status: body.status,
-  });
+  createDto<AiCalendarEvent>(
+    "CalendarEvent",
+    {
+      // Ownership via ?agentId= scope, not a writable CalendarEvent field.
+      kind: body.kind,
+      title: body.title,
+      description: body.description,
+      start_at: body.start_at,
+      end_at: body.end_at,
+      all_day: body.all_day,
+      location: body.location,
+      linked_card_id: body.linked_card_id,
+      linked_run_id: body.linked_run_id,
+      status: body.status,
+    },
+    { agentId: body.agentId }
+  );
 
 export const updateCalendarEvent = (
   id: string,
@@ -2061,12 +2130,15 @@ export const updateCalendarEvent = (
     location?: string | null;
     kind?: AiCalendarKind;
     status?: string;
+    agentId?: string;
   }
-) =>
-  updateDto<AiCalendarEvent>("CalendarEvent", id, patch);
+) => {
+  const { agentId, ...data } = patch;
+  return updateDto<AiCalendarEvent>("CalendarEvent", id, data, { agentId });
+};
 
-export const deleteCalendarEvent = (id: string) =>
-  deleteDto("CalendarEvent", id);
+export const deleteCalendarEvent = (id: string, agentId?: string) =>
+  deleteDto("CalendarEvent", id, { agentId });
 
 export const fetchCalendarActivity = (
   agentId = "intelligence",
