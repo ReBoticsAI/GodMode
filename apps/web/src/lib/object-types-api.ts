@@ -64,10 +64,8 @@ export async function fetchObjectType(name: string): Promise<ObjectTypeClient> {
 /** Optional agent workspace scope for Record API calls (dual workspaces). */
 export type RecordScopeOpts = { agentId?: string };
 
-function withAgentScope(path: string, opts?: RecordScopeOpts): string {
-  if (!opts?.agentId) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}agentId=${encodeURIComponent(opts.agentId)}`;
+function agentScopeQuery(opts?: RecordScopeOpts): string {
+  return opts?.agentId ? `?agentId=${encodeURIComponent(opts.agentId)}` : "";
 }
 
 export async function fetchRecords(
@@ -114,11 +112,9 @@ export async function fetchRecord(
   id: string,
   opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
+  const qs = agentScopeQuery(opts);
   return api(
-    withAgentScope(
-      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
-      opts
-    )
+    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}${qs}`
   );
 }
 
@@ -127,7 +123,8 @@ export async function createRecordApi(
   data: Record<string, unknown>,
   opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
-  return api(withAgentScope(`/records/${encodeURIComponent(objectType)}`, opts), {
+  const qs = agentScopeQuery(opts);
+  return api(`/records/${encodeURIComponent(objectType)}${qs}`, {
     method: "POST",
     body: JSON.stringify({ data }),
   });
@@ -140,11 +137,9 @@ export async function updateRecordApi(
   expectedVersion?: string,
   opts?: RecordScopeOpts
 ): Promise<RecordRowClient> {
+  const qs = agentScopeQuery(opts);
   return api(
-    withAgentScope(
-      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
-      opts
-    ),
+    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}${qs}`,
     {
       method: "PUT",
       headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
@@ -159,11 +154,9 @@ export async function deleteRecordApi(
   expectedVersion?: string,
   opts?: RecordScopeOpts
 ): Promise<void> {
+  const qs = agentScopeQuery(opts);
   await api(
-    withAgentScope(
-      `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}`,
-      opts
-    ),
+    `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(id)}${qs}`,
     {
       method: "DELETE",
       headers: expectedVersion ? { "If-Match": expectedVersion } : undefined,
@@ -184,12 +177,10 @@ export async function runRecordActionApi(
     agentId?: string;
   }
 ): Promise<unknown> {
-  const target = withAgentScope(
-    opts?.id
-      ? `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(opts.id)}/actions/${encodeURIComponent(action)}`
-      : `/records/${encodeURIComponent(objectType)}/actions/${encodeURIComponent(action)}`,
-    opts
-  );
+  const qs = agentScopeQuery(opts);
+  const target = opts?.id
+    ? `/records/${encodeURIComponent(objectType)}/${encodeURIComponent(opts.id)}/actions/${encodeURIComponent(action)}${qs}`
+    : `/records/${encodeURIComponent(objectType)}/actions/${encodeURIComponent(action)}${qs}`;
   const headers: Record<string, string> = {};
   if (opts?.confirmationId) {
     headers["X-Kernel-Confirmation"] = opts.confirmationId;
