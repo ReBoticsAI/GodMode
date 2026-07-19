@@ -67,6 +67,24 @@ Keep at least one local snapshot on the VPS disk, then upload offsite:
 
 Set `BACKUP_S3_*` for S3-compatible offsite. Test restore before launch.
 
+You can also trigger a **local-only** snapshot from **Admin → Observability →
+Run local snapshot** (`POST /api/admin/marketplace/backup`). That updates
+`platform_backup_meta` the same way as cron (without S3 upload).
+
+### Restore drill (local snapshot)
+
+1. Pick a snapshot directory under `BACKUP_LOCAL_DIR` (or `{data}/backups/<stamp>`).
+2. Stop Bridge (and any process holding open SQLite handles).
+3. Replace live files from the snapshot:
+   - `databases/core.sqlite` → `{PLATFORM_DATA_DIR}/core.sqlite`
+   - each `tenants/*.sqlite` → `{PLATFORM_DATA_DIR}/tenants/<same-name>`
+4. Restore file permissions to the runtime user.
+5. Start Bridge and hit `/api/health`, then Admin → Observability to confirm.
+6. If you keep offsite copies, practice restoring from S3 the same way after
+   downloading into a temporary directory.
+
+Never restore over a running Bridge. Keep the pre-restore tree until health checks pass.
+
 ## 8. Observability
 
 GodMode does **not** use external APM (no Sentry). Prefer first-party signals:

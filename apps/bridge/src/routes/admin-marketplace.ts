@@ -6,6 +6,7 @@ import {
   requirePlatformAdmin,
 } from "../services/auth/middleware.js";
 import { listPlatformRequestLogs } from "../services/request-log.js";
+import { runLocalPlatformBackup } from "../services/platform-backup.js";
 
 /** Read-only U2U marketplace fee ledger + backup status for platform admins. */
 export function createAdminMarketplaceRouter(): Router {
@@ -85,10 +86,30 @@ export function createAdminMarketplaceRouter(): Router {
     });
   });
 
+  router.post("/backup", async (_req, res) => {
+    const result = await runLocalPlatformBackup(getCoreDb());
+    if (result.status !== "ok") {
+      res.status(500).json({
+        error: result.error ?? "Backup failed",
+        backup: result,
+      });
+      return;
+    }
+    res.json({
+      backup: {
+        status: result.status,
+        localPath: result.localPath,
+        remoteUri: result.remoteUri,
+        error: result.error,
+        updatedAt: result.updatedAt,
+      },
+    });
+  });
+
   return router;
 }
 
-/** First-party ops log (stdout JSON + core.sqlite) — no external APM. */
+/** First-party ops log (stdout JSON + core.sqlite). No external APM. */
 export function createAdminObservabilityRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
