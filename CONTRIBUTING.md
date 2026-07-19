@@ -22,6 +22,26 @@ Run `npm run audit:oss` before release-related PRs. Changes to authenticated
 mutations, AI tools, ObjectTypes, adapters, or actions must also update the
 kernel coverage baseline and contract tests.
 
+## Platform principles (deps)
+
+Prefer **first-party** platform capabilities over SaaS APM/logging products.
+Bridge JSON logs + `platform_request_log` in core SQLite are the ops path. Do
+not add Sentry (or similar) to core. Unavoidable external edges are fine when
+they are not the product: Stripe, email transport (Resend/SMTP), OAuth IdPs as
+a convenience login layer, Cloudflare at the network edge, optional operator
+offsite object storage for backups.
+
+## Issues and PRs
+
+- Open a **GitHub issue** for work that will outlive one session (features,
+  hardening follow-ups, bugs). Small issues are useful when they are independently
+  shippable; tiny typos can stay in a drive-by PR without an issue.
+- Reference issue numbers in commits/PR bodies (`Fixes #N` / `Refs #N`).
+- Bundle related issues into one PR when they share a theme and review surface
+  (e.g. “observability UI + backup status”), but avoid kitchen-sink PRs.
+- Security-sensitive production vulns: use private advisories, not public issues
+  (see Security below).
+
 ## Pull requests
 
 - Keep changes focused; match existing code style.

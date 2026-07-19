@@ -7,6 +7,8 @@ export interface AuthenticatedUser {
   displayName: string;
   avatarUrl: string | null;
   isAdmin: boolean;
+  emailVerified: boolean;
+  mfaEnabled: boolean;
 }
 
 declare global {
@@ -34,12 +36,17 @@ export function sendForbidden(res: Response, message = "Forbidden"): void {
   res.status(403).json({ error: message });
 }
 
-export function coreUserToAuth(row: CoreUser): AuthenticatedUser {
+export function coreUserToAuth(
+  row: CoreUser,
+  extras?: { mfaEnabled?: boolean }
+): AuthenticatedUser {
   return {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
     isAdmin: Boolean(row.is_admin),
+    emailVerified: Boolean(row.email_verified_at),
+    mfaEnabled: Boolean(extras?.mfaEnabled),
   };
 }

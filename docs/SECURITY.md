@@ -2,6 +2,41 @@
 
 GodMode is a self-hosted personal OS with optional AI agents that can run tools, including terminal commands and file edits when enabled. Treat every deployment as **trusted-operator** infrastructure unless you harden it deliberately.
 
+## Authentication
+
+OSS / private hub uses **email/password + HttpOnly session cookies**. Production SaaS
+adds email verification, password reset (Resend or SMTP), optional Google/GitHub
+OAuth, and **required TOTP MFA for platform admins**. Session cookies are `Secure`
+when public URLs are HTTPS. Cookie-authenticated mutating API calls require a
+trusted `Origin`/`Referer` matching `WEB_ORIGIN` (webhooks remain signature-auth).
+
+## Public SaaS launch gate
+
+Do **not** point public DNS at SaaS until:
+
+1. Marketing site live (`/www` on the web app, shadcn) and Stripe business URL accepted (`BUSINESS_WEBSITE_URL`)
+2. Email verify + password reset working with production mail
+3. Platform admin MFA enrolled and enforced
+4. Cloudflare → Hostinger Full (strict), origin headers, HTTPS cookies, firewall locked
+5. Durable SQLite rate limits + cron backups + tested offsite restore
+6. SaaS defaults: deny agent `codeAccess`; block arbitrary Local plugin paths
+7. Live Stripe webhooks + Customer Portal on the Cloudflare hostname
+8. DEPLOY.md / this file / `deploy/hostinger.md` signed off
+
+Observability for launch: first-party Bridge JSON logs + `platform_request_log` +
+external `/api/health` uptime — not a third-party APM.
+
+See [DEPLOY.md](../DEPLOY.md) and [deploy/hostinger.md](../deploy/hostinger.md).
+
+## Open-source threat model (public repo)
+
+A public repository is a **public attack map**. Assume attackers read every route,
+default, and compose file.
+
+- Never commit secrets (`.env`, Stripe keys, session secrets, OAuth client secrets).
+- Public SaaS must sit behind Cloudflare (or equivalent) with invite/paywall + MFA.
+- Edge WAF is mandatory for internet-facing hubs; LAN staging is not a substitute.
+
 ## Production checklist
 
 Before exposing Bridge to a network:
@@ -10,27 +45,27 @@ Before exposing Bridge to a network:
 2. Set `AUTH_ALLOW_ANONYMOUS=false`.
 3. Set a strong `AUTH_SESSION_SECRET` (even though sessions are opaque DB IDs today, operators expect this to be set).
 4. Set `INITIAL_ADMINS` for multi-admin hubs, or rely on first-signup admin only on isolated self-hosted instances.
-5. Set `AUTH_ALLOW_SIGNUP=false` or require `AUTH_INVITE_CODES` on public hubs.
+5. Set `AUTH_ALLOW_SIGNUP=false` or require `AUTH_INVITE_CODES` on public hubs (SaaS uses Checkout entitlement instead).
 6. Do not set `INITIAL_ADMIN_PASSWORD` in production unless you force password change on first login.
 7. Install plugins only from sources you trust — plugin bridge code runs with host privileges.
-
-## Authentication
-
-OSS core uses **email/password + HttpOnly session cookies** only. There is no OAuth login surface — credentials never leave your Bridge unless you expose it to a network.
+8. On SaaS, leave `PLATFORM_SAAS_ALLOW_CODE_ACCESS` and `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` unset/false unless you explicitly accept the risk.
+9. Public marketing site live before live Stripe.
 
 ## Threat model highlights
 
 | Surface | Risk | Mitigation |
 |---------|------|------------|
-| AI coding tools (`run_terminal`, `edit_file`) | RCE for editors/agents with `codeAccess` | Disable code access on agents; use confirm mode |
+| AI coding tools (`run_terminal`, `edit_file`) | RCE for editors/agents with `codeAccess` | SaaS defaults deny `codeAccess`; disable on agents; confirm mode |
+| Local plugin path registration | Tenant RCE via arbitrary folders | Blocked on SaaS unless `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` |
 | Federation API token | Remote command injection if token leaks | Rotate tokens; restrict network access |
-| First signup admin | Race on internet-exposed fresh installs | Use invite codes or pre-seed `INITIAL_ADMINS` |
+| First signup admin | Race on internet-exposed fresh installs | Use invite codes, paywall, or pre-seed `INITIAL_ADMINS` |
 | Plugin bundles (`/api/plugins/*/web.js`) | Proprietary JS exposure | Requires authenticated tenant + installed plugin |
 | Generic Records/actions (`/api/records/*`) | Cross-tenant or overbroad mutation | OperationContext, access/action policy, adapter scoping |
 | Release manifests and update artifacts | Supply-chain execution or downgrade | Signed manifests, immutable digests, compatibility bounds, administrator confirmation |
 | Host update supervisor | Privileged container/service replacement | Dedicated authenticated local-host IPC; never expose the Docker socket to Bridge |
 | DuckDB analytics | SQL against attached timeseries | Platform admin only; SELECT-only subset |
 | Markdown rendering | `javascript:` links in assistant/wiki output | URL scheme allowlist in web UI |
+| Auth token endpoints | Account takeover / enumeration | Durable rate limits; opaque responses; hashed one-time tokens |
 
 ## ObjectType kernel boundary
 

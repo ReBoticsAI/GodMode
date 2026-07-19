@@ -172,7 +172,9 @@ function upsertAdminUser(
 
   if (user) {
     core.prepare(
-      `UPDATE users SET display_name=?, is_admin=1, updated_at=datetime('now') WHERE id=?`
+      `UPDATE users SET display_name=?, is_admin=1,
+         email_verified_at=COALESCE(email_verified_at, datetime('now')),
+         updated_at=datetime('now') WHERE id=?`
     ).run(displayName, user.id);
     // Seed the default password only when one is not already set (idempotent;
     // never clobber a password the user may have changed).
@@ -187,8 +189,8 @@ function upsertAdminUser(
     const seedPwd = config.auth.initialAdminPassword.trim();
     const passwordHash = config.isHub || !seedPwd ? null : hashPassword(seedPwd);
     core.prepare(
-      `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash)
-       VALUES (?, ?, ?, NULL, 1, ?)`
+      `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash, email_verified_at)
+       VALUES (?, ?, ?, NULL, 1, ?, datetime('now'))`
     ).run(id, normalized, displayName, passwordHash);
     core.prepare(
       `INSERT OR IGNORE INTO credit_wallets (user_id, balance) VALUES (?, 1000)`

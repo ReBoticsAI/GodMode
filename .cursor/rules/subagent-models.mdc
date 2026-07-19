@@ -1,0 +1,14 @@
+---
+description: Allowed models for Task/subagent launches
+alwaysApply: true
+---
+
+# Subagent model allowlist
+
+When launching Task tool subagents, only use these models (or omit `model` so the subagent inherits Auto):
+
+- **Auto** (omit `model` — default / parent inheritance)
+- **Composer 2.5** → `composer-2.5` or `composer-2.5-fast`
+- **Grok 4.5** → `cursor-grok-4.5-high`
+
+Do **not** pass other model slugs (Claude Opus/Sonnet/Fable, GPT-5.x, Gemini, etc.) unless the user explicitly overrides this rule in the current conversation.
