@@ -369,6 +369,33 @@ app.use("/api", attachAuthContext, (req, res, next) => {
     code: "EMAIL_NOT_VERIFIED",
   });
 });
+app.use("/api", (req, res, next) => {
+  if (
+    !config.isSaas ||
+    !req.user ||
+    !req.user.isAdmin ||
+    req.user.mfaEnabled
+  ) {
+    next();
+    return;
+  }
+  const raw = (req.originalUrl || req.url || "").split("?")[0] ?? "";
+  const p = raw.replace(/^\/api/, "") || req.path;
+  if (
+    p.startsWith("/auth") ||
+    p.startsWith("/saas") ||
+    p.includes("webhook") ||
+    p === "/health" ||
+    p.startsWith("/update")
+  ) {
+    next();
+    return;
+  }
+  res.status(403).json({
+    error: "MFA enrollment required for platform admins",
+    code: "MFA_SETUP_REQUIRED",
+  });
+});
 app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
 if (config.isSaas) {

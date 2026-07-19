@@ -6,9 +6,11 @@ GodMode is a self-hosted personal OS with optional AI agents that can run tools,
 
 OSS / private hub uses **email/password + HttpOnly session cookies**. Production SaaS
 adds email verification, password reset (Resend or SMTP), optional Google/GitHub
-OAuth, and **required TOTP MFA for platform admins**. Session cookies are `Secure`
-when public URLs are HTTPS. Cookie-authenticated mutating API calls require a
-trusted `Origin`/`Referer` matching `WEB_ORIGIN` (webhooks remain signature-auth).
+OAuth, and **required TOTP MFA for platform admins** (hard gate: admins cannot use
+the product shell until enrolled; Admin APIs also return `MFA_REQUIRED`). Session
+cookies are `Secure` when public URLs are HTTPS. Cookie-authenticated mutating
+API calls require a trusted `Origin`/`Referer` matching `WEB_ORIGIN` (webhooks
+remain signature-auth).
 
 ## Public SaaS launch gate
 
@@ -16,7 +18,7 @@ Do **not** point public DNS at SaaS until:
 
 1. Marketing site live (`/www` on the web app, shadcn) and Stripe business URL accepted (`BUSINESS_WEBSITE_URL`)
 2. Email verify + password reset working with production mail
-3. Platform admin MFA enrolled and enforced
+3. Platform admin MFA enrolled and hard-gated (Auth interstitial + `MFA_SETUP_REQUIRED` on product APIs)
 4. Cloudflare → Hostinger Full (strict), origin headers, HTTPS cookies, firewall locked
 5. Durable SQLite rate limits + cron backups + tested offsite restore
 6. SaaS defaults: deny agent `codeAccess`; block arbitrary Local plugin paths
