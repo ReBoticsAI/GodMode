@@ -1,0 +1,38 @@
+---
+description: Ban em-dashes in user-facing prose and docs
+alwaysApply: true
+---
+
+# No em-dashes in prose
+
+Do **not** use em-dashes (`—` U+2014) or double hyphens as em-dash substitutes (`--`) in user-facing prose or documentation.
+
+## Where this applies
+
+- UI copy (labels, descriptions, empty states, marketing pages)
+- Product docs and wiki/feature markdown
+- README-style docs meant for humans
+- Chat/agent-facing platform seed text
+
+## Exceptions
+
+- Code identifiers, file paths, CLI flags, and regex
+- Third-party strings you must quote verbatim
+- Markdown thematic breaks (`---`) as frontmatter or horizontal rules
+
+## Prefer instead
+
+- Periods or commas for soft breaks
+- Colons before lists or elaborations
+- Parentheses for asides
+- Spaced hyphen ` - ` when a brief pause is needed
+
+## Examples
+
+Incorrect: `Local-first personal OS — structure, agents, and wiki.`
+
+Correct: `Local-first personal OS: structure, agents, and wiki.`
+
+Incorrect: `Sellers keep 90% — the platform takes 10%.`
+
+Correct: `Sellers keep 90%. The platform takes 10%.`
