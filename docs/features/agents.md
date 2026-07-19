@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "/agents"
 summary: "Org chart with Intelligence and Digital You at the root; Pipeline configures each agent."
 ---
-
 # Agents
+
+![agents in GodMode](/features/agents.png)
+
 
 | Agent | Role |
 |-------|------|

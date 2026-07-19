@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "/home"
 summary: "Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace."
 ---
-
 # Home hub
+
+![home-hub in GodMode](/features/home-hub.png)
+
 
 The Home hub is the landing dashboard after login. It surfaces quick links into personal tools and Marketplace.
 

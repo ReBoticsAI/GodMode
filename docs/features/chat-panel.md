@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Sidebar → Chat"
 summary: "Floating window for agent chat, history, model picker, tools, and in-panel tabs."
 ---
-
 # Chat panel
+
+![chat-panel in GodMode](/features/chat-panel.png)
+
 
 The Chat panel is the floating window where you talk to agents. It is not an agent's name.
 

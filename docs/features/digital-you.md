@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Sidebar → Digital name"
 summary: "Persona agent created on first login for tone, preferences, and personal context."
 ---
-
 # Digital You
+
+![digital-you in GodMode](/features/digital-you.png)
+
 
 Digital You is your persona agent, created on first login. It holds tone, preferences, and personal context. It is distinct from Intelligence and from department subagents.
 

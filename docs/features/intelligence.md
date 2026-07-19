@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Chat panel → agent picker"
 summary: "Platform-wide companion for setup, structure, wiki, and cross-cutting work."
 ---
-
 # Intelligence
+
+![intelligence in GodMode](/features/intelligence.png)
+
 
 Intelligence is the built-in platform agent. It uses platform tools to create pages, agents, tasks, wiki articles, and more from chat.
 

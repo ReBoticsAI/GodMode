@@ -118,6 +118,15 @@ export function featureDocsForWikiSeed(): Array<{
   return loadFeatureDocs().map((d) => ({
     slug: d.slug === "_index" ? "features" : d.slug,
     title: d.title,
-    bodyMarkdown: d.bodyMarkdown,
+    bodyMarkdown: stripMarkdownImages(d.bodyMarkdown),
   }));
+}
+
+/** Drop image markdown/HTML so wiki/RAG stays text-only (token cost + non-vision models). */
+export function stripMarkdownImages(markdown: string): string {
+  return String(markdown ?? "")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/<img\b[^>]*>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim() + "\n";
 }

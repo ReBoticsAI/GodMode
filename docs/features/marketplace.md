@@ -5,8 +5,10 @@ section: "Social and extension"
 location: "/marketplace"
 summary: "Official, Local, Community, Installed, and Sell tabs with real checkout."
 ---
-
 # Marketplace
+
+![marketplace in GodMode](/features/marketplace.png)
+
 
 Marketplace installs packs and plugins from catalogs. On GodMode Cloud it supports paid Official items and user-to-user Community listings with real-money checkout.
 
