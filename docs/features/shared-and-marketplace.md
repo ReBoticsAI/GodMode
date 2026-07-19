@@ -5,8 +5,10 @@ section: "Hubs"
 location: "Sidebar → Shared; /marketplace"
 summary: "Live grants and the pack marketplace at a glance."
 ---
-
 # Shared and Marketplace
+
+![shared-and-marketplace in GodMode](/features/shared-and-marketplace.png)
+
 
 ## Shared
 

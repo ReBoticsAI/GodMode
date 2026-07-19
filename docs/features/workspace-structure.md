@@ -5,8 +5,10 @@ section: "Hubs"
 location: "/structure"
 summary: "Departments, divisions, and pages. New workspaces start empty."
 ---
-
 # Workspace structure
+
+![workspace-structure in GodMode](/features/workspace-structure.png)
+
 
 GodMode organizes work in a tree:
 

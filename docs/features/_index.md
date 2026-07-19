@@ -10,7 +10,9 @@ summary: "Catalog of built-in GodMode features. Same pages seed the platform wik
 
 GodMode is a local-first personal OS. These pages describe every built-in feature.
 
-Intelligence and other agents should read pages in the **platform** wiki space (seeded from this catalog) when answering product questions.
+Marketing pages under `/www/features` may include platform screenshots. The same
+markdown seeds the **platform** wiki for agents with **images stripped** (token
+cost and non-vision models).
 
 ## How to use this catalog
 
