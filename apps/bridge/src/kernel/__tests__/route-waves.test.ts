@@ -31,6 +31,7 @@ function declaredRoutes(
 describe("legacy route wave", () => {
   it("exposes only the approved specialized POST transports", () => {
     expect(declaredRoutes("post|put|patch|delete")).toEqual([
+      "admin-marketplace.ts:post:/backup",
       "admin-saas.ts:post:/customers/:userId/access",
       "ai.ts:post:/chat",
       "api-core.ts:post:/analytics/timeseries/query",
