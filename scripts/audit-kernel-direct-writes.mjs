@@ -45,7 +45,7 @@ function excluded(relative) {
     /^scripts\/audit-kernel/.test(relative) ||
     // CI artifact builders and privileged host updaters are not application
     // mutation entrypoints; their writes are their explicit operating contract.
-    /^scripts\/(?:release|update)\//.test(relative)
+    /^scripts\/(?:release|update|backup)\//.test(relative)
   );
 }
 

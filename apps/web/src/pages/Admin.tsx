@@ -50,6 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StructureAdminPanel } from "@/pages/StructureAdminPanel";
 import { AdminUsersPanel } from "@/pages/admin/AdminUsersPanel";
 import { AdminSaasCustomersPanel } from "@/pages/admin/AdminSaasCustomersPanel";
+import { AdminMarketplaceFeesPanel } from "@/pages/admin/AdminMarketplaceFeesPanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -107,6 +108,7 @@ export default function Admin() {
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
           {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
+          <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
           <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="template">Workspace template</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -123,6 +125,9 @@ export default function Admin() {
             <AdminSaasCustomersPanel />
           </TabsContent>
         ) : null}
+        <TabsContent value="marketplace" className="mt-4">
+          <AdminMarketplaceFeesPanel />
+        </TabsContent>
         <TabsContent value="updates" className="mt-4">
           <UpdatesCard />
         </TabsContent>

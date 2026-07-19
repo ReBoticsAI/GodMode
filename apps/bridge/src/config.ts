@@ -164,6 +164,47 @@ export const config = {
     /** Optional password for INITIAL_ADMINS seed users (local/client only). Empty = no password seeded. */
     initialAdminPassword: process.env.INITIAL_ADMIN_PASSWORD ?? "",
   },
+  email: {
+    provider: (process.env.EMAIL_PROVIDER ?? "none").toLowerCase() as
+      | "none"
+      | "resend"
+      | "smtp",
+    from: process.env.EMAIL_FROM ?? "GodMode <noreply@localhost>",
+    resendApiKey: (process.env.RESEND_API_KEY ?? "").trim(),
+    smtp: {
+      host: process.env.SMTP_HOST ?? "",
+      port: Number(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === "true",
+      user: process.env.SMTP_USER ?? "",
+      pass: process.env.SMTP_PASS ?? "",
+    },
+  },
+  oauth: {
+    google: {
+      clientId: (process.env.OAUTH_GOOGLE_CLIENT_ID ?? "").trim(),
+      clientSecret: (process.env.OAUTH_GOOGLE_CLIENT_SECRET ?? "").trim(),
+    },
+    github: {
+      clientId: (process.env.OAUTH_GITHUB_CLIENT_ID ?? "").trim(),
+      clientSecret: (process.env.OAUTH_GITHUB_CLIENT_SECRET ?? "").trim(),
+    },
+  },
+  backups: {
+    localDir: process.env.BACKUP_LOCAL_DIR ?? "",
+    s3: {
+      endpoint: (process.env.BACKUP_S3_ENDPOINT ?? "").trim(),
+      region: process.env.BACKUP_S3_REGION ?? "auto",
+      bucket: (process.env.BACKUP_S3_BUCKET ?? "").trim(),
+      accessKeyId: (process.env.BACKUP_S3_ACCESS_KEY_ID ?? "").trim(),
+      secretAccessKey: (process.env.BACKUP_S3_SECRET_ACCESS_KEY ?? "").trim(),
+      prefix: process.env.BACKUP_S3_PREFIX ?? "godmode/",
+    },
+  },
+  businessWebsiteUrl: (process.env.BUSINESS_WEBSITE_URL ?? "").trim(),
+  /** When saas: deny agent codeAccess unless PLATFORM_SAAS_ALLOW_CODE_ACCESS=true */
+  saasAllowCodeAccess: process.env.PLATFORM_SAAS_ALLOW_CODE_ACCESS === "true",
+  /** When saas: block tenant Local plugin path registration unless true */
+  saasAllowLocalPlugins: process.env.PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS === "true",
   federation: {
     /** Shared secret peers present to this Bridge's federation API (empty = derive from share grants only). */
     token: process.env.FEDERATION_TOKEN ?? "",

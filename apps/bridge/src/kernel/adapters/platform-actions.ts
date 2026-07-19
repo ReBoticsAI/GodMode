@@ -724,11 +724,22 @@ export const catalogSourceAdapter: RecordAdapter = {
   create(_db, def, data, ctx) {
     const core = ctx.data!.coreDb;
     const userId = requireUser(ctx);
+    const url = requiredText(data, "url");
+    if (
+      config.isSaas &&
+      !config.saasAllowLocalPlugins &&
+      (url.startsWith("file:") || url.startsWith("/") || /^[A-Za-z]:[\\/]/.test(url))
+    ) {
+      throw httpError(
+        403,
+        "Local file catalog sources are disabled on SaaS. Use https Official or allowlisted catalogs."
+      );
+    }
     const id = addCatalogSource(
       core,
       userId,
       requiredText(data, "name"),
-      requiredText(data, "url")
+      url
     );
     return record(def, listCatalogSources(core, userId).find((row) => row.id === id)!);
   },
@@ -806,6 +817,12 @@ export const catalogInstallAdapter: RecordAdapter = {
       return { ok: true, pluginId: input.plugin_id };
     },
     register_local_plugin(_db, _def, _id, input, ctx) {
+      if (config.isSaas && !config.saasAllowLocalPlugins) {
+        throw httpError(
+          403,
+          "Local plugin path registration is disabled on SaaS. Install from Official or allowlisted catalogs."
+        );
+      }
       return registerLocalPluginFolder(
         ctx.data!.coreDb,
         requireTenant(ctx),

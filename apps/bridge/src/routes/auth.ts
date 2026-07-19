@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { config } from "../config.js";
 import {
@@ -35,6 +36,25 @@ import {
   executeRecordAction,
   KernelError,
 } from "../kernel/record-api.js";
+import {
+  beginMfaEnroll,
+  confirmMfaEnroll,
+  consumeAuthToken,
+  disableMfa,
+  issueAuthToken,
+  markEmailVerified,
+  markEmailVerifiedIfNull,
+  mfaEnabled,
+  setPasswordHash,
+  upsertOauthAccount,
+  verifyMfaChallenge,
+} from "../services/auth/mfa-and-tokens.js";
+import {
+  resetPasswordEmail,
+  sendMail,
+  verificationEmail,
+} from "../services/auth/mailer.js";
+import { hashPassword } from "../services/auth/password.js";
 import {
   consumeSaasEntitlement,
   findPendingEntitlementByStripeSession,
@@ -84,6 +104,21 @@ export function createAuthRouter(): Router {
       return;
     }
 
+    const coreDb = core;
+    if (mfaEnabled(coreDb, user.id)) {
+      const mfaToken = issueAuthToken(coreDb, {
+        userId: user.id,
+        purpose: "mfa_login",
+        ttlMinutes: 5,
+      });
+      res.json({
+        mfaRequired: true,
+        mfaToken,
+        user: coreUserToAuth(user, { mfaEnabled: true }),
+      });
+      return;
+    }
+
     touchUserLastSeen(user.id);
     const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
     res.setHeader(
@@ -92,7 +127,8 @@ export function createAuthRouter(): Router {
     );
 
     res.json({
-      user: coreUserToAuth(user),
+      user: coreUserToAuth(user, { mfaEnabled: false }),
+      mfaSetupRequired: Boolean(config.isSaas && user.is_admin),
       ...(config.isProduction ? {} : { sessionToken: sessionId }),
     });
   });
@@ -188,13 +224,29 @@ export function createAuthRouter(): Router {
         });
       }
       const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
+      // Seeded INITIAL_ADMINS may already be verified; otherwise send verify link.
+      if (!user.email_verified_at) {
+        try {
+          const token = issueAuthToken(core, {
+            userId: user.id,
+            purpose: "verify",
+            ttlMinutes: 60 * 24,
+          });
+          const link = `${config.web.publicUrl.replace(/\/$/, "")}/login?verify=${encodeURIComponent(token)}`;
+          void sendMail(verificationEmail({ to: normalized, link })).catch((err) =>
+            console.error("[auth] signup verification mail failed", err)
+          );
+        } catch (err) {
+          console.error("[auth] signup verification token failed", err);
+        }
+      }
       const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
       res.setHeader(
         "Set-Cookie",
         issueSessionCookies(sessionId, config.auth.sessionTtlDays, secure)
       );
       res.status(201).json({
-        user: coreUserToAuth(user),
+        user: coreUserToAuth(user, { mfaEnabled: false }),
         ...(config.isProduction ? {} : { sessionToken: sessionId }),
       });
     } catch (err) {
@@ -408,7 +460,357 @@ export function createAuthRouter(): Router {
     });
   });
 
+  router.post("/mfa/verify-login", authLimiter, (req, res) => {
+    const { mfaToken, code } = req.body ?? {};
+    if (typeof mfaToken !== "string" || typeof code !== "string") {
+      res.status(400).json({ error: "mfaToken and code required" });
+      return;
+    }
+    const core = getCoreDb();
+    const consumed = consumeAuthToken(core, { rawToken: mfaToken, purpose: "mfa_login" });
+    if (!consumed) {
+      res.status(401).json({ error: "Invalid or expired MFA token" });
+      return;
+    }
+    if (!verifyMfaChallenge(core, consumed.userId, code)) {
+      res.status(401).json({ error: "Invalid MFA code" });
+      return;
+    }
+    const user = core.prepare("SELECT * FROM users WHERE id=?").get(consumed.userId) as CoreUser;
+    touchUserLastSeen(user.id);
+    const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
+    res.setHeader(
+      "Set-Cookie",
+      issueSessionCookies(sessionId, config.auth.sessionTtlDays, secure)
+    );
+    res.json({
+      user: coreUserToAuth(user, { mfaEnabled: true }),
+      ...(config.isProduction ? {} : { sessionToken: sessionId }),
+    });
+  });
+
+  router.post("/request-verification", authLimiter, async (req, res) => {
+    const email =
+      typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    // Always OK — do not reveal account existence
+    res.json({ ok: true });
+    if (!email) return;
+    try {
+      const core = getCoreDb();
+      const user = core.prepare("SELECT * FROM users WHERE email=?").get(email) as
+        | CoreUser
+        | undefined;
+      if (!user || user.email_verified_at) return;
+      const token = issueAuthToken(core, {
+        userId: user.id,
+        purpose: "verify",
+        ttlMinutes: 60 * 24,
+      });
+      const link = `${config.web.publicUrl.replace(/\/$/, "")}/login?verify=${encodeURIComponent(token)}`;
+      await sendMail(verificationEmail({ to: email, link }));
+    } catch (err) {
+      console.error("[auth] verification mail failed", err);
+    }
+  });
+
+  router.post("/verify-email", authLimiter, (req, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      res.status(400).json({ error: "token required" });
+      return;
+    }
+    const core = getCoreDb();
+    const consumed = consumeAuthToken(core, { rawToken: token, purpose: "verify" });
+    if (!consumed) {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
+    markEmailVerified(core, consumed.userId);
+    res.json({ ok: true });
+  });
+
+  router.post("/forgot-password", authLimiter, async (req, res) => {
+    const email =
+      typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    res.json({ ok: true });
+    if (!email) return;
+    try {
+      const core = getCoreDb();
+      const user = core.prepare("SELECT * FROM users WHERE email=?").get(email) as
+        | CoreUser
+        | undefined;
+      if (!user) return;
+      const token = issueAuthToken(core, {
+        userId: user.id,
+        purpose: "reset",
+        ttlMinutes: 60,
+      });
+      const link = `${config.web.publicUrl.replace(/\/$/, "")}/login?reset=${encodeURIComponent(token)}`;
+      await sendMail(resetPasswordEmail({ to: email, link }));
+    } catch (err) {
+      console.error("[auth] reset mail failed", err);
+    }
+  });
+
+  router.post("/reset-password", authLimiter, (req, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const newPassword =
+      typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+    if (!token || newPassword.length < 6) {
+      res.status(400).json({ error: "token and newPassword (min 6) required" });
+      return;
+    }
+    const core = getCoreDb();
+    const consumed = consumeAuthToken(core, { rawToken: token, purpose: "reset" });
+    if (!consumed) {
+      res.status(400).json({ error: "Invalid or expired token" });
+      return;
+    }
+    setPasswordHash(core, consumed.userId, hashPassword(newPassword));
+    res.json({ ok: true });
+  });
+
+  router.post("/mfa/begin", attachAuthContext, requireAuth, (req, res) => {
+    const core = getCoreDb();
+    const result = beginMfaEnroll(core, req.user!.id, req.user!.email);
+    res.json(result);
+  });
+
+  router.post("/mfa/confirm", attachAuthContext, requireAuth, (req, res) => {
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    const core = getCoreDb();
+    if (!confirmMfaEnroll(core, req.user!.id, code)) {
+      res.status(400).json({ error: "Invalid code" });
+      return;
+    }
+    res.json({ ok: true });
+  });
+
+  router.post("/mfa/disable", attachAuthContext, requireAuth, (req, res) => {
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    const core = getCoreDb();
+    if (!verifyMfaChallenge(core, req.user!.id, code)) {
+      res.status(400).json({ error: "Invalid code" });
+      return;
+    }
+    disableMfa(core, req.user!.id);
+    res.json({ ok: true });
+  });
+
+  router.get("/mfa/status", attachAuthContext, requireAuth, (req, res) => {
+    const core = getCoreDb();
+    res.json({
+      enabled: mfaEnabled(core, req.user!.id),
+      required: Boolean(config.isSaas && req.user!.isAdmin),
+    });
+  });
+
+  router.get("/oauth/providers", (_req, res) => {
+    res.json({
+      google: Boolean(config.oauth.google.clientId),
+      github: Boolean(config.oauth.github.clientId),
+    });
+  });
+
+  // OAuth: Google + GitHub
+  router.get("/oauth/:provider/start", authLimiter, (req, res) => {
+    const provider = String(req.params.provider);
+    const redirectUri = `${config.auth.publicUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+    if (provider === "google") {
+      const { clientId } = config.oauth.google;
+      if (!clientId) {
+        res.status(503).json({ error: "Google OAuth not configured" });
+        return;
+      }
+      const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      url.searchParams.set("client_id", clientId);
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("scope", "openid email profile");
+      url.searchParams.set("access_type", "online");
+      res.json({ url: url.toString() });
+      return;
+    }
+    if (provider === "github") {
+      const { clientId } = config.oauth.github;
+      if (!clientId) {
+        res.status(503).json({ error: "GitHub OAuth not configured" });
+        return;
+      }
+      const url = new URL("https://github.com/login/oauth/authorize");
+      url.searchParams.set("client_id", clientId);
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("scope", "read:user user:email");
+      res.json({ url: url.toString() });
+      return;
+    }
+    res.status(404).json({ error: "Unknown provider" });
+  });
+
+  router.get("/oauth/:provider/callback", authLimiter, async (req, res) => {
+    const provider = String(req.params.provider);
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    if (!code) {
+      res.status(400).send("Missing code");
+      return;
+    }
+    try {
+      const profile = await exchangeOauthCode(provider, code);
+      const core = getCoreDb();
+      let userId: string | undefined;
+      const linked = core
+        .prepare(
+          `SELECT user_id FROM oauth_accounts WHERE provider=? AND provider_user_id=?`
+        )
+        .get(provider, profile.providerUserId) as { user_id: string } | undefined;
+      if (linked) {
+        userId = linked.user_id;
+      } else {
+        const existing = core
+          .prepare(`SELECT id FROM users WHERE email=?`)
+          .get(profile.email) as { id: string } | undefined;
+        if (existing) {
+          userId = existing.id;
+        } else {
+          const created = await executeCollectionAction(
+            core,
+            "User",
+            "signup",
+            {
+              email: profile.email,
+              password: randomOauthPassword(),
+              display_name: profile.name,
+            },
+            createSystemOperationContext({})
+          ) as { id: string };
+          userId = created.id;
+        }
+        upsertOauthAccount(core, {
+          provider,
+          providerUserId: profile.providerUserId,
+          userId,
+          profileJson: JSON.stringify(profile),
+        });
+      }
+      // Provider already required a verified email - mark account verified.
+      markEmailVerifiedIfNull(core, userId!);
+      const user = core.prepare("SELECT * FROM users WHERE id=?").get(userId!) as CoreUser;
+      if (mfaEnabled(core, user.id)) {
+        const mfaToken = issueAuthToken(core, {
+          userId: user.id,
+          purpose: "mfa_login",
+          ttlMinutes: 5,
+        });
+        res.redirect(
+          `${config.web.publicUrl.replace(/\/$/, "")}/login?mfaToken=${encodeURIComponent(mfaToken)}`
+        );
+        return;
+      }
+      const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
+      res.setHeader(
+        "Set-Cookie",
+        issueSessionCookies(sessionId, config.auth.sessionTtlDays, secure)
+      );
+      res.redirect(config.web.publicUrl.replace(/\/$/, "") || "/");
+    } catch (err) {
+      console.error("[oauth]", err);
+      res.status(502).send("OAuth failed");
+    }
+  });
+
   return router;
+}
+
+function randomOauthPassword(): string {
+  return `oauth$${randomBytes(24).toString("hex")}`;
+}
+
+async function exchangeOauthCode(
+  provider: string,
+  code: string
+): Promise<{ providerUserId: string; email: string; name: string }> {
+  const redirectUri = `${config.auth.publicUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+  if (provider === "google") {
+    const { clientId, clientSecret } = config.oauth.google;
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    if (!tokenRes.ok) throw new Error(await tokenRes.text());
+    const tokenJson = (await tokenRes.json()) as { access_token?: string };
+    const profileRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+    });
+    if (!profileRes.ok) throw new Error(await profileRes.text());
+    const p = (await profileRes.json()) as {
+      id?: string;
+      email?: string;
+      name?: string;
+      verified_email?: boolean;
+    };
+    if (!p.id || !p.email || !p.verified_email) throw new Error("Google email not verified");
+    return {
+      providerUserId: p.id,
+      email: p.email.toLowerCase(),
+      name: p.name ?? p.email,
+    };
+  }
+  if (provider === "github") {
+    const { clientId, clientSecret } = config.oauth.github;
+    const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+    if (!tokenRes.ok) throw new Error(await tokenRes.text());
+    const tokenJson = (await tokenRes.json()) as { access_token?: string };
+    const userRes = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${tokenJson.access_token}`,
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!userRes.ok) throw new Error(await userRes.text());
+    const u = (await userRes.json()) as { id?: number; login?: string; email?: string | null; name?: string | null };
+    const emailsRes = await fetch("https://api.github.com/user/emails", {
+      headers: {
+        Authorization: `Bearer ${tokenJson.access_token}`,
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!emailsRes.ok) throw new Error(await emailsRes.text());
+    const emails = (await emailsRes.json()) as Array<{
+      email: string;
+      primary: boolean;
+      verified: boolean;
+    }>;
+    const email =
+      emails.find((e) => e.primary && e.verified)?.email ??
+      emails.find((e) => e.verified)?.email ??
+      "";
+    if (!u.id || !email) throw new Error("GitHub verified email unavailable");
+    return {
+      providerUserId: String(u.id),
+      email: email.toLowerCase(),
+      name: u.name ?? u.login ?? email,
+    };
+  }
+  throw new Error("Unknown provider");
 }
 
 function mergeProfile(

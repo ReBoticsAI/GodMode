@@ -2599,6 +2599,8 @@ export interface AuthUser {
   displayName: string;
   avatarUrl: string | null;
   isAdmin?: boolean;
+  emailVerified?: boolean;
+  mfaEnabled?: boolean;
 }
 
 export interface TenantSummary {
@@ -2631,13 +2633,17 @@ export interface AdminUserRow {
 }
 
 export function loginPassword(email: string, password: string) {
-  return api<{ user: AuthUser; sessionToken?: string }>(
-    "/auth/login",
-    {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }
-  ).then((res) => {
+  return api<{
+    user: AuthUser;
+    sessionToken?: string;
+    mfaRequired?: boolean;
+    mfaToken?: string;
+    mfaSetupRequired?: boolean;
+  }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  }).then((res) => {
+    if (res.mfaRequired) return res;
     if (allowSessionTokenFallback && res.sessionToken) {
       clearActiveTenant();
       writeSessionToken(res.sessionToken);
@@ -2645,6 +2651,103 @@ export function loginPassword(email: string, password: string) {
     return res;
   });
 }
+
+export function verifyMfaLogin(mfaToken: string, code: string) {
+  return api<{ user: AuthUser; sessionToken?: string }>("/auth/mfa/verify-login", {
+    method: "POST",
+    body: JSON.stringify({ mfaToken, code }),
+  }).then((res) => {
+    if (allowSessionTokenFallback && res.sessionToken) {
+      clearActiveTenant();
+      writeSessionToken(res.sessionToken);
+    }
+    return res;
+  });
+}
+
+export function requestEmailVerification(email: string) {
+  return api<{ ok: boolean }>("/auth/request-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyEmailToken(token: string) {
+  return api<{ ok: boolean }>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function forgotPassword(email: string) {
+  return api<{ ok: boolean }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, newPassword: string) {
+  return api<{ ok: boolean }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, newPassword }),
+  });
+}
+
+export function fetchMfaStatus() {
+  return api<{ enabled: boolean; required: boolean }>("/auth/mfa/status");
+}
+
+export function beginMfaEnroll() {
+  return api<{
+    secretBase32: string;
+    otpauthUrl: string;
+    recoveryCodes: string[];
+  }>("/auth/mfa/begin", { method: "POST", body: "{}" });
+}
+
+export function confirmMfaEnroll(code: string) {
+  return api<{ ok: boolean }>("/auth/mfa/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function disableMfa(code: string) {
+  return api<{ ok: boolean }>("/auth/mfa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function fetchOauthProviders() {
+  return api<{ google: boolean; github: boolean }>("/auth/oauth/providers");
+}
+
+export function startOauth(provider: "google" | "github") {
+  return api<{ url: string }>(`/auth/oauth/${provider}/start`);
+}
+
+export function fetchAdminMarketplaceFees() {
+  return api<{
+    orders: Array<{
+      id: string;
+      amountCents: number;
+      platformFeeCents: number;
+      status: string;
+      provider: string;
+      sellerUserId: string | null;
+      createdAt: string;
+      deliveredAt: string | null;
+    }>;
+    totals: {
+      paidCount: number;
+      deliveredCount: number;
+      amountCents: number;
+      platformFeeCents: number;
+    };
+  }>("/admin/marketplace/fees");
+}
+
 
 export function signupPassword(
   email: string,

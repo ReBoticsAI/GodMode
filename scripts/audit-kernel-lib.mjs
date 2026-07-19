@@ -839,7 +839,7 @@ export function discoverMutationCallers(repoRoot) {
   for (const [scope, root] of scopes) {
     for (const file of walkFiles(root)) {
       const relative = slash(path.relative(repoRoot, file));
-      if (/(__tests__|\.test\.|audit-kernel)/.test(relative)) continue;
+      if (/(__tests__|\.test\.|audit-kernel|scripts\/(?:release|update|backup)\/)/.test(relative)) continue;
       const source = sourceFile(file);
       const constants = constMap([file]);
       visit(source, (node) => {

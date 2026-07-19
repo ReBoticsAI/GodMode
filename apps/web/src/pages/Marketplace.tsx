@@ -15,6 +15,7 @@ import {
   fetchMyMarketplaceListings,
   fetchOfficialCatalog,
   fetchUnofficialCatalog,
+  fetchBridgeHealth,
   installCatalogEntry,
   installWorkspacePlugin,
   registerLocalPlugin,
@@ -323,6 +324,7 @@ export default function MarketplacePage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [addingLocal, setAddingLocal] = useState(false);
+  const [saas, setSaas] = useState(false);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [acquiringId, setAcquiringId] = useState<string | null>(null);
   const [cryptoPrompt, setCryptoPrompt] = useState<{
@@ -347,6 +349,12 @@ export default function MarketplacePage() {
   const [publishPriceDollars, setPublishPriceDollars] = useState("0");
   const [publishDelivery, setPublishDelivery] = useState<"clone" | "live">("clone");
   const [publishResourceId, setPublishResourceId] = useState("");
+
+  useEffect(() => {
+    void fetchBridgeHealth()
+      .then((h) => setSaas(Boolean(h.saas)))
+      .catch(() => setSaas(false));
+  }, []);
 
   const ownedListingIds = useMemo(() => {
     const ids = new Set<string>();
@@ -833,6 +841,18 @@ export default function MarketplacePage() {
         </TabsContent>
 
         <TabsContent value="local" className="mt-4 space-y-6">
+          {saas ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Local plugins on Cloud</CardTitle>
+                <CardDescription>
+                  Arbitrary local folder registration is disabled on GodMode Cloud for
+                  security. Install from Official or Community catalogs instead.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          ) : (
+            <>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Add local plugin folder</CardTitle>
@@ -944,6 +964,8 @@ export default function MarketplacePage() {
               <code className="text-xs">pluginLocalPath</code> entries.
             </p>
           ) : null}
+            </>
+          )}
 
           {localFiltered.length > 0 ? (
             <div className="space-y-2">
