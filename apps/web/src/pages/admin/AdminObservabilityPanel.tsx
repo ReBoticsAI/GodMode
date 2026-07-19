@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminBackupStatus,
   fetchAdminObservabilityRequests,
+  triggerAdminPlatformBackup,
   type AdminRequestLogRow,
 } from "@/api";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -35,6 +37,7 @@ type LevelFilter = "all" | "warn" | "error";
 
 export function AdminObservabilityPanel() {
   const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [requests, setRequests] = useState<AdminRequestLogRow[]>([]);
   const [backup, setBackup] = useState<{
@@ -67,16 +70,41 @@ export function AdminObservabilityPanel() {
     reload();
   }, [reload]);
 
+  const runBackup = async () => {
+    setBackingUp(true);
+    try {
+      const res = await triggerAdminPlatformBackup();
+      setBackup(res.backup);
+      toast.success("Local snapshot complete");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Backup failed");
+      await reload();
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Backup status</CardTitle>
           <CardDescription>
-            Latest entry from <code>platform_backup_meta</code>. Cron and
-            optional Admin snapshot write here. Soft retention for request logs
-            keeps the newest ~5k warn/error rows in core.sqlite.
+            Latest entry from <code>platform_backup_meta</code>. Cron and this
+            one-click local snapshot write here. Soft retention for request logs
+            keeps the newest ~5k warn/error rows in core.sqlite. Optional S3
+            upload stays on the operator cron script.
           </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              size="sm"
+              disabled={backingUp}
+              onClick={() => void runBackup()}
+            >
+              {backingUp ? "Snapshotting..." : "Run local snapshot"}
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {loading && !backup ? (
