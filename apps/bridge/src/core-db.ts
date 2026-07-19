@@ -10,6 +10,7 @@ import {
   runMigrations,
   type Migration,
 } from "./services/db-migrations.js";
+import { ensureAuthSecuritySchema } from "./services/auth/mfa-and-tokens.js";
 
 function ensurePlatformGroupsTables(db: CoreDatabase): void {
   ensurePlatformGroups(db);
@@ -52,6 +53,8 @@ export interface CoreUser {
   /** Platform admin can disable SaaS customer login without deleting the account. */
   access_disabled: number;
   last_seen_at: string | null;
+  /** ISO timestamp when email was verified; null = unverified. */
+  email_verified_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -806,6 +809,7 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   { version: 9, name: "core_release_flow_v1", up: ensureReleaseFlowTables },
   { version: 10, name: "core_saas_subscriptions_v1", up: ensureSaasSubscriptionSchema },
   { version: 11, name: "core_marketplace_commerce_v1", up: ensureMarketplaceCommerceSchema },
+  { version: 12, name: "core_auth_security_v1", up: ensureAuthSecurityMigration },
 ];
 
 function ensureCoreUserColumns(db: CoreDatabase): void {
@@ -1019,6 +1023,11 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+}
+
+function ensureAuthSecurityMigration(db: CoreDatabase): void {
+  addCol(db, "users", "email_verified_at", "TEXT");
+  ensureAuthSecuritySchema(db);
 }
 
 /**

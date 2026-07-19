@@ -175,7 +175,39 @@ Some domain packs require a **local connector** on the user's machine. See `apps
 
 ## Hostinger VPS checklist
 
-- Ubuntu 22.04+, Docker + Compose plugin
-- Firewall: 80/443 only
+Full topology: [deploy/hostinger.md](deploy/hostinger.md).
+
+- Ubuntu 22.04+, Docker + Compose plugin (not shared PHP hosting)
+- Cloudflare orange-cloud → VPS IP; SSL **Full (strict)**; WAF enabled
+- Firewall: SSH IP-restricted; 80/443 only; **never** publish Bridge `3847`
 - `deploy/.env.production` with real secrets (never commit)
+- Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
+- Cron backups via `scripts/backup/snapshot-platform.mjs` + `BACKUP_S3_*`
 - Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
+
+## Public marketing site (Stripe business website)
+
+Deploy the public marketing site from **`apps/web` at `/www`** (shadcn) before enabling
+**live** Stripe keys. Cloudflare Pages / `www` DNS should serve that origin (or rewrite
+`/` → `/www`). See [`sites/www/README.md`](sites/www/README.md). Set the live URL in
+Stripe Dashboard → Business website and document it as `BUSINESS_WEBSITE_URL` for
+operators.
+
+The public site must be viewable without GodMode auth (home, pricing, Terms,
+Privacy, security summary, contact).
+
+## Public DNS launch gate
+
+**Do not** point public DNS at SaaS until all are true:
+
+1. Marketing site live and Stripe business URL accepted
+2. Email verify + password reset working with production mail (`EMAIL_PROVIDER`)
+3. Platform admin MFA enrolled and enforced on SaaS
+4. Cloudflare → Hostinger Full (strict), origin security headers, HTTPS cookies, firewall locked
+5. Durable rate limits + Hostinger cron backups + tested offsite restore
+6. SaaS `codeAccess` / Local plugin policy enabled (defaults deny)
+7. Live Stripe webhooks + Customer Portal verified on the Cloudflare hostname
+8. [docs/SECURITY.md](docs/SECURITY.md) / this file / [deploy/hostinger.md](deploy/hostinger.md) checklist signed off
+
+Environments during hardening: Z440 family `:8080` + LAN SaaS `:9080` for iteration;
+**Hostinger** is the public production target once the gate passes.

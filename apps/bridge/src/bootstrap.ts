@@ -10,6 +10,8 @@ import { initCoreDb, listAllTenantIds } from "./core-db.js";
 import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.js";
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
+import { requireTrustedOrigin } from "./services/auth/rate-limit.js";
+import { structuredRequestLog } from "./services/request-log.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createUpdateRouter } from "./routes/update.js";
 import { createMarketplaceRouter } from "./routes/marketplace.js";
@@ -43,6 +45,7 @@ import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
 import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
+import { createAdminMarketplaceRouter, createAdminObservabilityRouter } from "./routes/admin-marketplace.js";
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
 import { setDispatcherDeps } from "./services/hook-dispatcher.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
@@ -331,6 +334,8 @@ if (config.isSaas) {
 }
 app.use(express.json({ limit: "25mb" }));
 app.use(legacyEndpointTelemetry(coreDb));
+app.use(structuredRequestLog);
+app.use(requireTrustedOrigin);
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -340,6 +345,28 @@ app.get("/api/health", (_req, res) => {
     hub: config.isHub,
     client: config.isClient,
     saas: config.isSaas,
+  });
+});
+app.use("/api", attachAuthContext, (req, res, next) => {
+  if (!config.isSaas || !req.user || req.user.emailVerified) {
+    next();
+    return;
+  }
+  const raw = (req.originalUrl || req.url || "").split("?")[0] ?? "";
+  const p = raw.replace(/^\/api/, "") || req.path;
+  if (
+    p.startsWith("/auth") ||
+    p.startsWith("/saas") ||
+    p.includes("webhook") ||
+    p === "/health" ||
+    p.startsWith("/update")
+  ) {
+    next();
+    return;
+  }
+  res.status(403).json({
+    error: "Email verification required",
+    code: "EMAIL_NOT_VERIFIED",
   });
 });
 app.use("/api/update", createUpdateRouter(coreDb));
@@ -376,6 +403,8 @@ if (config.isSaas) {
   app.use("/api/admin/saas", createAdminSaasRouter());
 }
 app.use("/api/admin", createAdminUsersRouter());
+app.use("/api/admin/marketplace", createAdminMarketplaceRouter());
+app.use("/api/admin/observability", createAdminObservabilityRouter());
 app.use("/api/admin/workspace-template", createAdminWorkspaceTemplateRouter());
 app.use("/api/inference", createInferenceRouter(llmManager));
 app.use("/api/connections", createConnectionsRouter());
