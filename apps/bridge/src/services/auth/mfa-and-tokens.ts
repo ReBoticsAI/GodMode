@@ -277,3 +277,54 @@ export function verifyMfaChallenge(
   }
   return false;
 }
+
+export function markEmailVerified(core: CoreDatabase, userId: string): void {
+  core
+    .prepare(
+      `UPDATE users SET email_verified_at=datetime('now'), updated_at=datetime('now') WHERE id=?`
+    )
+    .run(userId);
+}
+
+export function setPasswordHash(
+  core: CoreDatabase,
+  userId: string,
+  passwordHash: string
+): void {
+  core
+    .prepare(
+      `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
+    )
+    .run(passwordHash, userId);
+}
+
+export function upsertOauthAccount(
+  core: CoreDatabase,
+  opts: {
+    provider: string;
+    providerUserId: string;
+    userId: string;
+    profileJson: string;
+  }
+): void {
+  core
+    .prepare(
+      `INSERT INTO oauth_accounts (provider, provider_user_id, user_id, profile_json, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+         user_id=excluded.user_id, updated_at=datetime('now')`
+    )
+    .run(opts.provider, opts.providerUserId, opts.userId, opts.profileJson);
+}
+
+export function markEmailVerifiedIfNull(
+  core: CoreDatabase,
+  userId: string
+): void {
+  core
+    .prepare(
+      `UPDATE users SET email_verified_at=COALESCE(email_verified_at, datetime('now')),
+         updated_at=datetime('now') WHERE id=?`
+    )
+    .run(userId);
+}
