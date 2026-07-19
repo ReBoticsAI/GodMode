@@ -51,6 +51,7 @@ import { StructureAdminPanel } from "@/pages/StructureAdminPanel";
 import { AdminUsersPanel } from "@/pages/admin/AdminUsersPanel";
 import { AdminSaasCustomersPanel } from "@/pages/admin/AdminSaasCustomersPanel";
 import { AdminMarketplaceFeesPanel } from "@/pages/admin/AdminMarketplaceFeesPanel";
+import { AdminObservabilityPanel } from "@/pages/admin/AdminObservabilityPanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -93,10 +94,10 @@ export default function Admin() {
         title="Admin"
         description={
           isSaas
-            ? "Billing, SaaS customers, updates, workspace template, users, and support."
+            ? "Billing, SaaS customers, observability, updates, workspace template, users, and support."
             : isHub
-              ? "Billing, updates, workspace template, users, and support."
-              : "Updates, workspace template, users, and support."
+              ? "Billing, observability, updates, workspace template, users, and support."
+              : "Observability, updates, workspace template, users, and support."
         }
       />
 
@@ -109,6 +110,7 @@ export default function Admin() {
           {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
           {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
           <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+          <TabsTrigger value="observability">Observability</TabsTrigger>
           <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="template">Workspace template</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -127,6 +129,9 @@ export default function Admin() {
         ) : null}
         <TabsContent value="marketplace" className="mt-4">
           <AdminMarketplaceFeesPanel />
+        </TabsContent>
+        <TabsContent value="observability" className="mt-4">
+          <AdminObservabilityPanel />
         </TabsContent>
         <TabsContent value="updates" className="mt-4">
           <UpdatesCard />

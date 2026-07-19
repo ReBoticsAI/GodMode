@@ -2748,6 +2748,44 @@ export function fetchAdminMarketplaceFees() {
   }>("/admin/marketplace/fees");
 }
 
+export type AdminRequestLogRow = {
+  id: string;
+  level: string;
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  ip: string | null;
+  userId: string | null;
+  error: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminObservabilityRequests(opts?: {
+  limit?: number;
+  level?: "warn" | "error" | "all";
+}) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.level && opts.level !== "all") params.set("level", opts.level);
+  const q = params.toString();
+  return api<{ requests: AdminRequestLogRow[] }>(
+    `/admin/observability/requests${q ? `?${q}` : ""}`
+  );
+}
+
+export function fetchAdminBackupStatus() {
+  return api<{
+    backup: {
+      status: string;
+      localPath: string | null;
+      remoteUri: string | null;
+      error: string | null;
+      updatedAt: string;
+    } | null;
+  }>("/admin/marketplace/backup-status");
+}
+
 
 export function signupPassword(
   email: string,

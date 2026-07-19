@@ -71,9 +71,11 @@ Set `BACKUP_S3_*` for S3-compatible offsite. Test restore before launch.
 
 GodMode does **not** use external APM (no Sentry). Prefer first-party signals:
 
+- **Admin → Observability** tab: filterable warn/error request table + last backup
+  status (`platform_backup_meta`)
 - Docker / Bridge **JSON request logs** on stdout (Hostinger `docker logs`)
-- Warn/error rows persisted to `core.sqlite` (`platform_request_log`); Admin API
-  `GET /api/admin/observability/requests`
+- Warn/error rows persisted to `core.sqlite` (`platform_request_log`); API
+  `GET /api/admin/observability/requests` (soft-capped at ~5k newest rows)
 - External uptime check against `https://<cloudflare-host>/api/health` (not the raw VPS IP)
 
 ## 9. Marketing / Stripe business URL
