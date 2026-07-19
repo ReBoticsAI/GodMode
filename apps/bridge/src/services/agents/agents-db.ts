@@ -256,6 +256,8 @@ export function ensureIntelligenceLocalBackendWhenExternalLlm(db: AppDatabase): 
 /** Whether an agent may use coding/terminal tools (read_file, run_terminal, etc.). */
 export function agentCodeAccess(agent: AiAgent | null | undefined): boolean {
   if (!agent) return false;
+  // SaaS: deny coding/terminal tools unless platform policy explicitly enables them.
+  if (config.isSaas && !config.saasAllowCodeAccess) return false;
   if (agent.id === "intelligence") return true;
   return agent.config?.codeAccess === true;
 }

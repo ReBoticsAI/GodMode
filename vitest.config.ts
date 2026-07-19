@@ -13,6 +13,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/release-flow.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
+      "apps/bridge/src/services/auth/__tests__/mfa-and-tokens.test.ts",
       "apps/web/src/__tests__/**/*.test.ts",
       "apps/web/src/__tests__/**/*.test.tsx",
       "apps/web/src/pages/records/__tests__/**/*.test.tsx",

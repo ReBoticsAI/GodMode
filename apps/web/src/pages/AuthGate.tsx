@@ -2,11 +2,18 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   fetchBridgeHealth,
+  fetchOauthProviders,
   fetchSaasCheckoutStatus,
   fetchSaasPaywall,
+  forgotPassword,
   loginPassword,
+  requestEmailVerification,
+  resetPassword,
+  startOauth,
   startSaasCheckout,
   signupPassword,
+  verifyEmailToken,
+  verifyMfaLogin,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { APP_NAME, HOME_PATH } from "@/lib/navigation";
@@ -22,7 +29,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "forgot" | "reset" | "mfa" | "verify-banner";
 /** SaaS signup: pick plan → pay → create account (no invite codes). */
 type SaasSignupStep = "plan" | "account";
 
@@ -53,7 +60,7 @@ function clearStoredCheckoutSession(): void {
 }
 
 export default function AuthGate() {
-  const { refresh } = useTenant();
+  const { refresh, user } = useTenant();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>("login");
@@ -81,6 +88,10 @@ export default function AuthGate() {
     }>
   >([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [mfaToken, setMfaToken] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [oauth, setOauth] = useState({ google: false, github: false });
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -102,7 +113,44 @@ export default function AuthGate() {
       .catch(() => {
         /* health optional on first paint */
       });
+    void fetchOauthProviders()
+      .then(setOauth)
+      .catch(() => setOauth({ google: false, github: false }));
   }, []);
+
+  useEffect(() => {
+    const verify = searchParams.get("verify");
+    const reset = searchParams.get("reset");
+    const mfa = searchParams.get("mfaToken");
+    if (verify) {
+      setBusy(true);
+      void verifyEmailToken(verify)
+        .then(async () => {
+          toast.success("Email verified — you can sign in");
+          await refresh();
+          setMode("login");
+        })
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Verification failed")
+        )
+        .finally(() => {
+          setSearchParams({}, { replace: true });
+          setBusy(false);
+        });
+      return;
+    }
+    if (reset) {
+      setResetToken(reset);
+      setMode("reset");
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    if (mfa) {
+      setMfaToken(mfa);
+      setMode("mfa");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, refresh]);
 
   useEffect(() => {
     if (!saas) return;
@@ -150,8 +198,68 @@ export default function AuthGate() {
       });
   }, [saas, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (user && user.emailVerified === false) {
+      setMode("verify-banner");
+      setEmail(user.email);
+    }
+  }, [user]);
+
+  const finishLogin = async () => {
+    await refresh();
+    navigate(HOME_PATH, { replace: true });
+    toast.success("Signed in");
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode === "forgot") {
+      setBusy(true);
+      try {
+        await forgotPassword(email.trim());
+        toast.success("If that email exists, a reset link was sent");
+        setMode("login");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Request failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (mode === "reset") {
+      if (password.length < 6) {
+        toast.error("Password must be at least 6 characters");
+        return;
+      }
+      setBusy(true);
+      try {
+        await resetPassword(resetToken, password);
+        toast.success("Password updated — sign in");
+        setMode("login");
+        setPassword("");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Reset failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (mode === "mfa") {
+      if (!mfaCode.trim()) {
+        toast.error("Enter your authenticator code");
+        return;
+      }
+      setBusy(true);
+      try {
+        await verifyMfaLogin(mfaToken, mfaCode.trim());
+        await finishLogin();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "MFA failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!email.trim() || !password) {
       toast.error("Email and password are required");
       return;
@@ -164,19 +272,26 @@ export default function AuthGate() {
     setBusy(true);
     try {
       if (mode === "login") {
-        await loginPassword(email.trim(), password);
-        await refresh();
-        navigate(HOME_PATH, { replace: true });
-        toast.success("Signed in");
-      } else {
+        const res = await loginPassword(email.trim(), password);
+        if (res.mfaRequired && res.mfaToken) {
+          setMfaToken(res.mfaToken);
+          setMode("mfa");
+          toast.message("Enter your authenticator code");
+          return;
+        }
+        if (res.mfaSetupRequired) {
+          toast.message("Enroll MFA under Settings — required for admin tools on Cloud");
+        }
+        await finishLogin();
+      } else if (mode === "signup") {
         await signupPassword(email.trim(), password, name.trim(), {
           inviteCode: !saas && inviteCode.trim() ? inviteCode.trim() : undefined,
           checkoutSessionId: saas ? checkoutSessionId.trim() : undefined,
         });
         clearStoredCheckoutSession();
         await refresh();
-        navigate(HOME_PATH, { replace: true });
-        toast.success("Account created");
+        toast.success("Account created — check your email to verify");
+        setMode("verify-banner");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication failed");
@@ -206,6 +321,34 @@ export default function AuthGate() {
     }
   };
 
+  const resendVerification = async () => {
+    const target = email.trim() || user?.email || "";
+    if (!target) {
+      toast.error("Enter your email");
+      return;
+    }
+    setBusy(true);
+    try {
+      await requestEmailVerification(target);
+      toast.success("If that email exists, a verification link was sent");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send email");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginOauth = async (provider: "google" | "github") => {
+    setBusy(true);
+    try {
+      const { url } = await startOauth(provider);
+      window.location.href = url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "OAuth unavailable");
+      setBusy(false);
+    }
+  };
+
   const switchMode = (next: Mode) => {
     setMode(next);
     if (next === "signup" && saas && !checkoutSessionId) {
@@ -216,30 +359,52 @@ export default function AuthGate() {
   };
 
   const showSaasPlan = saas && mode === "signup" && saasStep === "plan";
-  const showAccountForm = !saas || mode === "login" || saasStep === "account";
+  const showAccountForm =
+    mode === "forgot" ||
+    mode === "reset" ||
+    mode === "mfa" ||
+    mode === "verify-banner" ||
+    (!saas || mode === "login" || saasStep === "account");
+
+  const title =
+    mode === "forgot"
+      ? "Forgot password"
+      : mode === "reset"
+        ? "Reset password"
+        : mode === "mfa"
+          ? "Two-factor authentication"
+          : mode === "verify-banner"
+            ? "Verify your email"
+            : mode === "login"
+              ? "Sign in"
+              : showSaasPlan
+                ? "Choose a plan"
+                : "Create account";
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground">
       <Card className={`w-full ${showSaasPlan ? "max-w-md" : "max-w-sm"}`}>
         <CardHeader className="text-center">
           <div className="mb-1 text-3xl font-bold tracking-tight">{APP_NAME}</div>
-          <CardTitle>
-            {mode === "login"
-              ? "Sign in"
-              : showSaasPlan
-                ? "Choose a plan"
-                : "Create account"}
-          </CardTitle>
+          <CardTitle>{title}</CardTitle>
           <CardDescription>
-            {mode === "login"
-              ? saas
-                ? "Sign in to your GodMode cloud workspace."
-                : "Sign in to your local GodMode workspace."
-              : showSaasPlan
-                ? "Pick a plan to unlock signup. You create your account after payment."
-                : saas
-                  ? "Payment confirmed. Create your account to open your workspace."
-                  : "Create your account. The first signup becomes platform admin."}
+            {mode === "forgot"
+              ? "We will email a reset link if an account exists."
+              : mode === "reset"
+                ? "Choose a new password for your account."
+                : mode === "mfa"
+                  ? "Enter the 6-digit code from your authenticator app."
+                  : mode === "verify-banner"
+                    ? "Confirm your email to unlock the full product."
+                    : mode === "login"
+                      ? saas
+                        ? "Sign in to your GodMode cloud workspace."
+                        : "Sign in to your local GodMode workspace."
+                      : showSaasPlan
+                        ? "Pick a plan to unlock signup. You create your account after payment."
+                        : saas
+                          ? "Payment confirmed. Create your account to open your workspace."
+                          : "Create your account. The first signup becomes platform admin."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -343,8 +508,62 @@ export default function AuthGate() {
             </div>
           )}
 
-          {showAccountForm && (
+          {showAccountForm && !showSaasPlan && (
             <form onSubmit={submit} className="flex flex-col gap-3">
+              {mode === "verify-banner" && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a verification link to <strong>{email || user?.email}</strong>.
+                    Open it to continue.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void resendVerification()}
+                  >
+                    Resend verification email
+                  </Button>
+                  <Button type="button" variant="link" onClick={() => setMode("login")}>
+                    Back to sign in
+                  </Button>
+                </>
+              )}
+
+              {mode === "mfa" && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="auth-mfa">Authenticator code</Label>
+                    <Input
+                      id="auth-mfa"
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value)}
+                      placeholder="123456"
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <Button type="submit" disabled={busy} className="w-full">
+                    Verify
+                  </Button>
+                </>
+              )}
+
+              {(mode === "forgot" || mode === "login" || mode === "signup") && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="auth-email">Email</Label>
+                  <Input
+                    id="auth-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    readOnly={emailLocked && mode === "signup"}
+                  />
+                </div>
+              )}
+
               {mode === "signup" && (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="auth-name">Name</Label>
@@ -369,48 +588,95 @@ export default function AuthGate() {
                   />
                 </div>
               )}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="auth-email">Email</Label>
-                <Input
-                  id="auth-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  readOnly={emailLocked}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="auth-password">Password</Label>
-                <Input
-                  id="auth-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••"
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                />
-              </div>
-              <Button type="submit" disabled={busy} className="mt-1 w-full">
-                {mode === "login" ? "Sign in" : "Sign up"}
-              </Button>
+
+              {(mode === "login" || mode === "signup" || mode === "reset") && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="auth-password">
+                    {mode === "reset" ? "New password" : "Password"}
+                  </Label>
+                  <Input
+                    id="auth-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••"
+                    autoComplete={
+                      mode === "login" ? "current-password" : "new-password"
+                    }
+                  />
+                </div>
+              )}
+
+              {mode !== "verify-banner" && mode !== "mfa" && (
+                <Button type="submit" disabled={busy} className="mt-1 w-full">
+                  {mode === "forgot"
+                    ? "Send reset link"
+                    : mode === "reset"
+                      ? "Update password"
+                      : mode === "login"
+                        ? "Sign in"
+                        : "Sign up"}
+                </Button>
+              )}
+
+              {mode === "login" && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="px-0 self-start"
+                  onClick={() => setMode("forgot")}
+                >
+                  Forgot password?
+                </Button>
+              )}
             </form>
           )}
 
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-            <Button
-              type="button"
-              variant="link"
-              className="px-1"
-              onClick={() => switchMode(mode === "login" ? "signup" : "login")}
-            >
-              {mode === "login" ? "Sign up" : "Sign in"}
+          {(mode === "login" || mode === "signup") && !showSaasPlan && (oauth.google || oauth.github) && (
+            <div className="flex flex-col gap-2">
+              <p className="text-center text-xs text-muted-foreground">Or continue with</p>
+              {oauth.google ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void beginOauth("google")}
+                >
+                  Google
+                </Button>
+              ) : null}
+              {oauth.github ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void beginOauth("github")}
+                >
+                  GitHub
+                </Button>
+              ) : null}
+            </div>
+          )}
+
+          {(mode === "login" || mode === "signup") && (
+            <p className="text-center text-sm text-muted-foreground">
+              {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+              <Button
+                type="button"
+                variant="link"
+                className="px-1"
+                onClick={() => switchMode(mode === "login" ? "signup" : "login")}
+              >
+                {mode === "login" ? "Sign up" : "Sign in"}
+              </Button>
+            </p>
+          )}
+
+          {(mode === "forgot" || mode === "reset") && (
+            <Button type="button" variant="link" onClick={() => setMode("login")}>
+              Back to sign in
             </Button>
-          </p>
+          )}
         </CardContent>
       </Card>
     </div>

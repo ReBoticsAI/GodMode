@@ -73,7 +73,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useMemo, useState, createElement, type ComponentType } from "react";
 import { autoChatAgentIdForPagePath } from "@/lib/structure-agents";
 import { toast } from "sonner";
-import { connectWebSocket } from "@/api";
+import { connectWebSocket, fetchBridgeHealth } from "@/api";
 
 interface AiNotificationPayload {
   kind?: string;
@@ -377,20 +377,30 @@ function LegacyBuilderRedirect() {
  * AuthGate (sign in / sign up) instead of the workspace shell.
  */
 function AuthGatedApp() {
-  const { authenticated, loading } = useTenant();
+  const { authenticated, loading, user } = useTenant();
   const { checking, needsWizard, refresh } = useOnboardingGate();
   const [pluginsReady, setPluginsReady] = useState(false);
+  const [saas, setSaas] = useState(false);
 
   useEffect(() => {
-    if (!authenticated) {
+    void fetchBridgeHealth()
+      .then((h) => setSaas(Boolean(h.saas)))
+      .catch(() => setSaas(false));
+  }, []);
+
+  // Plan: require verified email before full product use on SaaS only.
+  const needsEmailVerify = saas && authenticated && user?.emailVerified === false;
+
+  useEffect(() => {
+    if (!authenticated || needsEmailVerify) {
       setPluginsReady(true);
       return;
     }
     setPluginsReady(false);
     void loadWebPlugins().finally(() => setPluginsReady(true));
-  }, [authenticated]);
+  }, [authenticated, needsEmailVerify]);
 
-  if (loading || (authenticated && (checking || !pluginsReady))) {
+  if (loading || (authenticated && !needsEmailVerify && (checking || !pluginsReady))) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Loading workspace…
@@ -398,7 +408,7 @@ function AuthGatedApp() {
     );
   }
 
-  if (!authenticated) {
+  if (!authenticated || needsEmailVerify) {
     return (
       <>
         <AuthGate />

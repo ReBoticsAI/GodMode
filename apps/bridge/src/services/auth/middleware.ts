@@ -13,6 +13,7 @@ import {
   SYSTEM_USER_ID,
 } from "../tenant-bootstrap.js";
 import { coreUserToAuth, sendForbidden, sendUnauthorized } from "../../types/express-auth.js";
+import { mfaEnabled } from "./mfa-and-tokens.js";
 import {
   parseSessionCookie,
   resolveSession,
@@ -49,7 +50,9 @@ export function attachAuthContext(
         // Drop revoked SaaS sessions so APIs cannot keep working after cancel.
         continue;
       }
-      req.user = coreUserToAuth(resolved.user);
+      req.user = coreUserToAuth(resolved.user, {
+        mfaEnabled: mfaEnabled(core, resolved.user.id),
+      });
       req.sessionId = resolved.sessionId;
       break;
     }
@@ -106,6 +109,8 @@ export function requireAuth(
       displayName: "Local User",
       avatarUrl: null,
       isAdmin: false,
+      emailVerified: true,
+      mfaEnabled: false,
     };
     next();
     return;
@@ -113,16 +118,46 @@ export function requireAuth(
   sendUnauthorized(res);
 }
 
+/**
+ * SaaS: block product APIs until email is verified.
+ * Call after requireAuth. Auth lifecycle routes should not use this.
+ */
+export function requireEmailVerified(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!config.isSaas) {
+    next();
+    return;
+  }
+  if (req.user?.emailVerified) {
+    next();
+    return;
+  }
+  res.status(403).json({
+    error: "Email verification required",
+    code: "EMAIL_NOT_VERIFIED",
+  });
+}
+
 export function requirePlatformAdmin(
   req: Request,
   res: Response,
   next: NextFunction
 ): void {
-  if (req.user?.isAdmin) {
-    next();
+  if (!req.user?.isAdmin) {
+    sendForbidden(res, "Platform admin required");
     return;
   }
-  sendForbidden(res, "Platform admin required");
+  if (config.isSaas && !req.user.mfaEnabled) {
+    res.status(403).json({
+      error: "MFA enrollment required for platform admins",
+      code: "MFA_REQUIRED",
+    });
+    return;
+  }
+  next();
 }
 
 /** Require at least viewer/editor/owner on the resolved tenant. */
