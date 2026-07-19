@@ -23,8 +23,9 @@ Do **not** point public DNS at SaaS until:
 7. Live Stripe webhooks + Customer Portal on the Cloudflare hostname
 8. DEPLOY.md / this file / `deploy/hostinger.md` signed off
 
-Observability for launch: first-party Bridge JSON logs + `platform_request_log` +
-external `/api/health` uptime — not a third-party APM.
+Observability for launch: Admin → Observability (request/error table + backup
+status), first-party Bridge JSON logs + `platform_request_log`, and external
+`/api/health` uptime. Do not rely on a third-party APM.
 
 See [DEPLOY.md](../DEPLOY.md) and [deploy/hostinger.md](../deploy/hostinger.md).
 
