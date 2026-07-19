@@ -1,98 +1,67 @@
 # GodMode features
 
-Complete reference for the personal OS shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** (sidebar) is where you talk to Intelligence, Digital You, department agents, and DMs.
+Complete reference for the personal OS shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** is where you talk to agents.
 
-For what shipped since v0.1.0, see [CHANGELOG.md](../CHANGELOG.md). Contribution themes: [CONTRIBUTING.md](../CONTRIBUTING.md#what-we-are-looking-for-roadmap-themes).
+Canonical per-feature pages (marketing site and platform wiki seed):
+
+## Hubs
+
+- [GodMode overview](features/godmode-overview.md) - What GodMode is, and how Intelligence relates to the personal OS.
+- [Workspace structure](features/workspace-structure.md) - Departments, divisions, and pages. New workspaces start empty.
+- [Shared and Marketplace](features/shared-and-marketplace.md) - Live grants and the pack marketplace at a glance.
+- [Personal tools](features/personal-tools.md) - Calendar, Tasks, Wiki, Vault, Bank, Notifications, Support.
 
 ## Platform and agents
 
-| Feature | Route / location | Description |
-|---------|------------------|-------------|
-| **Admin → Updates** | `/settings/admin?tab=updates` | Channel selection (stable/nightly), signed release checks, defer/skip, and host-supervisor apply when installed. See [RELEASES.md](RELEASES.md). |
-| **Home hub** | `/home` | Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace. |
-| **Intelligence** | Chat panel → agent picker | Platform-wide companion for setup, structure, wiki, and cross-cutting work. Uses platform tools to create pages, agents, tasks, and more from chat. |
-| **Digital You** | Sidebar → Digital *name* | Persona agent created on first login  -  tone, preferences, and personal context. Distinct from Intelligence and department subagents. |
-| **Chat panel** | Sidebar → Chat | Floating window: agent chat, history, model picker, tool execution, and in-panel tabs (Knowledge, Vault, Bank, Support, …). |
-| **Model picker** | Chat composer | Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared/remote endpoints. Embedding-only GGUFs are excluded. |
-| **Model harness profiles** | Applied on model select | Per-family tool mode, sampling, and discovery middleware (e.g. Gemma 4, Cursor Auto / Composer / Grok). See [LOCAL_LLM.md](LOCAL_LLM.md). |
-| **Cursor Cloud** | Vault → Cursor subscription | Run Intelligence on your Cursor plan (`cursor_cloud`) with GodMode tools. See [CURSOR_SUBSCRIPTION.md](CURSOR_SUBSCRIPTION.md). |
-| **Agents** | `/agents` | Org chart with **Intelligence** and **Digital You** at the root; department subagents below. **Pipeline** configures models, tools, rules, and profiles per agent. |
-| **DMs and channels** | Chat panel → DMs / Channels | Direct messages and group conversations with users and agents. |
+- [Admin Updates](features/admin-updates.md) - Stable/nightly channels, signed release checks, defer/skip, host-supervisor apply.
+- [Home hub](features/home-hub.md) - Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace.
+- [Intelligence](features/intelligence.md) - Platform-wide companion for setup, structure, wiki, and cross-cutting work.
+- [Digital You](features/digital-you.md) - Persona agent created on first login for tone, preferences, and personal context.
+- [Chat panel](features/chat-panel.md) - Floating window for agent chat, history, model picker, tools, and in-panel tabs.
+- [Model picker](features/model-picker.md) - Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared endpoints.
+- [Model harness profiles](features/model-harness-profiles.md) - Per-family tool mode, sampling, and discovery middleware.
+- [Cursor Cloud](features/cursor-cloud.md) - Run Intelligence on your Cursor plan with GodMode tools.
+- [Agents](features/agents.md) - Org chart with Intelligence and Digital You at the root; Pipeline configures each agent.
+- [DMs and channels](features/dms-and-channels.md) - Direct messages and group conversations with users and agents.
 
-## Knowledge and memory (Chat → Knowledge)
+## Knowledge and memory
 
-| Tab | Description |
-|-----|-------------|
-| **Rules** | Behavior constraints attached to the active agent. |
-| **Skills** | Reusable workflows / playbooks the agent can invoke (quality-gated on create). |
-| **Memory** | Semantic facts (global or chat-scoped); hybrid RAG when embeddings are enabled. |
-| **Artifacts** | Generated outputs linked to agent work. |
-| **Reflection** | Queued knowledge proposals and RAG maintenance  -  review before merging into long-term memory. |
-| **Tools** | Platform tools allowlisted for the active agent. |
-
-Longer architecture (working / semantic / episodic / procedural + wiki RAG): [AGENT_MEMORY.md](AGENT_MEMORY.md).
+- [Rules](features/rules.md) - Behavior constraints attached to the active agent.
+- [Skills](features/skills.md) - Reusable workflows or playbooks the agent can invoke.
+- [Memory](features/memory.md) - Semantic facts (global or chat-scoped); hybrid RAG when embeddings are enabled.
+- [Artifacts](features/artifacts.md) - Generated outputs linked to agent work.
+- [Reflection](features/reflection.md) - Queued knowledge proposals and RAG maintenance for review before merge.
+- [Tools](features/tools.md) - Platform tools allowlisted for the active agent.
 
 ## Productivity
 
-| Feature | Route / location | Description |
-|---------|------------------|-------------|
-| **Structure** | `/structure` | Tree editor: departments → divisions → pages. New workspaces start empty; Intelligence or Structure creates content. |
-| **Wiki** | `/wiki` | Markdown knowledge base with spaces, internal/external visibility, and backlinks; hybrid wiki snippets can inject into chat. |
-| **Tasks** | `/tasks` | Kanban boards with columns, priorities, subtasks, and comments. Tag a card `auto` to queue autonomous agent work. |
-| **Automations** | Chat panel → Automations tab | Same kanban board in the Chat window; tag `auto` for the autonomous runner. |
-| **Calendar** | `/calendar` | Personal events and activity feed. Agents also get their own calendar in Chat → Calendar tab (dual workspaces). |
-| **Notifications** | `/notifications` | Platform alerts, including deduplicated signed-release availability. Also in Chat → Notifications tab. |
-| **Vault** | `/vault` | Secrets, API keys, and Cursor subscription connect. Chat → Vault tab for quick access while chatting. |
-| **Bank** | `/bank` | Connect wallets and accounts for you and your agents to track balances. Chat → Bank tab. |
-| **Support** | `/support` | Platform bugs via GitHub; shared resource issues to resource owners. Hub **Support group** staffing (Admin) lets users and agents answer tickets. Chat → Support tab. |
+- [Structure](features/structure.md) - Tree editor for departments, divisions, and pages.
+- [Wiki](features/wiki.md) - Markdown knowledge base with spaces, visibility, backlinks, and RAG.
+- [Tasks](features/tasks.md) - Kanban boards; tag a card auto for autonomous agent work.
+- [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
+- [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
+- [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
+- [Vault](features/vault.md) - Secrets, API keys, and Cursor subscription connect.
+- [Bank](features/bank.md) - Connect wallets and accounts for you and your agents.
+- [Support](features/support.md) - Platform bugs via GitHub; shared resource issues to owners; optional Support group.
 
 ## Social and extension
 
-| Feature | Route / location | Description |
-|---------|------------------|-------------|
-| **Contacts** | `/contacts` | Social graph — people, groups, and relationship view. |
-| **Shared** | Sidebar → Shared | Live resources another user granted you; Tailscale network panel for cross-home federation. |
-| **Settings** | `/settings` | Account, appearance, and session settings. |
-| **Marketplace** | `/marketplace` | Official / Local / Community / Installed / Sell; free and paid Official catalog; user-to-user Community listings; seller payouts (Stripe/PayPal/MetaMask). See [MARKETPLACE.md](MARKETPLACE.md) and [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md). |
-| **Intelligence plugin pipeline** | Chat tools | `scaffold_plugin` → `build_plugin` → `install_plugin` for local/hub authoring. See [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md). |
-| **Git / GitHub plugins** | Marketplace → Official | Structured `git_*` / `gh_*` tools for commit→PR→CI (requires host `git`/`gh`). See [MARKETPLACE.md](MARKETPLACE.md#official-devtools-plugins-git--github). |
-| **Connector** | `apps/connector` | Optional local process for hardware-bound marketplace plugins (desktop apps, devices). |
-| **Desktop** | `apps/desktop` | Electron shell + installers that embed Bridge + web for local personal use. |
-| **ObjectType Records** | `/records/:objectType` | Metadata-driven list/form pages and declared actions for core and installed-plugin domains. |
+- [Contacts](features/contacts.md) - Social graph for people, groups, and relationships.
+- [Shared](features/shared.md) - Live resources another user granted you; federation tooling.
+- [Settings](features/settings.md) - Account, appearance, and session settings.
+- [Marketplace](features/marketplace.md) - Official, Local, Community, Installed, and Sell tabs with real checkout.
+- [Intelligence plugin pipeline](features/plugin-pipeline.md) - scaffold_plugin → build_plugin → install_plugin for local and hub authoring.
+- [Git and GitHub plugins](features/git-github-plugins.md) - Structured git_* and gh_* tools for commit, PR, and CI when host tools exist.
+- [Connector](features/connector.md) - Optional local process for hardware-bound marketplace plugins.
+- [Desktop](features/desktop.md) - Electron shell and installers that embed Bridge and web for local use.
+- [ObjectType Records](features/objecttype-records.md) - Metadata-driven list/form pages and declared actions for core and plugins.
 
 ## Chat modes and commands
 
-| Mode / feature | Description |
-|----------------|-------------|
-| **Agent** | Default — Intelligence runs tools and mutates workspace state. |
-| **Plan** | Structured planning; confirms before destructive tool calls. |
-| **Ask** | Read-only Q&A without tool side effects. |
-| **Slash commands** | Type `/` in the composer — `/help`, `/clear`, and custom commands from **Settings → Commands**. |
+- [Agent mode](features/agent-mode.md) - Default mode: Intelligence runs tools and mutates workspace state.
+- [Plan mode](features/plan-mode.md) - Structured planning; confirms before destructive tool calls.
+- [Ask mode](features/ask-mode.md) - Read-only Q&A without tool side effects.
+- [Slash commands](features/slash-commands.md) - Type / for /help, /clear, and custom commands from Settings.
 
-## Architecture notes
-
-- **Local-first:** tenant data in SQLite on your machine (`core.sqlite` + per-tenant DB).
-- **LLM backends:** local llama.cpp (spawned or `LLAMA_EXTERNAL` attach), Cursor Cloud, or provider keys in Vault.
-- **Multi-agent org:** scoped permissions, tool allowlists, and structure-linked agents.
-- **Workspace growth:** Intelligence can create departments, wiki pages, tasks, and automations from chat.
-- **ObjectType kernel:** authenticated web, agent, plugin, and HTTP consumers
-  discover explicit Record CRUD and named actions across 74 audited ObjectTypes;
-  exact-parity adapters preserve domain services and side effects behind the
-  single durable mutation boundary.
-- **Durable execution:** asynchronous actions enforce retries/backoff, timeout,
-  declared cancellation, scoped idempotency, leases, and replay-safe recovery;
-  declared events retain per-consumer receipts.
-- **Plugins:** optional domain packs register ObjectTypes, actions, bridge routes,
-  web pages, and install hooks without forking core through a versioned kernel
-  client.
-- **Completed cutover:** strict audits report zero legacy routes/callers,
-  unmatched callers, and direct entry-point writes. WebSocket/token streams,
-  binary transfer, ephemeral presence, and other reviewed wire-level exceptions
-  remain specialized rather than being mislabeled as Record CRUD.
-- **Cross-database safety:** plugin/acquisition sagas resume idempotently across
-  core and tenant SQLite files, while shared-resource adapters enforce the exact
-  grant and owner database.
-- **Generic structure pages:** `StructureNode.object_type` selects the Record
-  renderer; `segment` remains the URL component.
-
-See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [VERIFICATION.md](VERIFICATION.md), [MARKETPLACE.md](MARKETPLACE.md), [SHARED_FEDERATION.md](SHARED_FEDERATION.md), [ONBOARDING.md](ONBOARDING.md), [AGENT_MEMORY.md](AGENT_MEMORY.md), and [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
+Architecture notes remain in the longer engineering docs: [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [MARKETPLACE.md](MARKETPLACE.md).

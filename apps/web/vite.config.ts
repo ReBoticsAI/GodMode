@@ -197,6 +197,7 @@ const alias: Record<string, string> = {
   // Dev facade; production plugins use /plugin-shims/web-host.js via import map.
   "@godmode/web-host": path.resolve(__dirname, "./src/plugin-vendor/web-host.ts"),
   "@godmode/flow-core": path.resolve(__dirname, "../../packages/flow-core/src/index.ts"),
+  "@product-docs": path.resolve(__dirname, "../../docs/features"),
   "lucide-react": path.join(rootNodeModules, "lucide-react"),
   sonner: path.join(rootNodeModules, "sonner"),
   "@xyflow/react": path.join(rootNodeModules, "@xyflow/react"),
@@ -206,6 +207,7 @@ const alias: Record<string, string> = {
 export default defineConfig({
   plugins: [react(), tailwindcss(), importMapPlugin(), pluginShimPlugin()],
   resolve: { alias },
+  assetsInclude: ["**/*.md"],
   optimizeDeps: {
     include: ["lucide-react", "sonner", "@xyflow/react", "recharts"],
   },
