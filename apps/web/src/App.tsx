@@ -13,6 +13,7 @@ import Vault from "./pages/Vault";
 import Users from "./pages/Users";
 import Shared from "./pages/Shared";
 import AuthGate from "./pages/AuthGate";
+import MarketingRoutes from "./pages/marketing/MarketingRoutes";
 import { FirstRunWizard, useOnboardingGate } from "@/components/FirstRunWizard";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
@@ -433,7 +434,10 @@ export default function App() {
   return (
     <TooltipProvider delay={200}>
       <TenantProvider>
-        <AuthGatedApp />
+        <Routes>
+          <Route path="/www/*" element={<MarketingRoutes />} />
+          <Route path="*" element={<AuthGatedApp />} />
+        </Routes>
       </TenantProvider>
     </TooltipProvider>
   );
