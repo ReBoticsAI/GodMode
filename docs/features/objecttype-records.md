@@ -5,8 +5,10 @@ section: "Social and extension"
 location: "/records/:objectType"
 summary: "Metadata-driven list/form pages and declared actions for core and plugins."
 ---
-
 # ObjectType Records
+
+![objecttype-records in GodMode](/features/objecttype-records.png)
+
 
 ObjectType Records are metadata-driven list and form pages with declared actions for core and installed-plugin domains. Plugins extend GodMode by registering ObjectTypes against the kernel instead of forking core.
 

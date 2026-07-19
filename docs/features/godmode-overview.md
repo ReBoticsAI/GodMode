@@ -5,8 +5,10 @@ section: "Hubs"
 location: "Platform wiki"
 summary: "What GodMode is, and how Intelligence relates to the personal OS."
 ---
-
 # GodMode overview
+
+![godmode-overview in GodMode](/features/godmode-overview.png)
+
 
 **GodMode** is the platform: your personal operating system for work, life areas, and automations.
 

@@ -5,7 +5,9 @@ section: "Chat modes and commands"
 location: "Chat composer mode"
 summary: "Structured planning; confirms before destructive tool calls."
 ---
-
 # Plan mode
+
+![plan-mode in GodMode](/features/plan-mode.png)
+
 
 Plan mode is structured planning. The agent confirms before destructive tool calls.

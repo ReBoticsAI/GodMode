@@ -5,8 +5,10 @@ section: "Hubs"
 location: "Sidebar personal pages"
 summary: "Calendar, Tasks, Wiki, Vault, Bank, Notifications, Support."
 ---
-
 # Personal tools
+
+![personal-tools in GodMode](/features/personal-tools.png)
+
 
 Every workspace includes these sidebar pages:
 

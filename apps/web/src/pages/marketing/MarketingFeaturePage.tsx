@@ -61,12 +61,27 @@ export default function MarketingFeaturePage() {
           "[&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold",
           "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
           "[&_table]:w-full [&_th]:border-b [&_th]:px-2 [&_th]:py-1 [&_th]:text-left",
-          "[&_td]:border-b [&_td]:border-border/60 [&_td]:px-2 [&_td]:py-1"
+          "[&_td]:border-b [&_td]:border-border/60 [&_td]:px-2 [&_td]:py-1",
+          "[&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-md [&_img]:border [&_img]:border-border"
         )}
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
+            img({ src, alt }) {
+              if (!src || typeof src !== "string") return null;
+              if (!(src.startsWith("/features/") || src.startsWith("/assets/"))) {
+                return null;
+              }
+              return (
+                <img
+                  src={src}
+                  alt={alt ?? ""}
+                  loading="lazy"
+                  className="my-4 max-w-full rounded-md border border-border"
+                />
+              );
+            },
             a({ href, children, ...props }) {
               const path = href ?? "";
               if (path.startsWith("/") && !path.startsWith("//")) {

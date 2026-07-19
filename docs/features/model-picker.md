@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Chat composer"
 summary: "Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared endpoints."
 ---
-
 # Model picker
+
+![model-picker in GodMode](/features/model-picker.png)
+
 
 The composer model picker lists local GGUFs, Cursor subscription models, cloud providers, and shared/remote endpoints. Embedding-only GGUFs are excluded.
 
