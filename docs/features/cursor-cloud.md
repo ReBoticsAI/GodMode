@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Vault → Cursor subscription"
 summary: "Run Intelligence on your Cursor plan with GodMode tools."
 ---
-
 # Cursor Cloud
+
+![cursor-cloud in GodMode](/features/cursor-cloud.png)
+
 
 Connect a Cursor subscription in Vault, then run Intelligence (`cursor_cloud`) with GodMode tools on that plan.
 

@@ -5,8 +5,10 @@ section: "Social and extension"
 location: "/settings"
 summary: "Account, appearance, and session settings."
 ---
-
 # Settings
+
+![settings in GodMode](/features/settings.png)
+
 
 Settings covers account, appearance, and session preferences.
 

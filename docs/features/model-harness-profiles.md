@@ -5,8 +5,10 @@ section: "Platform and agents"
 location: "Applied on model select"
 summary: "Per-family tool mode, sampling, and discovery middleware."
 ---
-
 # Model harness profiles
+
+![model-harness-profiles in GodMode](/features/model-harness-profiles.png)
+
 
 When you select a model, GodMode applies a harness profile for that family (tool mode, sampling, discovery middleware). Examples include Gemma 4 and Cursor Auto / Composer / Grok families.
 
