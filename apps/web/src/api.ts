@@ -2786,6 +2786,18 @@ export function fetchAdminBackupStatus() {
   }>("/admin/marketplace/backup-status");
 }
 
+export function triggerAdminPlatformBackup() {
+  return api<{
+    backup: {
+      status: string;
+      localPath: string | null;
+      remoteUri: string | null;
+      error: string | null;
+      updatedAt: string;
+    };
+  }>("/admin/marketplace/backup", { method: "POST", body: "{}" });
+}
+
 
 export function signupPassword(
   email: string,

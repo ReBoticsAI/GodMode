@@ -117,6 +117,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-platform-backup",
+    methods: ["POST"],
+    pathPattern: "/api/admin/marketplace/backup",
+    rationale:
+      "Platform-admin local SQLite snapshot trigger; durable meta via platform_backup_meta, not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-official-catalog-public",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/catalog/official/public",
