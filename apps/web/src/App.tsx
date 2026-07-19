@@ -390,18 +390,26 @@ function AuthGatedApp() {
   }, []);
 
   // Plan: require verified email before full product use on SaaS only.
+  // SaaS platform admins must also enroll MFA before the product shell.
   const needsEmailVerify = saas && authenticated && user?.emailVerified === false;
+  const needsMfaSetup =
+    saas &&
+    authenticated &&
+    !needsEmailVerify &&
+    Boolean(user?.isAdmin) &&
+    user?.mfaEnabled === false;
+  const needsAuthInterstitial = needsEmailVerify || needsMfaSetup;
 
   useEffect(() => {
-    if (!authenticated || needsEmailVerify) {
+    if (!authenticated || needsAuthInterstitial) {
       setPluginsReady(true);
       return;
     }
     setPluginsReady(false);
     void loadWebPlugins().finally(() => setPluginsReady(true));
-  }, [authenticated, needsEmailVerify]);
+  }, [authenticated, needsAuthInterstitial]);
 
-  if (loading || (authenticated && !needsEmailVerify && (checking || !pluginsReady))) {
+  if (loading || (authenticated && !needsAuthInterstitial && (checking || !pluginsReady))) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Loading workspace…
@@ -409,7 +417,7 @@ function AuthGatedApp() {
     );
   }
 
-  if (!authenticated || needsEmailVerify) {
+  if (!authenticated || needsAuthInterstitial) {
     return (
       <>
         <AuthGate />

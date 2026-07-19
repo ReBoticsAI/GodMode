@@ -28,8 +28,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
+import { MfaEnrollForm } from "@/components/auth/MfaEnrollForm";
 
-type Mode = "login" | "signup" | "forgot" | "reset" | "mfa" | "verify-banner";
+type Mode =
+  | "login"
+  | "signup"
+  | "forgot"
+  | "reset"
+  | "mfa"
+  | "verify-banner"
+  | "mfa-setup";
 /** SaaS signup: pick plan → pay → create account (no invite codes). */
 type SaasSignupStep = "plan" | "account";
 
@@ -199,11 +207,16 @@ export default function AuthGate() {
   }, [saas, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (user && user.emailVerified === false) {
+    if (!user) return;
+    if (user.emailVerified === false) {
       setMode("verify-banner");
       setEmail(user.email);
+      return;
     }
-  }, [user]);
+    if (saas && user.isAdmin && user.mfaEnabled === false) {
+      setMode("mfa-setup");
+    }
+  }, [user, saas]);
 
   const finishLogin = async () => {
     await refresh();
@@ -280,7 +293,10 @@ export default function AuthGate() {
           return;
         }
         if (res.mfaSetupRequired) {
-          toast.message("Enroll MFA under Settings — required for admin tools on Cloud");
+          await refresh();
+          setMode("mfa-setup");
+          toast.message("Enroll MFA to continue as a Cloud platform admin");
+          return;
         }
         await finishLogin();
       } else if (mode === "signup") {
@@ -364,6 +380,7 @@ export default function AuthGate() {
     mode === "reset" ||
     mode === "mfa" ||
     mode === "verify-banner" ||
+    mode === "mfa-setup" ||
     (!saas || mode === "login" || saasStep === "account");
 
   const title =
@@ -375,7 +392,9 @@ export default function AuthGate() {
           ? "Two-factor authentication"
           : mode === "verify-banner"
             ? "Verify your email"
-            : mode === "login"
+            : mode === "mfa-setup"
+              ? "Enroll MFA"
+              : mode === "login"
               ? "Sign in"
               : showSaasPlan
                 ? "Choose a plan"
@@ -396,7 +415,9 @@ export default function AuthGate() {
                   ? "Enter the 6-digit code from your authenticator app."
                   : mode === "verify-banner"
                     ? "Confirm your email to unlock the full product."
-                    : mode === "login"
+                    : mode === "mfa-setup"
+                      ? "Platform admins must enroll authenticator MFA before using GodMode Cloud."
+                      : mode === "login"
                       ? saas
                         ? "Sign in to your GodMode cloud workspace."
                         : "Sign in to your local GodMode workspace."
@@ -530,6 +551,16 @@ export default function AuthGate() {
                 </>
               )}
 
+              {mode === "mfa-setup" && (
+                <MfaEnrollForm
+                  onEnrolled={async () => {
+                    await refresh();
+                    navigate(HOME_PATH, { replace: true });
+                    toast.success("Signed in");
+                  }}
+                />
+              )}
+
               {mode === "mfa" && (
                 <>
                   <div className="flex flex-col gap-1.5">
@@ -607,7 +638,7 @@ export default function AuthGate() {
                 </div>
               )}
 
-              {mode !== "verify-banner" && mode !== "mfa" && (
+              {mode !== "verify-banner" && mode !== "mfa" && mode !== "mfa-setup" && (
                 <Button type="submit" disabled={busy} className="mt-1 w-full">
                   {mode === "forgot"
                     ? "Send reset link"
