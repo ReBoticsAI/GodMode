@@ -42,7 +42,11 @@ import {
   consumeAuthToken,
   disableMfa,
   issueAuthToken,
+  markEmailVerified,
+  markEmailVerifiedIfNull,
   mfaEnabled,
+  setPasswordHash,
+  upsertOauthAccount,
   verifyMfaChallenge,
 } from "../services/auth/mfa-and-tokens.js";
 import {
@@ -521,11 +525,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "Invalid or expired token" });
       return;
     }
-    core
-      .prepare(
-        `UPDATE users SET email_verified_at=datetime('now'), updated_at=datetime('now') WHERE id=?`
-      )
-      .run(consumed.userId);
+    markEmailVerified(core, consumed.userId);
     res.json({ ok: true });
   });
 
@@ -566,11 +566,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "Invalid or expired token" });
       return;
     }
-    core
-      .prepare(
-        `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
-      )
-      .run(hashPassword(newPassword), consumed.userId);
+    setPasswordHash(core, consumed.userId, hashPassword(newPassword));
     res.json({ ok: true });
   });
 
@@ -689,22 +685,15 @@ export function createAuthRouter(): Router {
           ) as { id: string };
           userId = created.id;
         }
-        core
-          .prepare(
-            `INSERT INTO oauth_accounts (provider, provider_user_id, user_id, profile_json, updated_at)
-             VALUES (?, ?, ?, ?, datetime('now'))
-             ON CONFLICT(provider, provider_user_id) DO UPDATE SET
-               user_id=excluded.user_id, updated_at=datetime('now')`
-          )
-          .run(provider, profile.providerUserId, userId, JSON.stringify(profile));
+        upsertOauthAccount(core, {
+          provider,
+          providerUserId: profile.providerUserId,
+          userId,
+          profileJson: JSON.stringify(profile),
+        });
       }
-      // Provider already required a verified email — mark account verified.
-      core
-        .prepare(
-          `UPDATE users SET email_verified_at=COALESCE(email_verified_at, datetime('now')),
-             updated_at=datetime('now') WHERE id=?`
-        )
-        .run(userId!);
+      // Provider already required a verified email - mark account verified.
+      markEmailVerifiedIfNull(core, userId!);
       const user = core.prepare("SELECT * FROM users WHERE id=?").get(userId!) as CoreUser;
       if (mfaEnabled(core, user.id)) {
         const mfaToken = issueAuthToken(core, {
