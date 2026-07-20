@@ -49,6 +49,12 @@ function tenantDb(): Database.Database {
   db.exec(`
     CREATE TABLE ai_projects (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT, agent_id TEXT,
+      archived_at TEXT,
+      github_project_node_id TEXT,
+      github_project_url TEXT,
+      github_status_map_json TEXT,
+      sync_enabled INTEGER NOT NULL DEFAULT 0,
+      last_synced_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
