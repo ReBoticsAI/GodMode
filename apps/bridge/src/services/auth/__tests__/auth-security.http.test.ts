@@ -206,7 +206,12 @@ function buildApp(): express.Express {
   app.use(requireTrustedOrigin);
   app.use("/api/auth", createAuthRouter());
   app.use("/api", attachAuthContext, (req, res, next) => {
-    if (!config.isSaas || !req.user || req.user.emailVerified) {
+    if (
+      !config.isSaas ||
+      !req.user ||
+      req.user.emailVerified ||
+      req.user.isAdmin
+    ) {
       next();
       return;
     }
@@ -490,7 +495,7 @@ describe("auth security HTTP integration", () => {
     const userId = insertUser({
       email: "gate@example.com",
       password: "secret12",
-      isAdmin: true,
+      isAdmin: false,
       verified: false,
     });
     const sessionId = createSession(getCoreDb(), userId, 7);
@@ -508,6 +513,25 @@ describe("auth security HTTP integration", () => {
         origin: ALLOWED_ORIGIN,
       });
       expect(authOk.status).toBe(200);
+    });
+  });
+
+  it("SaaS platform admins skip email verification gate", async () => {
+    const userId = insertUser({
+      email: "admin-gate@example.com",
+      password: "secret12",
+      isAdmin: true,
+      verified: false,
+    });
+    const sessionId = createSession(getCoreDb(), userId, 7);
+    const app = buildApp();
+    await withServer(app, async (base) => {
+      const ok = await api(base, "GET", "/api/structure", {
+        cookie: `godmode_session=${sessionId}`,
+        origin: ALLOWED_ORIGIN,
+      });
+      expect(ok.status).toBe(200);
+      expect(ok.json.ok).toBe(true);
     });
   });
 

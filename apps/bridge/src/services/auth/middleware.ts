@@ -131,7 +131,7 @@ export function requireEmailVerified(
     next();
     return;
   }
-  if (req.user?.emailVerified) {
+  if (req.user?.emailVerified || req.user?.isAdmin) {
     next();
     return;
   }
