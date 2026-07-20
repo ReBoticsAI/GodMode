@@ -188,6 +188,19 @@ export const config = {
       clientId: (process.env.OAUTH_GITHUB_CLIENT_ID ?? "").trim(),
       clientSecret: (process.env.OAUTH_GITHUB_CLIENT_SECRET ?? "").trim(),
     },
+    /** Projects sync OAuth (broader scopes). Falls back to login GitHub app if unset. */
+    githubIntegration: {
+      clientId: (
+        process.env.OAUTH_GITHUB_INTEGRATION_CLIENT_ID ??
+        process.env.OAUTH_GITHUB_CLIENT_ID ??
+        ""
+      ).trim(),
+      clientSecret: (
+        process.env.OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET ??
+        process.env.OAUTH_GITHUB_CLIENT_SECRET ??
+        ""
+      ).trim(),
+    },
   },
   backups: {
     localDir: process.env.BACKUP_LOCAL_DIR ?? "",

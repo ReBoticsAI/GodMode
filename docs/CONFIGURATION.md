@@ -24,12 +24,24 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
 | `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
 | `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth (optional, Phase 6) |
-| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth (optional) |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
+| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | GitHub OAuth for **Tasks ↔ Projects sync** (scopes: `read:user project repo`). Callback: `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Offsite backup upload |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | `false` | When SaaS, allow agent coding/terminal tools |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration |
+
+### GitHub OAuth apps (login vs Projects sync)
+
+Register callback URLs on the GitHub OAuth App:
+
+| Purpose | Callback URL |
+|---------|----------------|
+| Sign-in | `{AUTH_PUBLIC_URL}/api/auth/oauth/github/callback` |
+| Tasks ↔ GitHub Projects | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
+
+Integration OAuth uses scopes `read:user project repo` and stores tokens in the tenant Vault (`github_projects_oauth`). Prefer a dedicated OAuth App via `OAUTH_GITHUB_INTEGRATION_CLIENT_*`; if unset, the login GitHub client is reused (ensure that app has the integration callback and sufficient scopes).
 
 ## Bridge and data paths
 

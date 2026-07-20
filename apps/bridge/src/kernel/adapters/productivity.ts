@@ -16,6 +16,10 @@ import {
   ensureUserProject,
 } from "../../services/user-productivity.js";
 import {
+  pushCardColumnToGithub,
+  pushCardFieldsToGithub,
+} from "../../services/github-projects.js";
+import {
   assertShareRole,
   resolveShareAccess,
 } from "../../services/share-service.js";
@@ -524,10 +528,53 @@ function cardRow(
 function existingUserProject(db: AppDatabase, userId: string): string | null {
   const row = db
     .prepare(
-      `SELECT id FROM ai_projects WHERE user_id=? ORDER BY created_at ASC LIMIT 1`
+      `SELECT id FROM ai_projects WHERE user_id=? AND (archived_at IS NULL OR archived_at = '')
+       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at ASC LIMIT 1`
     )
-    .get(userId) as { id: string } | undefined;
+    .get(userId, `user-${userId}`) as { id: string } | undefined;
   return row?.id ?? null;
+}
+
+/** Find a card on any of the user's boards (not just My Tasks). */
+function findUserOwnedCard(
+  db: AppDatabase,
+  userId: string,
+  cardId: string
+): { row: Record<string, unknown>; projectId: string } | null {
+  const row = db
+    .prepare(
+      `SELECT c.* FROM ai_project_cards c
+       JOIN ai_projects p ON p.id = c.project_id
+       WHERE c.id=? AND p.user_id=?`
+    )
+    .get(cardId, userId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return { row, projectId: String(row.project_id) };
+}
+
+function resolveOwnedProjectId(
+  db: AppDatabase,
+  ctx: OperationContext,
+  data: RecordData
+): string {
+  if (ctx.agentId) return ensureAgentProject(ctx.agentId, db);
+  const userId = requireUser(ctx);
+  const requested =
+    typeof data.project_id === "string" && data.project_id.trim()
+      ? data.project_id.trim()
+      : null;
+  if (requested) {
+    const owned = db
+      .prepare(
+        `SELECT id FROM ai_projects WHERE id=? AND user_id=? AND archived_at IS NULL`
+      )
+      .get(requested, userId);
+    if (!owned) {
+      badRequest("unknown or archived project_id");
+    }
+    return requested;
+  }
+  return ensureUserProject(userId, db);
 }
 
 function taskAccess(
@@ -556,9 +603,8 @@ function taskAccess(
     if (ctx.source === "http") return null;
   }
   const userId = requireUser(ctx);
-  const localProjectId = ensureUserProject(userId, db);
-  const local = cardRow(db, id, localProjectId);
-  if (local) {
+  const found = findUserOwnedCard(db, userId, id);
+  if (found) {
     return {
       access: {
         db,
@@ -566,17 +612,19 @@ function taskAccess(
         ownerTenantId: ctx.tenantId ?? "",
         role: "owner",
       },
-      projectId: localProjectId,
-      row: local,
+      projectId: found.projectId,
+      row: found.row,
     };
   }
   for (const access of sharedAccesses(ctx, "user_tasks")) {
-    const projectId = existingUserProject(access.db, access.ownerUserId);
-    if (!projectId) continue;
-    const row = cardRow(access.db, id, projectId);
-    if (!row) continue;
+    const sharedFound = findUserOwnedCard(access.db, access.ownerUserId, id);
+    if (!sharedFound) continue;
     if (write) assertShareRole(access.role, "editor");
-    return { access, projectId, row };
+    return {
+      access,
+      projectId: sharedFound.projectId,
+      row: sharedFound.row,
+    };
   }
   return null;
 }
@@ -684,7 +732,15 @@ export const taskCardServiceAdapter: RecordAdapter = {
       };
     }
     const userId = requireUser(ctx);
-    const projectId = ensureUserProject(userId, db);
+    const filterProjectId =
+      typeof query.filters?.project_id === "string"
+        ? query.filters.project_id
+        : typeof query.filters?.projectId === "string"
+          ? query.filters.projectId
+          : null;
+    const projectId = filterProjectId
+      ? resolveOwnedProjectId(db, ctx, { project_id: filterProjectId })
+      : ensureUserProject(userId, db);
     const localRows = db
       .prepare(
         `SELECT * FROM ai_project_cards WHERE project_id=?
@@ -692,16 +748,21 @@ export const taskCardServiceAdapter: RecordAdapter = {
       )
       .all(projectId) as Record<string, unknown>[];
     const rows = [...localRows];
-    for (const access of sharedAccesses(ctx, "user_tasks")) {
-      const sharedProjectId = existingUserProject(access.db, access.ownerUserId);
-      if (!sharedProjectId) continue;
-      rows.push(
-        ...(access.db
-          .prepare(
-            `SELECT * FROM ai_project_cards WHERE project_id=? ORDER BY sort_order ASC`
-          )
-          .all(sharedProjectId) as Record<string, unknown>[])
-      );
+    if (!filterProjectId) {
+      for (const access of sharedAccesses(ctx, "user_tasks")) {
+        const sharedProjectId = existingUserProject(
+          access.db,
+          access.ownerUserId
+        );
+        if (!sharedProjectId) continue;
+        rows.push(
+          ...(access.db
+            .prepare(
+              `SELECT * FROM ai_project_cards WHERE project_id=? ORDER BY sort_order ASC`
+            )
+            .all(sharedProjectId) as Record<string, unknown>[])
+        );
+      }
     }
     return {
       objectType: def.name,
@@ -714,7 +775,7 @@ export const taskCardServiceAdapter: RecordAdapter = {
     return resolved ? record(def, resolved.row) : null;
   },
   create(db, def, data, ctx) {
-    const projectId = productivityProjectId(db, ctx);
+    const projectId = resolveOwnedProjectId(db, ctx, data);
     const columnId =
       typeof data.column_id === "string" ? data.column_id : "backlog";
     const id = typeof data.id === "string" && data.id ? data.id : uuidv4();
@@ -775,7 +836,26 @@ export const taskCardServiceAdapter: RecordAdapter = {
         `UPDATE ai_project_cards SET ${sets.join(", ")} WHERE id=? AND project_id=?`
       ).run(...values, id, projectId);
     }
-    return record(def, cardRow(access.db, id, projectId)!);
+    const updated = record(def, cardRow(access.db, id, projectId)!);
+    if (access.ownerUserId) {
+      const pushed = [
+        "title",
+        "description",
+        "due_at",
+        "priority",
+        "tags_json",
+      ].some((k) => Object.prototype.hasOwnProperty.call(data, k));
+      if (pushed) {
+        void pushCardFieldsToGithub({
+          userId: access.ownerUserId,
+          db: access.db,
+          cardId: id,
+        }).catch((err) => {
+          console.warn("[github-projects] push fields failed", err);
+        });
+      }
+    }
+    return updated;
   },
   delete(db, _def, id, ctx) {
     const resolved = taskAccess(db, id, ctx, true);
@@ -830,6 +910,16 @@ export const taskCardServiceAdapter: RecordAdapter = {
         );
       }
       notifyCardMutation(access.db, updated, targetCtx, "card_updated");
+      if (access.ownerUserId) {
+        void pushCardColumnToGithub({
+          userId: access.ownerUserId,
+          db: access.db,
+          cardId: id,
+          columnId,
+        }).catch((err) => {
+          console.warn("[github-projects] push status failed", err);
+        });
+      }
       return record(def, updated);
     },
     assign(db, def, id, input, ctx) {
