@@ -208,7 +208,7 @@ export default function AuthGate() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.emailVerified === false) {
+    if (user.emailVerified === false && !user.isAdmin) {
       setMode("verify-banner");
       setEmail(user.email);
       return;
