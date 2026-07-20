@@ -24,6 +24,7 @@ import {
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
+import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { toast } from "sonner";
 
 const THEME_OPTIONS = [
@@ -123,7 +124,7 @@ function MfaCard() {
       setSecret(res.secretBase32);
       setOtpauthUrl(res.otpauthUrl);
       setRecoveryCodes(res.recoveryCodes);
-      toast.message("Scan the secret in your authenticator, then confirm with a code");
+      toast.message("Scan the QR code, then confirm with a 6-digit code");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start MFA");
     } finally {
@@ -177,12 +178,10 @@ function MfaCard() {
       <CardContent className="flex flex-col gap-3">
         {secret ? (
           <>
+            {otpauthUrl ? <OtpauthQr otpauthUrl={otpauthUrl} /> : null}
             <p className="text-sm break-all">
-              Secret: <code className="text-xs">{secret}</code>
+              Or enter secret: <code className="text-xs">{secret}</code>
             </p>
-            {otpauthUrl ? (
-              <p className="text-xs text-muted-foreground break-all">{otpauthUrl}</p>
-            ) : null}
             {recoveryCodes.length > 0 ? (
               <div className="rounded-md border border-border p-2 text-xs">
                 <p className="font-medium mb-1">Recovery codes (store offline)</p>
