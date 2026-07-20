@@ -41,6 +41,7 @@ import { createSupportRouter } from "./routes/support.js";
 import { createWikiRouter } from "./routes/wiki.js";
 import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
+import { createGithubIntegrationRouter } from "./routes/github-integration.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
 import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
@@ -429,6 +430,7 @@ app.use("/api/wiki", createWikiRouter(embeddingManager));
 app.use("/api/bank", createBankRouter());
 if (!config.isHub) {
   app.use("/api/integrations", createIntegrationsRouter());
+  app.use("/api/integrations/github", createGithubIntegrationRouter());
 }
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());

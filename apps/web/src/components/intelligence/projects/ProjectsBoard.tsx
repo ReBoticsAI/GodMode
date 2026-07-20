@@ -933,7 +933,13 @@ function CardEditorDialog({
   );
 }
 
-export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
+export function ProjectsBoard({
+  scope,
+  projectId,
+}: {
+  scope: ProductivityScope;
+  projectId?: string;
+}) {
   const [columns, setColumns] = useState<AiProjectColumn[]>([]);
   const [cards, setCards] = useState<AiProjectCard[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -945,7 +951,7 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
 
   const load = useCallback(() => {
     const req = isUserScope(scope)
-      ? fetchUserProjects(scope.userId)
+      ? fetchUserProjects(scope.userId, projectId)
       : fetchAiProjects(scope.agentId);
     req
       .then((r) => {
@@ -955,7 +961,7 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Failed to load tasks");
       });
-  }, [scope]);
+  }, [scope, projectId]);
 
   useEffect(() => {
     load();
@@ -1003,6 +1009,7 @@ export function ProjectsBoard({ scope }: { scope: ProductivityScope }) {
         await createUserProjectCard({
           title: "New task",
           columnId: "backlog",
+          projectId,
         });
       } else {
         await createProjectCard({

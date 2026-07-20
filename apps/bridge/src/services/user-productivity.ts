@@ -93,35 +93,158 @@ export function requireWriteAccess(access: UserProductivityAccess): void {
   assertShareRole(access.role, "editor");
 }
 
-/** Lazily create the personal kanban project for a user. */
-export function ensureUserProject(userId: string, db: AppDatabase): string {
-  const existing = db
-    .prepare(`SELECT id FROM ai_projects WHERE user_id = ? ORDER BY created_at ASC LIMIT 1`)
-    .get(userId) as { id: string } | undefined;
-  if (existing) return existing.id;
+/** Stable id for the default personal board. */
+export function userProjectId(userId: string): string {
+  return `user-${userId}`;
+}
 
-  const id = `user-${userId}`;
+const CANONICAL_COLUMNS = [
+  ["backlog", "Backlog", 0],
+  ["in_progress", "In Progress", 1],
+  ["review", "Review", 2],
+  ["done", "Done", 3],
+] as const;
+
+function seedCanonicalColumns(db: AppDatabase, projectId: string): void {
+  for (const [colId, name, order] of CANONICAL_COLUMNS) {
+    db.prepare(
+      `INSERT OR IGNORE INTO ai_project_columns (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)`
+    ).run(colId, projectId, name, order);
+  }
+}
+
+/** Lazily create the default personal kanban board ("My Tasks"). */
+export function ensureUserProject(userId: string, db: AppDatabase): string {
+  const id = userProjectId(userId);
+  const byId = db
+    .prepare(`SELECT id FROM ai_projects WHERE id = ?`)
+    .get(id) as { id: string } | undefined;
+  if (byId) {
+    seedCanonicalColumns(db, id);
+    return id;
+  }
+
   db.prepare(
     `INSERT OR IGNORE INTO ai_projects (id, name, user_id, agent_id) VALUES (?, ?, ?, NULL)`
   ).run(id, "My Tasks", userId);
-
-  const cols = [
-    ["backlog", "Backlog", 0],
-    ["in_progress", "In Progress", 1],
-    ["review", "Review", 2],
-    ["done", "Done", 3],
-  ] as const;
-  for (const [colId, name, order] of cols) {
-    db.prepare(
-      `INSERT OR IGNORE INTO ai_project_columns (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)`
-    ).run(colId, id, name, order);
-  }
-
+  seedCanonicalColumns(db, id);
   return id;
 }
 
-export function userProjectId(userId: string): string {
-  return `user-${userId}`;
+export type UserBoardRow = {
+  id: string;
+  name: string;
+  user_id: string | null;
+  archived_at: string | null;
+  github_project_node_id: string | null;
+  github_project_url: string | null;
+  github_status_map_json: string | null;
+  sync_enabled: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** List non-archived (or all) user-owned kanban boards. */
+export function listUserBoards(
+  userId: string,
+  db: AppDatabase,
+  opts?: { includeArchived?: boolean }
+): UserBoardRow[] {
+  ensureUserProject(userId, db);
+  if (opts?.includeArchived) {
+    return db
+      .prepare(
+        `SELECT * FROM ai_projects WHERE user_id = ? ORDER BY
+           CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC`
+      )
+      .all(userId, userProjectId(userId)) as UserBoardRow[];
+  }
+  return db
+    .prepare(
+      `SELECT * FROM ai_projects WHERE user_id = ? AND archived_at IS NULL
+       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC`
+    )
+    .all(userId, userProjectId(userId)) as UserBoardRow[];
+}
+
+export function getUserBoard(
+  userId: string,
+  db: AppDatabase,
+  boardId: string
+): UserBoardRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM ai_projects WHERE id = ? AND user_id = ?`
+    )
+    .get(boardId, userId) as UserBoardRow | undefined;
+}
+
+/** Create an additional personal kanban board (not My Tasks). */
+export function createUserBoard(
+  userId: string,
+  db: AppDatabase,
+  name: string
+): UserBoardRow {
+  ensureUserProject(userId, db);
+  const trimmed = name.trim();
+  if (!trimmed) throw Object.assign(new Error("name required"), { status: 400 });
+  const id = uuidv4();
+  db.prepare(
+    `INSERT INTO ai_projects (id, name, user_id, agent_id) VALUES (?, ?, ?, NULL)`
+  ).run(id, trimmed, userId);
+  db.prepare(
+    `UPDATE ai_projects SET updated_at=datetime('now') WHERE id=?`
+  ).run(id);
+  return getUserBoard(userId, db, id)!;
+}
+
+export function renameUserBoard(
+  userId: string,
+  db: AppDatabase,
+  boardId: string,
+  name: string
+): UserBoardRow {
+  const trimmed = name.trim();
+  if (!trimmed) throw Object.assign(new Error("name required"), { status: 400 });
+  const board = getUserBoard(userId, db, boardId);
+  if (!board) throw Object.assign(new Error("Board not found"), { status: 404 });
+  db.prepare(
+    `UPDATE ai_projects SET name=?, updated_at=datetime('now') WHERE id=? AND user_id=?`
+  ).run(trimmed, boardId, userId);
+  return getUserBoard(userId, db, boardId)!;
+}
+
+export function archiveUserBoard(
+  userId: string,
+  db: AppDatabase,
+  boardId: string
+): UserBoardRow {
+  if (boardId === userProjectId(userId)) {
+    throw Object.assign(new Error("Cannot archive My Tasks"), { status: 400 });
+  }
+  const board = getUserBoard(userId, db, boardId);
+  if (!board) throw Object.assign(new Error("Board not found"), { status: 404 });
+  db.prepare(
+    `UPDATE ai_projects SET archived_at=datetime('now'), sync_enabled=0, updated_at=datetime('now')
+     WHERE id=? AND user_id=?`
+  ).run(boardId, userId);
+  return getUserBoard(userId, db, boardId)!;
+}
+
+/** Resolve which board to use; defaults to My Tasks. Verifies ownership. */
+export function resolveUserBoardId(
+  userId: string,
+  db: AppDatabase,
+  projectId?: string | null
+): string {
+  const defaultId = ensureUserProject(userId, db);
+  if (!projectId || projectId === defaultId) return defaultId;
+  const board = getUserBoard(userId, db, projectId);
+  if (!board || board.archived_at) {
+    throw Object.assign(new Error("Board not found"), { status: 404 });
+  }
+  return board.id;
 }
 
 /**

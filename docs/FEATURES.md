@@ -37,7 +37,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 
 - [Structure](features/structure.md) - Tree editor for departments, divisions, and pages.
 - [Wiki](features/wiki.md) - Markdown knowledge base with spaces, visibility, backlinks, and RAG.
-- [Tasks](features/tasks.md) - Kanban boards; tag a card auto for autonomous agent work.
+- [Tasks](features/tasks.md) - Multiple personal kanban boards; optional GitHub Project sync; tag a card auto for autonomous agent work.
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.

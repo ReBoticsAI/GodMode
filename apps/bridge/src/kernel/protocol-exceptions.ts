@@ -197,4 +197,73 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     rationale: "Ephemeral typing signal with no durable domain mutation.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "github-integration-connect",
+    methods: ["POST"],
+    pathPattern: "/api/integrations/github/connect",
+    rationale:
+      "GitHub Projects OAuth start; tokens land in Vault after callback, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "github-integration-disconnect",
+    methods: ["POST"],
+    pathPattern: "/api/integrations/github/disconnect",
+    rationale:
+      "Clears Vault-stored GitHub Projects OAuth token; integration transport, not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-create",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects",
+    rationale:
+      "Personal kanban board create on ai_projects (multi-board Tasks); board metadata is not TaskCard Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-rename",
+    methods: ["PATCH"],
+    pathPattern: "/api/user/projects/:",
+    rationale: "Personal kanban board rename; board metadata, not TaskCard Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-archive",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/:/archive",
+    rationale: "Soft-archive personal kanban board; board metadata, not TaskCard Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-github-link",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/:/github/link",
+    rationale:
+      "Link a Tasks board to a GitHub Project the user can access; sync config, not TaskCard CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-github-unlink",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/:/github/unlink",
+    rationale: "Clear GitHub Project link on a Tasks board; sync config, not TaskCard CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-github-sync",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/:/github/sync",
+    rationale:
+      "Pull GitHub Project items into TaskCards via sync service; orchestration transport.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "user-task-board-github-status-map",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/:/github/status-map",
+    rationale:
+      "Persist column↔GitHub Status option map for a linked board; sync config, not TaskCard CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;

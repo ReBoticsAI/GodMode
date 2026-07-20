@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from "express";
-import { v4 as uuidv4 } from "uuid";
 import {
   attachAuthContext,
   requireAuth,
@@ -7,15 +6,24 @@ import {
   requireEditorForMutation,
 } from "../services/auth/middleware.js";
 import {
-  ensureUserProject,
-  newId,
+  archiveUserBoard,
+  createUserBoard,
+  listUserBoards,
+  renameUserBoard,
   requireWriteAccess,
+  resolveUserBoardId,
   resolveUserCalendarAccess,
   resolveUserTasksAccess,
 } from "../services/user-productivity.js";
 import type { ShareError } from "../services/share-service.js";
-
-const CALENDAR_KINDS = new Set(["event", "task", "appointment"]);
+import {
+  linkBoardToGithubProject,
+  listGithubProjectsForUser,
+  syncBoardWithGithub,
+  updateBoardStatusMap,
+  getGithubProjectMetaForUser,
+  unlinkBoardGithub,
+} from "../services/github-projects.js";
 
 function handleShareError(err: unknown, res: Response): boolean {
   const e = err as ShareError & { status?: number };
@@ -26,11 +34,23 @@ function handleShareError(err: unknown, res: Response): boolean {
   return false;
 }
 
+function sendErr(err: unknown, res: Response): void {
+  if (handleShareError(err, res)) return;
+  const e = err as { status?: number; message?: string };
+  res.status(e?.status ?? 500).json({ error: e?.message ?? String(err) });
+}
+
+function parseProjectId(req: Request): string | undefined {
+  const q = req.query.projectId;
+  if (typeof q === "string" && q.trim()) return q.trim();
+  const body = req.body?.projectId ?? req.body?.project_id;
+  if (typeof body === "string" && body.trim()) return body.trim();
+  return undefined;
+}
+
 export function createUserProductivityRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth, resolveTenant, requireEditorForMutation);
-
-  // --- Calendar ---
 
   router.get("/calendar/events", (req, res) => {
     try {
@@ -54,9 +74,7 @@ export function createUserProductivityRouter(): Router {
         .all(...params);
       res.json({ events, role: access.role, ownerUserId: access.ownerUserId });
     } catch (err) {
-      if (!handleShareError(err, res)) {
-        res.status(500).json({ error: String(err) });
-      }
+      sendErr(err, res);
     }
   });
 
@@ -65,7 +83,11 @@ export function createUserProductivityRouter(): Router {
       const access = resolveUserCalendarAccess(req, "viewer");
       const from = req.query.from ? String(req.query.from) : undefined;
       const to = req.query.to ? String(req.query.to) : undefined;
-      const pid = ensureUserProject(access.ownerUserId, access.db);
+      const pid = resolveUserBoardId(
+        access.ownerUserId,
+        access.db,
+        parseProjectId(req)
+      );
 
       const cardClauses: string[] = ["project_id = ?", "due_at IS NOT NULL"];
       const cardParams: unknown[] = [pid];
@@ -85,26 +107,19 @@ export function createUserProductivityRouter(): Router {
 
       res.json({ runs: [], cards, role: access.role, ownerUserId: access.ownerUserId });
     } catch (err) {
-      if (!handleShareError(err, res)) {
-        res.status(500).json({ error: String(err) });
-      }
+      sendErr(err, res);
     }
   });
-
-  // --- Tasks / Projects ---
 
   router.get("/projects", (req, res) => {
     try {
       const access = resolveUserTasksAccess(req, "viewer");
-      const pid = ensureUserProject(access.ownerUserId, access.db);
-      const projects = access.db
-        .prepare(`SELECT * FROM ai_projects WHERE user_id = ? ORDER BY updated_at DESC`)
-        .all(access.ownerUserId);
-      // Columns are the shared canonical kanban lanes (backlog/in_progress/
-      // review/done), keyed by a global primary key. They are seeded once for
-      // the 'default' project, so a per-project filter returns nothing for user
-      // boards. Mirror the agent board and return the canonical set so the user
-      // Tasks board renders the full Kanban (cards map to lanes by column_id).
+      const boards = listUserBoards(access.ownerUserId, access.db);
+      const pid = resolveUserBoardId(
+        access.ownerUserId,
+        access.db,
+        parseProjectId(req)
+      );
       const columns = access.db
         .prepare(`SELECT * FROM ai_project_columns ORDER BY sort_order ASC`)
         .all();
@@ -114,27 +129,193 @@ export function createUserProductivityRouter(): Router {
         )
         .all(pid);
       res.json({
-        projects,
+        projects: boards,
+        activeProjectId: pid,
         columns,
         cards,
         role: access.role,
         ownerUserId: access.ownerUserId,
       });
     } catch (err) {
-      if (!handleShareError(err, res)) {
-        res.status(500).json({ error: String(err) });
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const name = typeof req.body?.name === "string" ? req.body.name : "";
+      const board = createUserBoard(access.ownerUserId, access.db, name);
+      res.status(201).json({ project: board });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.patch("/projects/:id", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const boardId = String(req.params.id);
+      if (typeof req.body?.name === "string") {
+        const board = renameUserBoard(
+          access.ownerUserId,
+          access.db,
+          boardId,
+          req.body.name
+        );
+        res.json({ project: board });
+        return;
       }
+      res.status(400).json({ error: "name required" });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/:id/archive", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const board = archiveUserBoard(
+        access.ownerUserId,
+        access.db,
+        String(req.params.id)
+      );
+      res.json({ project: board });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/:id/github/link", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const projectNodeId =
+        typeof req.body?.projectNodeId === "string"
+          ? req.body.projectNodeId.trim()
+          : "";
+      const statusMap =
+        req.body?.statusMap && typeof req.body.statusMap === "object"
+          ? (req.body.statusMap as Record<string, string>)
+          : undefined;
+      const board = await linkBoardToGithubProject({
+        userId: access.ownerUserId,
+        db: access.db,
+        boardId: String(req.params.id),
+        projectNodeId,
+        statusMap,
+      });
+      res.json({ project: board });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/:id/github/unlink", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const board = unlinkBoardGithub(
+        access.ownerUserId,
+        access.db,
+        String(req.params.id)
+      );
+      res.json({ project: board });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/:id/github/sync", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const result = await syncBoardWithGithub({
+        userId: access.ownerUserId,
+        db: access.db,
+        boardId: String(req.params.id),
+      });
+      res.json(result);
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/:id/github/status-map", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const statusMap =
+        req.body?.statusMap && typeof req.body.statusMap === "object"
+          ? (req.body.statusMap as Record<string, string>)
+          : null;
+      if (!statusMap) {
+        res.status(400).json({ error: "statusMap required" });
+        return;
+      }
+      const board = updateBoardStatusMap(
+        access.ownerUserId,
+        access.db,
+        String(req.params.id),
+        statusMap
+      );
+      res.json({ project: board });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/github/projects", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const projects = await listGithubProjectsForUser(
+        access.ownerUserId,
+        access.db
+      );
+      res.json({ projects });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/github/projects/meta", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const projectNodeId =
+        typeof req.query.projectNodeId === "string"
+          ? req.query.projectNodeId.trim()
+          : "";
+      if (!projectNodeId) {
+        res.status(400).json({ error: "projectNodeId required" });
+        return;
+      }
+      const meta = await getGithubProjectMetaForUser(
+        access.ownerUserId,
+        access.db,
+        projectNodeId
+      );
+      res.json(meta);
+    } catch (err) {
+      sendErr(err, res);
     }
   });
 
   router.get("/projects/cards/:id/subtasks", (req, res) => {
     try {
       const access = resolveUserTasksAccess(req, "viewer");
-      const pid = ensureUserProject(access.ownerUserId, access.db);
-      const parent = access.db
-        .prepare(`SELECT id FROM ai_project_cards WHERE id=? AND project_id=?`)
-        .get(req.params.id, pid);
-      if (!parent) {
+      const card = access.db
+        .prepare(
+          `SELECT c.id, c.project_id FROM ai_project_cards c
+           JOIN ai_projects p ON p.id = c.project_id
+           WHERE c.id=? AND p.user_id=?`
+        )
+        .get(req.params.id, access.ownerUserId) as
+        | { id: string; project_id: string }
+        | undefined;
+      if (!card) {
         res.status(404).json({ error: "Not found" });
         return;
       }
@@ -142,26 +323,30 @@ export function createUserProductivityRouter(): Router {
         .prepare(
           `SELECT * FROM ai_project_cards WHERE parent_card_id = ? AND project_id = ? ORDER BY sort_order ASC`
         )
-        .all(req.params.id, pid) as Array<{ column_id: string; status: string | null }>;
+        .all(req.params.id, card.project_id) as Array<{
+        column_id: string;
+        status: string | null;
+      }>;
       const total = rows.length;
       const done = rows.filter(
         (r) => r.column_id === "done" || r.status === "accepted"
       ).length;
       res.json({ subtasks: rows, total, done, open: total - done });
     } catch (err) {
-      if (!handleShareError(err, res)) {
-        res.status(500).json({ error: String(err) });
-      }
+      sendErr(err, res);
     }
   });
 
   router.get("/projects/cards/:id/comments", (req, res) => {
     try {
       const access = resolveUserTasksAccess(req, "viewer");
-      const pid = ensureUserProject(access.ownerUserId, access.db);
       const card = access.db
-        .prepare(`SELECT id FROM ai_project_cards WHERE id=? AND project_id=?`)
-        .get(req.params.id, pid);
+        .prepare(
+          `SELECT c.id FROM ai_project_cards c
+           JOIN ai_projects p ON p.id = c.project_id
+           WHERE c.id=? AND p.user_id=?`
+        )
+        .get(req.params.id, access.ownerUserId);
       if (!card) {
         res.status(404).json({ error: "Not found" });
         return;
@@ -174,9 +359,7 @@ export function createUserProductivityRouter(): Router {
         .all(req.params.id);
       res.json({ comments: rows });
     } catch (err) {
-      if (!handleShareError(err, res)) {
-        res.status(500).json({ error: String(err) });
-      }
+      sendErr(err, res);
     }
   });
 

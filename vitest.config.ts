@@ -11,6 +11,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
       "apps/bridge/src/routes/__tests__/marketplace-listings-query.test.ts",
       "apps/bridge/src/services/__tests__/release-flow.test.ts",
+      "apps/bridge/src/services/__tests__/github-projects-status-map.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
       "apps/bridge/src/services/auth/__tests__/mfa-and-tokens.test.ts",

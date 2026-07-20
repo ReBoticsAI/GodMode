@@ -1321,6 +1321,13 @@ export interface AiProjectRow {
   id: string;
   name: string;
   agent_id: string | null;
+  user_id?: string | null;
+  archived_at?: string | null;
+  github_project_node_id?: string | null;
+  github_project_url?: string | null;
+  github_status_map_json?: string | null;
+  sync_enabled?: number;
+  last_synced_at?: string | null;
 }
 
 export interface AiProjectsSnapshot {
@@ -2219,12 +2226,117 @@ export const fetchUserCalendarActivity = (
   }>(`/user/calendar/activity${qs ? `?${qs}` : ""}`);
 };
 
-export const fetchUserProjects = (userId?: string) => {
-  const q = userId ? `?userId=${encodeURIComponent(userId)}` : "";
-  return api<AiProjectsSnapshot & { role: UserProductivityRole; ownerUserId: string }>(
-    `/user/projects${q}`
-  );
+export const fetchUserProjects = (userId?: string, projectId?: string) => {
+  const params = new URLSearchParams();
+  if (userId) params.set("userId", userId);
+  if (projectId) params.set("projectId", projectId);
+  const q = params.toString() ? `?${params}` : "";
+  return api<
+    AiProjectsSnapshot & {
+      role: UserProductivityRole;
+      ownerUserId: string;
+      activeProjectId?: string;
+    }
+  >(`/user/projects${q}`);
 };
+
+export type UserTaskBoard = {
+  id: string;
+  name: string;
+  user_id: string | null;
+  archived_at: string | null;
+  github_project_node_id: string | null;
+  github_project_url: string | null;
+  github_status_map_json: string | null;
+  sync_enabled: number;
+  last_synced_at: string | null;
+};
+
+export const createUserTaskBoard = (name: string) =>
+  api<{ project: UserTaskBoard }>("/user/projects", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+
+export const renameUserTaskBoard = (id: string, name: string) =>
+  api<{ project: UserTaskBoard }>(`/user/projects/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+export const archiveUserTaskBoard = (id: string) =>
+  api<{ project: UserTaskBoard }>(
+    `/user/projects/${encodeURIComponent(id)}/archive`,
+    { method: "POST" }
+  );
+
+export const fetchGithubProjectsList = () =>
+  api<{
+    projects: Array<{
+      id: string;
+      title: string;
+      url: string;
+      number: number;
+      owner: string;
+    }>;
+  }>("/user/github/projects");
+
+export const linkUserBoardGithub = (
+  boardId: string,
+  body: { projectNodeId: string; statusMap?: Record<string, string> }
+) =>
+  api<{ project: UserTaskBoard }>(
+    `/user/projects/${encodeURIComponent(boardId)}/github/link`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+
+export const unlinkUserBoardGithub = (boardId: string) =>
+  api<{ project: UserTaskBoard }>(
+    `/user/projects/${encodeURIComponent(boardId)}/github/unlink`,
+    { method: "POST" }
+  );
+
+export const syncUserBoardGithub = (boardId: string) =>
+  api<{
+    project: UserTaskBoard;
+    pulled: number;
+    created: number;
+    updated: number;
+  }>(`/user/projects/${encodeURIComponent(boardId)}/github/sync`, {
+    method: "POST",
+  });
+
+export const fetchGithubProjectMeta = (projectNodeId: string) =>
+  api<{
+    id: string;
+    title: string;
+    url: string;
+    statusOptions: Array<{ id: string; name: string }>;
+    statusFieldId: string | null;
+    defaultStatusMap: Record<string, string>;
+  }>(
+    `/user/github/projects/meta?projectNodeId=${encodeURIComponent(projectNodeId)}`
+  );
+
+export const updateUserBoardStatusMap = (
+  boardId: string,
+  statusMap: Record<string, string>
+) =>
+  api<{ project: UserTaskBoard }>(
+    `/user/projects/${encodeURIComponent(boardId)}/github/status-map`,
+    { method: "POST", body: JSON.stringify({ statusMap }) }
+  );
+
+export const fetchGithubIntegrationStatus = () =>
+  api<{ connected: boolean; login: string | null; configured: boolean }>(
+    "/integrations/github/status"
+  );
+
+export const startGithubIntegrationConnect = () =>
+  api<{ url: string }>("/integrations/github/connect", { method: "POST" });
+
+export const disconnectGithubIntegration = () =>
+  api<{ ok: boolean }>("/integrations/github/disconnect", { method: "POST" });
 
 export const createUserProjectCard = (body: {
   columnId?: string;
@@ -2238,6 +2350,7 @@ export const createUserProjectCard = (body: {
   parentCardId?: string;
   status?: string;
   assignedAgentId?: string;
+  projectId?: string;
 }) =>
   createDto<AiProjectCard>("TaskCard", {
     column_id: body.columnId,
@@ -2251,6 +2364,7 @@ export const createUserProjectCard = (body: {
     parent_card_id: body.parentCardId,
     status: body.status,
     assigned_agent_id: body.assignedAgentId,
+    project_id: body.projectId,
   });
 
 export const moveUserProjectCard = (id: string, columnId: string, sortOrder?: number) =>
