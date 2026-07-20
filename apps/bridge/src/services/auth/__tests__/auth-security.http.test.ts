@@ -498,6 +498,13 @@ describe("auth security HTTP integration", () => {
       isAdmin: false,
       verified: false,
     });
+    // Non-admins need an active subscription or attachAuthContext drops the session.
+    getCoreDb()
+      .prepare(
+        `INSERT INTO saas_subscriptions (id, user_id, email, status, access_revoked)
+         VALUES (?, ?, ?, 'active', 0)`
+      )
+      .run(randomUUID(), userId, "gate@example.com");
     const sessionId = createSession(getCoreDb(), userId, 7);
     const app = buildApp();
     await withServer(app, async (base) => {
