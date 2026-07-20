@@ -390,8 +390,12 @@ function AuthGatedApp() {
   }, []);
 
   // Plan: require verified email before full product use on SaaS only.
-  // SaaS platform admins must also enroll MFA before the product shell.
-  const needsEmailVerify = saas && authenticated && user?.emailVerified === false;
+  // Platform admins skip email verification (bootstrap before Resend); MFA still required.
+  const needsEmailVerify =
+    saas &&
+    authenticated &&
+    user?.emailVerified === false &&
+    user?.isAdmin !== true;
   const needsMfaSetup =
     saas &&
     authenticated &&

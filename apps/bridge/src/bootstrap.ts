@@ -348,7 +348,14 @@ app.get("/api/health", (_req, res) => {
   });
 });
 app.use("/api", attachAuthContext, (req, res, next) => {
-  if (!config.isSaas || !req.user || req.user.emailVerified) {
+  // Platform admins skip email verification (MFA remains required). Lets
+  // operators bootstrap SaaS before transactional mail (Resend) is configured.
+  if (
+    !config.isSaas ||
+    !req.user ||
+    req.user.emailVerified ||
+    req.user.isAdmin
+  ) {
     next();
     return;
   }
