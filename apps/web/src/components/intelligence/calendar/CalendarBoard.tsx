@@ -779,7 +779,7 @@ function MonthView({
         {days.slice(0, 7).map((d) => (
           <div
             key={d.getDay()}
-            className="px-1 py-1 text-center text-[10px] uppercase text-muted-foreground"
+            className="px-1 py-1.5 text-center text-xs uppercase tracking-wide text-muted-foreground"
           >
             {d.toLocaleDateString([], { weekday: "short" })}
           </div>
@@ -787,7 +787,7 @@ function MonthView({
       </div>
       <div className="grid min-h-0 flex-1 grid-rows-6 overflow-y-auto">
         {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7">
+          <div key={wi} className="grid min-h-0 grid-cols-7">
             {week.map((d) => {
               const inMonth = isSameMonth(d, monthAnchor);
               const isToday = isSameDay(d, now);
@@ -849,7 +849,7 @@ function MonthView({
                   key={d.toISOString()}
                   onClick={onCreate ? () => onCreate(d) : undefined}
                   className={cn(
-                    "flex min-h-0 flex-col gap-0.5 border-t border-l border-border p-1",
+                    "flex h-full min-h-0 flex-col gap-0.5 border-t border-l border-border p-1.5",
                     wi === 0 && "border-t-0",
                     onCreate && "cursor-pointer hover:bg-muted/40",
                     !inMonth && "bg-muted/20"
@@ -857,9 +857,9 @@ function MonthView({
                 >
                   <span
                     className={cn(
-                      "ml-auto text-[10px]",
+                      "ml-auto text-xs tabular-nums",
                       isToday
-                        ? "flex size-4 items-center justify-center rounded-full bg-emerald-500 font-medium text-white"
+                        ? "flex size-5 items-center justify-center rounded-full bg-emerald-500 font-medium text-white"
                         : inMonth
                           ? "text-foreground"
                           : "text-muted-foreground"

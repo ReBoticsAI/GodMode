@@ -8,7 +8,7 @@ export default function UserCalendarPage() {
   const userId = user?.id ?? "";
 
   return (
-    <Page>
+    <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-4 overflow-hidden">
       <PageHeader
         title="Calendar"
         description="Your personal calendar — private by default. Share it with teammates or agents when you need to collaborate."
@@ -22,7 +22,7 @@ export default function UserCalendarPage() {
           ) : null
         }
       />
-      <div className="flex min-h-[560px] flex-1 flex-col rounded-lg border bg-card/30 p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card/30 p-3">
         <CalendarBoard scope={{ kind: "user" }} />
       </div>
     </Page>
