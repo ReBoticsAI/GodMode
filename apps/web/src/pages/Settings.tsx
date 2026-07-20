@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { LogOutIcon, MonitorIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react";
+import {
+  FolderGit2Icon,
+  LogOutIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+  UserIcon,
+} from "lucide-react";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +25,11 @@ import {
   beginMfaEnroll,
   confirmMfaEnroll,
   disableMfa,
+  disconnectGithubIntegration,
+  fetchGithubIntegrationStatus,
   fetchMfaStatus,
   logoutAuth,
+  startGithubIntegrationConnect,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
@@ -264,6 +274,117 @@ function SessionCard() {
   );
 }
 
+function GithubConnectCard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    login: string | null;
+    configured: boolean;
+  } | null>(null);
+
+  const reload = () => {
+    void fetchGithubIntegrationStatus()
+      .then(setStatus)
+      .catch(() =>
+        setStatus({ connected: false, login: null, configured: false })
+      );
+  };
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  useEffect(() => {
+    const flag = searchParams.get("github");
+    if (!flag) return;
+    if (flag === "connected") {
+      toast.success("GitHub connected");
+      reload();
+    } else if (flag === "error") {
+      toast.error("GitHub connection failed");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("github");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await startGithubIntegrationConnect();
+      window.location.assign(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not start OAuth");
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await disconnectGithubIntegration();
+      toast.success("GitHub disconnected");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Disconnect failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Connect GitHub</CardTitle>
+        <CardDescription>
+          Link your GitHub account to sync personal Tasks boards with GitHub
+          Projects you can access. Separate from sign-in OAuth.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {status?.connected ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Connected as{" "}
+              <span className="font-medium text-foreground">
+                {status.login ?? "GitHub user"}
+              </span>
+              . Open Tasks → Board settings to link a Project.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void disconnect()}
+            >
+              Disconnect GitHub
+            </Button>
+          </>
+        ) : (
+          <>
+            {!status?.configured ? (
+              <p className="text-sm text-muted-foreground">
+                GitHub OAuth is not configured on this host. Set{" "}
+                <code className="text-xs">OAUTH_GITHUB_INTEGRATION_CLIENT_*</code>{" "}
+                (or login GitHub client) and the callback URL in Configuration.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              disabled={busy || status?.configured === false}
+              onClick={() => void connect()}
+            >
+              <FolderGit2Icon data-icon="inline-start" />
+              Connect GitHub
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   return (
     <Page>
@@ -274,6 +395,7 @@ export default function Settings() {
       <div className="flex flex-col gap-4">
         <AccountCard />
         <MfaCard />
+        <GithubConnectCard />
         <SubscriptionCard />
         <AppearanceCard />
         <SessionCard />

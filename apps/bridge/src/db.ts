@@ -1479,6 +1479,12 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   // Per-user personal calendar/tasks (scoped by user_id in owner workspace tenant DB).
   addCol("ai_calendar_events", "user_id", "TEXT");
   addCol("ai_projects", "user_id", "TEXT");
+  addCol("ai_projects", "archived_at", "TEXT");
+  addCol("ai_projects", "github_project_node_id", "TEXT");
+  addCol("ai_projects", "github_project_url", "TEXT");
+  addCol("ai_projects", "github_status_map_json", "TEXT");
+  addCol("ai_projects", "sync_enabled", "INTEGER NOT NULL DEFAULT 0");
+  addCol("ai_projects", "last_synced_at", "TEXT");
   db.exec(`
       CREATE INDEX IF NOT EXISTS ai_calendar_events_user_idx
         ON ai_calendar_events(user_id, start_at);
