@@ -62,9 +62,6 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         aria-label="Primary"
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1"
       >
-        <p className="px-3 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
-          Website
-        </p>
         {NAV_ITEMS.map(({ to, label, Icon, ...rest }) => (
           <NavLink
             key={to}
@@ -99,25 +96,41 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+type MarketingCrumb = { label: string; to?: string };
+
+function marketingCrumbs(pathname: string): MarketingCrumb[] {
+  const home: MarketingCrumb = { label: "Home", to: MARKETING_BASE };
+  const isHome =
+    pathname === MARKETING_BASE || pathname === `${MARKETING_BASE}/`;
+  if (isHome) return [{ label: "Home" }];
+
+  const featureMatch = pathname.match(
+    new RegExp(`^${MARKETING_BASE}/features(?:/([^/]+))?$`)
+  );
+  if (featureMatch) {
+    if (!featureMatch[1]) {
+      return [home, { label: "Features" }];
+    }
+    return [
+      home,
+      { label: "Features", to: `${MARKETING_BASE}/features` },
+      { label: getFeatureDoc(featureMatch[1])?.title ?? "Feature" },
+    ];
+  }
+
+  const item = NAV_ITEMS.find(
+    (n) =>
+      n.to !== MARKETING_BASE &&
+      (pathname === n.to || pathname.startsWith(`${n.to}/`))
+  );
+  if (item) return [home, { label: item.label }];
+  return [home, { label: "Page" }];
+}
+
 function MarketingHeader({ onOpenNav }: { onOpenNav?: () => void }) {
   const { pathname } = useLocation();
-  const crumb = useMemo(() => {
-    const featureMatch = pathname.match(
-      new RegExp(`^${MARKETING_BASE}/features(?:/([^/]+))?$`)
-    );
-    if (featureMatch) {
-      if (featureMatch[1]) {
-        return getFeatureDoc(featureMatch[1])?.title ?? "Feature";
-      }
-      return "Features";
-    }
-    const item = NAV_ITEMS.find((n) =>
-      n.to === MARKETING_BASE
-        ? pathname === MARKETING_BASE || pathname === `${MARKETING_BASE}/`
-        : pathname === n.to || pathname.startsWith(`${n.to}/`)
-    );
-    return item?.label ?? "Website";
-  }, [pathname]);
+  const crumbs = useMemo(() => marketingCrumbs(pathname), [pathname]);
+  const current = crumbs[crumbs.length - 1]?.label ?? "Home";
 
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b bg-sidebar/60 px-2 text-xs sm:px-3">
@@ -138,13 +151,41 @@ function MarketingHeader({ onOpenNav }: { onOpenNav?: () => void }) {
         className="flex min-w-0 flex-1 items-center gap-1 truncate text-muted-foreground"
       >
         <span className="truncate font-medium text-foreground sm:hidden">
-          {crumb}
+          {current}
         </span>
-        <span className="hidden items-center gap-1 sm:flex">
-          <span className="truncate">Website</span>
-          <ChevronRightIcon className="size-3 shrink-0 opacity-50" />
-          <span className="truncate font-medium text-foreground">{crumb}</span>
-        </span>
+        <ol className="hidden min-w-0 items-center gap-1 sm:flex">
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
+            return (
+              <li
+                key={`${crumb.label}-${index}`}
+                className="inline-flex min-w-0 items-center gap-1"
+              >
+                {index > 0 ? (
+                  <ChevronRightIcon className="size-3 shrink-0 opacity-50" />
+                ) : null}
+                {isLast || !crumb.to ? (
+                  <span
+                    className={cn(
+                      "truncate",
+                      isLast && "font-medium text-foreground"
+                    )}
+                    aria-current={isLast ? "page" : undefined}
+                  >
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <Link
+                    to={crumb.to}
+                    className="truncate transition-colors hover:text-foreground"
+                  >
+                    {crumb.label}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       </nav>
       <Button size="sm" variant="outline" className="hidden sm:inline-flex" render={<Link to="/" />}>
         Open Cloud
@@ -158,9 +199,6 @@ function MarketingFooter() {
     <footer className="flex h-9 shrink-0 items-center gap-3 border-t bg-sidebar/40 px-3 font-mono text-xs uppercase tracking-wide text-muted-foreground">
       <span className="truncate text-[10px] normal-case tracking-normal">
         {APP_NAME}
-      </span>
-      <span className="ml-auto truncate text-[10px] normal-case tracking-normal">
-        Public site · Stripe business website
       </span>
     </footer>
   );
