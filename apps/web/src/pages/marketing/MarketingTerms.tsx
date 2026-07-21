@@ -22,7 +22,8 @@ export default function MarketingTerms() {
       <p>
         Paid Cloud access is billed via Stripe. Plans renew until canceled in the Customer
         Portal. Failure to pay may suspend access. Platform operators listed in INITIAL_ADMINS
-        may be exempt from paywall for operations.
+        may be exempt from paywall for operations. Refunds are limited as described in the{" "}
+        <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link>.
       </p>
       <h2>3. Acceptable use</h2>
       <p>

@@ -17,6 +17,7 @@ export default function MarketingPricing() {
       <PageHeader
         title="Pricing"
         description="Self-host for free. GodMode Cloud is the hosted multi-tenant SaaS with Marketplace commerce authority."
+        descriptionClassName="max-w-5xl text-base leading-relaxed"
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -27,7 +28,7 @@ export default function MarketingPricing() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$0</p>
-            <p className="mt-1 text-sm text-muted-foreground">Your data, your machine.</p>
+            <p className="mt-1 text-base text-muted-foreground">Your data, your machine.</p>
           </CardContent>
           <CardFooter>
             <Button
@@ -52,7 +53,7 @@ export default function MarketingPricing() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$9.99</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-base text-muted-foreground">
               Cancel anytime in the Customer Portal.
             </p>
           </CardContent>
@@ -68,7 +69,7 @@ export default function MarketingPricing() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$74.99</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-base text-muted-foreground">
               Exact Stripe Price IDs are configured per environment.
             </p>
           </CardContent>
@@ -78,13 +79,20 @@ export default function MarketingPricing() {
         </Card>
       </div>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">
         Marketplace purchases are separate from the Cloud subscription. See{" "}
         <Link
           to={`${MARKETING_BASE}/terms`}
           className="text-foreground underline underline-offset-4"
         >
           Terms
+        </Link>{" "}
+        and the{" "}
+        <Link
+          to={`${MARKETING_BASE}/refund`}
+          className="text-foreground underline underline-offset-4"
+        >
+          Refund policy
         </Link>
         .
       </p>
