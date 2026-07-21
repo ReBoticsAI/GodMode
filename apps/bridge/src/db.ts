@@ -513,7 +513,21 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 11, name: "playbook_graph_schema_v1", up: migratePlaybookGraphSchema },
   { version: 12, name: "archive_lessons_schema_v1", up: migrateArchiveLessonsSchema },
   { version: 13, name: "holdings_schema_v1", up: createHoldingsSchema },
+  { version: 14, name: "multi_board_tasks_github_v1", up: migrateMultiBoardTasksSchema },
 ] as const;
+
+/** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
+function migrateMultiBoardTasksSchema(db: Database.Database): void {
+  addColumn(db, "ai_projects", "archived_at", "TEXT");
+  addColumn(db, "ai_projects", "github_project_node_id", "TEXT");
+  addColumn(db, "ai_projects", "github_project_url", "TEXT");
+  addColumn(db, "ai_projects", "github_status_map_json", "TEXT");
+  addColumn(db, "ai_projects", "sync_enabled", "INTEGER NOT NULL DEFAULT 0");
+  addColumn(db, "ai_projects", "last_synced_at", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS ai_projects_user_idx ON ai_projects(user_id);
+  `);
+}
 
 function migrateStructureObjectType(db: Database.Database): void {
   addColumn(db, "structure_nodes", "object_type", "TEXT");
