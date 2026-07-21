@@ -1,4 +1,12 @@
-export type { PluginHostServices, TenantDb, SierraPb1SchedulerHost, SystemEventRow, CardAwaitingHost } from "@godmode/plugin-api";
+export type {
+  PluginHostServices,
+  TenantDb,
+  PluginSchedulerHost,
+  SystemEventRow,
+  CardAwaitingHost,
+  HealthProbeFn,
+  IpcEnqueueFn,
+} from "@godmode/plugin-api";
 
 import type { PluginHostServices } from "@godmode/plugin-api";
 

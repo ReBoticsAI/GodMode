@@ -115,8 +115,8 @@ function testExecutorAwaitingGateSimulation(): void {
   // Simulates autonomous-executor pre-turn gate: in-flight → skip; terminal → resume.
   const db = makeTestDb();
   db.exec(`
-    CREATE TABLE backtest_runs (id TEXT PRIMARY KEY, status TEXT);
-    INSERT INTO backtest_runs (id, status) VALUES ('run-live', 'running');
+    CREATE TABLE await_runs (id TEXT PRIMARY KEY, status TEXT);
+    INSERT INTO await_runs (id, status) VALUES ('run-live', 'running');
   `);
   db.prepare(
     `INSERT INTO ai_project_cards (id, project_id, column_id, title, parent_card_id, context_json)
@@ -132,13 +132,13 @@ function testExecutorAwaitingGateSimulation(): void {
   );
 
   const row = db
-    .prepare(`SELECT status FROM backtest_runs WHERE id = ?`)
+    .prepare(`SELECT status FROM await_runs WHERE id = ?`)
     .get("run-live") as { status: string };
   assert.equal(isBacktestInFlightStatus(row.status), true);
 
-  db.prepare(`UPDATE backtest_runs SET status = 'done' WHERE id = ?`).run("run-live");
+  db.prepare(`UPDATE await_runs SET status = 'done' WHERE id = ?`).run("run-live");
   const doneRow = db
-    .prepare(`SELECT status FROM backtest_runs WHERE id = ?`)
+    .prepare(`SELECT status FROM await_runs WHERE id = ?`)
     .get("run-live") as { status: string };
   assert.equal(isBacktestTerminalStatus(doneRow.status), true);
 }

@@ -31,44 +31,7 @@ export function pageElementFor(kind: string): ReactElement {
   return webPluginRuntime.pageElement(kind, () => CORE_RENDERERS.placeholder());
 }
 
-/** @deprecated Use dynamic plugin registration; kept for structure editor labels. */
-export const PAGE_KINDS = [
-  ...CORE_PAGE_KINDS,
-  "dashboard",
-  "routines",
-  "performance",
-  "trading-plan",
-  "playbooks",
-  "builder",
-  "monitor",
-  "journal",
-  "backtest",
-  "sierra-dashboard-group",
-  "sierra-trading-plan-group",
-  "sierra-playbooks-group",
-  "sierra-config-group",
-  "sierra-setup",
-  "pm-dashboard-group",
-  "pm-trading-plan-group",
-  "pm-playbooks-group",
-  "pm-config-group",
-  "pm-dashboard",
-  "pm-markets",
-  "pm-trade",
-  "pm-inefficiencies",
-  "pm-activity",
-  "pm-arbitrage",
-  "pm-no-buy",
-  "pm-market-making",
-  "pm-wallets",
-  "pm-positions",
-  "pm-settings",
-  "pm-deposits",
-  "pm-negrisk-basket",
-  "pm-trending",
-  "pm-liquidity-crunch",
-  "pm-stale-quotes",
-  "pm-builder",
-] as const;
+/** @deprecated Prefer CORE_PAGE_KINDS + plugin registration; kept for structure editor labels. */
+export const PAGE_KINDS = [...CORE_PAGE_KINDS] as const;
 
 export type PageKind = (typeof PAGE_KINDS)[number];

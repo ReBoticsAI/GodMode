@@ -1,6 +1,7 @@
 /**
- * Valid structure node `kind` values — must stay in sync with
- * apps/web/src/lib/page-registry.tsx PAGE_KINDS.
+ * Valid structure node `kind` values for personal-OS core.
+ * Plugins register additional kinds via registerPageKinds / web pageKinds.register.
+ * Keep in sync with apps/web/src/lib/page-registry.tsx CORE_PAGE_KINDS (+ generic kinds below).
  */
 export const PAGE_KINDS = [
   "dashboard",
@@ -14,34 +15,9 @@ export const PAGE_KINDS = [
   "backtest",
   "placeholder",
   "home",
+  "custom",
   "record-list",
   "record-form",
-  "sierra-dashboard-group",
-  "sierra-trading-plan-group",
-  "sierra-playbooks-group",
-  "sierra-config-group",
-  "sierra-setup",
-  "pm-dashboard-group",
-  "pm-trading-plan-group",
-  "pm-playbooks-group",
-  "pm-config-group",
-  "pm-dashboard",
-  "pm-markets",
-  "pm-trade",
-  "pm-inefficiencies",
-  "pm-activity",
-  "pm-arbitrage",
-  "pm-no-buy",
-  "pm-market-making",
-  "pm-wallets",
-  "pm-positions",
-  "pm-settings",
-  "pm-deposits",
-  "pm-negrisk-basket",
-  "pm-trending",
-  "pm-liquidity-crunch",
-  "pm-stale-quotes",
-  "pm-builder",
 ] as const;
 
 export type PageKind = (typeof PAGE_KINDS)[number];

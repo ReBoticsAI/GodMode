@@ -208,9 +208,9 @@ const workerPool = createWorkerPool();
 
 void initTimeseriesStore().then(async (ts) => {
   const counts = await backfillSqliteTimeseries(db, ts);
-  if (counts.ticks + counts.bars + counts.pmPrice > 0) {
+  if (counts.ticks + counts.bars + counts.extra > 0) {
     console.log(
-      `[timeseries] backfill: ticks=${counts.ticks} bars=${counts.bars} pm_price=${counts.pmPrice}`
+      `[timeseries] backfill: ticks=${counts.ticks} bars=${counts.bars} extra=${counts.extra}`
     );
   }
   try {
@@ -446,7 +446,9 @@ app.use("/api/inference", createInferenceRouter(llmManager));
 app.use("/api/connections", createConnectionsRouter());
 app.use("/api/user", createUserProductivityRouter());
 app.use("/api/federation", createFederationRouter({
-  pingSc: () => getPluginHost().pingScHealth?.() ?? Promise.resolve({ ok: false, detail: "sierra plugin not loaded" }),
+  pingSc: () =>
+    getPluginHost().pingHealthProbe?.("chart-ipc") ??
+    Promise.resolve({ ok: false, detail: "chart-ipc plugin not loaded" }),
 }));
 app.get("/api/plugins/manifest", tenantDbMiddleware, attachAuthContext, requireAuth, createPluginsManifestHandler(coreDb));
 app.use("/api", tenantDbMiddleware, createCoreApiRouter(db, { bus }));

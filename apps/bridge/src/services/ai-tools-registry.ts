@@ -531,7 +531,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         rightSidebar: { type: "string", description: "Plugin sidebar slot id, or none to clear" },
-        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-dashboard-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (plugin-registered or core)" },
         segment: { type: "string", description: "URL segment (defaults to id)" },
       },
       required: ["departmentId", "id", "label", "icon"],
@@ -551,7 +551,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         label: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },
         segment: { type: "string", description: "URL segment (a-z 0-9 -, may be empty)" },
-        kind: { ...kindSchema(), description: "Page renderer kind (e.g. sierra-playbooks-group)" },
+        kind: { ...kindSchema(), description: "Page renderer kind (plugin-registered or core)" },
       },
       required: ["departmentId", "divisionId", "id", "label", "icon"],
     },
@@ -632,7 +632,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     parameters: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Optional deterministic id (e.g. sierra-chart)" },
+        id: { type: "string", description: "Optional deterministic id (e.g. trading-dashboard)" },
         name: { type: "string" },
         description: { type: "string" },
         icon: { type: "string", description: "lucide icon slug" },

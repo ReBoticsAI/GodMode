@@ -10,8 +10,8 @@ import {
   KernelError,
 } from "../kernel/record-api.js";
 
-function scEnqueue(line: string, chartbookKey?: string): string {
-  return getPluginHost().enqueueScLine!(line, chartbookKey);
+function ipcEnqueue(line: string, chartbookKey?: string): string {
+  return getPluginHost().enqueueIpcLine!("chart-ipc", line, chartbookKey);
 }
 
 interface FederationGrant {
@@ -244,7 +244,7 @@ export function createFederationRouter(deps: {
         targetTenantId: body.targetTenantId!,
       });
       const line = validateScCommandLine(body.line);
-      const file = scEnqueue(line, body.chartbookKey);
+      const file = ipcEnqueue(line, body.chartbookKey);
       res.json({ ok: true, verb: "execute", enqueued: line, file });
     } catch (err) {
       if (err instanceof FederationAuthorizationError) {

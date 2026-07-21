@@ -46,38 +46,28 @@ const CATEGORY_STYLES: Record<EventCategory, string> = {
   system: "bg-slate-500/15 text-slate-300 border-slate-500/30",
 };
 
-// Bridge -> WS broadcasters (apps/bridge/src/ws.ts):
-//   orders     order, fill, sc_fill, sc_fill_reset, sc_trade, sc_trade_reset
-//   positions  sc_position
-//   market     sc_market, master_symbol
-//   levels     sc_level, sc_levels_refresh
-//   system     status, deployment, data_audit, sc_account, sc_trade_stats,
-//              pb_cmd_ack, connected, sc_chart_props, sc_replay_state,
-//              sc_drawing, sc_drawings_refresh, ipc (System -> IPC), local
+// Core ships generic order/fill types; plugins register domain event types.
+const ORDERS_TYPES = new Set(["order", "fill"]);
+const POSITIONS_TYPES = new Set<string>();
+const MARKET_TYPES = new Set(["master_symbol"]);
+const LEVELS_TYPES = new Set<string>();
 
-const ORDERS_TYPES = new Set([
-  "order",
-  "fill",
-  "sc_fill",
-  "sc_fill_reset",
-  "sc_trade",
-  "sc_trade_reset",
-]);
+export type LiveEventCategory = "orders" | "positions" | "market" | "levels";
 
-const POSITIONS_TYPES = new Set(["sc_position"]);
-
-const MARKET_TYPES = new Set([
-  "sc_market",
-  "sc_quote",
-  "sc_tick",
-  "sc_ticks",
-  "sc_dom",
-  "sc_profile",
-  "sc_footprint",
-  "master_symbol",
-]);
-
-const LEVELS_TYPES = new Set(["sc_level", "sc_levels_refresh", "sc_signal"]);
+export function registerLiveEventTypes(
+  category: LiveEventCategory,
+  types: string[]
+): void {
+  const target =
+    category === "orders"
+      ? ORDERS_TYPES
+      : category === "positions"
+        ? POSITIONS_TYPES
+        : category === "market"
+          ? MARKET_TYPES
+          : LEVELS_TYPES;
+  for (const t of types) target.add(t);
+}
 
 export function categorizeEvent(type: string): EventCategory {
   if (ORDERS_TYPES.has(type)) return "orders";
