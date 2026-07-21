@@ -13,6 +13,7 @@ import {
   MenuIcon,
   ScaleIcon,
   ShieldIcon,
+  ReceiptIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page, PageHeader } from "@/components/PageHeader";
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: `${MARKETING_BASE}/security`, label: "Security", Icon: ShieldIcon },
   { to: `${MARKETING_BASE}/contact`, label: "Contact", Icon: ContactIcon },
   { to: `${MARKETING_BASE}/terms`, label: "Terms", Icon: ScaleIcon },
+  { to: `${MARKETING_BASE}/refund`, label: "Refunds", Icon: ReceiptIcon },
   { to: `${MARKETING_BASE}/privacy`, label: "Privacy", Icon: BookOpenIcon },
 ] as const;
 
@@ -259,8 +261,12 @@ export function MarketingProse({
 }) {
   return (
     <Page>
-      <PageHeader title={title} description={description} />
-      <div className="flex max-w-2xl flex-col gap-4 text-sm leading-relaxed text-muted-foreground [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mt-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_li]:ml-4 [&_li]:list-disc [&_strong]:text-foreground [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-1.5">
+      <PageHeader
+        title={title}
+        description={description}
+        descriptionClassName="max-w-5xl text-base leading-relaxed"
+      />
+      <div className="flex max-w-5xl flex-col gap-4 text-base leading-relaxed text-muted-foreground [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1 [&_strong]:text-foreground [&_ul]:my-2 [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-1.5">
         {children}
       </div>
     </Page>
