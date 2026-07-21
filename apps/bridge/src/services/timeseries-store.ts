@@ -2,14 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config.js";
 
-export type TimeseriesDataset =
-  | "ticks"
-  | "quotes"
-  | "depth"
-  | "footprint"
-  | "bars"
-  | "pm_book"
-  | "pm_price";
+export type TimeseriesDataset = string;
 
 type Row = Record<string, string | number | boolean | null>;
 
@@ -219,55 +212,51 @@ export async function initTimeseriesStore(): Promise<TimeseriesStore> {
   return store;
 }
 
-/** Backfill SQLite time-series tables into Parquet cold store. */
+/** Backfill SQLite time-series tables into Parquet cold store (tables may be plugin-owned). */
 export async function backfillSqliteTimeseries(
   db: import("../db.js").AppDatabase,
   store: TimeseriesStore
-): Promise<{ ticks: number; bars: number; pmPrice: number }> {
+): Promise<{ ticks: number; bars: number; extra: number }> {
   let ticks = 0;
   let bars = 0;
-  let pmPrice = 0;
+  let extra = 0;
 
-  const tickRows = db
-    .prepare(`SELECT symbol, seq, ts, price, size, side FROM sc_timesales`)
-    .all() as Array<Record<string, unknown>>;
-  for (const r of tickRows) {
-    store.append("ticks", String(r.symbol), r as Row);
-    ticks++;
-  }
-
-  const barCols = new Set(
-    (db.prepare(`PRAGMA table_info(sc_bars)`).all() as Array<{ name: string }>).map((c) => c.name)
-  );
-  const volumeExpr = barCols.has("volume")
-    ? "volume"
-    : barCols.has("total_volume")
-      ? "total_volume AS volume"
-      : "NULL AS volume";
-  if (barCols.has("symbol") && barCols.has("ts")) {
-    const barRows = db
-      .prepare(`SELECT symbol, ts, open, high, low, close, ${volumeExpr} FROM sc_bars`)
+  try {
+    const tickRows = db
+      .prepare(`SELECT symbol, seq, ts, price, size, side FROM sc_timesales`)
       .all() as Array<Record<string, unknown>>;
-    for (const r of barRows) {
-      store.append("bars", String(r.symbol), r as Row);
-      bars++;
+    for (const r of tickRows) {
+      store.append("ticks", String(r.symbol), r as Row);
+      ticks++;
     }
+  } catch {
+    /* plugin table absent on vanilla OSS */
   }
 
   try {
-    const priceRows = db
-      .prepare(`SELECT asset, ts, price FROM pm_price_history`)
-      .all() as Array<Record<string, unknown>>;
-    for (const r of priceRows) {
-      store.append("pm_price", String(r.asset), r as Row);
-      pmPrice++;
+    const barCols = new Set(
+      (db.prepare(`PRAGMA table_info(sc_bars)`).all() as Array<{ name: string }>).map((c) => c.name)
+    );
+    const volumeExpr = barCols.has("volume")
+      ? "volume"
+      : barCols.has("total_volume")
+        ? "total_volume AS volume"
+        : "NULL AS volume";
+    if (barCols.has("symbol") && barCols.has("ts")) {
+      const barRows = db
+        .prepare(`SELECT symbol, ts, open, high, low, close, ${volumeExpr} FROM sc_bars`)
+        .all() as Array<Record<string, unknown>>;
+      for (const r of barRows) {
+        store.append("bars", String(r.symbol), r as Row);
+        bars++;
+      }
     }
   } catch {
-    /* table may differ */
+    /* plugin table absent on vanilla OSS */
   }
 
   await store.flushAll();
-  return { ticks, bars, pmPrice };
+  return { ticks, bars, extra };
 }
 
 /** Roll up raw tick partitions to 1m bars (best-effort). */

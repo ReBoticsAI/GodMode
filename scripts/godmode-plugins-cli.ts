@@ -4,8 +4,8 @@
  *
  * Usage:
  *   npm run plugins -- list
- *   npm run plugins -- install sierra-chart --tenant <id>
- *   npm run plugins -- uninstall polymarket --tenant <id>
+ *   npm run plugins -- install <plugin-id> --tenant <id>
+ *   npm run plugins -- uninstall <plugin-id> --tenant <id>
  */
 import "dotenv/config";
 import { initCoreDb } from "../apps/bridge/src/core-db.js";

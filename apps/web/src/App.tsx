@@ -3,7 +3,6 @@ import {
   Route,
   Routes,
   useLocation,
-  useParams,
 } from "react-router-dom";
 import Home from "./pages/Home";
 import AgentsPage from "./pages/Agents";
@@ -274,7 +273,7 @@ function AppRoutes({
           element={<Navigate to={r.to} replace />}
         />
       ))}
-      <Route path="/builder/:id" element={<LegacyBuilderRedirect />} />
+      <Route path="/builder/:id" element={<Navigate to="/" replace />} />
 
       <Route
         path="*"
@@ -363,20 +362,6 @@ function buildDivisionRoutes(
     </Route>,
   ];
 }
-
-function LegacyBuilderRedirect() {
-  const { id } = useParams();
-  const target = id
-    ? `/trading/sierra/builder/${id}`
-    : "/trading/sierra/builder";
-  return <Navigate to={target} replace />;
-}
-
-/**
- * Gates the authenticated app behind a real session. While the session is
- * still resolving we render nothing; an unauthenticated visitor sees the
- * AuthGate (sign in / sign up) instead of the workspace shell.
- */
 function AuthGatedApp() {
   const { authenticated, loading, user } = useTenant();
   const { checking, needsWizard, refresh } = useOnboardingGate();

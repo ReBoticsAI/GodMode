@@ -46,4 +46,5 @@ export {
   type PluginWebManifest,
 } from "./web-api.js";
 
-export type { PluginHostServices, TenantDb, SierraPb1SchedulerHost, SystemEventRow, CardAwaitingHost } from "./host-services.js";
+export type { PluginHostServices, TenantDb, PluginSchedulerHost, SystemEventRow, CardAwaitingHost } from "./host-services.js";
+export type { HealthProbeFn, IpcEnqueueFn } from "./host-services.js";

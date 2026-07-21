@@ -10,10 +10,12 @@ import {
 } from "./card-awaiting.js";
 import { v4 as uuidv4 } from "uuid";
 import { broadcastCardActivity } from "../ws-broker.js";
-import { getPluginHost, type SierraPb1SchedulerHost } from "@godmode/plugin-host";
+import { getPluginHost, type PluginSchedulerHost } from "@godmode/plugin-host";
 
-function getPb1Scheduler(): SierraPb1SchedulerHost | null {
-  return getPluginHost().getSierraPb1Scheduler?.() ?? null;
+const OPTIMIZATION_SCHEDULER_ID = "optimization";
+
+function getOptimizationScheduler(): PluginSchedulerHost | null {
+  return getPluginHost().getPluginScheduler?.(OPTIMIZATION_SCHEDULER_ID) ?? null;
 }
 
 /**
@@ -347,7 +349,7 @@ function resolveAgentId(db: AppDatabase, card: CardRow): string {
   const proj = db
     .prepare(`SELECT agent_id FROM ai_projects WHERE id = ?`)
     .get(card.project_id) as { agent_id: string | null } | undefined;
-  return proj?.agent_id ?? "sierra-chart";
+  return proj?.agent_id ?? "intelligence";
 }
 
 /** Force the board invariant: exactly one not-done subtask is in_progress. */
@@ -554,7 +556,7 @@ function autoAcceptCompletedBacktestSubtask(
   resumeBacktest: { runId: string; status: string } | undefined,
   tenantId?: string | null
 ): boolean {
-  if (getPb1Scheduler()?.isMultiBacktestSubtask(subtask)) return false;
+  if (getOptimizationScheduler()?.isMultiBacktestSubtask(subtask)) return false;
   if (!resumeBacktest || resumeBacktest.status !== "done") return false;
   const run = db
     .prepare(
@@ -697,21 +699,21 @@ export async function runAutonomousTick(
       }
       if (isBacktestTerminalStatus(runStatus)) {
         resumeBacktest = { runId: awaiting.refId, status: runStatus };
-        const pb1 = getPb1Scheduler();
+        const opt = getOptimizationScheduler();
         if (
-          pb1?.isMultiBacktestSubtask(activeSubtask) &&
+          opt?.isMultiBacktestSubtask(activeSubtask) &&
           resumeBacktest.status === "done"
         ) {
-          if (pb1.isCombinePhaseSubtask(activeSubtask)) {
-            pb1.recordCompletedCombineRun(
+          if (opt.isCombinePhaseSubtask(activeSubtask)) {
+            opt.recordCompletedCombineRun(
               deps,
               parent,
               activeSubtask,
               resumeBacktest.runId,
               resumeBacktest.status
             );
-          } else if (pb1.isOosPhaseSubtask(activeSubtask)) {
-            pb1.recordCompletedOosRun(
+          } else if (opt.isOosPhaseSubtask(activeSubtask)) {
+            opt.recordCompletedOosRun(
               deps,
               parent,
               activeSubtask,
@@ -719,7 +721,7 @@ export async function runAutonomousTick(
               resumeBacktest.status
             );
           } else {
-            pb1.recordCompletedSweepRun(
+            opt.recordCompletedSweepRun(
               deps,
               parent,
               activeSubtask,
@@ -743,52 +745,52 @@ export async function runAutonomousTick(
   const parentFresh = db
     .prepare(`SELECT * FROM ai_project_cards WHERE id = ?`)
     .get(parent.id) as CardRow;
-  const pb1Scheduler = getPb1Scheduler();
-  if (activeForKick && pb1Scheduler?.isSweepPhaseSubtask(activeForKick)) {
-    pb1Scheduler.syncSweepCursorFromRuns(db, parentFresh);
-  } else if (activeForKick && pb1Scheduler?.isCombinePhaseSubtask(activeForKick)) {
-    pb1Scheduler.syncCombineCursorFromRuns(db, parentFresh);
-  } else if (activeForKick && pb1Scheduler?.isOosPhaseSubtask(activeForKick)) {
-    pb1Scheduler.syncOosCursorFromRuns(db, parentFresh);
+  const optScheduler = getOptimizationScheduler();
+  if (activeForKick && optScheduler?.isSweepPhaseSubtask(activeForKick)) {
+    optScheduler.syncSweepCursorFromRuns(db, parentFresh);
+  } else if (activeForKick && optScheduler?.isCombinePhaseSubtask(activeForKick)) {
+    optScheduler.syncCombineCursorFromRuns(db, parentFresh);
+  } else if (activeForKick && optScheduler?.isOosPhaseSubtask(activeForKick)) {
+    optScheduler.syncOosCursorFromRuns(db, parentFresh);
   }
   const parentSynced = db
     .prepare(`SELECT * FROM ai_project_cards WHERE id = ?`)
     .get(parent.id) as CardRow;
   if (
-    pb1Scheduler &&
+    optScheduler &&
     activeForKick &&
     !resumeBacktest &&
     !readCardAwaiting(activeForKick) &&
-    (pb1Scheduler.isSweepPhaseSubtask(activeForKick) ||
-      pb1Scheduler.isCombinePhaseSubtask(activeForKick) ||
-      pb1Scheduler.isOosPhaseSubtask(activeForKick))
+    (optScheduler.isSweepPhaseSubtask(activeForKick) ||
+      optScheduler.isCombinePhaseSubtask(activeForKick) ||
+      optScheduler.isOosPhaseSubtask(activeForKick))
   ) {
-    const phaseKind = pb1Scheduler.isOosPhaseSubtask(activeForKick)
+    const phaseKind = optScheduler.isOosPhaseSubtask(activeForKick)
       ? "oos"
-      : pb1Scheduler.isCombinePhaseSubtask(activeForKick)
+      : optScheduler.isCombinePhaseSubtask(activeForKick)
         ? "combine"
         : "sweep";
     try {
       const finalized =
         phaseKind === "oos"
-          ? pb1Scheduler.finalizeOosPhaseIfComplete(deps, parentSynced, activeForKick)
+          ? optScheduler.finalizeOosPhaseIfComplete(deps, parentSynced, activeForKick)
           : phaseKind === "combine"
-            ? pb1Scheduler.finalizeCombinePhaseIfComplete(deps, parentSynced, activeForKick)
-            : pb1Scheduler.finalizeSweepPhaseIfComplete(deps, parentSynced, activeForKick);
+            ? optScheduler.finalizeCombinePhaseIfComplete(deps, parentSynced, activeForKick)
+            : optScheduler.finalizeSweepPhaseIfComplete(deps, parentSynced, activeForKick);
       if (finalized) {
         sweepFinalized = true;
         subtasks = getSubtasks(db, parent.id);
       } else {
         const kicked =
           phaseKind === "oos"
-            ? await pb1Scheduler.tryDeterministicPb1OosKick(deps, parentSynced, activeForKick)
+            ? await optScheduler.tryDeterministicOosKick(deps, parentSynced, activeForKick)
             : phaseKind === "combine"
-              ? await pb1Scheduler.tryDeterministicPb1CombineKick(
+              ? await optScheduler.tryDeterministicCombineKick(
                   deps,
                   parentSynced,
                   activeForKick
                 )
-              : await pb1Scheduler.tryDeterministicPb1SweepKick(
+              : await optScheduler.tryDeterministicSweepKick(
                   deps,
                   parentSynced,
                   activeForKick
