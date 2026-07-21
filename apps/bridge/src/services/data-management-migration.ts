@@ -29,18 +29,6 @@ function migrateV1(db: Database.Database): void {
     `);
   }
 
-  const hasPmSignals = db
-    .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='pm_signals'`)
-    .get();
-  if (hasPmSignals) {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS pm_signals_by_market_ts
-        ON pm_signals(market_id, detected_at DESC);
-      CREATE INDEX IF NOT EXISTS pm_signals_by_acted_ts
-        ON pm_signals(acted_on, detected_at DESC);
-    `);
-  }
-
   // --- Events / outbox spine ---
   db.exec(`
     CREATE TABLE IF NOT EXISTS events (
