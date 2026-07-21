@@ -46,7 +46,7 @@ function SectionHeading({
         </Badge>
       ) : null}
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-      <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+      <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">{description}</p>
     </div>
   );
 }
@@ -68,7 +68,7 @@ function FeatureCard({
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         {title}
       </CardTitle>
-      <CardDescription>{description}</CardDescription>
+      <CardDescription className="text-base leading-relaxed">{description}</CardDescription>
     </CardHeader>
   );
 
@@ -181,6 +181,7 @@ export default function MarketingHome() {
       <PageHeader
         title={APP_NAME}
         description="Your Control Center: create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Open source. Local-first. Self-host or use Cloud for convenience. Extend through Marketplace. Share with your team."
+        descriptionClassName="max-w-5xl text-base leading-relaxed"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button render={<Link to="/" />}>Open Cloud</Button>
@@ -298,7 +299,7 @@ export default function MarketingHome() {
                 takes 10%.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+            <CardContent className="flex flex-col gap-2 text-base text-muted-foreground">
               <p>
                 Sell tab: accept ToS, connect Stripe Connect, PayPal, and/or MetaMask, then
                 publish and manage My listings.
@@ -327,7 +328,7 @@ export default function MarketingHome() {
                 platform (merchant of record).
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
+            <CardContent className="text-base text-muted-foreground">
               Local and private-hub installs pull the Official feed; GodMode Cloud is the
               commerce authority for paid checkout.
             </CardContent>
@@ -341,7 +342,7 @@ export default function MarketingHome() {
                 packs. Not the Community user-listing feed.
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
+            <CardContent className="text-base text-muted-foreground">
               Ideal for private packs and development. SaaS surfaces focus Official + Community
               commerce.
             </CardContent>

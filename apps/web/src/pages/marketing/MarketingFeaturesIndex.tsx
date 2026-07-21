@@ -25,6 +25,7 @@ export default function MarketingFeaturesIndex() {
       <PageHeader
         title="Features"
         description="Built-in GodMode capabilities. The same pages seed the platform wiki so agents and the public site share one product truth."
+        descriptionClassName="max-w-5xl text-base leading-relaxed"
       />
 
       {bySection.map(({ section, items }) => (
@@ -45,7 +46,7 @@ export default function MarketingFeaturesIndex() {
                 >
                   <CardHeader>
                     <CardTitle className="text-base">{doc.title}</CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-base leading-relaxed">
                       {doc.summary || doc.location}
                     </CardDescription>
                   </CardHeader>

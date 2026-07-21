@@ -48,6 +48,7 @@ export default function MarketingFeaturePage() {
           [doc.section, doc.location].filter(Boolean).join(" · ") ||
           doc.summary
         }
+        descriptionClassName="max-w-5xl text-base leading-relaxed"
         actions={
           <Button
             variant="outline"

@@ -132,18 +132,11 @@ the platform. Plugin ObjectTypes are discoverable only for tenants where the
 plugin is installed. See
 [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
-Authenticated data consumers discover explicit CRUD operations and named actions
-through the ObjectType kernel. The strict audit currently discovers 74
-ObjectTypes and reports zero legacy routes/callers, unmatched mutation callers,
-or direct entry-point writes. Existing domain services remain authoritative
-behind exact-parity adapters, so all durable mutations share one enforced
-dispatch boundary without duplicating business logic.
-
-Durable asynchronous actions enforce leases, retries, timeouts, cancellation,
-idempotency, and restart recovery. Declared events use per-consumer durable
-receipts. Live WebSocket/token streams and authorized binary transfer remain
-intentional specialized transports; the stream or bytes are not Record CRUD.
-See [docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
+Durable data goes through the **ObjectType kernel**: typed records, named
+actions, and adapters so mutations share one dispatch boundary. Async work uses
+leases, retries, timeouts, and recovery; live WebSocket streams and binary
+transfer stay specialized transports (not Record CRUD). Details for contributors:
+[docs/OBJECTTYPE_KERNEL.md](docs/OBJECTTYPE_KERNEL.md).
 
 ## Quick start
 
