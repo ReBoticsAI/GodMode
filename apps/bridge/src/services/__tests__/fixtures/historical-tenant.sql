@@ -54,35 +54,18 @@ CREATE TABLE structure_nodes (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE sc_levels (
-  symbol TEXT NOT NULL,
-  label TEXT NOT NULL,
-  price REAL NOT NULL,
-  kind TEXT,
-  chart_number INTEGER,
-  study_id INTEGER,
-  subgraph_index INTEGER,
-  ts TEXT,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (symbol, label)
-);
 
-INSERT INTO departments VALUES ('trading', 'Trading', 'chart', '/trading', 1, 0);
+INSERT INTO departments VALUES ('personal', 'Personal', 'home', '/personal', 1, 0);
 INSERT INTO divisions VALUES
-  ('sierra', 'trading', 'Sierra', 'activity', '/trading/sierra', NULL, 1, 0);
+  ('notes', 'personal', 'Notes', 'book', '/personal/notes', NULL, 1, 0);
 INSERT INTO division_pages VALUES
-  ('dashboard', 'sierra', 'trading', 'Dashboard', 'layout', '', 'sierra-dashboard', 1, 0),
-  ('journal', 'sierra', 'trading', 'Journal', 'book', 'journal', 'journal', 0, 1);
-INSERT INTO ai_agents VALUES ('dept-trading'), ('custom-agent');
+  ('dashboard', 'notes', 'personal', 'Dashboard', 'layout', '', 'notes', 1, 0),
+  ('journal', 'notes', 'personal', 'Journal', 'book', 'journal', 'journal', 0, 1);
+INSERT INTO ai_agents VALUES ('dept-personal'), ('custom-agent');
 INSERT INTO ai_agent_assignments VALUES
-  ('department', 'trading', 'dept-trading'),
+  ('department', 'personal', 'dept-personal'),
   ('page', 'custom-page', 'custom-agent');
 INSERT INTO structure_nodes
   (id, parent_id, label, icon, segment, kind, built_in, sort_order)
 VALUES
   ('custom-root', NULL, 'Custom Root', 'star', 'custom', 'custom-page', 0, 99);
-INSERT INTO sc_levels
-  (symbol, label, price, kind, chart_number, study_id, subgraph_index, ts)
-VALUES
-  ('ES', 'VWAP', 5500.25, 'study', 2, 10, 0, '2026-01-01T00:00:00Z'),
-  ('NQ', 'Prior High', 20100.5, 'reference', 3, 11, 1, '2026-01-01T00:00:01Z');
