@@ -18,7 +18,7 @@
     "audit:kernel:strict": "node scripts/audit-kernel-strict.mjs",
     "audit:kernel:parity": "node scripts/audit-kernel-parity.mjs --strict",
     "test": "vitest run",
-    "test:audit": "node --test scripts/__tests__/audit-kernel.test.mjs scripts/__tests__/audit-kernel-parity.test.mjs",
+    "test:audit": "node --test scripts/__tests__/audit-kernel.test.mjs scripts/__tests__/audit-kernel-parity.test.mjs scripts/__tests__/oss-debt.test.mjs",
     "test:release": "node --test scripts/release/__tests__/*.test.mjs",
     "release:verify": "node scripts/release/verify-release.mjs",
     "test:objecttypes": "vitest run packages/kernel/src packages/plugin-api/src apps/bridge/src/kernel apps/web/src",
