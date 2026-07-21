@@ -10,7 +10,6 @@ import {
   runMigrations,
   type Migration,
 } from "../db-migrations.js";
-import { migrateScLevelsSchema } from "../sc-levels-migration.js";
 import { migrateStructureNodes } from "../structure-nodes-migration.js";
 import { CORE_MIGRATIONS } from "../../core-db.js";
 
@@ -111,11 +110,6 @@ function foreignKeyViolations(db: Database.Database): unknown[] {
        ON p.department_id=v.department_id AND p.division_id=v.id
      ORDER BY d.id, v.id, p.id`
   );
-  const levelChecksum = checksum(
-    db,
-    `SELECT symbol, label, price, kind, chart_number, study_id, subgraph_index, ts
-     FROM sc_levels ORDER BY symbol, label`
-  );
   const customStructureChecksum = checksum(
     db,
     `SELECT id, parent_id, label, icon, segment, kind, built_in, sort_order
@@ -123,7 +117,6 @@ function foreignKeyViolations(db: Database.Database): unknown[] {
   );
   const tenantMigrations: Migration[] = [
     { version: 2, name: "structure_nodes_flatten_v1", up: migrateStructureNodes },
-    { version: 5, name: "sc_levels_source_key_v1", up: migrateScLevelsSchema },
   ];
 
   runMigrations(db, tenantMigrations);
@@ -141,14 +134,6 @@ function foreignKeyViolations(db: Database.Database): unknown[] {
     legacyStructureChecksum
   );
   assert.equal(
-    checksum(
-      db,
-      `SELECT symbol, label, price, kind, chart_number, study_id, subgraph_index, ts
-       FROM sc_levels ORDER BY symbol, label`
-    ),
-    levelChecksum
-  );
-  assert.equal(
     (db.prepare("SELECT COUNT(*) AS count FROM structure_nodes").get() as {
       count: number;
     }).count,
@@ -162,16 +147,6 @@ function foreignKeyViolations(db: Database.Database): unknown[] {
     ),
     customStructureChecksum,
     "pre-existing custom structure must remain unchanged"
-  );
-  assert.equal(
-    (db.prepare("SELECT COUNT(*) AS count FROM sc_levels").get() as {
-      count: number;
-    }).count,
-    2
-  );
-  assert.deepEqual(
-    db.prepare("SELECT source_key FROM sc_levels ORDER BY source_key").all(),
-    [{ source_key: "Prior High" }, { source_key: "VWAP" }]
   );
   assert.deepEqual(
     db.prepare("SELECT agent_id FROM ai_agent_assignments ORDER BY agent_id").all(),

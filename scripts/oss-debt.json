@@ -3,15 +3,9 @@
   "version": 1,
   "description": "Known temporary Sierra/Polymarket coupling in OSS core. Matches outside this list fail audit:oss. Shrink to empty by Phase 4.",
   "entries": [
-    { "path": "apps/bridge/src/db.ts", "owner": "sierra", "phase": 1, "reason": "playbooks/sc_*/backtest_* DDL in core schema" },
-    { "path": "apps/bridge/src/services/sc-levels-migration.ts", "owner": "sierra", "phase": 1, "reason": "sc_levels source_key migration" },
-    { "path": "apps/bridge/src/services/data-management-migration.ts", "owner": "polymarket", "phase": 1, "reason": "pm_signals index migration" },
     { "path": "apps/bridge/src/services/structure-regroup-migration.ts", "owner": "core-scrub", "phase": 1, "reason": "Sierra/PM structure regroup migration" },
-    { "path": "apps/bridge/src/services/__tests__/fixtures/historical-tenant.sql", "owner": "sierra", "phase": 1, "reason": "sc_levels DDL + /trading/sierra fixture" },
-    { "path": "apps/bridge/src/services/__tests__/db-migrations-upgrade.test.ts", "owner": "sierra", "phase": 1, "reason": "asserts core sc_levels migration" },
     { "path": "apps/bridge/src/services/__tests__/card-awaiting.test.ts", "owner": "sierra", "phase": 1, "reason": "backtest_runs fixture for awaiting host" },
-    { "path": "apps/bridge/src/services/timeseries-store.ts", "owner": "core-scrub", "phase": 1, "reason": "sc_bars/sc_timesales + pm_book/pm_price datasets" },
-    { "path": "apps/bridge/src/services/storage-usage.ts", "owner": "core-scrub", "phase": 1, "reason": "sc_*/pm_* tables + Sierra IPC label" },
+    { "path": "apps/bridge/src/services/timeseries-store.ts", "owner": "core-scrub", "phase": 2, "reason": "pm_book/pm_price dataset ids pending generic timeseries API" },
 
     { "path": "packages/plugin-api/src/host-services.ts", "owner": "core-scrub", "phase": 2, "reason": "SierraPb1/pingSc/enqueueScLine/pm_* host API" },
     { "path": "packages/plugin-api/src/index.ts", "owner": "sierra", "phase": 2, "reason": "re-exports SierraPb1SchedulerHost" },
