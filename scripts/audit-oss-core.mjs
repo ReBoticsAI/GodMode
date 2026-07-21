@@ -80,6 +80,22 @@ if (exists("docs/KERNEL_MIGRATION_MATRIX.md")) {
   errors.push("docs/KERNEL_MIGRATION_MATRIX.md must not ship in OSS core");
 }
 
+/** Sierra Chart operator helpers belong in godmode-plugin-sierra, not OSS core. */
+const BANNED_SIERRA_SCRIPTS = [
+  "scripts/sc-screenshot.ps1",
+  "scripts/find-zone-signals.ps1",
+  "scripts/find-zones-deep.ps1",
+  "scripts/check-input.ps1",
+  "scripts/seed-playbook.cjs",
+];
+for (const rel of BANNED_SIERRA_SCRIPTS) {
+  if (exists(rel)) {
+    errors.push(
+      `${rel}: Sierra Chart operator script must live in godmode-plugin-sierra`
+    );
+  }
+}
+
 const BANNED_DOC_TERMS = [
   { re: /Sierra\s*Chart|SierraChart/i, label: "Sierra Chart" },
   { re: /Polymarket/i, label: "Polymarket" },
