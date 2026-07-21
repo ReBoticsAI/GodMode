@@ -103,14 +103,14 @@ const EXTEND_ITEMS = [
   {
     title: "ObjectType kernel",
     description:
-      "Plugins register records, named actions, and UI against a durable mutation boundary. Extend the OS the same way first-party domains do.",
+      "Plugins register records, named actions, and UI against a durable mutation boundary. Extend the Control Center the same way first-party domains do.",
     Icon: WorkflowIcon,
     slug: "objecttype-records",
   },
   {
     title: "Shared federation",
     description:
-      "Grant live resources to other users. Shared surfaces and cross-home federation turn a personal OS into a network of workspaces.",
+      "Grant live resources to your team. Shared surfaces and cross-home federation connect people inside the same Control Center model.",
     Icon: Share2Icon,
     slug: "shared",
   },
@@ -127,7 +127,7 @@ const OS_FEATURES = [
   {
     title: "Digital You",
     description:
-      "Persona agent for tone, preferences, and personal context. Distinct from Intelligence and department agents.",
+      "Your digital twin: learns from how you use the platform and can stand in when you are unavailable. Distinct from Intelligence.",
     Icon: UsersIcon,
     slug: "digital-you",
   },
@@ -180,7 +180,7 @@ export default function MarketingHome() {
     <Page>
       <PageHeader
         title={APP_NAME}
-        description="Local-first personal OS you extend yourself: structure, multi-agent org chart, wiki, tasks, and a user-to-user Marketplace. Cloud is optional."
+        description="Your Control Center: create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Open source. Local-first. Self-host or use Cloud for convenience. Extend through Marketplace. Share with your team."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button render={<Link to="/" />}>Open Cloud</Button>
@@ -202,20 +202,57 @@ export default function MarketingHome() {
             >
               Get the source
             </Button>
+            <Button
+              variant="outline"
+              render={
+                <a
+                  href="https://github.com/users/ReBoticsAI/projects/1"
+                  target="_blank"
+                  rel="noreferrer"
+                />
+              }
+            >
+              Roadmap
+            </Button>
           </div>
         }
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Not another chat thread</CardTitle>
+          <CardTitle>One Control Center</CardTitle>
           <CardDescription>
-            Chat-only assistants forget context between sessions. {APP_NAME} gives you a
-            persistent workspace (departments, pages, agents, memory, and tools) that
-            Intelligence can read, write, and extend over time. You are not stuck in a fixed
-            SaaS template; the platform is designed so you and the community grow it.
+            Create, edit, organize, and monitor knowledge and wiki, tasks and project
+            management, contacts and relationships, accounting, and day-to-day work, with
+            Intelligence as your platform guide and Digital You as your twin. Built to be the
+            last platform stack you need. Niche domains ship as plugins via Marketplace.
           </CardDescription>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Roadmap</CardTitle>
+          <CardDescription>
+            GodMode is usable today. Core still grows (owned email and domains, accounting
+            depth, robot and IoT actors, owned inference and training, and more). Follow
+            progress on the public Roadmap Project.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter>
+          <Button
+            variant="outline"
+            render={
+              <a
+                href="https://github.com/users/ReBoticsAI/projects/1"
+                target="_blank"
+                rel="noreferrer"
+              />
+            }
+          >
+            Open Roadmap
+          </Button>
+        </CardFooter>
       </Card>
 
       <Separator />
@@ -224,7 +261,7 @@ export default function MarketingHome() {
         <SectionHeading
           badge="Designed to be extended"
           title="Build on the platform, not around it"
-          description="GodMode ships as a personal OS with an explicit extension surface: Structure you grow, plugins you install or author, ObjectTypes that register new domains, and Shared grants that connect workspaces."
+          description="GodMode ships as a Control Center with an explicit extension surface: Structure you grow, plugins you install or author, ObjectTypes that register new domains, and Shared grants for your team."
         />
         <div className="grid gap-4 md:grid-cols-2">
           {EXTEND_ITEMS.map(({ title, description, Icon, slug }) => (
@@ -327,7 +364,7 @@ export default function MarketingHome() {
 
       <section className="flex flex-col gap-4">
         <SectionHeading
-          title="Built-in personal OS"
+          title="Built into the Control Center"
           description="Everything below ships in core. Then you extend it with Structure, plugins, and Marketplace."
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -360,8 +397,8 @@ export default function MarketingHome() {
             <CardHeader>
               <CardTitle className="text-base">Self-hosted</CardTitle>
               <CardDescription>
-                Your data stays in SQLite on your device. Open source (Apache 2.0). Local LLMs,
-                Cursor Cloud, or provider keys in Vault.
+                Open source (Apache 2.0). Local-first on your machine or private hub. Local
+                LLMs, Cursor Cloud, or provider keys in Vault.
               </CardDescription>
             </CardHeader>
             <CardFooter>

@@ -1,6 +1,6 @@
 # Getting started
 
-GodMode is a local-first personal OS. Pick the path that matches how you want to run it.
+GodMode is your Control Center. Pick the path that matches how you want to run it.
 
 ## Download (recommended for most users)
 
