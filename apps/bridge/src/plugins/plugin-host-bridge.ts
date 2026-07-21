@@ -9,7 +9,14 @@ import {
   findCardsAwaitingRef,
   markCardAwaitingTerminal,
 } from "../services/card-awaiting.js";
-import { setPluginHost, type PluginHostServices, type SierraPb1SchedulerHost, type TenantDb } from "@godmode/plugin-host";
+import {
+  setPluginHost,
+  type PluginHostServices,
+  type PluginSchedulerHost,
+  type TenantDb,
+  type HealthProbeFn,
+  type IpcEnqueueFn,
+} from "@godmode/plugin-host";
 import { config } from "../config.js";
 import {
   createRecord,
@@ -17,17 +24,11 @@ import {
   KernelError,
 } from "../kernel/index.js";
 
-let pingScHealthImpl: (() => Promise<{ ok: boolean; detail?: string }>) | null = null;
-let enqueueScLineImpl: ((line: string, chartbookKey?: string) => string) | null = null;
-let sierraPb1Scheduler: SierraPb1SchedulerHost | null = null;
+const healthProbes = new Map<string, HealthProbeFn>();
+const ipcEnqueues = new Map<string, IpcEnqueueFn>();
+const pluginSchedulers = new Map<string, PluginSchedulerHost>();
 const systemEventHandlers: Array<(event: import("@godmode/plugin-api").SystemEventRow) => void> = [];
 let autonomousRunnerKick: ((reason?: string) => void) | null = null;
-
-export function setScHealthPing(
-  fn: () => Promise<{ ok: boolean; detail?: string }>
-): void {
-  pingScHealthImpl = fn;
-}
 
 function upsertTradingDepartment(db: AppDatabase): void {
   try {
@@ -90,27 +91,29 @@ export function initPluginHost(): PluginHostServices {
         tenantId: input.tenantId,
       });
     },
-    async pingScHealth() {
-      if (pingScHealthImpl) return pingScHealthImpl();
-      return { ok: false, detail: "sierra plugin not loaded" };
+    registerHealthProbe(id, fn) {
+      healthProbes.set(id, fn);
     },
-    registerScHealthPing(fn: () => Promise<{ ok: boolean; detail?: string }>) {
-      pingScHealthImpl = fn;
+    async pingHealthProbe(id) {
+      const fn = healthProbes.get(id);
+      if (fn) return fn();
+      return { ok: false, detail: `health probe "${id}" not registered` };
     },
-    enqueueScLine(line, chartbookKey) {
-      if (!enqueueScLineImpl) {
-        throw new Error("sierra plugin not loaded — SC command queue unavailable");
+    registerIpcEnqueue(id, fn) {
+      ipcEnqueues.set(id, fn);
+    },
+    enqueueIpcLine(id, line, chartbookKey) {
+      const fn = ipcEnqueues.get(id);
+      if (!fn) {
+        throw new Error(`IPC enqueue "${id}" not registered — plugin not loaded`);
       }
-      return enqueueScLineImpl(line, chartbookKey);
+      return fn(line, chartbookKey);
     },
-    registerEnqueueScLine(fn) {
-      enqueueScLineImpl = fn;
+    getPluginScheduler(id) {
+      return pluginSchedulers.get(id) ?? null;
     },
-    getSierraPb1Scheduler() {
-      return sierraPb1Scheduler;
-    },
-    registerSierraPb1Scheduler(api) {
-      sierraPb1Scheduler = api;
+    registerPluginScheduler(id, api) {
+      pluginSchedulers.set(id, api);
     },
     registerSystemEventHandler(fn) {
       systemEventHandlers.push(fn);
