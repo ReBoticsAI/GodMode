@@ -151,7 +151,6 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [LOCAL_LLM.md](./LOCAL_LLM.md).
 | `HOLDINGS_SECRET_KEY` | AES key for holdings encryption |
 | `MORALIS_API_KEY` | Crypto balance lookups |
 | `PAYPAL_*` | PayPal sandbox/live for Bank |
-| `DTC_*` | Trade service socket (plugin domain) |
 
 Domain-specific paths (chart host directories, codegen output, backtest charts) are set by optional plugins via their own env documentation — OSS core defaults these to empty.
 

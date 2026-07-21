@@ -15,7 +15,7 @@ export interface LocalConnectorManifest {
 
 export interface LocalConnector {
   manifest: LocalConnectorManifest;
-  /** Execute a federation SC line locally (e.g. enqueue to Sierra Chart IPC). */
+  /** Execute a federation IPC line locally (plugin-registered enqueue). */
   execute(line: string, chartbookKey?: string): Promise<{ ok: boolean; detail?: string }>;
   health(): Promise<{ ok: boolean; detail?: string }>;
 }

@@ -57,7 +57,7 @@ import { cn } from "@/lib/utils";
 1. `read_file` the target page and nearby pages for conventions.
 2. Reuse existing layout primitives (`PageHeader`, cards, tables).
 3. Keep diffs focused — one page/feature per task unless explicitly asked for more.
-4. After UI edits, mention which route to open to verify (e.g. `/trading/sierra/backtests/:id`).
+4. After UI edits, mention which route to open to verify (e.g. the page you changed).
 
 ## Forms (shadcn Field API)
 

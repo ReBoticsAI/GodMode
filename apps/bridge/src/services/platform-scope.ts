@@ -44,14 +44,11 @@ const ACTION_MIN_ROLE: Record<string, AssignmentRole> = {
   assign_agent: "owner",
   set_agent_role: "owner",
   attach_node_agent: "editor",
-  bootstrap_sierra_area: "editor",
-  bootstrap_polymarket_area: "editor",
-  // Polymarket (Phase B)
+  bootstrap_trading_area: "editor",
   create_pm_strategy: "editor",
   update_pm_strategy: "editor",
   enable_pm_strategy: "owner",
   disable_pm_strategy: "owner",
-  // Playbooks (Phase C)
   upsert_playbook_spec: "editor",
   sc_remove_all: "owner",
 };

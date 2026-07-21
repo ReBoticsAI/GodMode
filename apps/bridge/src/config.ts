@@ -114,11 +114,6 @@ export const config = {
   corsPermissive: process.env.CORS_PERMISSIVE === "true",
   /** Optional token for cloning private GitHub plugin repos via Marketplace install. */
   githubToken: process.env.GITHUB_TOKEN ?? "",
-  dtc: {
-    host: process.env.DTC_HOST ?? "127.0.0.1",
-    port: Number(process.env.DTC_PORT ?? 11099),
-    enabled: process.env.DTC_ENABLED !== "false",
-  },
   dataDir: appData,
   /** Root directory for per-agent sandboxes ({dataDir}/agents/<agentId>). */
   agentsDir: path.join(appData, "agents"),
@@ -227,47 +222,7 @@ export const config = {
       `http://${process.env.BRIDGE_HOST ?? "127.0.0.1"}:${process.env.BRIDGE_PORT ?? 3847}`,
   },
   ipcDir: path.join(appData, "ipc"),
-  ipcResyncDir: path.join(appData, "ipc", "resync"),
-  ipcPlaybookCmdDir: path.join(appData, "ipc", "cmd"),
-  ipcInbound: path.join(appData, "ipc", "to_sc.txt"),
-  ipcOutbound: path.join(appData, "ipc", "from_sc.txt"),
-  ipcOutboundMaxBytes: Number(process.env.IPC_OUTBOUND_MAX_BYTES ?? 50 * 1024 * 1024),
-  chartPlatformDir: process.env.SIERRA_CHART_DIR ?? "",
-  chartPlatformDataDir: process.env.SIERRA_CHART_DATA_DIR ?? "",
-  chartPlatformAcsSource: process.env.SIERRA_CHART_ACS_SOURCE ?? "",
-  scUdpPort: Number(process.env.SC_UDP_PORT ?? 22903),
-  msysBash: process.env.MSYS2_BASH ?? "",
-  useStudyReloader: process.env.USE_STUDY_RELOADER !== "false",
-  codegenOutputDir:
-    process.env.CODEGEN_OUTPUT ?? path.join(repoRoot, "codegen-stubs"),
   repoRoot,
-  /**
-   * Optional explicit list of chart numbers to use as the backtest pool.
-   * Auto-numbering varies by host; users normally configure this from the UI
-   * which writes to the sc_charts table; this env list is only the bootstrap
-   * fallback when the DB has no chart selections.
-   */
-  backtestChartList: (process.env.BACKTEST_CHARTS ?? "")
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0),
-  /** Last-resort range fallback (used only if no DB selection and no env list). */
-  backtestChartRange: {
-    start: Number(process.env.BACKTEST_CHART_START ?? 13),
-    end: Number(process.env.BACKTEST_CHART_END ?? 22),
-  },
-  /** Normalized chartbook key for live Platform.cht command routing. */
-  liveChartbookKey: (process.env.LIVE_CHARTBOOK ?? "Platform").replace(
-    /[^a-zA-Z0-9_-]/g,
-    ""
-  ),
-  /** Normalized chartbook key for Backtest.cht isolated backtests. */
-  backtestChartbookKey: (process.env.BACKTEST_CHARTBOOK ?? "Backtest").replace(
-    /[^a-zA-Z0-9_-]/g,
-    ""
-  ),
-  /** Host input index for "Sim Only" on generated studies (plugin-specific). */
-  backtestSimOnlyInputIndex: Number(process.env.BACKTEST_SIM_INPUT_INDEX ?? 99),
   ai: {
     llamaServerBin:
       process.env.LLAMA_SERVER_BIN ??

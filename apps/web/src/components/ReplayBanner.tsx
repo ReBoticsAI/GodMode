@@ -31,7 +31,7 @@ export function ReplayBanner() {
     syncFromApi();
     const disconnect = connectWebSocket((raw) => {
       const msg = raw as { type: string; data?: ReplayRow };
-      if (msg.type !== "sc_replay_state") return;
+      if (msg.type !== "sc_replay_state" && msg.type !== "replay_state") return;
       syncFromApi();
     });
     return disconnect;

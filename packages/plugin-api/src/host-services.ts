@@ -3,7 +3,8 @@ import type { IRouter, Request } from "express";
 /** Opaque tenant SQLite handle — plugins must not cast without bridge types. */
 export type TenantDb = unknown;
 
-export interface SierraPb1SchedulerHost {
+/** Plugin-registered scheduler hooks (e.g. optimization card phases). */
+export interface PluginSchedulerHost {
   finalizeCombinePhaseIfComplete: (...args: unknown[]) => unknown;
   finalizeOosPhaseIfComplete: (...args: unknown[]) => unknown;
   finalizeSweepPhaseIfComplete: (...args: unknown[]) => unknown;
@@ -17,9 +18,9 @@ export interface SierraPb1SchedulerHost {
   syncCombineCursorFromRuns: (...args: unknown[]) => unknown;
   syncOosCursorFromRuns: (...args: unknown[]) => unknown;
   syncSweepCursorFromRuns: (...args: unknown[]) => unknown;
-  tryDeterministicPb1CombineKick: (...args: unknown[]) => Promise<unknown>;
-  tryDeterministicPb1OosKick: (...args: unknown[]) => Promise<unknown>;
-  tryDeterministicPb1SweepKick: (...args: unknown[]) => Promise<unknown>;
+  tryDeterministicCombineKick: (...args: unknown[]) => Promise<unknown>;
+  tryDeterministicOosKick: (...args: unknown[]) => Promise<unknown>;
+  tryDeterministicSweepKick: (...args: unknown[]) => Promise<unknown>;
 }
 
 export interface SystemEventRow {
@@ -46,6 +47,9 @@ export interface CardAwaitingHost {
   ): void;
 }
 
+export type HealthProbeFn = () => Promise<{ ok: boolean; detail?: string }>;
+export type IpcEnqueueFn = (line: string, chartbookKey?: string) => string;
+
 export interface PluginHostServices {
   getTenantDb(tenantId: string): TenantDb;
   getReqTenantDb(req: Request): TenantDb;
@@ -53,14 +57,7 @@ export interface PluginHostServices {
   getTimeseriesStore(): {
     analyticsQuery(sql: string): Promise<unknown[]>;
     append(
-      dataset:
-        | "ticks"
-        | "quotes"
-        | "depth"
-        | "footprint"
-        | "bars"
-        | "pm_book"
-        | "pm_price",
+      dataset: string,
       symbol: string,
       row: Record<string, string | number | boolean | null>
     ): void;
@@ -73,21 +70,19 @@ export interface PluginHostServices {
     payload?: Record<string, unknown>;
     tenantId?: string | null;
   }): void;
-  pingScHealth?(): Promise<{ ok: boolean; detail?: string }>;
-  registerScHealthPing?(
-    fn: () => Promise<{ ok: boolean; detail?: string }>
-  ): void;
-  /** Sierra Chart IPC command queue (plugin registers when loaded). */
-  enqueueScLine?(
-    line: string,
-    chartbookKey?: string
-  ): string;
-  registerEnqueueScLine?(
-    fn: (line: string, chartbookKey?: string) => string
-  ): void;
-  /** PB1 optimization scheduler hooks for autonomous executor. */
-  getSierraPb1Scheduler?(): SierraPb1SchedulerHost | null;
-  registerSierraPb1Scheduler?(api: SierraPb1SchedulerHost): void;
+
+  /** Register a named health probe (plugins choose ids, e.g. "chart-ipc"). */
+  registerHealthProbe?(id: string, fn: HealthProbeFn): void;
+  pingHealthProbe?(id: string): Promise<{ ok: boolean; detail?: string }>;
+
+  /** Register a named IPC line enqueue handler. */
+  registerIpcEnqueue?(id: string, fn: IpcEnqueueFn): void;
+  enqueueIpcLine?(id: string, line: string, chartbookKey?: string): string;
+
+  /** Register a named scheduler host for autonomous card phases. */
+  getPluginScheduler?(id: string): PluginSchedulerHost | null;
+  registerPluginScheduler?(id: string, api: PluginSchedulerHost): void;
+
   /** Durable system event side-effects (e.g. backtest terminal → Kanban). */
   registerSystemEventHandler?(
     fn: (event: SystemEventRow) => void

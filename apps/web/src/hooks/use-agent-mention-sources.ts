@@ -1,15 +1,5 @@
 import { useEffect } from "react";
-import {
-  api,
-  fetchAiAgents,
-  fetchAiArtifact,
-  fetchAiArtifacts,
-  fetchAiMemories,
-  fetchAiRules,
-  fetchAiSkills,
-  fetchPlaybooks,
-  fetchRepoMentionPaths,
-} from "@/api";
+import { fetchAiAgents, fetchAiArtifact, fetchAiArtifacts, fetchAiMemories, fetchAiRules, fetchAiSkills, fetchRepoMentionPaths } from "@/api";
 import { useIntelligence, type MentionSource } from "@/lib/intelligence-context";
 
 const MAX_ARTIFACTS = 80;
@@ -44,27 +34,16 @@ export function useAgentMentionSources(agentId: string | undefined, enabled: boo
         });
       }
 
-      const [artifactsRes, skillsRes, playbooks, rulesRes, memories, agentsRes, plan] =
+      const [artifactsRes, skillsRes, rulesRes, memories, agentsRes] =
         await Promise.all([
           fetchAiArtifacts(agentId, MAX_ARTIFACTS).catch(() => ({ artifacts: [] })),
           fetchAiSkills(true, agentId).catch(() => ({ skills: [] })),
-          fetchPlaybooks().catch(() => []),
           fetchAiRules(agentId).catch(() => ({ rules: [] })),
           fetchAiMemories(undefined, agentId, "active").catch(() => []),
           fetchAiAgents().catch(() => ({ agents: [] })),
-          api<Record<string, unknown>>("/trading-plan").catch(() => null),
         ]);
 
       if (cancelled) return;
-
-      if (plan) {
-        sources.push({
-          id: "trading-plan",
-          label: "Trading plan",
-          category: "Trading",
-          resolve: () => plan,
-        });
-      }
 
       const enabledRules = rulesRes.rules.filter((r) => r.enabled && r.status !== "pending");
       if (enabledRules.length > 0) {
@@ -91,27 +70,6 @@ export function useAgentMentionSources(agentId: string | undefined, enabled: boo
               content: row.content,
             };
           },
-        });
-      }
-
-      for (const pb of playbooks) {
-        let spec: unknown = pb.spec_json;
-        try {
-          spec = JSON.parse(pb.spec_json);
-        } catch {
-          /* keep raw string */
-        }
-        sources.push({
-          id: `playbook:${pb.id}`,
-          label: trimLabel(`${pb.id} — ${pb.name}`),
-          category: "Playbooks",
-          resolve: () => ({
-            id: pb.id,
-            name: pb.name,
-            status: pb.status,
-            version: pb.version,
-            spec,
-          }),
         });
       }
 

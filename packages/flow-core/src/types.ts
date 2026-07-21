@@ -2,8 +2,7 @@
  * Shared contract for GodMode flow charts: the visual graph is canonical,
  * a derived spec is the runtime/apply input, and `apply` propagates it down.
  *
- * Sierra playbooks are the reference implementation:
- *   GraphDoc → compile → Playbook spec → codegen → deploy
+ * Example pipeline: GraphDoc → compile → domain spec → deploy
  */
 export interface GraphDiagnostic {
   level: "error" | "warn";
