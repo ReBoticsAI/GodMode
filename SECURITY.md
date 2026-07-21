@@ -1,6 +1,6 @@
 # Security Policy
 
-GodMode is a self-hosted personal OS. Treat every deployment as **trusted-operator** infrastructure unless you harden it deliberately.
+GodMode is a self-hosted Control Center. Treat every deployment as **trusted-operator** infrastructure unless you harden it deliberately.
 
 ## Supported versions
 

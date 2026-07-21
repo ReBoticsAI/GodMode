@@ -13,7 +13,7 @@ summary: "Org chart with Intelligence and Digital You at the root; Pipeline conf
 | Agent | Role |
 |-------|------|
 | **Intelligence** | Platform-wide companion |
-| **Digital You** | Persona and personal context |
+| **Digital You** | Digital twin: learns from use; can stand in when unavailable |
 | **Department agents** | Own a division or page |
 | **Custom agents** | Workflow or domain specific |
 
