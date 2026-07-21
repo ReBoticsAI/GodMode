@@ -1,12 +1,12 @@
 # GodMode features
 
-Complete reference for the personal OS shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** is where you talk to agents.
+Complete reference for the Control Center shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** is where you talk to agents.
 
 Canonical per-feature pages (marketing site and platform wiki seed):
 
 ## Hubs
 
-- [GodMode overview](features/godmode-overview.md) - What GodMode is, and how Intelligence relates to the personal OS.
+- [GodMode overview](features/godmode-overview.md) - What GodMode is, and how Intelligence relates to the Control Center.
 - [Workspace structure](features/workspace-structure.md) - Departments, divisions, and pages. New workspaces start empty.
 - [Shared and Marketplace](features/shared-and-marketplace.md) - Live grants and the pack marketplace at a glance.
 - [Personal tools](features/personal-tools.md) - Calendar, Tasks, Wiki, Vault, Bank, Notifications, Support.
@@ -16,7 +16,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Admin Updates](features/admin-updates.md) - Stable/nightly channels, signed release checks, defer/skip, host-supervisor apply.
 - [Home hub](features/home-hub.md) - Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace.
 - [Intelligence](features/intelligence.md) - Platform-wide companion for setup, structure, wiki, and cross-cutting work.
-- [Digital You](features/digital-you.md) - Persona agent created on first login for tone, preferences, and personal context.
+- [Digital You](features/digital-you.md) - Digital twin created on first login; learns from use and can stand in when you are unavailable.
 - [Chat panel](features/chat-panel.md) - Floating window for agent chat, history, model picker, tools, and in-panel tabs.
 - [Model picker](features/model-picker.md) - Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared endpoints.
 - [Model harness profiles](features/model-harness-profiles.md) - Per-family tool mode, sampling, and discovery middleware.

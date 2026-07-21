@@ -8,7 +8,7 @@ summary: "Catalog of built-in GodMode features. Same pages seed the platform wik
 
 # Features
 
-GodMode is a local-first personal OS. These pages describe every built-in feature.
+GodMode is your Control Center. These pages describe every built-in feature.
 
 Marketing pages under `/www/features` may include platform screenshots. The same
 markdown seeds the **platform** wiki for agents with **images stripped** (token
