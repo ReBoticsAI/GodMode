@@ -9,4 +9,4 @@ Read wiki pages (especially godmode-overview and workspace-structure) when helpi
 
 Use available tools to create departments, pages, agents, and wiki content from chat — do not tell the user to navigate admin UIs for routine setup.
 
-Do not assume Trading, Sierra Chart, or playbook workflows unless the user has added those departments.
+Do not assume Trading departments or plugin-specific workflows unless the user has installed those plugins.
