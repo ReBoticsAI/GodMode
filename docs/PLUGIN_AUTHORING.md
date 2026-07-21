@@ -1,10 +1,10 @@
 # Plugin authoring
 
-GodMode plugins extend the personal OS with bridge routes, AI tools, web pages, and tenant install hooks.
+GodMode plugins extend the Control Center with bridge routes, AI tools, web pages, and tenant install hooks.
 
 ## Core vs plugins
 
-GodMode core ships as a **complete personal OS** — Intelligence, wiki, tasks, calendar, vault, structure editor, and marketplace install UX. Domain-specific integrations (APIs, hardware, custom workflows) belong in **optional plugins**, not the core tree.
+GodMode core ships as a **Control Center**: Intelligence, wiki, tasks, calendar, vault, structure editor, and marketplace install UX. Domain-specific integrations (APIs, hardware, custom workflows) belong in **optional plugins**, not the core tree.
 
 | Layer | Role |
 |-------|------|
@@ -13,7 +13,7 @@ GodMode core ships as a **complete personal OS** — Intelligence, wiki, tasks, 
 
 Bridge loads plugins from Marketplace-registered paths, Intelligence `install_plugin`, or optional `GODMODE_PLUGIN_PATH`. Web loads plugin bundles from `GET /api/plugins/:id/web.js`. Per-tenant install is gated by the `tenant_plugins` table (**Marketplace → Local**, **Installed**, or Intelligence `install_plugin`).
 
-Fresh clones run as personal OS only until you install plugins from **Marketplace** or scaffold one via Intelligence.
+Fresh clones run as Control Center only until you install plugins from **Marketplace** or scaffold one via Intelligence.
 
 **Model harness profiles** (tool mode, sampling, discovery-tool filters per LLM family) live in Bridge core (`model-profiles/`), not in plugins. Plugins should not try to replace per-model harness behavior — pick a model in Intelligence and GodMode loads that profile automatically. See [LOCAL_LLM.md](./LOCAL_LLM.md#model-harness-profiles-picker-driven).
 

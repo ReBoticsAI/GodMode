@@ -1,6 +1,6 @@
 # Architecture
 
-GodMode is a **local-first personal OS**: a React dashboard talks to a Node.js Bridge, which owns SQLite databases and orchestrates Intelligence, structure, agents, and optional plugins.
+GodMode is a **Control Center**: a React dashboard talks to a Node.js Bridge, which owns the data stores and orchestrates Intelligence, structure, agents, and optional plugins.
 
 ## Layer overview
 

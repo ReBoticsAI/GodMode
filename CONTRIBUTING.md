@@ -12,7 +12,7 @@ npm run dev
 - Web: http://localhost:5173
 - Bridge: http://localhost:3847
 
-Fresh clone = **personal OS only** (Intelligence, wiki, tasks, structure). Copy `apps/bridge/.env.example` → `.env` before `npm run dev`. Domain integrations ship as optional external plugin repos — see [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
+Fresh clone = **Control Center only** (Intelligence, wiki, tasks, structure). Copy `apps/bridge/.env.example` → `.env` before `npm run dev`. Domain integrations ship as optional external plugin repos; see [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
 ## Development mode
 
@@ -79,23 +79,17 @@ offsite object storage for backups.
 
 ## What we are looking for
 
-Roadmap themes live as **GitHub Issues** (enhancements and follow-ups). See
-[Issues](https://github.com/ReBoticsAI/GodMode/issues) for the exact work we
-want help on or plan to build next. Shipped behavior:
-[CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES.md](docs/FEATURES.md).
+Roadmap lives on the [GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1) Project (issues labeled `core`, `on-the-fence`, `plugin-backlog`). Shipped behavior: [CHANGELOG.md](CHANGELOG.md) and [docs/FEATURES.md](docs/FEATURES.md).
+
+Core vs plugin doctrine: [docs/CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md).
 
 **Contribution shape (how we think about new work):**
 
-- Prefer **first-party** personal-OS depth over bolting on SaaS APM or similar
-  (see Platform principles above).
-- Domain-specific bank/exchange, calendar/mail sync, and knowledge connectors
-  belong in **plugins**, not hard core dependencies.
-- **Desktop download** (Electron + local Bridge) and **Hub PWA** (homescreen
-  client of the hosted hub) are complementary install paths — do not collapse
-  them into one product. Desktop installers already ship; PWA and other themes
-  are tracked in Issues.
-- Open an issue or draft PR if you are unsure whether work belongs in core vs a
-  plugin.
+- Prefer **first-party Control Center depth** over bolting on SaaS APM or similar (see Platform principles above).
+- **Owned email and domains** are Core. External calendar/mail/knowledge **sync** connectors (Gmail, Outlook, Notion, and similar) belong in **plugins**.
+- Domain-specific trading, exchange OAuth for funded agents, and vendor hardware packs belong in **plugins**, not hard core dependencies.
+- **Desktop download** (Electron + local Bridge) and **Hub PWA** (homescreen client of the hosted hub) are complementary install paths; do not collapse them into one product. Desktop installers already ship; PWA and other themes are tracked on the Roadmap.
+- Open an issue or draft PR if you are unsure whether work belongs in core vs a plugin.
 
 ## Security
 

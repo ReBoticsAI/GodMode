@@ -92,7 +92,7 @@ export default function Home() {
     <Page>
       <PageHeader
         title={`Welcome, ${name}`}
-        description="Your personal operating system — organize life, work, and automations in one place."
+        description="Your Control Center: create, edit, organize, and monitor everything in one place."
         actions={
           unread > 0 ? (
             <Button variant="outline" size="sm" render={<Link to={NOTIFICATIONS_PATH} />}>
@@ -114,12 +114,12 @@ export default function Home() {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
               <strong className="text-foreground">{AI_NAME}</strong> is your platform
-              companion — open it from the sidebar to chat, run agents, and build
+              companion: open it from the sidebar to chat, run agents, and build
               automations.
             </p>
             <p>
               <strong className="text-foreground">Personal pages</strong> in the sidebar
-              (Calendar, Tasks, Bank, Vault) work across your whole workspace — no setup
+              (Calendar, Tasks, Bank, Vault) work across your whole workspace with no setup
               required.
             </p>
             <p>

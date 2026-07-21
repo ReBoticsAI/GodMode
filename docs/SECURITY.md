@@ -1,6 +1,6 @@
 # Security
 
-GodMode is a self-hosted personal OS with optional AI agents that can run tools, including terminal commands and file edits when enabled. Treat every deployment as **trusted-operator** infrastructure unless you harden it deliberately.
+GodMode is a self-hosted Control Center with optional AI agents that can run tools, including terminal commands and file edits when enabled. Treat every deployment as **trusted-operator** infrastructure unless you harden it deliberately.
 
 ## Authentication
 

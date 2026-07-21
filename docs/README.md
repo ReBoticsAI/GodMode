@@ -11,6 +11,7 @@ Documentation for installing, using, and extending GodMode.
 | [LOCAL_LLM.md](LOCAL_LLM.md) | llama.cpp / Gemma 4 reference profile and Docker attach |
 | [CURSOR_SUBSCRIPTION.md](CURSOR_SUBSCRIPTION.md) | Cursor Auto / named models for Intelligence (`cursor_cloud`) |
 | [FEATURES.md](FEATURES.md) | Full feature catalog by route and tab |
+| [CORE_VS_PLUGINS.md](CORE_VS_PLUGINS.md) | Test for Core vs plugin vs on-the-fence; Roadmap Project link |
 
 ## Use GodMode
 
@@ -38,6 +39,7 @@ Documentation for installing, using, and extending GodMode.
 
 ## Project
 
-- [../CONTRIBUTING.md](../CONTRIBUTING.md) — development, PRs, and roadmap themes
-- [../CHANGELOG.md](../CHANGELOG.md) — release history
-- [../SECURITY.md](../SECURITY.md) — vulnerability reporting
+- [../CONTRIBUTING.md](../CONTRIBUTING.md): development, PRs, and roadmap themes
+- [GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1): Core completeness and related issues
+- [../CHANGELOG.md](../CHANGELOG.md): release history
+- [../SECURITY.md](../SECURITY.md): vulnerability reporting

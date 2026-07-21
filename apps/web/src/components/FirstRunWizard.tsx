@@ -96,8 +96,8 @@ export function FirstRunWizard({ open, onFinished }: Props) {
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              GodMode is your local personal OS: structure, agents, wiki, tasks, and automations
-              in one workspace.
+              GodMode is your Control Center: create, edit, organize, and monitor your work
+              with structure, agents, wiki, tasks, and automations in one place.
             </p>
             <DialogFooter>
               <Button onClick={() => setStep(1)}>Continue</Button>

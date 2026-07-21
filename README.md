@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
-**Local-first personal OS** with built-in Intelligence, multi-agent org chart, wiki, tasks, calendar, vault, and automations. Run it on your PC  -  your data stays in SQLite on your machine.
+**Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Open source. Local-first. Self-host or use Cloud for convenience. Extend through Marketplace. Share live resources with your team. Built to be the last platform stack you need.
 
 ![GodMode home hub](docs/assets/readme/hero-home.png)
 
@@ -14,18 +14,22 @@
 
 | Name | Meaning |
 |------|---------|
-| **Intelligence** | The built-in platform agent  -  your guide to GodMode itself |
+| **Intelligence** | The built-in platform agent: your guide to GodMode itself |
 | **Chat panel** | The sidebar floating window where you talk to agents (not the agent's name) |
-| **Digital You** | Your persona agent, created on first login |
+| **Digital You** | Your digital twin: learns from how you use the platform; can stand in when you are unavailable |
 | **Agents → Pipeline** | Where you configure models, tools, rules, and profiles |
 
 ## Why GodMode?
 
-Chat-only assistants forget context between sessions. GodMode gives you a **persistent workspace** — departments, pages, agents, memory, and tools — that Intelligence can read, write, and extend over time.
+GodMode is the Control Center where you **create, edit, organize, and monitor** work across knowledge and wiki, tasks and project management, contacts and relationships, accounting, and the day-to-day surfaces (calendar, vault, notifications, Home), with an org of agents and humans in one place. Niche domains ship as plugins; Marketplace is how you install them.
 
-Unlike a single chat thread, GodMode is a **self-hosted personal OS**: structure tree, org chart of agents, built-in wiki, tasks, calendar, vault, and marketplace plugins — in one local SQLite stack.
+**Intelligence** reads, writes, and extends the workspace. **Digital You** is your twin that compounds from use. Open source and local-first by default; Cloud and Marketplace when you want convenience; Shared when your team needs live resources together.
 
-See the [feature catalog](docs/FEATURES.md) for the full list.
+See [CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md) and the [feature catalog](docs/FEATURES.md).
+
+## Roadmap
+
+Usable now. Core still grows toward the full Control Center (owned email and domains, accounting depth, robot/IoT actors, owned inference and training, and more). Track it on the [GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1).
 
 ## Features (overview)
 
@@ -33,7 +37,7 @@ See the [feature catalog](docs/FEATURES.md) for the full list.
 
 - **Home** (`/home`)  -  dashboard and quick links
 - **Intelligence**  -  platform companion; setup, structure, cross-cutting work
-- **Digital You**  -  persona agent for tone and personal context
+- **Digital You**  -  digital twin; learns from use and can stand in when you are unavailable
 - **Chat panel**  -  talk to any agent; history, tools, model picker
 - **Agents** (`/agents`)  -  org chart and Pipeline configuration
 
@@ -96,7 +100,7 @@ flowchart LR
 
 ### Agent organization
 
-**Intelligence** is the platform root agent; department subagents report to it. **Digital You** is your separate persona agent (tone and personal context) — also a root in the database (`parent_id` is null), shown beside Intelligence in the org chart with no parent/child link between them.
+**Intelligence** is the platform root agent; department subagents report to it. **Digital You** is your digital twin (separate root in the database; `parent_id` is null), shown beside Intelligence in the org chart with no parent/child link between them.
 
 ```mermaid
 flowchart TB
@@ -123,7 +127,7 @@ flowchart LR
   Plugin -->|registers ObjectTypes actions routes tools UI| Core
 ```
 
-Core ships as a complete personal OS. Plugins add domain packs without forking
+Core ships the Control Center. Plugins add domain packs without forking
 the platform. Plugin ObjectTypes are discoverable only for tenants where the
 plugin is installed. See
 [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
