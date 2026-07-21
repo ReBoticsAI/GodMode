@@ -14,6 +14,22 @@ assert.deepEqual(
 );
 assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 
+const tradingTables = db
+  .prepare(
+    `SELECT name FROM sqlite_master WHERE type='table'
+     AND (
+       name GLOB 'sc_*'
+       OR name IN ('playbooks', 'backtest_runs', 'backtest_sweeps', 'backtest_trades', 'pm_signals')
+     )
+     ORDER BY name`
+  )
+  .all() as Array<{ name: string }>;
+assert.deepEqual(
+  tradingTables,
+  [],
+  "vanilla OSS tenant boot must not create trading plugin tables"
+);
+
 const firstSchemaCount = (
   db
     .prepare(

@@ -99,10 +99,6 @@ function largestTables(db: AppDatabase): Array<{ name: string; bytes: number; ro
     // dbstat unavailable — fall back to row counts only for known large tables
     const tables = [
       "ai_messages",
-      "sc_timesales",
-      "sc_bars",
-      "pm_signals",
-      "pm_price_history",
       "events",
       "platform_action_log",
     ];
@@ -184,7 +180,7 @@ export function getStorageUsage(db: AppDatabase): StorageUsageReport {
   const ipcDir = config.ipcDir;
   entries.push({
     id: "ipc",
-    label: "Sierra IPC files",
+    label: "Trading IPC files",
     path: ipcDir,
     bytes: dirSize(ipcDir),
     kind: "dir",
