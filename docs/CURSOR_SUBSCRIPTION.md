@@ -40,7 +40,7 @@ Changing the picker model updates `send({ model, mode })` on an existing in-memo
 
 GodMode identity stays in `<!-- godmode-system -->` injection: `@cursor/sdk` `AgentOptions` has no system/instructions field for the main agent, so injection remains the highest-fidelity channel (decision: keep injection; do not wait for a native system API). Project rules continue via `settingSources: ["project"]` when `.cursor/` exists (not a Knowledge mirror). Never enables `user` / `team` / `all` setting sources on Bridge/SaaS.
 
-For **local / provider** backends (not `cursor_cloud`), Bridge also imports the coding root's `.cursor/rules/**/*.mdc` and `.cursor/skills/*/SKILL.md` into the tenant Knowledge DB (ids prefixed `cursor-ws-…`, source `__cursor_workspace__`) so Gemma and other local chats see the same repo rules. `cursor_cloud` skips that import to avoid double-injecting rules already loaded by the SDK.
+For **local / provider** backends (not `cursor_cloud`), Bridge also imports the coding root's `AGENTS.md`, optional `.cursor/AGENTS.md`, `.cursor/rules/**/*.mdc`, and `.cursor/skills/*/SKILL.md` into the tenant Knowledge DB (ids prefixed `cursor-ws-…`, source `__cursor_workspace__`) so Gemma and other local chats see the same repo instructions. `cursor_cloud` skips that import to avoid double-injecting rules already loaded by the SDK.
 
 When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a `.cursor/` directory, `Agent.create` / `resume` sets `local.settingSources: ["project"]` so Cursor **project** rules load from disk.
 

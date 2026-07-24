@@ -268,13 +268,13 @@ With tool autonomy off (or writes requiring confirm):
 3. Deny leaves the file unchanged; Approve applies and still shows the post-apply diff in the tool result.
 4. For `.ts` / `.tsx` writes, the tool result should also show a **Diagnostics** block (or skip when no tsconfig).
 
-## Local backend `.cursor/` knowledge (#71)
+## Local backend workspace knowledge (#71)
 
-With a local (non-`cursor_cloud`) Intelligence agent and a coding root that contains `.cursor/rules/*.mdc`:
+With a local (non-`cursor_cloud`) Intelligence agent and a coding root that contains `AGENTS.md` and/or `.cursor/rules/*.mdc`:
 
 1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
-2. Assembled system prompt / rules section should include the imported workspace rule bodies (ids like `cursor-ws-…`).
-3. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project rules).
+2. Assembled system prompt / rules section should include the imported workspace bodies (ids like `cursor-ws-agents-md`, `cursor-ws-…`).
+3. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions).
 
 ---
 
