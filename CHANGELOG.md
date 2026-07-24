@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Workspace AGENTS.md Knowledge import (#71)** - local/provider backends
+  also sync coding-root `AGENTS.md` and `.cursor/AGENTS.md` into Knowledge
+  (`cursor-ws-agents-md` / `cursor-ws-dot-cursor-agents-md`); fingerprint
+  covers AGENTS even when `.cursor/` is absent
 - **Workspace `.cursor/` Knowledge import (#71)** - local/provider backends
   sync coding-root `.cursor/rules` and `.cursor/skills` into Knowledge
   (`cursor-ws-…` ids); `cursor_cloud` skips import (SDK settingSources)
