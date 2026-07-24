@@ -542,10 +542,17 @@ export function removePluginKnowledge(db: AppDatabase, pluginId: string): void {
   db.prepare(`DELETE FROM ai_skills WHERE source_plugin_id = ?`).run(pluginId);
 }
 
-/** Sentinel `source_plugin_id` for repo `.cursor/rules` + `.cursor/skills` imports. */
+/**
+ * Sentinel `source_plugin_id` for repo AGENTS.md + `.cursor/rules` +
+ * `.cursor/skills` imports.
+ */
 export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
 
 const cursorWorkspaceSyncFp = new Map<string, string>();
+
+/** Stable Knowledge ids for AGENTS.md surfaces (Cursor workspace instructions). */
+export const CURSOR_WS_AGENTS_MD_ID = "cursor-ws-agents-md";
+export const CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID = "cursor-ws-dot-cursor-agents-md";
 
 function walkMdcFiles(dir: string, base = dir): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -574,29 +581,41 @@ function cursorRuleIdFromPath(rulesRoot: string, filePath: string): string {
   return `cursor-ws-${slug || "rule"}`;
 }
 
-function fingerprintCursorWorkspace(cursorDir: string): string {
-  if (!fs.existsSync(cursorDir) || !fs.statSync(cursorDir).isDirectory()) {
-    return "";
-  }
-  const parts: string[] = [];
-  const rulesDir = path.join(cursorDir, "rules");
-  for (const file of walkMdcFiles(rulesDir)) {
-    try {
-      parts.push(`${file}:${fs.statSync(file).mtimeMs}`);
-    } catch {
-      /* ignore */
+function pushMtimePart(parts: string[], filePath: string): void {
+  try {
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      parts.push(`${filePath}:${fs.statSync(filePath).mtimeMs}`);
     }
+  } catch {
+    /* ignore */
   }
-  const skillsDir = path.join(cursorDir, "skills");
-  if (fs.existsSync(skillsDir)) {
-    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue;
-      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) continue;
+}
+
+function fingerprintCursorWorkspace(codingRoot: string): string {
+  const parts: string[] = [];
+  pushMtimePart(parts, path.join(codingRoot, "AGENTS.md"));
+  const cursorDir = path.join(codingRoot, ".cursor");
+  pushMtimePart(parts, path.join(cursorDir, "AGENTS.md"));
+  if (fs.existsSync(cursorDir) && fs.statSync(cursorDir).isDirectory()) {
+    const rulesDir = path.join(cursorDir, "rules");
+    for (const file of walkMdcFiles(rulesDir)) {
       try {
-        parts.push(`${skillPath}:${fs.statSync(skillPath).mtimeMs}`);
+        parts.push(`${file}:${fs.statSync(file).mtimeMs}`);
       } catch {
         /* ignore */
+      }
+    }
+    const skillsDir = path.join(cursorDir, "skills");
+    if (fs.existsSync(skillsDir)) {
+      for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+        if (!fs.existsSync(skillPath)) continue;
+        try {
+          parts.push(`${skillPath}:${fs.statSync(skillPath).mtimeMs}`);
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
@@ -604,11 +623,56 @@ function fingerprintCursorWorkspace(cursorDir: string): string {
   return parts.join("|");
 }
 
+function upsertWorkspaceRule(
+  db: AppDatabase,
+  id: string,
+  description: string,
+  body: string,
+  alwaysApply: boolean,
+  globs: string[],
+  departments: string[],
+  priority: number
+): void {
+  db.prepare(
+    `INSERT INTO ai_rules
+     (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       description=excluded.description, body=excluded.body, always_apply=excluded.always_apply,
+       globs_json=excluded.globs_json, departments_json=excluded.departments_json,
+       priority=excluded.priority, source_plugin_id=excluded.source_plugin_id,
+       version=ai_rules.version+1, updated_at=datetime('now')`
+  ).run(
+    id,
+    description,
+    body,
+    alwaysApply ? 1 : 0,
+    JSON.stringify(globs),
+    JSON.stringify(departments),
+    priority,
+    CURSOR_WORKSPACE_SOURCE
+  );
+}
+
+function importAgentsMdFile(
+  db: AppDatabase,
+  filePath: string,
+  id: string,
+  description: string
+): boolean {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
+  const body = fs.readFileSync(filePath, "utf8").trim();
+  if (!body) return false;
+  upsertWorkspaceRule(db, id, description, body, true, [], [], 45);
+  return true;
+}
+
 /**
- * Import coding-root .cursor rules (mdc files, recursive) and skill SKILL.md
- * folders into the tenant knowledge DB for local/provider backends. IDs are
- * prefixed to avoid colliding with GodMode core rules. Skipped for
- * cursor_cloud agents (SDK settingSources loads project rules instead).
+ * Import coding-root AGENTS.md, .cursor rules (mdc files, recursive), and
+ * skill SKILL.md folders into the tenant knowledge DB for local/provider
+ * backends. IDs are prefixed to avoid colliding with GodMode core rules.
+ * Skipped for cursor_cloud agents (SDK settingSources loads project
+ * instructions instead).
  */
 export function importCursorWorkspaceKnowledge(
   db: AppDatabase,
@@ -619,28 +683,40 @@ export function importCursorWorkspaceKnowledge(
   let rules = 0;
   let skills = 0;
 
+  if (
+    importAgentsMdFile(
+      db,
+      path.join(root, "AGENTS.md"),
+      CURSOR_WS_AGENTS_MD_ID,
+      "Workspace AGENTS.md"
+    )
+  ) {
+    rules++;
+  }
+  if (
+    importAgentsMdFile(
+      db,
+      path.join(cursorDir, "AGENTS.md"),
+      CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID,
+      "Workspace .cursor/AGENTS.md"
+    )
+  ) {
+    rules++;
+  }
+
   const rulesDir = path.join(cursorDir, "rules");
   for (const file of walkMdcFiles(rulesDir)) {
     const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
     const id = cursorRuleIdFromPath(rulesDir, file);
-    db.prepare(
-      `INSERT INTO ai_rules
-       (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, updated_at)
-       VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
-       ON CONFLICT(id) DO UPDATE SET
-         description=excluded.description, body=excluded.body, always_apply=excluded.always_apply,
-         globs_json=excluded.globs_json, departments_json=excluded.departments_json,
-         priority=excluded.priority, source_plugin_id=excluded.source_plugin_id,
-         version=ai_rules.version+1, updated_at=datetime('now')`
-    ).run(
+    upsertWorkspaceRule(
+      db,
       id,
       parsed.description,
       parsed.body,
-      parsed.alwaysApply ? 1 : 0,
-      JSON.stringify(parsed.globs),
-      JSON.stringify(parsed.departments),
-      parsed.priority,
-      CURSOR_WORKSPACE_SOURCE
+      parsed.alwaysApply,
+      parsed.globs,
+      parsed.departments,
+      parsed.priority
     );
     rules++;
   }
@@ -679,7 +755,7 @@ export function importCursorWorkspaceKnowledge(
 }
 
 /**
- * Refresh workspace Cursor knowledge when `.cursor/` mtimes change.
+ * Refresh workspace Cursor knowledge when AGENTS.md / `.cursor/` mtimes change.
  * No-op when fingerprint matches the last sync for this db+root.
  */
 export function syncCursorWorkspaceKnowledge(
@@ -687,9 +763,8 @@ export function syncCursorWorkspaceKnowledge(
   codingRoot: string
 ): { rules: number; skills: number; synced: boolean } {
   const root = path.resolve(codingRoot);
-  const cursorDir = path.join(root, ".cursor");
   const key = `${root}`;
-  const fp = fingerprintCursorWorkspace(cursorDir);
+  const fp = fingerprintCursorWorkspace(root);
   if (cursorWorkspaceSyncFp.get(key) === fp) {
     return { rules: 0, skills: 0, synced: false };
   }

@@ -1,5 +1,5 @@
 /**
- * Workspace .cursor/ Knowledge import for local backends (#71 slice 9).
+ * Workspace AGENTS.md + .cursor/ Knowledge import for local backends (#71).
  */
 import Database from "better-sqlite3";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AppDatabase } from "../../db.js";
 import {
   CURSOR_WORKSPACE_SOURCE,
+  CURSOR_WS_AGENTS_MD_ID,
+  CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID,
   clearCursorWorkspaceSyncCacheForTests,
   importCursorWorkspaceKnowledge,
   syncCursorWorkspaceKnowledge,
@@ -124,6 +126,70 @@ describe("importCursorWorkspaceKnowledge", () => {
       .prepare(`SELECT id, name FROM ai_skills WHERE source_plugin_id = ?`)
       .all(CURSOR_WORKSPACE_SOURCE) as Array<{ id: string; name: string }>;
     expect(skills).toEqual([{ id: "cursor-ws-skill-demo-skill", name: "Demo" }]);
+  });
+
+  it("imports root and .cursor AGENTS.md as always-apply rules", () => {
+    const root = tempRoot();
+    writeFileSync(join(root, "AGENTS.md"), "Prefer small PRs.\n", "utf8");
+    mkdirSync(join(root, ".cursor"), { recursive: true });
+    writeFileSync(
+      join(root, ".cursor", "AGENTS.md"),
+      "Use workspace tools carefully.\n",
+      "utf8"
+    );
+
+    const db = openDb();
+    const result = importCursorWorkspaceKnowledge(db, root);
+    expect(result.rules).toBe(2);
+    expect(result.skills).toBe(0);
+
+    const rules = db
+      .prepare(
+        `SELECT id, description, body, always_apply FROM ai_rules WHERE source_plugin_id = ? ORDER BY id`
+      )
+      .all(CURSOR_WORKSPACE_SOURCE) as Array<{
+      id: string;
+      description: string;
+      body: string;
+      always_apply: number;
+    }>;
+    expect(rules.map((r) => r.id)).toEqual([
+      CURSOR_WS_AGENTS_MD_ID,
+      CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID,
+    ]);
+    expect(rules.every((r) => r.always_apply === 1)).toBe(true);
+    expect(rules[0]!.body).toContain("Prefer small PRs");
+    expect(rules[1]!.body).toContain("Use workspace tools carefully");
+  });
+
+  it("syncs when only root AGENTS.md exists (no .cursor)", () => {
+    const root = tempRoot();
+    writeFileSync(join(root, "AGENTS.md"), "Agents instructions.\n", "utf8");
+    const db = openDb();
+    const first = syncCursorWorkspaceKnowledge(db, root);
+    expect(first.synced).toBe(true);
+    expect(first.rules).toBe(1);
+    expect(
+      (
+        db
+          .prepare(`SELECT id FROM ai_rules WHERE id = ?`)
+          .get(CURSOR_WS_AGENTS_MD_ID) as { id: string } | undefined
+      )?.id
+    ).toBe(CURSOR_WS_AGENTS_MD_ID);
+
+    const second = syncCursorWorkspaceKnowledge(db, root);
+    expect(second.synced).toBe(false);
+
+    writeFileSync(join(root, "AGENTS.md"), "Updated agents instructions.\n", "utf8");
+    const third = syncCursorWorkspaceKnowledge(db, root);
+    expect(third.synced).toBe(true);
+    expect(
+      (
+        db
+          .prepare(`SELECT body FROM ai_rules WHERE id = ?`)
+          .get(CURSOR_WS_AGENTS_MD_ID) as { body: string }
+      ).body
+    ).toContain("Updated agents");
   });
 
   it("syncs only when fingerprint changes", () => {
