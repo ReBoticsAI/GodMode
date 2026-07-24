@@ -91,7 +91,7 @@ describe("resolveCursorSdkAgent", () => {
     });
   });
 
-  it("reuses in-memory agent as continued without calling SDK again", async () => {
+  it("reuses in-memory agent when fingerprint matches", async () => {
     const resume = vi.fn(async () => fakeAgent);
     const create = vi.fn(async () => fakeAgent);
     await resolveCursorSdkAgent({
@@ -109,13 +109,44 @@ describe("resolveCursorSdkAgent", () => {
       chatKey: "godmode-c3",
       apiKey: "k",
       cwd: process.cwd(),
-      fingerprint: "fp-changed",
-      modelId: "composer-2.5",
-      mode: "plan",
+      fingerprint: "fp1",
+      modelId: "auto",
+      mode: "agent",
       sdk: { resume, create },
     });
     expect(second.continued).toBe(true);
     expect(resume).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("recreates when fingerprint changes", async () => {
+    const close = vi.fn();
+    const firstAgent = { ...fakeAgent, close };
+    const resume = vi.fn(async () => firstAgent);
+    const create = vi.fn(async () => fakeAgent);
+    await resolveCursorSdkAgent({
+      chatKey: "godmode-c4",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp1",
+      modelId: "auto",
+      mode: "agent",
+      sdk: { resume, create },
+    });
+    resume.mockClear();
+    create.mockClear();
+    resume.mockImplementation(async () => fakeAgent);
+    const second = await resolveCursorSdkAgent({
+      chatKey: "godmode-c4",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp-changed",
+      modelId: "composer-2.5",
+      mode: "plan",
+      sdk: { resume, create },
+    });
+    expect(close).toHaveBeenCalled();
+    expect(resume).toHaveBeenCalledOnce();
+    expect(second.continued).toBe(true);
   });
 });

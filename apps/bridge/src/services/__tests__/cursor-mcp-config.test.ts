@@ -1,5 +1,5 @@
 /**
- * Read-only `.cursor/mcp.json` discovery for platform context (#71).
+ * Read-only `.cursor/mcp.json` discovery + SDK pass-through helpers (#71).
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,8 +8,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import type { AppDatabase } from "../../db.js";
 import {
+  MAX_SDK_MCP_SERVERS,
   collectCursorMcpDiscovery,
+  cursorMcpServersFingerprint,
   enrichPlatformContextWithMcp,
+  loadCursorMcpServersForSdk,
+  resolveMcpDiscoveryExecution,
+  resolveMcpFromWorkspace,
 } from "../coding/cursor-mcp-config.js";
 import {
   assemblePrompt,
@@ -85,6 +90,15 @@ describe("collectCursorMcpDiscovery", () => {
     expect(JSON.stringify(disc)).not.toContain("secret-token");
   });
 
+  it("labels sdk-inline execution in the summary", () => {
+    const root = tempRoot();
+    writeMcpJson(root, {
+      mcpServers: { demo: { command: "node", args: ["s.js"] } },
+    });
+    const disc = collectCursorMcpDiscovery(root, { execution: "sdk-inline" });
+    expect(disc?.summary).toContain("passed to Cursor SDK");
+  });
+
   it("infers stdio from command when type is omitted", () => {
     const root = tempRoot();
     writeMcpJson(root, {
@@ -96,6 +110,94 @@ describe("collectCursorMcpDiscovery", () => {
     expect(disc?.servers).toEqual([
       { name: "time", transport: "stdio", detail: "cmd:python" },
     ]);
+  });
+});
+
+describe("loadCursorMcpServersForSdk", () => {
+  it("maps stdio and http entries for the SDK", () => {
+    const root = tempRoot();
+    writeMcpJson(root, {
+      mcpServers: {
+        github: {
+          command: "npx",
+          args: ["-y", "pkg"],
+          env: { TOKEN: "secret" },
+        },
+        docs: { type: "http", url: "https://mcp.example.com/sse" },
+      },
+    });
+    const servers = loadCursorMcpServersForSdk(root);
+    expect(servers).toEqual({
+      docs: { type: "http", url: "https://mcp.example.com/sse" },
+      github: {
+        type: "stdio",
+        command: "npx",
+        args: ["-y", "pkg"],
+        env: { TOKEN: "secret" },
+      },
+    });
+  });
+
+  it("caps server count", () => {
+    const root = tempRoot();
+    const mcpServers: Record<string, { command: string }> = {};
+    for (let i = 0; i < MAX_SDK_MCP_SERVERS + 3; i++) {
+      mcpServers[`s${String(i).padStart(2, "0")}`] = { command: "node" };
+    }
+    writeMcpJson(root, { mcpServers });
+    expect(Object.keys(loadCursorMcpServersForSdk(root) ?? {})).toHaveLength(
+      MAX_SDK_MCP_SERVERS
+    );
+  });
+});
+
+describe("resolveMcpFromWorkspace", () => {
+  it("defaults on for non-SaaS and off for SaaS", () => {
+    expect(resolveMcpFromWorkspace({}, { isSaas: false })).toBe(true);
+    expect(resolveMcpFromWorkspace({}, { isSaas: true })).toBe(false);
+  });
+
+  it("honors explicit boolean", () => {
+    expect(
+      resolveMcpFromWorkspace({ mcpFromWorkspace: true }, { isSaas: true })
+    ).toBe(true);
+    expect(
+      resolveMcpFromWorkspace({ mcpFromWorkspace: false }, { isSaas: false })
+    ).toBe(false);
+  });
+});
+
+describe("resolveMcpDiscoveryExecution", () => {
+  it("picks sdk labels for cursor_cloud", () => {
+    expect(
+      resolveMcpDiscoveryExecution({
+        backend: "cursor_cloud",
+        mcpFromWorkspace: true,
+      })
+    ).toBe("sdk-inline");
+    expect(
+      resolveMcpDiscoveryExecution({
+        backend: "cursor_cloud",
+        hasProjectSettingSources: true,
+      })
+    ).toBe("sdk-project");
+    expect(resolveMcpDiscoveryExecution({ backend: "local" })).toBe(
+      "discovery-only"
+    );
+  });
+});
+
+describe("cursorMcpServersFingerprint", () => {
+  it("changes when mcp.json changes while enabled", () => {
+    const root = tempRoot();
+    writeMcpJson(root, { mcpServers: { a: { command: "node" } } });
+    const first = cursorMcpServersFingerprint(root, true);
+    writeMcpJson(root, {
+      mcpServers: { a: { command: "node" }, b: { command: "npx" } },
+    });
+    const second = cursorMcpServersFingerprint(root, true);
+    expect(first).not.toEqual(second);
+    expect(cursorMcpServersFingerprint(root, false)).toBe("");
   });
 });
 

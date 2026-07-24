@@ -283,7 +283,9 @@ With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
 1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
 2. Page Context / platform section should include an `MCP:` line listing server names and transports.
 3. Secrets in `env` / `headers` must not appear in the inspect payload or assembled prompt.
-4. Chat still works if `mcp.json` is missing or invalid (soft-fail). Bridge does not execute those MCP servers from discovery alone.
+4. Chat still works if `mcp.json` is missing or invalid (soft-fail).
+5. On `cursor_cloud` (non-SaaS default): the line should note SDK availability (`project settings` and/or `passed to Cursor SDK`). Local backends stay `discovery only`.
+6. On SaaS, inline `mcpServers` stay off unless `agent.config.mcpFromWorkspace: true`.
 
 ---
 
