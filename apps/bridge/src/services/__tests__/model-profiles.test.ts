@@ -162,7 +162,7 @@ assert.equal(formatCursorModelLabel("x", "Nice Name"), "Nice Name");
 
 assert.equal(
   cursorCloudCacheFingerprint("auto", "abc", ""),
-  "auto||abc|"
+  "auto||abc||agent"
 );
 assert.notEqual(
   cursorCloudCacheFingerprint("auto", "sys1"),
