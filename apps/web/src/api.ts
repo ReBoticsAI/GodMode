@@ -945,6 +945,8 @@ export interface AiStreamHandlers {
     toolCallId: string;
     name: string;
     args: Record<string, unknown>;
+    previewDiff?: string;
+    previewError?: string;
   }) => void;
   onTerminalOutput?: (payload: {
     toolCallId: string;
@@ -1058,6 +1060,14 @@ export function streamAiChat(
                 toolCallId: parsed.toolCallId as string,
                 name: parsed.name as string,
                 args: (parsed.args as Record<string, unknown>) ?? {},
+                previewDiff:
+                  typeof parsed.previewDiff === "string"
+                    ? parsed.previewDiff
+                    : undefined,
+                previewError:
+                  typeof parsed.previewError === "string"
+                    ? parsed.previewError
+                    : undefined,
               });
               break;
             case "terminal_output":
