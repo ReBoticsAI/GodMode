@@ -87,7 +87,7 @@ import {
 } from "./coding/fs-tools.js";
 import { runTerminal } from "./coding/terminal-service.js";
 import { codebaseSearch } from "./coding/codebase-search.js";
-import { readDiagnostics } from "./coding/read-diagnostics.js";
+import { readDiagnostics, verifyTypeScriptAfterWrite } from "./coding/read-diagnostics.js";
 import { logToolAudit } from "./coding/tool-audit.js";
 import {
   createNotification,
@@ -2034,7 +2034,11 @@ export async function executeTool(
         bytesOut: res.bytes,
         result: res.created ? "created" : "updated",
       });
-      return { ...res, diff };
+      const verification = await verifyTypeScriptAfterWrite({
+        path: res.path,
+        tenantId: codingTenantId(ctx),
+      });
+      return { ...res, diff, verification };
     }
 
     case "edit_file": {
@@ -2057,7 +2061,11 @@ export async function executeTool(
         bytesOut: res.bytes,
         result: "ok",
       });
-      return { ...res, diff };
+      const verification = await verifyTypeScriptAfterWrite({
+        path: res.path,
+        tenantId: codingTenantId(ctx),
+      });
+      return { ...res, diff, verification };
     }
 
     case "delete_file": {
@@ -2120,7 +2128,11 @@ export async function executeTool(
         bytesOut: res.bytes,
         result: "ok",
       });
-      return res;
+      const verification = await verifyTypeScriptAfterWrite({
+        path: res.path,
+        tenantId: codingTenantId(ctx),
+      });
+      return { ...res, verification };
     }
 
     case "read_diagnostics":

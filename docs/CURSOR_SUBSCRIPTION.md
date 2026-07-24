@@ -72,6 +72,8 @@ Optional `agent.config.modelParams` (e.g. `{ "fast": true }`) is passed as SDK `
 
 When Intelligence asks to run `edit_file`, `write_file`, or `apply_patch` and confirmation is required, Bridge dry-runs a unified diff against the coding-root file and sends it on `tool_confirm_required` as `previewDiff` (or `previewError`). The chat confirm card shows that preview **before** Approve/Deny. Approve still runs the normal executor (disk write unchanged).
 
+After a successful TypeScript/TSX write, the tool result also includes `verification` from a bounded `tsc --noEmit` (skipped for non-TS paths or when no `tsconfig` is present). The chat tool card shows a Diagnostics block so the model sees type errors in the same turn without a separate `read_diagnostics` call.
+
 ## CLI login ≠ SDK billing key
 
 `cursor-agent login` authenticates the **CLI** (`cursor` backend / contractors). Intelligence **Cursor Cloud** requires the dashboard **User API key** in Vault (or `CURSOR_API_KEY`). CLI login alone does not enable `cursor_cloud`.

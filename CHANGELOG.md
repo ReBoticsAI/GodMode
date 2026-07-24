@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Post-apply TS diagnostics on write tools (#71)** - successful
+  `edit_file` / `write_file` / `apply_patch` on `.ts`/`.tsx` attach a
+  bounded `tsc` `verification` payload (skipped for non-TS / no tsconfig)
 - **Pre-apply write-tool diff preview (#71)** - `edit_file` / `write_file` /
   `apply_patch` confirm cards show a unified diff vs disk before Approve
   (dry-run; executor paths unchanged)

@@ -266,6 +266,7 @@ With tool autonomy off (or writes requiring confirm):
 1. Ask Intelligence to edit a small file via `edit_file` / `write_file` / `apply_patch`.
 2. Confirm card should show a **Preview diff** (unified) before Approve.
 3. Deny leaves the file unchanged; Approve applies and still shows the post-apply diff in the tool result.
+4. For `.ts` / `.tsx` writes, the tool result should also show a **Diagnostics** block (or skip when no tsconfig).
 
 ---
 
