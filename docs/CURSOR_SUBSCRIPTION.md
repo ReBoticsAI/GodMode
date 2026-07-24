@@ -36,7 +36,9 @@ Picker model id selects a Cursor family harness (see [LOCAL_LLM.md](./LOCAL_LLM.
 | `/grok/i` | `cursor-grok` |
 | other Cursor ids | `cursor` (fallback) |
 
-Changing the picker model recreates the cached SDK agent for that chat (model + system prompt fingerprint), so mid-thread switches take effect. A rolling transcript appendix is prepended for continuity: prior user/assistant text plus truncated tool calls and tool results (char-budgeted). This is not a full SDK-native conversation resume or Gemma-local history replay; it keeps multi-turn tool context after fingerprint resets.
+Changing the picker model recreates the cached SDK agent for that chat (model + system prompt + project-settings fingerprint), so mid-thread switches take effect. A rolling transcript appendix is prepended for continuity: prior user/assistant text plus truncated tool calls and tool results (char-budgeted). This is not a full SDK-native conversation resume or Gemma-local history replay; it keeps multi-turn tool context after fingerprint resets.
+
+When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a `.cursor/` directory, `Agent.create` sets `local.settingSources: ["project"]` so Cursor **project** rules load from disk. GodMode Identity still comes from `<!-- godmode-system -->` injection; this does not mirror `.cursor/rules` into Knowledge and never enables `user` / `team` / `all` setting sources (host Cursor prefs stay off on Bridge/SaaS).
 
 ## System prompt shape (Cursor parity)
 

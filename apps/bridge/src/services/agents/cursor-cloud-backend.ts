@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { AppDatabase } from "../../db.js";
 import { config } from "../../config.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
@@ -9,6 +11,9 @@ import { shouldAutoApproveTool } from "../confirm-policy.js";
 import { resolveCursorApiKey } from "../cursor-subscription.js";
 import type { IntelligenceChatMode } from "../chat-mode.js";
 import type { AgentMessage } from "../ai-agent.js";
+
+/** Only project rules; never user/team/mdm/all (Bridge/SaaS isolation). */
+export type CursorProjectSettingSource = "project";
 
 type SdkAgent = Awaited<
   ReturnType<(typeof import("@cursor/sdk"))["Agent"]["create"]>
@@ -169,12 +174,51 @@ export function cursorModelParamsHash(
     .slice(0, 12);
 }
 
+/**
+ * Load Cursor project settings (`.cursor/rules`, etc.) when the coding root is
+ * a Cursor workspace. Never enables user/team/host Cursor settings.
+ */
+export function resolveCursorSettingSources(
+  cwd: string
+): CursorProjectSettingSource[] {
+  const cursorDir = join(cwd, ".cursor");
+  try {
+    if (existsSync(cursorDir) && statSync(cursorDir).isDirectory()) {
+      return ["project"];
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+/** Fingerprint token for settingSources so cache recreates when the gate flips. */
+export function cursorSettingSourcesFingerprint(
+  sources: readonly string[]
+): string {
+  return sources.includes("project") ? "project" : "";
+}
+
 export function cursorCloudCacheFingerprint(
   modelId: string,
   sysHash: string,
-  paramsHash = ""
+  paramsHash = "",
+  settingSourcesKey = ""
 ): string {
-  return `${modelId}|${paramsHash}|${sysHash}`;
+  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}`;
+}
+
+/** Local Agent.create options derived from coding root (exported for tests). */
+export function buildCursorLocalCreateOptions(cwd: string): {
+  cwd: string;
+  sandboxOptions: { enabled: false };
+  settingSources: CursorProjectSettingSource[];
+} {
+  return {
+    cwd,
+    sandboxOptions: { enabled: false },
+    settingSources: resolveCursorSettingSources(cwd),
+  };
 }
 
 function buildCustomTools(
@@ -254,10 +298,7 @@ async function getOrCreateChatAgent(
     apiKey,
     agentId: chatKey,
     model: { id: modelId },
-    local: {
-      cwd,
-      sandboxOptions: { enabled: false },
-    },
+    local: buildCursorLocalCreateOptions(cwd),
   });
   chatAgents.set(chatKey, { agent, cacheFingerprint: fingerprint });
   return agent;
@@ -293,10 +334,12 @@ export class CursorCloudBackend implements AgentBackend {
     const paramsHash = cursorModelParamsHash(
       cfg.modelParams as Record<string, unknown> | undefined
     );
+    const settingSources = resolveCursorSettingSources(cwd);
     const fingerprint = cursorCloudCacheFingerprint(
       modelId,
       systemHash(sys),
-      paramsHash
+      paramsHash,
+      cursorSettingSourcesFingerprint(settingSources)
     );
 
     const sdkAgent = await getOrCreateChatAgent(
