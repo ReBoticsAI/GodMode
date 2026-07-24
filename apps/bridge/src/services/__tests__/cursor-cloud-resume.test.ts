@@ -147,6 +147,6 @@ describe("resolveCursorSdkAgent", () => {
     });
     expect(close).toHaveBeenCalled();
     expect(resume).toHaveBeenCalledOnce();
-    expect(second.continued).toBe(true);
+    expect(second.continued).toBe(false);
   });
 });

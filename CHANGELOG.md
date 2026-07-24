@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Compaction scratchpad + dynamic reminders (#71)** - dropped chat turns
+  inject a brief `<godmode_compaction>` summary into the system prompt;
+  `cursor_cloud` adds per-turn mode/workspace/abort reminders; structural
+  SDK fingerprint changes force the transcript appendix again
 - **cursor_cloud MCP pass-through (#71)** - opt-in/default-on (non-SaaS)
   inline `mcpServers` from coding-root `.cursor/mcp.json` on create/resume/send;
   SaaS defaults off; Page Context MCP line notes SDK vs discovery-only
