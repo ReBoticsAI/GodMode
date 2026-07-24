@@ -226,11 +226,11 @@ describe("enrichPlatformContextWithMcp", () => {
 });
 
 describe("prompt-assembler MCP line", () => {
-  it("renders MCP: summary in the platform section", () => {
+  it("renders MCP in the dedicated mcp section", () => {
     const db = new Database(":memory:") as unknown as AppDatabase;
     const flow = getDefaultPromptFlowConfig();
     for (const sec of flow.sections) {
-      sec.enabled = sec.id === "platform" || sec.id === "base";
+      sec.enabled = sec.id === "platform" || sec.id === "base" || sec.id === "mcp";
     }
     const assembled = assemblePrompt(db, {
       basePrompt: "You are a test agent.",
@@ -246,8 +246,9 @@ describe("prompt-assembler MCP line", () => {
       },
       agentId: "intelligence",
     });
+    expect(assembled.systemPrompt).toContain("<godmode_mcp>");
     expect(assembled.systemPrompt).toContain(
-      "MCP: github (stdio) cmd:npx | discovery only (not executed by Bridge)"
+      "github (stdio) cmd:npx | discovery only (not executed by Bridge)"
     );
     expect(assembled.systemPrompt).toContain("Route: /intelligence");
   });

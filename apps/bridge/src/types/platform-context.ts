@@ -20,6 +20,13 @@ export interface McpWorkspaceDiscovery {
   sourcePath?: string;
 }
 
+/** Read-only summary of coding-root `.cursor/hooks.json`. */
+export interface HooksWorkspaceDiscovery {
+  events: string[];
+  summary: string;
+  sourcePath?: string;
+}
+
 export interface PlatformContext {
   breadcrumb?: string[];
   pathname?: string;
@@ -31,4 +38,6 @@ export interface PlatformContext {
   gitSnapshot?: GitWorkspaceSnapshot;
   /** Compact coding-root MCP config discovery (server-enriched; not executed). */
   mcpDiscovery?: McpWorkspaceDiscovery;
+  /** Compact coding-root `.cursor/hooks.json` discovery (read-only). */
+  hooksDiscovery?: HooksWorkspaceDiscovery;
 }

@@ -281,11 +281,16 @@ With a local (non-`cursor_cloud`) Intelligence agent and a coding root that cont
 With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
 
 1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
-2. Page Context / platform section should include an `MCP:` line listing server names and transports.
+2. Assembled prompt should include a `<godmode_mcp>` section listing server names and transports.
 3. Secrets in `env` / `headers` must not appear in the inspect payload or assembled prompt.
 4. Chat still works if `mcp.json` is missing or invalid (soft-fail).
-5. On `cursor_cloud` (non-SaaS default): the line should note SDK availability (`project settings` and/or `passed to Cursor SDK`). Local backends stay `discovery only`.
-6. On SaaS, inline `mcpServers` stay off unless `agent.config.mcpFromWorkspace: true`.
+5. On `cursor_cloud` (non-SaaS default): the MCP summary should note SDK availability. Local backends stay `discovery only`.
+6. On SaaS, inline `mcpServers` stay off unless `agent.config.mcpFromWorkspace: true` (AI Settings → Backend toggle).
+7. Optional: with `.cursor/hooks.json`, Page Context includes a `Hooks:` discovery line (not executed).
+
+## Blind eval (#71)
+
+Use [CURSOR_PARITY_EVAL.md](./CURSOR_PARITY_EVAL.md) for IDE vs GodMode scoring on the same model.
 
 ---
 
@@ -298,6 +303,7 @@ With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
 - [GETTING_STARTED.md](./GETTING_STARTED.md)
 - [LOCAL_LLM.md](./LOCAL_LLM.md)
 - [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)
+- [CURSOR_PARITY_EVAL.md](./CURSOR_PARITY_EVAL.md)
 - [AGENT_MEMORY.md](./AGENT_MEMORY.md)
 - [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md)
 - [RELEASES.md](./RELEASES.md)

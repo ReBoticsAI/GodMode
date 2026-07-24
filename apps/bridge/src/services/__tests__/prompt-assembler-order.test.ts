@@ -79,19 +79,35 @@ describe("prompt-assembler Cursor heading order", () => {
 
     const migrated = migratePromptFlowConfig(stale);
     expect(migrated.promptFlowVersion).toBe(PROMPT_FLOW_VERSION);
+    expect(PROMPT_FLOW_VERSION).toBe(4);
+    expect(migrated.sections.find((s) => s.id === "memory")?.enabled).toBe(false);
+    expect(migrated.sections.find((s) => s.id === "mcp")?.enabled).toBe(true);
+    expect(migrated.sections.find((s) => s.id === "platform")?.order).toBe(3);
+    expect(migrated.sections.find((s) => s.id === "mcp")?.order).toBe(4);
     expect(migrated.positions).toEqual({ base: { x: 1, y: 2 } });
+  });
 
-    const memory = migrated.sections.find((s) => s.id === "memory");
-    expect(memory?.enabled).toBe(false);
-
-    const platform = migrated.sections.find((s) => s.id === "platform");
-    const rules = migrated.sections.find((s) => s.id === "rules");
-    expect(platform!.order).toBeLessThan(rules!.order);
-
-    const defaults = getDefaultPromptFlowConfig();
-    for (const def of defaults.sections) {
-      const got = migrated.sections.find((s) => s.id === def.id);
-      expect(got?.order).toBe(def.order);
+  it("emits a dedicated MCP section from platform context", () => {
+    const db = new Database(":memory:") as unknown as AppDatabase;
+    const flow = getDefaultPromptFlowConfig();
+    for (const sec of flow.sections) {
+      sec.enabled = sec.id === "base" || sec.id === "mcp" || sec.id === "platform";
     }
+    const { systemPrompt } = assemblePrompt(db, {
+      basePrompt: "BASE",
+      flowConfig: flow,
+      agent: null,
+      platformContext: {
+        pathname: "/intelligence",
+        mcpDiscovery: {
+          servers: [{ name: "github", transport: "stdio" }],
+          summary: "github (stdio) | discovery only (not executed by Bridge)",
+        },
+      },
+    });
+    expect(systemPrompt).toContain("<godmode_mcp>");
+    expect(systemPrompt).toContain("github (stdio)");
+    expect(systemPrompt).toContain("Route: /intelligence");
+    expect(systemPrompt).not.toMatch(/MCP: github/);
   });
 });
