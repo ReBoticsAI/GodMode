@@ -54,6 +54,16 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 
 `cursor_cloud` still delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt (SDK native system-role replacement is a later #71 slice). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
+Intelligence chat mode maps to the SDK as follows:
+
+| GodMode mode | SDK `Agent.create({ mode })` | Notes |
+|--------------|------------------------------|-------|
+| Agent | `agent` | Full tool loop |
+| Plan | `plan` | Native Cursor plan mode (plus GodMode read-only tool filter) |
+| Ask | `agent` | No SDK ask mode; GodMode strips tools and uses the ask harness block |
+
+Optional `agent.config.modelParams` (e.g. `{ "fast": true }`) is passed as SDK `model.params: [{ id, value }]` on create. Param and mode changes recreate the cached SDK agent (same fingerprint path as model/system/`settingSources`).
+
 ## CLI login ≠ SDK billing key
 
 `cursor-agent login` authenticates the **CLI** (`cursor` backend / contractors). Intelligence **Cursor Cloud** requires the dashboard **User API key** in Vault (or `CURSOR_API_KEY`). CLI login alone does not enable `cursor_cloud`.

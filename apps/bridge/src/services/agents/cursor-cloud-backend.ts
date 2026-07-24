@@ -174,6 +174,33 @@ export function cursorModelParamsHash(
     .slice(0, 12);
 }
 
+/** SDK `ModelSelection.params` entries from GodMode `modelParams` record. */
+export function toSdkModelParams(
+  params: Record<string, unknown> | null | undefined
+): Array<{ id: string; value: string }> | undefined {
+  if (!params) return undefined;
+  const out: Array<{ id: string; value: string }> = [];
+  for (const id of Object.keys(params).sort()) {
+    const raw = params[id];
+    if (raw === undefined || raw === null) continue;
+    out.push({
+      id,
+      value: typeof raw === "string" ? raw : JSON.stringify(raw),
+    });
+  }
+  return out.length ? out : undefined;
+}
+
+/**
+ * Map Intelligence chat mode to SDK AgentModeOption.
+ * Ask has no SDK equivalent — keep `"agent"` and rely on GodMode tool filtering.
+ */
+export function toSdkAgentMode(
+  chatMode: IntelligenceChatMode | undefined
+): "agent" | "plan" {
+  return chatMode === "plan" ? "plan" : "agent";
+}
+
 /**
  * Load Cursor project settings (`.cursor/rules`, etc.) when the coding root is
  * a Cursor workspace. Never enables user/team/host Cursor settings.
@@ -203,9 +230,10 @@ export function cursorCloudCacheFingerprint(
   modelId: string,
   sysHash: string,
   paramsHash = "",
-  settingSourcesKey = ""
+  settingSourcesKey = "",
+  sdkMode: "agent" | "plan" = "agent"
 ): string {
-  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}`;
+  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}`;
 }
 
 /** Local Agent.create options derived from coding root (exported for tests). */
@@ -286,7 +314,9 @@ async function getOrCreateChatAgent(
   apiKey: string,
   cwd: string,
   fingerprint: string,
-  modelId: string
+  modelId: string,
+  modelParams: Array<{ id: string; value: string }> | undefined,
+  mode: "agent" | "plan"
 ): Promise<SdkAgent> {
   const existing = chatAgents.get(chatKey);
   if (existing && existing.cacheFingerprint === fingerprint) return existing.agent;
@@ -297,7 +327,10 @@ async function getOrCreateChatAgent(
   const agent = await Agent.create({
     apiKey,
     agentId: chatKey,
-    model: { id: modelId },
+    model: modelParams?.length
+      ? { id: modelId, params: modelParams }
+      : { id: modelId },
+    mode,
     local: buildCursorLocalCreateOptions(cwd),
   });
   chatAgents.set(chatKey, { agent, cacheFingerprint: fingerprint });
@@ -331,15 +364,20 @@ export class CursorCloudBackend implements AgentBackend {
     const prompt = buildPrompt(req);
     const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
     const modelId = cfg.model?.trim() || "auto";
+    const modelParams = toSdkModelParams(
+      cfg.modelParams as Record<string, unknown> | undefined
+    );
     const paramsHash = cursorModelParamsHash(
       cfg.modelParams as Record<string, unknown> | undefined
     );
     const settingSources = resolveCursorSettingSources(cwd);
+    const sdkMode = toSdkAgentMode(chatMode);
     const fingerprint = cursorCloudCacheFingerprint(
       modelId,
       systemHash(sys),
       paramsHash,
-      cursorSettingSourcesFingerprint(settingSources)
+      cursorSettingSourcesFingerprint(settingSources),
+      sdkMode
     );
 
     const sdkAgent = await getOrCreateChatAgent(
@@ -347,7 +385,9 @@ export class CursorCloudBackend implements AgentBackend {
       apiKey,
       cwd,
       fingerprint,
-      modelId
+      modelId,
+      modelParams,
+      sdkMode
     );
     const run = await sdkAgent.send(prompt, { local: { customTools } });
 
