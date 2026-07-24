@@ -84,6 +84,12 @@ export interface AgentCursorCloudConfig {
    */
   modelParams?: Record<string, unknown>;
   workspace?: string;
+  /**
+   * Pass coding-root `.cursor/mcp.json` as inline SDK `mcpServers` on create/resume/send.
+   * Default: on for non-SaaS, off on SaaS. Project MCP may still load ambiently via
+   * `local.settingSources: ["project"]` when `.cursor/` exists.
+   */
+  mcpFromWorkspace?: boolean;
 }
 
 export interface AiAgentRecord {

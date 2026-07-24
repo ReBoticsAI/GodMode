@@ -132,7 +132,12 @@ import {
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
-import { enrichPlatformContextWithMcp } from "../services/coding/cursor-mcp-config.js";
+import {
+  enrichPlatformContextWithMcp,
+  resolveMcpDiscoveryExecution,
+  resolveMcpFromWorkspace,
+} from "../services/coding/cursor-mcp-config.js";
+import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
@@ -175,6 +180,29 @@ function maybeSyncCursorWorkspaceKnowledge(
     root: workspace?.trim() || undefined,
   });
   syncCursorWorkspaceKnowledge(db, root);
+}
+
+function mcpExecutionForAgent(
+  agent: AiAgent | null | undefined,
+  opts?: { tenantId?: string | null; workspace?: string }
+) {
+  const cwd = resolveCodingRoot({
+    tenantId: opts?.tenantId,
+    root: opts?.workspace?.trim() || undefined,
+  });
+  const mcpFromWorkspace =
+    agent?.backend === "cursor_cloud"
+      ? resolveMcpFromWorkspace(
+          agent.config as { mcpFromWorkspace?: unknown },
+          { isSaas: config.isSaas }
+        )
+      : false;
+  return resolveMcpDiscoveryExecution({
+    backend: agent?.backend,
+    mcpFromWorkspace,
+    hasProjectSettingSources:
+      resolveCursorSettingSources(cwd).includes("project"),
+  });
 }
 
 interface ChatMessagePart {
@@ -522,7 +550,14 @@ export function createAiRouter(
         pathname ? { pathname, breadcrumb: [] } : undefined,
         { tenantId: req.tenantId, workspace: agentWorkspace }
       ),
-      { tenantId: req.tenantId, workspace: agentWorkspace }
+      {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+        execution: mcpExecutionForAgent(agent, {
+          tenantId: req.tenantId,
+          workspace: agentWorkspace,
+        }),
+      }
     );
     const assembled = assemblePrompt(tdb(req), {
       basePrompt: agent?.systemPrompt ?? settings.systemPrompt,
@@ -1155,7 +1190,14 @@ export function createAiRouter(
         tenantId: req.tenantId,
         workspace: agentWorkspace,
       }),
-      { tenantId: req.tenantId, workspace: agentWorkspace }
+      {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+        execution: mcpExecutionForAgent(agent, {
+          tenantId: req.tenantId,
+          workspace: agentWorkspace,
+        }),
+      }
     );
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,
