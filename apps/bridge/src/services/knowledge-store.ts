@@ -541,3 +541,169 @@ export function removePluginKnowledge(db: AppDatabase, pluginId: string): void {
   }
   db.prepare(`DELETE FROM ai_skills WHERE source_plugin_id = ?`).run(pluginId);
 }
+
+/** Sentinel `source_plugin_id` for repo `.cursor/rules` + `.cursor/skills` imports. */
+export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
+
+const cursorWorkspaceSyncFp = new Map<string, string>();
+
+function walkMdcFiles(dir: string, base = dir): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, ent.name);
+    if (ent.isDirectory()) {
+      out.push(...walkMdcFiles(abs, base));
+    } else if (ent.isFile() && ent.name.endsWith(".mdc")) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+function cursorRuleIdFromPath(rulesRoot: string, filePath: string): string {
+  const rel = path
+    .relative(rulesRoot, filePath)
+    .replace(/\\/g, "/")
+    .replace(/\.mdc$/i, "");
+  const slug = rel
+    .split("/")
+    .map((p) => p.replace(/[^a-zA-Z0-9._-]+/g, "-"))
+    .filter(Boolean)
+    .join("--");
+  return `cursor-ws-${slug || "rule"}`;
+}
+
+function fingerprintCursorWorkspace(cursorDir: string): string {
+  if (!fs.existsSync(cursorDir) || !fs.statSync(cursorDir).isDirectory()) {
+    return "";
+  }
+  const parts: string[] = [];
+  const rulesDir = path.join(cursorDir, "rules");
+  for (const file of walkMdcFiles(rulesDir)) {
+    try {
+      parts.push(`${file}:${fs.statSync(file).mtimeMs}`);
+    } catch {
+      /* ignore */
+    }
+  }
+  const skillsDir = path.join(cursorDir, "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) continue;
+      try {
+        parts.push(`${skillPath}:${fs.statSync(skillPath).mtimeMs}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  parts.sort();
+  return parts.join("|");
+}
+
+/**
+ * Import coding-root .cursor rules (mdc files, recursive) and skill SKILL.md
+ * folders into the tenant knowledge DB for local/provider backends. IDs are
+ * prefixed to avoid colliding with GodMode core rules. Skipped for
+ * cursor_cloud agents (SDK settingSources loads project rules instead).
+ */
+export function importCursorWorkspaceKnowledge(
+  db: AppDatabase,
+  codingRoot: string
+): { rules: number; skills: number } {
+  const root = path.resolve(codingRoot);
+  const cursorDir = path.join(root, ".cursor");
+  let rules = 0;
+  let skills = 0;
+
+  const rulesDir = path.join(cursorDir, "rules");
+  for (const file of walkMdcFiles(rulesDir)) {
+    const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
+    const id = cursorRuleIdFromPath(rulesDir, file);
+    db.prepare(
+      `INSERT INTO ai_rules
+       (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, updated_at)
+       VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET
+         description=excluded.description, body=excluded.body, always_apply=excluded.always_apply,
+         globs_json=excluded.globs_json, departments_json=excluded.departments_json,
+         priority=excluded.priority, source_plugin_id=excluded.source_plugin_id,
+         version=ai_rules.version+1, updated_at=datetime('now')`
+    ).run(
+      id,
+      parsed.description,
+      parsed.body,
+      parsed.alwaysApply ? 1 : 0,
+      JSON.stringify(parsed.globs),
+      JSON.stringify(parsed.departments),
+      parsed.priority,
+      CURSOR_WORKSPACE_SOURCE
+    );
+    rules++;
+  }
+
+  const skillsDir = path.join(cursorDir, "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) continue;
+      const parsed = parseSkillMd(fs.readFileSync(skillPath, "utf8"), ent.name);
+      const id = `cursor-ws-skill-${ent.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
+      db.prepare(
+        `INSERT INTO ai_skills
+         (id, agent_id, name, description, body, tools_json, departments_json, enabled, status, source_plugin_id, updated_at)
+         VALUES (?, 'intelligence', ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name, description=excluded.description, body=excluded.body,
+           tools_json=excluded.tools_json, departments_json=excluded.departments_json,
+           source_plugin_id=excluded.source_plugin_id,
+           version=ai_skills.version+1, updated_at=datetime('now')`
+      ).run(
+        id,
+        parsed.name,
+        parsed.description,
+        parsed.body,
+        JSON.stringify(parsed.tools),
+        JSON.stringify(parsed.departments),
+        CURSOR_WORKSPACE_SOURCE
+      );
+      skills++;
+    }
+  }
+
+  return { rules, skills };
+}
+
+/**
+ * Refresh workspace Cursor knowledge when `.cursor/` mtimes change.
+ * No-op when fingerprint matches the last sync for this db+root.
+ */
+export function syncCursorWorkspaceKnowledge(
+  db: AppDatabase,
+  codingRoot: string
+): { rules: number; skills: number; synced: boolean } {
+  const root = path.resolve(codingRoot);
+  const cursorDir = path.join(root, ".cursor");
+  const key = `${root}`;
+  const fp = fingerprintCursorWorkspace(cursorDir);
+  if (cursorWorkspaceSyncFp.get(key) === fp) {
+    return { rules: 0, skills: 0, synced: false };
+  }
+  removePluginKnowledge(db, CURSOR_WORKSPACE_SOURCE);
+  if (!fp) {
+    cursorWorkspaceSyncFp.set(key, "");
+    return { rules: 0, skills: 0, synced: true };
+  }
+  const result = importCursorWorkspaceKnowledge(db, root);
+  cursorWorkspaceSyncFp.set(key, fp);
+  return { ...result, synced: true };
+}
+
+/** @internal test helper */
+export function clearCursorWorkspaceSyncCacheForTests(): void {
+  cursorWorkspaceSyncFp.clear();
+}
