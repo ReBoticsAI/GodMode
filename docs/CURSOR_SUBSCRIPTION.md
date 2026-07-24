@@ -46,26 +46,31 @@ When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a 
 
 ## System prompt shape (Cursor parity)
 
-GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v3`):
+GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v3`, prompt-flow v4):
 
 1. Identity: agent profile, user context, base prompt
 2. Early harness: communication, tool-calling policy, search/reading, citations
-3. Environment: platform / page context
-4. Rules and skills
-5. GodMode-only blocks (labeled): `<godmode_memory>`, `<godmode_wiki>`, `<godmode_capabilities>`, `<godmode_user>`
-6. Tools and @mentions
-7. Late harness: plugin tiers, tasks loop, coding agent contract (when code access), chat mode
+3. Environment: platform / page context (git + hooks discovery)
+4. MCP / external tools (`<godmode_mcp>` when `.cursor/mcp.json` is present)
+5. Rules and skills
+6. GodMode-only blocks (labeled): `<godmode_memory>`, `<godmode_wiki>`, `<godmode_capabilities>`, `<godmode_user>`
+7. Tools and @mentions
+8. Late harness: plugin tiers, tasks loop, coding agent contract (when code access), chat mode
 
 Before assembly, Bridge enriches `platformContext` with a compact **git snapshot** of the coding root (`agent.config.workspace` or tenant/repo root): branch, dirty file count, and ahead/behind when an upstream exists. Soft-fails outside a git work tree. Rendered as `Git: Branch: … | clean|dirty: N | ahead X / behind Y` in the Page Context section (visible in `/api/ai/inspect` when a pathname is supplied).
 
-When the coding root has `.cursor/mcp.json`, Bridge also attaches a read-only **MCP discovery** line (`MCP: name (stdio|http|…) | …`) in Page Context. Server names and transport are listed; `env` values and `headers` are never included in that line.
+When the coding root has `.cursor/hooks.json`, Bridge attaches a read-only **Hooks** line listing event names (discovery only; Bridge does not run Cursor hooks).
+
+When the coding root has `.cursor/mcp.json`, Bridge also attaches MCP discovery into the dedicated **MCP** prompt section. Server names and transport are listed; `env` values and `headers` are never included in that line.
 
 For **`cursor_cloud`**, project MCP is available in two ways:
 
 1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK loads `.cursor/mcp.json`).
-2. **Inline** `mcpServers` from the same file when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers.
+2. **Inline** `mcpServers` from the same file when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle in AI Settings → Backend. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
 
 Local/provider backends still see discovery only; Bridge does not spawn MCP processes for those backends. GodMode native tools remain separate from Cursor MCP.
+
+Blind IDE vs GodMode scoring prompts live in [CURSOR_PARITY_EVAL.md](./CURSOR_PARITY_EVAL.md).
 
 `cursor_cloud` delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt. That is intentional: the SDK has no main-agent system-role field, so injection is the durable contract (not a temporary workaround awaiting replacement). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
@@ -93,6 +98,7 @@ After a successful TypeScript/TSX write, the tool result also includes `verifica
 
 ## Related
 
+- [CURSOR_PARITY_EVAL.md](./CURSOR_PARITY_EVAL.md) — IDE vs GodMode blind eval prompts
 - [LOCAL_LLM.md](./LOCAL_LLM.md) — local Gemma + harness table
 - [CONFIGURATION.md](./CONFIGURATION.md) — env vars including `CURSOR_API_KEY`
 - Vault UI: Cursor subscription card

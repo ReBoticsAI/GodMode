@@ -31,6 +31,7 @@ export type PromptSectionId =
   | "capabilities"
   | "tools"
   | "platform"
+  | "mcp"
   | "mentions"
   | "chatHistory"
   | "userMessage"
@@ -43,7 +44,7 @@ export interface PromptFlowSectionConfig {
 }
 
 /** Bump when default section orders change; load migrates stored configs. */
-export const PROMPT_FLOW_VERSION = 3;
+export const PROMPT_FLOW_VERSION = 4;
 
 export interface PromptFlowConfig {
   /** Cursor-parity section order version. Missing/older values are migrated on load. */
@@ -82,6 +83,7 @@ const SECTION_LABELS: Record<PromptSectionId, string> = {
   capabilities: "Capabilities (RAG)",
   tools: "Tools Available",
   platform: "Page Context",
+  mcp: "MCP / external tools",
   mentions: "@ Mentions",
   chatHistory: "Chat History",
   userMessage: "User Message",
@@ -98,16 +100,17 @@ export const DEFAULT_FLOW_SECTIONS: PromptFlowSectionConfig[] = [
   { id: "user", enabled: true, order: 1 },
   { id: "base", enabled: true, order: 2 },
   { id: "platform", enabled: true, order: 3 },
-  { id: "rules", enabled: true, order: 4 },
-  { id: "skills", enabled: true, order: 5 },
-  { id: "memory", enabled: true, order: 6 },
-  { id: "wiki", enabled: true, order: 7 },
-  { id: "capabilities", enabled: true, order: 8 },
-  { id: "tools", enabled: true, order: 9 },
-  { id: "mentions", enabled: true, order: 10 },
-  { id: "chatHistory", enabled: true, order: 11 },
-  { id: "userMessage", enabled: true, order: 12 },
-  { id: "final", enabled: true, order: 13 },
+  { id: "mcp", enabled: true, order: 4 },
+  { id: "rules", enabled: true, order: 5 },
+  { id: "skills", enabled: true, order: 6 },
+  { id: "memory", enabled: true, order: 7 },
+  { id: "wiki", enabled: true, order: 8 },
+  { id: "capabilities", enabled: true, order: 9 },
+  { id: "tools", enabled: true, order: 10 },
+  { id: "mentions", enabled: true, order: 11 },
+  { id: "chatHistory", enabled: true, order: 12 },
+  { id: "userMessage", enabled: true, order: 13 },
+  { id: "final", enabled: true, order: 14 },
 ];
 
 /** System-prompt emission order (Cursor cognitive shape). */
@@ -116,6 +119,7 @@ const CURSOR_SYSTEM_ORDER: PromptSectionId[] = [
   "user",
   "base",
   "platform",
+  "mcp",
   "rules",
   "skills",
   "memory",
@@ -134,6 +138,7 @@ const GODMODE_WRAP: Partial<Record<PromptSectionId, { open: string; close: strin
       open: "<godmode_capabilities>",
       close: "</godmode_capabilities>",
     },
+    mcp: { open: "<godmode_mcp>", close: "</godmode_mcp>" },
   };
 
 const SYSTEM_SECTION_IDS = new Set<PromptSectionId>(CURSOR_SYSTEM_ORDER);
@@ -274,14 +279,23 @@ function renderPlatform(ctx: PlatformContext | undefined): string {
   if (ctx.gitSnapshot?.summary) {
     lines.push(`Git: ${ctx.gitSnapshot.summary}`);
   }
-  if (ctx.mcpDiscovery?.summary) {
-    lines.push(`MCP: ${ctx.mcpDiscovery.summary}`);
+  if (ctx.hooksDiscovery?.summary) {
+    lines.push(`Hooks: ${ctx.hooksDiscovery.summary}`);
   }
   if (ctx.pageSnapshot) {
     lines.push("\n--- Current page data ---");
     lines.push(JSON.stringify(ctx.pageSnapshot, null, 2));
   }
   return lines.length ? lines.join("\n") : "";
+}
+
+function renderMcpSection(ctx: PlatformContext | undefined): string {
+  if (!ctx?.mcpDiscovery?.summary) return "";
+  return [
+    "Project MCP configuration (from coding-root `.cursor/mcp.json`):",
+    ctx.mcpDiscovery.summary,
+    "GodMode native tools are separate from MCP. Local/provider backends do not spawn MCP from Bridge.",
+  ].join("\n");
 }
 
 /** Compact department context profile for a `dept-<id>` agent, else "". */
@@ -349,6 +363,8 @@ function sectionBody(
       const parts = [renderPlatform(ctx), renderDeptContextProfile(db, agentId)];
       return parts.filter(Boolean).join("\n\n");
     }
+    case "mcp":
+      return renderMcpSection(ctx);
     case "mentions":
       return renderMentions(ctx);
     case "chatHistory":
