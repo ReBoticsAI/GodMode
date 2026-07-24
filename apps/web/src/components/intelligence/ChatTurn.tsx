@@ -146,13 +146,17 @@ function statusGlyph(status: string) {
 function ToolConfirmBody({
   name,
   args,
+  previewDiff,
+  previewError,
 }: {
   name: string;
   args: Record<string, unknown>;
+  previewDiff?: string;
+  previewError?: string;
 }) {
   if (name === "run_terminal") {
     return (
-      <div className="space-y-1 text-xs">
+      <div className="flex flex-col gap-1 text-xs">
         <div>
           <span className="text-muted-foreground">cwd: </span>
           <code className="rounded bg-background/60 px-1">
@@ -167,14 +171,26 @@ function ToolConfirmBody({
   }
   if (name === "edit_file" || name === "write_file" || name === "apply_patch") {
     return (
-      <div className="space-y-1 text-xs">
+      <div className="flex flex-col gap-1 text-xs">
         <div>
           <span className="text-muted-foreground">path: </span>
           <code className="rounded bg-background/60 px-1">
             {String(args.path ?? "")}
           </code>
         </div>
-        {name === "edit_file" ? (
+        {previewError ? (
+          <p className="text-xs text-destructive">{previewError}</p>
+        ) : null}
+        {previewDiff ? (
+          <div>
+            <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Preview diff
+            </div>
+            <pre className="max-h-48 overflow-auto rounded bg-background/60 p-1.5 font-mono text-[10px] text-emerald-700 dark:text-emerald-400 whitespace-pre-wrap">
+              {previewDiff.slice(0, 4000)}
+            </pre>
+          </div>
+        ) : name === "edit_file" ? (
           <pre className="max-h-40 overflow-auto rounded bg-background/60 p-2 font-mono text-[10px] whitespace-pre-wrap">
             {`--- old\n${String(args.old_string ?? "").slice(0, 1200)}\n\n+++ new\n${String(args.new_string ?? "").slice(0, 1200)}`}
           </pre>
@@ -221,6 +237,8 @@ function ToolPart({
   startedAt,
   endedAt,
   terminalStream,
+  previewDiff,
+  previewError,
   onApprove,
   onDeny,
 }: Extract<MsgPart, { kind: "tool" }> & {
@@ -297,11 +315,16 @@ function ToolPart({
         )}
       </button>
       {awaiting && (
-        <div className="space-y-2 border-t border-amber-500/20 bg-amber-500/5 px-2 py-2">
+        <div className="flex flex-col gap-2 border-t border-amber-500/20 bg-amber-500/5 px-2 py-2">
           <p className="text-xs text-muted-foreground">
             The agent is paused until you approve or deny this action.
           </p>
-          <ToolConfirmBody name={name} args={args} />
+          <ToolConfirmBody
+            name={name}
+            args={args}
+            previewDiff={previewDiff}
+            previewError={previewError}
+          />
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

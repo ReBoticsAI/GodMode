@@ -20,6 +20,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/cursor-cloud-sdk-options.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-resume.test.ts",
       "apps/bridge/src/services/__tests__/git-workspace.test.ts",
+      "apps/bridge/src/services/__tests__/fs-tools-preview.test.ts",
       "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",

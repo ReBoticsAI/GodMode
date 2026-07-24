@@ -68,6 +68,10 @@ Intelligence chat mode maps to the SDK as follows:
 
 Optional `agent.config.modelParams` (e.g. `{ "fast": true }`) is passed as SDK `model.params: [{ id, value }]` on create/resume and on each `send`.
 
+## Coding apply path
+
+When Intelligence asks to run `edit_file`, `write_file`, or `apply_patch` and confirmation is required, Bridge dry-runs a unified diff against the coding-root file and sends it on `tool_confirm_required` as `previewDiff` (or `previewError`). The chat confirm card shows that preview **before** Approve/Deny. Approve still runs the normal executor (disk write unchanged).
+
 ## CLI login ≠ SDK billing key
 
 `cursor-agent login` authenticates the **CLI** (`cursor` backend / contractors). Intelligence **Cursor Cloud** requires the dashboard **User API key** in Vault (or `CURSOR_API_KEY`). CLI login alone does not enable `cursor_cloud`.
