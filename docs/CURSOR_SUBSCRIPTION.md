@@ -36,9 +36,11 @@ Picker model id selects a Cursor family harness (see [LOCAL_LLM.md](./LOCAL_LLM.
 | `/grok/i` | `cursor-grok` |
 | other Cursor ids | `cursor` (fallback) |
 
-Changing the picker model recreates the cached SDK agent for that chat (model + system prompt + project-settings fingerprint), so mid-thread switches take effect. A rolling transcript appendix is prepended for continuity: prior user/assistant text plus truncated tool calls and tool results (char-budgeted). This is not a full SDK-native conversation resume or Gemma-local history replay; it keeps multi-turn tool context after fingerprint resets.
+Changing the picker model updates `send({ model, mode })` on an existing in-memory handle. After Bridge restart, `cursor_cloud` calls `Agent.resume("godmode-<chatId>")` before `Agent.create`, so native SDK conversation (including tool turns) survives when the local agent store still has the agent. The rolling transcript appendix is a **fallback** only when create is used (new chat or resume miss). It is skipped when resume or an in-memory handle continues the conversation.
 
-When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a `.cursor/` directory, `Agent.create` sets `local.settingSources: ["project"]` so Cursor **project** rules load from disk. GodMode Identity still comes from `<!-- godmode-system -->` injection; this does not mirror `.cursor/rules` into Knowledge and never enables `user` / `team` / `all` setting sources (host Cursor prefs stay off on Bridge/SaaS).
+GodMode identity stays in `<!-- godmode-system -->` injection: `@cursor/sdk` `AgentOptions` has no system/instructions field for the main agent, so injection remains the highest-fidelity channel (decision: keep injection; do not wait for a native system API). Project rules continue via `settingSources: ["project"]` when `.cursor/` exists (not a Knowledge mirror). Never enables `user` / `team` / `all` setting sources on Bridge/SaaS.
+
+When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a `.cursor/` directory, `Agent.create` / `resume` sets `local.settingSources: ["project"]` so Cursor **project** rules load from disk.
 
 ## System prompt shape (Cursor parity)
 
@@ -54,7 +56,7 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 
 Before assembly, Bridge enriches `platformContext` with a compact **git snapshot** of the coding root (`agent.config.workspace` or tenant/repo root): branch, dirty file count, and ahead/behind when an upstream exists. Soft-fails outside a git work tree. Rendered as `Git: Branch: … | clean|dirty: N | ahead X / behind Y` in the Page Context section (visible in `/api/ai/inspect` when a pathname is supplied).
 
-`cursor_cloud` still delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt (SDK native system-role replacement is a later #71 slice). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
+`cursor_cloud` delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt. That is intentional: the SDK has no main-agent system-role field, so injection is the durable contract (not a temporary workaround awaiting replacement). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
 Intelligence chat mode maps to the SDK as follows:
 
@@ -64,7 +66,7 @@ Intelligence chat mode maps to the SDK as follows:
 | Plan | `plan` | Native Cursor plan mode (plus GodMode read-only tool filter) |
 | Ask | `agent` | No SDK ask mode; GodMode strips tools and uses the ask harness block |
 
-Optional `agent.config.modelParams` (e.g. `{ "fast": true }`) is passed as SDK `model.params: [{ id, value }]` on create. Param and mode changes recreate the cached SDK agent (same fingerprint path as model/system/`settingSources`).
+Optional `agent.config.modelParams` (e.g. `{ "fast": true }`) is passed as SDK `model.params: [{ id, value }]` on create/resume and on each `send`.
 
 ## CLI login ≠ SDK billing key
 
