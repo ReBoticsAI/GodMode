@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **cursor_cloud Agent.resume (#71)** - resume SDK agents by chat id before
+  create; skip transcript appendix when native conversation continues;
+  document that `godmode-system` injection remains (SDK has no system field)
 - **Platform git snapshot (#71)** - coding chats inject compact branch /
   dirty / ahead-behind into Page Context from the coding root (soft-fail
   outside git)
