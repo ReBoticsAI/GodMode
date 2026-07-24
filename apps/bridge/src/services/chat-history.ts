@@ -127,22 +127,30 @@ function messageChars(m: AgentMessage): number {
 export function compactAgentMessages(
   messages: AgentMessage[],
   maxChars: number
-): { messages: AgentMessage[]; droppedTurns: number } {
+): { messages: AgentMessage[]; droppedTurns: number; scratchpad: string } {
   let total = messages.reduce((a, m) => a + messageChars(m), 0);
-  if (total <= maxChars) return { messages, droppedTurns: 0 };
+  if (total <= maxChars) {
+    return { messages, droppedTurns: 0, scratchpad: "" };
+  }
 
   const kept = [...messages];
   let droppedTurns = 0;
+  const droppedUserPreviews: string[] = [];
   while (kept.length > 2 && total > maxChars) {
-    const drop = kept.findIndex(
-      (m, i) => i > 0 && m.role === "user"
-    );
+    const drop = kept.findIndex((m, i) => i > 0 && m.role === "user");
     if (drop < 0) break;
     let end = drop + 1;
     while (end < kept.length && kept[end].role !== "user") end++;
     const removed = kept.splice(drop, end - drop);
     total -= removed.reduce((a, m) => a + messageChars(m), 0);
     droppedTurns += 1;
+    const userMsg = removed.find((m) => m.role === "user");
+    if (userMsg?.content?.trim()) {
+      const flat = userMsg.content.replace(/\s+/g, " ").trim();
+      droppedUserPreviews.push(
+        flat.length > 120 ? `${flat.slice(0, 119)}…` : flat
+      );
+    }
   }
 
   if (total > maxChars) {
@@ -157,5 +165,32 @@ export function compactAgentMessages(
       }
     }
   }
-  return { messages: kept, droppedTurns };
+
+  const scratchpad = buildCompactionScratchpad(
+    droppedTurns,
+    droppedUserPreviews
+  );
+  return { messages: kept, droppedTurns, scratchpad };
+}
+
+function buildCompactionScratchpad(
+  droppedTurns: number,
+  userPreviews: string[]
+): string {
+  if (droppedTurns <= 0) return "";
+  const lines = [
+    `<godmode_compaction>`,
+    `Earlier conversation was compacted (${droppedTurns} turn${droppedTurns === 1 ? "" : "s"} dropped from the live window). Episodic distill may retain details in memory.`,
+  ];
+  if (userPreviews.length) {
+    lines.push("Dropped user turns (brief):");
+    for (const p of userPreviews.slice(0, 6)) {
+      lines.push(`- ${p}`);
+    }
+    if (userPreviews.length > 6) {
+      lines.push(`- … +${userPreviews.length - 6} more`);
+    }
+  }
+  lines.push(`</godmode_compaction>`);
+  return lines.join("\n");
 }
