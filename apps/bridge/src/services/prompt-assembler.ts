@@ -10,10 +10,13 @@ import { getAgent } from "./agents/agents-db.js";
 import type { AiAgent } from "./agents/types.js";
 import { assembleAgentProfileSection } from "./agents/agent-profile-prompt.js";
 import { assembleUserContextSection } from "./agents/user-context-prompt.js";
-import { getHarnessPromptForTenant, HARNESS_VERSION } from "./harness-prompt.js";
+import {
+  getHarnessEarlyBlock,
+  getHarnessLateBlockForAgent,
+  HARNESS_VERSION,
+} from "./harness-prompt.js";
 import type { IntelligenceChatMode } from "./chat-mode.js";
 import { agentCodeAccess } from "./agents/agents-db.js";
-import { isOperatorTenantDb } from "./tenant-kind.js";
 import { config } from "../config.js";
 import { grammarToolsIndexText } from "./tool-grammar.js";
 
@@ -39,7 +42,12 @@ export interface PromptFlowSectionConfig {
   order: number;
 }
 
+/** Bump when default section orders change; load migrates stored configs. */
+export const PROMPT_FLOW_VERSION = 3;
+
 export interface PromptFlowConfig {
+  /** Cursor-parity section order version. Missing/older values are migrated on load. */
+  promptFlowVersion?: number;
   sections: PromptFlowSectionConfig[];
   positions?: Record<string, { x: number; y: number }>;
   viewport?: { x: number; y: number; zoom: number };
@@ -80,25 +88,97 @@ const SECTION_LABELS: Record<PromptSectionId, string> = {
   final: "Final LLM Request",
 };
 
+/**
+ * Cursor-shaped default order (#71):
+ * identity → environment → rules/skills → GodMode RAG → tools → …
+ * Early/late harness are injected by assemblePrompt, not listed as sections.
+ */
 export const DEFAULT_FLOW_SECTIONS: PromptFlowSectionConfig[] = [
-  { id: "profile", enabled: true, order: -2 },
-  { id: "user", enabled: true, order: -1 },
-  { id: "base", enabled: true, order: 0 },
-  { id: "rules", enabled: true, order: 1 },
-  { id: "memory", enabled: true, order: 2 },
-  { id: "wiki", enabled: true, order: 2.5 },
-  { id: "skills", enabled: true, order: 3 },
-  { id: "capabilities", enabled: true, order: 4 },
-  { id: "tools", enabled: true, order: 5 },
-  { id: "platform", enabled: true, order: 6 },
-  { id: "mentions", enabled: true, order: 7 },
-  { id: "chatHistory", enabled: true, order: 8 },
-  { id: "userMessage", enabled: true, order: 9 },
-  { id: "final", enabled: true, order: 10 },
+  { id: "profile", enabled: true, order: 0 },
+  { id: "user", enabled: true, order: 1 },
+  { id: "base", enabled: true, order: 2 },
+  { id: "platform", enabled: true, order: 3 },
+  { id: "rules", enabled: true, order: 4 },
+  { id: "skills", enabled: true, order: 5 },
+  { id: "memory", enabled: true, order: 6 },
+  { id: "wiki", enabled: true, order: 7 },
+  { id: "capabilities", enabled: true, order: 8 },
+  { id: "tools", enabled: true, order: 9 },
+  { id: "mentions", enabled: true, order: 10 },
+  { id: "chatHistory", enabled: true, order: 11 },
+  { id: "userMessage", enabled: true, order: 12 },
+  { id: "final", enabled: true, order: 13 },
 ];
 
+/** System-prompt emission order (Cursor cognitive shape). */
+const CURSOR_SYSTEM_ORDER: PromptSectionId[] = [
+  "profile",
+  "user",
+  "base",
+  "platform",
+  "rules",
+  "skills",
+  "memory",
+  "wiki",
+  "capabilities",
+  "tools",
+  "mentions",
+];
+
+const GODMODE_WRAP: Partial<Record<PromptSectionId, { open: string; close: string }>> =
+  {
+    user: { open: "<godmode_user>", close: "</godmode_user>" },
+    memory: { open: "<godmode_memory>", close: "</godmode_memory>" },
+    wiki: { open: "<godmode_wiki>", close: "</godmode_wiki>" },
+    capabilities: {
+      open: "<godmode_capabilities>",
+      close: "</godmode_capabilities>",
+    },
+  };
+
+const SYSTEM_SECTION_IDS = new Set<PromptSectionId>(CURSOR_SYSTEM_ORDER);
+
+function wrapGodModeSection(id: PromptSectionId, body: string): string {
+  const wrap = GODMODE_WRAP[id];
+  if (!wrap || !body.trim()) return body;
+  return `${wrap.open}\n${body}\n${wrap.close}`;
+}
+
 export function getDefaultPromptFlowConfig(): PromptFlowConfig {
-  return { sections: [...DEFAULT_FLOW_SECTIONS] };
+  return {
+    promptFlowVersion: PROMPT_FLOW_VERSION,
+    sections: DEFAULT_FLOW_SECTIONS.map((s) => ({ ...s })),
+  };
+}
+
+/**
+ * Re-apply default orders when promptFlowVersion is stale; preserve enabled flags
+ * and UI positions/viewport.
+ */
+export function migratePromptFlowConfig(config: PromptFlowConfig): PromptFlowConfig {
+  const version = config.promptFlowVersion ?? 0;
+  const byId = new Map(config.sections.map((s) => [s.id, s]));
+  const needsOrderMigration = version < PROMPT_FLOW_VERSION;
+
+  const sections: PromptFlowSectionConfig[] = DEFAULT_FLOW_SECTIONS.map((def) => {
+    const existing = byId.get(def.id);
+    return {
+      id: def.id,
+      enabled: existing?.enabled ?? def.enabled,
+      order: needsOrderMigration ? def.order : (existing?.order ?? def.order),
+    };
+  });
+
+  for (const def of DEFAULT_FLOW_SECTIONS) {
+    byId.delete(def.id);
+  }
+  // Drop unknown legacy ids; known defaults already merged above.
+
+  return {
+    ...config,
+    promptFlowVersion: PROMPT_FLOW_VERSION,
+    sections: sections.sort((a, b) => a.order - b.order),
+  };
 }
 
 export function loadPromptFlowConfig(db: AppDatabase): PromptFlowConfig {
@@ -109,23 +189,27 @@ export function loadPromptFlowConfig(db: AppDatabase): PromptFlowConfig {
   try {
     const parsed = JSON.parse(row.config_json) as PromptFlowConfig;
     if (!parsed.sections?.length) return getDefaultPromptFlowConfig();
-    const ids = new Set(parsed.sections.map((s) => s.id));
-    const merged = [...parsed.sections];
-    for (const def of DEFAULT_FLOW_SECTIONS) {
-      if (!ids.has(def.id)) merged.push({ ...def });
+    const priorVersion = parsed.promptFlowVersion ?? 0;
+    const migrated = migratePromptFlowConfig(parsed);
+    if (priorVersion < PROMPT_FLOW_VERSION) {
+      savePromptFlowConfig(db, migrated);
     }
-    return { ...parsed, sections: merged.sort((a, b) => a.order - b.order) };
+    return migrated;
   } catch {
     return getDefaultPromptFlowConfig();
   }
 }
 
-export function savePromptFlowConfig(db: AppDatabase, config: PromptFlowConfig): void {
+export function savePromptFlowConfig(db: AppDatabase, flow: PromptFlowConfig): void {
+  const toSave: PromptFlowConfig = {
+    ...flow,
+    promptFlowVersion: flow.promptFlowVersion ?? PROMPT_FLOW_VERSION,
+  };
   db.prepare(
     `INSERT INTO ai_prompt_flow (id, config_json, updated_at)
      VALUES ('default', ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET config_json = excluded.config_json, updated_at = datetime('now')`
-  ).run(JSON.stringify(config));
+  ).run(JSON.stringify(toSave));
 }
 
 const DEFAULT_AGENT_ID = "intelligence";
@@ -160,20 +244,6 @@ function getMemoriesText(
     "--- What you remember about the user ---\n" +
     all.map((m) => `- ${m.text}`).join("\n")
   );
-}
-
-function renderMemoryList(texts: string[]): string {
-  if (texts.length === 0) return "";
-  return (
-    "--- What you remember about the user ---\n" +
-    texts.map((t) => `- ${t}`).join("\n")
-  );
-}
-
-interface MemoryEmbeddingRow {
-  text: string;
-  embedding: Buffer | null;
-  embedding_dim: number | null;
 }
 
 /**
@@ -288,20 +358,6 @@ function sectionBody(
   }
 }
 
-const SYSTEM_SECTION_IDS = new Set<PromptSectionId>([
-  "profile",
-  "user",
-  "base",
-  "rules",
-  "memory",
-  "wiki",
-  "skills",
-  "capabilities",
-  "tools",
-  "platform",
-  "mentions",
-]);
-
 export function assemblePrompt(
   db: AppDatabase,
   opts: {
@@ -327,21 +383,37 @@ export function assemblePrompt(
     wikiOverride?: string;
     capabilitiesOverride?: string;
     chatMode?: IntelligenceChatMode;
-    /** Model harness profile delta appended after the base harness. */
+    /** Model harness profile delta appended after the late harness. */
     harnessDelta?: string;
   }
 ): AssembleResult {
-  const flow = opts.flowConfig ?? loadPromptFlowConfig(db);
+  const flow = migratePromptFlowConfig(
+    opts.flowConfig ?? loadPromptFlowConfig(db)
+  );
   const ordered = [...flow.sections].sort((a, b) => a.order - b.order);
+  const enabledById = new Map(flow.sections.map((s) => [s.id, s.enabled]));
   const nativeTools = opts.nativeTools ?? false;
   const agentId = opts.agentId ?? DEFAULT_AGENT_ID;
-  const agent = opts.agent ?? getAgent(db, agentId);
+  const agent = opts.agent !== undefined ? opts.agent : getAgent(db, agentId);
 
-  const systemParts: string[] = [];
+  const bodyById = new Map<PromptSectionId, string>();
   const sections: AssembledSection[] = [];
   const omitted: string[] = [];
 
   for (const sec of ordered) {
+    if (!sec.enabled) {
+      sections.push({
+        id: sec.id,
+        label: SECTION_LABELS[sec.id],
+        enabled: false,
+        included: false,
+        preview: "(disabled)",
+        charCount: 0,
+        inSystemPrompt: SYSTEM_SECTION_IDS.has(sec.id),
+      });
+      continue;
+    }
+
     const body =
       sec.id === "memory" && opts.memoryOverride != null
         ? opts.memoryOverride
@@ -363,17 +435,15 @@ export function assemblePrompt(
                 opts.tenantId,
                 opts.capabilitiesOverride
               );
+    bodyById.set(sec.id, body);
+
     const inSystem = SYSTEM_SECTION_IDS.has(sec.id);
     const hasContent =
       body.trim().length > 0 &&
       !body.startsWith("(tools passed natively");
-    const included = sec.enabled && (hasContent || sec.id === "base");
+    const included = hasContent || sec.id === "base";
 
-    if (sec.enabled && inSystem && hasContent) {
-      systemParts.push(body);
-    } else if (sec.enabled && inSystem && sec.id === "base") {
-      systemParts.push(opts.basePrompt);
-    } else if (sec.enabled && !hasContent && inSystem && sec.id !== "base") {
+    if (inSystem && !hasContent && sec.id !== "base") {
       omitted.push(sec.id);
     }
 
@@ -403,19 +473,56 @@ export function assemblePrompt(
     });
   }
 
-  let systemPrompt = systemParts.filter(Boolean).join("\n");
+  const systemParts: string[] = [];
+  let earlyInserted = false;
+
+  const insertEarly = () => {
+    if (earlyInserted) return;
+    systemParts.push(getHarnessEarlyBlock("GodMode"));
+    earlyInserted = true;
+  };
+
+  for (const id of CURSOR_SYSTEM_ORDER) {
+    const enabled = enabledById.get(id) ?? true;
+    if (!enabled) {
+      // Still place early harness before environment/rules even if identity sections off.
+      if (id === "platform" || id === "rules") insertEarly();
+      continue;
+    }
+
+    let body = bodyById.get(id) ?? "";
+    if (id === "base" && !body.trim()) {
+      body = opts.basePrompt;
+    }
+    const hasContent =
+      body.trim().length > 0 &&
+      !body.startsWith("(tools passed natively");
+    if (!hasContent && id !== "base") {
+      if (id === "platform" || id === "rules") insertEarly();
+      continue;
+    }
+    if (id === "base" && !body.trim()) {
+      insertEarly();
+      continue;
+    }
+
+    systemParts.push(wrapGodModeSection(id, body));
+
+    if (id === "base") {
+      insertEarly();
+    }
+  }
+
+  insertEarly();
+
   const codeAccess = agent ? agentCodeAccess(agent) : false;
-  const harness = getHarnessPromptForTenant(
-    "GodMode",
-    isOperatorTenantDb(db),
-    codeAccess,
-    opts.chatMode
-  );
+  let late = getHarnessLateBlockForAgent(codeAccess, opts.chatMode);
   const harnessDelta = opts.harnessDelta?.trim();
-  const harnessBlock = harnessDelta ? `${harness}\n\n${harnessDelta}` : harness;
-  systemPrompt = systemPrompt
-    ? `${systemPrompt}\n\n${harnessBlock}\n\n<!-- harness:${HARNESS_VERSION} -->`
-    : `${harnessBlock}\n\n<!-- harness:${HARNESS_VERSION} -->`;
+  if (harnessDelta) late = `${late}\n\n${harnessDelta}`;
+  systemParts.push(late);
+  systemParts.push(`<!-- harness:${HARNESS_VERSION} -->`);
+
+  let systemPrompt = systemParts.filter(Boolean).join("\n\n");
 
   if (opts.enableThinking) {
     const thinkPrefix = "<|think|>\n";
@@ -428,7 +535,10 @@ export function assemblePrompt(
 
   const finalSec = sections.find((s) => s.id === "final");
   if (finalSec) {
-    finalSec.preview = systemPrompt.length > 500 ? `${systemPrompt.slice(0, 500)}…` : systemPrompt;
+    finalSec.preview =
+      systemPrompt.length > 500
+        ? `${systemPrompt.slice(0, 500)}…`
+        : systemPrompt;
     finalSec.charCount = systemPrompt.length;
   }
 

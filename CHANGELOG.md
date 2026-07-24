@@ -6,9 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Intelligence prompt assembly (#71)** - Cursor-shaped heading order:
+  early harness (communication / tool policy) before GodMode memory/wiki
+  blocks; late harness (tasks / coding) after tools. Labeled
+  `<godmode_*>` sections; prompt-flow configs migrate to order v3 while
+  preserving enabled flags
+
 ### Fixed
 
-- **Plugin HTTP hot-reload** — `api.routes.mount` takes effect on
+- **Plugin HTTP hot-reload** - `api.routes.mount` takes effect on
   `install_plugin` / reload without restarting Bridge (stable Express route
   slots; prefer mount in `register` over raw `app.use` in `server:beforeListen`)
 
