@@ -58,7 +58,14 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 
 Before assembly, Bridge enriches `platformContext` with a compact **git snapshot** of the coding root (`agent.config.workspace` or tenant/repo root): branch, dirty file count, and ahead/behind when an upstream exists. Soft-fails outside a git work tree. Rendered as `Git: Branch: … | clean|dirty: N | ahead X / behind Y` in the Page Context section (visible in `/api/ai/inspect` when a pathname is supplied).
 
-When the coding root has `.cursor/mcp.json`, Bridge also attaches a read-only **MCP discovery** line (`MCP: name (stdio|http|…) | discovery only (not executed by Bridge)`). Server names and transport are listed; `env` values and `headers` are never included. This is prompt awareness only: Bridge does **not** spawn MCP processes or connect to remote MCP endpoints from this path. GodMode native tools remain separate from Cursor MCP. Wiring SDK `mcpServers` for `cursor_cloud` is a later parity slice.
+When the coding root has `.cursor/mcp.json`, Bridge also attaches a read-only **MCP discovery** line (`MCP: name (stdio|http|…) | …`) in Page Context. Server names and transport are listed; `env` values and `headers` are never included in that line.
+
+For **`cursor_cloud`**, project MCP is available in two ways:
+
+1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK loads `.cursor/mcp.json`).
+2. **Inline** `mcpServers` from the same file when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers.
+
+Local/provider backends still see discovery only; Bridge does not spawn MCP processes for those backends. GodMode native tools remain separate from Cursor MCP.
 
 `cursor_cloud` delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt. That is intentional: the SDK has no main-agent system-role field, so injection is the durable contract (not a temporary workaround awaiting replacement). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 

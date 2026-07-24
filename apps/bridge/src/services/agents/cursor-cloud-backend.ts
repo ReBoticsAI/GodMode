@@ -11,6 +11,12 @@ import { shouldAutoApproveTool } from "../confirm-policy.js";
 import { resolveCursorApiKey } from "../cursor-subscription.js";
 import type { IntelligenceChatMode } from "../chat-mode.js";
 import type { AgentMessage } from "../ai-agent.js";
+import {
+  cursorMcpServersFingerprint,
+  loadCursorMcpServersForSdk,
+  resolveMcpFromWorkspace,
+  type CursorSdkMcpServers,
+} from "../coding/cursor-mcp-config.js";
 
 /** Only project rules; never user/team/mdm/all (Bridge/SaaS isolation). */
 export type CursorProjectSettingSource = "project";
@@ -245,9 +251,10 @@ export function cursorCloudCacheFingerprint(
   sysHash: string,
   paramsHash = "",
   settingSourcesKey = "",
-  sdkMode: "agent" | "plan" = "agent"
+  sdkMode: "agent" | "plan" = "agent",
+  mcpKey = ""
 ): string {
-  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}`;
+  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}|${mcpKey}`;
 }
 
 /** Local Agent.create / resume options derived from coding root (exported for tests). */
@@ -270,12 +277,14 @@ export function buildCursorSdkAgentOptions(args: {
   mode: "agent" | "plan";
   cwd: string;
   agentId?: string;
+  mcpServers?: CursorSdkMcpServers;
 }): {
   apiKey: string;
   agentId?: string;
   model: { id: string; params?: Array<{ id: string; value: string }> };
   mode: "agent" | "plan";
   local: ReturnType<typeof buildCursorLocalCreateOptions>;
+  mcpServers?: CursorSdkMcpServers;
 } {
   return {
     apiKey: args.apiKey,
@@ -285,6 +294,7 @@ export function buildCursorSdkAgentOptions(args: {
       : { id: args.modelId },
     mode: args.mode,
     local: buildCursorLocalCreateOptions(args.cwd),
+    ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
   };
 }
 
@@ -301,6 +311,7 @@ export async function resolveCursorSdkAgent(args: {
   modelId: string;
   modelParams?: Array<{ id: string; value: string }>;
   mode: "agent" | "plan";
+  mcpServers?: CursorSdkMcpServers;
   /** Injectable for tests. */
   sdk?: {
     resume: (
@@ -312,8 +323,15 @@ export async function resolveCursorSdkAgent(args: {
 }): Promise<{ agent: SdkAgent; continued: boolean }> {
   const existing = chatAgents.get(args.chatKey);
   if (existing) {
-    existing.cacheFingerprint = args.fingerprint;
-    return { agent: existing.agent, continued: true };
+    if (existing.cacheFingerprint === args.fingerprint) {
+      return { agent: existing.agent, continued: true };
+    }
+    try {
+      existing.agent.close();
+    } catch {
+      /* ignore */
+    }
+    chatAgents.delete(args.chatKey);
   }
 
   const baseOpts = buildCursorSdkAgentOptions({
@@ -322,6 +340,7 @@ export async function resolveCursorSdkAgent(args: {
     modelParams: args.modelParams,
     mode: args.mode,
     cwd: args.cwd,
+    mcpServers: args.mcpServers,
   });
 
   let sdk = args.sdk;
@@ -453,13 +472,19 @@ export class CursorCloudBackend implements AgentBackend {
       cfg.modelParams as Record<string, unknown> | undefined
     );
     const settingSources = resolveCursorSettingSources(cwd);
+    const mcpEnabled = resolveMcpFromWorkspace(cfg, { isSaas: config.isSaas });
+    const mcpServers = mcpEnabled
+      ? loadCursorMcpServersForSdk(cwd)
+      : undefined;
+    const mcpKey = cursorMcpServersFingerprint(cwd, mcpEnabled);
     const sdkMode = toSdkAgentMode(chatMode);
     const fingerprint = cursorCloudCacheFingerprint(
       modelId,
       systemHash(sys),
       paramsHash,
       cursorSettingSourcesFingerprint(settingSources),
-      sdkMode
+      sdkMode,
+      mcpKey
     );
 
     const { agent: sdkAgent, continued } = await resolveCursorSdkAgent({
@@ -470,6 +495,7 @@ export class CursorCloudBackend implements AgentBackend {
       modelId,
       modelParams,
       mode: sdkMode,
+      mcpServers,
     });
     const prompt = buildPrompt(req, {
       includeTranscript: shouldIncludeTranscriptAppendix(continued),
@@ -480,6 +506,7 @@ export class CursorCloudBackend implements AgentBackend {
     const run = await sdkAgent.send(prompt, {
       model: modelSelection,
       mode: sdkMode,
+      ...(mcpServers ? { mcpServers } : {}),
       local: { customTools },
     });
 

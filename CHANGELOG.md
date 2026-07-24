@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **cursor_cloud MCP pass-through (#71)** - opt-in/default-on (non-SaaS)
+  inline `mcpServers` from coding-root `.cursor/mcp.json` on create/resume/send;
+  SaaS defaults off; Page Context MCP line notes SDK vs discovery-only
 - **MCP config discovery in platform context (#71)** - coding-root
   `.cursor/mcp.json` server names/transports appear as an `MCP:` Page
   Context line (secrets redacted; Bridge does not execute MCP from this path)
