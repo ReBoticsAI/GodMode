@@ -274,6 +274,9 @@ function renderPlatform(ctx: PlatformContext | undefined): string {
   if (ctx.gitSnapshot?.summary) {
     lines.push(`Git: ${ctx.gitSnapshot.summary}`);
   }
+  if (ctx.mcpDiscovery?.summary) {
+    lines.push(`MCP: ${ctx.mcpDiscovery.summary}`);
+  }
   if (ctx.pageSnapshot) {
     lines.push("\n--- Current page data ---");
     lines.push(JSON.stringify(ctx.pageSnapshot, null, 2));
