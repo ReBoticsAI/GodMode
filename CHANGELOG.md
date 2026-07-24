@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **cursor_cloud SDK mode + model.params (#71)** - Plan maps to SDK
+  `mode: "plan"`; Agent/Ask use `mode: "agent"` (Ask stays GodMode tool
+  filtering). `modelParams` now reach `Agent.create({ model: { id, params } })`
 - **cursor_cloud project settingSources (#71)** - when the coding root has
   `.cursor/`, SDK `local.settingSources: ["project"]` loads repo Cursor
   rules alongside GodMode `godmode-system` injection (never user/team/all)
