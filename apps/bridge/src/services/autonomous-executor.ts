@@ -1,6 +1,7 @@
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
 import { runSubagent } from "./agents/runner.js";
+import { raceWithTimeout, TIMEOUT_SENTINEL } from "./agents/subagent-bounds.js";
 import { createNotification } from "./notification-service.js";
 import {
   clearCardAwaiting,
@@ -64,23 +65,6 @@ const PER_TICK_ITERATIONS = 8;
  * away, the tick abandons the turn, keeps whatever the tools already persisted,
  * and the loop continues — so one bad turn can never block the executor. */
 const TURN_TIMEOUT_MS = 240_000;
-
-const TIMEOUT_SENTINEL = Symbol("turn-timeout");
-
-async function withTimeout<T>(
-  p: Promise<T>,
-  ms: number
-): Promise<T | typeof TIMEOUT_SENTINEL> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<typeof TIMEOUT_SENTINEL>((resolve) => {
-    timer = setTimeout(() => resolve(TIMEOUT_SENTINEL), ms);
-  });
-  try {
-    return await Promise.race([p, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 /** Pace re-enqueues while the LLM is still loading (avoids burning the chain
  * budget in a tight spin during model warm-up). */
@@ -844,7 +828,7 @@ export async function runAutonomousTick(
   let answer = "";
   let runError: string | null = null;
   try {
-    const raced = await withTimeout(
+    const raced = await raceWithTimeout(
       runSubagent({
         db,
         llm: deps.llm,

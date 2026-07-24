@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Subagent bounds + queue stall recovery (#118)** - shared
+  `subagent-bounds` helper; workflows and hooks use the same 120s structured
+  timeout as chat delegation; autonomous ticks keep a single 240s race;
+  stale `ai_prompt_queue` `running` rows older than 60m
+  (`AI_QUEUE_STALE_RUNNING_MINUTES`) are marked error
 - **Delegation stall recovery (#70)** - `delegate_to_subagent` uses a 120s
   wall-clock timeout (optional `timeoutMs`, max 300s) and returns structured
   `status: ok | timeout | error` so parent chats can recover instead of hanging

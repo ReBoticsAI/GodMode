@@ -16,6 +16,13 @@ import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
 import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
 import type { LlmManager } from "./llm-manager.js";
 import { runSubagent } from "./agents/runner.js";
+import { runBoundedSubagentDelegation } from "./agents/subagent-bounds.js";
+export {
+  DELEGATE_DEFAULT_TIMEOUT_MS,
+  DELEGATE_MAX_TIMEOUT_MS,
+  runBoundedSubagentDelegation,
+  type DelegateSubagentResult,
+} from "./agents/subagent-bounds.js";
 import { runCursorAgent } from "./agents/cursor-backend.js";
 import { buildContractorContextBundle } from "./contractor-context.js";
 import { createAgent, getAgent, listAgents } from "./agents/agents-db.js";
@@ -1131,81 +1138,6 @@ async function runPlatform<T>(
       result: `error: ${(err as Error).message}`,
     });
     throw err;
-  }
-}
-
-/** Default wall-clock cap for chat-time `delegate_to_subagent` (#70). */
-export const DELEGATE_DEFAULT_TIMEOUT_MS = 120_000;
-/** Hard ceiling for optional `timeoutMs` overrides. */
-export const DELEGATE_MAX_TIMEOUT_MS = 300_000;
-
-const DELEGATE_TIMEOUT_SENTINEL = Symbol("delegate-timeout");
-
-async function withDelegateTimeout<T>(
-  p: Promise<T>,
-  ms: number
-): Promise<T | typeof DELEGATE_TIMEOUT_SENTINEL> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<typeof DELEGATE_TIMEOUT_SENTINEL>((resolve) => {
-    timer = setTimeout(() => resolve(DELEGATE_TIMEOUT_SENTINEL), ms);
-  });
-  try {
-    return await Promise.race([p, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-export type DelegateSubagentResult = {
-  agentId: string;
-  status: "ok" | "timeout" | "error";
-  answer?: string;
-  error?: string;
-  durationMs: number;
-};
-
-/**
- * Run a subagent promise with a wall-clock timeout and structured status.
- * Exported for unit tests; used by `delegate_to_subagent`.
- */
-export async function runBoundedSubagentDelegation(opts: {
-  agentId: string;
-  run: () => Promise<string>;
-  timeoutMs?: number;
-}): Promise<DelegateSubagentResult> {
-  const raw =
-    opts.timeoutMs != null && Number.isFinite(opts.timeoutMs)
-      ? Number(opts.timeoutMs)
-      : DELEGATE_DEFAULT_TIMEOUT_MS;
-  const timeoutMs = Math.min(
-    Math.max(1, Math.floor(raw)),
-    DELEGATE_MAX_TIMEOUT_MS
-  );
-  const started = Date.now();
-  try {
-    const raced = await withDelegateTimeout(opts.run(), timeoutMs);
-    const durationMs = Date.now() - started;
-    if (raced === DELEGATE_TIMEOUT_SENTINEL) {
-      return {
-        agentId: opts.agentId,
-        status: "timeout",
-        error: `Subagent timed out after ${timeoutMs}ms`,
-        durationMs,
-      };
-    }
-    return {
-      agentId: opts.agentId,
-      status: "ok",
-      answer: raced,
-      durationMs,
-    };
-  } catch (err) {
-    return {
-      agentId: opts.agentId,
-      status: "error",
-      error: err instanceof Error ? err.message : String(err),
-      durationMs: Date.now() - started,
-    };
   }
 }
 
