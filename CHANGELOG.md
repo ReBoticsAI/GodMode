@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Delegation stall recovery (#70)** - `delegate_to_subagent` uses a 120s
+  wall-clock timeout (optional `timeoutMs`, max 300s) and returns structured
+  `status: ok | timeout | error` so parent chats can recover instead of hanging
 - **Plugin HTTP hot-reload** - `api.routes.mount` takes effect on
   `install_plugin` / reload without restarting Bridge (stable Express route
   slots; prefer mount in `register` over raw `app.use` in `server:beforeListen`)
