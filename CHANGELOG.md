@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **cursor_cloud transcript fidelity (#71)** - prior-turn appendix now
+  includes truncated tool calls and tool results (not only user/assistant
+  text) so multi-turn context survives SDK agent cache resets
 - **Intelligence prompt assembly (#71)** - Cursor-shaped heading order:
   early harness (communication / tool policy) before GodMode memory/wiki
   blocks; late harness (tasks / coding) after tools. Labeled

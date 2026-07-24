@@ -21,9 +21,12 @@ interface ChatAgentEntry {
 }
 
 /** Soft cap for prior-turn transcript appendix (chars). */
-const TRANSCRIPT_CHAR_BUDGET = 6_000;
+export const TRANSCRIPT_CHAR_BUDGET = 10_000;
 const TRANSCRIPT_MAX_TURNS = 12;
 const TRANSCRIPT_PER_MESSAGE_CAP = 1_200;
+const TRANSCRIPT_TOOL_ARGS_CAP = 400;
+/** Align with chat-history `compactAgentMessages` tool-result truncation. */
+const TRANSCRIPT_TOOL_RESULT_CAP = 1_500;
 
 const chatAgents = new Map<string, ChatAgentEntry>();
 
@@ -44,43 +47,90 @@ function flattenTextContent(content: string): string {
   return content.replace(/\s+/g, " ").trim();
 }
 
+function truncateFlat(text: string, cap: number): string {
+  const body = flattenTextContent(text);
+  if (body.length <= cap) return body;
+  return `${body.slice(0, cap)}…`;
+}
+
+function truncateToolResult(content: string, cap: number): string {
+  if (content.length <= cap) return content;
+  const omitted = content.length - cap;
+  return `${content.slice(0, cap)}\n[... ${omitted} chars omitted ...]`;
+}
+
+/** Serialize one history message into appendix lines (may be empty). */
+export function formatTranscriptMessageLines(m: AgentMessage): string[] {
+  if (m.role === "user") {
+    const body = truncateFlat(m.content ?? "", TRANSCRIPT_PER_MESSAGE_CAP);
+    return body ? [`User: ${body}`] : [];
+  }
+  if (m.role === "assistant") {
+    const lines: string[] = [];
+    const body = truncateFlat(m.content ?? "", TRANSCRIPT_PER_MESSAGE_CAP);
+    if (body) lines.push(`Assistant: ${body}`);
+    for (const tc of m.tool_calls ?? []) {
+      const args = truncateFlat(tc.function.arguments ?? "", TRANSCRIPT_TOOL_ARGS_CAP);
+      lines.push(
+        args
+          ? `Assistant tool_call ${tc.function.name}: ${args}`
+          : `Assistant tool_call ${tc.function.name}`
+      );
+    }
+    return lines;
+  }
+  if (m.role === "tool") {
+    const label = m.name?.trim() || m.tool_call_id?.trim() || "tool";
+    const body = truncateToolResult(m.content ?? "", TRANSCRIPT_TOOL_RESULT_CAP).trim();
+    return body ? [`Tool[${label}]: ${body}`] : [];
+  }
+  return [];
+}
+
 /**
- * Rolling user/assistant transcript for continuity when the SDK agent is reset
- * (e.g. model switch). Skips system/tool messages and the current last user turn.
- * Not a full Gemma-local history replay — no tool JSON.
+ * Rolling transcript for continuity when the SDK agent is reset (e.g. model
+ * switch). Includes prior tool calls/results under a char budget. Drops system
+ * messages and the current last user turn (sent as the live prompt). Not a
+ * full SDK-native conversation resume.
  */
 export function buildTranscriptAppendix(
   messages: AgentMessage[],
   budget = TRANSCRIPT_CHAR_BUDGET
 ): string {
-  const textTurns = messages.filter(
-    (m) =>
-      (m.role === "user" || m.role === "assistant") &&
-      typeof m.content === "string" &&
-      m.content.trim().length > 0 &&
-      !m.tool_calls?.length
-  );
-  if (textTurns.length <= 1) return "";
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx <= 0) return "";
 
-  // Drop the last user message — it is sent as the live prompt.
-  const prior = textTurns.slice(0, -1).slice(-TRANSCRIPT_MAX_TURNS);
+  let prior = messages.slice(0, lastUserIdx).filter((m) => m.role !== "system");
+  if (!prior.length) return "";
+
+  const userStarts: number[] = [];
+  for (let i = 0; i < prior.length; i++) {
+    if (prior[i]!.role === "user") userStarts.push(i);
+  }
+  if (userStarts.length > TRANSCRIPT_MAX_TURNS) {
+    prior = prior.slice(userStarts[userStarts.length - TRANSCRIPT_MAX_TURNS]!);
+  }
+
   const blocks: string[] = [];
   let used = 0;
   for (let i = prior.length - 1; i >= 0; i--) {
-    const m = prior[i]!;
-    let body = flattenTextContent(m.content);
-    if (body.length > TRANSCRIPT_PER_MESSAGE_CAP) {
-      body = `${body.slice(0, TRANSCRIPT_PER_MESSAGE_CAP)}…`;
-    }
-    const line = `${m.role === "user" ? "User" : "Assistant"}: ${body}`;
-    if (used + line.length + 1 > budget) break;
-    blocks.unshift(line);
-    used += line.length + 1;
+    const lines = formatTranscriptMessageLines(prior[i]!);
+    if (!lines.length) continue;
+    const chunk = lines.join("\n");
+    if (used + chunk.length + 1 > budget) break;
+    blocks.unshift(chunk);
+    used += chunk.length + 1;
   }
   if (!blocks.length) return "";
   return [
     "<!-- godmode-recent-transcript -->",
-    "Recent turns (for continuity; not a full tool replay):",
+    "Recent turns (for continuity after SDK agent reset; tool calls/results truncated):",
     ...blocks,
     "<!-- /godmode-recent-transcript -->",
   ].join("\n");
