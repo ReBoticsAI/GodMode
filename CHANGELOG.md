@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin HTTP hot-reload** — `api.routes.mount` takes effect on
+  `install_plugin` / reload without restarting Bridge (stable Express route
+  slots; prefer mount in `register` over raw `app.use` in `server:beforeListen`)
+
 ## [0.9.1] - 2026-07-18
 
 Patch release restoring dual agent/user workspaces after kernel cutover

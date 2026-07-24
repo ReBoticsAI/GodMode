@@ -147,7 +147,7 @@ GodMode plugin scaffold.
 2. Call Intelligence \`build_plugin\` (Bridge esbuild)
 3. Call Intelligence \`install_plugin\` — loads at runtime and enables for your tenant
 
-Same pipeline as Marketplace → Unofficial. Custom Express \`api.routes.mount\` after boot may still need a Bridge restart.
+Same pipeline as Marketplace → Unofficial. Use \`api.routes.mount\` for Express routes; they hot-reload with \`install_plugin\` (no Bridge restart). Avoid raw \`app.use\` in \`server:beforeListen\`.
 `,
     "utf8"
   );
