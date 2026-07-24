@@ -21,7 +21,7 @@ type SdkAgent = Awaited<
 
 interface ChatAgentEntry {
   agent: SdkAgent;
-  /** Fingerprint of system + model (+ optional params) — recreate when this changes. */
+  /** Last structural fingerprint observed for this in-memory handle. */
   cacheFingerprint: string;
 }
 
@@ -141,12 +141,18 @@ export function buildTranscriptAppendix(
   ].join("\n");
 }
 
-export function buildPrompt(req: AgentRunRequest): string {
+export function buildPrompt(
+  req: AgentRunRequest,
+  opts?: { includeTranscript?: boolean }
+): string {
   const system = req.messages.find((m) => m.role === "system")?.content?.trim() ?? "";
   const lastUser =
     [...req.messages].reverse().find((m) => m.role === "user")?.content?.trim() ?? "";
   if (!lastUser) throw new Error("User message required");
-  const appendix = buildTranscriptAppendix(req.messages);
+  const includeTranscript = opts?.includeTranscript !== false;
+  const appendix = includeTranscript
+    ? buildTranscriptAppendix(req.messages)
+    : "";
   const parts: string[] = [];
   if (system) {
     parts.push(`<!-- godmode-system -->\n${system}\n<!-- /godmode-system -->`);
@@ -154,6 +160,14 @@ export function buildPrompt(req: AgentRunRequest): string {
   if (appendix) parts.push(appendix);
   parts.push(lastUser);
   return parts.join("\n\n");
+}
+
+/**
+ * Whether to append the GodMode transcript fallback.
+ * Skip when the SDK agent was resumed or reused (native conversation history).
+ */
+export function shouldIncludeTranscriptAppendix(continued: boolean): boolean {
+  return !continued;
 }
 
 function systemHash(system: string): string {
@@ -193,7 +207,7 @@ export function toSdkModelParams(
 
 /**
  * Map Intelligence chat mode to SDK AgentModeOption.
- * Ask has no SDK equivalent — keep `"agent"` and rely on GodMode tool filtering.
+ * Ask has no SDK equivalent; keep `"agent"` and rely on GodMode tool filtering.
  */
 export function toSdkAgentMode(
   chatMode: IntelligenceChatMode | undefined
@@ -236,7 +250,7 @@ export function cursorCloudCacheFingerprint(
   return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}`;
 }
 
-/** Local Agent.create options derived from coding root (exported for tests). */
+/** Local Agent.create / resume options derived from coding root (exported for tests). */
 export function buildCursorLocalCreateOptions(cwd: string): {
   cwd: string;
   sandboxOptions: { enabled: false };
@@ -247,6 +261,103 @@ export function buildCursorLocalCreateOptions(cwd: string): {
     sandboxOptions: { enabled: false },
     settingSources: resolveCursorSettingSources(cwd),
   };
+}
+
+export function buildCursorSdkAgentOptions(args: {
+  apiKey: string;
+  modelId: string;
+  modelParams?: Array<{ id: string; value: string }>;
+  mode: "agent" | "plan";
+  cwd: string;
+  agentId?: string;
+}): {
+  apiKey: string;
+  agentId?: string;
+  model: { id: string; params?: Array<{ id: string; value: string }> };
+  mode: "agent" | "plan";
+  local: ReturnType<typeof buildCursorLocalCreateOptions>;
+} {
+  return {
+    apiKey: args.apiKey,
+    ...(args.agentId ? { agentId: args.agentId } : {}),
+    model: args.modelParams?.length
+      ? { id: args.modelId, params: args.modelParams }
+      : { id: args.modelId },
+    mode: args.mode,
+    local: buildCursorLocalCreateOptions(args.cwd),
+  };
+}
+
+/**
+ * Resolve an SDK agent for a chat key: reuse in-memory handle, else
+ * `Agent.resume`, else `Agent.create`. `continued` is true when native SDK
+ * history should be trusted (skip transcript appendix).
+ */
+export async function resolveCursorSdkAgent(args: {
+  chatKey: string;
+  apiKey: string;
+  cwd: string;
+  fingerprint: string;
+  modelId: string;
+  modelParams?: Array<{ id: string; value: string }>;
+  mode: "agent" | "plan";
+  /** Injectable for tests. */
+  sdk?: {
+    resume: (
+      agentId: string,
+      options: Record<string, unknown>
+    ) => Promise<SdkAgent>;
+    create: (options: Record<string, unknown>) => Promise<SdkAgent>;
+  };
+}): Promise<{ agent: SdkAgent; continued: boolean }> {
+  const existing = chatAgents.get(args.chatKey);
+  if (existing) {
+    existing.cacheFingerprint = args.fingerprint;
+    return { agent: existing.agent, continued: true };
+  }
+
+  const baseOpts = buildCursorSdkAgentOptions({
+    apiKey: args.apiKey,
+    modelId: args.modelId,
+    modelParams: args.modelParams,
+    mode: args.mode,
+    cwd: args.cwd,
+  });
+
+  let sdk = args.sdk;
+  if (!sdk) {
+    const mod = await import("@cursor/sdk");
+    sdk = {
+      resume: (id, options) =>
+        mod.Agent.resume(id, options as Parameters<typeof mod.Agent.resume>[1]),
+      create: (options) =>
+        mod.Agent.create(options as Parameters<typeof mod.Agent.create>[0]),
+    };
+  }
+
+  try {
+    const agent = await sdk.resume(args.chatKey, baseOpts);
+    chatAgents.set(args.chatKey, {
+      agent,
+      cacheFingerprint: args.fingerprint,
+    });
+    return { agent, continued: true };
+  } catch {
+    const agent = await sdk.create({
+      ...baseOpts,
+      agentId: args.chatKey,
+    });
+    chatAgents.set(args.chatKey, {
+      agent,
+      cacheFingerprint: args.fingerprint,
+    });
+    return { agent, continued: false };
+  }
+}
+
+/** @internal test helper: clears in-memory SDK agent cache. */
+export function clearCursorCloudAgentCacheForTests(): void {
+  chatAgents.clear();
 }
 
 function buildCustomTools(
@@ -309,37 +420,9 @@ function buildCustomTools(
   return tools;
 }
 
-async function getOrCreateChatAgent(
-  chatKey: string,
-  apiKey: string,
-  cwd: string,
-  fingerprint: string,
-  modelId: string,
-  modelParams: Array<{ id: string; value: string }> | undefined,
-  mode: "agent" | "plan"
-): Promise<SdkAgent> {
-  const existing = chatAgents.get(chatKey);
-  if (existing && existing.cacheFingerprint === fingerprint) return existing.agent;
-  if (existing) {
-    chatAgents.delete(chatKey);
-  }
-  const { Agent } = await import("@cursor/sdk");
-  const agent = await Agent.create({
-    apiKey,
-    agentId: chatKey,
-    model: modelParams?.length
-      ? { id: modelId, params: modelParams }
-      : { id: modelId },
-    mode,
-    local: buildCursorLocalCreateOptions(cwd),
-  });
-  chatAgents.set(chatKey, { agent, cacheFingerprint: fingerprint });
-  return agent;
-}
-
 /**
  * Runs Intelligence on Cursor subscription models via @cursor/sdk.
- * GodMode tools are exposed as SDK customTools — same tool loop, Cursor-hosted models.
+ * GodMode tools are exposed as SDK customTools (same tool loop, Cursor-hosted models).
  */
 export class CursorCloudBackend implements AgentBackend {
   constructor(private db: AppDatabase) {}
@@ -361,7 +444,6 @@ export class CursorCloudBackend implements AgentBackend {
       delegationDepth: req.delegationDepth ?? 0,
     };
     const customTools = buildCustomTools(req, this.db, toolCtx, chatMode);
-    const prompt = buildPrompt(req);
     const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
     const modelId = cfg.model?.trim() || "auto";
     const modelParams = toSdkModelParams(
@@ -380,16 +462,26 @@ export class CursorCloudBackend implements AgentBackend {
       sdkMode
     );
 
-    const sdkAgent = await getOrCreateChatAgent(
+    const { agent: sdkAgent, continued } = await resolveCursorSdkAgent({
       chatKey,
       apiKey,
       cwd,
       fingerprint,
       modelId,
       modelParams,
-      sdkMode
-    );
-    const run = await sdkAgent.send(prompt, { local: { customTools } });
+      mode: sdkMode,
+    });
+    const prompt = buildPrompt(req, {
+      includeTranscript: shouldIncludeTranscriptAppendix(continued),
+    });
+    const modelSelection = modelParams?.length
+      ? { id: modelId, params: modelParams }
+      : { id: modelId };
+    const run = await sdkAgent.send(prompt, {
+      model: modelSelection,
+      mode: sdkMode,
+      local: { customTools },
+    });
 
     let streamed = "";
     for await (const event of run.stream()) {
