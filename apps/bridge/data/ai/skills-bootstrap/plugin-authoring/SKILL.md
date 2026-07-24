@@ -18,7 +18,8 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
 5. `build_plugin` compiles with Bridge esbuild (`src` → `dist`). No per-plugin `npm install` required.
 6. `install_plugin` registers owned ObjectTypes before seeding Records, loads the
    plugin, and enables it for the tenant. Custom routes must enforce tenant and
-   installed-plugin checks. No Bridge restart for tools / tenant:install.
+   installed-plugin checks. No Bridge restart for tools, tenant:install, or
+   `api.routes.mount` HTTP routes.
 7. Declare strict action input/output/error schemas, roles, confirmation,
    idempotency, concurrency, retry, timeout, cancellation, execution mode, and
    sensitive paths; verify terminal `OperationRun` state and tenant isolation.

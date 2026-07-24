@@ -54,6 +54,12 @@ export interface PluginHostServices {
   getTenantDb(tenantId: string): TenantDb;
   getReqTenantDb(req: Request): TenantDb;
   createPluginRouter(): IRouter;
+  /**
+   * Mount a plugin HTTP route through Bridge route slots so install/reload
+   * updates handlers without a process restart. Prefer `api.routes.mount` in
+   * `register`; use this from `server:beforeListen` instead of raw `app.use`.
+   */
+  mountPluginRoute?(pluginId: string, path: string, router: IRouter): void;
   getTimeseriesStore(): {
     analyticsQuery(sql: string): Promise<unknown[]>;
     append(

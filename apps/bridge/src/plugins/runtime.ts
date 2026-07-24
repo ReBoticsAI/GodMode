@@ -1,4 +1,10 @@
-import type { Express, IRouter, RequestHandler } from "express";
+import {
+  Router,
+  type Express,
+  type IRouter,
+  type NextFunction,
+  type RequestHandler,
+} from "express";
 import type { EventEmitter } from "node:events";
 import type { ObjectTypeDef, RecordData } from "@godmode/kernel";
 import type { AppDatabase } from "../db.js";
@@ -55,10 +61,74 @@ interface PluginHookEntry {
   handler: HookHandler;
 }
 
+interface PluginRouterEntry {
+  pluginId: string;
+  path: string;
+  router: IRouter;
+}
+
+interface PluginMiddlewareEntry {
+  pluginId: string;
+  middleware: RequestHandler;
+}
+
+/**
+ * Express cannot remove `app.use` layers. Keep a stable shell mounted once and
+ * swap the active handler so plugin install/reload updates routes in-process.
+ */
+class RouteSlot {
+  private active: RequestHandler = (_req, _res, next) => next();
+  readonly shell: RequestHandler = (req, res, next) => this.active(req, res, next);
+  mounted = false;
+
+  swap(handler: RequestHandler | IRouter): void {
+    this.active = handler as RequestHandler;
+  }
+
+  clear(): void {
+    this.active = (_req, _res, next) => next();
+  }
+}
+
+class MiddlewareSlot {
+  private active: RequestHandler[] = [];
+  readonly shell: RequestHandler = (req, res, next) => {
+    let index = 0;
+    const run = (err?: unknown) => {
+      if (err !== undefined && err !== null) {
+        next(err);
+        return;
+      }
+      const mw = this.active[index++];
+      if (!mw) {
+        next();
+        return;
+      }
+      try {
+        mw(req, res, run as NextFunction);
+      } catch (error) {
+        next(error);
+      }
+    };
+    run();
+  };
+  mounted = false;
+
+  swap(handlers: RequestHandler[]): void {
+    this.active = [...handlers];
+  }
+
+  clear(): void {
+    this.active = [];
+  }
+}
+
 export class PluginRuntime {
   private readonly hooks = new Map<PluginHookName, PluginHookEntry[]>();
-  private readonly routers: Array<{ path: string; router: IRouter }> = [];
-  private readonly middleware: RequestHandler[] = [];
+  private readonly routers: PluginRouterEntry[] = [];
+  private readonly middleware: PluginMiddlewareEntry[] = [];
+  private readonly routeSlots = new Map<string, RouteSlot>();
+  private readonly middlewareSlot = new MiddlewareSlot();
   private readonly tools: PluginToolDef[] = [];
   private readonly objectTypeDisposers: Array<{
     pluginId: string;
@@ -66,9 +136,19 @@ export class PluginRuntime {
   }> = [];
   readonly loaded: LoadedPlugin[] = [];
   private config: PluginRuntimeConfig | null = null;
+  private app: Express | null = null;
 
   configure(config: PluginRuntimeConfig): void {
     this.config = config;
+  }
+
+  /** Retain the Express app so post-boot install/reload can sync route slots. */
+  setApp(app: Express): void {
+    this.app = app;
+  }
+
+  hasApp(): boolean {
+    return this.app !== null;
   }
 
   register(manifest: GodmodePluginManifest, pluginRoot: string, registerFn: GodModePluginRegister): void {
@@ -87,11 +167,15 @@ export class PluginRuntime {
   }
 
   /**
-   * Drop a loaded plugin's tools/hooks/loaded entry so it can be re-registered
-   * after a rebuild. Does not unmount Express routes already attached at boot.
+   * Drop a loaded plugin's tools/hooks/routes/loaded entry so it can be
+   * re-registered after a rebuild. Route slots stay mounted; inners are cleared
+   * or swapped via {@link syncPluginRoutes}.
    */
   unregister(pluginId: string): boolean {
     const before = this.loaded.length;
+    const affectedPaths = this.routers
+      .filter((entry) => entry.pluginId === pluginId)
+      .map((entry) => entry.path);
     this.loaded.splice(
       0,
       this.loaded.length,
@@ -99,6 +183,12 @@ export class PluginRuntime {
     );
     for (let i = this.tools.length - 1; i >= 0; i--) {
       if (this.tools[i].pluginId === pluginId) this.tools.splice(i, 1);
+    }
+    for (let i = this.routers.length - 1; i >= 0; i--) {
+      if (this.routers[i].pluginId === pluginId) this.routers.splice(i, 1);
+    }
+    for (let i = this.middleware.length - 1; i >= 0; i--) {
+      if (this.middleware[i].pluginId === pluginId) this.middleware.splice(i, 1);
     }
     for (const [name, entries] of this.hooks) {
       const next = entries.filter((e) => e.pluginId !== pluginId);
@@ -110,6 +200,9 @@ export class PluginRuntime {
       if (entry.pluginId !== pluginId) continue;
       entry.dispose();
       this.objectTypeDisposers.splice(index, 1);
+    }
+    if (this.app) {
+      this.syncPluginRoutes(undefined, affectedPaths);
     }
     return this.loaded.length < before;
   }
@@ -130,13 +223,76 @@ export class PluginRuntime {
     return this.tools.find((t) => t.name === name);
   }
 
+  /**
+   * Record a plugin route (same as `api.routes.mount`) and sync slots when the
+   * app is already attached. Preferred over raw `ctx.app.use` in hooks.
+   */
+  mountPluginRoute(pluginId: string, path: string, router: IRouter): void {
+    this.routers.push({ pluginId, path, router });
+    if (this.app) this.syncPluginRoutes(pluginId);
+  }
+
+  /**
+   * Ensure Express has stable shells for plugin middleware/paths and swap the
+   * active handlers from the current registry. Safe to call after boot.
+   */
+  syncPluginRoutes(pluginId?: string, extraPaths: string[] = []): void {
+    if (!this.app) return;
+
+    this.ensureMiddlewareSlotMounted();
+    this.middlewareSlot.swap(this.middleware.map((entry) => entry.middleware));
+
+    const paths = new Set<string>(extraPaths);
+    for (const entry of this.routers) {
+      if (pluginId && entry.pluginId !== pluginId) continue;
+      paths.add(entry.path);
+    }
+    if (!pluginId) {
+      for (const path of this.routeSlots.keys()) paths.add(path);
+      for (const entry of this.routers) paths.add(entry.path);
+    }
+
+    for (const path of paths) {
+      this.ensureRouteSlotMounted(path);
+      const routersForPath = this.routers.filter((entry) => entry.path === path);
+      const slot = this.routeSlots.get(path)!;
+      if (routersForPath.length === 0) {
+        slot.clear();
+        continue;
+      }
+      if (routersForPath.length === 1) {
+        slot.swap(routersForPath[0]!.router);
+        continue;
+      }
+      const composite = Router();
+      for (const entry of routersForPath) {
+        composite.use(entry.router);
+      }
+      slot.swap(composite);
+    }
+  }
+
   mountOn(app: Express): void {
-    for (const mw of this.middleware) {
-      app.use(mw);
+    this.setApp(app);
+    this.syncPluginRoutes();
+  }
+
+  private ensureMiddlewareSlotMounted(): void {
+    if (!this.app || this.middlewareSlot.mounted) return;
+    this.app.use(this.middlewareSlot.shell);
+    this.middlewareSlot.mounted = true;
+  }
+
+  private ensureRouteSlotMounted(path: string): void {
+    if (!this.app) return;
+    let slot = this.routeSlots.get(path);
+    if (!slot) {
+      slot = new RouteSlot();
+      this.routeSlots.set(path, slot);
     }
-    for (const { path, router } of this.routers) {
-      app.use(path, router);
-    }
+    if (slot.mounted) return;
+    this.app.use(path, slot.shell);
+    slot.mounted = true;
   }
 
   private bootContext(partial: Partial<PluginTenantContext> = {}): PluginBootContext & PluginTenantContext {
@@ -273,10 +429,11 @@ export class PluginRuntime {
       },
       routes: {
         mount(path: string, router: IRouter) {
-          self.routers.push({ path, router });
+          self.mountPluginRoute(pluginId, path, router);
         },
         use(middleware: RequestHandler) {
-          self.middleware.push(middleware);
+          self.middleware.push({ pluginId, middleware });
+          if (self.app) self.syncPluginRoutes(pluginId);
         },
       },
       tools: {

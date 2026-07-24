@@ -15,7 +15,8 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
 5. Implement bridge/web entries → `build_plugin` → `install_plugin`.
 6. For public packs, run `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
 7. Custom Express routes must enforce authentication, tenant membership, and
-   installed-plugin visibility explicitly. Advanced mounts after boot may still
-   need a Bridge restart — prefer tools + ObjectTypes + tenant hooks in v1.
+   installed-plugin visibility explicitly. Use `api.routes.mount` in `register`
+   so routes hot-reload with `install_plugin` (no Bridge restart). Prefer tools
+   + ObjectTypes + tenant hooks when HTTP is unnecessary.
 8. Verify discovery, representative Record/action calls, exact adapter parity,
    async terminal/recovery behavior, and tenant isolation after install.
