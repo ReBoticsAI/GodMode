@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **MCP config discovery in platform context (#71)** - coding-root
+  `.cursor/mcp.json` server names/transports appear as an `MCP:` Page
+  Context line (secrets redacted; Bridge does not execute MCP from this path)
 - **Workspace AGENTS.md Knowledge import (#71)** - local/provider backends
   also sync coding-root `AGENTS.md` and `.cursor/AGENTS.md` into Knowledge
   (`cursor-ws-agents-md` / `cursor-ws-dot-cursor-agents-md`); fingerprint
