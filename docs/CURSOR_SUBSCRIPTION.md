@@ -36,7 +36,21 @@ Picker model id selects a Cursor family harness (see [LOCAL_LLM.md](./LOCAL_LLM.
 | `/grok/i` | `cursor-grok` |
 | other Cursor ids | `cursor` (fallback) |
 
-Changing the picker model recreates the cached SDK agent for that chat (model + system prompt fingerprint), so mid-thread switches take effect. A short rolling user/assistant transcript is appended for continuity — not a full local tool-history replay like Gemma.
+Changing the picker model recreates the cached SDK agent for that chat (model + system prompt fingerprint), so mid-thread switches take effect. A short rolling user/assistant transcript is appended for continuity - not a full local tool-history replay like Gemma.
+
+## System prompt shape (Cursor parity)
+
+GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v3`):
+
+1. Identity: agent profile, user context, base prompt
+2. Early harness: communication, tool-calling policy, search/reading, citations
+3. Environment: platform / page context
+4. Rules and skills
+5. GodMode-only blocks (labeled): `<godmode_memory>`, `<godmode_wiki>`, `<godmode_capabilities>`, `<godmode_user>`
+6. Tools and @mentions
+7. Late harness: plugin tiers, tasks loop, coding agent contract (when code access), chat mode
+
+`cursor_cloud` still delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt (SDK native system-role replacement is a later #71 slice). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
 ## CLI login ≠ SDK billing key
 

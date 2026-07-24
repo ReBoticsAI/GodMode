@@ -410,6 +410,8 @@ export interface AiAssembledSection {
 }
 
 export interface AiPromptFlowConfig {
+  /** Cursor-parity section order version (bridge migrates older configs). */
+  promptFlowVersion?: number;
   sections: Array<{ id: PromptSectionId; enabled: boolean; order: number }>;
   positions?: Record<string, { x: number; y: number }>;
   viewport?: { x: number; y: number; zoom: number };
