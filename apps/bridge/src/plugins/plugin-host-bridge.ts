@@ -23,6 +23,7 @@ import {
   createSystemOperationContext,
   KernelError,
 } from "../kernel/index.js";
+import { pluginRuntime } from "./runtime.js";
 
 const healthProbes = new Map<string, HealthProbeFn>();
 const ipcEnqueues = new Map<string, IpcEnqueueFn>();
@@ -67,6 +68,9 @@ export function initPluginHost(): PluginHostServices {
       const router = Router();
       router.use(tenantDbMiddleware);
       return router;
+    },
+    mountPluginRoute(pluginId, path, router) {
+      pluginRuntime.mountPluginRoute(pluginId, path, router);
     },
     getTimeseriesStore() {
       return getTimeseriesStore();
