@@ -271,6 +271,9 @@ function renderPlatform(ctx: PlatformContext | undefined): string {
   if (ctx.pathname) lines.push(`Route: ${ctx.pathname}`);
   if (ctx.pageKind) lines.push(`Page type: ${ctx.pageKind}`);
   if (ctx.pageLabel) lines.push(`Page: ${ctx.pageLabel}`);
+  if (ctx.gitSnapshot?.summary) {
+    lines.push(`Git: ${ctx.gitSnapshot.summary}`);
+  }
   if (ctx.pageSnapshot) {
     lines.push("\n--- Current page data ---");
     lines.push(JSON.stringify(ctx.pageSnapshot, null, 2));

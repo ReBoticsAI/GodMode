@@ -52,6 +52,8 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 6. Tools and @mentions
 7. Late harness: plugin tiers, tasks loop, coding agent contract (when code access), chat mode
 
+Before assembly, Bridge enriches `platformContext` with a compact **git snapshot** of the coding root (`agent.config.workspace` or tenant/repo root): branch, dirty file count, and ahead/behind when an upstream exists. Soft-fails outside a git work tree. Rendered as `Git: Branch: … | clean|dirty: N | ahead X / behind Y` in the Page Context section (visible in `/api/ai/inspect` when a pathname is supplied).
+
 `cursor_cloud` still delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt (SDK native system-role replacement is a later #71 slice). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
 Intelligence chat mode maps to the SDK as follows:

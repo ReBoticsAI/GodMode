@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Platform git snapshot (#71)** - coding chats inject compact branch /
+  dirty / ahead-behind into Page Context from the coding root (soft-fail
+  outside git)
 - **cursor_cloud SDK mode + model.params (#71)** - Plan maps to SDK
   `mode: "plan"`; Agent/Ask use `mode: "agent"` (Ask stays GodMode tool
   filtering). `modelParams` now reach `Agent.create({ model: { id, params } })`

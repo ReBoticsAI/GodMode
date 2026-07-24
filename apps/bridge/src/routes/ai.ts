@@ -158,6 +158,7 @@ import { ensureAgentProject } from "../services/user-productivity.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
+import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
 
 interface ChatMessagePart {
   type: "text" | "image_url";
@@ -488,9 +489,15 @@ export function createAiRouter(
     const pathname = (req.query.pathname as string) || undefined;
     const agentId = String(req.query.agentId ?? "intelligence");
     const agent = getAgent(tdb(req), agentId);
-    const previewCtx: PlatformContext | undefined = pathname
-      ? { pathname, breadcrumb: [] }
-      : undefined;
+    const agentWorkspace =
+      agent?.config &&
+      typeof (agent.config as { workspace?: unknown }).workspace === "string"
+        ? String((agent.config as { workspace?: string }).workspace)
+        : undefined;
+    const previewCtx = enrichPlatformContextWithGit(
+      pathname ? { pathname, breadcrumb: [] } : undefined,
+      { tenantId: req.tenantId, workspace: agentWorkspace }
+    );
     const assembled = assemblePrompt(tdb(req), {
       basePrompt: agent?.systemPrompt ?? settings.systemPrompt,
       platformContext: previewCtx,
@@ -1106,9 +1113,18 @@ export function createAiRouter(
         topK: config.embeddings.wikiRagTopK,
       }
     );
+    const agentWorkspace =
+      typeof (agent.config as { workspace?: unknown } | undefined)?.workspace ===
+      "string"
+        ? String((agent.config as { workspace?: string }).workspace)
+        : undefined;
+    const platformContextWithGit = enrichPlatformContextWithGit(platformContext, {
+      tenantId: req.tenantId,
+      workspace: agentWorkspace,
+    });
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,
-      platformContext,
+      platformContext: platformContextWithGit,
       chatId: activeChatId,
       historyCount: history.length,
       userPreview: message?.trim(),
