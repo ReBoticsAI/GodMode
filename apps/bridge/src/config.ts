@@ -293,6 +293,14 @@ export const config = {
       | "low",
     defaultNativeTools: (process.env.LLAMA_NATIVE_TOOLS ?? "true") !== "false",
     /**
+     * Minutes after which a `running` ai_prompt_queue row is marked error
+     * (worker crash / lost job). Must exceed autonomous turn (4m) and
+     * delegate max timeout (5m).
+     */
+    queueStaleRunningMinutes: Number(
+      process.env.AI_QUEUE_STALE_RUNNING_MINUTES ?? 60
+    ),
+    /**
      * native = OpenAI-style tools via llama-server --jinja;
      * grammar = JSON-schema constrained decoding.
      * External llama-server (Gemma + --jinja) defaults to native — grammar
