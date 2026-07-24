@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Workspace `.cursor/` Knowledge import (#71)** - local/provider backends
+  sync coding-root `.cursor/rules` and `.cursor/skills` into Knowledge
+  (`cursor-ws-…` ids); `cursor_cloud` skips import (SDK settingSources)
 - **Post-apply TS diagnostics on write tools (#71)** - successful
   `edit_file` / `write_file` / `apply_patch` on `.ts`/`.tsx` attach a
   bounded `tsc` `verification` payload (skipped for non-TS / no tsconfig)

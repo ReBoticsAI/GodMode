@@ -130,7 +130,10 @@ import {
   resolveProfileForAgent,
 } from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
-import { globFiles, listDir } from "../services/coding/fs-tools.js";
+import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
+import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
+import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
+import type { AiAgent } from "../services/agents/types.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
 import type { CodeAutonomyLevel } from "../services/agents/agents-db.js";
 import {
@@ -158,7 +161,20 @@ import { ensureAgentProject } from "../services/user-productivity.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
-import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
+
+function maybeSyncCursorWorkspaceKnowledge(
+  db: AppDatabase,
+  agent: AiAgent | null | undefined,
+  tenantId: string | null | undefined,
+  workspace?: string
+): void {
+  if (!agent || agent.backend === "cursor_cloud") return;
+  const root = resolveCodingRoot({
+    tenantId,
+    root: workspace?.trim() || undefined,
+  });
+  syncCursorWorkspaceKnowledge(db, root);
+}
 
 interface ChatMessagePart {
   type: "text" | "image_url";
@@ -494,6 +510,12 @@ export function createAiRouter(
       typeof (agent.config as { workspace?: unknown }).workspace === "string"
         ? String((agent.config as { workspace?: string }).workspace)
         : undefined;
+    maybeSyncCursorWorkspaceKnowledge(
+      tdb(req),
+      agent,
+      req.tenantId,
+      agentWorkspace
+    );
     const previewCtx = enrichPlatformContextWithGit(
       pathname ? { pathname, breadcrumb: [] } : undefined,
       { tenantId: req.tenantId, workspace: agentWorkspace }
@@ -1118,6 +1140,12 @@ export function createAiRouter(
       "string"
         ? String((agent.config as { workspace?: string }).workspace)
         : undefined;
+    maybeSyncCursorWorkspaceKnowledge(
+      engineDb,
+      agent,
+      req.tenantId,
+      agentWorkspace
+    );
     const platformContextWithGit = enrichPlatformContextWithGit(platformContext, {
       tenantId: req.tenantId,
       workspace: agentWorkspace,
