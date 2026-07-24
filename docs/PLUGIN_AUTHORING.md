@@ -24,9 +24,9 @@ Same tools work in the monorepo and on Docker hub/client:
 1. `scaffold_plugin` — creates `plugins/<id>/` under the **coding root** (local: `{repo}/plugins/<id>`; hub/client: `/data/tenant-workspaces/<tenant>/plugins/<id>`). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
 2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`).
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`).
-4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools and `tenant:install`.
+4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes.
 
-This matches **Marketplace → Local**. Custom Express routes registered via `api.routes.mount` / `server:beforeListen` after boot may still need a restart — scaffolds should prefer tools + tenant hooks.
+This matches **Marketplace → Local**. Prefer `api.routes.mount` in `register` for Express routes (hot-reloads via route slots). Avoid raw `ctx.app.use` in `server:beforeListen`; that path cannot be swapped on reload. If you must mount from the hook, use `ctx.host.mountPluginRoute(pluginId, path, router)`.
 
 ## Manifest (`godmode.plugin.json`)
 
@@ -123,11 +123,16 @@ export const register: GodModePluginRegister = (api) => {
     // Run reviewed migrations or seed service-backed state.
   });
 
-  api.hooks.on("server:beforeListen", (ctx) => {
-    const router = ctx.host.createPluginRouter();
-    // router.get("/foo", …)
-    ctx.app?.use("/api/my-plugin", router);
-  });
+  // Prefer mount in register (hot-reloads without Bridge restart):
+  const router = api.host.createPluginRouter();
+  // router.get("/foo", …)
+  api.routes.mount("/api/my-plugin", router);
+
+  // Legacy: if you must use the listen hook, prefer mountPluginRoute over app.use:
+  // api.hooks.on("server:beforeListen", (ctx) => {
+  //   const r = ctx.host.createPluginRouter();
+  //   ctx.host.mountPluginRoute?.(api.manifest.id, "/api/my-plugin", r);
+  // });
 };
 ```
 
@@ -170,6 +175,7 @@ Injected at boot via `api.host`:
 | `getTenantDb(tenantId)` | Tenant-scoped SQLite |
 | `getReqTenantDb(req)` | SQLite from authenticated request |
 | `createPluginRouter()` | Express router with tenant middleware |
+| `mountPluginRoute(pluginId, path, router)` | Slot-based HTTP mount (hot-reload safe) |
 | `getTimeseriesStore()` | Analytics / DuckDB queries |
 | `bootstrapTradingDepartment(db)` | Upsert a department shell node (plugin install hooks) |
 | `bridgeFetch(path)` | Internal HTTP to Bridge |

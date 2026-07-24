@@ -7,6 +7,7 @@ export default defineConfig({
       "packages/kernel/src/__tests__/**/*.test.ts",
       "packages/plugin-api/src/__tests__/**/*.test.ts",
       "apps/bridge/src/kernel/__tests__/**/*.test.ts",
+      "apps/bridge/src/plugins/__tests__/route-hot-reload.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
       "apps/bridge/src/routes/__tests__/marketplace-listings-query.test.ts",

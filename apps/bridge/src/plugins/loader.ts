@@ -118,6 +118,9 @@ export async function loadPluginFromRoot(
       pluginRuntime.unregister(manifest.id);
     }
     await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
+    if (pluginRuntime.hasApp()) {
+      pluginRuntime.syncPluginRoutes(manifest.id);
+    }
   } catch (error) {
     replaceObjectTypesByPlugin(manifest.id, previousDefs);
     throw error;

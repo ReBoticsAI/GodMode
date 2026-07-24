@@ -454,6 +454,7 @@ app.get("/api/plugins/manifest", tenantDbMiddleware, attachAuthContext, requireA
 app.use("/api", tenantDbMiddleware, createCoreApiRouter(db, { bus }));
 app.use("/api", tenantDbMiddleware, createKernelRouter(db, { bus }));
 app.use("/api/plugins", tenantDbMiddleware, attachAuthContext, requireAuth, createPluginsRouter(coreDb));
+pluginRuntime.setApp(app);
 pluginRuntime.mountOn(app);
 
 const server = http.createServer(app);
