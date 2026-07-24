@@ -11,6 +11,7 @@ import type { AiQueueWorker } from "./ai-queue-worker.js";
 import { createNotification } from "./notification-service.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { runSubagent } from "./agents/runner.js";
+import { runBoundedSubagentDelegation } from "./agents/subagent-bounds.js";
 import {
   createAgentMessage,
   createMessage,
@@ -213,23 +214,37 @@ async function runActionRunAgent(
   }
   const prompt = fillTemplate(promptTpl || "Hook triggered.", payload);
   const db = getTenantDb(agentTenantId);
-  const answer = await runSubagent({
-    db,
-    llm: deps.llm,
+  const bounded = await runBoundedSubagentDelegation({
     agentId,
-    prompt,
-    toolCtx: {
-      db,
-      bridgePort: deps.bridgePort,
-      llm: deps.llm,
-      activeAgentId: agentId,
-      tenantId: agentTenantId,
-    },
+    run: () =>
+      runSubagent({
+        db,
+        llm: deps.llm!,
+        agentId,
+        prompt,
+        toolCtx: {
+          db,
+          bridgePort: deps.bridgePort,
+          llm: deps.llm,
+          activeAgentId: agentId,
+          tenantId: agentTenantId,
+        },
+      }),
   });
+  if (bounded.status !== "ok") {
+    return {
+      status: "error",
+      detail: bounded.error ?? `Agent ${agentId} ${bounded.status}`,
+      result: {
+        status: bounded.status,
+        durationMs: bounded.durationMs,
+      },
+    };
+  }
   return {
     status: "success",
     detail: `Agent ${agentId} run completed`,
-    result: { answer: answer.slice(0, 4000) },
+    result: { answer: (bounded.answer ?? "").slice(0, 4000) },
   };
 }
 

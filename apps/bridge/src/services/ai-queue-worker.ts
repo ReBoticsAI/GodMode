@@ -14,6 +14,7 @@ import { runAutonomousTick } from "./autonomous-executor.js";
 import { runEpisodicDistill } from "./episodic-distill.js";
 import { runWikiSynthesize } from "./wiki-synthesize.js";
 import type { EmbeddingManager } from "./embeddings/embedding-manager.js";
+import { config } from "../config.js";
 
 /** Workflow id of the durable autonomous executor (routed to the tick engine). */
 export const AUTONOMOUS_RUNNER_ID = "autonomous-task-runner";
@@ -21,6 +22,30 @@ export const AUTONOMOUS_RUNNER_ID = "autonomous-task-runner";
  * loop always terminates even if Task selection misbehaves. Per-Task tick caps
  * (in the executor) are the real limit; this is just the ultimate backstop. */
 const MAX_AUTONOMOUS_CHAIN = 80;
+
+/**
+ * Mark abandoned `running` queue rows as error so they cannot block forever
+ * after a Bridge crash. Fail, do not requeue (jobs are not safely idempotent).
+ * Returns number of rows updated.
+ */
+export function recoverStaleQueueJobs(
+  db: AppDatabase,
+  staleMinutes: number = config.ai.queueStaleRunningMinutes
+): number {
+  const minutes = Math.max(1, Math.floor(staleMinutes));
+  const result = db
+    .prepare(
+      `UPDATE ai_prompt_queue
+         SET status = 'error',
+             error = 'stale running job recovered after worker loss',
+             finished_at = datetime('now')
+       WHERE status = 'running'
+         AND started_at IS NOT NULL
+         AND started_at < datetime('now', ?)`
+    )
+    .run(`-${minutes} minutes`);
+  return result.changes;
+}
 
 export interface QueueJobRow {
   id: string;
@@ -198,6 +223,19 @@ export class AiQueueWorker {
 
   private async tick(): Promise<void> {
     if (this.running) return;
+    for (const { db } of this.listTenantDbs()) {
+      try {
+        const n = recoverStaleQueueJobs(db);
+        if (n > 0) {
+          console.warn(`[ai-queue] recovered ${n} stale running job(s)`);
+        }
+      } catch (err) {
+        console.warn(
+          "[ai-queue] stale recovery skipped:",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
     let next: { tenantId: string; db: AppDatabase; job: QueueJobRow } | null;
     try {
       next = this.nextPending();
