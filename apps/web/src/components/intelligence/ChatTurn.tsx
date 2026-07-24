@@ -424,6 +424,62 @@ function ToolPart({
               </div>
             );
           })()}
+          {(() => {
+            if (
+              name !== "edit_file" &&
+              name !== "write_file" &&
+              name !== "apply_patch"
+            ) {
+              return null;
+            }
+            const verification =
+              result != null &&
+              typeof result === "object" &&
+              "verification" in result
+                ? (result as {
+                    verification?: {
+                      ok?: boolean;
+                      skipped?: boolean;
+                      reason?: string;
+                      diagnostics?: Array<{
+                        file: string;
+                        line: number;
+                        severity: string;
+                        message: string;
+                      }>;
+                    };
+                  }).verification
+                : undefined;
+            if (!verification || verification.skipped) return null;
+            const diags = verification.diagnostics ?? [];
+            return (
+              <div>
+                <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Diagnostics {verification.ok ? "(ok)" : "(issues)"}
+                </div>
+                {diags.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground">No issues reported.</p>
+                ) : (
+                  <pre
+                    className={cn(
+                      "max-h-40 overflow-auto rounded bg-background/60 p-1.5 font-mono text-[10px] whitespace-pre-wrap",
+                      verification.ok
+                        ? "text-muted-foreground"
+                        : "text-amber-700 dark:text-amber-400"
+                    )}
+                  >
+                    {diags
+                      .slice(0, 20)
+                      .map(
+                        (d) =>
+                          `${d.file}:${d.line} ${d.severity}: ${d.message}`
+                      )
+                      .join("\n")}
+                  </pre>
+                )}
+              </div>
+            );
+          })()}
           <details className="text-[10px]">
             <summary className="cursor-pointer text-muted-foreground">Debug JSON</summary>
             <div className="mt-1 space-y-1.5">
