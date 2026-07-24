@@ -4,6 +4,7 @@ import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
 import { executeTool, type ToolExecContext } from "./ai-tool-executor.js";
 import { runSubagent } from "./agents/runner.js";
+import { runBoundedSubagentDelegation } from "./agents/subagent-bounds.js";
 
 /**
  * Workflows are directed graphs executed by a stateful, ready-queue runner.
@@ -430,17 +431,27 @@ async function runAgentNode(
   const allow = Array.isArray(cfg.autoApproveTools)
     ? (cfg.autoApproveTools as unknown[]).map((t) => String(t))
     : [];
-  return runSubagent({
-    db: deps.db,
-    llm: deps.llm,
+  const bounded = await runBoundedSubagentDelegation({
     agentId,
-    prompt: promptText,
-    systemExtra: cfg.system ? String(cfg.system) : undefined,
-    toolCtx: { db: deps.db, bridgePort: deps.bridgePort, llm: deps.llm },
-    maxIterations: Number(cfg.maxIterations ?? 8),
-    onConfirmRequired: async ({ name }) =>
-      allow.includes(name) && !NEVER_AUTO_APPROVE.has(name),
+    run: () =>
+      runSubagent({
+        db: deps.db,
+        llm: deps.llm,
+        agentId,
+        prompt: promptText,
+        systemExtra: cfg.system ? String(cfg.system) : undefined,
+        toolCtx: { db: deps.db, bridgePort: deps.bridgePort, llm: deps.llm },
+        maxIterations: Number(cfg.maxIterations ?? 8),
+        onConfirmRequired: async ({ name }) =>
+          allow.includes(name) && !NEVER_AUTO_APPROVE.has(name),
+      }),
   });
+  if (bounded.status !== "ok") {
+    throw new Error(
+      bounded.error ?? `Workflow agent node ${bounded.status} for ${agentId}`
+    );
+  }
+  return bounded.answer ?? "";
 }
 
 /** Records a node's output into the run state (string + best-effort JSON view). */
