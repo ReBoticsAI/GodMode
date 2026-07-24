@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **MCP prompt section, hooks discovery, parity eval (#71)** - dedicated
+  `<godmode_mcp>` prompt-flow section (v4); read-only `.cursor/hooks.json`
+  Page Context line; agent Backend toggle for `mcpFromWorkspace`;
+  `docs/CURSOR_PARITY_EVAL.md` blind-eval harness
 - **Compaction scratchpad + dynamic reminders (#71)** - dropped chat turns
   inject a brief `<godmode_compaction>` summary into the system prompt;
   `cursor_cloud` adds per-turn mode/workspace/abort reminders; structural

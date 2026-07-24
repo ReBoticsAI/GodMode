@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -249,6 +250,26 @@ export function BackendTab({
               <span className="font-mono">auto</span>,{" "}
               <span className="font-mono">composer-2.5</span>.
             </p>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <div className="flex flex-col gap-0.5">
+              <Label className="text-[11px]">Workspace MCP servers</Label>
+              <p className="text-[10px] text-muted-foreground">
+                Pass coding-root <span className="font-mono">.cursor/mcp.json</span> to the
+                SDK as inline <span className="font-mono">mcpServers</span> (cap 8). Default
+                on for local installs; off on SaaS unless enabled.
+              </p>
+            </div>
+            <Switch
+              checked={
+                typeof cfg.mcpFromWorkspace === "boolean"
+                  ? Boolean(cfg.mcpFromWorkspace)
+                  : true
+              }
+              onCheckedChange={(v) =>
+                saveAgent({ config: { ...cfg, mcpFromWorkspace: v } })
+              }
+            />
           </div>
           <p className="rounded-md border bg-muted/20 p-2 text-[10px] text-muted-foreground">
             GodMode tools (wiki, coding, plugins) run as SDK custom tools — same Intelligence

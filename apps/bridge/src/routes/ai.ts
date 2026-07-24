@@ -137,6 +137,7 @@ import {
   resolveMcpDiscoveryExecution,
   resolveMcpFromWorkspace,
 } from "../services/coding/cursor-mcp-config.js";
+import { enrichPlatformContextWithHooks } from "../services/coding/cursor-hooks-config.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
@@ -545,19 +546,22 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const previewCtx = enrichPlatformContextWithMcp(
-      enrichPlatformContextWithGit(
-        pathname ? { pathname, breadcrumb: [] } : undefined,
-        { tenantId: req.tenantId, workspace: agentWorkspace }
-      ),
-      {
-        tenantId: req.tenantId,
-        workspace: agentWorkspace,
-        execution: mcpExecutionForAgent(agent, {
+    const previewCtx = enrichPlatformContextWithHooks(
+      enrichPlatformContextWithMcp(
+        enrichPlatformContextWithGit(
+          pathname ? { pathname, breadcrumb: [] } : undefined,
+          { tenantId: req.tenantId, workspace: agentWorkspace }
+        ),
+        {
           tenantId: req.tenantId,
           workspace: agentWorkspace,
-        }),
-      }
+          execution: mcpExecutionForAgent(agent, {
+            tenantId: req.tenantId,
+            workspace: agentWorkspace,
+          }),
+        }
+      ),
+      { tenantId: req.tenantId, workspace: agentWorkspace }
     );
     const assembled = assemblePrompt(tdb(req), {
       basePrompt: agent?.systemPrompt ?? settings.systemPrompt,
@@ -1185,19 +1189,22 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const platformContextEnriched = enrichPlatformContextWithMcp(
-      enrichPlatformContextWithGit(platformContext, {
-        tenantId: req.tenantId,
-        workspace: agentWorkspace,
-      }),
-      {
-        tenantId: req.tenantId,
-        workspace: agentWorkspace,
-        execution: mcpExecutionForAgent(agent, {
+    const platformContextEnriched = enrichPlatformContextWithHooks(
+      enrichPlatformContextWithMcp(
+        enrichPlatformContextWithGit(platformContext, {
           tenantId: req.tenantId,
           workspace: agentWorkspace,
         }),
-      }
+        {
+          tenantId: req.tenantId,
+          workspace: agentWorkspace,
+          execution: mcpExecutionForAgent(agent, {
+            tenantId: req.tenantId,
+            workspace: agentWorkspace,
+          }),
+        }
+      ),
+      { tenantId: req.tenantId, workspace: agentWorkspace }
     );
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,
