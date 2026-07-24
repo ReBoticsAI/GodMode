@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **cursor_cloud project settingSources (#71)** - when the coding root has
+  `.cursor/`, SDK `local.settingSources: ["project"]` loads repo Cursor
+  rules alongside GodMode `godmode-system` injection (never user/team/all)
 - **cursor_cloud transcript fidelity (#71)** - prior-turn appendix now
   includes truncated tool calls and tool results (not only user/assistant
   text) so multi-turn context survives SDK agent cache resets
