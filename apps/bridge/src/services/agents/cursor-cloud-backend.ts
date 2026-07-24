@@ -159,18 +159,58 @@ export function buildPrompt(
   const appendix = includeTranscript
     ? buildTranscriptAppendix(req.messages)
     : "";
+  const reminders = buildDynamicReminders(req);
   const parts: string[] = [];
   if (system) {
     parts.push(`<!-- godmode-system -->\n${system}\n<!-- /godmode-system -->`);
   }
+  if (reminders) parts.push(reminders);
   if (appendix) parts.push(appendix);
   parts.push(lastUser);
   return parts.join("\n\n");
 }
 
 /**
+ * Turn-local operating reminders (Cursor-like dynamic system notes).
+ * Mode / abort / coding-root hints for the live send.
+ */
+export function buildDynamicReminders(req: AgentRunRequest): string {
+  const lines: string[] = [];
+  const mode = req.chatMode ?? "agent";
+  if (mode === "plan") {
+    lines.push(
+      "Mode: plan. Prefer investigation and a concrete plan; avoid write/deploy tools unless the user explicitly asks to execute."
+    );
+  } else if (mode === "ask") {
+    lines.push(
+      "Mode: ask. Answer from context and read-only tools; do not edit files or run mutating commands."
+    );
+  } else {
+    lines.push("Mode: agent. Investigate then implement with available tools.");
+  }
+  if (req.abortSignal) {
+    lines.push(
+      "This run can be aborted by the user; stop cleanly if the abort signal fires."
+    );
+  }
+  const workspace =
+    typeof req.agent?.config?.workspace === "string"
+      ? req.agent.config.workspace.trim()
+      : "";
+  if (workspace) {
+    lines.push(`Coding workspace: ${workspace}`);
+  }
+  return [
+    "<!-- godmode-reminders -->",
+    ...lines,
+    "<!-- /godmode-reminders -->",
+  ].join("\n");
+}
+
+/**
  * Whether to append the GodMode transcript fallback.
- * Skip when the SDK agent was resumed or reused (native conversation history).
+ * Skip when the SDK agent was resumed or reused with an unchanged fingerprint
+ * (native conversation history). Include after create or structural recreate.
  */
 export function shouldIncludeTranscriptAppendix(continued: boolean): boolean {
   return !continued;
@@ -321,6 +361,7 @@ export async function resolveCursorSdkAgent(args: {
     create: (options: Record<string, unknown>) => Promise<SdkAgent>;
   };
 }): Promise<{ agent: SdkAgent; continued: boolean }> {
+  let forceTranscript = false;
   const existing = chatAgents.get(args.chatKey);
   if (existing) {
     if (existing.cacheFingerprint === args.fingerprint) {
@@ -332,6 +373,8 @@ export async function resolveCursorSdkAgent(args: {
       /* ignore */
     }
     chatAgents.delete(args.chatKey);
+    // Structural change (model/mode/MCP/system): keep transcript appendix.
+    forceTranscript = true;
   }
 
   const baseOpts = buildCursorSdkAgentOptions({
@@ -360,7 +403,7 @@ export async function resolveCursorSdkAgent(args: {
       agent,
       cacheFingerprint: args.fingerprint,
     });
-    return { agent, continued: true };
+    return { agent, continued: !forceTranscript };
   } catch {
     const agent = await sdk.create({
       ...baseOpts,
