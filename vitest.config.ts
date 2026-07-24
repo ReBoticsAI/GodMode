@@ -15,6 +15,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/github-projects-status-map.test.ts",
       "apps/bridge/src/services/__tests__/multi-board-tasks-migration.test.ts",
       "apps/bridge/src/services/__tests__/prompt-assembler-order.test.ts",
+      "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
       "apps/bridge/src/services/auth/__tests__/mfa-and-tokens.test.ts",

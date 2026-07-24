@@ -20,8 +20,11 @@ export function DelegationTab() {
       <p>
         Intelligence can invoke other subagents on the fly using the{" "}
         <code className="rounded bg-muted px-1">delegate_to_subagent</code> tool (requires
-        confirmation). Assign subagents to project cards or workflow agent nodes via{" "}
-        <code className="rounded bg-muted px-1">agentId</code>.
+        confirmation). Delegation is bounded (default 120s wall clock; optional{" "}
+        <code className="rounded bg-muted px-1">timeoutMs</code> up to 300s) and returns{" "}
+        <code className="rounded bg-muted px-1">status: ok | timeout | error</code> so the
+        parent can recover instead of hanging. Assign subagents to project cards or
+        workflow agent nodes via <code className="rounded bg-muted px-1">agentId</code>.
       </p>
       <Label className="text-[11px] text-foreground">Available subagents</Label>
       <ul className="max-h-48 space-y-1 overflow-auto rounded-md border bg-muted/20 p-2">
