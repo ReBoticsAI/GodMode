@@ -276,6 +276,15 @@ With a local (non-`cursor_cloud`) Intelligence agent and a coding root that cont
 2. Assembled system prompt / rules section should include the imported workspace bodies (ids like `cursor-ws-agents-md`, `cursor-ws-…`).
 3. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions).
 
+## MCP config discovery (#71)
+
+With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
+
+1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
+2. Page Context / platform section should include an `MCP:` line listing server names and transports.
+3. Secrets in `env` / `headers` must not appear in the inspect payload or assembled prompt.
+4. Chat still works if `mcp.json` is missing or invalid (soft-fail). Bridge does not execute those MCP servers from discovery alone.
+
 ---
 
 ## Related docs

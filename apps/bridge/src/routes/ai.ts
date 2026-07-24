@@ -132,6 +132,7 @@ import {
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
+import { enrichPlatformContextWithMcp } from "../services/coding/cursor-mcp-config.js";
 import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
@@ -516,8 +517,11 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const previewCtx = enrichPlatformContextWithGit(
-      pathname ? { pathname, breadcrumb: [] } : undefined,
+    const previewCtx = enrichPlatformContextWithMcp(
+      enrichPlatformContextWithGit(
+        pathname ? { pathname, breadcrumb: [] } : undefined,
+        { tenantId: req.tenantId, workspace: agentWorkspace }
+      ),
       { tenantId: req.tenantId, workspace: agentWorkspace }
     );
     const assembled = assemblePrompt(tdb(req), {
@@ -1146,13 +1150,16 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const platformContextWithGit = enrichPlatformContextWithGit(platformContext, {
-      tenantId: req.tenantId,
-      workspace: agentWorkspace,
-    });
+    const platformContextEnriched = enrichPlatformContextWithMcp(
+      enrichPlatformContextWithGit(platformContext, {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+      }),
+      { tenantId: req.tenantId, workspace: agentWorkspace }
+    );
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,
-      platformContext: platformContextWithGit,
+      platformContext: platformContextEnriched,
       chatId: activeChatId,
       historyCount: history.length,
       userPreview: message?.trim(),
