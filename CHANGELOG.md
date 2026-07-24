@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Pre-apply write-tool diff preview (#71)** - `edit_file` / `write_file` /
+  `apply_patch` confirm cards show a unified diff vs disk before Approve
+  (dry-run; executor paths unchanged)
 - **cursor_cloud Agent.resume (#71)** - resume SDK agents by chat id before
   create; skip transcript appendix when native conversation continues;
   document that `godmode-system` injection remains (SDK has no system field)

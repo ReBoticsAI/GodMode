@@ -1049,7 +1049,10 @@ export function IntelligencePanel() {
           abortRef.current = null;
         },
         onToolConfirmRequired: (payload) => {
-          builder.onToolConfirmRequired(payload.toolCallId);
+          builder.onToolConfirmRequired(payload.toolCallId, {
+            previewDiff: payload.previewDiff,
+            previewError: payload.previewError,
+          });
           pendingConfirmRef.current = builder;
           pendingAssistantIdRef.current = assistantId;
           sync();

@@ -60,8 +60,15 @@ export function readFile(opts: {
   };
 }
 
-export function readFileRaw(opts: { path: string; tenantId?: string | null }): string {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+export function readFileRaw(opts: {
+  path: string;
+  tenantId?: string | null;
+  root?: string;
+}): string {
+  const abs = resolveRepoPath(opts.path, {
+    tenantId: opts.tenantId,
+    root: opts.root,
+  });
   if (!fs.existsSync(abs)) return "";
   return fs.readFileSync(abs, "utf8");
 }
@@ -300,17 +307,12 @@ export function computeUnifiedDiff(
   return [...header, ...hunks].join("\n");
 }
 
-/** Apply a unified diff patch to a file (multi-hunk, Cursor-style). */
-export function applyPatch(opts: {
-  path: string;
-  patch: string;
-  tenantId?: string | null;
-}): { path: string; diff: string; bytes: number } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
-  if (!fs.existsSync(abs)) throw new Error(`File not found: ${opts.path}`);
-  const original = fs.readFileSync(abs, "utf8");
+const PREVIEW_DIFF_CAP = 8_000;
+
+/** Apply unified-diff hunks to in-memory content (no disk writes). */
+export function applyPatchToContent(original: string, patch: string): string {
   const lines = original.split(/\r?\n/);
-  const patchLines = String(opts.patch ?? "").split(/\r?\n/);
+  const patchLines = String(patch ?? "").split(/\r?\n/);
   let out = [...lines];
   let idx = 0;
   while (idx < patchLines.length) {
@@ -341,7 +343,104 @@ export function applyPatch(opts: {
       idx++;
     }
   }
-  const next = out.join("\n");
+  return out.join("\n");
+}
+
+export type WriteToolPreview = {
+  previewDiff?: string;
+  previewError?: string;
+};
+
+/**
+ * Dry-run unified diff for write tools shown on confirm (no disk mutation).
+ */
+export function previewWriteToolDiff(
+  toolName: string,
+  args: Record<string, unknown>,
+  opts?: { tenantId?: string | null; root?: string }
+): WriteToolPreview {
+  try {
+    if (
+      toolName !== "edit_file" &&
+      toolName !== "write_file" &&
+      toolName !== "apply_patch"
+    ) {
+      return {};
+    }
+    const filePath = String(args.path ?? "").trim();
+    if (!filePath) return { previewError: "path required" };
+    const rootOpts = { tenantId: opts?.tenantId, root: opts?.root };
+
+    if (toolName === "write_file") {
+      const prior = readFileRaw({ path: filePath, ...rootOpts });
+      const next = String(args.content ?? "");
+      const diff = computeUnifiedDiff(prior, next, filePath);
+      if (!diff) return { previewDiff: "(no changes)" };
+      return {
+        previewDiff:
+          diff.length > PREVIEW_DIFF_CAP
+            ? `${diff.slice(0, PREVIEW_DIFF_CAP)}\n…[truncated]`
+            : diff,
+      };
+    }
+
+    if (toolName === "edit_file") {
+      const abs = resolveRepoPath(filePath, rootOpts);
+      if (!fs.existsSync(abs)) {
+        return { previewError: `File not found: ${filePath}` };
+      }
+      const oldStr = String(args.old_string ?? "");
+      const newStr = String(args.new_string ?? "");
+      if (!oldStr) return { previewError: "old_string required" };
+      const content = fs.readFileSync(abs, "utf8");
+      const count = content.split(oldStr).length - 1;
+      if (count === 0) return { previewError: "old_string not found in file" };
+      if (count > 1) {
+        return { previewError: `old_string is not unique (${count} matches)` };
+      }
+      const next = content.replace(oldStr, newStr);
+      const diff = computeUnifiedDiff(content, next, filePath);
+      if (!diff) return { previewDiff: "(no changes)" };
+      return {
+        previewDiff:
+          diff.length > PREVIEW_DIFF_CAP
+            ? `${diff.slice(0, PREVIEW_DIFF_CAP)}\n…[truncated]`
+            : diff,
+      };
+    }
+
+    // apply_patch
+    const abs = resolveRepoPath(filePath, rootOpts);
+    if (!fs.existsSync(abs)) {
+      return { previewError: `File not found: ${filePath}` };
+    }
+    const original = fs.readFileSync(abs, "utf8");
+    const next = applyPatchToContent(original, String(args.patch ?? ""));
+    const diff = computeUnifiedDiff(original, next, filePath);
+    if (!diff) return { previewDiff: "(no changes)" };
+    return {
+      previewDiff:
+        diff.length > PREVIEW_DIFF_CAP
+          ? `${diff.slice(0, PREVIEW_DIFF_CAP)}\n…[truncated]`
+          : diff,
+    };
+  } catch (err) {
+    return {
+      previewError: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Apply a unified diff patch to a file (multi-hunk, Cursor-style). */
+export function applyPatch(opts: {
+  path: string;
+  patch: string;
+  tenantId?: string | null;
+}): { path: string; diff: string; bytes: number } {
+  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+  if (!fs.existsSync(abs)) throw new Error(`File not found: ${opts.path}`);
+  const original = fs.readFileSync(abs, "utf8");
+  const next = applyPatchToContent(original, opts.patch);
   fs.writeFileSync(abs, next, "utf8");
   const diff = computeUnifiedDiff(original, next, opts.path);
   return { path: opts.path, diff, bytes: Buffer.byteLength(next, "utf8") };

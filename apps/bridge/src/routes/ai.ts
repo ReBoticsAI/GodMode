@@ -1404,7 +1404,18 @@ export function createAiRouter(
               )
             );
             if (auto) return true;
-            send("tool_confirm_required", { toolCallId, name, args });
+            const { previewWriteToolDiff } = await import(
+              "../services/coding/fs-tools.js"
+            );
+            const preview = previewWriteToolDiff(name, args, {
+              tenantId: work.tenantId,
+            });
+            send("tool_confirm_required", {
+              toolCallId,
+              name,
+              args,
+              ...preview,
+            });
             return waitForToolConfirmation(toolCallId);
           },
         });

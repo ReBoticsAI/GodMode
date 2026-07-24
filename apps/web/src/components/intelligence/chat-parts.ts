@@ -106,6 +106,9 @@ export type MsgPart =
       startedAt: number;
       endedAt?: number;
       terminalStream?: string;
+      /** Pre-apply unified diff for write-tool confirmations. */
+      previewDiff?: string;
+      previewError?: string;
     }
   | { kind: "todos"; items: TodoItem[] };
 
@@ -314,14 +317,21 @@ export class PartsBuilder {
     });
   }
 
-  onToolConfirmRequired(id: string): void {
+  onToolConfirmRequired(
+    id: string,
+    preview?: { previewDiff?: string; previewError?: string }
+  ): void {
     const tool = [...this.committed]
       .reverse()
       .find(
         (p): p is Extract<MsgPart, { kind: "tool" }> =>
           p.kind === "tool" && p.id === id
       );
-    if (tool) tool.status = "awaiting_confirm";
+    if (tool) {
+      tool.status = "awaiting_confirm";
+      if (preview?.previewDiff) tool.previewDiff = preview.previewDiff;
+      if (preview?.previewError) tool.previewError = preview.previewError;
+    }
   }
 
   markToolRunning(id: string): void {
