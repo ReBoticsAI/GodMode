@@ -36,7 +36,7 @@ Picker model id selects a Cursor family harness (see [LOCAL_LLM.md](./LOCAL_LLM.
 | `/grok/i` | `cursor-grok` |
 | other Cursor ids | `cursor` (fallback) |
 
-Changing the picker model recreates the cached SDK agent for that chat (model + system prompt fingerprint), so mid-thread switches take effect. A short rolling user/assistant transcript is appended for continuity - not a full local tool-history replay like Gemma.
+Changing the picker model recreates the cached SDK agent for that chat (model + system prompt fingerprint), so mid-thread switches take effect. A rolling transcript appendix is prepended for continuity: prior user/assistant text plus truncated tool calls and tool results (char-budgeted). This is not a full SDK-native conversation resume or Gemma-local history replay; it keeps multi-turn tool context after fingerprint resets.
 
 ## System prompt shape (Cursor parity)
 
