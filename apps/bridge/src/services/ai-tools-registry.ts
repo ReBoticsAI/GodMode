@@ -359,7 +359,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "delegate_to_subagent",
     description:
-      "Invoke another named subagent with a prompt and return its answer. Use for specialized tasks (planning, review, coding). Requires user confirmation.",
+      "Invoke another named subagent with a prompt and return a structured result: { agentId, status: ok|timeout|error, answer?, error?, durationMs }. Default wall-clock timeout is 120s (override with timeoutMs, max 300s). On timeout or error, recover by narrowing the ask, retrying, or using explore_codebase. Requires user confirmation.",
     mode: "confirm",
     parameters: {
       type: "object",
@@ -367,6 +367,11 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         agent: { type: "string", description: "Subagent id or name" },
         prompt: { type: "string" },
         context: { type: "string", description: "Optional extra context for the subagent" },
+        timeoutMs: {
+          type: "number",
+          description:
+            "Optional wall-clock timeout in milliseconds (default 120000, max 300000)",
+        },
       },
       required: ["agent", "prompt"],
     },
