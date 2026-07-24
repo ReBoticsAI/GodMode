@@ -69,6 +69,8 @@ Local/provider backends still see discovery only; Bridge does not spawn MCP proc
 
 `cursor_cloud` delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt. That is intentional: the SDK has no main-agent system-role field, so injection is the durable contract (not a temporary workaround awaiting replacement). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
+Per turn, `cursor_cloud` also injects `<!-- godmode-reminders -->` (mode, optional abort note, coding workspace). When history compaction drops earlier turns, Bridge appends a short `<godmode_compaction>` scratchpad to the system prompt (and still enqueues episodic distill). If the in-memory SDK agent is recreated because model/mode/MCP/system fingerprint changed, the rolling transcript appendix is included again even when `Agent.resume` succeeds.
+
 Intelligence chat mode maps to the SDK as follows:
 
 | GodMode mode | SDK `Agent.create({ mode })` | Notes |

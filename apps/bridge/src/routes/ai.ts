@@ -1224,10 +1224,8 @@ export function createAiRouter(
       stripThinking: harnessProfile.stripThinkingFromHistory,
     });
     const ctxBudget = Math.floor(llm.getStatus().ctxSize * 4 * HISTORY_CHAR_BUDGET_RATIO);
-    const { messages: compactedHistory, droppedTurns } = compactAgentMessages(
-      historyAgentMessages,
-      ctxBudget
-    );
+    const { messages: compactedHistory, droppedTurns, scratchpad } =
+      compactAgentMessages(historyAgentMessages, ctxBudget);
     if (droppedTurns > 0 && activeChatId && memoryMaintenance) {
       // Compaction erased turns — enqueue distill so episodic knowledge survives.
       memoryMaintenance.enqueueDistill({
@@ -1237,8 +1235,12 @@ export function createAiRouter(
       });
     }
 
+    const systemPromptWithScratchpad = scratchpad
+      ? `${systemPrompt}\n\n${scratchpad}`
+      : systemPrompt;
+
     const messages: ChatMessage[] = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPromptWithScratchpad },
       ...compactedHistory.map((h) => ({
         role: h.role as "user" | "assistant",
         content: h.content,
@@ -1267,7 +1269,7 @@ export function createAiRouter(
     // payloads are huge base64 blobs, so we only record their count.
     llm.recordLastRequest({
       at: new Date().toISOString(),
-      systemPrompt,
+      systemPrompt: systemPromptWithScratchpad,
       sampling,
       endpoint: `${llm.getServerBaseUrl()}/v1/chat/completions`,
       sections: assembled.sections,
