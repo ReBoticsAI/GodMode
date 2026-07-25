@@ -367,6 +367,11 @@ export const config = {
     /** Max embed HTTP requests per 10s window (shared llama-server). */
     queueRps: Number(process.env.EMBEDDINGS_QUEUE_RPS ?? 8),
     queueStaleMinutes: Number(process.env.EMBEDDINGS_QUEUE_STALE_MINUTES ?? 15),
+    /** Optional in-memory ANN accelerator (#69 track D). */
+    annEnabled: (process.env.EMBEDDINGS_ANN_ENABLED ?? "false") === "true",
+    annBackend: (process.env.EMBEDDINGS_ANN_BACKEND ?? "hnsw") as "hnsw" | "brute_force",
+    /** Use HNSW only when corpus size is at least this many vectors. */
+    annMinRows: Number(process.env.EMBEDDINGS_ANN_MIN_ROWS ?? 2000),
     /**
      * Per-job profiles (#69). Unset fields inherit the shared embedder above.
      * Set EMBEDDINGS_CODE_MODEL_PATH / EMBEDDINGS_CODE_PORT to specialize code.

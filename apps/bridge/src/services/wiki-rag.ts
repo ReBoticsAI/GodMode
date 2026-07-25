@@ -1,11 +1,11 @@
 import type { CoreDatabase } from "../core-db.js";
 import {
   blobToVector,
-  cosineSimilarity,
   vectorToBlob,
   type EmbeddingClient,
 } from "./embeddings/embedding-client.js";
 import { enqueueEmbedJob, isEmbedQueueEnabled } from "./embeddings/embed-queue.js";
+import { scheduleAnnInvalidate, searchVectors } from "./embeddings/vector-retrieval.js";
 
 const RRF_K = 60;
 
@@ -90,6 +90,7 @@ export async function embedAndStoreWikiPage(
     db.prepare(
       `UPDATE wiki_pages SET embedding = ?, embedding_dim = ? WHERE id = ?`
     ).run(vectorToBlob(vec), vec.length, pageId);
+    scheduleAnnInvalidate("wiki:");
     return true;
   } catch {
     return false;
@@ -242,16 +243,16 @@ function vectorWiki(
   queryVec: Float32Array,
   limit: number
 ): Array<{ pageId: string; rank: number }> {
-  const scored = rows
-    .map((r) => {
-      const vec = blobToVector(r.embedding);
-      if (!vec) return null;
-      return { pageId: r.id, score: cosineSimilarity(queryVec, vec) };
-    })
-    .filter((x): x is { pageId: string; score: number } => x != null)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-  return scored.map((s, i) => ({ pageId: s.pageId, rank: i + 1 }));
+  const docs: Array<{ id: string; vec: Float32Array }> = [];
+  for (const r of rows) {
+    const vec = blobToVector(r.embedding);
+    if (!vec) continue;
+    docs.push({ id: r.id, vec });
+  }
+  return searchVectors("wiki:pages", docs, queryVec, limit).map((h, i) => ({
+    pageId: h.id,
+    rank: i + 1,
+  }));
 }
 
 function reciprocalRankFusion(
