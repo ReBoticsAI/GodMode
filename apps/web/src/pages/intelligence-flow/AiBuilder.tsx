@@ -27,6 +27,7 @@ import {
   deleteAiAgent,
   fetchAiCommands,
   fetchAiInspect,
+  fetchAiMcp,
   fetchAiModels,
   fetchAiPromptFlow,
   fetchAiSettings,
@@ -39,11 +40,13 @@ import {
   type AiAgent,
   type AiAssembledPrompt,
   type AiInspect,
+  type AiMcpStatus,
   type AiModel,
   type AiPromptFlowConfig,
   type AiSettings as AiSettingsType,
 } from "@/api";
 import { BackendTab } from "@/pages/ai-settings/BackendTab";
+import { McpTab } from "@/pages/ai-settings/McpTab";
 import { DelegationTab } from "@/pages/ai-settings/DelegationTab";
 import { ModelTab } from "@/pages/ai-settings/ModelTab";
 import { GenerationTab } from "@/pages/ai-settings/GenerationTab";
@@ -84,6 +87,7 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
   const [models, setModels] = useState<AiModel[]>([]);
   const [settings, setSettings] = useState<AiSettingsType | null>(null);
   const [inspect, setInspect] = useState<AiInspect | null>(null);
+  const [mcpStatus, setMcpStatus] = useState<AiMcpStatus | null>(null);
   const [flowConfig, setFlowConfig] = useState<AiPromptFlowConfig | null>(null);
   const [assembled, setAssembled] = useState<AiAssembledPrompt | null>(null);
   const [commandCount, setCommandCount] = useState(0);
@@ -117,6 +121,9 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
     fetchAiInspect({ agentId: selectedAgentId })
       .then(setInspect)
       .catch(() => undefined);
+    fetchAiMcp(selectedAgentId)
+      .then(setMcpStatus)
+      .catch(() => setMcpStatus(null));
   }, [selectedAgentId]);
 
   const loadFlow = useCallback(() => {
@@ -666,8 +673,43 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
     />
   );
 
+  const projectChip =
+    mcpStatus?.projectInstructions === "sdk"
+      ? "Project instructions: SDK"
+      : mcpStatus?.projectInstructions === "knowledge"
+        ? "Project instructions: Knowledge"
+        : "Project instructions: none";
+  const mcpChip = mcpStatus?.servers.length
+    ? `MCP: ${mcpStatus.servers.filter((s) => s.enabled).length}/${mcpStatus.servers.length}`
+    : "MCP: none";
+  const compactionChip = assembled?.systemPrompt?.includes("<godmode_compaction>")
+    ? "Compaction applied"
+    : null;
+
   const inspector = !selectedData ? (
-    <FlowInspector emptyDescription="Select a node to configure it." />
+    <FlowInspector title="Inspector" subtitle="Status">
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-muted-foreground">Select a node to configure it.</p>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" className="text-[10px]">
+            {projectChip}
+          </Badge>
+          <Badge variant="secondary" className="text-[10px]">
+            {mcpChip}
+          </Badge>
+          {compactionChip && (
+            <Badge variant="secondary" className="text-[10px]">
+              {compactionChip}
+            </Badge>
+          )}
+          {agentRecord?.backend && (
+            <Badge variant="outline" className="text-[10px]">
+              Backend: {agentRecord.backend}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </FlowInspector>
   ) : (
     <FlowInspector
       title={selectedData.label}
@@ -720,6 +762,15 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
                 )}
                 {selectedData.kind === "backend" && (
                   <BackendTab agent={agentRecord} saveAgent={saveAgent} />
+                )}
+                {selectedData.kind === "mcp" && (
+                  <div className="flex flex-col gap-2">
+                    <McpTab agent={agentRecord} saveAgent={saveAgent} />
+                    <Label className="text-[11px] text-muted-foreground">Latest preview</Label>
+                    <pre className="max-h-64 overflow-auto rounded-md border bg-black/30 p-2 font-mono text-[10px] whitespace-pre-wrap">
+                      {assembledMap.get("mcp")?.preview || "(empty)"}
+                    </pre>
+                  </div>
                 )}
                 {selectedData.kind === "profile" && agentRecord && (
                   <div className="flex flex-col gap-3">

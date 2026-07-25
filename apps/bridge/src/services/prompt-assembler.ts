@@ -279,9 +279,6 @@ function renderPlatform(ctx: PlatformContext | undefined): string {
   if (ctx.gitSnapshot?.summary) {
     lines.push(`Git: ${ctx.gitSnapshot.summary}`);
   }
-  if (ctx.hooksDiscovery?.summary) {
-    lines.push(`Hooks: ${ctx.hooksDiscovery.summary}`);
-  }
   if (ctx.pageSnapshot) {
     lines.push("\n--- Current page data ---");
     lines.push(JSON.stringify(ctx.pageSnapshot, null, 2));

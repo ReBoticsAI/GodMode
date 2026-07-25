@@ -299,8 +299,8 @@ function HooksManager({
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {scheduleOnly
-            ? "Cron-triggered automations. Run a workflow, agent, or notification on a schedule."
-            : "Event- and schedule-driven hooks that notify you, run agents, run workflows, send messages, or call webhooks."}
+            ? "Cron-triggered GodMode automations. Run a workflow, agent, or notification on a schedule."
+            : "GodMode event- and schedule-driven automations (notify, run agents/workflows, messages, webhooks). Separate from Cursor IDE hooks.json."}
         </p>
         <Button size="sm" onClick={openCreate}>
           {scheduleOnly ? "New schedule" : "New automation"}
@@ -318,7 +318,7 @@ function HooksManager({
             <CardDescription>
               {scheduleOnly
                 ? "Create a cron schedule to run a workflow or agent automatically."
-                : "Create a hook to react to platform events or run on a schedule."}
+                : "Create a GodMode automation to react to platform events or run on a schedule. This is not Cursor IDE hooks.json."}
             </CardDescription>
           </CardHeader>
         </Card>

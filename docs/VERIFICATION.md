@@ -268,25 +268,27 @@ With tool autonomy off (or writes requiring confirm):
 3. Deny leaves the file unchanged; Approve applies and still shows the post-apply diff in the tool result.
 4. For `.ts` / `.tsx` writes, the tool result should also show a **Diagnostics** block (or skip when no tsconfig).
 
-## Local backend workspace knowledge (#71)
+## Local backend workspace knowledge (#71 / #135)
 
 With a local (non-`cursor_cloud`) Intelligence agent and a coding root that contains `AGENTS.md` and/or `.cursor/rules/*.mdc`:
 
-1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
-2. Assembled system prompt / rules section should include the imported workspace bodies (ids like `cursor-ws-agents-md`, `cursor-ws-…`).
-3. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions).
+1. Open Knowledge → Rules / Skills (or `/api/ai/inspect`).
+2. Imported workspace rows appear with a **Workspace** source badge (ids like `cursor-ws-agents-md`).
+3. Create or edit a native rule in Knowledge; re-import / chat sync must **not** overwrite that edit (`user_edited`).
+4. Use **Import from coding root** for an explicit force refresh of unchanged imports.
+5. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions). Prefer editing Rules in Knowledge for local backends.
 
-## MCP config discovery (#71)
+## MCP settings (#71 / #135)
 
 With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
 
-1. Open `/api/ai/inspect?pathname=/intelligence` (or chat once).
-2. Assembled prompt should include a `<godmode_mcp>` section listing server names and transports.
-3. Secrets in `env` / `headers` must not appear in the inspect payload or assembled prompt.
-4. Chat still works if `mcp.json` is missing or invalid (soft-fail).
-5. On `cursor_cloud` (non-SaaS default): the MCP summary should note SDK availability. Local backends stay `discovery only`.
-6. On SaaS, inline `mcpServers` stay off unless `agent.config.mcpFromWorkspace: true` (AI Settings → Backend toggle).
-7. Optional: with `.cursor/hooks.json`, Page Context includes a `Hooks:` discovery line (not executed).
+1. Open Agents → Pipeline → **MCP** node (or `GET /api/ai/mcp`).
+2. Server names and transports list; secrets in `env` / `headers` must not appear.
+3. Assembled prompt includes `<godmode_mcp>` when the MCP section is enabled.
+4. On `cursor_cloud`: toggle **Pass workspace MCP to SDK** and per-server enable/disable; Backend → **Coding workspace** sets the coding root (parity with CLI cwd).
+5. On SaaS, inline `mcpServers` stay off unless `mcpFromWorkspace` is enabled.
+6. Chat still works if `mcp.json` is missing or invalid (soft-fail).
+7. Automations → Hooks are **GodMode** automations only (not Cursor IDE `hooks.json`). Cursor hooks discovery was removed from Page Context.
 
 ## Blind eval (#71)
 

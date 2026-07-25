@@ -149,6 +149,19 @@ describe("loadCursorMcpServersForSdk", () => {
       MAX_SDK_MCP_SERVERS
     );
   });
+
+  it("omits disabled server names", () => {
+    const root = tempRoot();
+    writeMcpJson(root, {
+      mcpServers: {
+        keep: { command: "node" },
+        skip: { command: "python" },
+      },
+    });
+    expect(loadCursorMcpServersForSdk(root, { disabled: ["skip"] })).toEqual({
+      keep: { type: "stdio", command: "node" },
+    });
+  });
 });
 
 describe("resolveMcpFromWorkspace", () => {

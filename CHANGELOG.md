@@ -6,12 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Cursor conventions in GodMode UI (#135)** - Knowledge Rules/Skills create,
+  edit, delete with source badges; non-destructive workspace import
+  (`user_edited` / content hash); Agents Pipeline **MCP** node (list,
+  enable/disable, `mcpFromWorkspace`); Builder status chips; `cursor_cloud`
+  coding workspace field; doctrine updates in `CURSOR_SUBSCRIPTION` /
+  `VERIFICATION`
+
 ### Changed
 
-- **MCP prompt section, hooks discovery, parity eval (#71)** - dedicated
-  `<godmode_mcp>` prompt-flow section (v4); read-only `.cursor/hooks.json`
-  Page Context line; agent Backend toggle for `mcpFromWorkspace`;
-  `docs/CURSOR_PARITY_EVAL.md` blind-eval harness
+- **Hooks: Automations is canonical (#135)** - removed `.cursor/hooks.json`
+  Page Context discovery; Automations copy clarifies GodMode hooks vs Cursor
+  IDE `hooks.json`
+- **MCP prompt section + parity eval (#71)** - dedicated
+  `<godmode_mcp>` prompt-flow section (v4); agent Backend / MCP-node toggle
+  for `mcpFromWorkspace`; `docs/CURSOR_PARITY_EVAL.md` blind-eval harness
+  (Cursor `hooks.json` Page Context discovery removed in #135)
 - **Compaction scratchpad + dynamic reminders (#71)** - dropped chat turns
   inject a brief `<godmode_compaction>` summary into the system prompt;
   `cursor_cloud` adds per-turn mode/workspace/abort reminders; structural

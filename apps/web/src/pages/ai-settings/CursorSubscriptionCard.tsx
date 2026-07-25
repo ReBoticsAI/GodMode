@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ExternalLinkIcon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -202,8 +203,15 @@ export function CursorSubscriptionCard() {
             <p className="text-[10px] text-muted-foreground">
               Sets Intelligence to Cursor Cloud. Prefer{" "}
               <span className="font-medium">Auto (Cursor picks)</span> for everyday
-              use; pin a named model only when you need a fixed route. You can also
-              pick Cursor models in the Intelligence picker.
+              use; pin a named model only when you need a fixed route. Manage MCP
+              servers on Agents → Pipeline →{" "}
+              <Link
+                to="/agents?section=pipeline&node=mcp"
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                MCP
+              </Link>
+              .
             </p>
           </>
         )}

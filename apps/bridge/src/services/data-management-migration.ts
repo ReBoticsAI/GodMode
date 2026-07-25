@@ -4,14 +4,22 @@ import { encryptSecret, decryptSecret } from "./holdings/crypto-box.js";
 
 const MIGRATION_VERSION = 1;
 
-export function registerDataManagementMigrations(): void {
-  registerMigration(MIGRATION_VERSION, "data_management_upgrade_v1", migrateV1);
-  registerMigration(6, "plugin_knowledge_source_v6", migratePluginKnowledgeV2);
-}
-
 function migratePluginKnowledgeV2(db: Database.Database): void {
   addCol(db, "ai_rules", "source_plugin_id", "TEXT");
   addCol(db, "ai_skills", "source_plugin_id", "TEXT");
+}
+
+function migrateKnowledgeUserEditedV7(db: Database.Database): void {
+  addCol(db, "ai_rules", "content_hash", "TEXT");
+  addCol(db, "ai_rules", "user_edited", "INTEGER NOT NULL DEFAULT 0");
+  addCol(db, "ai_skills", "content_hash", "TEXT");
+  addCol(db, "ai_skills", "user_edited", "INTEGER NOT NULL DEFAULT 0");
+}
+
+export function registerDataManagementMigrations(): void {
+  registerMigration(MIGRATION_VERSION, "data_management_upgrade_v1", migrateV1);
+  registerMigration(6, "plugin_knowledge_source_v6", migratePluginKnowledgeV2);
+  registerMigration(15, "knowledge_user_edited_v15", migrateKnowledgeUserEditedV7);
 }
 
 function migrateV1(db: Database.Database): void {

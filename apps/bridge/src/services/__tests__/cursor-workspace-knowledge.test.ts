@@ -47,6 +47,8 @@ function openDb(): AppDatabase {
       status TEXT NOT NULL DEFAULT 'active',
       version INTEGER NOT NULL DEFAULT 1,
       source_plugin_id TEXT,
+      content_hash TEXT,
+      user_edited INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -62,6 +64,8 @@ function openDb(): AppDatabase {
       status TEXT NOT NULL DEFAULT 'active',
       version INTEGER NOT NULL DEFAULT 1,
       source_plugin_id TEXT,
+      content_hash TEXT,
+      user_edited INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -252,5 +256,34 @@ describe("importCursorWorkspaceKnowledge", () => {
           .get(CURSOR_WORKSPACE_SOURCE) as { c: number }
       ).c
     ).toBe(0);
+  });
+
+  it("does not overwrite user-edited workspace rules", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, ".cursor", "rules"), { recursive: true });
+    writeFileSync(
+      join(root, ".cursor", "rules", "a.mdc"),
+      "---\ndescription: A\n---\nOriginal\n",
+      "utf8"
+    );
+    const db = openDb();
+    syncCursorWorkspaceKnowledge(db, root);
+    db.prepare(
+      `UPDATE ai_rules SET body = ?, user_edited = 1 WHERE id = ?`
+    ).run("Edited in GodMode", "cursor-ws-a");
+
+    writeFileSync(
+      join(root, ".cursor", "rules", "a.mdc"),
+      "---\ndescription: A\n---\nDisk changed\n",
+      "utf8"
+    );
+    clearCursorWorkspaceSyncCacheForTests();
+    syncCursorWorkspaceKnowledge(db, root, { force: true });
+
+    const row = db
+      .prepare(`SELECT body, user_edited FROM ai_rules WHERE id = ?`)
+      .get("cursor-ws-a") as { body: string; user_edited: number };
+    expect(row.body).toBe("Edited in GodMode");
+    expect(row.user_edited).toBe(1);
   });
 });

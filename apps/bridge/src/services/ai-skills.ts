@@ -24,6 +24,8 @@ export interface AiSkill {
   agentId?: string;
   version?: number;
   updatedAt?: string;
+  sourcePluginId?: string | null;
+  userEdited?: boolean;
 }
 
 /**
@@ -172,6 +174,50 @@ export function updateAiSkillState(
      VALUES (?, ?, ?, datetime('now'))
      ON CONFLICT(agent_id, skill_id) DO UPDATE SET enabled = excluded.enabled, updated_at = datetime('now')`
   ).run(agentId, skillId, enabled ? 1 : 0);
+}
+
+/** Update skill body/metadata and mark as user-edited. */
+export function updateAiSkillContent(
+  db: AppDatabase,
+  skillId: string,
+  patch: {
+    name?: string;
+    description?: string;
+    body?: string;
+    tools?: string[];
+    departments?: string[];
+  }
+): boolean {
+  const cur = db
+    .prepare(
+      `SELECT name, description, body, tools_json, departments_json FROM ai_skills WHERE id = ?`
+    )
+    .get(skillId) as
+    | {
+        name: string;
+        description: string;
+        body: string;
+        tools_json: string;
+        departments_json: string;
+      }
+    | undefined;
+  if (!cur) return false;
+  db.prepare(
+    `UPDATE ai_skills SET
+       name = ?, description = ?, body = ?, tools_json = ?, departments_json = ?,
+       user_edited = 1, version = version + 1, updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(
+    patch.name ?? cur.name,
+    patch.description ?? cur.description,
+    patch.body ?? cur.body,
+    patch.tools !== undefined ? JSON.stringify(patch.tools) : cur.tools_json,
+    patch.departments !== undefined
+      ? JSON.stringify(patch.departments)
+      : cur.departments_json,
+    skillId
+  );
+  return true;
 }
 
 /** Filesystem-safe skill id from a free-form name. */
