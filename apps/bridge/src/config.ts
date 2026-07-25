@@ -354,6 +354,20 @@ export const config = {
     /** Top-K code chunks for semantic codebase_search. */
     codeRagTopK: Number(process.env.EMBEDDINGS_CODE_RAG_TOP_K ?? 20),
     /**
+     * Shared embed queue (#69 track C). Env override wins; otherwise on for SaaS.
+     * When off, writers embed inline (OSS / developer default).
+     */
+    queueEnabled:
+      process.env.EMBEDDINGS_QUEUE_ENABLED === "true"
+        ? true
+        : process.env.EMBEDDINGS_QUEUE_ENABLED === "false"
+          ? false
+          : isSaas,
+    queuePollMs: Number(process.env.EMBEDDINGS_QUEUE_POLL_MS ?? 750),
+    /** Max embed HTTP requests per 10s window (shared llama-server). */
+    queueRps: Number(process.env.EMBEDDINGS_QUEUE_RPS ?? 8),
+    queueStaleMinutes: Number(process.env.EMBEDDINGS_QUEUE_STALE_MINUTES ?? 15),
+    /**
      * Per-job profiles (#69). Unset fields inherit the shared embedder above.
      * Set EMBEDDINGS_CODE_MODEL_PATH / EMBEDDINGS_CODE_PORT to specialize code.
      */

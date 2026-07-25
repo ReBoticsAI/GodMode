@@ -28,6 +28,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/compaction-scratchpad.test.ts",
       "apps/bridge/src/services/__tests__/code-index.test.ts",
       "apps/bridge/src/services/embeddings/__tests__/profiles.test.ts",
+      "apps/bridge/src/services/embeddings/__tests__/embed-queue.test.ts",
       "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",

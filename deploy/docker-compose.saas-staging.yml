@@ -33,6 +33,12 @@ services:
       - BRIDGE_HOST=127.0.0.1
       - AUTH_ALLOW_ANONYMOUS=false
       - AUTH_ALLOW_SIGNUP=false
+      # Shared host embedder + SaaS fair queue (#69 track C)
+      - EMBEDDINGS_ENABLED=true
+      - EMBEDDINGS_EXTERNAL=true
+      - EMBEDDINGS_SERVER_HOST=host.docker.internal
+      - EMBEDDINGS_PORT=8082
+      - EMBEDDINGS_QUEUE_ENABLED=true
     restart: unless-stopped
 
 volumes:

@@ -5,6 +5,7 @@ import {
   vectorToBlob,
   type EmbeddingClient,
 } from "./embeddings/embedding-client.js";
+import { enqueueEmbedJob, isEmbedQueueEnabled } from "./embeddings/embed-queue.js";
 
 const RRF_K = 60;
 
@@ -43,12 +44,36 @@ export function removeWikiPageFromIndex(db: CoreDatabase, pageId: string): void 
 export function indexWikiPage(
   db: CoreDatabase,
   embedder: EmbeddingClient | null | undefined,
-  page: { id: string; title: string; body_markdown: string }
+  page: { id: string; title: string; body_markdown: string },
+  opts: { tenantId?: string | null; lane?: "interactive" | "backfill" } = {}
 ): void {
   const text = `${page.title}\n${page.body_markdown ?? ""}`.trim();
   syncWikiPageToFts(db, page.id, page.title, page.body_markdown ?? "");
-  if (embedder?.isReady() && text) {
+  if (!text) return;
+  if (isEmbedQueueEnabled()) {
+    enqueueEmbedJob({
+      tenantId: opts.tenantId ?? pageTenantId(db, page.id) ?? "",
+      profile: "memory",
+      lane: opts.lane ?? "interactive",
+      targetKind: "wiki",
+      targetId: page.id,
+      text,
+    });
+    return;
+  }
+  if (embedder?.isReady()) {
     void embedAndStoreWikiPage(db, embedder, page.id, text);
+  }
+}
+
+function pageTenantId(db: CoreDatabase, pageId: string): string | null {
+  try {
+    const row = db
+      .prepare(`SELECT tenant_id FROM wiki_pages WHERE id = ?`)
+      .get(pageId) as { tenant_id: string } | undefined;
+    return row?.tenant_id ?? null;
+  } catch {
+    return null;
   }
 }
 
