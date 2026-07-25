@@ -15,6 +15,7 @@ import {
   embedProfileModelId,
   resolveEmbedProfile,
 } from "../embeddings/profiles.js";
+import { enqueueEmbedJob, isEmbedQueueEnabled } from "../embeddings/embed-queue.js";
 import {
   chunkSourceFile,
   isIndexableSourcePath,
@@ -245,24 +246,39 @@ export async function syncCodeIndex(
 
     let embedded = 0;
     const embedder = opts.embedder;
-    if (embedder?.isReady() && pendingEmbed.length) {
-      const batchSize = 16;
-      for (let i = 0; i < pendingEmbed.length; i += batchSize) {
-        const batch = pendingEmbed.slice(i, i + batchSize);
-        const vectors = await embedder.embedBatch(
-          batch.map((b) => b.text),
-          { profile: "code" }
-        );
-        if (!vectors) break;
-        for (let j = 0; j < batch.length; j++) {
-          const vec = vectors[j];
-          if (!vec) continue;
-          db.prepare(
-            `UPDATE code_chunks
-             SET embedding = ?, embedding_dim = ?, model_id = ?, updated_at = datetime('now')
-             WHERE id = ?`
-          ).run(vectorToBlob(vec), vec.length, modelId, batch[j].id);
-          embedded++;
+    if (pendingEmbed.length) {
+      if (isEmbedQueueEnabled()) {
+        for (const item of pendingEmbed) {
+          const jobId = enqueueEmbedJob({
+            tenantId: opts.tenantId ?? "",
+            profile: "code",
+            lane: "backfill",
+            targetKind: "code_chunk",
+            targetId: item.id,
+            text: item.text,
+            extra: { modelId },
+          });
+          if (jobId) embedded++;
+        }
+      } else if (embedder?.isReady()) {
+        const batchSize = 16;
+        for (let i = 0; i < pendingEmbed.length; i += batchSize) {
+          const batch = pendingEmbed.slice(i, i + batchSize);
+          const vectors = await embedder.embedBatch(
+            batch.map((b) => b.text),
+            { profile: "code" }
+          );
+          if (!vectors) break;
+          for (let j = 0; j < batch.length; j++) {
+            const vec = vectors[j];
+            if (!vec) continue;
+            db.prepare(
+              `UPDATE code_chunks
+               SET embedding = ?, embedding_dim = ?, model_id = ?, updated_at = datetime('now')
+               WHERE id = ?`
+            ).run(vectorToBlob(vec), vec.length, modelId, batch[j].id);
+            embedded++;
+          }
         }
       }
     }

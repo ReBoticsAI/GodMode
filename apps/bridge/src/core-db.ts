@@ -810,7 +810,38 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   { version: 10, name: "core_saas_subscriptions_v1", up: ensureSaasSubscriptionSchema },
   { version: 11, name: "core_marketplace_commerce_v1", up: ensureMarketplaceCommerceSchema },
   { version: 12, name: "core_auth_security_v1", up: ensureAuthSecurityMigration },
+  { version: 13, name: "core_embed_queue_v1", up: ensureEmbedQueueSchema },
 ];
+
+function ensureEmbedQueueSchema(db: CoreDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS embed_queue (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT '',
+      profile TEXT NOT NULL DEFAULT 'memory'
+        CHECK (profile IN ('memory', 'code')),
+      lane TEXT NOT NULL DEFAULT 'backfill'
+        CHECK (lane IN ('interactive', 'backfill')),
+      priority INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'done', 'error')),
+      target_kind TEXT NOT NULL
+        CHECK (target_kind IN ('memory', 'wiki', 'code_chunk')),
+      target_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS embed_queue_status_lane_idx
+      ON embed_queue(status, lane, created_at ASC);
+    CREATE INDEX IF NOT EXISTS embed_queue_tenant_status_idx
+      ON embed_queue(tenant_id, status);
+    CREATE INDEX IF NOT EXISTS embed_queue_target_pending_idx
+      ON embed_queue(target_kind, target_id, status);
+  `);
+}
 
 function ensureCoreUserColumns(db: CoreDatabase): void {
   ensureUsersIsAdminColumn(db);

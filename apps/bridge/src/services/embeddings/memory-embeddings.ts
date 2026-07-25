@@ -1,6 +1,7 @@
 import type { AppDatabase } from "../../db.js";
 import { syncMemoryToFts } from "../vector-rag.js";
 import { vectorToBlob, type EmbeddingClient } from "./embedding-client.js";
+import { enqueueEmbedJob, isEmbedQueueEnabled } from "./embed-queue.js";
 
 /**
  * Embed a single memory's text and persist the vector. Best-effort: returns
@@ -26,18 +27,36 @@ export async function embedAndStoreMemory(
   }
 }
 
+export type IndexMemoryOpts = {
+  tenantId?: string | null;
+  /** Force backfill lane even for a single write. */
+  lane?: "interactive" | "backfill";
+};
+
 /**
  * Always sync FTS; optionally embed when the client is ready.
- * Embed is async / best-effort so hot write paths stay responsive.
+ * When the SaaS embed queue is enabled, enqueue instead of inline HTTP.
  */
 export function indexMemory(
   db: AppDatabase,
   embedder: EmbeddingClient | null | undefined,
   id: string,
-  text: string
+  text: string,
+  opts: IndexMemoryOpts = {}
 ): void {
   if (!text.trim()) return;
   syncMemoryToFts(db, id, text);
+  if (isEmbedQueueEnabled()) {
+    enqueueEmbedJob({
+      tenantId: opts.tenantId ?? "",
+      profile: "memory",
+      lane: opts.lane ?? "interactive",
+      targetKind: "memory",
+      targetId: id,
+      text,
+    });
+    return;
+  }
   if (embedder?.isReady()) {
     void embedAndStoreMemory(db, embedder, id, text);
   }
@@ -56,13 +75,13 @@ export function removeMemoryFromIndex(db: AppDatabase, id: string): void {
  * Backfill embeddings for memories that don't have one yet. Best-effort and
  * intended to run non-blocking on startup once the embedder is healthy.
  * Processes in small batches to avoid a long single request.
+ * When the embed queue is enabled, enqueues backfill jobs instead of embedding.
  */
 export async function backfillMemoryEmbeddings(
   db: AppDatabase,
   embedder: EmbeddingClient,
-  opts: { batchSize?: number; maxRows?: number } = {}
+  opts: { batchSize?: number; maxRows?: number; tenantId?: string | null } = {}
 ): Promise<number> {
-  if (!embedder.isReady()) return 0;
   const batchSize = opts.batchSize ?? 32;
   const maxRows = opts.maxRows ?? 5000;
   let done = 0;
@@ -75,6 +94,26 @@ export async function backfillMemoryEmbeddings(
       )
       .all(maxRows) as Array<{ id: string; text: string }>;
     if (rows.length === 0) return 0;
+
+    if (isEmbedQueueEnabled()) {
+      for (const r of rows) {
+        const id = enqueueEmbedJob({
+          tenantId: opts.tenantId ?? "",
+          profile: "memory",
+          lane: "backfill",
+          targetKind: "memory",
+          targetId: r.id,
+          text: r.text,
+        });
+        if (id) done++;
+      }
+      if (done > 0) {
+        console.log(`[embeddings] enqueued ${done} memory embed job(s)`);
+      }
+      return done;
+    }
+
+    if (!embedder.isReady()) return 0;
 
     const update = db.prepare(
       `UPDATE ai_memories SET embedding = ?, embedding_dim = ? WHERE id = ?`

@@ -968,6 +968,13 @@ export interface EmbeddingEngineActivity {
   wikiRagTopK?: number;
   codeRagTopK?: number;
   profiles?: Array<{ id: string; label: string; ready: boolean; dim: number | null }>;
+  queue?: {
+    enabled: boolean;
+    depth: number;
+    byLane: { interactive: number; backfill: number };
+    failuresRecent: number;
+    fairLastTenant: string | null;
+  };
   embedderLogTail: string[];
 }
 

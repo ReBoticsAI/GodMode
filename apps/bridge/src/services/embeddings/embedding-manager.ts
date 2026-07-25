@@ -6,6 +6,7 @@ import { CpuLlamaServer, type CpuServerStatus } from "./cpu-llama-server.js";
 import { EmbeddingClient } from "./embedding-client.js";
 import { backfillMemoryEmbeddings } from "./memory-embeddings.js";
 import { backfillWikiFts } from "../wiki-rag.js";
+import { EmbedQueueWorker } from "./embed-queue-worker.js";
 import {
   codeProfileUsesSeparateServer,
   embedProfileModelId,
@@ -51,6 +52,7 @@ export class EmbeddingManager {
   private readonly codeServer: CpuLlamaServer | null;
   private readonly memoryClient: EmbeddingClient;
   private readonly codeClient: EmbeddingClient;
+  private readonly embedQueueWorker: EmbedQueueWorker;
 
   constructor(private readonly db: AppDatabase) {
     const memory = resolveEmbedProfile("memory");
@@ -79,6 +81,7 @@ export class EmbeddingManager {
       this.codeServer = null;
       this.codeClient = this.memoryClient;
     }
+    this.embedQueueWorker = new EmbedQueueWorker(this, this.db);
   }
 
   get enabled(): boolean {
@@ -186,15 +189,16 @@ export class EmbeddingManager {
     if (this.codeClient.isReady()) {
       void this.softBackfillCodeIndexes();
     }
+    this.embedQueueWorker.start();
     return this.getStatus();
   }
 
   private async backfillAllTenants(): Promise<void> {
     const client = this.memoryClient;
     const dbs = this.listTenantDbs();
-    for (const { db } of dbs) {
+    for (const { tenantId, db } of dbs) {
       try {
-        await backfillMemoryEmbeddings(db, client);
+        await backfillMemoryEmbeddings(db, client, { tenantId: tenantId || null });
       } catch (err) {
         console.warn(
           "[embeddings] tenant memory backfill failed:",
@@ -233,7 +237,10 @@ export class EmbeddingManager {
     if (!this.enabled || !this.memoryServer.isReady()) return;
     try {
       const db = tenantId ? getTenantDb(tenantId) : this.db;
-      await backfillMemoryEmbeddings(db, this.memoryClient, { maxRows: 200 });
+      await backfillMemoryEmbeddings(db, this.memoryClient, {
+        maxRows: 200,
+        tenantId: tenantId ?? null,
+      });
     } catch {
       /* best-effort */
     }
@@ -257,6 +264,7 @@ export class EmbeddingManager {
   }
 
   async stop(): Promise<EmbeddingEngineStatus> {
+    this.embedQueueWorker.stop();
     if (this.codeServer) await this.codeServer.stop();
     await this.memoryServer.stop();
     return this.getStatus();

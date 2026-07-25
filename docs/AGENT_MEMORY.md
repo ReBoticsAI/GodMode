@@ -28,6 +28,9 @@ Same pattern as the chat LLM: attach to a **host** embedder — do not ship CUDA
 | `EMBEDDINGS_PORT` | `8082` |
 | `EMBEDDINGS_MODEL_PATH` | host path to EmbeddingGemma GGUF (spawn only when not external) |
 | `EMBEDDINGS_CODE_MODEL_PATH` / `EMBEDDINGS_CODE_PORT` | optional separate **code** profile server |
+| `EMBEDDINGS_QUEUE_ENABLED` | SaaS shared embed queue (`true`/`false`; default on when `INSTALLATION_SURFACE=saas`) |
+| `EMBEDDINGS_QUEUE_RPS` | max embed HTTP calls per 10s window (default 8) |
+| `EMBEDDINGS_QUEUE_STALE_MINUTES` | recover abandoned `running` jobs (default 15) |
 
 ### Profiles (#69)
 
@@ -39,6 +42,12 @@ Same pattern as the chat LLM: attach to a **host** embedder — do not ship CUDA
 Default local installs share one llama-server for both profiles. Status UI shows each profile's readiness and dimension.
 
 `codebase_search` fuses vector chunk hits with ripgrep; when the code profile is unavailable it falls back to grep-only.
+
+### SaaS embed queue (#69 track C)
+
+On SaaS (or when `EMBEDDINGS_QUEUE_ENABLED=true`), memory/wiki/code writers enqueue into core `embed_queue`. A Bridge worker embeds against the shared pool with **tenant round-robin** (interactive before backfill). OSS / developer installs keep inline best-effort embed by default.
+
+**Still deferred from #69:** optional ANN backends (track D).
 
 Backfill walks **tenant workspace DBs**, not only the operator bootstrap DB. Wiki FTS is on core; page embeds update when the embedder is ready.
 
@@ -68,4 +77,4 @@ Approve episodes in **Intelligence → Memory**. Approve wiki proposals under **
 
 OpenWiki CLI, Gmail/Notion connectors, Computer Use.
 
-**Deferred from #69:** SaaS shared embed queue/workers (track C), optional ANN backends (track D).
+**Deferred from #69:** optional ANN backends (track D).
