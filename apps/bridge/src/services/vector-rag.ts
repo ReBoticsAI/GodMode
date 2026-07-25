@@ -1,6 +1,10 @@
 import type { AppDatabase } from "../db.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
-import { blobToVector, cosineSimilarity } from "./embeddings/embedding-client.js";
+import { blobToVector } from "./embeddings/embedding-client.js";
+import {
+  scheduleAnnInvalidate,
+  searchVectors,
+} from "./embeddings/vector-retrieval.js";
 
 const DEFAULT_AGENT_ID = "intelligence";
 const RRF_K = 60;
@@ -117,17 +121,29 @@ function vectorSearch(
     )
     .all(chatId, agentId) as Array<{ id: string; text: string; embedding: Buffer | null }>;
 
-  const scored = rows
-    .map((r) => {
-      const vec = blobToVector(r.embedding);
-      if (!vec) return null;
-      return { memoryId: r.id, text: r.text, score: cosineSimilarity(queryVec, vec) };
-    })
-    .filter((x): x is { memoryId: string; text: string; score: number } => x != null)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  const docs: Array<{ id: string; vec: Float32Array; text: string }> = [];
+  for (const r of rows) {
+    const vec = blobToVector(r.embedding);
+    if (!vec) continue;
+    docs.push({ id: r.id, vec, text: r.text });
+  }
+  const hits = searchVectors(
+    `memory:${agentId}:${chatId ?? ""}`,
+    docs,
+    queryVec,
+    limit
+  );
+  const textById = new Map(docs.map((d) => [d.id, d.text]));
+  return hits.map((h, i) => ({
+    memoryId: h.id,
+    text: textById.get(h.id) ?? "",
+    rank: i + 1,
+  }));
+}
 
-  return scored.map((s, i) => ({ memoryId: s.memoryId, text: s.text, rank: i + 1 }));
+/** Call after memory embedding writes so ANN rebuilds on next query. */
+export function noteMemoryEmbeddingWrite(): void {
+  scheduleAnnInvalidate("memory:");
 }
 
 function reciprocalRankFusion(

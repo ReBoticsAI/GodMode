@@ -47,7 +47,15 @@ Default local installs share one llama-server for both profiles. Status UI shows
 
 On SaaS (or when `EMBEDDINGS_QUEUE_ENABLED=true`), memory/wiki/code writers enqueue into core `embed_queue`. A Bridge worker embeds against the shared pool with **tenant round-robin** (interactive before backfill). OSS / developer installs keep inline best-effort embed by default.
 
-**Still deferred from #69:** optional ANN backends (track D).
+### Optional ANN (#69 track D)
+
+SQLite BLOBs stay the source of truth. Set `EMBEDDINGS_ANN_ENABLED=true` to accelerate cosine top-K with an in-memory pure-TS HNSW index when the corpus has at least `EMBEDDINGS_ANN_MIN_ROWS` vectors (default 2000). Default installs keep brute-force scan.
+
+| Env | Purpose |
+|-----|---------|
+| `EMBEDDINGS_ANN_ENABLED` | opt-in ANN (default off) |
+| `EMBEDDINGS_ANN_BACKEND` | `hnsw` (default) or `brute_force` |
+| `EMBEDDINGS_ANN_MIN_ROWS` | minimum corpus size before HNSW is used |
 
 Backfill walks **tenant workspace DBs**, not only the operator bootstrap DB. Wiki FTS is on core; page embeds update when the embedder is ready.
 
@@ -76,5 +84,3 @@ Approve episodes in **Intelligence → Memory**. Approve wiki proposals under **
 ## Out of scope (this architecture)
 
 OpenWiki CLI, Gmail/Notion connectors, Computer Use.
-
-**Deferred from #69:** optional ANN backends (track D).

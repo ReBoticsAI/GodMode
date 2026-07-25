@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Optional ANN retrieval (#69 D)** - pure-TS in-memory HNSW behind
+  `searchVectors`; opt-in via `EMBEDDINGS_ANN_ENABLED` when corpus ≥
+  `EMBEDDINGS_ANN_MIN_ROWS`; SQLite BLOBs remain source of truth
 - **SaaS embed queue (#69 C)** - core `embed_queue` with tenant round-robin
   worker; writers enqueue on SaaS (or `EMBEDDINGS_QUEUE_ENABLED`); OSS keeps
   inline embed by default; staging compose wires shared host embedder
