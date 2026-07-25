@@ -6,12 +6,35 @@ import { CpuLlamaServer, type CpuServerStatus } from "./cpu-llama-server.js";
 import { EmbeddingClient } from "./embedding-client.js";
 import { backfillMemoryEmbeddings } from "./memory-embeddings.js";
 import { backfillWikiFts } from "../wiki-rag.js";
+import {
+  codeProfileUsesSeparateServer,
+  embedProfileModelId,
+  listEmbedProfileIds,
+  resolveEmbedProfile,
+  type EmbedProfileId,
+} from "./profiles.js";
+
+export interface EmbedProfileStatus {
+  id: EmbedProfileId;
+  label: string;
+  consumers: string[];
+  modelId: string;
+  modelPath: string;
+  port: number;
+  pooling: string;
+  dim: number | null;
+  ready: boolean;
+  separateServer: boolean;
+  server: CpuServerStatus;
+}
 
 export interface EmbeddingEngineStatus {
   enabled: boolean;
   /** True only when the persisted override (ai_settings.embeddingsEnabled) is set. */
   enabledOverride: boolean | null;
+  /** Primary / memory embedder (back-compat). */
   embedder: CpuServerStatus;
+  profiles: EmbedProfileStatus[];
 }
 
 /** Persisted runtime override key for the master enable flag. */
@@ -20,47 +43,55 @@ const SETTING_ENABLED = "embeddingsEnabled";
 const LEGACY_SETTING_ENABLED = "curatorEnabled";
 
 /**
- * Lifecycle owner for the CPU embedder llama-server that powers semantic (RAG)
- * memory retrieval. Spawns/health-checks the embedder, auto-starts on boot when
- * enabled, and degrades gracefully: if the feature flag is off nothing spawns
- * and {@link isEmbedderReady} returns false so chat/RAG fall back to recency.
+ * Lifecycle owner for CPU embedder llama-server(s) powering semantic RAG.
+ * Profiles: `memory` (default) and `code` (may share the same server).
  */
 export class EmbeddingManager {
-  private readonly embedderServer: CpuLlamaServer;
-  private readonly embeddingClient: EmbeddingClient;
+  private readonly memoryServer: CpuLlamaServer;
+  private readonly codeServer: CpuLlamaServer | null;
+  private readonly memoryClient: EmbeddingClient;
+  private readonly codeClient: EmbeddingClient;
 
   constructor(private readonly db: AppDatabase) {
-    this.embedderServer = new CpuLlamaServer({
-      role: "embedder",
-      modelPath: config.embeddings.embedderModelPath,
-      port: config.embeddings.embedderPort,
-      ctxSize: config.embeddings.embedderCtxSize,
+    const memory = resolveEmbedProfile("memory");
+    this.memoryServer = new CpuLlamaServer({
+      role: "embedder-memory",
+      modelPath: memory.modelPath,
+      port: memory.port,
+      ctxSize: memory.ctxSize,
       threads: config.embeddings.threads,
-      // EmbeddingGemma: mean pooling over the last hidden states.
-      extraArgs: ["--embeddings", "--pooling", "mean"],
+      extraArgs: ["--embeddings", "--pooling", memory.pooling],
     });
-    this.embeddingClient = new EmbeddingClient(this.embedderServer);
+    this.memoryClient = new EmbeddingClient(this.memoryServer, "memory");
+
+    if (codeProfileUsesSeparateServer()) {
+      const code = resolveEmbedProfile("code");
+      this.codeServer = new CpuLlamaServer({
+        role: "embedder-code",
+        modelPath: code.modelPath,
+        port: code.port,
+        ctxSize: code.ctxSize,
+        threads: config.embeddings.threads,
+        extraArgs: ["--embeddings", "--pooling", code.pooling],
+      });
+      this.codeClient = new EmbeddingClient(this.codeServer, "code");
+    } else {
+      this.codeServer = null;
+      this.codeClient = this.memoryClient;
+    }
   }
 
-  /**
-   * Effective master flag: the persisted runtime override
-   * (ai_settings.embeddingsEnabled) wins when present, otherwise the
-   * env-derived config default. Lets the user flip the engine from the UI and
-   * have it survive a bridge restart.
-   */
   get enabled(): boolean {
     const override = this.readEnabledOverride();
     return override ?? config.embeddings.enabled;
   }
 
-  /** The raw persisted override, or null when unset (config default applies). */
   private readEnabledOverride(): boolean | null {
     try {
       const row = this.db
         .prepare("SELECT value FROM ai_settings WHERE key = ?")
         .get(SETTING_ENABLED) as { value: string } | undefined;
       if (row) return row.value === "true" || row.value === "1";
-      // Back-compat: honor a pre-existing enable flag from the old engine.
       const legacy = this.db
         .prepare("SELECT value FROM ai_settings WHERE key = ?")
         .get(LEGACY_SETTING_ENABLED) as { value: string } | undefined;
@@ -87,10 +118,6 @@ export class EmbeddingManager {
     }
   }
 
-  /**
-   * Persist the master enable flag and reconcile the server: enabling starts
-   * the embedder, disabling stops it. Returns the resulting status.
-   */
   async setEnabled(enabled: boolean): Promise<EmbeddingEngineStatus> {
     this.writeEnabledOverride(enabled);
     try {
@@ -108,38 +135,62 @@ export class EmbeddingManager {
     return this.getStatus();
   }
 
-  getEmbeddingClient(): EmbeddingClient {
-    return this.embeddingClient;
+  /** Default memory client (back-compat for wiki/memory/capability callers). */
+  getEmbeddingClient(profile: EmbedProfileId = "memory"): EmbeddingClient {
+    return profile === "code" ? this.codeClient : this.memoryClient;
   }
 
-  isEmbedderReady(): boolean {
-    return this.embedderServer.isReady();
+  isEmbedderReady(profile: EmbedProfileId = "memory"): boolean {
+    return this.getEmbeddingClient(profile).isReady();
   }
 
   getStatus(): EmbeddingEngineStatus {
+    const separate = codeProfileUsesSeparateServer();
+    const profiles: EmbedProfileStatus[] = listEmbedProfileIds().map((id) => {
+      const cfg = resolveEmbedProfile(id);
+      const client = this.getEmbeddingClient(id);
+      const server =
+        id === "code" && this.codeServer
+          ? this.codeServer.getStatus()
+          : this.memoryServer.getStatus();
+      return {
+        id,
+        label: cfg.label,
+        consumers: cfg.consumers,
+        modelId: embedProfileModelId(cfg),
+        modelPath: cfg.modelPath,
+        port: cfg.port,
+        pooling: cfg.pooling,
+        dim: client.getLastDim(),
+        ready: client.isReady(),
+        separateServer: id === "code" ? separate : false,
+        server,
+      };
+    });
     return {
       enabled: this.enabled,
       enabledOverride: this.readEnabledOverride(),
-      embedder: this.embedderServer.getStatus(),
+      embedder: this.memoryServer.getStatus(),
+      profiles,
     };
   }
 
-  /** Start the embedder server (idempotent). External attach when EMBEDDINGS_EXTERNAL. */
   async start(): Promise<EmbeddingEngineStatus> {
-    await this.embedderServer.start();
-    // Best-effort, non-blocking backfill across operator + every tenant workspace DB.
-    if (this.embedderServer.isReady()) {
+    await this.memoryServer.start();
+    if (this.codeServer) {
+      await this.codeServer.start();
+    }
+    if (this.memoryServer.isReady()) {
       void this.backfillAllTenants();
+    }
+    if (this.codeClient.isReady()) {
+      void this.softBackfillCodeIndexes();
     }
     return this.getStatus();
   }
 
-  /**
-   * Embed missing memory vectors for the operator DB and each tenant workspace.
-   * Also ensures wiki FTS rows exist on core (wiki embeddings backfill when ready).
-   */
   private async backfillAllTenants(): Promise<void> {
-    const client = this.embeddingClient;
+    const client = this.memoryClient;
     const dbs = this.listTenantDbs();
     for (const { db } of dbs) {
       try {
@@ -158,12 +209,31 @@ export class EmbeddingManager {
     }
   }
 
-  /** Lazy backfill for the current work/engine tenant on first chat when enabled. */
+  /** Non-blocking code-index warm for coding roots (does not block chat). */
+  private async softBackfillCodeIndexes(): Promise<void> {
+    const { syncCodeIndex } = await import("../coding/code-index.js");
+    const embedder = this.codeClient;
+    for (const { tenantId, db } of this.listTenantDbs()) {
+      try {
+        await syncCodeIndex(db, {
+          tenantId: tenantId || null,
+          embedder,
+          maxFiles: 400,
+        });
+      } catch (err) {
+        console.warn(
+          "[embeddings] code index soft backfill failed:",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+  }
+
   async ensureTenantBackfill(tenantId: string | undefined): Promise<void> {
-    if (!this.enabled || !this.embedderServer.isReady()) return;
+    if (!this.enabled || !this.memoryServer.isReady()) return;
     try {
       const db = tenantId ? getTenantDb(tenantId) : this.db;
-      await backfillMemoryEmbeddings(db, this.embeddingClient, { maxRows: 200 });
+      await backfillMemoryEmbeddings(db, this.memoryClient, { maxRows: 200 });
     } catch {
       /* best-effort */
     }
@@ -187,11 +257,11 @@ export class EmbeddingManager {
   }
 
   async stop(): Promise<EmbeddingEngineStatus> {
-    await this.embedderServer.stop();
+    if (this.codeServer) await this.codeServer.stop();
+    await this.memoryServer.stop();
     return this.getStatus();
   }
 
-  /** Boot hook: launch the embedder only when both enabled and autoStart are set. */
   async maybeAutoStart(): Promise<void> {
     if (!this.enabled || !config.embeddings.autoStart) return;
     try {

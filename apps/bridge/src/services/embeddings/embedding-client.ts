@@ -1,4 +1,9 @@
 import type { CpuLlamaServer } from "./cpu-llama-server.js";
+import type { EmbedProfileId } from "./profiles.js";
+
+export type EmbedRequestOpts = {
+  profile?: EmbedProfileId;
+};
 
 /**
  * Thin client over an embedder llama-server (`--embeddings`). Returns
@@ -7,23 +12,44 @@ import type { CpuLlamaServer } from "./cpu-llama-server.js";
  * the caller should fall back to non-semantic behavior.
  */
 export class EmbeddingClient {
-  constructor(private readonly server: CpuLlamaServer) {}
+  private lastDim: number | null = null;
+  private lastProfile: EmbedProfileId | null = null;
+
+  constructor(
+    private readonly server: CpuLlamaServer,
+    private readonly defaultProfile: EmbedProfileId = "memory"
+  ) {}
 
   isReady(): boolean {
     return this.server.isReady();
   }
 
+  getLastDim(): number | null {
+    return this.lastDim;
+  }
+
+  getDefaultProfile(): EmbedProfileId {
+    return this.defaultProfile;
+  }
+
   /** Embed a single string; returns an L2-normalized vector or null on failure. */
-  async embed(text: string): Promise<Float32Array | null> {
-    const out = await this.embedBatch([text]);
+  async embed(
+    text: string,
+    opts?: EmbedRequestOpts
+  ): Promise<Float32Array | null> {
+    const out = await this.embedBatch([text], opts);
     return out?.[0] ?? null;
   }
 
   /** Embed many strings in one request. Returns null if the embedder is down. */
-  async embedBatch(texts: string[]): Promise<Float32Array[] | null> {
+  async embedBatch(
+    texts: string[],
+    opts?: EmbedRequestOpts
+  ): Promise<Float32Array[] | null> {
     const clean = texts.map((t) => (t ?? "").trim()).filter(Boolean);
     if (clean.length === 0) return [];
     if (!this.server.isReady()) return null;
+    const profile = opts?.profile ?? this.defaultProfile;
     try {
       const res = await fetch(`${this.server.getBaseUrl()}/v1/embeddings`, {
         method: "POST",
@@ -39,7 +65,14 @@ export class EmbeddingClient {
       if (!Array.isArray(data) || data.length === 0) return null;
       // Preserve request order via the returned `index` when present.
       const ordered = [...data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-      return ordered.map((d) => l2normalize(Float32Array.from(d.embedding)));
+      const vectors = ordered.map((d) =>
+        l2normalize(Float32Array.from(d.embedding))
+      );
+      if (vectors[0]) {
+        this.lastDim = vectors[0].length;
+        this.lastProfile = profile;
+      }
+      return vectors;
     } catch {
       return null;
     }
