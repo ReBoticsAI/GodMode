@@ -7,7 +7,6 @@ import path from "node:path";
 import type { AppDatabase } from "../../db.js";
 import {
   blobToVector,
-  cosineSimilarity,
   vectorToBlob,
   type EmbeddingClient,
 } from "../embeddings/embedding-client.js";
@@ -16,6 +15,7 @@ import {
   resolveEmbedProfile,
 } from "../embeddings/profiles.js";
 import { enqueueEmbedJob, isEmbedQueueEnabled } from "../embeddings/embed-queue.js";
+import { scheduleAnnInvalidate, searchVectors } from "../embeddings/vector-retrieval.js";
 import {
   chunkSourceFile,
   isIndexableSourcePath,
@@ -280,6 +280,7 @@ export async function syncCodeIndex(
             embedded++;
           }
         }
+        if (embedded > 0) scheduleAnnInvalidate(`code:${rootId}`);
       }
     }
 
@@ -341,23 +342,33 @@ export function searchCodeChunks(
   }
 
   const prefix = opts.pathPrefix?.replace(/\\/g, "/").replace(/^\.\//, "");
-  const scored: CodeChunkHit[] = [];
+  const docs: Array<{
+    id: string;
+    vec: Float32Array;
+    row: (typeof rows)[number];
+  }> = [];
   for (const row of rows) {
     if (prefix && !row.path.replace(/\\/g, "/").startsWith(prefix)) continue;
     const vec = blobToVector(row.embedding);
     if (!vec) continue;
-    const score = cosineSimilarity(opts.queryVec, vec);
-    scored.push({
-      id: row.id,
-      path: row.path,
-      startLine: row.start_line,
-      endLine: row.end_line,
-      symbol: row.symbol,
-      kind: row.kind,
-      snippet: row.text.slice(0, 200).replace(/\s+/g, " ").trim(),
-      score,
-    });
+    docs.push({ id: row.id, vec, row });
   }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+  const hits = searchVectors(`code:${rootId}`, docs, opts.queryVec, limit);
+  const byId = new Map(docs.map((d) => [d.id, d.row]));
+  return hits
+    .map((h) => {
+      const row = byId.get(h.id);
+      if (!row) return null;
+      return {
+        id: row.id,
+        path: row.path,
+        startLine: row.start_line,
+        endLine: row.end_line,
+        symbol: row.symbol,
+        kind: row.kind,
+        snippet: row.text.slice(0, 200).replace(/\s+/g, " ").trim(),
+        score: h.score,
+      };
+    })
+    .filter((x): x is CodeChunkHit => x != null);
 }

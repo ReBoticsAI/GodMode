@@ -15,6 +15,7 @@ import {
   recoverStaleEmbedJobs,
   type EmbedQueueJob,
 } from "./embed-queue.js";
+import { scheduleAnnInvalidate } from "./vector-retrieval.js";
 
 export class EmbedQueueWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -109,6 +110,7 @@ export class EmbedQueueWorker {
           `UPDATE wiki_pages SET embedding = ?, embedding_dim = ? WHERE id = ?`
         )
         .run(vectorToBlob(vec), vec.length, job.target_id);
+      scheduleAnnInvalidate("wiki:");
       return true;
     }
 
@@ -117,6 +119,7 @@ export class EmbedQueueWorker {
       db.prepare(
         `UPDATE ai_memories SET embedding = ?, embedding_dim = ? WHERE id = ?`
       ).run(vectorToBlob(vec), vec.length, job.target_id);
+      scheduleAnnInvalidate("memory:");
       return true;
     }
 
@@ -127,6 +130,7 @@ export class EmbedQueueWorker {
          SET embedding = ?, embedding_dim = ?, model_id = ?, updated_at = datetime('now')
          WHERE id = ?`
       ).run(vectorToBlob(vec), vec.length, modelId, job.target_id);
+      scheduleAnnInvalidate("code:");
       return true;
     }
 
