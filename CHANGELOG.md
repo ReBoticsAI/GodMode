@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Platform analytics DuckDB (#140)** - core `TimeseriesStore` is a thin
+  wrapper over per-tenant `analytics.duckdb` for platform/plugin telemetry
+  only; Sierra SC backfill/rollup removed from Bridge boot
 - **Optional ANN retrieval (#69 D)** - pure-TS in-memory HNSW behind
   `searchVectors`; opt-in via `EMBEDDINGS_ANN_ENABLED` when corpus ≥
   `EMBEDDINGS_ANN_MIN_ROWS`; SQLite BLOBs remain source of truth

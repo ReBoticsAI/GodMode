@@ -3,16 +3,28 @@ import { initTimeseriesStore, getTimeseriesStore } from "../services/timeseries-
 
 if (parentPort) {
   void initTimeseriesStore().then(() => {
-    parentPort!.on("message", async (msg: { type: string; dataset?: string; symbol?: string; rows?: unknown[] }) => {
-      if (msg.type === "append_batch" && msg.dataset && msg.symbol && msg.rows) {
-        getTimeseriesStore().appendBatch(
-          msg.dataset as import("../services/timeseries-store.js").TimeseriesDataset,
-          msg.symbol,
-          msg.rows as Array<Record<string, string | number | boolean | null>>
-        );
-      } else if (msg.type === "flush") {
-        await getTimeseriesStore().flushAll();
+    parentPort!.on(
+      "message",
+      async (msg: {
+        type: string;
+        dataset?: string;
+        symbol?: string;
+        entity?: string;
+        rows?: unknown[];
+        tenantId?: string;
+      }) => {
+        const entity = msg.entity ?? msg.symbol;
+        if (msg.type === "append_batch" && msg.dataset && entity && msg.rows) {
+          getTimeseriesStore().appendBatch(
+            msg.dataset,
+            entity,
+            msg.rows as Array<Record<string, string | number | boolean | null>>,
+            { tenantId: msg.tenantId }
+          );
+        } else if (msg.type === "flush") {
+          await getTimeseriesStore().flushAll();
+        }
       }
-    });
+    );
   });
 }

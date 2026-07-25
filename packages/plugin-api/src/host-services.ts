@@ -60,12 +60,29 @@ export interface PluginHostServices {
    * `register`; use this from `server:beforeListen` instead of raw `app.use`.
    */
   mountPluginRoute?(pluginId: string, path: string, router: IRouter): void;
+  /**
+   * Platform analytics / coarse plugin telemetry only.
+   * Market ticks and bars belong in domain plugins (e.g. Sierra), not this store.
+   */
   getTimeseriesStore(): {
-    analyticsQuery(sql: string): Promise<unknown[]>;
+    analyticsQuery(sql: string, opts?: { tenantId?: string | null }): Promise<unknown[]>;
     append(
       dataset: string,
-      symbol: string,
-      row: Record<string, string | number | boolean | null>
+      entity: string,
+      row: Record<string, string | number | boolean | null>,
+      opts?: { tenantId?: string | null }
+    ): void;
+    appendPlatformMetric?(
+      dataset: string,
+      entity: string,
+      row: Record<string, string | number | boolean | null>,
+      opts?: { tenantId?: string | null }
+    ): void;
+    appendBatch?(
+      dataset: string,
+      entity: string,
+      rows: Array<Record<string, string | number | boolean | null>>,
+      opts?: { tenantId?: string | null }
     ): void;
   };
   bootstrapTradingDepartment(db: TenantDb): void;

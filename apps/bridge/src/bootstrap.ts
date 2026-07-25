@@ -76,9 +76,6 @@ import { refreshPeerHealth } from "./services/federation-peers.js";
 import { startTenantEventsRelay } from "./services/events-relay.js";
 import {
   initTimeseriesStore,
-  backfillSqliteTimeseries,
-  getTimeseriesStore,
-  rollupTicksTo1m,
 } from "./services/timeseries-store.js";
 import { backfillMemoryFts } from "./services/vector-rag.js";
 import { createWorkerPool } from "./services/worker-pool.js";
@@ -206,19 +203,12 @@ if (config.isHub) {
 const stopEventsRelay = startTenantEventsRelay(kernelDatabases, bus);
 const workerPool = createWorkerPool();
 
-void initTimeseriesStore().then(async (ts) => {
-  const counts = await backfillSqliteTimeseries(db, ts);
-  if (counts.ticks + counts.bars + counts.extra > 0) {
-    console.log(
-      `[timeseries] backfill: ticks=${counts.ticks} bars=${counts.bars} extra=${counts.extra}`
-    );
-  }
+void initTimeseriesStore().then(async () => {
   try {
     backfillMemoryFts(db);
   } catch {
     /* optional */
   }
-  setInterval(() => void rollupTicksTo1m(ts), 6 * 60 * 60 * 1000).unref?.();
 }).catch((err) => {
   console.warn("[timeseries] startup failed:", err instanceof Error ? err.message : err);
 });
