@@ -108,7 +108,9 @@ export class TimeseriesStore {
     const file = analyticsDbPath(tid);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const db = new Database(file);
-    const conn = db.connect();
+    // Prefer Database as connection surface; fall back to .connect() when present.
+    const conn =
+      typeof db.connect === "function" ? db.connect() : db;
     await this.run(conn, `
       CREATE TABLE IF NOT EXISTS metrics (
         dataset VARCHAR NOT NULL,
