@@ -65,8 +65,10 @@ The Alpine GodMode image does **not** run CUDA inference. Run `llama-server` on 
 | `EMBEDDINGS_EXTERNAL` | `true` |
 | `EMBEDDINGS_SERVER_HOST` | `host.docker.internal` |
 | `EMBEDDINGS_PORT` | `8082` |
+| `EMBEDDINGS_CODE_MODEL_PATH` | optional separate code-profile GGUF |
+| `EMBEDDINGS_CODE_PORT` | optional separate code-profile port |
 
-Compose example: [deploy/docker-compose.hub-external-llm.yml](../deploy/docker-compose.hub-external-llm.yml).
+Also see [AGENT_MEMORY.md](./AGENT_MEMORY.md) for **memory** vs **code** embed profiles and hybrid `codebase_search`.
 
 Host `llama-server` must use **`--jinja`** so chat/tool templates match. With `LLAMA_EXTERNAL=true`, Bridge defaults `LLAMA_TOOL_MODE` to **native** if unset.
 

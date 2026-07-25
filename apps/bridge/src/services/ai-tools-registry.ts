@@ -933,7 +933,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "codebase_search",
     description:
-      "Semantic codebase search: ripgrep + path ranking. Prefer this over raw grep for exploratory questions.",
+      "Hybrid codebase search: semantic code-chunk vectors (when the code embedding profile is ready) fused with ripgrep path ranking. Falls back to grep-only without embeddings. Prefer this over raw grep for exploratory questions.",
     mode: "auto",
     category: "coding",
     parameters: {

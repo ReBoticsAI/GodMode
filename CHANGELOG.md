@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Embeddings profiles + AST code search (#69 A+B)** - formal `memory` /
+  `code` embed profiles (shared local server by default); tree-sitter TS/TSX
+  chunking; tenant `code_chunks` index; hybrid vector+grep `codebase_search`
+  with grep fallback; Embedding Engine UI shows both profiles
 - **Cursor conventions in GodMode UI (#135)** - Knowledge Rules/Skills create,
   edit, delete with source badges; non-destructive workspace import
   (`user_edited` / content hash); Agents Pipeline **MCP** node (list,

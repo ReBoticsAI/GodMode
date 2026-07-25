@@ -937,6 +937,19 @@ export interface EmbeddingEngineStatus {
   /** True/false when the persisted runtime override is set, null = env default. */
   enabledOverride: boolean | null;
   embedder: CpuServerStatus | null;
+  profiles?: Array<{
+    id: "memory" | "code";
+    label: string;
+    consumers: string[];
+    modelId: string;
+    modelPath: string;
+    port: number;
+    pooling: string;
+    dim: number | null;
+    ready: boolean;
+    separateServer: boolean;
+    server: CpuServerStatus;
+  }>;
 }
 
 export interface EmbeddingEngineActivity {
@@ -949,9 +962,12 @@ export interface EmbeddingEngineActivity {
     wikiProposals?: number;
   };
   embeddingCoverage: { total: number; embedded: number };
+  codeCoverage?: { chunks: number; embedded: number };
   ftsCoverage?: { total: number; indexed: number };
   ragTopK: number;
   wikiRagTopK?: number;
+  codeRagTopK?: number;
+  profiles?: Array<{ id: string; label: string; ready: boolean; dim: number | null }>;
   embedderLogTail: string[];
 }
 

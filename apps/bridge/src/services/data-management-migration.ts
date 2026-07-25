@@ -20,6 +20,39 @@ export function registerDataManagementMigrations(): void {
   registerMigration(MIGRATION_VERSION, "data_management_upgrade_v1", migrateV1);
   registerMigration(6, "plugin_knowledge_source_v6", migratePluginKnowledgeV2);
   registerMigration(15, "knowledge_user_edited_v15", migrateKnowledgeUserEditedV7);
+  registerMigration(16, "code_embeddings_index_v16", migrateCodeEmbeddingsIndexV16);
+}
+
+function migrateCodeEmbeddingsIndexV16(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS code_index_roots (
+      id TEXT PRIMARY KEY,
+      root_path TEXT NOT NULL UNIQUE,
+      fingerprint TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS code_chunks (
+      id TEXT PRIMARY KEY,
+      root_id TEXT NOT NULL REFERENCES code_index_roots(id) ON DELETE CASCADE,
+      path TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'module',
+      symbol TEXT NOT NULL DEFAULT '',
+      start_line INTEGER NOT NULL DEFAULT 1,
+      end_line INTEGER NOT NULL DEFAULT 1,
+      content_hash TEXT NOT NULL,
+      text TEXT NOT NULL,
+      embedding BLOB,
+      embedding_dim INTEGER,
+      model_id TEXT,
+      profile TEXT NOT NULL DEFAULT 'code',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS code_chunks_by_root_path
+      ON code_chunks(root_id, path);
+    CREATE INDEX IF NOT EXISTS code_chunks_by_root
+      ON code_chunks(root_id);
+  `);
 }
 
 function migrateV1(db: Database.Database): void {

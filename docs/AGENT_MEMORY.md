@@ -27,6 +27,18 @@ Same pattern as the chat LLM: attach to a **host** embedder — do not ship CUDA
 | `EMBEDDINGS_SERVER_HOST` | `host.docker.internal` |
 | `EMBEDDINGS_PORT` | `8082` |
 | `EMBEDDINGS_MODEL_PATH` | host path to EmbeddingGemma GGUF (spawn only when not external) |
+| `EMBEDDINGS_CODE_MODEL_PATH` / `EMBEDDINGS_CODE_PORT` | optional separate **code** profile server |
+
+### Profiles (#69)
+
+| Profile | Purpose | Consumers |
+|---------|---------|-----------|
+| **memory** | Text / page / capability RAG | Chat prompt sections, wiki |
+| **code** | AST code chunks (TS/TSX via tree-sitter) | `codebase_search` hybrid retrieval |
+
+Default local installs share one llama-server for both profiles. Status UI shows each profile's readiness and dimension.
+
+`codebase_search` fuses vector chunk hits with ripgrep; when the code profile is unavailable it falls back to grep-only.
 
 Backfill walks **tenant workspace DBs**, not only the operator bootstrap DB. Wiki FTS is on core; page embeds update when the embedder is ready.
 
@@ -54,4 +66,6 @@ Approve episodes in **Intelligence → Memory**. Approve wiki proposals under **
 
 ## Out of scope (this architecture)
 
-OpenWiki CLI, Gmail/Notion connectors, ANN vector DB, Computer Use.
+OpenWiki CLI, Gmail/Notion connectors, Computer Use.
+
+**Deferred from #69:** SaaS shared embed queue/workers (track C), optional ANN backends (track D).

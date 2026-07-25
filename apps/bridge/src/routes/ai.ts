@@ -406,7 +406,7 @@ export function createAiRouter(
   // --- Embedding engine (CPU embedder llama-server powering semantic RAG) ---
   router.get("/embeddings/status", (req, res) => {
     if (!embeddings) {
-      res.json({ enabled: false, enabledOverride: null, embedder: null });
+      res.json({ enabled: false, enabledOverride: null, embedder: null, profiles: [] });
       return;
     }
     res.json(embeddings.getStatus());
@@ -465,6 +465,21 @@ export function createAiRouter(
     }
 
     const embeddingStatus = embeddings?.getStatus() ?? null;
+    let codeChunks = 0;
+    let codeEmbedded = 0;
+    try {
+      const row = tdb(req)
+        .prepare(
+          `SELECT COUNT(*) AS n,
+                  SUM(CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END) AS e
+           FROM code_chunks`
+        )
+        .get() as { n: number; e: number } | undefined;
+      codeChunks = row?.n ?? 0;
+      codeEmbedded = row?.e ?? 0;
+    } catch {
+      /* schema may not exist yet */
+    }
 
     res.json({
       enabled: embeddingStatus?.enabled ?? false,
@@ -479,12 +494,23 @@ export function createAiRouter(
         total: activeMemories,
         embedded: embeddedMemories,
       },
+      codeCoverage: {
+        chunks: codeChunks,
+        embedded: codeEmbedded,
+      },
       ftsCoverage: {
         total: activeMemories,
         indexed: ftsIndexed,
       },
       ragTopK: config.embeddings.ragTopK,
       wikiRagTopK: config.embeddings.wikiRagTopK,
+      codeRagTopK: config.embeddings.codeRagTopK,
+      profiles: (embeddingStatus?.profiles ?? []).map((p) => ({
+        id: p.id,
+        label: p.label,
+        ready: p.ready,
+        dim: p.dim,
+      })),
       embedderLogTail: embeddingStatus?.embedder.logs.slice(-20) ?? [],
     });
   });
@@ -1498,9 +1524,11 @@ export function createAiRouter(
             bridgePort,
             llm,
             queue,
-            embedder: embeddings?.isEmbedderReady()
-              ? embeddings.getEmbeddingClient()
-              : undefined,
+            embedder: embeddings?.isEmbedderReady("code")
+              ? embeddings.getEmbeddingClient("code")
+              : embeddings?.isEmbedderReady("memory")
+                ? embeddings.getEmbeddingClient("memory")
+                : undefined,
             activeAgentId: agent.id,
             userId: req.user?.id,
             tenantId: work.tenantId,

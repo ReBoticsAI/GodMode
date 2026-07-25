@@ -75,6 +75,8 @@ Before assembly, Bridge enriches `platformContext` with a compact **git snapshot
 
 When the coding root has `.cursor/mcp.json`, Bridge also attaches MCP discovery into the dedicated **MCP** prompt section (and the Builder MCP node). Server names and transport are listed; `env` values and `headers` are never included.
 
+`codebase_search` uses the **code** embedding profile when indexed (AST chunks + hybrid grep); otherwise grep-only. See [AGENT_MEMORY.md](./AGENT_MEMORY.md).
+
 For **`cursor_cloud`**, project MCP is available in two ways:
 
 1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK loads `.cursor/mcp.json`).
