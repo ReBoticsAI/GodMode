@@ -2113,6 +2113,8 @@ export async function executeTool(
         glob: args.glob ? String(args.glob) : undefined,
         limit: args.limit != null ? Number(args.limit) : undefined,
         tenantId: codingTenantId(ctx),
+        db: ctx.db,
+        embedder: ctx.embedder ?? null,
       });
 
     case "apply_patch": {
@@ -2170,8 +2172,10 @@ export async function executeTool(
             path: args.path ? String(args.path) : undefined,
             glob: args.glob ? String(args.glob) : undefined,
             tenantId: codingTenantId(ctx),
+            db: ctx.db,
+            embedder: ctx.embedder ?? null,
           });
-          return { query: q, results: search.results };
+          return { query: q, results: search.results, mode: search.mode };
         })
       );
       return { explorations, parallel: explorations.length };

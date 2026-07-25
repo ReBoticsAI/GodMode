@@ -228,8 +228,12 @@ export async function grepSearch(opts: {
   glob?: string;
   caseInsensitive?: boolean;
   tenantId?: string | null;
+  root?: string;
 }): Promise<{ pattern: string; output: string; engine: "rg" | "node" }> {
-  const root = resolveRepoPath(opts.path?.trim() || ".", { tenantId: opts.tenantId });
+  const root = resolveRepoPath(opts.path?.trim() || ".", {
+    tenantId: opts.tenantId,
+    root: opts.root,
+  });
   const rgArgs = [
     "--line-number",
     "--no-heading",

@@ -71,6 +71,6 @@ Average delta (GM - IDE):
 
 ## Out of scope here
 
-- True semantic search quality (#69)
+- True semantic search quality beyond hybrid vectors+grep (further ANN: #69 track D)
 - Browser / CDP parity
 - Full automated scoring
