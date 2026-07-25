@@ -18,6 +18,7 @@ import {
   indexMemory,
   removeMemoryFromIndex,
 } from "../services/embeddings/memory-embeddings.js";
+import { getEmbedQueueMetrics } from "../services/embeddings/embed-queue.js";
 import {
   countCapabilityIndex,
   rebuildAllAgentCapabilityIndexes,
@@ -511,6 +512,7 @@ export function createAiRouter(
         ready: p.ready,
         dim: p.dim,
       })),
+      queue: getEmbedQueueMetrics(),
       embedderLogTail: embeddingStatus?.embedder.logs.slice(-20) ?? [],
     });
   });
