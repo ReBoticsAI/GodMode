@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { Parser, Language, type SyntaxNode } from "web-tree-sitter";
+import { Parser, Language, type Node as SyntaxNode } from "web-tree-sitter";
 
 const require = createRequire(import.meta.url);
 
