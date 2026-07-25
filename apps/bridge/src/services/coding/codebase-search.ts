@@ -110,7 +110,7 @@ async function grepRanked(opts: {
       cwd: opts.path ?? ".",
       tenantId: opts.tenantId,
     });
-    for (const p of glob.files.slice(0, opts.limit)) {
+    for (const p of glob.matches.slice(0, opts.limit)) {
       deduped.push({
         path: p,
         line: 1,
