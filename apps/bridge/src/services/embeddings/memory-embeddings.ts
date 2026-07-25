@@ -2,6 +2,7 @@ import type { AppDatabase } from "../../db.js";
 import { syncMemoryToFts } from "../vector-rag.js";
 import { vectorToBlob, type EmbeddingClient } from "./embedding-client.js";
 import { enqueueEmbedJob, isEmbedQueueEnabled } from "./embed-queue.js";
+import { scheduleAnnInvalidate } from "./vector-retrieval.js";
 
 /**
  * Embed a single memory's text and persist the vector. Best-effort: returns
@@ -21,6 +22,7 @@ export async function embedAndStoreMemory(
     db.prepare(
       `UPDATE ai_memories SET embedding = ?, embedding_dim = ? WHERE id = ?`
     ).run(vectorToBlob(vec), vec.length, id);
+    scheduleAnnInvalidate("memory:");
     return true;
   } catch {
     return false;
@@ -133,6 +135,7 @@ export async function backfillMemoryEmbeddings(
       });
       tx();
     }
+    if (done > 0) scheduleAnnInvalidate("memory:");
   } catch (err) {
     console.warn(
       "[embeddings] memory embedding backfill failed:",

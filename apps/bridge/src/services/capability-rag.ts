@@ -1,7 +1,8 @@
 import type { AppDatabase } from "../db.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
-import { blobToVector, cosineSimilarity } from "./embeddings/embedding-client.js";
+import { blobToVector } from "./embeddings/embedding-client.js";
 import { buildCapabilityDocs, type CapabilityKind } from "./capability-index.js";
+import { searchVectors } from "./embeddings/vector-retrieval.js";
 
 const RRF_K = 60;
 
@@ -70,20 +71,19 @@ function vectorCapabilitySearch(
     )
     .all(agentId) as Array<{ kind: string; id: string; agent_id: string; embedding: Buffer | null }>;
 
-  const scored = rows
-    .map((r) => {
-      const vec = blobToVector(r.embedding);
-      if (!vec) return null;
-      return {
-        key: `${r.kind}:${r.id}`,
-        score: cosineSimilarity(queryVec, vec),
-      };
+  const docs: Array<{ id: string; vec: Float32Array }> = [];
+  for (const r of rows) {
+    const vec = blobToVector(r.embedding);
+    if (!vec) continue;
+    docs.push({ id: `${r.kind}:${r.id}`, vec });
+  }
+  return searchVectors(`capability:${agentId}`, docs, queryVec, limit).map(
+    (h, i) => ({
+      key: h.id,
+      score: h.score,
+      rank: i + 1,
     })
-    .filter((x): x is { key: string; score: number } => x != null)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-
-  return scored.map((s, i) => ({ ...s, rank: i + 1 }));
+  );
 }
 
 function reciprocalRankFusion(
