@@ -116,18 +116,43 @@ function largestTables(db: AppDatabase): Array<{ name: string; bytes: number; ro
   }
 }
 
-function parquetBreakdown(): Array<{ dataset: string; bytes: number; files: number }> {
+function timeseriesBreakdown(): Array<{
+  id: string;
+  label: string;
+  path: string;
+  bytes: number;
+  detail?: string;
+}> {
   const root = path.join(config.dataDir, "timeseries");
   if (!fs.existsSync(root)) return [];
-  const out: Array<{ dataset: string; bytes: number; files: number }> = [];
+  const out: Array<{
+    id: string;
+    label: string;
+    path: string;
+    bytes: number;
+    detail?: string;
+  }> = [];
   for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
     if (!ent.isDirectory()) continue;
     const full = path.join(root, ent.name);
-    out.push({
-      dataset: ent.name,
-      bytes: dirSize(full),
-      files: countFilesInDir(full),
-    });
+    if (ent.name.startsWith("tenant=")) {
+      const duck = path.join(full, "analytics.duckdb");
+      out.push({
+        id: `analytics_${ent.name}`,
+        label: `Platform analytics (${ent.name})`,
+        path: fs.existsSync(duck) ? duck : full,
+        bytes: fs.existsSync(duck) ? safeStat(duck) : dirSize(full),
+        detail: fs.existsSync(duck) ? "DuckDB" : undefined,
+      });
+    } else {
+      out.push({
+        id: `legacy_ts_${ent.name}`,
+        label: `Orphaned legacy timeseries: ${ent.name}`,
+        path: full,
+        bytes: dirSize(full),
+        detail: `${countFilesInDir(full)} files`,
+      });
+    }
   }
   return out.sort((a, b) => b.bytes - a.bytes);
 }
@@ -190,21 +215,20 @@ export function getStorageUsage(db: AppDatabase): StorageUsageReport {
   const tsBytes = dirSize(timeseriesDir);
   entries.push({
     id: "timeseries",
-    label: "Parquet time-series (cold store)",
+    label: "Platform analytics (DuckDB)",
     path: timeseriesDir,
     bytes: tsBytes,
     kind: "dir",
   });
 
-  const parquetDatasets = parquetBreakdown();
-  for (const ds of parquetDatasets) {
+  for (const ds of timeseriesBreakdown()) {
     entries.push({
-      id: `parquet_${ds.dataset}`,
-      label: `Parquet: ${ds.dataset}`,
-      path: path.join(timeseriesDir, ds.dataset),
+      id: ds.id,
+      label: ds.label,
+      path: ds.path,
       bytes: ds.bytes,
-      kind: "parquet_dataset",
-      detail: `${ds.files} files`,
+      kind: ds.id.startsWith("legacy_") ? "dir" : "file",
+      detail: ds.detail,
     });
   }
 
@@ -217,7 +241,7 @@ export function getStorageUsage(db: AppDatabase): StorageUsageReport {
     diskFreeBytes: disk.free,
     diskTotalBytes: disk.total,
     largestTables: largestTables(db),
-    parquetDatasets,
+    parquetDatasets: [],
   };
 }
 

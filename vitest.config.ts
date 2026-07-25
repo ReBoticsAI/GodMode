@@ -30,6 +30,7 @@ export default defineConfig({
       "apps/bridge/src/services/embeddings/__tests__/profiles.test.ts",
       "apps/bridge/src/services/embeddings/__tests__/embed-queue.test.ts",
       "apps/bridge/src/services/embeddings/__tests__/vector-retrieval.test.ts",
+      "apps/bridge/src/services/__tests__/timeseries-store.test.ts",
       "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",

@@ -176,7 +176,7 @@ Injected at boot via `api.host`:
 | `getReqTenantDb(req)` | SQLite from authenticated request |
 | `createPluginRouter()` | Express router with tenant middleware |
 | `mountPluginRoute(pluginId, path, router)` | Slot-based HTTP mount (hot-reload safe) |
-| `getTimeseriesStore()` | Analytics / DuckDB queries |
+| `getTimeseriesStore()` | Platform analytics DuckDB (telemetry only; not market ticks) |
 | `bootstrapTradingDepartment(db)` | Upsert a department shell node (plugin install hooks) |
 | `bridgeFetch(path)` | Internal HTTP to Bridge |
 
