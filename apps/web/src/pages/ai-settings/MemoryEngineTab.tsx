@@ -50,11 +50,13 @@ function EngineCard({
   icon,
   blurb,
   server,
+  extra,
 }: {
   title: string;
   icon: React.ReactNode;
   blurb: string;
   server: CpuServerStatus | null;
+  extra?: React.ReactNode;
 }) {
   const state = server?.state ?? "stopped";
   return (
@@ -76,6 +78,7 @@ function EngineCard({
         <CardDescription className="text-[11px]">{blurb}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
+        {extra}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
           <dt className="text-muted-foreground">Health</dt>
           <dd className={server?.healthOk ? "text-emerald-500" : "text-muted-foreground"}>
@@ -202,10 +205,11 @@ export function MemoryEngineTab() {
             </Badge>
           </div>
           <CardDescription className="text-[11px]">
-            A CPU-pinned <span className="font-medium">embedder</span>{" "}
-            (EmbeddingGemma) powers semantic (RAG) recall of your AI's long-term
-            memory. Fully optional — chat works with it off and falls back to
-            recency. Knowledge maintenance is owned by the Reflection engine.
+            CPU-pinned embedders power semantic recall for{" "}
+            <span className="font-medium">memory</span> (RAG) and{" "}
+            <span className="font-medium">code</span> (`codebase_search`). Both
+            profiles share one server by default. Optional: chat works with this
+            off and falls back to recency / grep.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between">
@@ -235,13 +239,47 @@ export function MemoryEngineTab() {
         </p>
       )}
 
-      <div className="grid gap-4">
-        <EngineCard
-          title="Embedder"
-          icon={<DatabaseIcon className="size-3.5 text-primary" />}
-          blurb="EmbeddingGemma — builds vectors so chat can recall relevant memories (RAG)."
-          server={status?.embedder ?? null}
-        />
+      <div className="grid gap-4 md:grid-cols-2">
+        {(status?.profiles?.length
+          ? status.profiles
+          : [
+              {
+                id: "memory" as const,
+                label: "Memory",
+                consumers: [] as string[],
+                modelId: "",
+                modelPath: "",
+                port: 0,
+                pooling: "mean",
+                dim: null as number | null,
+                ready: false,
+                separateServer: false,
+                server: status?.embedder as CpuServerStatus,
+              },
+            ]
+        ).map((p) => (
+          <EngineCard
+            key={p.id}
+            title={`${p.label} profile`}
+            icon={<DatabaseIcon className="size-3.5 text-primary" />}
+            blurb={
+              p.id === "code"
+                ? "AST code chunks for semantic codebase_search (hybrid with grep)."
+                : "Memories, wiki, and capabilities RAG for chat."
+            }
+            server={p.server ?? status?.embedder ?? null}
+            extra={
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                <dt className="text-muted-foreground">Ready</dt>
+                <dd>{p.ready ? "yes" : "no"}</dd>
+                <dt className="text-muted-foreground">Dim</dt>
+                <dd className="font-mono">{p.dim ?? "-"}</dd>
+                <dt className="text-muted-foreground">Separate server</dt>
+                <dd>{p.separateServer ? "yes" : "shared"}</dd>
+              </dl>
+            }
+          />
+        ))}
       </div>
 
       <Card>
@@ -269,9 +307,9 @@ export function MemoryEngineTab() {
 
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">Embedding coverage (RAG readiness)</span>
+              <span className="text-muted-foreground">Memory embedding coverage</span>
               <span className="font-mono">
-                {cov ? `${cov.embedded}/${cov.total} embedded` : "—"}
+                {cov ? `${cov.embedded}/${cov.total} embedded` : "-"}
               </span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -282,9 +320,34 @@ export function MemoryEngineTab() {
             </div>
           </div>
 
+          {activity?.codeCoverage ? (
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Code chunk coverage</span>
+                <span className="font-mono">
+                  {activity.codeCoverage.embedded}/{activity.codeCoverage.chunks} embedded
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-sky-500 transition-all"
+                  style={{
+                    width: `${
+                      activity.codeCoverage.chunks > 0
+                        ? Math.round(
+                            (100 * activity.codeCoverage.embedded) / activity.codeCoverage.chunks,
+                          )
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
+
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
             <dt className="text-muted-foreground">RAG top-K</dt>
-            <dd className="font-mono">{activity?.ragTopK ?? "—"}</dd>
+            <dd className="font-mono">{activity?.ragTopK ?? "-"}</dd>
           </dl>
 
           <div className="flex justify-end">

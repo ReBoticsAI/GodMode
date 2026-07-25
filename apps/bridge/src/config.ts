@@ -351,6 +351,32 @@ export const config = {
     ragTopK: Number(process.env.EMBEDDINGS_RAG_TOP_K ?? 12),
     /** Top-K wiki snippets for chat prompt section. */
     wikiRagTopK: Number(process.env.EMBEDDINGS_WIKI_RAG_TOP_K ?? 4),
+    /** Top-K code chunks for semantic codebase_search. */
+    codeRagTopK: Number(process.env.EMBEDDINGS_CODE_RAG_TOP_K ?? 20),
+    /**
+     * Per-job profiles (#69). Unset fields inherit the shared embedder above.
+     * Set EMBEDDINGS_CODE_MODEL_PATH / EMBEDDINGS_CODE_PORT to specialize code.
+     */
+    profiles: {
+      memory: {
+        modelPath: (process.env.EMBEDDINGS_MEMORY_MODEL_PATH ?? "").trim(),
+        port: Number(process.env.EMBEDDINGS_MEMORY_PORT ?? 0) || 0,
+        ctxSize: Number(process.env.EMBEDDINGS_MEMORY_CTX_SIZE ?? 0) || 0,
+        pooling: (process.env.EMBEDDINGS_MEMORY_POOLING ?? "mean") as
+          | "mean"
+          | "cls"
+          | "none",
+      },
+      code: {
+        modelPath: (process.env.EMBEDDINGS_CODE_MODEL_PATH ?? "").trim(),
+        port: Number(process.env.EMBEDDINGS_CODE_PORT ?? 0) || 0,
+        ctxSize: Number(process.env.EMBEDDINGS_CODE_CTX_SIZE ?? 0) || 0,
+        pooling: (process.env.EMBEDDINGS_CODE_POOLING ?? "mean") as
+          | "mean"
+          | "cls"
+          | "none",
+      },
+    },
   },
   holdings: {
     /** AES-256-GCM key (hex). Auto-generated to data dir if absent. */
