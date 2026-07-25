@@ -19,7 +19,7 @@ function migrateKnowledgeUserEditedV7(db: Database.Database): void {
 export function registerDataManagementMigrations(): void {
   registerMigration(MIGRATION_VERSION, "data_management_upgrade_v1", migrateV1);
   registerMigration(6, "plugin_knowledge_source_v6", migratePluginKnowledgeV2);
-  registerMigration(7, "knowledge_user_edited_v7", migrateKnowledgeUserEditedV7);
+  registerMigration(15, "knowledge_user_edited_v15", migrateKnowledgeUserEditedV7);
 }
 
 function migrateV1(db: Database.Database): void {
