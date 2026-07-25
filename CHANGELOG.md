@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **SaaS embed queue (#69 C)** - core `embed_queue` with tenant round-robin
+  worker; writers enqueue on SaaS (or `EMBEDDINGS_QUEUE_ENABLED`); OSS keeps
+  inline embed by default; staging compose wires shared host embedder
 - **Embeddings profiles + AST code search (#69 A+B)** - formal `memory` /
   `code` embed profiles (shared local server by default); tree-sitter TS/TSX
   chunking; tenant `code_chunks` index; hybrid vector+grep `codebase_search`
