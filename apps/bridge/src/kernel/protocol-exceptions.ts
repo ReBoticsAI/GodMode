@@ -266,4 +266,12 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "Persist column↔GitHub Status option map for a linked board; sync config, not TaskCard CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "ai-workspace-knowledge-import",
+    methods: ["POST"],
+    pathPattern: "/api/ai/workspace-knowledge/import",
+    rationale:
+      "One-shot bootstrap of coding-root AGENTS.md / .cursor rules and skills into Knowledge; orchestration over Rule/Skill Records, not generic Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;
