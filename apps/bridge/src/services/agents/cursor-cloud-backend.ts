@@ -516,10 +516,13 @@ export class CursorCloudBackend implements AgentBackend {
     );
     const settingSources = resolveCursorSettingSources(cwd);
     const mcpEnabled = resolveMcpFromWorkspace(cfg, { isSaas: config.isSaas });
-    const mcpServers = mcpEnabled
-      ? loadCursorMcpServersForSdk(cwd)
+    const mcpDisabled = Array.isArray(cfg.mcpDisabledServers)
+      ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
       : undefined;
-    const mcpKey = cursorMcpServersFingerprint(cwd, mcpEnabled);
+    const mcpServers = mcpEnabled
+      ? loadCursorMcpServersForSdk(cwd, { disabled: mcpDisabled })
+      : undefined;
+    const mcpKey = cursorMcpServersFingerprint(cwd, mcpEnabled, mcpDisabled);
     const sdkMode = toSdkAgentMode(chatMode);
     const fingerprint = cursorCloudCacheFingerprint(
       modelId,

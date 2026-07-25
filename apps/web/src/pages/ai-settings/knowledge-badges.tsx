@@ -6,7 +6,44 @@ import { cn } from "@/lib/utils";
 
 export const ROOT_AGENT_ID = "intelligence";
 
+/** Matches bridge `CURSOR_WORKSPACE_SOURCE` for AGENTS.md / `.cursor/` imports. */
+export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
+
 export type KnowledgeStatusFilter = "all" | "active" | "disabled" | "pending";
+
+export function sourceBadgeLabel(
+  sourcePluginId?: string | null,
+  userEdited?: boolean
+): "Native" | "Plugin" | "Workspace" | "Workspace (edited)" {
+  if (sourcePluginId === CURSOR_WORKSPACE_SOURCE) {
+    return userEdited ? "Workspace (edited)" : "Workspace";
+  }
+  if (sourcePluginId) return "Plugin";
+  return "Native";
+}
+
+export function SourceBadge({
+  sourcePluginId,
+  userEdited,
+}: {
+  sourcePluginId?: string | null;
+  userEdited?: boolean;
+}) {
+  const label = sourceBadgeLabel(sourcePluginId, userEdited);
+  const tone =
+    label === "Native"
+      ? "border-slate-500/40 text-slate-600"
+      : label === "Plugin"
+        ? "border-orange-500/40 text-orange-600"
+        : label === "Workspace (edited)"
+          ? "border-teal-500/40 text-teal-600"
+          : "border-cyan-500/40 text-cyan-600";
+  return (
+    <Badge variant="outline" className={cn("text-[10px]", tone)}>
+      {label}
+    </Badge>
+  );
+}
 
 export function isInherited(ownerAgentId: string | undefined, activeAgentId: string): boolean {
   return (ownerAgentId ?? ROOT_AGENT_ID) === ROOT_AGENT_ID && activeAgentId !== ROOT_AGENT_ID;

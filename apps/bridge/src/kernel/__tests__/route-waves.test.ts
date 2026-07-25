@@ -34,6 +34,7 @@ describe("legacy route wave", () => {
       "admin-marketplace.ts:post:/backup",
       "admin-saas.ts:post:/customers/:userId/access",
       "ai.ts:post:/chat",
+      "ai.ts:post:/workspace-knowledge/import",
       "api-core.ts:post:/analytics/timeseries/query",
       "auth.ts:post:/change-password",
       "auth.ts:post:/forgot-password",

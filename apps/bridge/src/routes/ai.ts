@@ -133,11 +133,11 @@ import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
 import {
+  collectCursorMcpDiscovery,
   enrichPlatformContextWithMcp,
   resolveMcpDiscoveryExecution,
   resolveMcpFromWorkspace,
 } from "../services/coding/cursor-mcp-config.js";
-import { enrichPlatformContextWithHooks } from "../services/coding/cursor-hooks-config.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
@@ -546,22 +546,19 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const previewCtx = enrichPlatformContextWithHooks(
-      enrichPlatformContextWithMcp(
-        enrichPlatformContextWithGit(
-          pathname ? { pathname, breadcrumb: [] } : undefined,
-          { tenantId: req.tenantId, workspace: agentWorkspace }
-        ),
-        {
+    const previewCtx = enrichPlatformContextWithMcp(
+      enrichPlatformContextWithGit(
+        pathname ? { pathname, breadcrumb: [] } : undefined,
+        { tenantId: req.tenantId, workspace: agentWorkspace }
+      ),
+      {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+        execution: mcpExecutionForAgent(agent, {
           tenantId: req.tenantId,
           workspace: agentWorkspace,
-          execution: mcpExecutionForAgent(agent, {
-            tenantId: req.tenantId,
-            workspace: agentWorkspace,
-          }),
-        }
-      ),
-      { tenantId: req.tenantId, workspace: agentWorkspace }
+        }),
+      }
     );
     const assembled = assemblePrompt(tdb(req), {
       basePrompt: agent?.systemPrompt ?? settings.systemPrompt,
@@ -652,6 +649,86 @@ export function createAiRouter(
     const agentDb = agentDbFromRequest(req, res, agentId, "viewer");
     if (!agentDb) return;
     res.json({ skills: listAiSkills(agentDb, includeBody, agentId) });
+  });
+
+  router.post("/workspace-knowledge/import", (req, res) => {
+    const agentId = agentIdFromRequest(req);
+    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
+    if (!agentDb) return;
+    const agent = getAgent(tdb(req), agentId);
+    if (agent?.backend === "cursor_cloud") {
+      res.json({
+        rules: 0,
+        skills: 0,
+        synced: false,
+        message:
+          "Workspace knowledge import is not available for Cursor Cloud agents; project instructions load via SDK settingSources.",
+      });
+      return;
+    }
+    const agentWorkspace =
+      agent?.config &&
+      typeof (agent.config as { workspace?: unknown }).workspace === "string"
+        ? String((agent.config as { workspace: string }).workspace)
+        : undefined;
+    const root = resolveCodingRoot({
+      tenantId: req.tenantId,
+      root: agentWorkspace?.trim() || undefined,
+    });
+    const result = syncCursorWorkspaceKnowledge(agentDb, root, { force: true });
+    res.json(result);
+  });
+
+  router.get("/mcp", (req, res) => {
+    const agentId = agentIdFromRequest(req);
+    const agent = getAgent(tdb(req), agentId);
+    const cfg = (agent?.config ?? {}) as {
+      workspace?: unknown;
+      mcpFromWorkspace?: unknown;
+      mcpDisabledServers?: unknown;
+    };
+    const agentWorkspace =
+      typeof cfg.workspace === "string" ? cfg.workspace : undefined;
+    const root = resolveCodingRoot({
+      tenantId: req.tenantId,
+      root: agentWorkspace?.trim() || undefined,
+    });
+    const mcpFromWorkspace =
+      agent?.backend === "cursor_cloud"
+        ? resolveMcpFromWorkspace(
+            { mcpFromWorkspace: cfg.mcpFromWorkspace },
+            { isSaas: config.isSaas }
+          )
+        : false;
+    const disabled = Array.isArray(cfg.mcpDisabledServers)
+      ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
+      : [];
+    const disabledSet = new Set(disabled);
+    const discovery = collectCursorMcpDiscovery(root, {
+      execution: mcpExecutionForAgent(agent, {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+      }),
+    });
+    const settingSources = resolveCursorSettingSources(root);
+    res.json({
+      workspace: root,
+      sourcePath: discovery?.sourcePath ?? null,
+      summary: discovery?.summary ?? null,
+      mcpFromWorkspace,
+      backend: agent?.backend ?? null,
+      settingSources,
+      projectInstructions:
+        agent?.backend === "cursor_cloud"
+          ? settingSources.includes("project")
+            ? "sdk"
+            : "none"
+          : "knowledge",
+      servers: (discovery?.servers ?? []).map((s) => ({
+        ...s,
+        enabled: !disabledSet.has(s.name),
+      })),
+    });
   });
 
   router.get("/skills/:id", (req, res) => {
@@ -1189,22 +1266,19 @@ export function createAiRouter(
       req.tenantId,
       agentWorkspace
     );
-    const platformContextEnriched = enrichPlatformContextWithHooks(
-      enrichPlatformContextWithMcp(
-        enrichPlatformContextWithGit(platformContext, {
+    const platformContextEnriched = enrichPlatformContextWithMcp(
+      enrichPlatformContextWithGit(platformContext, {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+      }),
+      {
+        tenantId: req.tenantId,
+        workspace: agentWorkspace,
+        execution: mcpExecutionForAgent(agent, {
           tenantId: req.tenantId,
           workspace: agentWorkspace,
         }),
-        {
-          tenantId: req.tenantId,
-          workspace: agentWorkspace,
-          execution: mcpExecutionForAgent(agent, {
-            tenantId: req.tenantId,
-            workspace: agentWorkspace,
-          }),
-        }
-      ),
-      { tenantId: req.tenantId, workspace: agentWorkspace }
+      }
     );
     const assembled = assemblePrompt(engineDb, {
       basePrompt: agent.systemPrompt,

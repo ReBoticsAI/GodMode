@@ -394,6 +394,7 @@ export type PromptSectionId =
   | "skills"
   | "tools"
   | "platform"
+  | "mcp"
   | "mentions"
   | "chatHistory"
   | "userMessage"
@@ -475,6 +476,10 @@ export interface AiRule {
   agentId?: string;
   version?: number;
   updatedAt?: string;
+  /** Plugin id, `__cursor_workspace__`, or null/undefined for native. */
+  sourcePluginId?: string | null;
+  /** True when edited in GodMode (workspace import will not overwrite). */
+  userEdited?: boolean;
 }
 
 export interface AiSkill {
@@ -491,6 +496,8 @@ export interface AiSkill {
   agentId?: string;
   version?: number;
   updatedAt?: string;
+  sourcePluginId?: string | null;
+  userEdited?: boolean;
 }
 
 export interface AiChatCommand {
@@ -675,6 +682,46 @@ export const rejectAiRule = (id: string, agentId?: string) => {
   ).then(() => ({ ok: true, rules: [] }));
 };
 
+export const createAiRule = (body: {
+  description: string;
+  body: string;
+  alwaysApply?: boolean;
+  agentId?: string;
+}) =>
+  createDto<AiRule>(
+    "Rule",
+    {
+      description: body.description,
+      body: body.body,
+      always_apply: body.alwaysApply ?? true,
+      status: "active",
+    },
+    { agentId: body.agentId }
+  );
+
+export const updateAiRuleContent = (
+  id: string,
+  patch: {
+    description?: string;
+    body?: string;
+    alwaysApply?: boolean;
+    agentId?: string;
+  }
+) =>
+  updateDto<AiRule>(
+    "Rule",
+    id,
+    {
+      description: patch.description,
+      body: patch.body,
+      always_apply: patch.alwaysApply,
+    },
+    { agentId: patch.agentId }
+  );
+
+export const deleteAiRule = (id: string, agentId?: string) =>
+  deleteDto("Rule", id, { agentId });
+
 export const fetchAiSkills = (includeBody?: boolean, agentId?: string) => {
   const params = new URLSearchParams();
   if (includeBody) params.set("body", "1");
@@ -716,6 +763,78 @@ export const rejectAiSkill = (id: string, agentId?: string) => {
     true,
     { agentId }
   ).then(() => ({ ok: true, skills: [] }));
+};
+
+export const createAiSkill = (body: {
+  name: string;
+  description: string;
+  body: string;
+  agentId?: string;
+}) =>
+  createDto<AiSkill>(
+    "Skill",
+    {
+      name: body.name,
+      description: body.description,
+      body: body.body,
+      status: "active",
+    },
+    { agentId: body.agentId }
+  );
+
+export const updateAiSkillContent = (
+  id: string,
+  patch: {
+    name?: string;
+    description?: string;
+    body?: string;
+    agentId?: string;
+  }
+) =>
+  updateDto<AiSkill>(
+    "Skill",
+    id,
+    {
+      name: patch.name,
+      description: patch.description,
+      body: patch.body,
+    },
+    { agentId: patch.agentId }
+  );
+
+export const deleteAiSkill = (id: string, agentId?: string) =>
+  deleteDto("Skill", id, { agentId });
+
+export const importWorkspaceKnowledge = (agentId?: string) =>
+  api<{ rules: number; skills: number; synced: boolean; message?: string }>(
+    "/ai/workspace-knowledge/import",
+    {
+      method: "POST",
+      body: JSON.stringify(agentId ? { agentId } : {}),
+    }
+  );
+
+export interface AiMcpServerStatus {
+  name: string;
+  transport: "stdio" | "http" | "sse" | "unknown";
+  detail?: string;
+  enabled: boolean;
+}
+
+export interface AiMcpStatus {
+  workspace: string;
+  sourcePath: string | null;
+  summary: string | null;
+  mcpFromWorkspace: boolean;
+  backend: string | null;
+  settingSources: string[];
+  projectInstructions: "sdk" | "knowledge" | "none";
+  servers: AiMcpServerStatus[];
+}
+
+export const fetchAiMcp = (agentId?: string) => {
+  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+  return api<AiMcpStatus>(`/ai/mcp${qs}`);
 };
 
 export const fetchAiArtifacts = (agentId?: string, limit?: number) => {

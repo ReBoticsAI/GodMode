@@ -11,6 +11,7 @@ import {
   deleteRuleFile,
   listAiRules,
   setAiRuleStatus,
+  updateAiRuleContent,
   updateAiRuleState,
 } from "../../services/ai-rules.js";
 import {
@@ -18,6 +19,7 @@ import {
   deleteSkillFile,
   listAiSkills,
   setAiSkillStatus,
+  updateAiSkillContent,
   updateAiSkillState,
 } from "../../services/ai-skills.js";
 import {
@@ -374,6 +376,8 @@ function ruleRecord(
     status: row.status,
     version: row.version,
     updated_at: row.updatedAt,
+    source_plugin_id: row.sourcePluginId ?? null,
+    user_edited: Boolean(row.userEdited),
   });
 }
 
@@ -439,11 +443,26 @@ export const ruleServiceAdapter: RecordAdapter = {
   },
   update(db, def, id, data, ctx) {
     if (!findRule(db, id, ctx)) notFound("Rule");
+    const contentPatch: Parameters<typeof updateAiRuleContent>[2] = {};
+    if (typeof data.description === "string") contentPatch.description = data.description;
+    if (typeof data.body === "string") contentPatch.body = data.body;
+    if (typeof data.always_apply === "boolean") contentPatch.alwaysApply = data.always_apply;
+    if (data.globs_json !== undefined) contentPatch.globs = jsonArray(data.globs_json);
+    if (data.departments_json !== undefined) {
+      contentPatch.departments = jsonArray(data.departments_json);
+    }
+    if (typeof data.priority === "number") contentPatch.priority = data.priority;
+    if (Object.keys(contentPatch).length) {
+      assertOwnedKnowledge(db, "ai_rules", id, ctx, "Rule");
+      updateAiRuleContent(db, id, contentPatch);
+    }
     updateAiRuleState(db, agentId(ctx), id, {
       enabled:
         typeof data.enabled === "boolean" ? data.enabled : undefined,
       priorityOverride:
-        typeof data.priority === "number" ? data.priority : undefined,
+        typeof data.priority === "number" && !Object.keys(contentPatch).length
+          ? data.priority
+          : undefined,
     });
     return ruleRecord(def, findRule(db, id, ctx)!);
   },
@@ -488,6 +507,8 @@ function skillRecord(
     status: row.status,
     version: row.version,
     updated_at: row.updatedAt,
+    source_plugin_id: row.sourcePluginId ?? null,
+    user_edited: Boolean(row.userEdited),
   });
 }
 
@@ -527,6 +548,18 @@ export const skillServiceAdapter: RecordAdapter = {
   },
   update(db, def, id, data, ctx) {
     if (!findSkill(db, id, ctx)) notFound("Skill");
+    const contentPatch: Parameters<typeof updateAiSkillContent>[2] = {};
+    if (typeof data.name === "string") contentPatch.name = data.name;
+    if (typeof data.description === "string") contentPatch.description = data.description;
+    if (typeof data.body === "string") contentPatch.body = data.body;
+    if (data.tools_json !== undefined) contentPatch.tools = jsonArray(data.tools_json);
+    if (data.departments_json !== undefined) {
+      contentPatch.departments = jsonArray(data.departments_json);
+    }
+    if (Object.keys(contentPatch).length) {
+      assertOwnedKnowledge(db, "ai_skills", id, ctx, "Skill");
+      updateAiSkillContent(db, id, contentPatch);
+    }
     if (typeof data.enabled === "boolean") {
       updateAiSkillState(db, agentId(ctx), id, data.enabled);
     }

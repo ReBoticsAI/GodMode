@@ -26,6 +26,10 @@ export interface AiRule {
   agentId?: string;
   version?: number;
   updatedAt?: string;
+  /** Plugin id, `__cursor_workspace__`, or null/undefined for native. */
+  sourcePluginId?: string | null;
+  /** True when the user edited this row in GodMode (workspace import will not overwrite). */
+  userEdited?: boolean;
 }
 
 function rulesDir(): string {
@@ -198,6 +202,61 @@ export function updateAiRuleState(
        priority_override = excluded.priority_override,
        updated_at = datetime('now')`
   ).run(agentId, ruleId, enabled, pri);
+}
+
+/** Update rule body/metadata and mark as user-edited (blocks workspace overwrite). */
+export function updateAiRuleContent(
+  db: AppDatabase,
+  ruleId: string,
+  patch: {
+    description?: string;
+    body?: string;
+    alwaysApply?: boolean;
+    globs?: string[];
+    departments?: string[];
+    priority?: number;
+  }
+): boolean {
+  const row = db.prepare(`SELECT id FROM ai_rules WHERE id = ?`).get(ruleId);
+  if (!row) return false;
+  const cur = db
+    .prepare(
+      `SELECT description, body, always_apply, globs_json, departments_json, priority FROM ai_rules WHERE id = ?`
+    )
+    .get(ruleId) as {
+    description: string;
+    body: string;
+    always_apply: number;
+    globs_json: string;
+    departments_json: string;
+    priority: number;
+  };
+  const description = patch.description ?? cur.description;
+  const body = patch.body ?? cur.body;
+  const alwaysApply =
+    patch.alwaysApply !== undefined ? (patch.alwaysApply ? 1 : 0) : cur.always_apply;
+  const globsJson =
+    patch.globs !== undefined ? JSON.stringify(patch.globs) : cur.globs_json;
+  const departmentsJson =
+    patch.departments !== undefined
+      ? JSON.stringify(patch.departments)
+      : cur.departments_json;
+  const priority = patch.priority ?? cur.priority;
+  db.prepare(
+    `UPDATE ai_rules SET
+       description = ?, body = ?, always_apply = ?, globs_json = ?, departments_json = ?,
+       priority = ?, user_edited = 1, version = version + 1, updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(
+    description,
+    body,
+    alwaysApply,
+    globsJson,
+    departmentsJson,
+    priority,
+    ruleId
+  );
+  return true;
 }
 
 /** Filesystem-safe rule id from a free-form name. */
