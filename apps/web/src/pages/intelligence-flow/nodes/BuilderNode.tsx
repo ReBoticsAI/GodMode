@@ -19,6 +19,7 @@ import {
   ServerIcon,
   UsersIcon,
   RocketIcon,
+  PlugIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BuilderNodeData, BuilderNodeKind } from "../graph";
@@ -42,6 +43,7 @@ const ICONS: Record<BuilderNodeKind, React.ComponentType<{ className?: string }>
   skills: LayersIcon,
   tools: WrenchIcon,
   platform: MessageSquareIcon,
+  mcp: PlugIcon,
   mentions: AtSignIcon,
   chatHistory: HistoryIcon,
   userMessage: MessageSquareIcon,
