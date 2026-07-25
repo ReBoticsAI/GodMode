@@ -66,7 +66,7 @@ Before exposing Bridge to a network:
 | Generic Records/actions (`/api/records/*`) | Cross-tenant or overbroad mutation | OperationContext, access/action policy, adapter scoping |
 | Release manifests and update artifacts | Supply-chain execution or downgrade | Signed manifests, immutable digests, compatibility bounds, administrator confirmation |
 | Host update supervisor | Privileged container/service replacement | Dedicated authenticated local-host IPC; never expose the Docker socket to Bridge |
-| DuckDB analytics | SQL against attached timeseries | Platform admin only; SELECT-only subset |
+| DuckDB platform analytics | SQL against tenant analytics DB | Platform admin only; SELECT-only subset; market ticks live in domain plugins |
 | Markdown rendering | `javascript:` links in assistant/wiki output | URL scheme allowlist in web UI |
 | Auth token endpoints | Account takeover / enumeration | Durable rate limits; opaque responses; hashed one-time tokens |
 

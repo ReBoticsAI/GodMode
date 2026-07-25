@@ -13,9 +13,11 @@ import {
   completeEmbedJob,
   failEmbedJob,
   recoverStaleEmbedJobs,
+  getEmbedQueueMetrics,
   type EmbedQueueJob,
 } from "./embed-queue.js";
 import { scheduleAnnInvalidate } from "./vector-retrieval.js";
+import { getTimeseriesStore } from "../timeseries-store.js";
 
 export class EmbedQueueWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -51,6 +53,19 @@ export class EmbedQueueWorker {
     const recovered = recoverStaleEmbedJobs();
     if (recovered > 0) {
       console.warn(`[embed-queue] recovered ${recovered} stale running job(s)`);
+    }
+
+    try {
+      const m = getEmbedQueueMetrics();
+      getTimeseriesStore().appendPlatformMetric("embed_queue", "bridge", {
+        depth: m.depth,
+        interactive: m.byLane.interactive,
+        backfill: m.byLane.backfill,
+        failures_recent: m.failuresRecent,
+        enabled: m.enabled ? 1 : 0,
+      });
+    } catch {
+      /* analytics optional */
     }
 
     const job = claimNextEmbedJob();
