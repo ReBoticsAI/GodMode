@@ -90,6 +90,11 @@ export interface AgentCursorCloudConfig {
    * `local.settingSources: ["project"]` when `.cursor/` exists.
    */
   mcpFromWorkspace?: boolean;
+  /**
+   * Server names from coding-root `.cursor/mcp.json` to skip when passing
+   * inline SDK `mcpServers`. Ignored when `mcpFromWorkspace` is false.
+   */
+  mcpDisabledServers?: string[];
 }
 
 export interface AiAgentRecord {

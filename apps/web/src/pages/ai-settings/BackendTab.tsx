@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -251,29 +250,26 @@ export function BackendTab({
               <span className="font-mono">composer-2.5</span>.
             </p>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-            <div className="flex flex-col gap-0.5">
-              <Label className="text-[11px]">Workspace MCP servers</Label>
-              <p className="text-[10px] text-muted-foreground">
-                Pass coding-root <span className="font-mono">.cursor/mcp.json</span> to the
-                SDK as inline <span className="font-mono">mcpServers</span> (cap 8). Default
-                on for local installs; off on SaaS unless enabled.
-              </p>
-            </div>
-            <Switch
-              checked={
-                typeof cfg.mcpFromWorkspace === "boolean"
-                  ? Boolean(cfg.mcpFromWorkspace)
-                  : true
+          <div className="flex flex-col gap-1">
+            <Label className="text-[11px]">Coding workspace</Label>
+            <Input
+              className="h-8 font-mono text-xs"
+              value={String(cfg.workspace ?? "")}
+              onChange={(e) =>
+                saveAgent({ config: { ...cfg, workspace: e.target.value || undefined } })
               }
-              onCheckedChange={(v) =>
-                saveAgent({ config: { ...cfg, mcpFromWorkspace: v } })
-              }
+              placeholder="Defaults to Bridge repo root"
             />
+            <p className="text-[10px] text-muted-foreground">
+              Coding root for project <span className="font-mono">settingSources</span>, MCP
+              discovery, and SDK cwd. Same role as CLI backend working directory.
+            </p>
           </div>
           <p className="rounded-md border bg-muted/20 p-2 text-[10px] text-muted-foreground">
-            GodMode tools (wiki, coding, plugins) run as SDK custom tools — same Intelligence
-            experience, Cursor-hosted models. Usage bills to your Cursor account.
+            Manage workspace MCP servers on the Builder{" "}
+            <span className="font-medium">MCP</span> node (list, enable/disable, pass-through
+            toggle). GodMode tools still run as SDK custom tools; usage bills to your Cursor
+            account.
           </p>
         </>
       )}

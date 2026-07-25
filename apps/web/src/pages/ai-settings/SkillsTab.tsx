@@ -1,14 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { useIntelligence } from "@/lib/intelligence-context";
 import {
   approveAiSkill,
+  createAiSkill,
+  deleteAiSkill,
   fetchAiSkills,
+  importWorkspaceKnowledge,
   rejectAiSkill,
+  updateAiSkillContent,
   updateAiSkillState,
   type AiSkill,
 } from "@/api";
@@ -19,6 +36,7 @@ import {
   KnowledgeSummaryLine,
   matchesKnowledgeStatusFilter,
   OwnershipBadge,
+  SourceBadge,
   VersionMeta,
 } from "./knowledge-badges";
 
@@ -47,6 +65,7 @@ function SkillReadinessBadge({ skill }: { skill: AiSkill }) {
 function SkillMetaBadges({ skill, activeAgentId }: { skill: AiSkill; activeAgentId: string }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
+      <SourceBadge sourcePluginId={skill.sourcePluginId} userEdited={skill.userEdited} />
       <SkillReadinessBadge skill={skill} />
       <OwnershipBadge ownerAgentId={skill.agentId} activeAgentId={activeAgentId} />
       {skill.tools.map((t) => (
@@ -63,11 +82,28 @@ function SkillMetaBadges({ skill, activeAgentId }: { skill: AiSkill; activeAgent
   );
 }
 
+type SkillFormState = {
+  name: string;
+  description: string;
+  body: string;
+};
+
+const emptySkillForm = (): SkillFormState => ({
+  name: "",
+  description: "",
+  body: "",
+});
+
 export function SkillsTab() {
   const { activeAgentId } = useIntelligence();
   const [skills, setSkills] = useState<AiSkill[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<KnowledgeStatusFilter>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editSkill, setEditSkill] = useState<AiSkill | null>(null);
+  const [form, setForm] = useState<SkillFormState>(emptySkillForm);
+  const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(() => {
     fetchAiSkills(true, activeAgentId)
@@ -113,15 +149,158 @@ export function SkillsTab() {
     { id: "pending", label: "Pending" },
   ];
 
+  const openCreate = () => {
+    setForm(emptySkillForm());
+    setCreateOpen(true);
+  };
+
+  const openEdit = (skill: AiSkill) => {
+    setForm({
+      name: skill.name,
+      description: skill.description,
+      body: skill.body ?? "",
+    });
+    setEditSkill(skill);
+  };
+
+  const submitCreate = async () => {
+    const name = form.name.trim();
+    const description = form.description.trim();
+    const body = form.body.trim();
+    if (!name || !body) {
+      toast.error("Name and body are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createAiSkill({
+        name,
+        description,
+        body,
+        agentId: activeAgentId,
+      });
+      toast.success("Skill created");
+      setCreateOpen(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create skill");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitEdit = async () => {
+    if (!editSkill) return;
+    const name = form.name.trim();
+    const description = form.description.trim();
+    const body = form.body.trim();
+    if (!name || !body) {
+      toast.error("Name and body are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateAiSkillContent(editSkill.id, {
+        name,
+        description,
+        body,
+        agentId: activeAgentId,
+      });
+      toast.success("Skill updated");
+      setEditSkill(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update skill");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeSkill = async (skill: AiSkill) => {
+    if (!window.confirm(`Delete skill "${skill.name}"?`)) return;
+    try {
+      await deleteAiSkill(skill.id, activeAgentId);
+      toast.success("Skill deleted");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete skill");
+    }
+  };
+
+  const runImport = async () => {
+    setImporting(true);
+    try {
+      const result = await importWorkspaceKnowledge(activeAgentId);
+      if (result.message) {
+        toast.message(result.message);
+      } else if (result.synced) {
+        toast.success(`Imported ${result.rules} rules and ${result.skills} skills from coding root`);
+      } else {
+        toast.message("Coding root is unchanged since last import");
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const skillFormFields = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Name</Label>
+        <Input
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          placeholder="Skill id / display name"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Description</Label>
+        <Input
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          placeholder="One-line summary for the skills index"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Body</Label>
+        <Textarea
+          value={form.body}
+          onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+          placeholder="Full skill instructions (markdown)"
+          rows={8}
+          className="font-mono text-xs"
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Skills overview</CardTitle>
-          <CardDescription className="text-[11px]">
-            DB-backed instruction bundles for this agent. Enabled skills appear in the skills index;
-            full bodies load on demand via /skill or use_skill. Root skills are inherited.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">Skills overview</CardTitle>
+              <CardDescription className="text-[11px]">
+                DB-backed instruction bundles for this agent. Prefer editing skills here in
+                Knowledge; AGENTS.md and <code className="text-[10px]">.cursor/skills</code> are
+                bootstrap imports from the coding root.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => void runImport()} disabled={importing}>
+                {importing ? <Spinner className="size-3.5" /> : <DownloadIcon className="size-3.5" />}
+                Import from coding root
+              </Button>
+              <Button type="button" size="sm" onClick={openCreate}>
+                <PlusIcon className="size-3.5" />
+                New skill
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <KnowledgeSummaryLine {...summary} />
@@ -200,26 +379,101 @@ export function SkillsTab() {
               {skills.length === 0 ? "No skills yet." : "No skills match the current filter."}
             </p>
           )}
-          {active.map((s) => (
-            <div key={s.id} className="rounded-lg border px-3 py-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="text-xs text-muted-foreground">{s.description}</p>
+          {active.map((s) => {
+            const owned = !isInherited(s.agentId, activeAgentId);
+            return (
+              <div key={s.id} className="rounded-lg border px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{s.name}</p>
+                    <p className="text-xs text-muted-foreground">{s.description}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {owned && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          title="Edit skill"
+                          onClick={() => openEdit(s)}
+                        >
+                          <PencilIcon className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          title="Delete skill"
+                          onClick={() => void removeSkill(s)}
+                        >
+                          <Trash2Icon className="size-3.5 text-destructive" />
+                        </Button>
+                      </>
+                    )}
+                    <Switch
+                      checked={s.enabled}
+                      onCheckedChange={(v) => {
+                        void updateAiSkillState(s.id, v, activeAgentId).then(load);
+                      }}
+                    />
+                  </div>
                 </div>
-                <Switch
-                  checked={s.enabled}
-                  onCheckedChange={(v) => {
-                    void updateAiSkillState(s.id, v, activeAgentId).then(load);
-                  }}
-                />
+                <SkillMetaBadges skill={s} activeAgentId={activeAgentId} />
+                <VersionMeta version={s.version} updatedAt={s.updatedAt} />
+                {s.body && (
+                  <pre className="mt-2 max-h-24 overflow-auto rounded bg-muted/30 p-2 font-mono text-[10px]">
+                    {s.body.slice(0, 300)}
+                    {s.body.length > 300 ? "…" : ""}
+                  </pre>
+                )}
               </div>
-              <SkillMetaBadges skill={s} activeAgentId={activeAgentId} />
-              <VersionMeta version={s.version} updatedAt={s.updatedAt} />
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New skill</DialogTitle>
+            <DialogDescription>
+              Create a native skill for this agent. It is stored in the knowledge database, not in
+              the coding root.
+            </DialogDescription>
+          </DialogHeader>
+          {skillFormFields}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitCreate()} disabled={saving}>
+              {saving ? <Spinner className="size-4" /> : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editSkill != null} onOpenChange={(open) => !open && setEditSkill(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit skill</DialogTitle>
+            <DialogDescription>
+              {editSkill?.id} — edits are marked user-edited and will not be overwritten by coding
+              root imports.
+            </DialogDescription>
+          </DialogHeader>
+          {skillFormFields}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSkill(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitEdit()} disabled={saving}>
+              {saving ? <Spinner className="size-4" /> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

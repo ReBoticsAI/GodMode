@@ -272,16 +272,22 @@ export function resolveMcpDiscoveryExecution(args: {
 /**
  * Parse coding-root `.cursor/mcp.json` into SDK `mcpServers` shape.
  * Soft-fails on missing/invalid entries. Caps server count.
+ * `@param opts.disabled` names are omitted (case-sensitive match on server key).
  */
 export function loadCursorMcpServersForSdk(
-  codingRoot: string
+  codingRoot: string,
+  opts?: { disabled?: readonly string[] }
 ): CursorSdkMcpServers | undefined {
   const loaded = readMcpServersObject(codingRoot);
   if (!loaded) return undefined;
 
+  const disabled = new Set(
+    (opts?.disabled ?? []).map((n) => n.trim()).filter(Boolean)
+  );
   const names = Object.keys(loaded.servers).sort((a, b) => a.localeCompare(b));
   const out: CursorSdkMcpServers = {};
   for (const name of names) {
+    if (disabled.has(name)) continue;
     if (Object.keys(out).length >= MAX_SDK_MCP_SERVERS) break;
     const parsed = parseSdkServerEntry(name, loaded.servers[name]);
     if (parsed) out[name] = parsed;
@@ -289,10 +295,11 @@ export function loadCursorMcpServersForSdk(
   return Object.keys(out).length ? out : undefined;
 }
 
-/** Fingerprint for cache invalidation when MCP file or gate changes. */
+/** Fingerprint for cache invalidation when MCP file, gate, or disables change. */
 export function cursorMcpServersFingerprint(
   codingRoot: string,
-  enabled: boolean
+  enabled: boolean,
+  disabled?: readonly string[]
 ): string {
   if (!enabled) return "";
   const loaded = readMcpServersObject(codingRoot);
@@ -304,8 +311,13 @@ export function cursorMcpServersFingerprint(
     /* ignore */
   }
   const names = Object.keys(loaded.servers).sort().join(",");
+  const skip = [...(disabled ?? [])]
+    .map((n) => n.trim())
+    .filter(Boolean)
+    .sort()
+    .join(",");
   return createHash("sha256")
-    .update(`${mtime}|${names}`)
+    .update(`${mtime}|${names}|skip:${skip}`)
     .digest("hex")
     .slice(0, 12);
 }

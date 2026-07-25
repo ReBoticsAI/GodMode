@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import { config } from "../config.js";
@@ -314,6 +315,9 @@ export function listRulesFromDb(
     agentId: String(r.agent_id ?? "intelligence"),
     version: r.version != null ? Number(r.version) : undefined,
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
+    sourcePluginId:
+      r.source_plugin_id != null ? String(r.source_plugin_id) : null,
+    userEdited: Number(r.user_edited ?? 0) !== 0,
   }));
 }
 
@@ -345,6 +349,9 @@ export function listSkillsFromDb(
     agentId: String(r.agent_id ?? "intelligence"),
     version: r.version != null ? Number(r.version) : undefined,
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
+    sourcePluginId:
+      r.source_plugin_id != null ? String(r.source_plugin_id) : null,
+    userEdited: Number(r.user_edited ?? 0) !== 0,
   }));
 }
 
@@ -623,6 +630,10 @@ function fingerprintCursorWorkspace(codingRoot: string): string {
   return parts.join("|");
 }
 
+function contentHash(body: string): string {
+  return createHash("sha256").update(body).digest("hex").slice(0, 16);
+}
+
 function upsertWorkspaceRule(
   db: AppDatabase,
   id: string,
@@ -632,16 +643,27 @@ function upsertWorkspaceRule(
   globs: string[],
   departments: string[],
   priority: number
-): void {
+): boolean {
+  const hash = contentHash(body);
+  const existing = db
+    .prepare(
+      `SELECT user_edited FROM ai_rules WHERE id = ? AND source_plugin_id = ?`
+    )
+    .get(id, CURSOR_WORKSPACE_SOURCE) as { user_edited: number } | undefined;
+  if (existing && Number(existing.user_edited) !== 0) {
+    return false;
+  }
   db.prepare(
     `INSERT INTO ai_rules
-     (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, updated_at)
-     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
+     (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, source_plugin_id, content_hash, user_edited, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, 0, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        description=excluded.description, body=excluded.body, always_apply=excluded.always_apply,
        globs_json=excluded.globs_json, departments_json=excluded.departments_json,
        priority=excluded.priority, source_plugin_id=excluded.source_plugin_id,
-       version=ai_rules.version+1, updated_at=datetime('now')`
+       content_hash=excluded.content_hash,
+       version=ai_rules.version+1, updated_at=datetime('now')
+     WHERE COALESCE(ai_rules.user_edited, 0) = 0`
   ).run(
     id,
     description,
@@ -650,8 +672,51 @@ function upsertWorkspaceRule(
     JSON.stringify(globs),
     JSON.stringify(departments),
     priority,
-    CURSOR_WORKSPACE_SOURCE
+    CURSOR_WORKSPACE_SOURCE,
+    hash
   );
+  return true;
+}
+
+function upsertWorkspaceSkill(
+  db: AppDatabase,
+  id: string,
+  name: string,
+  description: string,
+  body: string,
+  tools: string[],
+  departments: string[]
+): boolean {
+  const hash = contentHash(body);
+  const existing = db
+    .prepare(
+      `SELECT user_edited FROM ai_skills WHERE id = ? AND source_plugin_id = ?`
+    )
+    .get(id, CURSOR_WORKSPACE_SOURCE) as { user_edited: number } | undefined;
+  if (existing && Number(existing.user_edited) !== 0) {
+    return false;
+  }
+  db.prepare(
+    `INSERT INTO ai_skills
+     (id, agent_id, name, description, body, tools_json, departments_json, enabled, status, source_plugin_id, content_hash, user_edited, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, 1, 'active', ?, ?, 0, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       name=excluded.name, description=excluded.description, body=excluded.body,
+       tools_json=excluded.tools_json, departments_json=excluded.departments_json,
+       source_plugin_id=excluded.source_plugin_id, content_hash=excluded.content_hash,
+       version=ai_skills.version+1, updated_at=datetime('now')
+     WHERE COALESCE(ai_skills.user_edited, 0) = 0`
+  ).run(
+    id,
+    name,
+    description,
+    body,
+    JSON.stringify(tools),
+    JSON.stringify(departments),
+    CURSOR_WORKSPACE_SOURCE,
+    hash
+  );
+  return true;
 }
 
 function importAgentsMdFile(
@@ -663,8 +728,7 @@ function importAgentsMdFile(
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
   const body = fs.readFileSync(filePath, "utf8").trim();
   if (!body) return false;
-  upsertWorkspaceRule(db, id, description, body, true, [], [], 45);
-  return true;
+  return upsertWorkspaceRule(db, id, description, body, true, [], [], 45);
 }
 
 /**
@@ -672,16 +736,18 @@ function importAgentsMdFile(
  * skill SKILL.md folders into the tenant knowledge DB for local/provider
  * backends. IDs are prefixed to avoid colliding with GodMode core rules.
  * Skipped for cursor_cloud agents (SDK settingSources loads project
- * instructions instead).
+ * instructions instead). Does not overwrite rows marked user_edited.
  */
 export function importCursorWorkspaceKnowledge(
   db: AppDatabase,
   codingRoot: string
-): { rules: number; skills: number } {
+): { rules: number; skills: number; ruleIds: string[]; skillIds: string[] } {
   const root = path.resolve(codingRoot);
   const cursorDir = path.join(root, ".cursor");
   let rules = 0;
   let skills = 0;
+  const ruleIds: string[] = [];
+  const skillIds: string[] = [];
 
   if (
     importAgentsMdFile(
@@ -692,6 +758,9 @@ export function importCursorWorkspaceKnowledge(
     )
   ) {
     rules++;
+    ruleIds.push(CURSOR_WS_AGENTS_MD_ID);
+  } else if (fs.existsSync(path.join(root, "AGENTS.md"))) {
+    ruleIds.push(CURSOR_WS_AGENTS_MD_ID);
   }
   if (
     importAgentsMdFile(
@@ -702,23 +771,30 @@ export function importCursorWorkspaceKnowledge(
     )
   ) {
     rules++;
+    ruleIds.push(CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID);
+  } else if (fs.existsSync(path.join(cursorDir, "AGENTS.md"))) {
+    ruleIds.push(CURSOR_WS_DOT_CURSOR_AGENTS_MD_ID);
   }
 
   const rulesDir = path.join(cursorDir, "rules");
   for (const file of walkMdcFiles(rulesDir)) {
     const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
     const id = cursorRuleIdFromPath(rulesDir, file);
-    upsertWorkspaceRule(
-      db,
-      id,
-      parsed.description,
-      parsed.body,
-      parsed.alwaysApply,
-      parsed.globs,
-      parsed.departments,
-      parsed.priority
-    );
-    rules++;
+    ruleIds.push(id);
+    if (
+      upsertWorkspaceRule(
+        db,
+        id,
+        parsed.description,
+        parsed.body,
+        parsed.alwaysApply,
+        parsed.globs,
+        parsed.departments,
+        parsed.priority
+      )
+    ) {
+      rules++;
+    }
   }
 
   const skillsDir = path.join(cursorDir, "skills");
@@ -729,53 +805,89 @@ export function importCursorWorkspaceKnowledge(
       if (!fs.existsSync(skillPath)) continue;
       const parsed = parseSkillMd(fs.readFileSync(skillPath, "utf8"), ent.name);
       const id = `cursor-ws-skill-${ent.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
-      db.prepare(
-        `INSERT INTO ai_skills
-         (id, agent_id, name, description, body, tools_json, departments_json, enabled, status, source_plugin_id, updated_at)
-         VALUES (?, 'intelligence', ?, ?, ?, ?, ?, 1, 'active', ?, datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET
-           name=excluded.name, description=excluded.description, body=excluded.body,
-           tools_json=excluded.tools_json, departments_json=excluded.departments_json,
-           source_plugin_id=excluded.source_plugin_id,
-           version=ai_skills.version+1, updated_at=datetime('now')`
-      ).run(
-        id,
-        parsed.name,
-        parsed.description,
-        parsed.body,
-        JSON.stringify(parsed.tools),
-        JSON.stringify(parsed.departments),
-        CURSOR_WORKSPACE_SOURCE
-      );
-      skills++;
+      skillIds.push(id);
+      if (
+        upsertWorkspaceSkill(
+          db,
+          id,
+          parsed.name,
+          parsed.description,
+          parsed.body,
+          parsed.tools,
+          parsed.departments
+        )
+      ) {
+        skills++;
+      }
     }
   }
 
-  return { rules, skills };
+  return { rules, skills, ruleIds, skillIds };
 }
 
 /**
  * Refresh workspace Cursor knowledge when AGENTS.md / `.cursor/` mtimes change.
- * No-op when fingerprint matches the last sync for this db+root.
+ * Non-destructive: never deletes or overwrites user-edited workspace rows.
  */
 export function syncCursorWorkspaceKnowledge(
   db: AppDatabase,
-  codingRoot: string
+  codingRoot: string,
+  opts?: { force?: boolean }
 ): { rules: number; skills: number; synced: boolean } {
   const root = path.resolve(codingRoot);
   const key = `${root}`;
   const fp = fingerprintCursorWorkspace(root);
-  if (cursorWorkspaceSyncFp.get(key) === fp) {
+  if (!opts?.force && cursorWorkspaceSyncFp.get(key) === fp) {
     return { rules: 0, skills: 0, synced: false };
   }
-  removePluginKnowledge(db, CURSOR_WORKSPACE_SOURCE);
+
   if (!fp) {
+    // Remove only non-edited workspace imports when disk artifacts disappear.
+    pruneMissingWorkspaceKnowledge(db, [], []);
     cursorWorkspaceSyncFp.set(key, "");
     return { rules: 0, skills: 0, synced: true };
   }
+
   const result = importCursorWorkspaceKnowledge(db, root);
+  pruneMissingWorkspaceKnowledge(db, result.ruleIds, result.skillIds);
   cursorWorkspaceSyncFp.set(key, fp);
-  return { ...result, synced: true };
+  return {
+    rules: result.rules,
+    skills: result.skills,
+    synced: true,
+  };
+}
+
+/** Drop workspace imports that vanished from disk, keeping user-edited rows. */
+function pruneMissingWorkspaceKnowledge(
+  db: AppDatabase,
+  keepRuleIds: string[],
+  keepSkillIds: string[]
+): void {
+  const keepRules = new Set(keepRuleIds);
+  const keepSkills = new Set(keepSkillIds);
+  const ruleRows = db
+    .prepare(
+      `SELECT id, user_edited FROM ai_rules WHERE source_plugin_id = ?`
+    )
+    .all(CURSOR_WORKSPACE_SOURCE) as Array<{ id: string; user_edited: number }>;
+  for (const row of ruleRows) {
+    if (keepRules.has(row.id)) continue;
+    if (Number(row.user_edited) !== 0) continue;
+    db.prepare(`DELETE FROM ai_agent_rule_state WHERE rule_id = ?`).run(row.id);
+    db.prepare(`DELETE FROM ai_rules WHERE id = ?`).run(row.id);
+  }
+  const skillRows = db
+    .prepare(
+      `SELECT id, user_edited FROM ai_skills WHERE source_plugin_id = ?`
+    )
+    .all(CURSOR_WORKSPACE_SOURCE) as Array<{ id: string; user_edited: number }>;
+  for (const row of skillRows) {
+    if (keepSkills.has(row.id)) continue;
+    if (Number(row.user_edited) !== 0) continue;
+    db.prepare(`DELETE FROM ai_agent_skill_state WHERE skill_id = ?`).run(row.id);
+    db.prepare(`DELETE FROM ai_skills WHERE id = ?`).run(row.id);
+  }
 }
 
 /** @internal test helper */
