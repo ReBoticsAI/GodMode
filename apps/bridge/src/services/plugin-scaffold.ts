@@ -1,28 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
-import { config, tenantWorkspaceDir } from "../config.js";
+import { resolveCodingRoot, type FsRootOpts } from "./coding/fs-tools.js";
 
 export interface ScaffoldRootOpts {
   tenantId?: string | null;
+  /** Agent coding workspace subpath (Layer 2 worktree). */
+  root?: string;
+  isolatedDeployment?: boolean;
+  tenantWorkspacesDir?: string;
 }
 
 /**
  * Canonical scaffold location — always under the coding root so edit_file works.
  * - Override: GODMODE_PLUGIN_SCAFFOLD_DIR/<id>
- * - Hub/client: {tenantWorkspace}/plugins/<id> (tenantId required)
- * - Local: {repoRoot}/plugins/<id>
+ * - Else: {resolveCodingRoot(...)}/plugins/<id> (tenant root or active worktree)
  */
 export function pluginScaffoldBase(opts?: ScaffoldRootOpts): string {
   const override = process.env.GODMODE_PLUGIN_SCAFFOLD_DIR?.trim();
   if (override) return override;
-  if (config.isHub || config.isClient) {
-    const tenantId = String(opts?.tenantId ?? "").trim();
-    if (!tenantId) {
-      throw new Error("tenantId required for plugin scaffold on hub/client");
-    }
-    return path.join(tenantWorkspaceDir(tenantId), "plugins");
-  }
-  return path.join(config.repoRoot, "plugins");
+  return path.join(resolveCodingRoot(opts as FsRootOpts), "plugins");
 }
 
 export function defaultPluginRoot(id: string, opts?: ScaffoldRootOpts): string {
@@ -34,10 +30,18 @@ export function scaffoldPlugin(opts: {
   name: string;
   departments?: string[];
   tenantId?: string | null;
+  root?: string;
+  isolatedDeployment?: boolean;
+  tenantWorkspacesDir?: string;
 }): { pluginRoot: string; created: boolean; codingPath: string } {
   const id = opts.id.trim().replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   if (!id) throw new Error("Plugin id required");
-  const pluginRoot = defaultPluginRoot(id, { tenantId: opts.tenantId });
+  const pluginRoot = defaultPluginRoot(id, {
+    tenantId: opts.tenantId,
+    root: opts.root,
+    isolatedDeployment: opts.isolatedDeployment,
+    tenantWorkspacesDir: opts.tenantWorkspacesDir,
+  });
   const codingPath = `plugins/${id}`;
   if (fs.existsSync(pluginRoot)) {
     return { pluginRoot, created: false, codingPath };
