@@ -24,6 +24,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/fs-tools-workspace.test.ts",
       "apps/bridge/src/services/__tests__/coding-tenant-isolation.test.ts",
       "apps/bridge/src/services/__tests__/terminal-sandbox.test.ts",
+      "apps/bridge/src/services/__tests__/terminal-egress-proxy.test.ts",
       "apps/bridge/src/services/__tests__/tenant-worktree.test.ts",
       "apps/bridge/src/services/__tests__/coding-ui-access.test.ts",
       "apps/bridge/src/services/__tests__/write-tool-verify.test.ts",
