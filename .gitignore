@@ -75,9 +75,7 @@ apps/bridge/data/**/artifacts/
 .screenshots/
 *.sse
 artifacts/
-.cursor/debug-*.log
-.cursor/plans/
-.cursor/rules/
+.cursor/
 **/from_sc.txt
 **/to_sc.txt
 
