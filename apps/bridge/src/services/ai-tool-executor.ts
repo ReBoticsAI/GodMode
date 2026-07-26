@@ -91,6 +91,7 @@ import {
   createTenantWorktree,
   discardTenantWorktree,
   listTenantWorktrees,
+  promoteTenantWorktree,
 } from "./coding/tenant-worktree.js";
 import { codebaseSearch } from "./coding/codebase-search.js";
 import { readDiagnostics, verifyTypeScriptAfterWrite } from "./coding/read-diagnostics.js";
@@ -2650,7 +2651,7 @@ export async function executeTool(
         ...created,
         agentId,
         workspaceSet: Boolean(agent),
-        next: "Coding tools and scaffold_plugin now use this worktree. Call coding_worktree_discard when done (promote/merge UX is a follow-up).",
+        next: "Coding tools and scaffold_plugin now use this worktree. Call coding_worktree_promote to merge into the live tenant tree, or coding_worktree_discard to drop it.",
       };
     }
 
@@ -2686,6 +2687,88 @@ export async function executeTool(
         }
       }
       return { ...discarded, workspaceCleared, agentId };
+    }
+
+    case "coding_worktree_promote": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error("tenant required for coding_worktree_promote on hub/client");
+      }
+      const slugOrWorkspace = String(args.slug ?? args.workspace ?? "");
+      const promoted = promoteTenantWorktree({
+        slugOrWorkspace,
+        tenantId: ctx.tenantId,
+      });
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const agent = getAgent(ctx.db, agentId);
+      let workspaceCleared = false;
+      if (agent) {
+        const ws =
+          typeof agent.config?.workspace === "string"
+            ? agent.config.workspace.trim()
+            : "";
+        const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "");
+        if (ws && norm(ws) === norm(promoted.workspace)) {
+          const next = { ...agent.config };
+          delete next.workspace;
+          updateAgent(ctx.db, agentId, { config: next });
+          workspaceCleared = true;
+        }
+      }
+
+      const liveOpts = { tenantId: ctx.tenantId ?? undefined, root: undefined };
+      const plugins: Array<{
+        id: string;
+        built?: unknown;
+        installed?: unknown;
+        error?: string;
+      }> = [];
+      const shouldInstall = args.install !== false;
+      if (shouldInstall && ctx.tenantId) {
+        for (const pluginId of promoted.pluginIds) {
+          try {
+            const pluginRoot = assertWithinCodingRoot(
+              defaultPluginRoot(pluginId, liveOpts),
+              liveOpts
+            );
+            const built = await buildPluginWithEsbuild(pluginRoot);
+            const installed = await dispatchKernelTool(ctx, "run_record_action", {
+              objectType: "CatalogInstall",
+              id: "",
+              action: "activate_plugin_path",
+              input: {
+                path: pluginRoot,
+                build_if_needed: false,
+                install_for_tenant: true,
+              },
+            });
+            plugins.push({ id: pluginId, built, installed });
+          } catch (err) {
+            plugins.push({
+              id: pluginId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
+      let discarded: { discarded: string; absolutePath: string } | undefined;
+      if (args.discard === true) {
+        discarded = discardTenantWorktree({
+          slugOrWorkspace: promoted.workspace,
+          tenantId: ctx.tenantId,
+        });
+      }
+
+      return {
+        ...promoted,
+        workspaceCleared,
+        agentId,
+        plugins,
+        discarded: discarded ?? null,
+        next: discarded
+          ? "Worktree merged into the live tenant tree and removed."
+          : "Worktree merged into the live tenant tree. Call coding_worktree_discard when finished with the branch.",
+      };
     }
 
     case "install_plugin": {
