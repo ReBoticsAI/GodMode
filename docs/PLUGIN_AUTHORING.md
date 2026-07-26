@@ -22,7 +22,7 @@ Fresh clones run as Control Center only until you install plugins from **Marketp
 Same tools work in the monorepo and on Docker hub/client:
 
 1. `scaffold_plugin` — creates `plugins/<id>/` under the **active coding root** (local: `{repo}/plugins/<id>`; hub/client: `{tenant-workspace}/plugins/<id>`, or under `{tenant}/.worktrees/<slug>/plugins/<id>` when `agent.config.workspace` points at a Layer 2 worktree). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
-2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` / `coding_worktree_discard` to isolate iterative edits; promote/merge into the live tenant plugin dir is a follow-up.
+2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` to isolate iterative edits, then `coding_worktree_promote` to merge into the live tenant tree (and optionally discard). Prefer promote before `install_plugin` so the persisted plugin path is never under `.worktrees/`.
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes.
 
