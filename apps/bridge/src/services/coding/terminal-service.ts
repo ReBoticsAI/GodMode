@@ -1,6 +1,12 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { resolveCodingRoot, resolveRepoPath } from "./fs-tools.js";
+import {
+  assertSandboxReadyForTerminal,
+  buildBubblewrapArgs,
+  requiresTerminalSandbox,
+  scrubTerminalEnv,
+} from "./terminal-sandbox.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512 * 1024;
@@ -24,6 +30,7 @@ export interface RunTerminalResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  sandboxed?: boolean;
 }
 
 function budget(text: string): string {
@@ -44,15 +51,36 @@ export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
     600_000
   );
 
+  const sandboxed = requiresTerminalSandbox();
+  if (sandboxed) {
+    assertSandboxReadyForTerminal();
+  }
+
   return new Promise((resolve, reject) => {
-    const shell = process.platform === "win32";
-    const proc = spawn(command, [], {
-      cwd,
-      shell,
-      windowsHide: true,
-      env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let proc;
+    if (sandboxed) {
+      const bwrapArgs = buildBubblewrapArgs({
+        codingRoot,
+        cwd,
+        command,
+      });
+      proc = spawn("bwrap", bwrapArgs, {
+        cwd: codingRoot,
+        shell: false,
+        windowsHide: true,
+        env: scrubTerminalEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } else {
+      const shell = process.platform === "win32";
+      proc = spawn(command, [], {
+        cwd,
+        shell,
+        windowsHide: true,
+        env: scrubTerminalEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    }
 
     let stdout = "";
     let stderr = "";
@@ -105,6 +133,7 @@ export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
         stdout: budget(stdout),
         stderr: budget(stderr),
         timedOut,
+        sandboxed,
       });
     });
   });

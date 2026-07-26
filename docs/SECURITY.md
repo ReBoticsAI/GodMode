@@ -59,7 +59,8 @@ Before exposing Bridge to a network:
 | Surface | Risk | Mitigation |
 |---------|------|------------|
 | AI coding tools (`run_terminal`, `edit_file`) | RCE for editors/agents with `codeAccess` | SaaS defaults deny `codeAccess`; disable on agents; confirm mode |
-| Hub/SaaS coding root | Cross-tenant file access via tools or Coding UI | Layer 1: coding root is always `tenant-workspaces/<tenantId>/`; agent workspace and plugin paths must stay under that root (issue #112). `run_terminal` is still cwd-only (not an OS jail) until Layer 3; do not enable interactive shell (#148) before then |
+| Hub/SaaS coding root | Cross-tenant file access via tools or Coding UI | Layer 1: coding root is always `tenant-workspaces/<tenantId>/`; agent workspace and plugin paths must stay under that root (issue #112) |
+| Hub/SaaS `run_terminal` | Shell escape past tenant root; host/Docker abuse | Layer 3: bubblewrap FS jail on hub/client Linux (`CODING_TERMINAL_SANDBOX=required`, fail closed if `bwrap` missing). SaaS/hub default `CODING_TERMINAL_NET=none` (`--unshare-net`); set `shared` only when npm/git egress is required. Host may need user namespaces for bwrap-in-Docker. Hostname egress allowlist and interactive shell (#148) remain gated |
 | Local plugin path registration | Tenant RCE via arbitrary folders | Blocked on SaaS unless `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` |
 | Federation API token | Remote command injection if token leaks | Rotate tokens; restrict network access |
 | First signup admin | Race on internet-exposed fresh installs | Use invite codes, paywall, or pre-seed `INITIAL_ADMINS` |
