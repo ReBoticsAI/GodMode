@@ -132,7 +132,9 @@ import {
 } from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
+import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
+import { createCodingWorkspaceRouter } from "./coding-workspace.js";
 import {
   collectCursorMcpDiscovery,
   enrichPlatformContextWithMcp,
@@ -273,6 +275,7 @@ export function createAiRouter(
     throw new Error("Tenant context required");
   };
   router.use(requireEditorForMutation);
+  router.use("/coding", createCodingWorkspaceRouter(tdb));
   const { training, scheduler, bridgePort, queue, embeddings, reflection, memoryMaintenance, bus } =
     deps;
   const datasetBuilderFor = (req: Request) => new AiDatasetBuilder(tdb(req));
@@ -522,14 +525,29 @@ export function createAiRouter(
   });
 
   router.get("/coding/mention-paths", (req, res) => {
+    if (!codingUiAllowed()) {
+      res.json({ paths: [], codingDisabled: true });
+      return;
+    }
     const q = String(req.query.q ?? "")
       .trim()
       .toLowerCase()
       .replace(/\\/g, "/");
     const limit = Math.min(Number(req.query.limit ?? 40), 80);
+    const agentId = String(req.query.agentId ?? "intelligence");
+    const agent = getAgent(tdb(req), agentId);
+    const agentWorkspace =
+      agent?.config &&
+      typeof (agent.config as { workspace?: unknown }).workspace === "string"
+        ? String((agent.config as { workspace: string }).workspace).trim()
+        : "";
+    const fsRoot = {
+      tenantId: req.tenantId,
+      root: agentWorkspace || undefined,
+    };
     const matches: Array<{ path: string; type: "file" | "dir" }> = [];
     if (!q) {
-      const root = listDir({ path: ".", recursive: false });
+      const root = listDir({ path: ".", recursive: false, ...fsRoot });
       for (const e of root.entries.slice(0, limit)) {
         matches.push({
           path: e.name,
@@ -539,7 +557,7 @@ export function createAiRouter(
       res.json({ paths: matches });
       return;
     }
-    const glob = globFiles({ pattern: `**/*${q}*` });
+    const glob = globFiles({ pattern: `**/*${q}*`, ...fsRoot });
     for (const p of glob.matches) {
       matches.push({ path: p, type: "file" });
       if (matches.length >= limit) break;

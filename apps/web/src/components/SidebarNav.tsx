@@ -8,6 +8,7 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   FilePlusIcon,
+  FolderTreeIcon,
   LandmarkIcon,
   LayersIcon,
   LifeBuoyIcon,
@@ -43,6 +44,7 @@ import {
   USERS_PATH,
   SUPPORT_PATH,
   WIKI_PATH,
+  CODING_PATH,
 } from "@/lib/navigation";
 import { useStructure } from "@/lib/structure-context";
 import { useTenant } from "@/lib/tenant-context";
@@ -429,6 +431,23 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         >
           <BookOpenIcon className="size-4 shrink-0" />
           <span className="truncate">Wiki</span>
+        </NavLink>
+
+        <NavLink
+          to={CODING_PATH}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-2 rounded-lg border border-sidebar-border/60 bg-sidebar-accent/10 px-2 py-2 text-sm font-semibold transition-colors",
+              "hover:bg-sidebar-accent/50",
+              isActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-foreground"
+            )
+          }
+        >
+          <FolderTreeIcon className="size-4 shrink-0" />
+          <span className="truncate">Coding</span>
         </NavLink>
 
         {canEditStructure ? (

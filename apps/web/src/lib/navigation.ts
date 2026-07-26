@@ -82,6 +82,7 @@ export const TASKS_PATH = "/tasks";
 export const NOTIFICATIONS_PATH = "/notifications";
 export const SUPPORT_PATH = "/support";
 export const WIKI_PATH = "/wiki";
+export const CODING_PATH = "/coding";
 export const RECORDS_PATH = "/records";
 
 /**
@@ -102,6 +103,7 @@ export function isChromelessPath(pathname: string): boolean {
     pathname.startsWith(NOTIFICATIONS_PATH) ||
     pathname.startsWith(SUPPORT_PATH) ||
     pathname.startsWith(WIKI_PATH) ||
+    pathname.startsWith(CODING_PATH) ||
     pathname.startsWith(RECORDS_PATH) ||
     pathname.startsWith(STRUCTURE_PATH) ||
     pathname.startsWith(CONTACTS_PATH) ||
@@ -119,6 +121,7 @@ export function chromelessHeaderSegments(pathname: string): string[] | null {
 
   if (norm.startsWith(HOME_PATH)) return ["Home"];
   if (norm.startsWith(WIKI_PATH)) return ["Wiki"];
+  if (norm.startsWith(CODING_PATH)) return ["Coding"];
   if (norm.startsWith(RECORDS_PATH)) return ["Records"];
   if (norm.startsWith(CALENDAR_PATH)) return ["Calendar"];
   if (norm.startsWith(TASKS_PATH)) return ["Tasks"];
