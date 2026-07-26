@@ -4,9 +4,12 @@ import { resolveCodingRoot, resolveRepoPath } from "./fs-tools.js";
 import {
   assertSandboxReadyForTerminal,
   buildBubblewrapArgs,
+  codingTerminalEgressHosts,
+  codingTerminalNetPolicy,
   requiresTerminalSandbox,
   scrubTerminalEnv,
 } from "./terminal-sandbox.js";
+import { startTerminalEgressProxy } from "./terminal-egress-proxy.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512 * 1024;
@@ -31,6 +34,7 @@ export interface RunTerminalResult {
   stderr: string;
   timedOut: boolean;
   sandboxed?: boolean;
+  netMode?: string;
 }
 
 function budget(text: string): string {
@@ -39,7 +43,9 @@ function budget(text: string): string {
   return buf.subarray(0, MAX_OUTPUT_BYTES).toString("utf8") + "\n…[truncated]";
 }
 
-export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
+export async function runTerminal(
+  opts: RunTerminalOpts
+): Promise<RunTerminalResult> {
   const command = String(opts.command ?? "").trim();
   if (!command) throw new Error("command required");
   const rootOpts = { tenantId: opts.tenantId, root: opts.root };
@@ -56,85 +62,106 @@ export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
     assertSandboxReadyForTerminal();
   }
 
-  return new Promise((resolve, reject) => {
-    let proc;
-    if (sandboxed) {
-      const bwrapArgs = buildBubblewrapArgs({
-        codingRoot,
-        cwd,
-        command,
+  const netMode = codingTerminalNetPolicy();
+  let proxy: Awaited<ReturnType<typeof startTerminalEgressProxy>> | null = null;
+  if (sandboxed && netMode === "allowlist") {
+    proxy = await startTerminalEgressProxy({
+      allowlist: codingTerminalEgressHosts(),
+    });
+  }
+
+  try {
+    return await new Promise<RunTerminalResult>((resolve, reject) => {
+      let proc;
+      if (sandboxed) {
+        const bwrapArgs = buildBubblewrapArgs({
+          codingRoot,
+          cwd,
+          command,
+          net: netMode,
+          proxyUrl: proxy?.proxyUrl,
+        });
+        proc = spawn("bwrap", bwrapArgs, {
+          cwd: codingRoot,
+          shell: false,
+          windowsHide: true,
+          env: scrubTerminalEnv(),
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } else {
+        const shell = process.platform === "win32";
+        proc = spawn(command, [], {
+          cwd,
+          shell,
+          windowsHide: true,
+          env: scrubTerminalEnv(),
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      }
+
+      let stdout = "";
+      let stderr = "";
+      let timedOut = false;
+
+      const onAbort = () => {
+        timedOut = true;
+        try {
+          proc.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+      };
+      opts.abortSignal?.addEventListener("abort", onAbort);
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          proc.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+      }, timeoutMs);
+
+      proc.stdout?.on("data", (chunk) => {
+        const text = String(chunk);
+        stdout += text;
+        opts.onOutput?.({ stream: "stdout", text });
       });
-      proc = spawn("bwrap", bwrapArgs, {
-        cwd: codingRoot,
-        shell: false,
-        windowsHide: true,
-        env: scrubTerminalEnv(),
-        stdio: ["ignore", "pipe", "pipe"],
+      proc.stderr?.on("data", (chunk) => {
+        const text = String(chunk);
+        stderr += text;
+        opts.onOutput?.({ stream: "stderr", text });
       });
-    } else {
-      const shell = process.platform === "win32";
-      proc = spawn(command, [], {
-        cwd,
-        shell,
-        windowsHide: true,
-        env: scrubTerminalEnv(),
-        stdio: ["ignore", "pipe", "pipe"],
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        opts.abortSignal?.removeEventListener("abort", onAbort);
+        reject(err);
       });
+
+      proc.on("close", (code, signal) => {
+        clearTimeout(timer);
+        opts.abortSignal?.removeEventListener("abort", onAbort);
+        resolve({
+          command,
+          cwd: path.relative(codingRoot, cwd).replace(/\\/g, "/") || ".",
+          exitCode: code,
+          signal: signal ?? null,
+          stdout: budget(stdout),
+          stderr: budget(stderr),
+          timedOut,
+          sandboxed,
+          netMode: sandboxed ? netMode : undefined,
+        });
+      });
+    });
+  } finally {
+    if (proxy) {
+      try {
+        await proxy.close();
+      } catch {
+        /* ignore */
+      }
     }
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    const onAbort = () => {
-      timedOut = true;
-      try {
-        proc.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
-    };
-    opts.abortSignal?.addEventListener("abort", onAbort);
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        proc.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
-    }, timeoutMs);
-
-    proc.stdout?.on("data", (chunk) => {
-      const text = String(chunk);
-      stdout += text;
-      opts.onOutput?.({ stream: "stdout", text });
-    });
-    proc.stderr?.on("data", (chunk) => {
-      const text = String(chunk);
-      stderr += text;
-      opts.onOutput?.({ stream: "stderr", text });
-    });
-
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      opts.abortSignal?.removeEventListener("abort", onAbort);
-      reject(err);
-    });
-
-    proc.on("close", (code, signal) => {
-      clearTimeout(timer);
-      opts.abortSignal?.removeEventListener("abort", onAbort);
-      resolve({
-        command,
-        cwd: path.relative(codingRoot, cwd).replace(/\\/g, "/") || ".",
-        exitCode: code,
-        signal: signal ?? null,
-        stdout: budget(stdout),
-        stderr: budget(stderr),
-        timedOut,
-        sandboxed,
-      });
-    });
-  });
+  }
 }
