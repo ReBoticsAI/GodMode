@@ -125,6 +125,19 @@ those deps **against this image** (CI job or
 `docker run --rm -v <plugin>:/plugin <godmode-image> npm ci`). Do not treat
 host `npm install` on a different libc as the source of truth for Docker hubs.
 
+### Plugin web CSP
+
+Production nginx sets a strict `Content-Security-Policy`. Plugin UI bundles
+resolve shared host modules (`react`, `@godmode/web-host`, …) through an
+**inline import map** in `index.html`. CSP requires that map’s body hash:
+
+- Vite writes `dist/.importmap-csp-hash` at build time
+- `deploy/docker-entrypoint.sh` injects `'sha256-…'` into nginx `script-src`
+
+`script-src` also allows `'unsafe-eval'` so plugin validators that use AJV
+(or similar `new Function` compilers) can load. Prefer precompiled schemas in
+plugins when you can; the eval allowance is for host compatibility.
+
 ## Data persistence
 
 Both compose files mount `PLATFORM_DATA_DIR=/data` (SQLite tenants, core DB, tenant sandboxes).

@@ -17,6 +17,20 @@ function importShim(): ImportShimFn | null {
 
 async function applyPluginImportMap(additions: Record<string, string>): Promise<void> {
   if (Object.keys(additions).length === 0) return;
+  const shim = importShim();
+  if (shim?.addImportMap) {
+    await shim.addImportMap({ imports: additions });
+    return;
+  }
+  // Production nginx CSP blocks inline import maps (script-src without matching
+  // sha256). Host shims already cover react / web-host; skip extras rather than
+  // spam CSP violations. Dev keeps the inline map for Vite plugin packages.
+  if (import.meta.env.PROD) {
+    console.warn(
+      "[plugins] extra import map skipped under CSP; load es-module-shims for plugin package imports"
+    );
+    return;
+  }
   const script = document.createElement("script");
   script.type = "importmap";
   script.setAttribute("data-godmode-plugin-importmap", "true");

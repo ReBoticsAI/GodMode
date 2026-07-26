@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -13,10 +14,8 @@ const rootNodeModules = path.resolve(__dirname, "../../node_modules");
 /** Specifier → stable `/plugin-shims/*.js` URL (production import map). */
 const PROD_SHIM_IMPORTS: Record<string, string> = {
   react: "/plugin-shims/react.js",
-  "react/": "/plugin-shims/react.js",
   "react/jsx-runtime": "/plugin-shims/react-jsx-runtime.js",
   "react-dom": "/plugin-shims/react-dom.js",
-  "react-dom/": "/plugin-shims/react-dom.js",
   "react-router-dom": "/plugin-shims/react-router-dom.js",
   "lucide-react": "/plugin-shims/lucide-react.js",
   sonner: "/plugin-shims/sonner.js",
@@ -32,10 +31,8 @@ const PROD_SHIM_IMPORTS: Record<string, string> = {
 
 const DEV_IMPORTS: Record<string, string> = {
   react: "/src/plugin-vendor/react.ts",
-  "react/": "/src/plugin-vendor/react.ts",
   "react/jsx-runtime": "/src/plugin-vendor/react-jsx-runtime.ts",
   "react-dom": "/src/plugin-vendor/react-dom.ts",
-  "react-dom/": "/src/plugin-vendor/react-dom.ts",
   "react-router-dom": "/src/plugin-vendor/react-router-dom.ts",
   "lucide-react": "/src/plugin-vendor/lucide-react.ts",
   sonner: "/src/plugin-vendor/sonner.ts",
@@ -172,6 +169,7 @@ function importMapPlugin(): Plugin {
       order: "pre",
       handler(_html, ctx) {
         const imports = ctx.server ? DEV_IMPORTS : PROD_SHIM_IMPORTS;
+        const children = JSON.stringify({ imports });
         const tags: Array<Record<string, unknown>> = [];
         if (ctx.server) {
           tags.push({
@@ -179,11 +177,18 @@ function importMapPlugin(): Plugin {
             attrs: { async: true, src: "/vendor/es-module-shims.js" },
             injectTo: "head-prepend",
           });
+        } else {
+          // CSP script-src blocks inline import maps unless the body hash is
+          // allowlisted. docker-entrypoint.sh reads this file into nginx CSP.
+          const hash = createHash("sha256").update(children).digest("base64");
+          const outDir = path.resolve(__dirname, "dist");
+          fs.mkdirSync(outDir, { recursive: true });
+          fs.writeFileSync(path.join(outDir, ".importmap-csp-hash"), hash);
         }
         tags.push({
           tag: "script",
           attrs: { type: "importmap", "data-godmode-importmap": "true" },
-          children: JSON.stringify({ imports }),
+          children,
           injectTo: "head-prepend",
         });
         return { tags };
