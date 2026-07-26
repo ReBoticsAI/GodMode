@@ -1496,6 +1496,31 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "coding_worktree_promote",
+    description:
+      "Merge a Bridge-owned worktree branch into the live tenant coding root, clear agent.config.workspace, then build/install affected plugins from live plugins/<id> paths (never leave install rooted under .worktrees/). Optional discard removes the worktree after merge. Requires confirmation.",
+    mode: "confirm",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        workspace: {
+          type: "string",
+          description: "Relative path e.g. .worktrees/my-feature",
+        },
+        install: {
+          type: "boolean",
+          description: "Build and install affected plugins from live paths (default true)",
+        },
+        discard: {
+          type: "boolean",
+          description: "Remove the worktree after a successful merge (default false)",
+        },
+      },
+    },
+  },
+  {
     name: "install_plugin",
     description:
       "Build if needed, load plugin at runtime (no Bridge restart), and enable for the current tenant. Same pipeline as Marketplace Unofficial. Requires confirmation.",
@@ -1657,6 +1682,7 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "coding_worktree_create",
   "coding_worktree_list",
   "coding_worktree_discard",
+  "coding_worktree_promote",
   "build_plugin",
   "install_plugin",
 ]);
@@ -1671,6 +1697,7 @@ const CODING_WRITE_TOOLS = new Set([
   "scaffold_plugin",
   "coding_worktree_create",
   "coding_worktree_discard",
+  "coding_worktree_promote",
   "build_plugin",
   "install_plugin",
 ]);
