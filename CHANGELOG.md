@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin UI under production CSP** - allowlist the Vite import-map sha256 at
+  container start and permit `'unsafe-eval'` so plugin web bundles (react shims
+  + AJV) load instead of falling back to Empty placeholder
+
 ### Changed
 
 - **Production image on glibc (#142)** - `deploy/Dockerfile` uses
