@@ -1616,6 +1616,9 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "revert_file",
   "delete_file",
   "run_terminal",
+  "scaffold_plugin",
+  "build_plugin",
+  "install_plugin",
 ]);
 
 const CODING_WRITE_TOOLS = new Set([
@@ -1625,6 +1628,9 @@ const CODING_WRITE_TOOLS = new Set([
   "delete_file",
   "run_terminal",
   "revert_file",
+  "scaffold_plugin",
+  "build_plugin",
+  "install_plugin",
 ]);
 
 export function isCodingWriteTool(name: string): boolean {

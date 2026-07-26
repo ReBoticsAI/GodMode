@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { config } from "../../config.js";
 import { resolveRepoPath } from "./fs-tools.js";
 
 export interface DiagnosticItem {
@@ -40,7 +39,7 @@ export function readDiagnostics(opts?: {
   timeoutMs?: number;
 }): Promise<{ ok: boolean; diagnostics: DiagnosticItem[]; raw: string }> {
   const cwd = resolveRepoPath(opts?.cwd?.trim() || ".", { tenantId: opts?.tenantId });
-  const root = config.repoRoot;
+  const root = cwd;
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TSC_TIMEOUT_MS;
 
   return new Promise((resolve) => {

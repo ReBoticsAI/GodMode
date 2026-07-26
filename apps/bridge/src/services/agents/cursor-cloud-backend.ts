@@ -17,6 +17,7 @@ import {
   resolveMcpFromWorkspace,
   type CursorSdkMcpServers,
 } from "../coding/cursor-mcp-config.js";
+import { resolveCodingRoot } from "../coding/fs-tools.js";
 
 /** Only project rules; never user/team/mdm/all (Bridge/SaaS isolation). */
 export type CursorProjectSettingSource = "project";
@@ -498,7 +499,11 @@ export class CursorCloudBackend implements AgentBackend {
     }
 
     const cfg = (req.agent.config ?? {}) as AgentCursorCloudConfig;
-    const cwd = cfg.workspace?.trim() || config.repoRoot;
+    const workspaceCfg = cfg.workspace?.trim() || undefined;
+    const cwd = resolveCodingRoot({
+      tenantId: req.toolCtx.tenantId,
+      root: workspaceCfg,
+    });
     const chatKey = `godmode-${req.toolCtx.chatId ?? req.agent.id}`;
     const chatMode = req.chatMode ?? "agent";
     const toolCtx: ToolExecContext = {
