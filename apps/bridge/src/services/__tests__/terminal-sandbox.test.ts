@@ -66,6 +66,34 @@ describe("buildBubblewrapArgs", () => {
     expect(args).not.toContain("--unshare-net");
   });
 
+  it("allowlist omits --unshare-net and forces proxy env", () => {
+    const root = tempDir("gm-bwrap-allow-");
+    const args = buildBubblewrapArgs({
+      codingRoot: root,
+      cwd: root,
+      command: "true",
+      net: "allowlist",
+      proxyUrl: "http://127.0.0.1:18080",
+    });
+    expect(args).not.toContain("--unshare-net");
+    const httpsIdx = args.indexOf("HTTPS_PROXY");
+    expect(httpsIdx).toBeGreaterThan(0);
+    expect(args[httpsIdx + 1]).toBe("http://127.0.0.1:18080");
+    expect(args).toContain("npm_config_https_proxy");
+  });
+
+  it("allowlist without proxyUrl fails closed", () => {
+    const root = tempDir("gm-bwrap-allow-miss-");
+    expect(() =>
+      buildBubblewrapArgs({
+        codingRoot: root,
+        cwd: root,
+        command: "true",
+        net: "allowlist",
+      })
+    ).toThrow(/proxy URL/i);
+  });
+
   it("rejects cwd outside coding root", () => {
     const root = tempDir("gm-bwrap-esc-");
     const other = tempDir("gm-bwrap-other-");

@@ -227,13 +227,22 @@ export const config = {
   /**
    * Network inside the terminal sandbox.
    * - none: --unshare-net (SaaS + hub default)
-   * - shared: host network visible (FS jail still on); set CODING_TERMINAL_NET=shared for npm/git
+   * - allowlist: FS jail without --unshare-net; Bridge CONNECT proxy enforces host allowlist (prefer over shared)
+   * - shared: full host network (FS jail still on)
    */
-  codingTerminalNet: ((): "none" | "shared" => {
+  codingTerminalNet: ((): "none" | "shared" | "allowlist" => {
     const raw = (process.env.CODING_TERMINAL_NET ?? "").trim().toLowerCase();
-    if (raw === "shared" || raw === "none") return raw;
+    if (raw === "shared" || raw === "none" || raw === "allowlist") return raw;
     return "none";
   })(),
+  /**
+   * Hostnames for CODING_TERMINAL_NET=allowlist (comma-separated).
+   * Empty uses built-in npm/GitHub defaults when mode is allowlist.
+   */
+  codingTerminalEgressHosts: (process.env.CODING_TERMINAL_EGRESS_HOSTS ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
   federation: {
     /** Shared secret peers present to this Bridge's federation API (empty = derive from share grants only). */
     token: process.env.FEDERATION_TOKEN ?? "",
