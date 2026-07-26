@@ -106,6 +106,12 @@ When Intelligence asks to run `edit_file`, `write_file`, or `apply_patch` and co
 
 After a successful TypeScript/TSX write, the tool result also includes `verification` from a bounded `tsc --noEmit` (skipped for non-TS paths or when no `tsconfig` is present). The chat tool card shows a Diagnostics block so the model sees type errors in the same turn without a separate `read_diagnostics` call.
 
+## Coding workspace UI
+
+Sidebar **Coding** (`/coding`) is a human file tree and editor over the same sandboxed coding root agents use (`resolveCodingRoot`: local repo, or hub/SaaS `tenant-workspaces/<tenantId>/`, or the agent's **Coding workspace** path). Creates, saves, renames, and deletes go through `/api/ai/coding/*` and are audited. Paths cannot escape the root.
+
+On SaaS, the UI and those APIs stay off unless `PLATFORM_SAAS_ALLOW_CODE_ACCESS=true` (same gate as agent `codeAccess`). Interactive shell is separate (issue #148) and stays blocked until tenant sandbox isolation (#112).
+
 ## CLI login ≠ SDK billing key
 
 `cursor-agent login` authenticates the **CLI** (`cursor` backend / contractors). Intelligence **Cursor Cloud** requires the dashboard **User API key** in Vault (or `CURSOR_API_KEY`). CLI login alone does not enable `cursor_cloud`.

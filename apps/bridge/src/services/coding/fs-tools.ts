@@ -73,12 +73,17 @@ export function readFileRaw(opts: {
   return fs.readFileSync(abs, "utf8");
 }
 
-export function writeFile(opts: { path: string; content: string; tenantId?: string | null }): {
+export function writeFile(opts: {
+  path: string;
+  content: string;
+  tenantId?: string | null;
+  root?: string;
+}): {
   path: string;
   bytes: number;
   created: boolean;
 } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
   const created = !fs.existsSync(abs);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const content = String(opts.content ?? "");
@@ -110,8 +115,12 @@ export function editFile(opts: {
   };
 }
 
-export function deleteFile(opts: { path: string; tenantId?: string | null }): { path: string; deleted: boolean } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+export function deleteFile(opts: {
+  path: string;
+  tenantId?: string | null;
+  root?: string;
+}): { path: string; deleted: boolean } {
+  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
   if (!fs.existsSync(abs)) return { path: opts.path, deleted: false };
   const stat = fs.statSync(abs);
   if (stat.isDirectory()) throw new Error("Cannot delete a directory with delete_file");
@@ -119,13 +128,66 @@ export function deleteFile(opts: { path: string; tenantId?: string | null }): { 
   return { path: opts.path, deleted: true };
 }
 
+/** Delete a file, or an empty directory (no recursive wipe). */
+export function deletePath(opts: {
+  path: string;
+  tenantId?: string | null;
+  root?: string;
+}): { path: string; deleted: boolean; type: "file" | "dir" | null } {
+  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+  if (!fs.existsSync(abs)) return { path: opts.path, deleted: false, type: null };
+  const stat = fs.statSync(abs);
+  if (stat.isDirectory()) {
+    const kids = fs.readdirSync(abs).filter((n) => n !== "." && n !== "..");
+    if (kids.length > 0) {
+      throw new Error(`Directory is not empty: ${opts.path}`);
+    }
+    fs.rmdirSync(abs);
+    return { path: opts.path, deleted: true, type: "dir" };
+  }
+  fs.unlinkSync(abs);
+  return { path: opts.path, deleted: true, type: "file" };
+}
+
+export function mkdirPath(opts: {
+  path: string;
+  tenantId?: string | null;
+  root?: string;
+}): { path: string; created: boolean } {
+  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+  if (fs.existsSync(abs)) {
+    const stat = fs.statSync(abs);
+    if (!stat.isDirectory()) throw new Error(`Not a directory: ${opts.path}`);
+    return { path: opts.path, created: false };
+  }
+  fs.mkdirSync(abs, { recursive: true });
+  return { path: opts.path, created: true };
+}
+
+export function renamePath(opts: {
+  from: string;
+  to: string;
+  tenantId?: string | null;
+  root?: string;
+}): { from: string; to: string } {
+  const rootOpts = { tenantId: opts.tenantId, root: opts.root };
+  const fromAbs = resolveRepoPath(opts.from, rootOpts);
+  const toAbs = resolveRepoPath(opts.to, rootOpts);
+  if (!fs.existsSync(fromAbs)) throw new Error(`Path not found: ${opts.from}`);
+  if (fs.existsSync(toAbs)) throw new Error(`Destination already exists: ${opts.to}`);
+  fs.mkdirSync(path.dirname(toAbs), { recursive: true });
+  fs.renameSync(fromAbs, toAbs);
+  return { from: opts.from, to: opts.to };
+}
+
 export function listDir(opts: {
   path?: string;
   recursive?: boolean;
   tenantId?: string | null;
+  root?: string;
 }): { path: string; entries: Array<{ name: string; type: "file" | "dir" }> } {
   const rel = opts.path?.trim() || ".";
-  const abs = resolveRepoPath(rel, { tenantId: opts.tenantId });
+  const abs = resolveRepoPath(rel, { tenantId: opts.tenantId, root: opts.root });
   if (!fs.existsSync(abs)) throw new Error(`Directory not found: ${rel}`);
   const entries: Array<{ name: string; type: "file" | "dir" }> = [];
   const walk = (dir: string, prefix: string) => {
@@ -158,8 +220,12 @@ export function globFiles(opts: {
   pattern: string;
   cwd?: string;
   tenantId?: string | null;
+  root?: string;
 }): { pattern: string; matches: string[] } {
-  const root = resolveRepoPath(opts.cwd?.trim() || ".", { tenantId: opts.tenantId });
+  const root = resolveRepoPath(opts.cwd?.trim() || ".", {
+    tenantId: opts.tenantId,
+    root: opts.root,
+  });
   const re = globToRegExp(opts.pattern.replace(/\\/g, "/"));
   const matches: string[] = [];
   const walk = (dir: string, prefix: string) => {
