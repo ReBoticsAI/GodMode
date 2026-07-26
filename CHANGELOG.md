@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Hardened plugin CSP (#145)** - drop `'unsafe-eval'` from production
+  `script-src`; plugin web bundles must precompile validators (see DEPLOY.md)
 - **Plugin UI under production CSP** - allowlist the Vite import-map sha256 at
-  container start and permit `'unsafe-eval'` so plugin web bundles (react shims
-  + AJV) load instead of falling back to Empty placeholder
+  container start so plugin web bundles (react shims) load instead of falling
+  back to Empty placeholder
 
 ### Changed
 
