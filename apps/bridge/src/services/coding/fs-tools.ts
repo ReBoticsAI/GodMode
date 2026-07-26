@@ -7,25 +7,87 @@ import { ensureTenantWorkspaceDir } from "../personal-os-seed.js";
 const DEFAULT_READ_LIMIT = 2000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
 
-export type FsRootOpts = { tenantId?: string | null; root?: string };
+export type FsRootOpts = {
+  tenantId?: string | null;
+  /** Optional workspace under the tenant/local coding root (agent config.workspace). */
+  root?: string;
+  /** Force hub/client isolation semantics (tests). */
+  isolatedDeployment?: boolean;
+  /** Override tenant-workspaces parent directory (tests). */
+  tenantWorkspacesDir?: string;
+};
 
-export function resolveCodingRoot(opts?: FsRootOpts): string {
-  if (opts?.root) return opts.root;
-  if (opts?.tenantId && (config.isHub || config.isClient)) {
-    return ensureTenantWorkspaceDir(opts.tenantId);
+function isIsolatedDeployment(opts?: FsRootOpts): boolean {
+  return opts?.isolatedDeployment ?? (config.isHub || config.isClient);
+}
+
+/** Resolve candidate under base; reject escapes (absolute or ..). */
+export function resolveUnderBase(base: string, candidate: string): string {
+  const baseAbs = path.resolve(base);
+  const trimmed = candidate.replace(/\\/g, "/").trim();
+  if (!trimmed) return baseAbs;
+  const target = path.isAbsolute(trimmed)
+    ? path.resolve(trimmed)
+    : path.resolve(baseAbs, trimmed);
+  const rel = path.relative(baseAbs, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`Path escapes coding root: ${candidate}`);
   }
-  return config.repoRoot;
+  return target;
+}
+
+function tenantWorkspaceRoot(tenantId: string, opts?: FsRootOpts): string {
+  const id = tenantId.trim();
+  if (!id) throw new Error("tenantId required");
+  if (opts?.tenantWorkspacesDir?.trim()) {
+    const dir = path.join(path.resolve(opts.tenantWorkspacesDir.trim()), id);
+    fs.mkdirSync(dir, { recursive: true });
+    return path.resolve(dir);
+  }
+  return path.resolve(ensureTenantWorkspaceDir(id));
+}
+
+/**
+ * Coding root for FS/terminal tools.
+ * Hub/client: always `{tenantWorkspaces}/<tenantId>/` (optional workspace subpath).
+ * Local: `config.repoRoot` or explicit `root` (tests / operator override).
+ */
+export function resolveCodingRoot(opts?: FsRootOpts): string {
+  if (isIsolatedDeployment(opts)) {
+    const tenantId = String(opts?.tenantId ?? "").trim();
+    if (!tenantId) {
+      throw new Error(
+        "tenantId required to resolve coding root on hub/client"
+      );
+    }
+    const tenantRoot = tenantWorkspaceRoot(tenantId, opts);
+    if (opts?.root?.trim()) {
+      return resolveUnderBase(tenantRoot, opts.root.trim());
+    }
+    return tenantRoot;
+  }
+  if (opts?.root?.trim()) {
+    return path.resolve(opts.root.trim());
+  }
+  return path.resolve(config.repoRoot);
+}
+
+/**
+ * Ensure absOrRel is inside the tenant/local coding base (ignores agent workspace override).
+ * Returns the resolved absolute path.
+ */
+export function assertWithinCodingRoot(
+  absOrRel: string,
+  opts?: FsRootOpts
+): string {
+  const base = resolveCodingRoot({ ...opts, root: undefined });
+  return resolveUnderBase(base, absOrRel);
 }
 
 /** Resolve a user path under the coding root; reject escapes. */
 export function resolveRepoPath(userPath: string, opts?: FsRootOpts): string {
   const base = path.resolve(resolveCodingRoot(opts));
-  const target = path.resolve(base, userPath.replace(/\\/g, "/"));
-  const rel = path.relative(base, target);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    throw new Error(`Path escapes repository root: ${userPath}`);
-  }
-  return target;
+  return resolveUnderBase(base, userPath.replace(/\\/g, "/"));
 }
 
 function budgetText(text: string, maxBytes = MAX_OUTPUT_BYTES): string {
@@ -38,9 +100,8 @@ export function readFile(opts: {
   path: string;
   offset?: number;
   limit?: number;
-  tenantId?: string | null;
-}): { path: string; content: string; totalLines: number; startLine: number } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+} & FsRootOpts): { path: string; content: string; totalLines: number; startLine: number } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) throw new Error(`File not found: ${opts.path}`);
   const stat = fs.statSync(abs);
   if (!stat.isFile()) throw new Error(`Not a file: ${opts.path}`);
@@ -62,13 +123,8 @@ export function readFile(opts: {
 
 export function readFileRaw(opts: {
   path: string;
-  tenantId?: string | null;
-  root?: string;
-}): string {
-  const abs = resolveRepoPath(opts.path, {
-    tenantId: opts.tenantId,
-    root: opts.root,
-  });
+} & FsRootOpts): string {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) return "";
   return fs.readFileSync(abs, "utf8");
 }
@@ -76,14 +132,12 @@ export function readFileRaw(opts: {
 export function writeFile(opts: {
   path: string;
   content: string;
-  tenantId?: string | null;
-  root?: string;
-}): {
+} & FsRootOpts): {
   path: string;
   bytes: number;
   created: boolean;
 } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+  const abs = resolveRepoPath(opts.path, opts);
   const created = !fs.existsSync(abs);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const content = String(opts.content ?? "");
@@ -95,9 +149,8 @@ export function editFile(opts: {
   path: string;
   old_string: string;
   new_string: string;
-  tenantId?: string | null;
-}): { path: string; replacements: number; bytes: number } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+} & FsRootOpts): { path: string; replacements: number; bytes: number } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) throw new Error(`File not found: ${opts.path}`);
   const oldStr = String(opts.old_string ?? "");
   const newStr = String(opts.new_string ?? "");
@@ -117,10 +170,8 @@ export function editFile(opts: {
 
 export function deleteFile(opts: {
   path: string;
-  tenantId?: string | null;
-  root?: string;
-}): { path: string; deleted: boolean } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+} & FsRootOpts): { path: string; deleted: boolean } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) return { path: opts.path, deleted: false };
   const stat = fs.statSync(abs);
   if (stat.isDirectory()) throw new Error("Cannot delete a directory with delete_file");
@@ -131,10 +182,8 @@ export function deleteFile(opts: {
 /** Delete a file, or an empty directory (no recursive wipe). */
 export function deletePath(opts: {
   path: string;
-  tenantId?: string | null;
-  root?: string;
-}): { path: string; deleted: boolean; type: "file" | "dir" | null } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+} & FsRootOpts): { path: string; deleted: boolean; type: "file" | "dir" | null } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) return { path: opts.path, deleted: false, type: null };
   const stat = fs.statSync(abs);
   if (stat.isDirectory()) {
@@ -151,10 +200,8 @@ export function deletePath(opts: {
 
 export function mkdirPath(opts: {
   path: string;
-  tenantId?: string | null;
-  root?: string;
-}): { path: string; created: boolean } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId, root: opts.root });
+} & FsRootOpts): { path: string; created: boolean } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (fs.existsSync(abs)) {
     const stat = fs.statSync(abs);
     if (!stat.isDirectory()) throw new Error(`Not a directory: ${opts.path}`);
@@ -167,12 +214,9 @@ export function mkdirPath(opts: {
 export function renamePath(opts: {
   from: string;
   to: string;
-  tenantId?: string | null;
-  root?: string;
-}): { from: string; to: string } {
-  const rootOpts = { tenantId: opts.tenantId, root: opts.root };
-  const fromAbs = resolveRepoPath(opts.from, rootOpts);
-  const toAbs = resolveRepoPath(opts.to, rootOpts);
+} & FsRootOpts): { from: string; to: string } {
+  const fromAbs = resolveRepoPath(opts.from, opts);
+  const toAbs = resolveRepoPath(opts.to, opts);
   if (!fs.existsSync(fromAbs)) throw new Error(`Path not found: ${opts.from}`);
   if (fs.existsSync(toAbs)) throw new Error(`Destination already exists: ${opts.to}`);
   fs.mkdirSync(path.dirname(toAbs), { recursive: true });
@@ -183,11 +227,9 @@ export function renamePath(opts: {
 export function listDir(opts: {
   path?: string;
   recursive?: boolean;
-  tenantId?: string | null;
-  root?: string;
-}): { path: string; entries: Array<{ name: string; type: "file" | "dir" }> } {
+} & FsRootOpts): { path: string; entries: Array<{ name: string; type: "file" | "dir" }> } {
   const rel = opts.path?.trim() || ".";
-  const abs = resolveRepoPath(rel, { tenantId: opts.tenantId, root: opts.root });
+  const abs = resolveRepoPath(rel, opts);
   if (!fs.existsSync(abs)) throw new Error(`Directory not found: ${rel}`);
   const entries: Array<{ name: string; type: "file" | "dir" }> = [];
   const walk = (dir: string, prefix: string) => {
@@ -219,13 +261,8 @@ function globToRegExp(pattern: string): RegExp {
 export function globFiles(opts: {
   pattern: string;
   cwd?: string;
-  tenantId?: string | null;
-  root?: string;
-}): { pattern: string; matches: string[] } {
-  const root = resolveRepoPath(opts.cwd?.trim() || ".", {
-    tenantId: opts.tenantId,
-    root: opts.root,
-  });
+} & FsRootOpts): { pattern: string; matches: string[] } {
+  const root = resolveRepoPath(opts.cwd?.trim() || ".", opts);
   const re = globToRegExp(opts.pattern.replace(/\\/g, "/"));
   const matches: string[] = [];
   const walk = (dir: string, prefix: string) => {
@@ -247,9 +284,8 @@ function grepNode(opts: {
   path?: string;
   glob?: string;
   caseInsensitive?: boolean;
-  tenantId?: string | null;
-}): string {
-  const root = resolveRepoPath(opts.path?.trim() || ".", { tenantId: opts.tenantId });
+} & FsRootOpts): string {
+  const root = resolveRepoPath(opts.path?.trim() || ".", opts);
   const flags = opts.caseInsensitive ? "i" : "";
   const re = new RegExp(opts.pattern, flags);
   const globRe = opts.glob ? globToRegExp(opts.glob) : null;
@@ -505,9 +541,8 @@ export function previewWriteToolDiff(
 export function applyPatch(opts: {
   path: string;
   patch: string;
-  tenantId?: string | null;
-}): { path: string; diff: string; bytes: number } {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+} & FsRootOpts): { path: string; diff: string; bytes: number } {
+  const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) throw new Error(`File not found: ${opts.path}`);
   const original = fs.readFileSync(abs, "utf8");
   const next = applyPatchToContent(original, opts.patch);
@@ -519,12 +554,12 @@ export function applyPatch(opts: {
 /** Revert a file to git HEAD (best-effort). */
 export function revertFile(opts: {
   path: string;
-  tenantId?: string | null;
-}): Promise<{ path: string; reverted: boolean; output: string }> {
-  const abs = resolveRepoPath(opts.path, { tenantId: opts.tenantId });
+} & FsRootOpts): Promise<{ path: string; reverted: boolean; output: string }> {
+  const abs = resolveRepoPath(opts.path, opts);
+  const codingRoot = resolveCodingRoot(opts);
   return new Promise((resolve, reject) => {
     const proc = spawn("git", ["checkout", "HEAD", "--", abs], {
-      cwd: config.repoRoot,
+      cwd: codingRoot,
       shell: process.platform === "win32",
       windowsHide: true,
     });
