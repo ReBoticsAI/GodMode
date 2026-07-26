@@ -61,6 +61,9 @@ export function probeBubblewrap(opts?: { force?: boolean }): {
         "--symlink",
         "usr/lib",
         "/lib",
+        "--ro-bind-try",
+        "/lib64",
+        "/lib64",
         "--dev",
         "/dev",
         "--proc",
@@ -68,7 +71,7 @@ export function probeBubblewrap(opts?: { force?: boolean }): {
         "--tmpfs",
         "/tmp",
         "--",
-        "/bin/true",
+        "/usr/bin/true",
       ],
       { encoding: "utf8", timeout: 10_000, windowsHide: true }
     );
