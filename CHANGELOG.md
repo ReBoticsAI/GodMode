@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Production image on glibc (#142)** - `deploy/Dockerfile` uses
+  `node:22-bookworm-slim` instead of Alpine so native `duckdb` /
+  `better-sqlite3` load in hub/client containers; plugin native deps must
+  match this image ABI
+
 ### Added
 
 - **Platform analytics DuckDB (#140)** - core `TimeseriesStore` is a thin
