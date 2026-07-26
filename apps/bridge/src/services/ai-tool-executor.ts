@@ -84,6 +84,7 @@ import {
   computeUnifiedDiff,
   revertFile,
   readFileRaw,
+  assertWithinCodingRoot,
 } from "./coding/fs-tools.js";
 import { runTerminal } from "./coding/terminal-service.js";
 import { codebaseSearch } from "./coding/codebase-search.js";
@@ -2613,10 +2614,13 @@ export async function executeTool(
       if (!ctx.tenantId) throw new Error("tenant required");
       const pluginId = String(args.pluginId ?? "").trim();
       if (!pluginId) throw new Error("pluginId required");
-      const pluginRoot =
+      const rawRoot =
         typeof args.pluginRoot === "string" && args.pluginRoot.trim()
-          ? path.resolve(args.pluginRoot.trim())
+          ? args.pluginRoot.trim()
           : defaultPluginRoot(pluginId, { tenantId: ctx.tenantId });
+      const pluginRoot = assertWithinCodingRoot(rawRoot, {
+        tenantId: ctx.tenantId,
+      });
       const result = await dispatchKernelTool(ctx, "run_record_action", {
         objectType: "CatalogInstall",
         id: "",
@@ -2631,13 +2635,19 @@ export async function executeTool(
     }
 
     case "build_plugin": {
-      const pluginRoot =
+      const rawRoot =
         typeof args.pluginRoot === "string" && args.pluginRoot.trim()
-          ? path.resolve(args.pluginRoot.trim())
+          ? args.pluginRoot.trim()
           : args.pluginId
             ? defaultPluginRoot(String(args.pluginId), { tenantId: ctx.tenantId })
             : "";
-      if (!pluginRoot) throw new Error("pluginRoot or pluginId required");
+      if (!rawRoot) throw new Error("pluginRoot or pluginId required");
+      if (!ctx.tenantId && (config.isHub || config.isClient)) {
+        throw new Error("tenant required for build_plugin on hub/client");
+      }
+      const pluginRoot = assertWithinCodingRoot(rawRoot, {
+        tenantId: ctx.tenantId,
+      });
       const built = await buildPluginWithEsbuild(pluginRoot);
       return {
         ...built,

@@ -1,7 +1,6 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { config } from "../../config.js";
-import { resolveRepoPath } from "./fs-tools.js";
+import { resolveCodingRoot, resolveRepoPath } from "./fs-tools.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512 * 1024;
@@ -12,6 +11,7 @@ export interface RunTerminalOpts {
   timeoutMs?: number;
   abortSignal?: AbortSignal;
   tenantId?: string | null;
+  root?: string;
   /** Stream stdout/stderr chunks live (SSE terminal_output). */
   onOutput?: (chunk: { stream: "stdout" | "stderr"; text: string }) => void;
 }
@@ -35,8 +35,10 @@ function budget(text: string): string {
 export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
   const command = String(opts.command ?? "").trim();
   if (!command) throw new Error("command required");
+  const rootOpts = { tenantId: opts.tenantId, root: opts.root };
   const cwdRel = opts.cwd?.trim() || ".";
-  const cwd = resolveRepoPath(cwdRel, { tenantId: opts.tenantId });
+  const cwd = resolveRepoPath(cwdRel, rootOpts);
+  const codingRoot = resolveCodingRoot(rootOpts);
   const timeoutMs = Math.min(
     Math.max(Number(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS), 1000),
     600_000
@@ -97,7 +99,7 @@ export function runTerminal(opts: RunTerminalOpts): Promise<RunTerminalResult> {
       opts.abortSignal?.removeEventListener("abort", onAbort);
       resolve({
         command,
-        cwd: path.relative(config.repoRoot, cwd) || ".",
+        cwd: path.relative(codingRoot, cwd).replace(/\\/g, "/") || ".",
         exitCode: code,
         signal: signal ?? null,
         stdout: budget(stdout),
