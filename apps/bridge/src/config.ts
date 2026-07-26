@@ -213,6 +213,27 @@ export const config = {
   saasAllowCodeAccess: process.env.PLATFORM_SAAS_ALLOW_CODE_ACCESS === "true",
   /** When saas: block tenant Local plugin path registration unless true */
   saasAllowLocalPlugins: process.env.PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS === "true",
+  /**
+   * Layer 3 terminal FS jail (#112).
+   * - required: hub/client Linux default (fail closed if bubblewrap missing)
+   * - off: local Windows / local Linux default; override with CODING_TERMINAL_SANDBOX=off|required
+   */
+  codingTerminalSandbox: ((): "required" | "off" => {
+    const raw = (process.env.CODING_TERMINAL_SANDBOX ?? "").trim().toLowerCase();
+    if (raw === "required" || raw === "off") return raw;
+    if (process.platform === "win32") return "off";
+    return isHub || deploymentMode === "client" ? "required" : "off";
+  })(),
+  /**
+   * Network inside the terminal sandbox.
+   * - none: --unshare-net (SaaS + hub default)
+   * - shared: host network visible (FS jail still on); set CODING_TERMINAL_NET=shared for npm/git
+   */
+  codingTerminalNet: ((): "none" | "shared" => {
+    const raw = (process.env.CODING_TERMINAL_NET ?? "").trim().toLowerCase();
+    if (raw === "shared" || raw === "none") return raw;
+    return "none";
+  })(),
   federation: {
     /** Shared secret peers present to this Bridge's federation API (empty = derive from share grants only). */
     token: process.env.FEDERATION_TOKEN ?? "",
