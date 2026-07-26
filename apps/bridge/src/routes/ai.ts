@@ -134,7 +134,7 @@ import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
-import { registerCodingWorkspaceRoutes } from "./coding-workspace.js";
+import { createCodingWorkspaceRouter } from "./coding-workspace.js";
 import {
   collectCursorMcpDiscovery,
   enrichPlatformContextWithMcp,
@@ -275,7 +275,7 @@ export function createAiRouter(
     throw new Error("Tenant context required");
   };
   router.use(requireEditorForMutation);
-  registerCodingWorkspaceRoutes(router, tdb);
+  router.use("/coding", createCodingWorkspaceRouter(tdb));
   const { training, scheduler, bridgePort, queue, embeddings, reflection, memoryMaintenance, bus } =
     deps;
   const datasetBuilderFor = (req: Request) => new AiDatasetBuilder(tdb(req));

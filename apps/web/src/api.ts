@@ -2005,11 +2005,13 @@ export const renameCodingPath = (
     body: JSON.stringify({ from, to, agentId }),
   });
 
-export const deleteCodingPath = (path: string, agentId?: string) =>
-  api<{ path: string; deleted: boolean; type: "file" | "dir" | null }>(
-    `/ai/coding/file${codingQs(agentId, { path })}`,
+export const deleteCodingPath = (path: string, agentId?: string) => {
+  const qs = codingQs(agentId, { path });
+  return api<{ path: string; deleted: boolean; type: "file" | "dir" | null }>(
+    `/ai/coding/file${qs}`,
     { method: "DELETE" }
   );
+};
 
 export const enqueueAiJob = (body: {
   prompt?: string;
