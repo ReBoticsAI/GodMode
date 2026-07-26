@@ -6,8 +6,9 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { config } from "../../config.js";
+import { resolveEgressAllowlist } from "./terminal-egress-proxy.js";
 
-export type CodingTerminalNet = "none" | "shared";
+export type CodingTerminalNet = "none" | "shared" | "allowlist";
 
 export function requiresTerminalSandbox(opts?: {
   sandboxMode?: "required" | "off";
@@ -21,6 +22,14 @@ export function codingTerminalNetPolicy(opts?: {
   net?: CodingTerminalNet;
 }): CodingTerminalNet {
   return opts?.net ?? config.codingTerminalNet;
+}
+
+export function codingTerminalEgressHosts(opts?: {
+  hosts?: string[];
+}): string[] {
+  return resolveEgressAllowlist(
+    opts?.hosts ?? config.codingTerminalEgressHosts
+  );
 }
 
 let cachedProbe: { ok: boolean; version?: string; error?: string } | null = null;
@@ -113,12 +122,19 @@ function pushRoBindTry(args: string[], hostPath: string): void {
 /**
  * Build bwrap argv (without the leading `bwrap` binary name).
  * Mounts codingRoot at the same host path (rw) so relative tooling stays sane.
+ *
+ * Network:
+ * - none: --unshare-net
+ * - shared: host network
+ * - allowlist: host network + forced HTTP(S)_PROXY to Bridge CONNECT proxy (no --unshare-net)
  */
 export function buildBubblewrapArgs(opts: {
   codingRoot: string;
   cwd: string;
   net?: CodingTerminalNet;
   command: string;
+  /** Required when net=allowlist (e.g. http://127.0.0.1:PORT). */
+  proxyUrl?: string;
 }): string[] {
   const codingRoot = path.resolve(opts.codingRoot);
   const cwd = path.resolve(opts.cwd);
@@ -127,6 +143,15 @@ export function buildBubblewrapArgs(opts: {
     throw new Error("Terminal cwd escapes coding root");
   }
   const net = codingTerminalNetPolicy({ net: opts.net });
+  if (net === "allowlist") {
+    const url = String(opts.proxyUrl ?? "").trim();
+    if (!url) {
+      throw new Error(
+        "CODING_TERMINAL_NET=allowlist requires a running Bridge egress proxy URL"
+      );
+    }
+  }
+
   const args: string[] = [
     "--die-with-parent",
     "--unshare-pid",
@@ -175,12 +200,28 @@ export function buildBubblewrapArgs(opts: {
     process.env.LANG || "C.UTF-8",
     "--setenv",
     "TERM",
-    process.env.TERM || "xterm-256color",
-    "--",
-    "/bin/sh",
-    "-c",
-    opts.command
+    process.env.TERM || "xterm-256color"
   );
+
+  if (net === "allowlist" && opts.proxyUrl) {
+    const proxyUrl = opts.proxyUrl.trim();
+    for (const key of [
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "ALL_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "all_proxy",
+      "npm_config_proxy",
+      "npm_config_https_proxy",
+    ]) {
+      args.push("--setenv", key, proxyUrl);
+    }
+    args.push("--setenv", "NO_PROXY", "");
+    args.push("--setenv", "no_proxy", "");
+  }
+
+  args.push("--", "/bin/sh", "-c", opts.command);
   return args;
 }
 
@@ -227,5 +268,13 @@ export function assertSandboxReadyForTerminal(): void {
     throw new Error(
       `Terminal sandbox required but bubblewrap is unavailable: ${probe.error ?? "unknown"}. Install bubblewrap and ensure user namespaces work inside the container.`
     );
+  }
+  if (codingTerminalNetPolicy() === "allowlist") {
+    const hosts = codingTerminalEgressHosts();
+    if (hosts.length === 0) {
+      throw new Error(
+        "CODING_TERMINAL_NET=allowlist requires a non-empty CODING_TERMINAL_EGRESS_HOSTS allowlist"
+      );
+    }
   }
 }
