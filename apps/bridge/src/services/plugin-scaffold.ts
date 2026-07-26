@@ -9,14 +9,18 @@ export interface ScaffoldRootOpts {
 /**
  * Canonical scaffold location — always under the coding root so edit_file works.
  * - Override: GODMODE_PLUGIN_SCAFFOLD_DIR/<id>
- * - Hub/client: {tenantWorkspace}/plugins/<id>
+ * - Hub/client: {tenantWorkspace}/plugins/<id> (tenantId required)
  * - Local: {repoRoot}/plugins/<id>
  */
 export function pluginScaffoldBase(opts?: ScaffoldRootOpts): string {
   const override = process.env.GODMODE_PLUGIN_SCAFFOLD_DIR?.trim();
   if (override) return override;
-  if (opts?.tenantId && (config.isHub || config.isClient)) {
-    return path.join(tenantWorkspaceDir(opts.tenantId), "plugins");
+  if (config.isHub || config.isClient) {
+    const tenantId = String(opts?.tenantId ?? "").trim();
+    if (!tenantId) {
+      throw new Error("tenantId required for plugin scaffold on hub/client");
+    }
+    return path.join(tenantWorkspaceDir(tenantId), "plugins");
   }
   return path.join(config.repoRoot, "plugins");
 }
