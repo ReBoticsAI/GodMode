@@ -113,6 +113,18 @@ docker compose -f docker-compose.client.yml up -d
 
 Open http://localhost:8080. Sign in with email and password. Workspace data stays on your machine; credits and marketplace listings come from the hub.
 
+## Image and native addons
+
+The production image ([`deploy/Dockerfile`](deploy/Dockerfile)) is
+`node:22-bookworm-slim` (**glibc**), not Alpine. Core `duckdb` (platform
+analytics) and `better-sqlite3` ship as glibc natives built in-image.
+
+Marketplace Local plugins load **in-process** in that container. If a plugin
+depends on native modules (for example its own DuckDB), install or rebuild
+those deps **against this image** (CI job or
+`docker run --rm -v <plugin>:/plugin <godmode-image> npm ci`). Do not treat
+host `npm install` on a different libc as the source of truth for Docker hubs.
+
 ## Data persistence
 
 Both compose files mount `PLATFORM_DATA_DIR=/data` (SQLite tenants, core DB, tenant sandboxes).
