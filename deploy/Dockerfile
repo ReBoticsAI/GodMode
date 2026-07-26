@@ -16,7 +16,7 @@ FROM node:22-bookworm-slim AS runtime
 ARG GODMODE_VERSION=0.1.0
 ARG GODMODE_COMMIT=unknown
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends nginx \
+  && apt-get install -y --no-install-recommends nginx bubblewrap \
   && rm -rf /var/lib/apt/lists/* \
   && rm -f /etc/nginx/sites-enabled/default
 WORKDIR /app

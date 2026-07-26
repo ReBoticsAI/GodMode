@@ -38,6 +38,8 @@ jobs:
           npm run audit:kernel:strict
           npm run audit:oss
           npm run test:audit
+      - name: Install bubblewrap for Layer 3 terminal sandbox tests
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: Run repository tests
         run: npm test
       - name: Build release inputs
