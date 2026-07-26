@@ -1445,7 +1445,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "scaffold_plugin",
     description:
-      "Create a plugin under plugins/<id> (coding root). Returns pluginRoot + codingPath. Then edit → build_plugin → install_plugin. Requires confirmation.",
+      "Create a plugin under plugins/<id> (active coding root / worktree). Returns pluginRoot + codingPath. Then edit → build_plugin → install_plugin. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1456,6 +1456,43 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         departments: { type: "array", items: { type: "string" } },
       },
       required: ["id", "name"],
+    },
+  },
+  {
+    name: "coding_worktree_create",
+    description:
+      "Create a Bridge-owned git worktree under .worktrees/<slug> inside the tenant coding root and set agent.config.workspace to it so subsequent coding tools edit the worktree. Requires confirmation.",
+    mode: "confirm",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        slug: { type: "string", description: "Short kebab-case worktree name" },
+        name: { type: "string", description: "Alias for slug" },
+      },
+    },
+  },
+  {
+    name: "coding_worktree_list",
+    description: "List Bridge-owned coding worktrees under .worktrees/ for this tenant.",
+    mode: "auto",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "coding_worktree_discard",
+    description:
+      "Remove a Bridge-owned coding worktree and clear agent.config.workspace if it pointed at that path. Does not merge changes into the live tenant tree. Requires confirmation.",
+    mode: "confirm",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        workspace: {
+          type: "string",
+          description: "Relative path e.g. .worktrees/my-feature",
+        },
+      },
     },
   },
   {
@@ -1617,6 +1654,9 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "delete_file",
   "run_terminal",
   "scaffold_plugin",
+  "coding_worktree_create",
+  "coding_worktree_list",
+  "coding_worktree_discard",
   "build_plugin",
   "install_plugin",
 ]);
@@ -1629,6 +1669,8 @@ const CODING_WRITE_TOOLS = new Set([
   "run_terminal",
   "revert_file",
   "scaffold_plugin",
+  "coding_worktree_create",
+  "coding_worktree_discard",
   "build_plugin",
   "install_plugin",
 ]);
