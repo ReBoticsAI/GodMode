@@ -134,9 +134,10 @@ resolve shared host modules (`react`, `@godmode/web-host`, …) through an
 - Vite writes `dist/.importmap-csp-hash` at build time
 - `deploy/docker-entrypoint.sh` injects `'sha256-…'` into nginx `script-src`
 
-`script-src` also allows `'unsafe-eval'` so plugin validators that use AJV
-(or similar `new Function` compilers) can load. Prefer precompiled schemas in
-plugins when you can; the eval allowance is for host compatibility.
+**Contract for plugin authors:** browser bundles must run without
+`'unsafe-eval'`. Do not call `ajv.compile`, `new Function`, or `eval` at
+runtime in web code. Precompile validators (AJV standalone) or validate on
+the bridge. First-party example: Sierra `playbook-schema` codegen.
 
 ## Data persistence
 
