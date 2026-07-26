@@ -25,7 +25,7 @@ export {
 } from "./agents/subagent-bounds.js";
 import { runCursorAgent } from "./agents/cursor-backend.js";
 import { buildContractorContextBundle } from "./contractor-context.js";
-import { createAgent, getAgent, listAgents } from "./agents/agents-db.js";
+import { createAgent, getAgent, listAgents, updateAgent } from "./agents/agents-db.js";
 import { objectTypeAutoToolDefs } from "../kernel/auto-tools.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
 import {
@@ -87,6 +87,11 @@ import {
   assertWithinCodingRoot,
 } from "./coding/fs-tools.js";
 import { runTerminal } from "./coding/terminal-service.js";
+import {
+  createTenantWorktree,
+  discardTenantWorktree,
+  listTenantWorktrees,
+} from "./coding/tenant-worktree.js";
 import { codebaseSearch } from "./coding/codebase-search.js";
 import { readDiagnostics, verifyTypeScriptAfterWrite } from "./coding/read-diagnostics.js";
 import { logToolAudit } from "./coding/tool-audit.js";
@@ -899,6 +904,22 @@ function auditCtx(ctx: ToolExecContext) {
 
 function codingTenantId(ctx: ToolExecContext): string | undefined {
   return ctx.tenantId ?? undefined;
+}
+
+/** FS/terminal/scaffold opts: tenant root + optional agent.config.workspace (Layer 2). */
+function codingFsOpts(ctx: ToolExecContext): {
+  tenantId?: string;
+  root?: string;
+} {
+  const tenantId = codingTenantId(ctx);
+  const agentId = ctx.activeAgentId;
+  let root: string | undefined;
+  if (agentId && ctx.db) {
+    const agent = getAgent(ctx.db, agentId);
+    const ws = agent?.config?.workspace;
+    if (typeof ws === "string" && ws.trim()) root = ws.trim();
+  }
+  return { tenantId, root };
 }
 
 function hookScope(ctx: ToolExecContext): HookOwnerScope {
@@ -1992,21 +2013,21 @@ export async function executeTool(
         path: String(args.path ?? ""),
         offset: args.offset != null ? Number(args.offset) : undefined,
         limit: args.limit != null ? Number(args.limit) : undefined,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
 
     case "list_dir":
       return fsListDir({
         path: args.path ? String(args.path) : undefined,
         recursive: args.recursive === true,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
 
     case "glob":
       return globFiles({
         pattern: String(args.pattern ?? ""),
         cwd: args.cwd ? String(args.cwd) : undefined,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
 
     case "grep":
@@ -2015,17 +2036,17 @@ export async function executeTool(
         path: args.path ? String(args.path) : undefined,
         glob: args.glob ? String(args.glob) : undefined,
         caseInsensitive: args.caseInsensitive === true,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
 
     case "write_file": {
       const filePath = String(args.path ?? "");
       const content = String(args.content ?? "");
-      const prior = readFileRaw({ path: filePath, tenantId: codingTenantId(ctx) });
+      const prior = readFileRaw({ path: filePath, ...codingFsOpts(ctx) });
       const res = fsWriteFile({
         path: filePath,
         content,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       const diff = computeUnifiedDiff(prior, content, res.path);
       logToolAudit(ctx.db, {
@@ -2037,7 +2058,7 @@ export async function executeTool(
       });
       const verification = await verifyTypeScriptAfterWrite({
         path: res.path,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       return { ...res, diff, verification };
     }
@@ -2046,14 +2067,14 @@ export async function executeTool(
       const filePath = String(args.path ?? "");
       const oldStr = String(args.old_string ?? "");
       const newStr = String(args.new_string ?? "");
-      const before = readFileRaw({ path: filePath, tenantId: codingTenantId(ctx) });
+      const before = readFileRaw({ path: filePath, ...codingFsOpts(ctx) });
       const res = fsEditFile({
         path: filePath,
         old_string: oldStr,
         new_string: newStr,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
-      const after = readFileRaw({ path: filePath, tenantId: codingTenantId(ctx) });
+      const after = readFileRaw({ path: filePath, ...codingFsOpts(ctx) });
       const diff = computeUnifiedDiff(before, after, res.path);
       logToolAudit(ctx.db, {
         ...auditCtx(ctx),
@@ -2064,13 +2085,13 @@ export async function executeTool(
       });
       const verification = await verifyTypeScriptAfterWrite({
         path: res.path,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       return { ...res, diff, verification };
     }
 
     case "delete_file": {
-      const res = fsDeleteFile({ path: String(args.path ?? ""), tenantId: codingTenantId(ctx) });
+      const res = fsDeleteFile({ path: String(args.path ?? ""), ...codingFsOpts(ctx) });
       logToolAudit(ctx.db, {
         ...auditCtx(ctx),
         action: "delete_file",
@@ -2085,7 +2106,7 @@ export async function executeTool(
         command: String(args.command ?? ""),
         cwd: args.cwd ? String(args.cwd) : undefined,
         timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
         onOutput: (chunk) => {
           ctx.onTerminalOutput?.({
             ...chunk,
@@ -2113,7 +2134,7 @@ export async function executeTool(
         path: args.path ? String(args.path) : undefined,
         glob: args.glob ? String(args.glob) : undefined,
         limit: args.limit != null ? Number(args.limit) : undefined,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
         db: ctx.db,
         embedder: ctx.embedder ?? null,
       });
@@ -2122,7 +2143,7 @@ export async function executeTool(
       const res = applyPatch({
         path: String(args.path ?? ""),
         patch: String(args.patch ?? ""),
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       logToolAudit(ctx.db, {
         ...auditCtx(ctx),
@@ -2133,7 +2154,7 @@ export async function executeTool(
       });
       const verification = await verifyTypeScriptAfterWrite({
         path: res.path,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       return { ...res, verification };
     }
@@ -2141,13 +2162,13 @@ export async function executeTool(
     case "read_diagnostics":
       return readDiagnostics({
         cwd: args.cwd ? String(args.cwd) : undefined,
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
 
     case "revert_file": {
       const res = await revertFile({
         path: String(args.path ?? ""),
-        tenantId: codingTenantId(ctx),
+        ...codingFsOpts(ctx),
       });
       logToolAudit(ctx.db, {
         ...auditCtx(ctx),
@@ -2172,7 +2193,7 @@ export async function executeTool(
             query: q,
             path: args.path ? String(args.path) : undefined,
             glob: args.glob ? String(args.glob) : undefined,
-            tenantId: codingTenantId(ctx),
+            ...codingFsOpts(ctx),
             db: ctx.db,
             embedder: ctx.embedder ?? null,
           });
@@ -2606,8 +2627,65 @@ export async function executeTool(
         departments: Array.isArray(args.departments)
           ? args.departments.map(String)
           : undefined,
+        ...codingFsOpts(ctx),
+      });
+    }
+
+    case "coding_worktree_create": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error("tenant required for coding_worktree_create on hub/client");
+      }
+      const created = createTenantWorktree({
+        slug: String(args.slug ?? args.name ?? ""),
         tenantId: ctx.tenantId,
       });
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const agent = getAgent(ctx.db, agentId);
+      if (agent) {
+        updateAgent(ctx.db, agentId, {
+          config: { ...agent.config, workspace: created.workspace },
+        });
+      }
+      return {
+        ...created,
+        agentId,
+        workspaceSet: Boolean(agent),
+        next: "Coding tools and scaffold_plugin now use this worktree. Call coding_worktree_discard when done (promote/merge UX is a follow-up).",
+      };
+    }
+
+    case "coding_worktree_list": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error("tenant required for coding_worktree_list on hub/client");
+      }
+      return {
+        worktrees: listTenantWorktrees({ tenantId: ctx.tenantId }),
+        activeWorkspace: codingFsOpts(ctx).root ?? null,
+      };
+    }
+
+    case "coding_worktree_discard": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error("tenant required for coding_worktree_discard on hub/client");
+      }
+      const discarded = discardTenantWorktree({
+        slugOrWorkspace: String(args.slug ?? args.workspace ?? ""),
+        tenantId: ctx.tenantId,
+      });
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const agent = getAgent(ctx.db, agentId);
+      let workspaceCleared = false;
+      if (agent) {
+        const ws = typeof agent.config?.workspace === "string" ? agent.config.workspace.trim() : "";
+        const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "");
+        if (ws && norm(ws) === norm(discarded.discarded)) {
+          const next = { ...agent.config };
+          delete next.workspace;
+          updateAgent(ctx.db, agentId, { config: next });
+          workspaceCleared = true;
+        }
+      }
+      return { ...discarded, workspaceCleared, agentId };
     }
 
     case "install_plugin": {
@@ -2617,7 +2695,7 @@ export async function executeTool(
       const rawRoot =
         typeof args.pluginRoot === "string" && args.pluginRoot.trim()
           ? args.pluginRoot.trim()
-          : defaultPluginRoot(pluginId, { tenantId: ctx.tenantId });
+          : defaultPluginRoot(pluginId, codingFsOpts(ctx));
       const pluginRoot = assertWithinCodingRoot(rawRoot, {
         tenantId: ctx.tenantId,
       });
@@ -2639,7 +2717,7 @@ export async function executeTool(
         typeof args.pluginRoot === "string" && args.pluginRoot.trim()
           ? args.pluginRoot.trim()
           : args.pluginId
-            ? defaultPluginRoot(String(args.pluginId), { tenantId: ctx.tenantId })
+            ? defaultPluginRoot(String(args.pluginId), codingFsOpts(ctx))
             : "";
       if (!rawRoot) throw new Error("pluginRoot or pluginId required");
       if (!ctx.tenantId && (config.isHub || config.isClient)) {
