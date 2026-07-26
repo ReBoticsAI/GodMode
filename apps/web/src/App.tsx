@@ -22,6 +22,7 @@ import Notifications from "./pages/Notifications";
 import Support from "./pages/Support";
 import Wiki from "./pages/Wiki";
 import WikiPage from "./pages/WikiPage";
+import CodingWorkspacePage from "./pages/coding/CodingWorkspacePage";
 import RecordListPage from "./pages/records/RecordListPage";
 import RecordFormPage from "./pages/records/RecordFormPage";
 import { Toaster } from "@/components/ui/sonner";
@@ -41,6 +42,7 @@ import {
   NOTIFICATIONS_PATH,
   SUPPORT_PATH,
   WIKI_PATH,
+  CODING_PATH,
   RECORDS_PATH,
   MARKETPLACE_PATH,
   CONTACTS_PATH,
@@ -249,6 +251,7 @@ function AppRoutes({
       <Route path={SUPPORT_PATH} element={<Support />} />
       <Route path={WIKI_PATH} element={<Wiki />} />
       <Route path={`${WIKI_PATH}/:slug`} element={<WikiPage />} />
+      <Route path={CODING_PATH} element={<CodingWorkspacePage />} />
       <Route path={RECORDS_PATH} element={<RecordListPage objectType="StructureNode" />} />
       <Route path={`${RECORDS_PATH}/:objectType`} element={<RecordListPage />} />
       <Route
