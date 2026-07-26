@@ -1939,6 +1939,78 @@ export const fetchRepoMentionPaths = (q = "") =>
     `/ai/coding/mention-paths${q ? `?q=${encodeURIComponent(q)}` : ""}`
   );
 
+export type CodingTreeEntry = {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+};
+
+export type CodingTreeResponse = {
+  path: string;
+  root: string;
+  entries: CodingTreeEntry[];
+  codingDisabled?: boolean;
+};
+
+function codingQs(agentId?: string, extra?: Record<string, string>): string {
+  const params = new URLSearchParams(extra);
+  if (agentId) params.set("agentId", agentId);
+  const s = params.toString();
+  return s ? `?${s}` : "";
+}
+
+export const fetchCodingTree = (path = ".", agentId?: string) =>
+  api<CodingTreeResponse>(
+    `/ai/coding/tree${codingQs(agentId, { path })}`
+  );
+
+export const fetchCodingFile = (path: string, agentId?: string) =>
+  api<{ path: string; content: string }>(
+    `/ai/coding/file${codingQs(agentId, { path })}`
+  );
+
+export const saveCodingFile = (
+  path: string,
+  content: string,
+  agentId?: string
+) =>
+  api<{ path: string; bytes: number; created: boolean }>("/ai/coding/file", {
+    method: "PUT",
+    body: JSON.stringify({ path, content, agentId }),
+  });
+
+export const createCodingFile = (
+  path: string,
+  content = "",
+  agentId?: string
+) =>
+  api<{ path: string; bytes: number; created: boolean }>("/ai/coding/file", {
+    method: "POST",
+    body: JSON.stringify({ path, content, agentId }),
+  });
+
+export const createCodingDir = (path: string, agentId?: string) =>
+  api<{ path: string; created: boolean }>("/ai/coding/mkdir", {
+    method: "POST",
+    body: JSON.stringify({ path, agentId }),
+  });
+
+export const renameCodingPath = (
+  from: string,
+  to: string,
+  agentId?: string
+) =>
+  api<{ from: string; to: string }>("/ai/coding/rename", {
+    method: "POST",
+    body: JSON.stringify({ from, to, agentId }),
+  });
+
+export const deleteCodingPath = (path: string, agentId?: string) =>
+  api<{ path: string; deleted: boolean; type: "file" | "dir" | null }>(
+    `/ai/coding/file${codingQs(agentId, { path })}`,
+    { method: "DELETE" }
+  );
+
 export const enqueueAiJob = (body: {
   prompt?: string;
   workflowId?: string;
