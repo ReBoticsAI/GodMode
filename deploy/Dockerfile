@@ -1,5 +1,7 @@
 # Production image: Bridge API + static Web UI behind nginx
-FROM node:22-alpine AS build
+# glibc base (bookworm) so duckdb / better-sqlite3 native addons load.
+# Alpine (musl) breaks glibc prebuilds (ld-linux-x86-64.so.2 missing).
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/bridge/package.json apps/bridge/
@@ -10,10 +12,13 @@ COPY . .
 RUN npm run build:packages && npm run build -w @godmode/web && npm run build -w @godmode/bridge \
   && npm prune --omit=dev
 
-FROM node:22-alpine AS runtime
+FROM node:22-bookworm-slim AS runtime
 ARG GODMODE_VERSION=0.1.0
 ARG GODMODE_COMMIT=unknown
-RUN apk add --no-cache nginx
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends nginx \
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -f /etc/nginx/sites-enabled/default
 WORKDIR /app
 # Reuse the production dependency tree from the build stage so multi-arch
 # builds never recompile native modules under QEMU.
@@ -23,7 +28,7 @@ COPY --from=build /app/apps/bridge/package.json apps/bridge/
 COPY --from=build /app/packages packages/
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 ENV NODE_ENV=production
 ENV GODMODE_VERSION=${GODMODE_VERSION}
 ENV GODMODE_COMMIT=${GODMODE_COMMIT}
