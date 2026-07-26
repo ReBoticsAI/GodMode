@@ -1,7 +1,7 @@
 /**
  * Human Coding workspace REST API over sandboxed fs-tools (#147).
  */
-import type { Request, Response, Router } from "express";
+import { Router, type Request, type Response } from "express";
 import fs from "node:fs";
 import type { AppDatabase } from "../db.js";
 import { getAgent } from "../services/agents/agents-db.js";
@@ -14,7 +14,7 @@ import {
   renamePath,
   resolveCodingRoot,
   resolveRepoPath,
-  writeFile,
+  writeFile as writeCodingFile,
 } from "../services/coding/fs-tools.js";
 import { logToolAudit } from "../services/coding/tool-audit.js";
 
@@ -80,11 +80,13 @@ function pathExists(
   }
 }
 
-export function registerCodingWorkspaceRoutes(
-  router: Router,
+/** Mounted at `/coding` under the AI router (`/api/ai/coding/*`). */
+export function createCodingWorkspaceRouter(
   tdb: (req: Request) => AppDatabase
-): void {
-  router.get("/coding/tree", (req, res) => {
+): Router {
+  const router = Router();
+
+  router.get("/tree", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -116,7 +118,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.get("/coding/file", (req, res) => {
+  router.get("/file", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -143,7 +145,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.put("/coding/file", (req, res) => {
+  router.put("/file", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -161,7 +163,7 @@ export function registerCodingWorkspaceRoutes(
         });
         return;
       }
-      const result = writeFile({ path, content, tenantId, root });
+      const result = writeCodingFile({ path, content, tenantId, root });
       logToolAudit(db, {
         agentId,
         userId: req.user?.id,
@@ -176,7 +178,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.post("/coding/file", (req, res) => {
+  router.post("/file", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -198,7 +200,7 @@ export function registerCodingWorkspaceRoutes(
         });
         return;
       }
-      const result = writeFile({ path, content, tenantId, root });
+      const result = writeCodingFile({ path, content, tenantId, root });
       logToolAudit(db, {
         agentId,
         userId: req.user?.id,
@@ -213,7 +215,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.post("/coding/mkdir", (req, res) => {
+  router.post("/mkdir", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -238,7 +240,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.post("/coding/rename", (req, res) => {
+  router.post("/rename", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -264,7 +266,7 @@ export function registerCodingWorkspaceRoutes(
     }
   });
 
-  router.delete("/coding/file", (req, res) => {
+  router.delete("/file", (req, res) => {
     if (denyIfBlocked(res)) return;
     try {
       const db = tdb(req);
@@ -287,4 +289,6 @@ export function registerCodingWorkspaceRoutes(
       sendFsError(res, err);
     }
   });
+
+  return router;
 }

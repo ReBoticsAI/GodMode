@@ -274,4 +274,28 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "One-shot bootstrap of coding-root AGENTS.md / .cursor rules and skills into Knowledge; orchestration over Rule/Skill Records, not generic Record CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "ai-coding-workspace-file",
+    methods: ["PUT", "POST", "DELETE"],
+    pathPattern: "/api/ai/coding/file",
+    rationale:
+      "Human Coding workspace file CRUD over sandboxed resolveCodingRoot; filesystem domain, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-coding-workspace-mkdir",
+    methods: ["POST"],
+    pathPattern: "/api/ai/coding/mkdir",
+    rationale:
+      "Human Coding workspace mkdir under sandboxed coding root; filesystem domain, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-coding-workspace-rename",
+    methods: ["POST"],
+    pathPattern: "/api/ai/coding/rename",
+    rationale:
+      "Human Coding workspace rename/move under sandboxed coding root; filesystem domain, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;
