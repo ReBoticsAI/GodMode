@@ -182,3 +182,106 @@ export function discardTenantWorktree(opts: {
   }
   return { discarded: rel, absolutePath: abs };
 }
+
+function resolveWorktreeRel(slugOrWorkspace: string): string {
+  const raw = String(slugOrWorkspace ?? "").trim().replace(/\\/g, "/");
+  if (!raw) throw new Error("slug or workspace path required");
+  const rel = raw.includes("/")
+    ? raw.replace(/^\.\//, "")
+    : worktreeRelativePath(raw);
+  if (!rel.startsWith(`${WORKTREES_DIR}/`)) {
+    throw new Error(`Not a managed worktree path: ${rel}`);
+  }
+  return rel;
+}
+
+function listPluginIdsUnder(root: string): string[] {
+  const pluginsDir = path.join(root, "plugins");
+  if (!fs.existsSync(pluginsDir)) return [];
+  return fs
+    .readdirSync(pluginsDir)
+    .filter((name) => {
+      const abs = path.join(pluginsDir, name);
+      return (
+        fs.statSync(abs).isDirectory() &&
+        fs.existsSync(path.join(abs, "godmode.plugin.json"))
+      );
+    })
+    .sort();
+}
+
+/**
+ * Commit dirty WIP in the worktree (if any), merge `wt/<slug>` into the tenant
+ * main worktree, and return plugin ids present under live `plugins/` after merge.
+ */
+export function promoteTenantWorktree(opts: {
+  slugOrWorkspace: string;
+  tenantId?: string | null;
+  isolatedDeployment?: boolean;
+  tenantWorkspacesDir?: string;
+}): {
+  workspace: string;
+  branch: string;
+  merged: true;
+  pluginIds: string[];
+  committed: boolean;
+} {
+  const rel = resolveWorktreeRel(opts.slugOrWorkspace);
+  const root = tenantBase(opts);
+  const abs = assertWithinCodingRoot(rel, { ...opts, root: undefined });
+  if (!fs.existsSync(abs)) {
+    throw new Error(`Worktree not found: ${rel}`);
+  }
+
+  const branchRes = git(abs, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const branch = branchRes.stdout.trim() || `wt/${path.basename(rel)}`;
+
+  const status = git(abs, ["status", "--porcelain"]);
+  let committed = false;
+  if (status.stdout.trim()) {
+    git(abs, ["add", "-A"]);
+    git(abs, ["commit", "-m", `wip: promote ${rel}`]);
+    committed = true;
+  }
+
+  const beforeMerge = git(root, ["rev-parse", "HEAD"]).stdout.trim();
+  const merge = git(
+    root,
+    ["merge", branch, "--no-ff", "-m", `promote worktree ${path.basename(rel)}`],
+    { allowFail: true }
+  );
+  if (merge.status !== 0) {
+    git(root, ["merge", "--abort"], { allowFail: true });
+    throw new Error(
+      `Promote merge failed (conflicts or git error). Resolve in the tenant root or discard the worktree.\n${(
+        merge.stderr || merge.stdout
+      ).trim()}`
+    );
+  }
+
+  // Plugin ids touched by the merge range, falling back to all live plugins.
+  const diff = git(
+    root,
+    ["diff", "--name-only", `${beforeMerge}..HEAD`, "--", "plugins"],
+    { allowFail: true }
+  );
+  const fromDiff = new Set<string>();
+  for (const line of diff.stdout.split(/\r?\n/)) {
+    const m = line.replace(/\\/g, "/").match(/^plugins\/([^/]+)\//);
+    if (m?.[1]) fromDiff.add(m[1]);
+  }
+  const liveIds = listPluginIdsUnder(root);
+  const pluginIds =
+    fromDiff.size > 0
+      ? liveIds.filter((id) => fromDiff.has(id))
+      : liveIds;
+
+  return {
+    workspace: rel,
+    branch,
+    merged: true,
+    pluginIds,
+    committed,
+  };
+}
+
