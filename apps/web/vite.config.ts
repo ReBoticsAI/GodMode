@@ -148,6 +148,7 @@ function pluginShimPlugin(): Plugin {
 }
 
 function importMapPlugin(): Plugin {
+  let prodImportMapBody: string | null = null;
   return {
     name: "godmode-import-map",
     configureServer(server) {
@@ -170,6 +171,9 @@ function importMapPlugin(): Plugin {
       handler(_html, ctx) {
         const imports = ctx.server ? DEV_IMPORTS : PROD_SHIM_IMPORTS;
         const children = JSON.stringify({ imports });
+        if (!ctx.server) {
+          prodImportMapBody = children;
+        }
         const tags: Array<Record<string, unknown>> = [];
         if (ctx.server) {
           tags.push({
@@ -177,13 +181,6 @@ function importMapPlugin(): Plugin {
             attrs: { async: true, src: "/vendor/es-module-shims.js" },
             injectTo: "head-prepend",
           });
-        } else {
-          // CSP script-src blocks inline import maps unless the body hash is
-          // allowlisted. docker-entrypoint.sh reads this file into nginx CSP.
-          const hash = createHash("sha256").update(children).digest("base64");
-          const outDir = path.resolve(__dirname, "dist");
-          fs.mkdirSync(outDir, { recursive: true });
-          fs.writeFileSync(path.join(outDir, ".importmap-csp-hash"), hash);
         }
         tags.push({
           tag: "script",
@@ -193,6 +190,14 @@ function importMapPlugin(): Plugin {
         });
         return { tags };
       },
+    },
+    closeBundle() {
+      // Write after Vite empties dist so docker-entrypoint can allowlist the hash.
+      const body = prodImportMapBody ?? JSON.stringify({ imports: PROD_SHIM_IMPORTS });
+      const hash = createHash("sha256").update(body).digest("base64");
+      const outDir = path.resolve(__dirname, "dist");
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(path.join(outDir, ".importmap-csp-hash"), hash);
     },
   };
 }
