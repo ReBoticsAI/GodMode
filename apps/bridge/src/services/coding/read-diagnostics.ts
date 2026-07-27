@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { spawn } from "node:child_process";
 import path from "node:path";
-import { resolveRepoPath } from "./fs-tools.js";
+import { resolveCodingRoot, resolveRepoPath } from "./fs-tools.js";
+import { runSandboxedArgv } from "./sandboxed-process.js";
 
 export interface DiagnosticItem {
   file: string;
@@ -36,81 +36,52 @@ export function hasTypeScriptConfig(cwd: string): boolean {
 export function readDiagnostics(opts?: {
   cwd?: string;
   tenantId?: string | null;
+  root?: string;
   timeoutMs?: number;
 }): Promise<{ ok: boolean; diagnostics: DiagnosticItem[]; raw: string }> {
-  const cwd = resolveRepoPath(opts?.cwd?.trim() || ".", { tenantId: opts?.tenantId });
-  const root = cwd;
+  const rootOpts = { tenantId: opts?.tenantId, root: opts?.root };
+  const cwd = resolveRepoPath(opts?.cwd?.trim() || ".", rootOpts);
+  const codingRoot = resolveCodingRoot(rootOpts);
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TSC_TIMEOUT_MS;
 
-  return new Promise((resolve) => {
-    const proc = spawn("npx", ["tsc", "--noEmit", "--pretty", "false"], {
-      cwd,
-      shell: process.platform === "win32",
-      windowsHide: true,
-      env: { ...process.env },
-    });
-
-    let out = "";
-    let settled = false;
-    const finish = (payload: {
-      ok: boolean;
-      diagnostics: DiagnosticItem[];
-      raw: string;
-    }) => {
-      if (settled) return;
-      settled = true;
-      resolve(payload);
-    };
-
-    const timer = setTimeout(() => {
-      try {
-        proc.kill();
-      } catch {
-        /* ignore */
+  return runSandboxedArgv({
+    codingRoot,
+    cwd,
+    argv: ["npx", "tsc", "--noEmit", "--pretty", "false"],
+    net: "none",
+    timeoutMs,
+  })
+    .then((res) => {
+      const raw = (res.stdout + res.stderr).slice(0, 32_000);
+      if (res.timedOut) {
+        return {
+          ok: false,
+          diagnostics: [
+            {
+              file: ".",
+              line: 1,
+              severity: "error" as const,
+              message: `tsc timed out after ${timeoutMs}ms`,
+            },
+          ],
+          raw,
+        };
       }
-      finish({
-        ok: false,
-        diagnostics: [
-          {
-            file: ".",
-            line: 1,
-            severity: "error",
-            message: `tsc timed out after ${timeoutMs}ms`,
-          },
-        ],
-        raw: out.slice(0, 32_000),
-      });
-    }, timeoutMs);
-
-    proc.stdout?.on("data", (c) => {
-      out += String(c);
-    });
-    proc.stderr?.on("data", (c) => {
-      out += String(c);
-    });
-
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      const diagnostics = parseTscOutput(out, root);
-      finish({ ok: code === 0, diagnostics, raw: out.slice(0, 32_000) });
-    });
-
-    proc.on("error", () => {
-      clearTimeout(timer);
-      finish({
-        ok: false,
-        diagnostics: [
-          {
-            file: ".",
-            line: 1,
-            severity: "error",
-            message: "Failed to run tsc - is TypeScript installed?",
-          },
-        ],
-        raw: "",
-      });
-    });
-  });
+      const diagnostics = parseTscOutput(raw, cwd);
+      return { ok: res.exitCode === 0, diagnostics, raw };
+    })
+    .catch(() => ({
+      ok: false,
+      diagnostics: [
+        {
+          file: ".",
+          line: 1,
+          severity: "error" as const,
+          message: "Failed to run tsc - is TypeScript installed?",
+        },
+      ],
+      raw: "",
+    }));
 }
 
 function normalizePath(p: string): string {
@@ -145,6 +116,7 @@ export async function verifyTypeScriptAfterWrite(
   opts: {
     path: string;
     tenantId?: string | null;
+    root?: string;
     timeoutMs?: number;
   },
   runner: typeof readDiagnostics = readDiagnostics
@@ -161,7 +133,7 @@ export async function verifyTypeScriptAfterWrite(
 
   let cwd: string;
   try {
-    cwd = resolveRepoPath(".", { tenantId: opts.tenantId });
+    cwd = resolveRepoPath(".", { tenantId: opts.tenantId, root: opts.root });
   } catch {
     return {
       ok: true,
@@ -183,6 +155,7 @@ export async function verifyTypeScriptAfterWrite(
   const result = await runner({
     cwd: ".",
     tenantId: opts.tenantId,
+    root: opts.root,
     timeoutMs: opts.timeoutMs,
   });
   const diagnostics = filterDiagnosticsForPath(result.diagnostics, filePath);
