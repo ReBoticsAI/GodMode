@@ -44,6 +44,7 @@ import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createGithubIntegrationRouter } from "./routes/github-integration.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
+import { createAdminAuthorityRouter } from "./routes/admin-authority.js";
 import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
 import { createAdminMarketplaceRouter, createAdminObservabilityRouter } from "./routes/admin-marketplace.js";
@@ -425,6 +426,7 @@ if (!config.isHub) {
 }
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
+  app.use("/api/admin/authority", createAdminAuthorityRouter());
 }
 if (config.isSaas) {
   app.use("/api/admin/saas", createAdminSaasRouter());

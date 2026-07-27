@@ -295,6 +295,12 @@ const server = http.createServer(async (req, res) => {
       service: "godmode-build-supervisor",
       defaultNet: DEFAULT_NET,
       egressNetwork: EGRESS_NETWORK,
+      concurrency: {
+        globalActive,
+        globalLimit: GLOBAL_CONCURRENCY,
+        tenantActive: Object.fromEntries(tenantActive),
+        tenantLimit: PER_TENANT_CONCURRENCY,
+      },
     });
     return;
   }
