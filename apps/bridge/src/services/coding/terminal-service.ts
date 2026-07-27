@@ -10,6 +10,7 @@ import {
   scrubTerminalEnv,
 } from "./terminal-sandbox.js";
 import { startTerminalEgressProxy } from "./terminal-egress-proxy.js";
+import { acquireTerminalSlot } from "./coding-quota.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512 * 1024;
@@ -70,6 +71,8 @@ export async function runTerminal(
       allowlist: codingTerminalEgressHosts(),
     });
   }
+
+  const releaseSlot = acquireTerminalSlot(opts.tenantId);
 
   try {
     return await new Promise<RunTerminalResult>((resolve, reject) => {
@@ -158,6 +161,7 @@ export async function runTerminal(
       });
     });
   } finally {
+    releaseSlot();
     if (proxy) {
       try {
         await proxy.close();

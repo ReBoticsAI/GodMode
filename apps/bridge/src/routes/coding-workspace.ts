@@ -6,6 +6,7 @@ import fs from "node:fs";
 import type { AppDatabase } from "../db.js";
 import { getAgent } from "../services/agents/agents-db.js";
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
+import { isCodingAuthorityError } from "../services/coding/coding-quota.js";
 import {
   deletePath,
   listDir,
@@ -490,7 +491,7 @@ export function createCodingWorkspaceRouter(
         userId: req.user?.id,
         action: "ui_run_terminal",
         command,
-        result: `error:${msg.slice(0, 200)}`,
+        result: isCodingAuthorityError(err) ? err.code : `error:${msg.slice(0, 200)}`,
       });
       send("error", { error: msg });
     } finally {

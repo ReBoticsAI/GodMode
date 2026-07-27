@@ -105,6 +105,7 @@ import {
 import { codebaseSearch } from "./coding/codebase-search.js";
 import { readDiagnostics, verifyTypeScriptAfterWrite } from "./coding/read-diagnostics.js";
 import { logToolAudit } from "./coding/tool-audit.js";
+import { isCodingAuthorityError } from "./coding/coding-quota.js";
 import {
   createNotification,
   listNotificationsForAgent,
@@ -2120,46 +2121,69 @@ export async function executeTool(
     }
 
     case "run_terminal": {
-      const res = await runTerminal({
-        command: String(args.command ?? ""),
-        cwd: args.cwd ? String(args.cwd) : undefined,
-        timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
-        ...codingFsOpts(ctx),
-        onOutput: (chunk) => {
-          ctx.onTerminalOutput?.({
-            ...chunk,
-            toolCallId: ctx.activeToolCallId,
+      try {
+        const res = await runTerminal({
+          command: String(args.command ?? ""),
+          cwd: args.cwd ? String(args.cwd) : undefined,
+          timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
+          ...codingFsOpts(ctx),
+          onOutput: (chunk) => {
+            ctx.onTerminalOutput?.({
+              ...chunk,
+              toolCallId: ctx.activeToolCallId,
+            });
+          },
+        });
+        const bytesOut =
+          Buffer.byteLength(res.stdout, "utf8") + Buffer.byteLength(res.stderr, "utf8");
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "run_terminal",
+          cwd: res.cwd,
+          command: res.command,
+          exitCode: res.exitCode,
+          bytesOut,
+          result: res.timedOut ? "timeout" : res.exitCode === 0 ? "ok" : "error",
+        });
+        return res;
+      } catch (err) {
+        if (isCodingAuthorityError(err)) {
+          logToolAudit(ctx.db, {
+            ...auditCtx(ctx),
+            action: "run_terminal",
+            command: String(args.command ?? ""),
+            result: err.code,
           });
-        },
-      });
-      const bytesOut =
-        Buffer.byteLength(res.stdout, "utf8") + Buffer.byteLength(res.stderr, "utf8");
-      logToolAudit(ctx.db, {
-        ...auditCtx(ctx),
-        action: "run_terminal",
-        cwd: res.cwd,
-        command: res.command,
-        exitCode: res.exitCode,
-        bytesOut,
-        result: res.timedOut ? "timeout" : res.exitCode === 0 ? "ok" : "error",
-      });
-      return res;
+        }
+        throw err;
+      }
     }
 
     case "terminal_session_create": {
-      const session = await createTerminalSession({
-        ...codingFsOpts(ctx),
-        cwd: args.cwd ? String(args.cwd) : undefined,
-        name: args.name ? String(args.name) : undefined,
-        shell: args.shell ? String(args.shell) : undefined,
-      });
-      logToolAudit(ctx.db, {
-        ...auditCtx(ctx),
-        action: "terminal_session_create",
-        cwd: session.cwd,
-        result: session.sessionId,
-      });
-      return session;
+      try {
+        const session = await createTerminalSession({
+          ...codingFsOpts(ctx),
+          cwd: args.cwd ? String(args.cwd) : undefined,
+          name: args.name ? String(args.name) : undefined,
+          shell: args.shell ? String(args.shell) : undefined,
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "terminal_session_create",
+          cwd: session.cwd,
+          result: session.sessionId,
+        });
+        return session;
+      } catch (err) {
+        if (isCodingAuthorityError(err)) {
+          logToolAudit(ctx.db, {
+            ...auditCtx(ctx),
+            action: "terminal_session_create",
+            result: err.code,
+          });
+        }
+        throw err;
+      }
     }
 
     case "terminal_session_list":
@@ -2941,28 +2965,40 @@ export async function executeTool(
     }
 
     case "run_ephemeral_build": {
-      const res = await runEphemeralBuild({
-        ...codingFsOpts(ctx),
-        command: String(args.command ?? ""),
-        cwd: args.cwd ? String(args.cwd) : undefined,
-        timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
-      });
-      logToolAudit(ctx.db, {
-        ...auditCtx(ctx),
-        action: "run_ephemeral_build",
-        cwd: res.cwdRel,
-        command: res.command,
-        exitCode: res.exitCode,
-        bytesOut:
-          Buffer.byteLength(res.stdout, "utf8") +
-          Buffer.byteLength(res.stderr, "utf8"),
-        result: res.timedOut
-          ? "timeout"
-          : res.exitCode === 0
-            ? "ok"
-            : "error",
-      });
-      return res;
+      try {
+        const res = await runEphemeralBuild({
+          ...codingFsOpts(ctx),
+          command: String(args.command ?? ""),
+          cwd: args.cwd ? String(args.cwd) : undefined,
+          timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "run_ephemeral_build",
+          cwd: res.cwdRel,
+          command: res.command,
+          exitCode: res.exitCode,
+          bytesOut:
+            Buffer.byteLength(res.stdout, "utf8") +
+            Buffer.byteLength(res.stderr, "utf8"),
+          result: res.timedOut
+            ? "timeout"
+            : res.exitCode === 0
+              ? "ok"
+              : "error",
+        });
+        return res;
+      } catch (err) {
+        if (isCodingAuthorityError(err)) {
+          logToolAudit(ctx.db, {
+            ...auditCtx(ctx),
+            action: "run_ephemeral_build",
+            command: String(args.command ?? ""),
+            result: err.code,
+          });
+        }
+        throw err;
+      }
     }
 
     case "prepare_marketplace_submission": {
