@@ -41,6 +41,15 @@ import {
   getDeleteAuthorityStatus,
   listDeleteAuthorityEvents,
 } from "../services/authority/delete-authority-admin.js";
+import {
+  getSendKillState,
+  setGlobalSendKill,
+  setTenantSendKill,
+} from "../services/authority/send-kill-switch.js";
+import {
+  getSendAuthorityStatus,
+  listSendAuthorityEvents,
+} from "../services/authority/send-authority-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
@@ -288,6 +297,65 @@ export function createAdminAuthorityRouter(): Router {
     }
     setTenantDeleteKill(tenantId, { deleteDisabled });
     res.json(getDeleteKillState([tenantId]));
+  });
+
+  router.get("/send-kills", (_req, res) => {
+    const tenantIds = listAllTenantIds(getCoreDb());
+    res.json(getSendKillState(tenantIds));
+  });
+
+  router.get("/send-status", (_req, res) => {
+    try {
+      res.json(getSendAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/send-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listSendAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/send-kills/global", (req, res) => {
+    const sendDisabled =
+      req.body?.sendDisabled === undefined
+        ? undefined
+        : Boolean(req.body.sendDisabled);
+    if (sendDisabled === undefined) {
+      res.status(400).json({ error: "sendDisabled required" });
+      return;
+    }
+    setGlobalSendKill({ sendDisabled });
+    res.json(getSendKillState(listAllTenantIds(getCoreDb())));
+  });
+
+  router.post("/send-kills/tenant/:tenantId", (req, res) => {
+    const tenantId =
+      typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+    if (!tenantId) {
+      res.status(400).json({ error: "tenantId required" });
+      return;
+    }
+    const sendDisabled =
+      req.body?.sendDisabled === undefined
+        ? undefined
+        : Boolean(req.body.sendDisabled);
+    if (sendDisabled === undefined) {
+      res.status(400).json({ error: "sendDisabled required" });
+      return;
+    }
+    setTenantSendKill(tenantId, { sendDisabled });
+    res.json(getSendKillState([tenantId]));
   });
 
   return router;
