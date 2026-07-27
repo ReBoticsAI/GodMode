@@ -298,4 +298,12 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "Human Coding workspace rename/move under sandboxed coding root; filesystem domain, not ObjectType Record CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "ai-coding-workspace-terminal-run",
+    methods: ["POST"],
+    pathPattern: "/api/ai/coding/terminal/run",
+    rationale:
+      "Human Coding workspace sandboxed command runner (#148); same runTerminal / bwrap boundary as agent run_terminal, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;
