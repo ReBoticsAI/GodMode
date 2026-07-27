@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
- * Host build supervisor (#164 / #112 Layer 4).
+ * Host build supervisor (#164 / #167 / #112 Layer 4).
  * Owns Docker socket; Bridge calls POST /v1/build over localhost bearer auth.
  * Never expose this port publicly.
+ *
+ * Network:
+ * - none (default): docker --network none
+ * - allowlist: bridge + HTTP(S)_PROXY to a host CONNECT proxy (npm/git)
  */
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -10,10 +14,13 @@ import path from "node:path";
 import fs from "node:fs";
 import {
   normalizeBuildCommand,
+  normalizeBuildNet,
+  resolveBuildEgressHosts,
   sanitizeCwdRel,
   sanitizeTenantId,
   tenantWorkspaceHostPath,
 } from "./lib.mjs";
+import { startBuildEgressProxy } from "./egress-proxy.mjs";
 
 const HOST = process.env.CODING_BUILD_SUPERVISOR_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODING_BUILD_SUPERVISOR_PORT || "8792");
@@ -21,11 +28,20 @@ const TOKEN = process.env.CODING_BUILD_SUPERVISOR_TOKEN || "";
 const DATA_DIR = process.env.PLATFORM_DATA_DIR || "";
 const IMAGE = process.env.CODING_BUILD_IMAGE || "node:22-bookworm-slim";
 const DOCKER_BIN = process.env.DOCKER_BIN || "docker";
+const DEFAULT_NET = normalizeBuildNet(process.env.CODING_BUILD_NET || "none");
+const EGRESS_PROXY_HOST =
+  process.env.CODING_BUILD_EGRESS_PROXY_HOST || "127.0.0.1";
+const EGRESS_PROXY_PORT = Number(
+  process.env.CODING_BUILD_EGRESS_PROXY_PORT || "8793"
+);
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1000;
-const GLOBAL_CONCURRENCY = Math.max(1, Number(process.env.CODING_BUILD_GLOBAL_CONCURRENCY || "2"));
+const GLOBAL_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.CODING_BUILD_GLOBAL_CONCURRENCY || "2")
+);
 const PER_TENANT_CONCURRENCY = Math.max(
   1,
   Number(process.env.CODING_BUILD_TENANT_CONCURRENCY || "1")
@@ -33,6 +49,8 @@ const PER_TENANT_CONCURRENCY = Math.max(
 
 let globalActive = 0;
 const tenantActive = new Map();
+/** @type {{ port: number, allowlist: string[], close: () => Promise<void> } | null} */
+let egressProxy = null;
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -76,18 +94,40 @@ function release(tenantId) {
 
 function runDocker(opts) {
   return new Promise((resolve) => {
-    const args = [
-      "run",
-      "--rm",
-      "--network",
-      "none",
+    const args = ["run", "--rm"];
+    if (opts.network === "none") {
+      args.push("--network", "none");
+    } else {
+      // Default bridge so the container can reach host.docker.internal → CONNECT proxy.
+      args.push("--add-host", "host.docker.internal:host-gateway");
+      const proxyUrl = `http://host.docker.internal:${opts.proxyPort}`;
+      args.push(
+        "-e",
+        `HTTP_PROXY=${proxyUrl}`,
+        "-e",
+        `HTTPS_PROXY=${proxyUrl}`,
+        "-e",
+        `http_proxy=${proxyUrl}`,
+        "-e",
+        `https_proxy=${proxyUrl}`,
+        "-e",
+        "NO_PROXY=localhost,127.0.0.1",
+        "-e",
+        "no_proxy=localhost,127.0.0.1",
+        "-e",
+        `npm_config_proxy=${proxyUrl}`,
+        "-e",
+        `npm_config_https_proxy=${proxyUrl}`
+      );
+    }
+    args.push(
       "-v",
       `${opts.bindHost}:/workspace:rw`,
       "-w",
       opts.workdir,
       IMAGE,
-      ...opts.argv,
-    ];
+      ...opts.argv
+    );
     const child = spawn(DOCKER_BIN, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -137,6 +177,19 @@ function runDocker(opts) {
   });
 }
 
+async function ensureEgressProxy() {
+  if (egressProxy) return egressProxy;
+  egressProxy = await startBuildEgressProxy({
+    host: EGRESS_PROXY_HOST,
+    port: EGRESS_PROXY_PORT,
+    hosts: resolveBuildEgressHosts(),
+  });
+  console.log(
+    `build egress CONNECT proxy on ${EGRESS_PROXY_HOST}:${egressProxy.port} hosts=${egressProxy.allowlist.length}`
+  );
+  return egressProxy;
+}
+
 async function handleBuild(body) {
   if (!DATA_DIR) throw new Error("PLATFORM_DATA_DIR is required");
   if (!TOKEN) throw new Error("CODING_BUILD_SUPERVISOR_TOKEN is required");
@@ -144,6 +197,9 @@ async function handleBuild(body) {
   const tenantId = sanitizeTenantId(body.tenantId);
   const cwdRel = sanitizeCwdRel(body.cwdRel);
   const command = normalizeBuildCommand(body.command);
+  const network = normalizeBuildNet(
+    body.network != null ? body.network : DEFAULT_NET
+  );
   const timeoutMs = Math.min(
     Math.max(Number(body.timeoutMs ?? DEFAULT_TIMEOUT_MS), 5_000),
     MAX_TIMEOUT_MS
@@ -151,7 +207,10 @@ async function handleBuild(body) {
 
   const relTenant = tenantWorkspaceHostPath(DATA_DIR, tenantId);
   const bindHost = path.resolve(DATA_DIR, relTenant);
-  if (!bindHost.startsWith(path.resolve(DATA_DIR) + path.sep) && bindHost !== path.resolve(DATA_DIR)) {
+  if (
+    !bindHost.startsWith(path.resolve(DATA_DIR) + path.sep) &&
+    bindHost !== path.resolve(DATA_DIR)
+  ) {
     throw new Error("Tenant path escapes data dir");
   }
   if (!fs.existsSync(bindHost)) {
@@ -169,6 +228,14 @@ async function handleBuild(body) {
     throw err;
   }
 
+  let proxyPort;
+  let allowlist;
+  if (network === "allowlist") {
+    const proxy = await ensureEgressProxy();
+    proxyPort = proxy.port;
+    allowlist = proxy.allowlist;
+  }
+
   const started = Date.now();
   try {
     const result = await runDocker({
@@ -176,6 +243,8 @@ async function handleBuild(body) {
       workdir,
       argv,
       timeoutMs,
+      network,
+      proxyPort,
     });
     return {
       ...result,
@@ -184,7 +253,8 @@ async function handleBuild(body) {
       cwdRel,
       tenantId,
       image: IMAGE,
-      network: "none",
+      network,
+      egressHosts: network === "allowlist" ? allowlist : [],
     };
   } finally {
     release(tenantId);
@@ -218,10 +288,17 @@ function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
-    json(res, 200, { ok: true, service: "godmode-build-supervisor" });
+    json(res, 200, {
+      ok: true,
+      service: "godmode-build-supervisor",
+      defaultNet: DEFAULT_NET,
+    });
     return;
   }
-  if (req.method === "POST" && (req.url === "/v1/build" || req.url === "/v1/build/")) {
+  if (
+    req.method === "POST" &&
+    (req.url === "/v1/build" || req.url === "/v1/build/")
+  ) {
     if (!authOk(req)) {
       unauthorized(res);
       return;
@@ -252,6 +329,6 @@ if (!DATA_DIR) {
 
 server.listen(PORT, HOST, () => {
   console.log(
-    `godmode-build-supervisor listening on http://${HOST}:${PORT} data=${DATA_DIR} image=${IMAGE}`
+    `godmode-build-supervisor listening on http://${HOST}:${PORT} data=${DATA_DIR} image=${IMAGE} defaultNet=${DEFAULT_NET}`
   );
 });

@@ -35,7 +35,7 @@ On hub/client SaaS, coding tools are confined so tenants cannot reach core or ea
 | 1 | Coding root = `tenant-workspaces/<tenantId>/` only |
 | 2 | Optional Bridge-owned `.worktrees/<slug>`; promote into live tree before install |
 | 3 | `run_terminal` / PTY / helpers under bubblewrap; network `none` or allowlist |
-| 4 | Optional ephemeral npm builds via host supervisor (`CODING_BUILD_MODE=ephemeral`) |
+| 4 | Optional ephemeral npm builds via host supervisor (`CODING_BUILD_MODE=ephemeral`); build net `none` or `allowlist` (#167) |
 
 Intelligence tool cards show sandbox / net / worktree badges when tools return isolation metadata. Full threat model: [SECURITY.md](./SECURITY.md).
 
