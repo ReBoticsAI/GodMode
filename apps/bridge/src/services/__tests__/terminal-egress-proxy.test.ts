@@ -1,15 +1,22 @@
 /**
- * Layer 3 egress allowlist CONNECT proxy (#112).
+ * Layer 3 egress allowlist CONNECT proxy (#112 / #157): UDS + host matcher.
  */
+import fs from "node:fs";
 import net from "node:net";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  ensureEgressBridgeScript,
   isEgressHostAllowed,
   resolveEgressAllowlist,
   startTerminalEgressProxy,
+  wrapAllowlistCommand,
   type TerminalEgressProxyHandle,
 } from "../coding/terminal-egress-proxy.js";
 
+const temps: string[] = [];
 const proxies: TerminalEgressProxyHandle[] = [];
 
 afterEach(async () => {
@@ -17,7 +24,16 @@ afterEach(async () => {
     const p = proxies.pop()!;
     await p.close().catch(() => undefined);
   }
+  while (temps.length) {
+    rmSync(temps.pop()!, { recursive: true, force: true });
+  }
 });
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
 
 describe("isEgressHostAllowed", () => {
   it("matches exact and wildcard suffix rules", () => {
@@ -42,15 +58,19 @@ describe("resolveEgressAllowlist", () => {
   });
 });
 
-describe("startTerminalEgressProxy", () => {
-  it("denies CONNECT to non-allowlisted hosts", async () => {
+describe.skipIf(process.platform === "win32")("startTerminalEgressProxy UDS", () => {
+  // AF_UNIX listen is unreliable on Windows temp paths; hub/CI is Linux.
+  it("denies CONNECT to non-allowlisted hosts over UDS", async () => {
+    const root = tempDir("gm-egress-");
     const proxy = await startTerminalEgressProxy({
+      codingRoot: root,
       allowlist: ["github.com"],
     });
     proxies.push(proxy);
+    expect(fs.existsSync(proxy.socketPath)).toBe(true);
 
     const response = await new Promise<string>((resolve, reject) => {
-      const sock = net.connect(proxy.port, proxy.host, () => {
+      const sock = net.createConnection(proxy.socketPath, () => {
         sock.write(
           "CONNECT evil.example:443 HTTP/1.1\r\nHost: evil.example:443\r\n\r\n"
         );
@@ -72,13 +92,15 @@ describe("startTerminalEgressProxy", () => {
   });
 
   it("rejects non-CONNECT methods", async () => {
+    const root = tempDir("gm-egress2-");
     const proxy = await startTerminalEgressProxy({
+      codingRoot: root,
       allowlist: ["github.com"],
     });
     proxies.push(proxy);
 
     const response = await new Promise<string>((resolve, reject) => {
-      const sock = net.connect(proxy.port, proxy.host, () => {
+      const sock = net.createConnection(proxy.socketPath, () => {
         sock.write("GET http://github.com/ HTTP/1.1\r\nHost: github.com\r\n\r\n");
       });
       let data = "";
@@ -94,5 +116,20 @@ describe("startTerminalEgressProxy", () => {
     });
 
     expect(response).toMatch(/400/);
+  });
+});
+
+describe("wrapAllowlistCommand", () => {
+  it("starts the TCP-to-UDS bridge before the user command", () => {
+    const root = tempDir("gm-wrap-");
+    ensureEgressBridgeScript(root);
+    const wrapped = wrapAllowlistCommand({
+      codingRoot: root,
+      socketRel: ".godmode-egress/proxy.sock",
+      command: "echo hi",
+    });
+    expect(wrapped).toContain("tcp-to-uds.mjs");
+    expect(wrapped).toContain("echo hi");
+    expect(wrapped).toContain("/usr/bin/node");
   });
 });

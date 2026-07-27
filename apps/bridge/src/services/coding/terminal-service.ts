@@ -66,6 +66,7 @@ export async function runTerminal(
   let proxy: Awaited<ReturnType<typeof startTerminalEgressProxy>> | null = null;
   if (sandboxed && netMode === "allowlist") {
     proxy = await startTerminalEgressProxy({
+      codingRoot,
       allowlist: codingTerminalEgressHosts(),
     });
   }
@@ -79,7 +80,8 @@ export async function runTerminal(
           cwd,
           command,
           net: netMode,
-          proxyUrl: proxy?.proxyUrl,
+          proxyUrl: proxy?.jailProxyUrl,
+          socketRel: proxy?.socketRel,
         });
         proc = spawn("bwrap", bwrapArgs, {
           cwd: codingRoot,
