@@ -2043,8 +2043,8 @@ export function streamCodingTerminal(
         headers.set("Authorization", `Bearer ${sessionToken}`);
         headers.set("X-Godmode-Session", sessionToken);
       }
-      const path = withSessionQuery("/ai/coding/terminal/run", sessionToken);
-      const res = await fetch(`${API_BASE}${path}`, {
+      // Keep first fetch arg statically analyzable for kernel mutation audit.
+      const res = await fetch(`${API_BASE}/ai/coding/terminal/run`, {
         method: "POST",
         headers,
         credentials: "include",
