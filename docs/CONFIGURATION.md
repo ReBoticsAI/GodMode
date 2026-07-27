@@ -37,6 +37,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `CODING_BUILD_NET` | `none` | Layer 4 build-container network (#167 / #170): `none` or `allowlist` (`shared` unsupported). `allowlist` uses a Docker `--internal` network plus host CONNECT proxy |
 | `CODING_BUILD_EGRESS_HOSTS` | empty | Optional comma-separated CONNECT hosts for `allowlist` (falls back to `CODING_TERMINAL_EGRESS_HOSTS`, then npm/GitHub defaults) |
 | `CODING_BUILD_EGRESS_NETWORK` | `godmode-build-egress` | Docker network name for `allowlist` builds (created with `--internal` if missing; fails closed if a non-internal network already uses the name) |
+| `CURSOR_SDK_SANDBOX` | hub/client Linux: `required`; else `off` | Enable Cursor SDK `sandboxOptions` for `cursor_cloud` built-in Shell/FS (#171). GodMode customTools still use Bridge Layer 3. Fail closed when `required` and the SDK sandbox helper is missing |
 
 ### GitHub OAuth apps (login vs Projects sync)
 
@@ -154,6 +155,7 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [LOCAL_LLM.md](./LOCAL_LLM.md).
 | Variable | Description |
 |----------|-------------|
 | `CURSOR_API_KEY` | Cursor User API key for Intelligence `cursor_cloud` (overrides Vault). See [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md). |
+| `CURSOR_SDK_SANDBOX` | Hub/client Linux default `required`; win32/local `off`. See coding isolation table above. |
 | `HOLDINGS_SECRET_KEY` | AES key for holdings encryption |
 | `MORALIS_API_KEY` | Crypto balance lookups |
 | `PAYPAL_*` | PayPal sandbox/live for Bank |

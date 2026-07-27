@@ -17,6 +17,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/prompt-assembler-order.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-transcript.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-setting-sources.test.ts",
+      "apps/bridge/src/services/__tests__/cursor-sandbox-policy.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-sdk-options.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-resume.test.ts",
       "apps/bridge/src/services/__tests__/git-workspace.test.ts",

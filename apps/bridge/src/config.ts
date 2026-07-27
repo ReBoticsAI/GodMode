@@ -225,6 +225,17 @@ export const config = {
     return isHub || deploymentMode === "client" ? "required" : "off";
   })(),
   /**
+   * Cursor SDK local sandbox for cursor_cloud built-in Shell/FS (#171 / #112).
+   * - required: hub/client Linux default (fail closed if SDK sandbox unsupported)
+   * - off: win32 / local default; GodMode customTools still use Bridge Layer 3
+   */
+  cursorSdkSandbox: ((): "required" | "off" => {
+    const raw = (process.env.CURSOR_SDK_SANDBOX ?? "").trim().toLowerCase();
+    if (raw === "required" || raw === "off") return raw;
+    if (process.platform === "win32") return "off";
+    return isHub || deploymentMode === "client" ? "required" : "off";
+  })(),
+  /**
    * Network inside the terminal sandbox.
    * - none: --unshare-net (SaaS + hub default)
    * - allowlist: FS jail + --unshare-net + UDS CONNECT allowlist (kernel-enforced; prefer over shared)
