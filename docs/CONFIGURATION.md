@@ -29,8 +29,8 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Offsite backup upload |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
-| `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | `false` | When SaaS, allow agent coding/terminal tools |
-| `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration |
+| `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
+| `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration (keep false) |
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
 | `CODING_BUILD_SUPERVISOR_TOKEN` | empty | Bearer token shared only with the build supervisor |
@@ -38,6 +38,20 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `CODING_BUILD_EGRESS_HOSTS` | empty | Optional comma-separated CONNECT hosts for `allowlist` (falls back to `CODING_TERMINAL_EGRESS_HOSTS`, then npm/GitHub defaults) |
 | `CODING_BUILD_EGRESS_NETWORK` | `godmode-build-egress` | Docker network name for `allowlist` builds (created with `--internal` if missing; fails closed if a non-internal network already uses the name) |
 | `CURSOR_SDK_SANDBOX` | hub/client Linux: `required`; else `off` | Enable Cursor SDK `sandboxOptions` for `cursor_cloud` built-in Shell/FS (#171). GodMode customTools still use Bridge Layer 3. Fail closed when `required` and the SDK sandbox helper is missing |
+
+### SaaS coding + Layer 4 (staging/prod)
+
+On `INSTALLATION_SURFACE=saas`, coding is **on by default** (#178). Set `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` to disable Coding UI and agent `codeAccess`. Keep `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS=false`.
+
+**Layer 3** (already default on hub/client Linux): `CODING_TERMINAL_SANDBOX=required`, `CODING_TERMINAL_NET=none`. For npm/git from the terminal, set `CODING_TERMINAL_NET=allowlist` (optional). Docker Bridge needs `cap_add: [SYS_ADMIN, NET_ADMIN]` and matching `security_opt` so bubblewrap namespaces work (see `deploy/docker-compose.saas-staging.yml`).
+
+**Layer 4** for SaaS staging/prod:
+
+1. Run `deploy/build-supervisor/` on the host against the **SaaS** `PLATFORM_DATA_DIR` only (separate supervisor or token from any private_hub data root).
+2. Bridge env: `CODING_BUILD_MODE=ephemeral`, `CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792`, shared `CODING_BUILD_SUPERVISOR_TOKEN`, `CODING_BUILD_NET=allowlist` (registry egress for demos).
+3. Do not mount `docker.sock` into Bridge. Residual shared-host risk is tracked in #172.
+
+Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.example), [deploy/.env.production.example](../deploy/.env.production.example).
 
 ### GitHub OAuth apps (login vs Projects sync)
 
