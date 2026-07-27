@@ -227,7 +227,7 @@ export const config = {
   /**
    * Network inside the terminal sandbox.
    * - none: --unshare-net (SaaS + hub default)
-   * - allowlist: FS jail without --unshare-net; Bridge CONNECT proxy enforces host allowlist (prefer over shared)
+   * - allowlist: FS jail + --unshare-net + UDS CONNECT allowlist (kernel-enforced; prefer over shared)
    * - shared: full host network (FS jail still on)
    */
   codingTerminalNet: ((): "none" | "shared" | "allowlist" => {
