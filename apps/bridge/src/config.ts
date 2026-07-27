@@ -243,6 +243,17 @@ export const config = {
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean),
+  /**
+   * Layer 4 ephemeral builds (#164 / #112).
+   * - off: default; build_plugin stays in-process esbuild
+   * - ephemeral: delegate allowlisted npm builds to host build supervisor
+   */
+  codingBuildMode: ((): "off" | "ephemeral" => {
+    const raw = (process.env.CODING_BUILD_MODE ?? "").trim().toLowerCase();
+    return raw === "ephemeral" ? "ephemeral" : "off";
+  })(),
+  codingBuildSupervisorUrl: (process.env.CODING_BUILD_SUPERVISOR_URL ?? "").trim(),
+  codingBuildSupervisorToken: (process.env.CODING_BUILD_SUPERVISOR_TOKEN ?? "").trim(),
   federation: {
     /** Shared secret peers present to this Bridge's federation API (empty = derive from share grants only). */
     token: process.env.FEDERATION_TOKEN ?? "",

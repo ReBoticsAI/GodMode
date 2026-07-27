@@ -1,0 +1,22 @@
+# Layer 4 build supervisor (#164 / #112).
+# Owns /var/run/docker.sock. Do NOT mount the socket into the godmode service.
+# Bridge reaches this via CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
+# (or compose network DNS if both services share a network).
+services:
+  build-supervisor:
+    image: node:22-bookworm-slim
+    working_dir: /supervisor
+    command: ["node", "server.mjs"]
+    ports:
+      - "127.0.0.1:8792:8792"
+    environment:
+      - CODING_BUILD_SUPERVISOR_HOST=0.0.0.0
+      - CODING_BUILD_SUPERVISOR_PORT=8792
+      - CODING_BUILD_SUPERVISOR_TOKEN=${CODING_BUILD_SUPERVISOR_TOKEN:?Set CODING_BUILD_SUPERVISOR_TOKEN}
+      - PLATFORM_DATA_DIR=/data
+      - CODING_BUILD_IMAGE=${CODING_BUILD_IMAGE:-node:22-bookworm-slim}
+    volumes:
+      - ./:/supervisor:ro
+      - ${GODMODE_DATA_DIR:?Set GODMODE_DATA_DIR to host tenant data root}:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

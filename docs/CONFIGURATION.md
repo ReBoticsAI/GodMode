@@ -31,6 +31,9 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | `false` | When SaaS, allow agent coding/terminal tools |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration |
+| `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
+| `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
+| `CODING_BUILD_SUPERVISOR_TOKEN` | empty | Bearer token shared only with the build supervisor |
 
 ### GitHub OAuth apps (login vs Projects sync)
 
