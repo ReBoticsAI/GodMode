@@ -51,7 +51,7 @@ describe("cursorCloudCacheFingerprint mode", () => {
       cursorCloudCacheFingerprint("auto", "sys", "", "", "plan")
     );
     expect(cursorCloudCacheFingerprint("auto", "sys")).toBe(
-      "auto||sys||agent|"
+      "auto||sys||agent||"
     );
   });
 });
