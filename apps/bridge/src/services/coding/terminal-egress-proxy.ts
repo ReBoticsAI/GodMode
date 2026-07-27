@@ -95,7 +95,8 @@ function parseConnectTarget(line: string): { host: string; port: number } | null
   return { host, port };
 }
 
-function attachConnectHandler(
+/** Attach CONNECT allowlist handling to a client socket (UDS or TCP). */
+export function attachEgressConnectHandler(
   client: net.Socket,
   allowlist: readonly string[]
 ): void {
@@ -240,7 +241,7 @@ export function startTerminalEgressProxy(opts: {
 
   return new Promise((resolve, reject) => {
     const server = net.createServer((client) => {
-      attachConnectHandler(client, allowlist);
+      attachEgressConnectHandler(client, allowlist);
     });
 
     server.once("error", reject);
