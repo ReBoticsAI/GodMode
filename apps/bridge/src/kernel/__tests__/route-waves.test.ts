@@ -37,6 +37,8 @@ describe("legacy route wave", () => {
       "admin-authority.ts:post:/delete-kills/tenant/:tenantId",
       "admin-authority.ts:post:/deploy-kills/global",
       "admin-authority.ts:post:/deploy-kills/tenant/:tenantId",
+      "admin-authority.ts:post:/send-kills/global",
+      "admin-authority.ts:post:/send-kills/tenant/:tenantId",
       "admin-authority.ts:post:/spend-kills/global",
       "admin-authority.ts:post:/spend-kills/tenant/:tenantId",
       "admin-marketplace.ts:post:/backup",

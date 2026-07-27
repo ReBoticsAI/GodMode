@@ -3528,6 +3528,61 @@ export function setAdminDeleteKillTenant(
   );
 }
 
+export type AdminSendAuthorityStatus = {
+  kills: {
+    envDisabled: boolean;
+    global: { sendDisabled: boolean };
+    tenants: Record<string, { sendDisabled: boolean }>;
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    sendDisabled: boolean;
+  }>;
+};
+
+export type AdminSendAuthorityEvent = {
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminSendStatus() {
+  return api<AdminSendAuthorityStatus>("/admin/authority/send-status");
+}
+
+export function fetchAdminSendEvents(opts?: { limit?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<{ events: AdminSendAuthorityEvent[] }>(
+    `/admin/authority/send-events${q ? `?${q}` : ""}`
+  );
+}
+
+export function setAdminSendKillGlobal(body: { sendDisabled: boolean }) {
+  return api<AdminSendAuthorityStatus["kills"]>(
+    "/admin/authority/send-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminSendKillTenant(
+  tenantId: string,
+  body: { sendDisabled: boolean }
+) {
+  return api<AdminSendAuthorityStatus["kills"]>(
+    `/admin/authority/send-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 
 export function signupPassword(
   email: string,
