@@ -67,6 +67,7 @@ import { MemoryMaintenanceService } from "./services/memory-maintenance.js";
 import { setWikiEmbedder } from "./services/wiki-service.js";
 import { syncAdaptersFromDisk } from "./services/ai-adapters.js";
 import { attachWebSocket } from "./ws.js";
+import { attachTerminalWebSocket } from "./terminal-ws.js";
 import { EngineRegistry } from "./services/engines/registry.js";
 import { EngineReconciler } from "./services/engines/reconciler.js";
 import { startDbMaintenance } from "./services/db-maintenance.js";
@@ -450,6 +451,8 @@ pluginRuntime.mountOn(app);
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 const broadcast = attachWebSocket(wss, bus);
+const terminalWss = new WebSocketServer({ server, path: "/ws/terminal" });
+attachTerminalWebSocket(terminalWss);
 
 await pluginRuntime.emitHook("server:beforeListen", {
   operatorTenantId,

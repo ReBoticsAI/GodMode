@@ -145,13 +145,17 @@ async function executeOneTool(
     result = { error: "User declined tool execution" };
   } else {
     try {
-      result = await executeTool(fnName, args, {
+        result = await executeTool(fnName, args, {
         ...toolCtx,
         confirmationApproved: true,
         activeToolCallId: tc.id,
+        abortSignal: req.abortSignal ?? toolCtx.abortSignal,
         onTerminalOutput: req.onTerminalOutput
           ? (chunk) => req.onTerminalOutput!(tc.id, chunk)
           : toolCtx.onTerminalOutput,
+        onTerminalMonitor: req.onTerminalMonitor
+          ? (chunk) => req.onTerminalMonitor!(tc.id, chunk)
+          : toolCtx.onTerminalMonitor,
       });
     } catch (err) {
       result = { error: err instanceof Error ? err.message : String(err) };

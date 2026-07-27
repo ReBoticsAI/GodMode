@@ -85,6 +85,10 @@ export interface RunAgentOptions {
     toolCallId: string,
     chunk: { stream: "stdout" | "stderr"; text: string }
   ) => void;
+  onTerminalMonitor?: (
+    toolCallId: string,
+    chunk: { sessionId: string; text: string }
+  ) => void;
 }
 
 interface CompletionChoice {
@@ -409,6 +413,8 @@ async function executeToolCalls(
     | "onToolResult"
     | "onConfirmRequired"
     | "onTerminalOutput"
+    | "onTerminalMonitor"
+    | "abortSignal"
   >
 ): Promise<AgentMessage[]> {
   const confirmFn = opts.requiresConfirmation ?? requiresConfirmation;
@@ -444,9 +450,13 @@ async function executeToolCalls(
         result = await exec(fnName, args, {
           ...opts.toolCtx,
           activeToolCallId: tc.id,
+          abortSignal: opts.abortSignal ?? opts.toolCtx.abortSignal,
           onTerminalOutput: opts.onTerminalOutput
             ? (chunk) => opts.onTerminalOutput!(tc.id, chunk)
             : opts.toolCtx.onTerminalOutput,
+          onTerminalMonitor: opts.onTerminalMonitor
+            ? (chunk) => opts.onTerminalMonitor!(tc.id, chunk)
+            : opts.toolCtx.onTerminalMonitor,
         });
       } catch (err) {
         result = { error: err instanceof Error ? err.message : String(err) };
@@ -486,6 +496,7 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
     onToolResult,
     onConfirmRequired,
     onTerminalOutput,
+    onTerminalMonitor,
   } = opts;
   let messages = [...opts.messages];
   const iterationLimit = Math.max(1, maxIterations);
@@ -628,6 +639,8 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
       onToolResult,
       onConfirmRequired,
       onTerminalOutput,
+      onTerminalMonitor,
+      abortSignal,
     });
     messages.push(...toolMessages);
 

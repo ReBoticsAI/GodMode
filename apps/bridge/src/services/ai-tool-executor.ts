@@ -88,6 +88,14 @@ import {
 } from "./coding/fs-tools.js";
 import { runTerminal } from "./coding/terminal-service.js";
 import {
+  closeTerminalSession,
+  createTerminalSession,
+  listTerminalSessions,
+  monitorTerminalSession,
+  readTerminalSession,
+  writeTerminalSession,
+} from "./coding/terminal-session-manager.js";
+import {
   createTenantWorktree,
   discardTenantWorktree,
   listTenantWorktrees,
@@ -187,10 +195,18 @@ export interface ToolExecContext {
   sessionAutonomy?: import("./agents/agents-db.js").CodeAutonomyLevel;
   /** Active tool call id for streaming terminal output. */
   activeToolCallId?: string;
+  /** Abort signal for long tools (terminal_monitor). */
+  abortSignal?: AbortSignal;
   /** The agent backend's confirmation policy approved this exact tool call. */
   confirmationApproved?: boolean;
   onTerminalOutput?: (chunk: {
     stream: "stdout" | "stderr";
+    text: string;
+    toolCallId?: string;
+  }) => void;
+  /** Batched PTY monitor lines for the current tool call (#162). */
+  onTerminalMonitor?: (chunk: {
+    sessionId: string;
     text: string;
     toolCallId?: string;
   }) => void;
@@ -2125,6 +2141,97 @@ export async function executeTool(
         exitCode: res.exitCode,
         bytesOut,
         result: res.timedOut ? "timeout" : res.exitCode === 0 ? "ok" : "error",
+      });
+      return res;
+    }
+
+    case "terminal_session_create": {
+      const session = await createTerminalSession({
+        ...codingFsOpts(ctx),
+        cwd: args.cwd ? String(args.cwd) : undefined,
+        name: args.name ? String(args.name) : undefined,
+        shell: args.shell ? String(args.shell) : undefined,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "terminal_session_create",
+        cwd: session.cwd,
+        result: session.sessionId,
+      });
+      return session;
+    }
+
+    case "terminal_session_list":
+      return { sessions: listTerminalSessions(ctx.tenantId) };
+
+    case "terminal_session_read": {
+      const res = readTerminalSession({
+        sessionId: String(args.sessionId ?? ""),
+        tenantId: ctx.tenantId,
+        sinceOffset:
+          args.sinceOffset != null ? Number(args.sinceOffset) : undefined,
+        maxChars: args.maxChars != null ? Number(args.maxChars) : undefined,
+      });
+      return res;
+    }
+
+    case "terminal_session_write": {
+      const data = String(args.data ?? "");
+      const res = writeTerminalSession({
+        sessionId: String(args.sessionId ?? ""),
+        tenantId: ctx.tenantId,
+        data,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "terminal_session_write",
+        result: res.sessionId,
+        bytesOut: Buffer.byteLength(data, "utf8"),
+      });
+      return res;
+    }
+
+    case "terminal_session_close": {
+      const res = await closeTerminalSession({
+        sessionId: String(args.sessionId ?? ""),
+        tenantId: ctx.tenantId,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "terminal_session_close",
+        result: res.sessionId,
+      });
+      return res;
+    }
+
+    case "terminal_monitor": {
+      const sessionId = String(args.sessionId ?? "");
+      const res = await monitorTerminalSession({
+        sessionId,
+        tenantId: ctx.tenantId,
+        idleMs: args.idleMs != null ? Number(args.idleMs) : undefined,
+        pattern: args.pattern ? String(args.pattern) : undefined,
+        maxBytes: args.maxBytes != null ? Number(args.maxBytes) : undefined,
+        abortSignal: ctx.abortSignal,
+        onBatch: (text) => {
+          ctx.onTerminalMonitor?.({
+            sessionId,
+            text,
+            toolCallId: ctx.activeToolCallId,
+          });
+          // Also surface as terminal_output so existing UI stream panes work.
+          ctx.onTerminalOutput?.({
+            stream: "stdout",
+            text,
+            toolCallId: ctx.activeToolCallId,
+          });
+        },
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "terminal_monitor",
+        result: `${res.reason}:${res.bytes}`,
+        bytesOut: res.bytes,
       });
       return res;
     }

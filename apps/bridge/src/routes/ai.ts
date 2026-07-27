@@ -1553,10 +1553,18 @@ export function createAiRouter(
             userId: req.user?.id,
             tenantId: work.tenantId,
             sessionAutonomy,
+            abortSignal: abortController.signal,
             onTerminalOutput: (chunk) => {
               send("terminal_output", {
                 toolCallId: chunk.toolCallId,
                 stream: chunk.stream,
+                text: chunk.text,
+              });
+            },
+            onTerminalMonitor: (chunk) => {
+              send("terminal_monitor", {
+                toolCallId: chunk.toolCallId,
+                sessionId: chunk.sessionId,
                 text: chunk.text,
               });
             },
@@ -1597,6 +1605,9 @@ export function createAiRouter(
           },
           onTerminalOutput: (toolCallId, chunk) => {
             send("terminal_output", { toolCallId, ...chunk });
+          },
+          onTerminalMonitor: (toolCallId, chunk) => {
+            send("terminal_monitor", { toolCallId, ...chunk });
           },
           onUsage: (u) => {
             usage = u;

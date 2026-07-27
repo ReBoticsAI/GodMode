@@ -1005,6 +1005,10 @@ export function IntelligencePanel() {
           builder.onTerminalOutput(toolCallId, stream, text);
           sync();
         },
+        onTerminalMonitor: ({ toolCallId, text }) => {
+          builder.onTerminalMonitor(toolCallId, text);
+          sync();
+        },
         onDone: (data) => {
           const finalParts = builder.finalize();
           clearArtifactMentions();

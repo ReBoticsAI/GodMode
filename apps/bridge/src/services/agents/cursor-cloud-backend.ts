@@ -463,10 +463,15 @@ function buildCustomTools(
             ...toolCtx,
             confirmationApproved: true,
             activeToolCallId: context.toolCallId,
+            abortSignal: req.abortSignal ?? toolCtx.abortSignal,
             onTerminalOutput: req.onTerminalOutput
               ? (chunk) =>
                   req.onTerminalOutput!(context.toolCallId ?? name, chunk)
               : toolCtx.onTerminalOutput,
+            onTerminalMonitor: req.onTerminalMonitor
+              ? (chunk) =>
+                  req.onTerminalMonitor!(context.toolCallId ?? name, chunk)
+              : toolCtx.onTerminalMonitor,
           });
           req.onToolResult?.(name, result, context.toolCallId, false);
           if (typeof result === "string") return result;

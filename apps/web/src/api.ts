@@ -1095,6 +1095,11 @@ export interface AiStreamHandlers {
     stream: "stdout" | "stderr";
     text: string;
   }) => void;
+  onTerminalMonitor?: (payload: {
+    toolCallId: string;
+    sessionId: string;
+    text: string;
+  }) => void;
   onDone?: (data: {
     content: string;
     thinking: string | null;
@@ -1216,6 +1221,13 @@ export function streamAiChat(
               handlers.onTerminalOutput?.({
                 toolCallId: parsed.toolCallId as string,
                 stream: parsed.stream as "stdout" | "stderr",
+                text: parsed.text as string,
+              });
+              break;
+            case "terminal_monitor":
+              handlers.onTerminalMonitor?.({
+                toolCallId: parsed.toolCallId as string,
+                sessionId: parsed.sessionId as string,
                 text: parsed.text as string,
               });
               break;
@@ -2021,6 +2033,90 @@ export type CodingTerminalDone = {
   sandboxed: boolean;
   netMode: string | null;
 };
+
+export type CodingTerminalSession = {
+  sessionId: string;
+  name: string;
+  cwd: string;
+  running: boolean;
+  sandboxed: boolean;
+  netMode: string;
+  lastLine: string;
+  attachedClients: number;
+  exitCode: number | null;
+  createdAt: number;
+};
+
+export const listCodingTerminalSessions = (agentId?: string) =>
+  api<{ sessions: CodingTerminalSession[] }>(
+    `/ai/coding/terminal/sessions${codingQs(agentId)}`
+  );
+
+export const createCodingTerminalSession = (
+  body: { cwd?: string; name?: string; shell?: string },
+  agentId?: string
+) =>
+  api<CodingTerminalSession>("/ai/coding/terminal/sessions", {
+    method: "POST",
+    body: JSON.stringify({ ...body, agentId }),
+  });
+
+export const closeCodingTerminalSession = (
+  sessionId: string,
+  agentId?: string
+) =>
+  api<{ sessionId: string; closed: boolean }>(
+    `/ai/coding/terminal/sessions/${encodeURIComponent(sessionId)}${codingQs(agentId)}`,
+    { method: "DELETE" }
+  );
+
+/** Authenticated WS for shared PTY attach (#162). */
+export function connectCodingTerminalWs(handlers: {
+  onMessage?: (msg: unknown) => void;
+  onClose?: () => void;
+}): { send: (msg: object) => void; close: () => void } {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = window.location.host;
+  const tenantId = getActiveTenantId();
+  const params = new URLSearchParams();
+  if (tenantId) params.set("tenantId", tenantId);
+  const sessionToken = allowSessionTokenFallback ? readSessionToken() : null;
+  if (sessionToken) params.set("session", sessionToken);
+  const qs = params.size ? `?${params.toString()}` : "";
+  const ws = new WebSocket(`${protocol}//${host}/ws/terminal${qs}`);
+
+  ws.onmessage = (ev) => {
+    try {
+      handlers.onMessage?.(JSON.parse(String(ev.data)));
+    } catch {
+      /* ignore */
+    }
+  };
+  ws.onclose = () => handlers.onClose?.();
+
+  return {
+    send: (msg) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      else {
+        ws.addEventListener(
+          "open",
+          () => ws.send(JSON.stringify(msg)),
+          { once: true }
+        );
+      }
+    },
+    close: () => {
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "detach" }));
+        }
+      } catch {
+        /* ignore */
+      }
+      ws.close();
+    },
+  };
+}
 
 /** SSE command runner for Coding workspace Terminal tab (#148). Returns abort fn. */
 export function streamCodingTerminal(
