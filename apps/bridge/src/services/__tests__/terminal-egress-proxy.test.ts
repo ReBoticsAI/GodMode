@@ -191,6 +191,7 @@ describe("wrapAllowlistCommand", () => {
     });
     expect(wrapped).toContain("tcp-to-uds.mjs");
     expect(wrapped).toContain("echo hi");
-    expect(wrapped).toContain("/usr/bin/node");
+    expect(wrapped).toContain("command -v node");
+    expect(wrapped).toContain("/usr/local/bin/node");
   });
 });
