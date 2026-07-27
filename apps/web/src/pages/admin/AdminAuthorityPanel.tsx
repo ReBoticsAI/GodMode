@@ -2,18 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminCodingEvents,
   fetchAdminCodingStatus,
+  fetchAdminDeleteEvents,
+  fetchAdminDeleteStatus,
   fetchAdminDeployEvents,
   fetchAdminDeployStatus,
   fetchAdminSpendEvents,
   fetchAdminSpendStatus,
   setAdminCodingKillGlobal,
   setAdminCodingKillTenant,
+  setAdminDeleteKillGlobal,
+  setAdminDeleteKillTenant,
   setAdminDeployKillGlobal,
   setAdminDeployKillTenant,
   setAdminSpendKillGlobal,
   setAdminSpendKillTenant,
   type AdminCodingAuthorityEvent,
   type AdminCodingAuthorityStatus,
+  type AdminDeleteAuthorityEvent,
+  type AdminDeleteAuthorityStatus,
   type AdminDeployAuthorityEvent,
   type AdminDeployAuthorityStatus,
   type AdminSpendAuthorityEvent,
@@ -747,11 +753,214 @@ function AdminAuthorityDeploySection({
   );
 }
 
+function AdminAuthorityDeleteSection({
+  status,
+  events,
+  loading,
+  savingKey,
+  onReload,
+  onToggleGlobal,
+  onToggleTenant,
+}: {
+  status: AdminDeleteAuthorityStatus | null;
+  events: AdminDeleteAuthorityEvent[];
+  loading: boolean;
+  savingKey: string | null;
+  onReload: () => void;
+  onToggleGlobal: (value: boolean) => void;
+  onToggleTenant: (tenantId: string, value: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Delete</CardTitle>
+          <CardDescription>
+            Hard-stop kill switches for kernel record deletes, coding file
+            deletes, wiki pages, and plugin uninstall. Platform-admin tenant wipe
+            and reconcile uninstall stay available.
+          </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {loading && !status ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : status ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={
+                    status.kills.envDisabled ? "destructive" : "secondary"
+                  }
+                >
+                  Env nuclear:{" "}
+                  {status.kills.envDisabled
+                    ? "PLATFORM_DELETE_DISABLED"
+                    : "off"}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3 sm:max-w-md">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="kill-delete">Disable delete</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Blocks record, file, wiki, and plugin uninstall deletes
+                    platform-wide.
+                  </p>
+                </div>
+                <Switch
+                  id="kill-delete"
+                  checked={status.kills.global.deleteDisabled}
+                  disabled={
+                    savingKey === "global:delete" || status.kills.envDisabled
+                  }
+                  onCheckedChange={onToggleGlobal}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Failed to load delete authority status.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {status ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per-tenant delete kills</CardTitle>
+            <CardDescription>
+              Disable delete for a single workspace without redeploying.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Delete kill</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {status.tenants.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground">
+                      No tenants found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  status.tenants.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {t.id}
+                            {t.isOperator ? " (operator)" : ""}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={t.deleteDisabled}
+                          disabled={
+                            savingKey === `${t.id}:delete` ||
+                            status.kills.envDisabled ||
+                            status.kills.global.deleteDisabled
+                          }
+                          onCheckedChange={(v) => onToggleTenant(t.id, v)}
+                          aria-label={`Disable delete for ${t.name}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent delete rejects</CardTitle>
+          <CardDescription>
+            Cross-tenant <code>tool_audit_log</code> rows with{" "}
+            <code>kill:*delete*</code> results.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && events.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Result</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No delete kill rejects logged yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {e.createdAt}
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-xs">
+                        {e.tenantName ?? e.tenantId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.agentId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.action}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{e.result}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 /** Admin → Authority: durable #96 control plane. */
 export function AdminAuthorityPanel() {
   const [codingLoading, setCodingLoading] = useState(true);
   const [spendLoading, setSpendLoading] = useState(true);
   const [deployLoading, setDeployLoading] = useState(true);
+  const [deleteLoading, setDeleteLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [codingStatus, setCodingStatus] =
     useState<AdminCodingAuthorityStatus | null>(null);
@@ -766,6 +975,11 @@ export function AdminAuthorityPanel() {
   const [deployStatus, setDeployStatus] =
     useState<AdminDeployAuthorityStatus | null>(null);
   const [deployEvents, setDeployEvents] = useState<AdminDeployAuthorityEvent[]>(
+    []
+  );
+  const [deleteStatus, setDeleteStatus] =
+    useState<AdminDeleteAuthorityStatus | null>(null);
+  const [deleteEvents, setDeleteEvents] = useState<AdminDeleteAuthorityEvent[]>(
     []
   );
 
@@ -823,11 +1037,30 @@ export function AdminAuthorityPanel() {
       .finally(() => setDeployLoading(false));
   }, []);
 
+  const reloadDelete = useCallback(() => {
+    setDeleteLoading(true);
+    Promise.all([
+      fetchAdminDeleteStatus(),
+      fetchAdminDeleteEvents({ limit: 100 }),
+    ])
+      .then(([s, e]) => {
+        setDeleteStatus(s);
+        setDeleteEvents(e.events);
+      })
+      .catch((err) =>
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load delete authority"
+        )
+      )
+      .finally(() => setDeleteLoading(false));
+  }, []);
+
   useEffect(() => {
     reloadCoding();
     reloadSpend();
     reloadDeploy();
-  }, [reloadCoding, reloadSpend, reloadDeploy]);
+    reloadDelete();
+  }, [reloadCoding, reloadSpend, reloadDeploy, reloadDelete]);
 
   const onToggleCodingGlobal = async (
     field: "codingDisabled" | "buildsDisabled",
@@ -928,6 +1161,34 @@ export function AdminAuthorityPanel() {
     }
   };
 
+  const onToggleDeleteGlobal = async (value: boolean) => {
+    setSavingKey("global:delete");
+    try {
+      await setAdminDeleteKillGlobal({ deleteDisabled: value });
+      toast.success(
+        value ? "Delete disabled platform-wide" : "Delete re-enabled"
+      );
+      reloadDelete();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleDeleteTenant = async (tenantId: string, value: boolean) => {
+    setSavingKey(`${tenantId}:delete`);
+    try {
+      await setAdminDeleteKillTenant(tenantId, { deleteDisabled: value });
+      toast.success("Tenant delete kill switch updated");
+      reloadDelete();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -935,8 +1196,9 @@ export function AdminAuthorityPanel() {
           <CardTitle>Authority</CardTitle>
           <CardDescription>
             Platform-admin control and visibility for bounded delegation (#96).
-            Each epic slice adds a section here. Coding, spend, and deploy
-            hard-stops are live; send / delete / agent pause follow later.
+            Each epic slice adds a section here. Coding, spend, deploy, and
+            delete hard-stops are live; send / agent pause / unified audit follow
+            later.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -969,6 +1231,16 @@ export function AdminAuthorityPanel() {
         onReload={reloadDeploy}
         onToggleGlobal={onToggleDeployGlobal}
         onToggleTenant={onToggleDeployTenant}
+      />
+
+      <AdminAuthorityDeleteSection
+        status={deleteStatus}
+        events={deleteEvents}
+        loading={deleteLoading}
+        savingKey={savingKey}
+        onReload={reloadDelete}
+        onToggleGlobal={onToggleDeleteGlobal}
+        onToggleTenant={onToggleDeleteTenant}
       />
     </div>
   );

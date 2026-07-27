@@ -6,6 +6,7 @@ import type { AppDatabase } from "../db.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 import { ensurePluginBuilt } from "./plugin-build.js";
 import { assertDeployAllowed } from "./authority/deploy-authority.js";
+import { assertDeleteAllowed } from "./authority/delete-authority.js";
 import {
   discoverPluginRoots,
   loadPluginFromRoot,
@@ -200,8 +201,15 @@ export async function installPluginForTenant(
 export async function uninstallPluginForTenant(
   core: CoreDatabase,
   tenantId: string,
-  pluginId: string
+  pluginId: string,
+  opts?: { authorityExempt?: boolean }
 ): Promise<void> {
+  if (!opts?.authorityExempt) {
+    assertDeleteAllowed({
+      tenantId,
+      action: "uninstall_plugin",
+    });
+  }
   const existing = core
     .prepare(`SELECT 1 FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`)
     .get(tenantId, pluginId);
@@ -347,7 +355,9 @@ export async function reconcilePluginLifecycle(
   for (const row of interrupted) {
     try {
       if (row.desired_state === "absent") {
-        await uninstallPluginForTenant(core, row.tenant_id, row.plugin_id);
+        await uninstallPluginForTenant(core, row.tenant_id, row.plugin_id, {
+          authorityExempt: true,
+        });
       } else if (pluginRuntime.hasPlugin(row.plugin_id)) {
         await installPluginForTenant(core, row.tenant_id, row.plugin_id);
       }

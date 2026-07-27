@@ -11,6 +11,7 @@ import {
 } from "./wiki-proposals.js";
 import { indexWikiPage, removeWikiPageFromIndex } from "./wiki-rag.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
+import { assertDeleteAllowed } from "./authority/delete-authority.js";
 
 /** Optional embedder for index-on-write (set from routes/tools when ready). */
 let wikiEmbedder: EmbeddingClient | null = null;
@@ -262,6 +263,10 @@ export function deletePage(
   if (!scope.tenantIds.includes(page.tenant_id)) {
     throw new WikiError("Only the owner tenant can delete this page", 403);
   }
+  assertDeleteAllowed({
+    tenantId: page.tenant_id,
+    action: "delete_wiki_page",
+  });
   cascadeWikiProposalCleanup(id, db);
   removeWikiPageFromIndex(db, id);
   db.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);

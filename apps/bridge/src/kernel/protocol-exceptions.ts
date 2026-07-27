@@ -229,6 +229,46 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-delete-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/delete-kills",
+    rationale:
+      "Platform-admin read of runtime delete kill switches (#96 Slice 5); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-delete-status",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/delete-status",
+    rationale:
+      "Platform-admin delete authority status (#96 Slice 5): kills and env nuclear flag; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-delete-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/delete-events",
+    rationale:
+      "Platform-admin cross-tenant delete kill reject feed (#96 Slice 5); tool_audit_log read, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-delete-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/delete-kills/global",
+    rationale:
+      "Platform-admin global delete kill switch (#96 Slice 5); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-delete-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/delete-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant delete kill switch (#96 Slice 5); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",

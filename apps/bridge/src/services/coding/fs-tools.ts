@@ -3,6 +3,7 @@ import path from "node:path";
 import { config } from "../../config.js";
 import { ensureTenantWorkspaceDir } from "../personal-os-seed.js";
 import { runSandboxedArgv } from "./sandboxed-process.js";
+import { assertDeleteAllowed } from "../authority/delete-authority.js";
 
 const DEFAULT_READ_LIMIT = 2000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
@@ -171,6 +172,10 @@ export function editFile(opts: {
 export function deleteFile(opts: {
   path: string;
 } & FsRootOpts): { path: string; deleted: boolean } {
+  assertDeleteAllowed({
+    tenantId: opts.tenantId,
+    action: "delete_file",
+  });
   const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) return { path: opts.path, deleted: false };
   const stat = fs.statSync(abs);
@@ -183,6 +188,10 @@ export function deleteFile(opts: {
 export function deletePath(opts: {
   path: string;
 } & FsRootOpts): { path: string; deleted: boolean; type: "file" | "dir" | null } {
+  assertDeleteAllowed({
+    tenantId: opts.tenantId,
+    action: "delete_path",
+  });
   const abs = resolveRepoPath(opts.path, opts);
   if (!fs.existsSync(abs)) return { path: opts.path, deleted: false, type: null };
   const stat = fs.statSync(abs);
