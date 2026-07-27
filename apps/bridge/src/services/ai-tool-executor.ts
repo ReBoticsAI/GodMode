@@ -2868,7 +2868,12 @@ export async function executeTool(
               defaultPluginRoot(pluginId, liveOpts),
               liveOpts
             );
-            const built = await buildPluginWithEsbuild(pluginRoot);
+            const built = await buildPluginWithEsbuild(pluginRoot, {
+              tenantId: ctx.tenantId,
+              userId: ctx.userId,
+              agentId: ctx.activeAgentId,
+              action: "build_plugin",
+            });
             const installed = await dispatchKernelTool(ctx, "run_record_action", {
               objectType: "CatalogInstall",
               id: "",
@@ -2957,7 +2962,12 @@ export async function executeTool(
       const pluginRoot = assertWithinCodingRoot(rawRoot, {
         tenantId: ctx.tenantId,
       });
-      const built = await buildPluginWithEsbuild(pluginRoot);
+      const built = await buildPluginWithEsbuild(pluginRoot, {
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        agentId: ctx.activeAgentId,
+        action: "build_plugin",
+      });
       return {
         ...built,
         next: "Call install_plugin to load at runtime and enable for this tenant (no Bridge restart).",

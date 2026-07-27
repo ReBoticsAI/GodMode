@@ -19,6 +19,7 @@ import {
   persistPluginPath,
   uninstallPluginForTenant,
 } from "./plugin-lifecycle.js";
+import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
   hasPaidEntitlementForCatalogEntry,
   MarketplaceCommerceError,
@@ -352,7 +353,11 @@ export async function registerLocalPluginFolder(
   const manifest = readGodmodePluginManifest(pluginRoot);
   const builtBefore = bridgeEntryExists(pluginRoot);
   if (!builtBefore) {
-    await ensurePluginBuilt(pluginRoot);
+    await ensurePluginBuilt(pluginRoot, {
+      tenantId,
+      userId: opts?.userId,
+      action: "register_local_plugin",
+    });
   }
 
   let installed = false;
@@ -410,6 +415,10 @@ export async function installDiscoveredPlugin(
   tenantId: string,
   pluginId: string
 ): Promise<void> {
+  assertDeployAllowed({
+    tenantId,
+    action: "install_discovered_plugin",
+  });
   const available = listAvailablePlugins().find((p) => p.id === pluginId);
   if (!available) {
     throw new Error(
@@ -451,7 +460,10 @@ async function installPluginEntry(
     }
     const builtBefore = bridgeEntryExists(target);
     if (!builtBefore) {
-      await ensurePluginBuilt(target);
+      await ensurePluginBuilt(target, {
+        tenantId,
+        action: "install_catalog_plugin",
+      });
       built = true;
     }
   } else {
@@ -475,7 +487,10 @@ async function installPluginEntry(
       });
     }
     if (!bridgeEntryExists(target)) {
-      await ensurePluginBuilt(target);
+      await ensurePluginBuilt(target, {
+        tenantId,
+        action: "install_catalog_plugin",
+      });
       built = true;
     }
   }

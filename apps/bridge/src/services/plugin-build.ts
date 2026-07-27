@@ -6,8 +6,14 @@ import fs from "node:fs";
 import path from "node:path";
 import * as esbuild from "esbuild";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
+import {
+  assertDeployAllowed,
+  type DeployAssertOpts,
+} from "./authority/deploy-authority.js";
 
 const EXTERNAL = ["@godmode/plugin-api", "@godmode/plugin-host"];
+
+export type PluginBuildAuthorityOpts = DeployAssertOpts;
 
 function resolveSource(pluginRoot: string, baseName: string): string | null {
   const candidates = [
@@ -30,8 +36,15 @@ export function bridgeEntryExists(pluginRoot: string): boolean {
 }
 
 export async function buildPluginWithEsbuild(
-  pluginRoot: string
+  pluginRoot: string,
+  authority?: PluginBuildAuthorityOpts
 ): Promise<{ ok: true; pluginRoot: string; outputs: string[] }> {
+  assertDeployAllowed({
+    tenantId: authority?.tenantId,
+    userId: authority?.userId,
+    agentId: authority?.agentId,
+    action: authority?.action ?? "build_plugin",
+  });
   const resolved = path.resolve(pluginRoot);
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
     throw new Error(`Plugin root not found: ${resolved}`);
@@ -84,8 +97,11 @@ export async function buildPluginWithEsbuild(
 }
 
 /** Build if dist entry missing; used by Marketplace Unofficial and Intelligence. */
-export async function ensurePluginBuilt(pluginRoot: string): Promise<boolean> {
+export async function ensurePluginBuilt(
+  pluginRoot: string,
+  authority?: PluginBuildAuthorityOpts
+): Promise<boolean> {
   if (bridgeEntryExists(pluginRoot)) return false;
-  await buildPluginWithEsbuild(pluginRoot);
+  await buildPluginWithEsbuild(pluginRoot, authority);
   return true;
 }
