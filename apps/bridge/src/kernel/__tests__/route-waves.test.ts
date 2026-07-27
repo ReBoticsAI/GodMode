@@ -33,6 +33,8 @@ describe("legacy route wave", () => {
     expect(declaredRoutes("post|put|patch|delete")).toEqual([
       "admin-authority.ts:post:/coding-kills/global",
       "admin-authority.ts:post:/coding-kills/tenant/:tenantId",
+      "admin-authority.ts:post:/deploy-kills/global",
+      "admin-authority.ts:post:/deploy-kills/tenant/:tenantId",
       "admin-authority.ts:post:/spend-kills/global",
       "admin-authority.ts:post:/spend-kills/tenant/:tenantId",
       "admin-marketplace.ts:post:/backup",

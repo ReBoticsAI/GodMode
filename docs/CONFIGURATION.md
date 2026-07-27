@@ -31,6 +31,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
 | `PLATFORM_SPEND_DISABLED` | unset | When `true`/`1`, force deny all spend (credits debit, chat, autonomous/queue) before `platform_meta` (#96 Slice 3) |
+| `PLATFORM_DEPLOY_DISABLED` | unset | When `true`/`1`, force deny plugin build/activate and worktree promote before `platform_meta` (#96 Slice 4) |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration (keep false) |
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
@@ -63,7 +64,9 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 **Spend hard-stop (#96 Slice 3):** runtime global/per-tenant spend kills block credit debits, Intelligence chat, and autonomous/queue work. Optional env nuclear: `PLATFORM_SPEND_DISABLED=true`. Full budgets/accounting remain #91.
 
-**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (send / deploy / delete) extend the same tab. API also available:
+**Deploy hard-stop (#96 Slice 4):** runtime global/per-tenant deploy kills block plugin esbuild, `activatePluginForTenant` / marketplace install, and worktree promote. Distinct from Coding Layer 4 `builds_disabled`. Optional env nuclear: `PLATFORM_DEPLOY_DISABLED=true`. Boot reconcile installs stay ungated so restart recovery is not bricked. CLI `godmode-plugins-cli` remains an ops bypass.
+
+**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (send / delete / agent pause) extend the same tab. API also available:
 
 - `GET /api/admin/authority/coding-status`
 - `GET /api/admin/authority/coding-events`
@@ -75,8 +78,13 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 - `GET /api/admin/authority/spend-kills`
 - `POST /api/admin/authority/spend-kills/global` body `{ "spendDisabled": true }`
 - `POST /api/admin/authority/spend-kills/tenant/:tenantId` same shape
+- `GET /api/admin/authority/deploy-status`
+- `GET /api/admin/authority/deploy-events`
+- `GET /api/admin/authority/deploy-kills`
+- `POST /api/admin/authority/deploy-kills/global` body `{ "deployDisabled": true }`
+- `POST /api/admin/authority/deploy-kills/tenant/:tenantId` same shape
 
-`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`.
+`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`.
 
 ### GitHub OAuth apps (login vs Projects sync)
 

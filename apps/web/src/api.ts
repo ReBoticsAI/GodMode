@@ -3418,6 +3418,61 @@ export function setAdminSpendKillTenant(
   );
 }
 
+export type AdminDeployAuthorityStatus = {
+  kills: {
+    envDisabled: boolean;
+    global: { deployDisabled: boolean };
+    tenants: Record<string, { deployDisabled: boolean }>;
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    deployDisabled: boolean;
+  }>;
+};
+
+export type AdminDeployAuthorityEvent = {
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminDeployStatus() {
+  return api<AdminDeployAuthorityStatus>("/admin/authority/deploy-status");
+}
+
+export function fetchAdminDeployEvents(opts?: { limit?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<{ events: AdminDeployAuthorityEvent[] }>(
+    `/admin/authority/deploy-events${q ? `?${q}` : ""}`
+  );
+}
+
+export function setAdminDeployKillGlobal(body: { deployDisabled: boolean }) {
+  return api<AdminDeployAuthorityStatus["kills"]>(
+    "/admin/authority/deploy-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminDeployKillTenant(
+  tenantId: string,
+  body: { deployDisabled: boolean }
+) {
+  return api<AdminDeployAuthorityStatus["kills"]>(
+    `/admin/authority/deploy-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 
 export function signupPassword(
   email: string,
