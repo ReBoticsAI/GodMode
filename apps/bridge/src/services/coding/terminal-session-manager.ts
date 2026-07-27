@@ -351,7 +351,17 @@ export function readTerminalSession(opts: {
   tenantId?: string | null;
   sinceOffset?: number;
   maxChars?: number;
-}): { sessionId: string; data: string; offset: number; running: boolean; exitCode: number | null } {
+}): {
+  sessionId: string;
+  data: string;
+  offset: number;
+  running: boolean;
+  exitCode: number | null;
+  sandboxed: boolean;
+  netMode: CodingTerminalNet | "host";
+  name: string;
+  cwd: string;
+} {
   const session = getTerminalSession(opts.sessionId, opts.tenantId);
   if (!session) throw new Error(`Unknown terminal session: ${opts.sessionId}`);
   const since = Math.max(0, Number(opts.sinceOffset ?? 0));
@@ -374,6 +384,10 @@ export function readTerminalSession(opts: {
     offset: session.byteOffset,
     running: !session.closed,
     exitCode: session.exitCode,
+    sandboxed: session.sandboxed,
+    netMode: session.netMode,
+    name: session.name,
+    cwd: path.relative(session.codingRoot, session.cwd).replace(/\\/g, "/") || ".",
   };
 }
 
@@ -381,12 +395,22 @@ export function writeTerminalSession(opts: {
   sessionId: string;
   tenantId?: string | null;
   data: string;
-}): { sessionId: string; ok: boolean } {
+}): {
+  sessionId: string;
+  ok: boolean;
+  sandboxed: boolean;
+  netMode: CodingTerminalNet | "host";
+} {
   const session = getTerminalSession(opts.sessionId, opts.tenantId);
   if (!session) throw new Error(`Unknown terminal session: ${opts.sessionId}`);
   if (session.closed) throw new Error(`Terminal session closed: ${opts.sessionId}`);
   session.pty.write(String(opts.data ?? ""));
-  return { sessionId: session.id, ok: true };
+  return {
+    sessionId: session.id,
+    ok: true,
+    sandboxed: session.sandboxed,
+    netMode: session.netMode,
+  };
 }
 
 export function resizeTerminalSession(opts: {
@@ -467,6 +491,8 @@ export async function monitorTerminalSession(opts: {
   reason: "idle" | "pattern" | "exit" | "abort" | "cap";
   bytes: number;
   exitCode: number | null;
+  sandboxed: boolean;
+  netMode: CodingTerminalNet | "host";
 }> {
   const session = getTerminalSession(opts.sessionId, opts.tenantId);
   if (!session) throw new Error(`Unknown terminal session: ${opts.sessionId}`);
@@ -560,6 +586,8 @@ export async function monitorTerminalSession(opts: {
       reason: "exit",
       bytes: 0,
       exitCode: session.exitCode,
+      sandboxed: session.sandboxed,
+      netMode: session.netMode,
     };
   }
 
@@ -574,6 +602,8 @@ export async function monitorTerminalSession(opts: {
     reason,
     bytes,
     exitCode: session.exitCode,
+    sandboxed: session.sandboxed,
+    netMode: session.netMode,
   };
 }
 
