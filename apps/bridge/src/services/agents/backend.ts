@@ -51,6 +51,10 @@ export interface AgentRunRequest {
     toolCallId: string,
     chunk: { stream: "stdout" | "stderr"; text: string }
   ) => void;
+  onTerminalMonitor?: (
+    toolCallId: string,
+    chunk: { sessionId: string; text: string }
+  ) => void;
   onUsage?: (usage: {
     prompt_tokens: number;
     completion_tokens: number;

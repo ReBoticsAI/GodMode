@@ -306,4 +306,28 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "Human Coding workspace sandboxed command runner (#148); same runTerminal / bwrap boundary as agent run_terminal, not ObjectType Record CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "ai-coding-workspace-terminal-sessions",
+    methods: ["POST"],
+    pathPattern: "/api/ai/coding/terminal/sessions",
+    rationale:
+      "Human/agent shared PTY session create (#162); sandboxed node-pty under coding root, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-coding-workspace-terminal-session-write",
+    methods: ["POST"],
+    pathPattern: "/api/ai/coding/terminal/sessions/:/write",
+    rationale:
+      "Shared PTY session stdin write (#162); filesystem/shell domain, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-coding-workspace-terminal-session-close",
+    methods: ["DELETE"],
+    pathPattern: "/api/ai/coding/terminal/sessions/:",
+    rationale:
+      "Shared PTY session close/kill (#162); filesystem/shell domain, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;

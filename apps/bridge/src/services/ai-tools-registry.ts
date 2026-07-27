@@ -916,7 +916,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "run_terminal",
     description:
-      "Run a shell command in the platform repository (cwd relative to repo root). Requires confirmation unless agent has codeAutonomy.",
+      "Run a one-shot shell command in the platform repository (cwd relative to repo root). Prefer terminal_session_* + terminal_monitor for long-lived servers, watchers, or REPLs. Requires confirmation unless agent has codeAutonomy.",
     mode: "confirm",
     category: "coding",
     write: true,
@@ -928,6 +928,90 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         timeoutMs: { type: "number" },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "terminal_session_create",
+    description:
+      "Create a shared sandboxed PTY session (interactive shell). Use for long-lived processes; humans can attach in Coding Terminal. Prefer over run_terminal for servers/watchers/REPLs.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        cwd: { type: "string" },
+        name: { type: "string" },
+        shell: { type: "string", description: "bash | sh (default bash)" },
+      },
+    },
+  },
+  {
+    name: "terminal_session_list",
+    description: "List shared PTY sessions for this tenant (id, cwd, running, lastLine, attachedClients).",
+    mode: "auto",
+    category: "coding",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "terminal_session_read",
+    description:
+      "Read scrollback from a shared PTY session (like reading a background output file). Pass sinceOffset from a prior read for incremental chunks.",
+    mode: "auto",
+    category: "coding",
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        sinceOffset: { type: "number" },
+        maxChars: { type: "number" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "terminal_session_write",
+    description:
+      "Write to a shared PTY session stdin (commands, Ctrl+C as \\u0003, etc.). Humans may also type when attached.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        data: { type: "string" },
+      },
+      required: ["sessionId", "data"],
+    },
+  },
+  {
+    name: "terminal_session_close",
+    description: "Kill and remove a shared PTY session.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: { sessionId: { type: "string" } },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "terminal_monitor",
+    description:
+      "Subscribe to new PTY output for this chat turn (Claude Monitor analogue). Batches lines (~200ms), caps bytes, stops on idle timeout, regex pattern, session exit, or abort. Prefer over busy-polling terminal_session_read.",
+    mode: "auto",
+    category: "coding",
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        idleMs: { type: "number", description: "Stop after this idle (default 8000)" },
+        pattern: { type: "string", description: "Stop when this regex matches recent output" },
+        maxBytes: { type: "number" },
+      },
+      required: ["sessionId"],
     },
   },
   {
@@ -1678,6 +1762,12 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "revert_file",
   "delete_file",
   "run_terminal",
+  "terminal_session_create",
+  "terminal_session_list",
+  "terminal_session_read",
+  "terminal_session_write",
+  "terminal_session_close",
+  "terminal_monitor",
   "scaffold_plugin",
   "coding_worktree_create",
   "coding_worktree_list",
@@ -1693,6 +1783,9 @@ const CODING_WRITE_TOOLS = new Set([
   "apply_patch",
   "delete_file",
   "run_terminal",
+  "terminal_session_create",
+  "terminal_session_write",
+  "terminal_session_close",
   "revert_file",
   "scaffold_plugin",
   "coding_worktree_create",

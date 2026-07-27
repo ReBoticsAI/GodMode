@@ -3,6 +3,11 @@
 # Alpine (musl) breaks glibc prebuilds (ld-linux-x86-64.so.2 missing).
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+# node-pty (and occasional native rebuilds) need a toolchain; duckdb/better-sqlite3
+# usually use glibc prebuilds on bookworm.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY apps/bridge/package.json apps/bridge/
 COPY apps/web/package.json apps/web/

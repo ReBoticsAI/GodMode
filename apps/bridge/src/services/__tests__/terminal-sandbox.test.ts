@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildBubblewrapArgs,
+  interactiveShellCommand,
   probeBubblewrap,
   resetBubblewrapProbeCache,
   scrubTerminalEnv,
@@ -107,6 +108,19 @@ describe("buildBubblewrapArgs", () => {
         command: "true",
       })
     ).toThrow(/escapes/i);
+  });
+});
+
+describe("interactiveShellCommand", () => {
+  it("defaults to bash login shell", () => {
+    expect(interactiveShellCommand()).toBe("exec /bin/bash -l");
+    expect(interactiveShellCommand({ shell: "sh" })).toBe("exec /bin/sh -l");
+  });
+
+  it("rejects unsafe shell strings", () => {
+    expect(() => interactiveShellCommand({ shell: "../../bin/evil" })).toThrow(
+      /Unsupported shell/
+    );
   });
 });
 
