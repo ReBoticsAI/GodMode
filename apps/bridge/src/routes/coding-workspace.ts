@@ -17,6 +17,7 @@ import {
   writeFile as writeCodingFile,
 } from "../services/coding/fs-tools.js";
 import { logToolAudit } from "../services/coding/tool-audit.js";
+import { runTerminal } from "../services/coding/terminal-service.js";
 
 const MAX_UI_FILE_BYTES = 512 * 1024;
 
@@ -287,6 +288,94 @@ export function createCodingWorkspaceRouter(
       res.json(result);
     } catch (err) {
       sendFsError(res, err);
+    }
+  });
+
+  /**
+   * Human coding terminal command runner (#148 slice 1).
+   * One-shot sandboxed shell via the same runTerminal / bwrap path as agent tools.
+   * Not a PTY: stdin is ignored; full interactive shell is a follow-up.
+   */
+  router.post("/terminal/run", async (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId, root, agentId } = fsOpts(req, db);
+    const body = req.body as {
+      command?: string;
+      cwd?: string;
+      timeoutMs?: number;
+    };
+    const command = String(body.command ?? "").trim();
+    if (!command) {
+      res.status(400).json({ error: "command required" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const send = (event: string, data: unknown) => {
+      if (res.writableEnded) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const abortController = new AbortController();
+    const onClientClose = () => abortController.abort();
+    req.on("close", onClientClose);
+    res.on("close", onClientClose);
+
+    try {
+      const result = await runTerminal({
+        command,
+        cwd: body.cwd?.trim() || ".",
+        timeoutMs: body.timeoutMs,
+        tenantId,
+        root,
+        abortSignal: abortController.signal,
+        onOutput: (chunk) => {
+          send("output", {
+            stream: chunk.stream,
+            text: chunk.text,
+          });
+        },
+      });
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_run_terminal",
+        cwd: result.cwd,
+        command: result.command,
+        exitCode: result.exitCode,
+        result: result.timedOut
+          ? "timeout"
+          : result.exitCode === 0
+            ? "ok"
+            : "error",
+      });
+      send("done", {
+        exitCode: result.exitCode,
+        signal: result.signal,
+        cwd: result.cwd,
+        timedOut: result.timedOut,
+        sandboxed: result.sandboxed ?? false,
+        netMode: result.netMode ?? null,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_run_terminal",
+        command,
+        result: `error:${msg.slice(0, 200)}`,
+      });
+      send("error", { error: msg });
+    } finally {
+      req.off("close", onClientClose);
+      res.off("close", onClientClose);
+      if (!res.writableEnded) res.end();
     }
   });
 
