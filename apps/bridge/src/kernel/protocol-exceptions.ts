@@ -149,6 +149,46 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-spend-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/spend-kills",
+    rationale:
+      "Platform-admin read of runtime spend kill switches (#96 Slice 3); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-spend-status",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/spend-status",
+    rationale:
+      "Platform-admin spend authority status (#96 Slice 3): kills and env nuclear flag; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-spend-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/spend-events",
+    rationale:
+      "Platform-admin cross-tenant spend kill reject feed (#96 Slice 3); tool_audit_log read, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-spend-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/spend-kills/global",
+    rationale:
+      "Platform-admin global spend kill switch (#96 Slice 3); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-spend-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/spend-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant spend kill switch (#96 Slice 3); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",
