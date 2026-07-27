@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listAllTenantIds } from "../core-db.js";
+import { getCoreDb, listAllTenantIds } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -16,7 +16,7 @@ export function createAdminAuthorityRouter(): Router {
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
 
   router.get("/coding-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds();
+    const tenantIds = listAllTenantIds(getCoreDb());
     res.json(getCodingKillState(tenantIds));
   });
 
