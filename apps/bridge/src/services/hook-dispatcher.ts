@@ -18,6 +18,10 @@ import {
   listConversationMemberUserIds,
 } from "./dm-service.js";
 import { getShareBroker } from "../ws-broker.js";
+import {
+  assertSendAllowed,
+  isSendAuthorityError,
+} from "./authority/send-authority.js";
 
 interface DispatcherDeps {
   llm?: LlmManager;
@@ -397,6 +401,21 @@ async function dispatchAction(
       cfg = JSON.parse(hook.action_config_json) as Record<string, unknown>;
     } catch {
       return { status: "error", detail: "invalid action_config_json" };
+    }
+  }
+  if (hook.action_kind === "webhook" || hook.action_kind === "send_message") {
+    try {
+      assertSendAllowed({
+        tenantId: hook.owner_tenant_id,
+        userId: hook.owner_kind === "user" ? hook.owner_id : null,
+        agentId: hook.owner_kind === "agent" ? hook.owner_id : "system",
+        action: `hook_${hook.action_kind}`,
+      });
+    } catch (err) {
+      if (isSendAuthorityError(err)) {
+        return { status: "error", detail: err.message };
+      }
+      throw err;
     }
   }
   switch (hook.action_kind) {

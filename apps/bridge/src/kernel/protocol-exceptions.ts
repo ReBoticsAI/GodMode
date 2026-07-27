@@ -269,6 +269,46 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-send-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/send-kills",
+    rationale:
+      "Platform-admin read of runtime send kill switches (#96 Slice 6); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-send-status",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/send-status",
+    rationale:
+      "Platform-admin send authority status (#96 Slice 6): kills and env nuclear flag; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-send-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/send-events",
+    rationale:
+      "Platform-admin cross-tenant send kill reject feed (#96 Slice 6); tool_audit_log read, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-send-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/send-kills/global",
+    rationale:
+      "Platform-admin global send kill switch (#96 Slice 6); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-send-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/send-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant send kill switch (#96 Slice 6); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",

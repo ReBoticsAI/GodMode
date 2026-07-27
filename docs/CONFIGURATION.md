@@ -33,6 +33,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `PLATFORM_SPEND_DISABLED` | unset | When `true`/`1`, force deny all spend (credits debit, chat, autonomous/queue) before `platform_meta` (#96 Slice 3) |
 | `PLATFORM_DEPLOY_DISABLED` | unset | When `true`/`1`, force deny plugin build/activate and worktree promote before `platform_meta` (#96 Slice 4) |
 | `PLATFORM_DELETE_DISABLED` | unset | When `true`/`1`, force deny record/FS/wiki/plugin uninstall deletes before `platform_meta` (#96 Slice 5) |
+| `PLATFORM_SEND_DISABLED` | unset | When `true`/`1`, force deny hook webhook/send_message before `platform_meta` (#96 Slice 6) |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration (keep false) |
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
@@ -69,7 +70,9 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 **Delete hard-stop (#96 Slice 5):** runtime global/per-tenant delete kills block kernel `deleteRecord`, coding `deleteFile`/`deletePath`, wiki `deletePage`, and plugin uninstall. Optional env nuclear: `PLATFORM_DELETE_DISABLED=true`. Reconcile uninstalls and failed-install compensation stay exempt. Platform-admin `wipeWorkspaceTenant` stays ungated. CLI uninstall remains an ops bypass.
 
-**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (send / agent pause / unified audit) extend the same tab. API also available:
+**Send hard-stop (#96 Slice 6):** runtime global/per-tenant send kills block hook `webhook` and `send_message` actions (automation outbound). Optional env nuclear: `PLATFORM_SEND_DISABLED=true`. Auth verification/reset mail, human DMs, agent conversational replies, and in-app `notify` stay ungated.
+
+**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (agent pause / unified audit) extend the same tab. API also available:
 
 - `GET /api/admin/authority/coding-status`
 - `GET /api/admin/authority/coding-events`
@@ -91,8 +94,13 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 - `GET /api/admin/authority/delete-kills`
 - `POST /api/admin/authority/delete-kills/global` body `{ "deleteDisabled": true }`
 - `POST /api/admin/authority/delete-kills/tenant/:tenantId` same shape
+- `GET /api/admin/authority/send-status`
+- `GET /api/admin/authority/send-events`
+- `GET /api/admin/authority/send-kills`
+- `POST /api/admin/authority/send-kills/global` body `{ "sendDisabled": true }`
+- `POST /api/admin/authority/send-kills/tenant/:tenantId` same shape
 
-`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`. `PLATFORM_DELETE_DISABLED=true` forces delete deny even before `platform_meta`.
+`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`. `PLATFORM_DELETE_DISABLED=true` forces delete deny even before `platform_meta`. `PLATFORM_SEND_DISABLED=true` forces send deny even before `platform_meta`.
 
 ### GitHub OAuth apps (login vs Projects sync)
 
