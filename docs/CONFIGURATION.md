@@ -58,8 +58,12 @@ On `INSTALLATION_SURFACE=saas`, coding is **on by default** (#178). Set `PLATFOR
 
 Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.example), [deploy/.env.production.example](../deploy/.env.production.example).
 
-**Coding quotas + kill switches (#96 Slice 1):** hub/SaaS defaults above limit noisy-neighbor terminal/PTY/build load. Rejects are audited in `tool_audit_log` with stable codes (`quota:*`, `kill:*`). Ops can disable coding or builds globally or per tenant without redeploying images via platform admin API:
+**Coding quotas + kill switches (#96 Slice 1–2):** hub/SaaS defaults above limit noisy-neighbor terminal/PTY/build load. Rejects are audited in `tool_audit_log` with stable codes (`quota:*`, `kill:*`).
 
+**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (spend / send / deploy / delete) extend the same tab. API also available:
+
+- `GET /api/admin/authority/coding-status`
+- `GET /api/admin/authority/coding-events`
 - `GET /api/admin/authority/coding-kills`
 - `POST /api/admin/authority/coding-kills/global` body `{ "codingDisabled": true, "buildsDisabled": false }`
 - `POST /api/admin/authority/coding-kills/tenant/:tenantId` same shape
