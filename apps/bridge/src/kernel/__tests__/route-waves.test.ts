@@ -52,6 +52,7 @@ describe("legacy route wave", () => {
       "coding-workspace.ts:post:/file",
       "coding-workspace.ts:post:/mkdir",
       "coding-workspace.ts:post:/rename",
+      "coding-workspace.ts:post:/terminal/run",
       "coding-workspace.ts:put:/file",
       "dm.ts:post:/conversations/:id/typing",
       "dm.ts:post:/uploads",

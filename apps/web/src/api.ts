@@ -2013,6 +2013,104 @@ export const deleteCodingPath = (path: string, agentId?: string) => {
   );
 };
 
+export type CodingTerminalDone = {
+  exitCode: number | null;
+  signal: string | null;
+  cwd: string;
+  timedOut: boolean;
+  sandboxed: boolean;
+  netMode: string | null;
+};
+
+/** SSE command runner for Coding workspace Terminal tab (#148). Returns abort fn. */
+export function streamCodingTerminal(
+  req: { command: string; cwd?: string; timeoutMs?: number; agentId?: string },
+  handlers: {
+    onOutput?: (chunk: { stream: "stdout" | "stderr"; text: string }) => void;
+    onDone?: (done: CodingTerminalDone) => void;
+    onError?: (error: string) => void;
+  }
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const tenantId = getActiveTenantId();
+      const sessionToken = allowSessionTokenFallback ? readSessionToken() : null;
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (tenantId) headers.set("X-Tenant-Id", tenantId);
+      if (sessionToken) {
+        headers.set("Authorization", `Bearer ${sessionToken}`);
+        headers.set("X-Godmode-Session", sessionToken);
+      }
+      // Keep first fetch arg statically analyzable for kernel mutation audit.
+      const res = await fetch(`${API_BASE}/ai/coding/terminal/run`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          command: req.command,
+          cwd: req.cwd,
+          timeoutMs: req.timeoutMs,
+          agentId: req.agentId,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        handlers.onError?.(
+          (err as { error?: string }).error ?? res.statusText
+        );
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const block of events) {
+          let event = "message";
+          let data = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) data += line.slice(6);
+          }
+          if (!data) continue;
+          let parsed: Record<string, unknown>;
+          try {
+            parsed = JSON.parse(data);
+          } catch {
+            continue;
+          }
+          if (event === "output") {
+            handlers.onOutput?.({
+              stream: parsed.stream as "stdout" | "stderr",
+              text: String(parsed.text ?? ""),
+            });
+          } else if (event === "done") {
+            handlers.onDone?.(parsed as unknown as CodingTerminalDone);
+          } else if (event === "error") {
+            handlers.onError?.(String(parsed.error ?? "terminal error"));
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        handlers.onError?.(err instanceof Error ? err.message : String(err));
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 export const enqueueAiJob = (body: {
   prompt?: string;
   workflowId?: string;
