@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { config } from "../../config.js";
 import { ensureTenantWorkspaceDir } from "../personal-os-seed.js";
+import { runSandboxedArgv } from "./sandboxed-process.js";
 
 const DEFAULT_READ_LIMIT = 2000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
@@ -332,39 +332,44 @@ export async function grepSearch(opts: {
   tenantId?: string | null;
   root?: string;
 }): Promise<{ pattern: string; output: string; engine: "rg" | "node" }> {
-  const root = resolveRepoPath(opts.path?.trim() || ".", {
-    tenantId: opts.tenantId,
-    root: opts.root,
-  });
+  const rootOpts = { tenantId: opts.tenantId, root: opts.root };
+  const root = resolveRepoPath(opts.path?.trim() || ".", rootOpts);
+  const codingRoot = resolveCodingRoot(rootOpts);
   const rgArgs = [
+    "rg",
     "--line-number",
     "--no-heading",
     "--color=never",
     "--max-count=500",
-    opts.pattern,
-    root,
   ];
-  if (opts.glob) rgArgs.splice(0, 0, "--glob", opts.glob);
-  if (opts.caseInsensitive) rgArgs.splice(0, 0, "-i");
-
-  const tryRg = (): Promise<string | null> =>
-    new Promise((resolve) => {
-      const proc = spawn("rg", rgArgs, { windowsHide: true });
-      let out = "";
-      proc.stdout?.on("data", (c) => {
-        out += String(c);
-      });
-      proc.on("error", () => resolve(null));
-      proc.on("close", (code) => {
-        if (code === 0 || code === 1) resolve(budgetText(out.trim()));
-        else resolve(null);
-      });
-    });
-
-  const rgOut = await tryRg();
-  if (rgOut != null) {
-    return { pattern: opts.pattern, output: rgOut || "(no matches)", engine: "rg" };
+  if (opts.glob) {
+    rgArgs.push("--glob", opts.glob);
   }
+  if (opts.caseInsensitive) {
+    rgArgs.push("-i");
+  }
+  rgArgs.push(opts.pattern, root);
+
+  try {
+    const res = await runSandboxedArgv({
+      codingRoot,
+      cwd: codingRoot,
+      argv: rgArgs,
+      net: "none",
+      timeoutMs: 30_000,
+    });
+    // rg: 0 = matches, 1 = no matches, other = error / missing binary
+    if (res.exitCode === 0 || res.exitCode === 1) {
+      return {
+        pattern: opts.pattern,
+        output: budgetText(res.stdout.trim()) || "(no matches)",
+        engine: "rg",
+      };
+    }
+  } catch {
+    /* fall through to node */
+  }
+
   return {
     pattern: opts.pattern,
     output: grepNode(opts) || "(no matches)",
@@ -557,22 +562,15 @@ export function revertFile(opts: {
 } & FsRootOpts): Promise<{ path: string; reverted: boolean; output: string }> {
   const abs = resolveRepoPath(opts.path, opts);
   const codingRoot = resolveCodingRoot(opts);
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["checkout", "HEAD", "--", abs], {
-      cwd: codingRoot,
-      shell: process.platform === "win32",
-      windowsHide: true,
-    });
-    let out = "";
-    proc.stdout?.on("data", (c) => {
-      out += String(c);
-    });
-    proc.stderr?.on("data", (c) => {
-      out += String(c);
-    });
-    proc.on("error", reject);
-    proc.on("close", (code) => {
-      resolve({ path: opts.path, reverted: code === 0, output: out.trim() });
-    });
-  });
+  return runSandboxedArgv({
+    codingRoot,
+    cwd: codingRoot,
+    argv: ["git", "checkout", "HEAD", "--", abs],
+    net: "none",
+    timeoutMs: 60_000,
+  }).then((res) => ({
+    path: opts.path,
+    reverted: res.exitCode === 0,
+    output: (res.stdout + res.stderr).trim(),
+  }));
 }
