@@ -30,6 +30,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Offsite backup upload |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
+| `PLATFORM_SPEND_DISABLED` | unset | When `true`/`1`, force deny all spend (credits debit, chat, autonomous/queue) before `platform_meta` (#96 Slice 3) |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration (keep false) |
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
@@ -60,15 +61,22 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 **Coding quotas + kill switches (#96 Slice 1–2):** hub/SaaS defaults above limit noisy-neighbor terminal/PTY/build load. Rejects are audited in `tool_audit_log` with stable codes (`quota:*`, `kill:*`).
 
-**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (spend / send / deploy / delete) extend the same tab. API also available:
+**Spend hard-stop (#96 Slice 3):** runtime global/per-tenant spend kills block credit debits, Intelligence chat, and autonomous/queue work. Optional env nuclear: `PLATFORM_SPEND_DISABLED=true`. Full budgets/accounting remain #91.
+
+**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and recent rejects. Later #96 slices (send / deploy / delete) extend the same tab. API also available:
 
 - `GET /api/admin/authority/coding-status`
 - `GET /api/admin/authority/coding-events`
 - `GET /api/admin/authority/coding-kills`
 - `POST /api/admin/authority/coding-kills/global` body `{ "codingDisabled": true, "buildsDisabled": false }`
 - `POST /api/admin/authority/coding-kills/tenant/:tenantId` same shape
+- `GET /api/admin/authority/spend-status`
+- `GET /api/admin/authority/spend-events`
+- `GET /api/admin/authority/spend-kills`
+- `POST /api/admin/authority/spend-kills/global` body `{ "spendDisabled": true }`
+- `POST /api/admin/authority/spend-kills/tenant/:tenantId` same shape
 
-`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding.
+`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`.
 
 ### GitHub OAuth apps (login vs Projects sync)
 

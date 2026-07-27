@@ -152,6 +152,7 @@ function meterInferenceUsage(
   opts: {
     endpoint: Record<string, unknown>;
     buyerUserId: string;
+    buyerTenantId?: string | null;
     tokensIn: number;
     tokensOut: number;
     listing?: Record<string, unknown> | null;
@@ -170,6 +171,7 @@ function meterInferenceUsage(
     reason: "inference_usage",
     refType: "endpoint",
     refId: String(opts.endpoint.id),
+    tenantId: opts.buyerTenantId,
   });
   if (sellerId !== opts.buyerUserId) {
     adjustCredits(core, {
@@ -288,6 +290,7 @@ export async function runRemoteInference(
             meterInferenceUsage(core, {
               endpoint,
               buyerUserId: opts.buyerUserId,
+              buyerTenantId: opts.buyerTenantId,
               tokensIn: Math.ceil(tokensIn),
               tokensOut: Math.ceil(tokensOut),
               listing,

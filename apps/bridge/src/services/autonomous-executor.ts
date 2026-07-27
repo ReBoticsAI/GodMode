@@ -12,6 +12,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { broadcastCardActivity } from "../ws-broker.js";
 import { getPluginHost, type PluginSchedulerHost } from "@godmode/plugin-host";
+import { assertSpendAllowed } from "./authority/spend-authority.js";
 
 const OPTIMIZATION_SCHEDULER_ID = "optimization";
 
@@ -615,6 +616,18 @@ function clearAwaitingOnAcceptedSubtasks(db: AppDatabase, subtasks: CardRow[]): 
 export async function runAutonomousTick(
   deps: AutonomousDeps
 ): Promise<TickResult> {
+  try {
+    assertSpendAllowed({
+      tenantId: deps.tenantId,
+      action: "autonomous_tick",
+    });
+  } catch (err) {
+    return {
+      status: "error",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+
   const db = deps.db;
   const parent = selectActiveTask(db);
   if (!parent) return { status: "idle" };

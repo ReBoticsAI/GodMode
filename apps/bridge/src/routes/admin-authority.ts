@@ -14,6 +14,15 @@ import {
   getCodingAuthorityStatus,
   listCodingAuthorityEvents,
 } from "../services/coding/coding-authority-admin.js";
+import {
+  getSpendKillState,
+  setGlobalSpendKill,
+  setTenantSpendKill,
+} from "../services/authority/spend-kill-switch.js";
+import {
+  getSpendAuthorityStatus,
+  listSpendAuthorityEvents,
+} from "../services/authority/spend-authority-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
@@ -84,6 +93,65 @@ export function createAdminAuthorityRouter(): Router {
     }
     setTenantCodingKill(tenantId, { codingDisabled, buildsDisabled });
     res.json(getCodingKillState([tenantId]));
+  });
+
+  router.get("/spend-kills", (_req, res) => {
+    const tenantIds = listAllTenantIds(getCoreDb());
+    res.json(getSpendKillState(tenantIds));
+  });
+
+  router.get("/spend-status", (_req, res) => {
+    try {
+      res.json(getSpendAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/spend-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listSpendAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/spend-kills/global", (req, res) => {
+    const spendDisabled =
+      req.body?.spendDisabled === undefined
+        ? undefined
+        : Boolean(req.body.spendDisabled);
+    if (spendDisabled === undefined) {
+      res.status(400).json({ error: "spendDisabled required" });
+      return;
+    }
+    setGlobalSpendKill({ spendDisabled });
+    res.json(getSpendKillState(listAllTenantIds(getCoreDb())));
+  });
+
+  router.post("/spend-kills/tenant/:tenantId", (req, res) => {
+    const tenantId =
+      typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+    if (!tenantId) {
+      res.status(400).json({ error: "tenantId required" });
+      return;
+    }
+    const spendDisabled =
+      req.body?.spendDisabled === undefined
+        ? undefined
+        : Boolean(req.body.spendDisabled);
+    if (spendDisabled === undefined) {
+      res.status(400).json({ error: "spendDisabled required" });
+      return;
+    }
+    setTenantSpendKill(tenantId, { spendDisabled });
+    res.json(getSpendKillState([tenantId]));
   });
 
   return router;

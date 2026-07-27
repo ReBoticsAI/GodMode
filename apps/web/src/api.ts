@@ -3363,6 +3363,61 @@ export function setAdminCodingKillTenant(
   );
 }
 
+export type AdminSpendAuthorityStatus = {
+  kills: {
+    envDisabled: boolean;
+    global: { spendDisabled: boolean };
+    tenants: Record<string, { spendDisabled: boolean }>;
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    spendDisabled: boolean;
+  }>;
+};
+
+export type AdminSpendAuthorityEvent = {
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminSpendStatus() {
+  return api<AdminSpendAuthorityStatus>("/admin/authority/spend-status");
+}
+
+export function fetchAdminSpendEvents(opts?: { limit?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<{ events: AdminSpendAuthorityEvent[] }>(
+    `/admin/authority/spend-events${q ? `?${q}` : ""}`
+  );
+}
+
+export function setAdminSpendKillGlobal(body: { spendDisabled: boolean }) {
+  return api<AdminSpendAuthorityStatus["kills"]>(
+    "/admin/authority/spend-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminSpendKillTenant(
+  tenantId: string,
+  body: { spendDisabled: boolean }
+) {
+  return api<AdminSpendAuthorityStatus["kills"]>(
+    `/admin/authority/spend-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 
 export function signupPassword(
   email: string,
