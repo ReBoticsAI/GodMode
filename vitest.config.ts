@@ -29,6 +29,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/tenant-worktree.test.ts",
       "apps/bridge/src/services/__tests__/coding-ui-access.test.ts",
       "apps/bridge/src/services/__tests__/coding-terminal-route.test.ts",
+      "apps/bridge/src/services/__tests__/terminal-session-manager.test.ts",
       "apps/bridge/src/services/__tests__/write-tool-verify.test.ts",
       "apps/bridge/src/services/__tests__/cursor-workspace-knowledge.test.ts",
       "apps/bridge/src/services/__tests__/cursor-mcp-config.test.ts",

@@ -242,6 +242,24 @@ export function buildBubblewrapArgs(opts: {
   return args;
 }
 
+/**
+ * Interactive shell command inside the jail (#162).
+ * Allowlist mode keeps the TCP→UDS bridge alive for the shell lifetime via wrapAllowlistCommand.
+ */
+export function interactiveShellCommand(opts?: { shell?: string }): string {
+  const shell = String(opts?.shell ?? "").trim();
+  if (shell === "sh" || shell === "/bin/sh") return "exec /bin/sh -l";
+  if (shell === "bash" || shell === "/bin/bash" || !shell) {
+    return "exec /bin/bash -l";
+  }
+  // Reject path escapes: only bare names or absolute /bin|/usr/bin
+  if (!/^\/?(bin|usr\/bin)\/[a-z0-9._+-]+$/i.test(shell) && !/^[a-z0-9._+-]+$/i.test(shell)) {
+    throw new Error(`Unsupported shell: ${shell}`);
+  }
+  const abs = shell.startsWith("/") ? shell : `/bin/${shell}`;
+  return `exec ${abs} -l`;
+}
+
 const DROP_ENV_PREFIXES = [
   "DOCKER_",
   "KUBERNETES_",

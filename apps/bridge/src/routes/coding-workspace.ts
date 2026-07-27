@@ -18,6 +18,13 @@ import {
 } from "../services/coding/fs-tools.js";
 import { logToolAudit } from "../services/coding/tool-audit.js";
 import { runTerminal } from "../services/coding/terminal-service.js";
+import {
+  closeTerminalSession,
+  createTerminalSession,
+  listTerminalSessions,
+  readTerminalSession,
+  writeTerminalSession,
+} from "../services/coding/terminal-session-manager.js";
 
 const MAX_UI_FILE_BYTES = 512 * 1024;
 
@@ -291,10 +298,124 @@ export function createCodingWorkspaceRouter(
     }
   });
 
+  /** Shared PTY sessions (#162): create / list / read / write / close. */
+  router.get("/terminal/sessions", (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId } = fsOpts(req, db);
+    res.json({ sessions: listTerminalSessions(tenantId) });
+  });
+
+  router.post("/terminal/sessions", async (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId, root, agentId } = fsOpts(req, db);
+    const body = req.body as {
+      cwd?: string;
+      name?: string;
+      shell?: string;
+      cols?: number;
+      rows?: number;
+    };
+    try {
+      const session = await createTerminalSession({
+        tenantId,
+        root,
+        cwd: body.cwd,
+        name: body.name,
+        shell: body.shell,
+        cols: body.cols,
+        rows: body.rows,
+      });
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_terminal_session_create",
+        cwd: session.cwd,
+        result: session.sessionId,
+      });
+      res.status(201).json(session);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_terminal_session_create",
+        result: `error:${msg.slice(0, 200)}`,
+      });
+      sendFsError(res, err);
+    }
+  });
+
+  router.get("/terminal/sessions/:sessionId", (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId } = fsOpts(req, db);
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    try {
+      const sinceOffset =
+        req.query.sinceOffset != null
+          ? Number(req.query.sinceOffset)
+          : undefined;
+      const maxChars =
+        req.query.maxChars != null ? Number(req.query.maxChars) : undefined;
+      res.json(
+        readTerminalSession({
+          sessionId,
+          tenantId,
+          sinceOffset,
+          maxChars,
+        })
+      );
+    } catch (err) {
+      sendFsError(res, err);
+    }
+  });
+
+  router.post("/terminal/sessions/:sessionId/write", (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId, agentId } = fsOpts(req, db);
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    const data = String((req.body as { data?: string })?.data ?? "");
+    try {
+      const result = writeTerminalSession({ sessionId, tenantId, data });
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_terminal_session_write",
+        result: sessionId,
+        bytesOut: Buffer.byteLength(data, "utf8"),
+      });
+      res.json(result);
+    } catch (err) {
+      sendFsError(res, err);
+    }
+  });
+
+  router.delete("/terminal/sessions/:sessionId", async (req, res) => {
+    if (denyIfBlocked(res)) return;
+    const db = tdb(req);
+    const { tenantId, agentId } = fsOpts(req, db);
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    try {
+      const result = await closeTerminalSession({ sessionId, tenantId });
+      logToolAudit(db, {
+        agentId,
+        userId: req.user?.id,
+        action: "ui_terminal_session_close",
+        result: sessionId,
+      });
+      res.json(result);
+    } catch (err) {
+      sendFsError(res, err);
+    }
+  });
+
   /**
    * Human coding terminal command runner (#148 slice 1).
    * One-shot sandboxed shell via the same runTerminal / bwrap path as agent tools.
-   * Not a PTY: stdin is ignored; full interactive shell is a follow-up.
+   * Shared PTY sessions live under /terminal/sessions (#162).
    */
   router.post("/terminal/run", async (req, res) => {
     if (denyIfBlocked(res)) return;

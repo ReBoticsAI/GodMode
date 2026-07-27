@@ -119,6 +119,7 @@ export class LocalLlamaBackend implements AgentBackend {
       onToolCallDelta: req.onToolCallDelta,
       onToolResult: req.onToolResult,
       onTerminalOutput: req.onTerminalOutput,
+      onTerminalMonitor: req.onTerminalMonitor,
       onConfirmRequired: async (payload) => {
         if (!filterTools(allow) && allowedNames && !allowedNames.has(payload.name)) {
           return false;

@@ -360,6 +360,10 @@ export class PartsBuilder {
     tool.terminalStream = (tool.terminalStream ?? "") + prefix + text;
   }
 
+  onTerminalMonitor(id: string, text: string): void {
+    this.onTerminalOutput(id, "stdout", text);
+  }
+
   onToolResult(id: string, result: unknown, isError: boolean): void {
     const tool = [...this.committed]
       .reverse()

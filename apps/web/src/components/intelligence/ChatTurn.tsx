@@ -169,6 +169,39 @@ function ToolConfirmBody({
       </div>
     );
   }
+  if (
+    name === "terminal_session_create" ||
+    name === "terminal_session_write" ||
+    name === "terminal_session_close" ||
+    name === "terminal_monitor" ||
+    name === "terminal_session_read"
+  ) {
+    return (
+      <div className="flex flex-col gap-1 text-xs">
+        {args.sessionId ? (
+          <div>
+            <span className="text-muted-foreground">session: </span>
+            <code className="rounded bg-background/60 px-1 font-mono">
+              {String(args.sessionId)}
+            </code>
+          </div>
+        ) : null}
+        {args.cwd ? (
+          <div>
+            <span className="text-muted-foreground">cwd: </span>
+            <code className="rounded bg-background/60 px-1">
+              {String(args.cwd)}
+            </code>
+          </div>
+        ) : null}
+        {args.data ? (
+          <pre className="max-h-24 overflow-auto rounded bg-background/60 p-2 font-mono text-[10px] whitespace-pre-wrap">
+            {String(args.data)}
+          </pre>
+        ) : null}
+      </div>
+    );
+  }
   if (name === "edit_file" || name === "write_file" || name === "apply_patch") {
     return (
       <div className="flex flex-col gap-1 text-xs">
@@ -375,7 +408,10 @@ function ToolPart({
               {args.offset != null ? ` from line ${String(args.offset)}` : null}
             </div>
           ) : null}
-          {name === "run_terminal" || terminalStream ? (
+          {name === "run_terminal" ||
+          name.startsWith("terminal_session_") ||
+          name === "terminal_monitor" ||
+          terminalStream ? (
             <div>
               <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Terminal
