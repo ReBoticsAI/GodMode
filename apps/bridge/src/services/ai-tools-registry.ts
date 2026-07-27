@@ -1622,7 +1622,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "build_plugin",
     description:
-      "Compile plugin with Bridge esbuild (src → dist). Pass pluginRoot or pluginId. Then call install_plugin. Requires confirmation.",
+      "Compile plugin with Bridge esbuild (src → dist). Pass pluginRoot or pluginId. Then call install_plugin. Requires confirmation. For npm/native deps use run_ephemeral_build when Layer 4 is enabled.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1631,6 +1631,30 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         pluginRoot: { type: "string" },
         pluginId: { type: "string" },
       },
+    },
+  },
+  {
+    name: "run_ephemeral_build",
+    description:
+      "Run an allowlisted npm build in an ephemeral host container (Layer 4). Requires CODING_BUILD_MODE=ephemeral and the build supervisor. Prefer build_plugin for GodMode plugins; use this for npm ci / native deps. Requires confirmation.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description:
+            "One of: npm ci | npm install | npm run build | npm test | npm run typecheck",
+        },
+        cwd: {
+          type: "string",
+          description: "Working directory relative to coding root (default .)",
+        },
+        timeoutMs: { type: "number" },
+      },
+      required: ["command"],
     },
   },
   {
@@ -1775,6 +1799,7 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "coding_worktree_promote",
   "build_plugin",
   "install_plugin",
+  "run_ephemeral_build",
 ]);
 
 const CODING_WRITE_TOOLS = new Set([
@@ -1793,6 +1818,7 @@ const CODING_WRITE_TOOLS = new Set([
   "coding_worktree_promote",
   "build_plugin",
   "install_plugin",
+  "run_ephemeral_build",
 ]);
 
 export function isCodingWriteTool(name: string): boolean {

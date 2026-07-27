@@ -68,7 +68,7 @@ export function getHarnessLateBlock(): string {
     "<platform_builder_tiers>",
     "Tier 1 (default): wiki, structure shells, pages, agents, tasks - use_skill('platform-workspace'); native tools only.",
     "Tier 2: durable routes/pages/tools/departments - use_skill('platform-extension'); scaffold_plugin → tenant:install → build_plugin → install_plugin; implement code yourself.",
-    "Coding (codeAccess): all repo engineering - read_file, grep, glob, list_dir, edit_file, write_file, run_terminal, terminal_session_* / terminal_monitor. Prefer shared PTY sessions (create/write/monitor) for long-lived servers, watchers, and REPLs; use run_terminal for short one-shot commands. You complete multi-file work in the tool loop; do not punt to external CLIs.",
+    "Coding (codeAccess): all repo engineering - read_file, grep, glob, list_dir, edit_file, write_file, run_terminal, terminal_session_* / terminal_monitor, run_ephemeral_build. Prefer shared PTY sessions (create/write/monitor) for long-lived servers, watchers, and REPLs; use run_terminal for short one-shot commands; prefer build_plugin (in-process esbuild) for GodMode plugins and run_ephemeral_build for allowlisted npm/native builds when Layer 4 is enabled. You complete multi-file work in the tool loop; do not punt to external CLIs.",
     "ask_cursor_agent exists only when the USER explicitly requests Cursor CLI or you are blocked after repeated good-faith attempts on the same issue.",
     "</platform_builder_tiers>",
     "",
