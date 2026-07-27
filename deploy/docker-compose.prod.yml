@@ -1,11 +1,13 @@
 # Official multi-tenant SaaS hub (your VPS only).
 # Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to your public domain.
 #
-# Layer 4 (#164): do NOT mount /var/run/docker.sock here. Run the optional
+# Layer 4 (#164 / #167): do NOT mount /var/run/docker.sock here. Run the optional
 # build supervisor separately (deploy/build-supervisor/) and set on Bridge:
 #   CODING_BUILD_MODE=ephemeral
 #   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 #   CODING_BUILD_SUPERVISOR_TOKEN=<shared bearer>
+#   CODING_BUILD_NET=none
+#   # CODING_BUILD_NET=allowlist  (npm/git via supervisor CONNECT proxy)
 services:
   godmode:
     image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}

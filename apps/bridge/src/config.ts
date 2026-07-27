@@ -254,6 +254,16 @@ export const config = {
   })(),
   codingBuildSupervisorUrl: (process.env.CODING_BUILD_SUPERVISOR_URL ?? "").trim(),
   codingBuildSupervisorToken: (process.env.CODING_BUILD_SUPERVISOR_TOKEN ?? "").trim(),
+  /**
+   * Layer 4 build-container network (#167).
+   * - none: docker --network none (default)
+   * - allowlist: bridge + HTTP(S)_PROXY to supervisor CONNECT allowlist (npm/git)
+   * shared is rejected (out of scope for builds)
+   */
+  codingBuildNet: ((): "none" | "allowlist" => {
+    const raw = (process.env.CODING_BUILD_NET ?? "").trim().toLowerCase();
+    return raw === "allowlist" ? "allowlist" : "none";
+  })(),
   federation: {
     /** Shared secret peers present to this Bridge's federation API (empty = derive from share grants only). */
     token: process.env.FEDERATION_TOKEN ?? "",
