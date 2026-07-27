@@ -21,6 +21,7 @@ import {
   type TerminalEgressProxyHandle,
 } from "./terminal-egress-proxy.js";
 import { resolveCodingRoot, resolveRepoPath } from "./fs-tools.js";
+import { assertCodingQuota } from "./coding-quota.js";
 
 const MAX_SCROLLBACK_CHARS = 512 * 1024;
 const MONITOR_BATCH_MS = 200;
@@ -204,6 +205,16 @@ async function spawnSandboxedPty(opts: {
 
 const sessions = new Map<string, Session>();
 
+/** Open (not closed) PTY sessions for a tenant (#96 / #179). */
+export function countOpenPtySessions(tenantId?: string | null): number {
+  const key = tenantKey(tenantId);
+  let n = 0;
+  for (const session of sessions.values()) {
+    if (session.tenantKey === key && !session.closed) n += 1;
+  }
+  return n;
+}
+
 function sessionMapKey(tenantId: string | null | undefined, sessionId: string): string {
   return `${tenantKey(tenantId)}:${sessionId}`;
 }
@@ -245,6 +256,11 @@ export async function createTerminalSession(opts: {
   cols?: number;
   rows?: number;
 }): Promise<TerminalSessionInfo> {
+  assertCodingQuota({
+    tenantId: opts.tenantId,
+    kind: "pty",
+    openPtySessions: countOpenPtySessions(opts.tenantId),
+  });
   const codingRoot = resolveCodingRoot({
     tenantId: opts.tenantId,
     root: opts.root,

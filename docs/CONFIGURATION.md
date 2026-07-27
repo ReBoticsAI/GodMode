@@ -37,6 +37,11 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `CODING_BUILD_NET` | `none` | Layer 4 build-container network (#167 / #170): `none` or `allowlist` (`shared` unsupported). `allowlist` uses a Docker `--internal` network plus host CONNECT proxy |
 | `CODING_BUILD_EGRESS_HOSTS` | empty | Optional comma-separated CONNECT hosts for `allowlist` (falls back to `CODING_TERMINAL_EGRESS_HOSTS`, then npm/GitHub defaults) |
 | `CODING_BUILD_EGRESS_NETWORK` | `godmode-build-egress` | Docker network name for `allowlist` builds (created with `--internal` if missing; fails closed if a non-internal network already uses the name) |
+| `CODING_BUILD_GLOBAL_CONCURRENCY` | `2` (supervisor) | Max concurrent Layer 4 builds platform-wide (#96 Slice 1) |
+| `CODING_BUILD_TENANT_CONCURRENCY` | `1` (supervisor) | Max concurrent Layer 4 builds per tenant |
+| `CODING_TERMINAL_GLOBAL_CONCURRENCY` | hub/SaaS: `4`; local: unlimited | Max concurrent `run_terminal` runs platform-wide |
+| `CODING_TERMINAL_TENANT_CONCURRENCY` | hub/SaaS: `2`; local: unlimited | Max concurrent `run_terminal` runs per tenant |
+| `CODING_PTY_MAX_PER_TENANT` | hub/SaaS: `3`; local: unlimited | Max open shared PTY sessions per tenant |
 | `CURSOR_SDK_SANDBOX` | hub/client Linux: `required`; else `off` | Enable Cursor SDK `sandboxOptions` for `cursor_cloud` built-in Shell/FS (#171). GodMode customTools still use Bridge Layer 3. Fail closed when `required` and the SDK sandbox helper is missing |
 
 ### SaaS coding + Layer 4 (staging/prod)
@@ -52,6 +57,14 @@ On `INSTALLATION_SURFACE=saas`, coding is **on by default** (#178). Set `PLATFOR
 3. Do not mount `docker.sock` into Bridge. Residual shared-host risk is tracked in #172.
 
 Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.example), [deploy/.env.production.example](../deploy/.env.production.example).
+
+**Coding quotas + kill switches (#96 Slice 1):** hub/SaaS defaults above limit noisy-neighbor terminal/PTY/build load. Rejects are audited in `tool_audit_log` with stable codes (`quota:*`, `kill:*`). Ops can disable coding or builds globally or per tenant without redeploying images via platform admin API:
+
+- `GET /api/admin/authority/coding-kills`
+- `POST /api/admin/authority/coding-kills/global` body `{ "codingDisabled": true, "buildsDisabled": false }`
+- `POST /api/admin/authority/coding-kills/tenant/:tenantId` same shape
+
+`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding.
 
 ### GitHub OAuth apps (login vs Projects sync)
 

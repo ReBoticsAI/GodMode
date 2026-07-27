@@ -4,6 +4,7 @@
  */
 import { config } from "../../config.js";
 import { resolveRepoPath } from "./fs-tools.js";
+import { assertCodingQuota, CodingAuthorityError } from "./coding-quota.js";
 
 export const ALLOWED_BUILD_COMMANDS = [
   "npm ci",
@@ -116,6 +117,7 @@ export async function runEphemeralBuild(opts: {
   if (!tenantId) {
     throw new Error("tenantId is required for ephemeral builds");
   }
+  assertCodingQuota({ tenantId, kind: "build" });
   const command = normalizeBuildCommand(opts.command);
   const cwdRel = sanitizeCwdRel(opts.cwd);
   // Ensure cwd exists under coding root (Layer 1) before asking the supervisor.
@@ -146,9 +148,11 @@ export async function runEphemeralBuild(opts: {
     throw new Error(`Build supervisor returned non-JSON (HTTP ${res.status})`);
   }
   if (!res.ok) {
-    throw new Error(
-      String(body.error ?? `Build supervisor rejected request (HTTP ${res.status})`)
-    );
+    const errMsg = String(body.error ?? `Build supervisor rejected request (HTTP ${res.status})`);
+    if (res.status === 429) {
+      throw new CodingAuthorityError("quota:build_supervisor", errMsg);
+    }
+    throw new Error(errMsg);
   }
   return {
     exitCode: Number(body.exitCode ?? 1),
