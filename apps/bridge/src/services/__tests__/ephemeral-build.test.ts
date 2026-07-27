@@ -51,6 +51,7 @@ describe("runEphemeralBuild fail-closed", () => {
   const prevMode = config.codingBuildMode;
   const prevUrl = config.codingBuildSupervisorUrl;
   const prevToken = config.codingBuildSupervisorToken;
+  const prevNet = config.codingBuildNet;
 
   afterEach(() => {
     (config as { codingBuildMode: string }).codingBuildMode = prevMode;
@@ -58,6 +59,7 @@ describe("runEphemeralBuild fail-closed", () => {
       prevUrl;
     (config as { codingBuildSupervisorToken: string }).codingBuildSupervisorToken =
       prevToken;
+    (config as { codingBuildNet: string }).codingBuildNet = prevNet;
   });
 
   it("fails when mode is off", () => {
@@ -80,6 +82,7 @@ describe("runEphemeralBuild fail-closed", () => {
       "http://127.0.0.1:8792";
     (config as { codingBuildSupervisorToken: string }).codingBuildSupervisorToken =
       "secret-token";
+    (config as { codingBuildNet: string }).codingBuildNet = "allowlist";
 
     const fetchMock = vi.fn(async () =>
       new Response(
@@ -93,7 +96,8 @@ describe("runEphemeralBuild fail-closed", () => {
           cwdRel: ".",
           tenantId: "t1",
           image: "node:22-bookworm-slim",
-          network: "none",
+          network: "allowlist",
+          egressHosts: ["registry.npmjs.org"],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -117,12 +121,15 @@ describe("runEphemeralBuild fail-closed", () => {
       });
       expect(result.exitCode).toBe(0);
       expect(result.mode).toBe("ephemeral");
+      expect(result.network).toBe("allowlist");
       expect(fetchMock).toHaveBeenCalledOnce();
       const [url, init] = fetchMock.mock.calls[0]!;
       expect(String(url)).toContain("/v1/build");
       expect((init as RequestInit).headers).toMatchObject({
         Authorization: "Bearer secret-token",
       });
+      const posted = JSON.parse(String((init as RequestInit).body));
+      expect(posted.network).toBe("allowlist");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

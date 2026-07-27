@@ -81,6 +81,7 @@ export type EphemeralBuildResult = {
   tenantId: string;
   image?: string;
   network?: string;
+  egressHosts?: string[];
   mode: "ephemeral";
 };
 
@@ -134,6 +135,7 @@ export async function runEphemeralBuild(opts: {
       cwdRel,
       command,
       timeoutMs: opts.timeoutMs,
+      network: config.codingBuildNet,
     }),
   });
   const text = await res.text();
@@ -159,6 +161,9 @@ export async function runEphemeralBuild(opts: {
     tenantId: String(body.tenantId ?? tenantId),
     image: body.image != null ? String(body.image) : undefined,
     network: body.network != null ? String(body.network) : undefined,
+    egressHosts: Array.isArray(body.egressHosts)
+      ? body.egressHosts.map((h) => String(h))
+      : undefined,
     mode: "ephemeral",
   };
 }

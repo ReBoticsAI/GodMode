@@ -1,7 +1,9 @@
-# Layer 4 build supervisor (#164 / #112).
+# Layer 4 build supervisor (#164 / #167 / #112).
 # Owns /var/run/docker.sock. Do NOT mount the socket into the godmode service.
 # Bridge reaches this via CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 # (or compose network DNS if both services share a network).
+# Publish egress proxy on loopback so sibling build containers can reach it via
+# host.docker.internal when CODING_BUILD_NET=allowlist.
 services:
   build-supervisor:
     image: node:22-bookworm-slim
@@ -9,12 +11,19 @@ services:
     command: ["node", "server.mjs"]
     ports:
       - "127.0.0.1:8792:8792"
+      # Egress CONNECT proxy for CODING_BUILD_NET=allowlist (sibling build containers)
+      - "127.0.0.1:8793:8793"
     environment:
       - CODING_BUILD_SUPERVISOR_HOST=0.0.0.0
       - CODING_BUILD_SUPERVISOR_PORT=8792
       - CODING_BUILD_SUPERVISOR_TOKEN=${CODING_BUILD_SUPERVISOR_TOKEN:?Set CODING_BUILD_SUPERVISOR_TOKEN}
       - PLATFORM_DATA_DIR=/data
       - CODING_BUILD_IMAGE=${CODING_BUILD_IMAGE:-node:22-bookworm-slim}
+      - CODING_BUILD_NET=${CODING_BUILD_NET:-none}
+      - CODING_BUILD_EGRESS_PROXY_HOST=0.0.0.0
+      - CODING_BUILD_EGRESS_PROXY_PORT=8793
+      - CODING_BUILD_EGRESS_HOSTS=${CODING_BUILD_EGRESS_HOSTS:-}
+      - CODING_TERMINAL_EGRESS_HOSTS=${CODING_TERMINAL_EGRESS_HOSTS:-}
     volumes:
       - ./:/supervisor:ro
       - ${GODMODE_DATA_DIR:?Set GODMODE_DATA_DIR to host tenant data root}:/data

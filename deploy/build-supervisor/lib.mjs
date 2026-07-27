@@ -1,5 +1,5 @@
 /**
- * Shared allowlist + path helpers for Layer 4 ephemeral builds (#164 / #112).
+ * Shared allowlist + path helpers for Layer 4 ephemeral builds (#164 / #167 / #112).
  * Plain ESM for the host Node supervisor (no TypeScript syntax).
  */
 
@@ -9,6 +9,18 @@ export const ALLOWED_BUILD_COMMANDS = [
   "npm run build",
   "npm test",
   "npm run typecheck",
+];
+
+/** Same defaults as Bridge terminal egress (npm/git). */
+export const DEFAULT_BUILD_EGRESS_HOSTS = [
+  "registry.npmjs.org",
+  "registry.yarnpkg.com",
+  "github.com",
+  "api.github.com",
+  "objects.githubusercontent.com",
+  "codeload.github.com",
+  "ghcr.io",
+  "nodejs.org",
 ];
 
 export function isAllowedBuildCommand(command) {
@@ -24,6 +36,65 @@ export function normalizeBuildCommand(command) {
     );
   }
   return normalized;
+}
+
+/** @returns {"none"|"allowlist"} */
+export function normalizeBuildNet(raw) {
+  const mode = String(raw ?? "").trim().toLowerCase();
+  if (mode === "allowlist") return "allowlist";
+  if (!mode || mode === "none") return "none";
+  throw new Error(
+    `Invalid build network mode: ${raw}. Allowed: none, allowlist (shared is out of scope)`
+  );
+}
+
+export function resolveBuildEgressHosts(hosts) {
+  const fromArg = (hosts ?? [])
+    .map((h) => String(h).trim().toLowerCase())
+    .filter(Boolean);
+  if (fromArg.length) return fromArg;
+  const fromEnv = String(
+    process.env.CODING_BUILD_EGRESS_HOSTS ||
+      process.env.CODING_TERMINAL_EGRESS_HOSTS ||
+      ""
+  )
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return fromEnv.length ? fromEnv : [...DEFAULT_BUILD_EGRESS_HOSTS];
+}
+
+/**
+ * Exact match or leading `*.example.com` suffix rule.
+ * Rejects empty hosts. IP literals and localhost are denied unless explicitly listed.
+ */
+export function isEgressHostAllowed(host, allowlist) {
+  const h = String(host ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, "");
+  if (!h) return false;
+
+  const listedExact = allowlist.some((rule) => rule === h);
+  const isLoopbackName =
+    h === "localhost" ||
+    h === "localhost.localdomain" ||
+    h.endsWith(".localhost");
+  const looksLikeIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":");
+  if ((looksLikeIp || isLoopbackName) && !listedExact) {
+    return false;
+  }
+
+  for (const rule of allowlist) {
+    const r = String(rule ?? "").trim().toLowerCase();
+    if (!r) continue;
+    if (r === h) return true;
+    if (r.startsWith("*.")) {
+      const suffix = r.slice(1);
+      if (h === r.slice(2) || h.endsWith(suffix)) return true;
+    }
+  }
+  return false;
 }
 
 /** Reject absolute paths and .. segments; return posix-relative path under workspace. */
