@@ -2,17 +2,19 @@
 # Owns /var/run/docker.sock. Do NOT mount the socket into the godmode service.
 # Bridge reaches this via CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 # (or compose network DNS if both services share a network).
-# Publish egress proxy on loopback so sibling build containers on the
-# godmode-build-egress --internal network can reach it via host.docker.internal.
+#
+# Publish on 0.0.0.0 (not 127.0.0.1): on Linux, containers using
+# host.docker.internal:host-gateway cannot reach ports bound only to loopback.
+# Keep bearer token required; firewall WAN if the host has a public NIC.
+# Egress CONNECT proxy (8793) must be reachable the same way for allowlist builds.
 services:
   build-supervisor:
     image: node:22-bookworm-slim
     working_dir: /supervisor
     command: ["node", "server.mjs"]
     ports:
-      - "127.0.0.1:8792:8792"
-      # Egress CONNECT proxy for CODING_BUILD_NET=allowlist (sibling build containers)
-      - "127.0.0.1:8793:8793"
+      - "8792:8792"
+      - "8793:8793"
     environment:
       - CODING_BUILD_SUPERVISOR_HOST=0.0.0.0
       - CODING_BUILD_SUPERVISOR_PORT=8792

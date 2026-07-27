@@ -18,6 +18,10 @@
 #
 # Or: docker compose -f docker-compose.yml up -d
 #
+# Publish notes: compose binds 8792/8793 on 0.0.0.0 so Linux containers can
+# reach the supervisor via host.docker.internal (host-gateway). Firewall WAN.
+# Bearer token is still required on /v1/build.
+#
 # Bridge env:
 #   CODING_BUILD_MODE=ephemeral
 #   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
