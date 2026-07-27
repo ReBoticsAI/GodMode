@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { Markdown } from "./Markdown";
 import {
@@ -21,7 +22,34 @@ import {
   type MsgPart,
   type TodoItem,
 } from "./chat-parts";
+import { collectIsolationBadgeLabels } from "./isolation-badges";
 
+/** Compact isolation badges from coding tool args/results (#166 / #112). */
+function IsolationBadges({
+  name,
+  args,
+  result,
+}: {
+  name: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+}) {
+  const badges = collectIsolationBadgeLabels({ name, args, result });
+  if (!badges.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 px-2 pb-1">
+      {badges.map((label) => (
+        <Badge
+          key={label}
+          variant="outline"
+          className="h-5 px-1.5 font-mono text-[9px] font-normal"
+        >
+          {label}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 /** Live-updating "Thought for Ns" reasoning block (Cursor-style). */
 function ThinkingPart({
   text,
@@ -166,6 +194,66 @@ function ToolConfirmBody({
         <pre className="max-h-32 overflow-auto rounded bg-background/60 p-2 font-mono text-[10px] whitespace-pre-wrap">
           {String(args.command ?? "")}
         </pre>
+      </div>
+    );
+  }
+  if (name === "run_ephemeral_build") {
+    return (
+      <div className="flex flex-col gap-1 text-xs">
+        <p className="text-muted-foreground">
+          Runs in a host ephemeral container (Layer 4). Docker socket stays off Bridge.
+        </p>
+        <div>
+          <span className="text-muted-foreground">cwd: </span>
+          <code className="rounded bg-background/60 px-1">
+            {String(args.cwd ?? ".")}
+          </code>
+        </div>
+        <pre className="max-h-24 overflow-auto rounded bg-background/60 p-2 font-mono text-[10px] whitespace-pre-wrap">
+          {String(args.command ?? "")}
+        </pre>
+      </div>
+    );
+  }
+  if (name === "coding_worktree_promote") {
+    return (
+      <div className="flex flex-col gap-1.5 text-xs">
+        <p>
+          Merges the worktree into the <strong>live tenant tree</strong>, then
+          clears the agent workspace. Plugin install must use live{" "}
+          <code className="rounded bg-background/60 px-1">plugins/</code>, never{" "}
+          <code className="rounded bg-background/60 px-1">.worktrees/</code>.
+        </p>
+        <div>
+          <span className="text-muted-foreground">worktree: </span>
+          <code className="rounded bg-background/60 px-1 font-mono">
+            {String(args.slug ?? args.workspace ?? "(active)")}
+          </code>
+        </div>
+        {args.install === false ? (
+          <p className="text-muted-foreground">install after promote: skipped</p>
+        ) : (
+          <p className="text-muted-foreground">
+            Will build/install detected plugins from the live tree after merge.
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (
+    name === "coding_worktree_create" ||
+    name === "coding_worktree_discard"
+  ) {
+    return (
+      <div className="flex flex-col gap-1 text-xs">
+        <div>
+          <span className="text-muted-foreground">
+            {name === "coding_worktree_create" ? "slug: " : "worktree: "}
+          </span>
+          <code className="rounded bg-background/60 px-1 font-mono">
+            {String(args.slug ?? args.name ?? args.workspace ?? "")}
+          </code>
+        </div>
       </div>
     );
   }
@@ -347,6 +435,7 @@ function ToolPart({
           </span>
         )}
       </button>
+      <IsolationBadges name={name} args={args} result={result} />
       {awaiting && (
         <div className="flex flex-col gap-2 border-t border-amber-500/20 bg-amber-500/5 px-2 py-2">
           <p className="text-xs text-muted-foreground">

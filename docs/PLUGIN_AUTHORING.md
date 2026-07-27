@@ -23,8 +23,21 @@ Same tools work in the monorepo and on Docker hub/client:
 
 1. `scaffold_plugin` — creates `plugins/<id>/` under the **active coding root** (local: `{repo}/plugins/<id>`; hub/client: `{tenant-workspace}/plugins/<id>`, or under `{tenant}/.worktrees/<slug>/plugins/<id>` when `agent.config.workspace` points at a Layer 2 worktree). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
 2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` to isolate iterative edits, then `coding_worktree_promote` to merge into the live tenant tree (and optionally discard). Prefer promote before `install_plugin` so the persisted plugin path is never under `.worktrees/`.
-3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`).
+3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`). For native/`npm ci` deps when Layer 4 is enabled, use `run_ephemeral_build` (host build supervisor; Docker socket never on Bridge).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes.
+
+### SaaS coding isolation (#112)
+
+On hub/client SaaS, coding tools are confined so tenants cannot reach core or each other:
+
+| Layer | Boundary |
+|-------|----------|
+| 1 | Coding root = `tenant-workspaces/<tenantId>/` only |
+| 2 | Optional Bridge-owned `.worktrees/<slug>`; promote into live tree before install |
+| 3 | `run_terminal` / PTY / helpers under bubblewrap; network `none` or allowlist |
+| 4 | Optional ephemeral npm builds via host supervisor (`CODING_BUILD_MODE=ephemeral`) |
+
+Intelligence tool cards show sandbox / net / worktree badges when tools return isolation metadata. Full threat model: [SECURITY.md](./SECURITY.md).
 
 This matches **Marketplace → Local**. Prefer `api.routes.mount` in `register` for Express routes (hot-reloads via route slots). Avoid raw `ctx.app.use` in `server:beforeListen`; that path cannot be swapped on reload. If you must mount from the hook, use `ctx.host.mountPluginRoute(pluginId, path, router)`.
 

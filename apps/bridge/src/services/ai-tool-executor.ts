@@ -2759,6 +2759,12 @@ export async function executeTool(
         ...created,
         agentId,
         workspaceSet: Boolean(agent),
+        worktreeSlug: created.slug,
+        isolation: {
+          kind: "worktree",
+          slug: created.slug,
+          workspace: created.workspace,
+        },
         next: "Coding tools and scaffold_plugin now use this worktree. Call coding_worktree_promote to merge into the live tenant tree, or coding_worktree_discard to drop it.",
       };
     }
@@ -2794,7 +2800,7 @@ export async function executeTool(
           workspaceCleared = true;
         }
       }
-      return { ...discarded, workspaceCleared, agentId };
+      return { ...discarded, workspaceCleared, agentId, worktreePath: discarded.discarded };
     }
 
     case "coding_worktree_promote": {
@@ -2873,6 +2879,16 @@ export async function executeTool(
         agentId,
         plugins,
         discarded: discarded ?? null,
+        worktreeSlug: promoted.workspace.replace(/^.*\.worktrees\//, "").replace(/\/$/, "") ||
+          promoted.workspace,
+        isolation: {
+          kind: "promote",
+          target: "live_tenant_tree",
+          workspace: promoted.workspace,
+          installFromWorktree: false,
+        },
+        warning:
+          "Merged into the live tenant tree. Plugin install paths must stay under the live tenant plugins/ dir, never under .worktrees/.",
         next: discarded
           ? "Worktree merged into the live tenant tree and removed."
           : "Worktree merged into the live tenant tree. Call coding_worktree_discard when finished with the branch.",
