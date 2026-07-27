@@ -271,8 +271,9 @@ export default function CodingWorkspacePage() {
           <EmptyHeader>
             <EmptyTitle>Coding disabled</EmptyTitle>
             <EmptyDescription>
-              This installation has SaaS code access turned off. File browse and
-              edit stay blocked until platform policy allows them.
+              This installation has SaaS code access turned off. File browse,
+              edit, and the Terminal command runner stay blocked until platform
+              policy allows them.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
