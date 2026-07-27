@@ -3269,6 +3269,100 @@ export function triggerAdminPlatformBackup() {
   }>("/admin/marketplace/backup", { method: "POST", body: "{}" });
 }
 
+export type AdminCodingAuthorityStatus = {
+  kills: {
+    global: { codingDisabled: boolean; buildsDisabled: boolean };
+    tenants: Record<
+      string,
+      { codingDisabled: boolean; buildsDisabled: boolean }
+    >;
+  };
+  quota: {
+    limits: {
+      terminalGlobal: number;
+      terminalTenant: number;
+      ptyMaxPerTenant: number;
+      buildGlobal: number;
+      buildTenant: number;
+      buildMode: "off" | "ephemeral";
+    };
+    live: {
+      terminalGlobalActive: number;
+      terminalByTenant: Record<string, number>;
+    };
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    openPtySessions: number;
+    terminalActive: number;
+    codingDisabled: boolean;
+    buildsDisabled: boolean;
+  }>;
+  supervisor: {
+    ok: boolean;
+    reachable: boolean;
+    error?: string;
+    concurrency?: {
+      globalActive?: number;
+      globalLimit?: number;
+      tenantActive?: Record<string, number>;
+      tenantLimit?: number;
+    };
+    defaultNet?: string;
+    egressNetwork?: string;
+  } | null;
+  platform: {
+    isSaas: boolean;
+    saasAllowCodeAccess: boolean;
+  };
+};
+
+export type AdminCodingAuthorityEvent = {
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminCodingStatus() {
+  return api<AdminCodingAuthorityStatus>("/admin/authority/coding-status");
+}
+
+export function fetchAdminCodingEvents(opts?: { limit?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<{ events: AdminCodingAuthorityEvent[] }>(
+    `/admin/authority/coding-events${q ? `?${q}` : ""}`
+  );
+}
+
+export function setAdminCodingKillGlobal(body: {
+  codingDisabled?: boolean;
+  buildsDisabled?: boolean;
+}) {
+  return api<AdminCodingAuthorityStatus["kills"]>(
+    "/admin/authority/coding-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminCodingKillTenant(
+  tenantId: string,
+  body: { codingDisabled?: boolean; buildsDisabled?: boolean }
+) {
+  return api<AdminCodingAuthorityStatus["kills"]>(
+    `/admin/authority/coding-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 
 export function signupPassword(
   email: string,

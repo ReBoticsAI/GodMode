@@ -169,6 +169,47 @@ export function acquireTerminalSlot(tenantId?: string | null): () => void {
   };
 }
 
+export type CodingQuotaSnapshot = {
+  limits: {
+    terminalGlobal: number;
+    terminalTenant: number;
+    ptyMaxPerTenant: number;
+    buildGlobal: number;
+    buildTenant: number;
+    buildMode: "off" | "ephemeral";
+  };
+  live: {
+    terminalGlobalActive: number;
+    terminalByTenant: Record<string, number>;
+  };
+};
+
+/** Ops visibility for Admin Authority (#96 Slice 2). */
+export function getCodingQuotaSnapshot(): CodingQuotaSnapshot {
+  const buildGlobal = parseLimit(
+    process.env.CODING_BUILD_GLOBAL_CONCURRENCY,
+    2
+  );
+  const buildTenant = parseLimit(
+    process.env.CODING_BUILD_TENANT_CONCURRENCY,
+    1
+  );
+  return {
+    limits: {
+      terminalGlobal: codingTerminalGlobalLimit(),
+      terminalTenant: codingTerminalTenantLimit(),
+      ptyMaxPerTenant: codingPtyMaxPerTenant(),
+      buildGlobal,
+      buildTenant,
+      buildMode: config.codingBuildMode,
+    },
+    live: {
+      terminalGlobalActive: globalTerminalActive,
+      terminalByTenant: Object.fromEntries(tenantTerminalActive),
+    },
+  };
+}
+
 /** Test helper: reset in-process counters. */
 export function resetCodingQuotaStateForTests(): void {
   globalTerminalActive = 0;

@@ -10,6 +10,10 @@ import {
   setGlobalCodingKill,
   setTenantCodingKill,
 } from "../services/coding/coding-kill-switch.js";
+import {
+  getCodingAuthorityStatus,
+  listCodingAuthorityEvents,
+} from "../services/coding/coding-authority-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
@@ -18,6 +22,28 @@ export function createAdminAuthorityRouter(): Router {
   router.get("/coding-kills", (_req, res) => {
     const tenantIds = listAllTenantIds(getCoreDb());
     res.json(getCodingKillState(tenantIds));
+  });
+
+  router.get("/coding-status", async (_req, res) => {
+    try {
+      res.json(await getCodingAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/coding-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listCodingAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   router.post("/coding-kills/global", (req, res) => {
@@ -34,7 +60,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalCodingKill({ codingDisabled, buildsDisabled });
-    res.json(getCodingKillState());
+    res.json(getCodingKillState(listAllTenantIds(getCoreDb())));
   });
 
   router.post("/coding-kills/tenant/:tenantId", (req, res) => {
