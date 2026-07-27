@@ -1,9 +1,9 @@
-# Layer 4 build supervisor (#164 / #167 / #112).
+# Layer 4 build supervisor (#164 / #167 / #170 / #112).
 # Owns /var/run/docker.sock. Do NOT mount the socket into the godmode service.
 # Bridge reaches this via CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 # (or compose network DNS if both services share a network).
-# Publish egress proxy on loopback so sibling build containers can reach it via
-# host.docker.internal when CODING_BUILD_NET=allowlist.
+# Publish egress proxy on loopback so sibling build containers on the
+# godmode-build-egress --internal network can reach it via host.docker.internal.
 services:
   build-supervisor:
     image: node:22-bookworm-slim
@@ -23,6 +23,7 @@ services:
       - CODING_BUILD_EGRESS_PROXY_HOST=0.0.0.0
       - CODING_BUILD_EGRESS_PROXY_PORT=8793
       - CODING_BUILD_EGRESS_HOSTS=${CODING_BUILD_EGRESS_HOSTS:-}
+      - CODING_BUILD_EGRESS_NETWORK=${CODING_BUILD_EGRESS_NETWORK:-godmode-build-egress}
       - CODING_TERMINAL_EGRESS_HOSTS=${CODING_TERMINAL_EGRESS_HOSTS:-}
     volumes:
       - ./:/supervisor:ro

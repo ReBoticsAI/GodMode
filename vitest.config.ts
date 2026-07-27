@@ -32,6 +32,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/terminal-session-manager.test.ts",
       "apps/bridge/src/services/__tests__/ephemeral-build.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-lib.test.ts",
+      "apps/bridge/src/services/__tests__/build-supervisor-egress-network.test.ts",
       "apps/bridge/src/services/__tests__/write-tool-verify.test.ts",
       "apps/bridge/src/services/__tests__/cursor-workspace-knowledge.test.ts",
       "apps/bridge/src/services/__tests__/cursor-mcp-config.test.ts",
