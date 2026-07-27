@@ -6,7 +6,10 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { config } from "../../config.js";
-import { resolveEgressAllowlist } from "./terminal-egress-proxy.js";
+import {
+  resolveEgressAllowlist,
+  wrapAllowlistCommand,
+} from "./terminal-egress-proxy.js";
 
 export type CodingTerminalNet = "none" | "shared" | "allowlist";
 
@@ -126,15 +129,19 @@ function pushRoBindTry(args: string[], hostPath: string): void {
  * Network:
  * - none: --unshare-net
  * - shared: host network
- * - allowlist: host network + forced HTTP(S)_PROXY to Bridge CONNECT proxy (no --unshare-net)
+ * - allowlist: --unshare-net + UDS CONNECT proxy + in-jail TCP bridge (kernel-enforced)
  */
 export function buildBubblewrapArgs(opts: {
   codingRoot: string;
   cwd: string;
   net?: CodingTerminalNet;
   command: string;
-  /** Required when net=allowlist (e.g. http://127.0.0.1:PORT). */
+  /** Jail-facing proxy URL (http://127.0.0.1:PORT) when net=allowlist. */
   proxyUrl?: string;
+  /** Relative UDS path under coding root when net=allowlist. */
+  socketRel?: string;
+  /** Pre-wrapped allowlist command (bridge + user cmd); if omitted, wraps here. */
+  wrappedCommand?: string;
 }): string[] {
   const codingRoot = path.resolve(opts.codingRoot);
   const cwd = path.resolve(opts.cwd);
@@ -145,9 +152,10 @@ export function buildBubblewrapArgs(opts: {
   const net = codingTerminalNetPolicy({ net: opts.net });
   if (net === "allowlist") {
     const url = String(opts.proxyUrl ?? "").trim();
-    if (!url) {
+    const sock = String(opts.socketRel ?? "").trim();
+    if (!url || !sock) {
       throw new Error(
-        "CODING_TERMINAL_NET=allowlist requires a running Bridge egress proxy URL"
+        "CODING_TERMINAL_NET=allowlist requires proxyUrl and socketRel from the Bridge UDS egress proxy"
       );
     }
   }
@@ -156,7 +164,8 @@ export function buildBubblewrapArgs(opts: {
     "--die-with-parent",
     "--unshare-pid",
   ];
-  if (net === "none") {
+  // none + allowlist: no IP network in the jail (egress only via UDS → Bridge).
+  if (net === "none" || net === "allowlist") {
     args.push("--unshare-net");
   }
 
@@ -203,7 +212,8 @@ export function buildBubblewrapArgs(opts: {
     process.env.TERM || "xterm-256color"
   );
 
-  if (net === "allowlist" && opts.proxyUrl) {
+  let command = opts.command;
+  if (net === "allowlist" && opts.proxyUrl && opts.socketRel) {
     const proxyUrl = opts.proxyUrl.trim();
     for (const key of [
       "HTTP_PROXY",
@@ -219,9 +229,16 @@ export function buildBubblewrapArgs(opts: {
     }
     args.push("--setenv", "NO_PROXY", "");
     args.push("--setenv", "no_proxy", "");
+    command =
+      opts.wrappedCommand ??
+      wrapAllowlistCommand({
+        codingRoot,
+        socketRel: opts.socketRel,
+        command: opts.command,
+      });
   }
 
-  args.push("--", "/bin/sh", "-c", opts.command);
+  args.push("--", "/bin/sh", "-c", command);
   return args;
 }
 
