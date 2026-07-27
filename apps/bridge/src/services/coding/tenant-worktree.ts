@@ -4,12 +4,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import {
   assertWithinCodingRoot,
   resolveCodingRoot,
   type FsRootOpts,
 } from "./fs-tools.js";
+import { runSandboxedArgvSync } from "./sandboxed-process.js";
 
 const WORKTREES_DIR = ".worktrees";
 
@@ -18,17 +18,18 @@ export type TenantWorktreeOpts = FsRootOpts & {
 };
 
 function git(
+  codingRoot: string,
   cwd: string,
   args: string[],
   opts?: { allowFail?: boolean }
 ): { status: number | null; stdout: string; stderr: string } {
-  const res = spawnSync("git", args, {
+  const res = runSandboxedArgvSync({
+    codingRoot,
     cwd,
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 60_000,
-    env: {
-      ...process.env,
+    argv: ["git", ...args],
+    net: "none",
+    timeoutMs: 60_000,
+    envExtra: {
       GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "GodMode",
       GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || "godmode@localhost",
       GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || "GodMode",
@@ -36,15 +37,16 @@ function git(
         process.env.GIT_COMMITTER_EMAIL || "godmode@localhost",
     },
   });
-  const stdout = String(res.stdout ?? "");
-  const stderr = String(res.stderr ?? "");
-  if (!opts?.allowFail && (res.error || (res.status ?? 1) !== 0)) {
+  const stdout = res.stdout;
+  const stderr = res.stderr;
+  if (!opts?.allowFail && (res.timedOut || (res.exitCode ?? 1) !== 0)) {
     throw new Error(
-      res.error?.message ??
-        `git ${args.join(" ")} failed: ${(stderr || stdout).trim() || "unknown"}`
+      res.timedOut
+        ? `git ${args.join(" ")} timed out`
+        : `git ${args.join(" ")} failed: ${(stderr || stdout).trim() || "unknown"}`
     );
   }
-  return { status: res.status, stdout, stderr };
+  return { status: res.exitCode, stdout, stderr };
 }
 
 function tenantBase(opts?: TenantWorktreeOpts): string {
@@ -68,24 +70,34 @@ export function ensureTenantGitRepo(opts?: TenantWorktreeOpts): string {
   fs.mkdirSync(root, { recursive: true });
   const gitDir = path.join(root, ".git");
   if (!fs.existsSync(gitDir)) {
-    git(root, ["init"]);
+    git(root, root, ["init"]);
     const marker = path.join(root, ".godmode-workspace");
     if (!fs.existsSync(marker)) {
       fs.writeFileSync(marker, "tenant coding workspace\n", "utf8");
     }
-    git(root, ["add", "-A"]);
-    git(root, ["commit", "-m", "init tenant coding workspace"], {
+    git(root, root, ["add", "-A"]);
+    git(root, root, ["commit", "-m", "init tenant coding workspace"], {
       allowFail: true,
     });
     // If commit failed (nothing to commit), force empty commit
-    const head = git(root, ["rev-parse", "HEAD"], { allowFail: true });
+    const head = git(root, root, ["rev-parse", "HEAD"], { allowFail: true });
     if (head.status !== 0) {
-      git(root, ["commit", "--allow-empty", "-m", "init tenant coding workspace"]);
+      git(root, root, [
+        "commit",
+        "--allow-empty",
+        "-m",
+        "init tenant coding workspace",
+      ]);
     }
   } else {
-    const head = git(root, ["rev-parse", "HEAD"], { allowFail: true });
+    const head = git(root, root, ["rev-parse", "HEAD"], { allowFail: true });
     if (head.status !== 0) {
-      git(root, ["commit", "--allow-empty", "-m", "init tenant coding workspace"]);
+      git(root, root, [
+        "commit",
+        "--allow-empty",
+        "-m",
+        "init tenant coding workspace",
+      ]);
     }
   }
   return root;
@@ -116,13 +128,11 @@ export function createTenantWorktree(opts: {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const branch = `wt/${slug}`;
   // Prefer new branch from HEAD; if branch exists, attach worktree to it.
-  const addNew = git(
-    root,
-    ["worktree", "add", "-b", branch, abs],
-    { allowFail: true }
-  );
+  const addNew = git(root, root, ["worktree", "add", "-b", branch, abs], {
+    allowFail: true,
+  });
   if (addNew.status !== 0) {
-    git(root, ["worktree", "add", abs, branch]);
+    git(root, root, ["worktree", "add", abs, branch]);
   }
   return { slug, workspace: rel, absolutePath: abs, branch };
 }
@@ -142,7 +152,7 @@ export function listTenantWorktrees(opts?: TenantWorktreeOpts): Array<{
     if (!fs.statSync(abs).isDirectory()) continue;
     const rel = worktreeRelativePath(name);
     assertWithinCodingRoot(rel, { ...opts, root: undefined });
-    const branch = git(abs, ["rev-parse", "--abbrev-ref", "HEAD"], {
+    const branch = git(root, abs, ["rev-parse", "--abbrev-ref", "HEAD"], {
       allowFail: true,
     });
     out.push({
@@ -173,12 +183,12 @@ export function discardTenantWorktree(opts: {
   if (!fs.existsSync(abs)) {
     throw new Error(`Worktree not found: ${rel}`);
   }
-  git(root, ["worktree", "remove", "--force", abs], { allowFail: true });
+  git(root, root, ["worktree", "remove", "--force", abs], { allowFail: true });
   if (fs.existsSync(abs)) {
     fs.rmSync(abs, { recursive: true, force: true });
-    git(root, ["worktree", "prune"], { allowFail: true });
+    git(root, root, ["worktree", "prune"], { allowFail: true });
   } else {
-    git(root, ["worktree", "prune"], { allowFail: true });
+    git(root, root, ["worktree", "prune"], { allowFail: true });
   }
   return { discarded: rel, absolutePath: abs };
 }
@@ -233,25 +243,26 @@ export function promoteTenantWorktree(opts: {
     throw new Error(`Worktree not found: ${rel}`);
   }
 
-  const branchRes = git(abs, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const branchRes = git(root, abs, ["rev-parse", "--abbrev-ref", "HEAD"]);
   const branch = branchRes.stdout.trim() || `wt/${path.basename(rel)}`;
 
-  const status = git(abs, ["status", "--porcelain"]);
+  const status = git(root, abs, ["status", "--porcelain"]);
   let committed = false;
   if (status.stdout.trim()) {
-    git(abs, ["add", "-A"]);
-    git(abs, ["commit", "-m", `wip: promote ${rel}`]);
+    git(root, abs, ["add", "-A"]);
+    git(root, abs, ["commit", "-m", `wip: promote ${rel}`]);
     committed = true;
   }
 
-  const beforeMerge = git(root, ["rev-parse", "HEAD"]).stdout.trim();
+  const beforeMerge = git(root, root, ["rev-parse", "HEAD"]).stdout.trim();
   const merge = git(
+    root,
     root,
     ["merge", branch, "--no-ff", "-m", `promote worktree ${path.basename(rel)}`],
     { allowFail: true }
   );
   if (merge.status !== 0) {
-    git(root, ["merge", "--abort"], { allowFail: true });
+    git(root, root, ["merge", "--abort"], { allowFail: true });
     throw new Error(
       `Promote merge failed (conflicts or git error). Resolve in the tenant root or discard the worktree.\n${(
         merge.stderr || merge.stdout
@@ -261,6 +272,7 @@ export function promoteTenantWorktree(opts: {
 
   // Plugin ids touched by the merge range, falling back to all live plugins.
   const diff = git(
+    root,
     root,
     ["diff", "--name-only", `${beforeMerge}..HEAD`, "--", "plugins"],
     { allowFail: true }
