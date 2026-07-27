@@ -24,6 +24,7 @@ import {
   codingPtyMaxPerTenant,
   codingTerminalGlobalLimit,
   codingTerminalTenantLimit,
+  getCodingQuotaSnapshot,
   isCodingAuthorityError,
   resetCodingQuotaStateForTests,
 } from "../coding/coding-quota.js";
@@ -53,6 +54,15 @@ describe("coding quota concurrency", () => {
     expect(codingTerminalGlobalLimit()).toBe(1);
     expect(codingTerminalTenantLimit()).toBe(1);
     expect(codingPtyMaxPerTenant()).toBe(2);
+  });
+
+  it("exposes a snapshot for Admin Authority", () => {
+    const release = acquireTerminalSlot("tenant-a");
+    const snap = getCodingQuotaSnapshot();
+    expect(snap.live.terminalGlobalActive).toBe(1);
+    expect(snap.live.terminalByTenant["tenant-a"]).toBe(1);
+    expect(snap.limits.terminalGlobal).toBe(1);
+    release();
   });
 
   it("rejects when global terminal slot is taken", () => {
