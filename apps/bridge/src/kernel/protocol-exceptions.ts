@@ -189,6 +189,46 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-deploy-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/deploy-kills",
+    rationale:
+      "Platform-admin read of runtime deploy kill switches (#96 Slice 4); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-deploy-status",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/deploy-status",
+    rationale:
+      "Platform-admin deploy authority status (#96 Slice 4): kills and env nuclear flag; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-deploy-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/deploy-events",
+    rationale:
+      "Platform-admin cross-tenant deploy kill reject feed (#96 Slice 4); tool_audit_log read, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-deploy-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/deploy-kills/global",
+    rationale:
+      "Platform-admin global deploy kill switch (#96 Slice 4); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-deploy-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/deploy-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant deploy kill switch (#96 Slice 4); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",

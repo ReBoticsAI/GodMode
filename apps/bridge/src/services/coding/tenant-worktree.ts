@@ -10,6 +10,7 @@ import {
   type FsRootOpts,
 } from "./fs-tools.js";
 import { runSandboxedArgvSync } from "./sandboxed-process.js";
+import { assertDeployAllowed } from "../authority/deploy-authority.js";
 
 const WORKTREES_DIR = ".worktrees";
 
@@ -236,6 +237,10 @@ export function promoteTenantWorktree(opts: {
   pluginIds: string[];
   committed: boolean;
 } {
+  assertDeployAllowed({
+    tenantId: opts.tenantId,
+    action: "coding_worktree_promote",
+  });
   const rel = resolveWorktreeRel(opts.slugOrWorkspace);
   const root = tenantBase(opts);
   const abs = assertWithinCodingRoot(rel, { ...opts, root: undefined });

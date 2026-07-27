@@ -5,6 +5,7 @@ import type { CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 import { ensurePluginBuilt } from "./plugin-build.js";
+import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
   discoverPluginRoots,
   loadPluginFromRoot,
@@ -238,9 +239,19 @@ export async function activatePluginForTenant(
   pluginRoot: string,
   opts: { buildIfNeeded?: boolean; installForTenant?: boolean; reload?: boolean } = {}
 ): Promise<ActivatePluginResult> {
+  assertDeployAllowed({
+    tenantId,
+    action: "activate_plugin",
+  });
   const resolved = path.resolve(pluginRoot);
   readGodmodePluginManifest(resolved);
-  const built = opts.buildIfNeeded === false ? false : await ensurePluginBuilt(resolved);
+  const built =
+    opts.buildIfNeeded === false
+      ? false
+      : await ensurePluginBuilt(resolved, {
+          tenantId,
+          action: "activate_plugin",
+        });
   prepareHostPackageLinks(resolved);
   const load = await loadPluginFromRoot(resolved, { reload: opts.reload });
   persistPluginPath(core, resolved);

@@ -31,6 +31,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/coding-ui-access.test.ts",
       "apps/bridge/src/services/__tests__/coding-quota.test.ts",
       "apps/bridge/src/services/__tests__/spend-authority.test.ts",
+      "apps/bridge/src/services/__tests__/deploy-authority.test.ts",
       "apps/bridge/src/services/__tests__/coding-terminal-route.test.ts",
       "apps/bridge/src/services/__tests__/terminal-session-manager.test.ts",
       "apps/bridge/src/services/__tests__/ephemeral-build.test.ts",

@@ -23,6 +23,15 @@ import {
   getSpendAuthorityStatus,
   listSpendAuthorityEvents,
 } from "../services/authority/spend-authority-admin.js";
+import {
+  getDeployKillState,
+  setGlobalDeployKill,
+  setTenantDeployKill,
+} from "../services/authority/deploy-kill-switch.js";
+import {
+  getDeployAuthorityStatus,
+  listDeployAuthorityEvents,
+} from "../services/authority/deploy-authority-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
@@ -152,6 +161,65 @@ export function createAdminAuthorityRouter(): Router {
     }
     setTenantSpendKill(tenantId, { spendDisabled });
     res.json(getSpendKillState([tenantId]));
+  });
+
+  router.get("/deploy-kills", (_req, res) => {
+    const tenantIds = listAllTenantIds(getCoreDb());
+    res.json(getDeployKillState(tenantIds));
+  });
+
+  router.get("/deploy-status", (_req, res) => {
+    try {
+      res.json(getDeployAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/deploy-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listDeployAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/deploy-kills/global", (req, res) => {
+    const deployDisabled =
+      req.body?.deployDisabled === undefined
+        ? undefined
+        : Boolean(req.body.deployDisabled);
+    if (deployDisabled === undefined) {
+      res.status(400).json({ error: "deployDisabled required" });
+      return;
+    }
+    setGlobalDeployKill({ deployDisabled });
+    res.json(getDeployKillState(listAllTenantIds(getCoreDb())));
+  });
+
+  router.post("/deploy-kills/tenant/:tenantId", (req, res) => {
+    const tenantId =
+      typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+    if (!tenantId) {
+      res.status(400).json({ error: "tenantId required" });
+      return;
+    }
+    const deployDisabled =
+      req.body?.deployDisabled === undefined
+        ? undefined
+        : Boolean(req.body.deployDisabled);
+    if (deployDisabled === undefined) {
+      res.status(400).json({ error: "deployDisabled required" });
+      return;
+    }
+    setTenantDeployKill(tenantId, { deployDisabled });
+    res.json(getDeployKillState([tenantId]));
   });
 
   return router;

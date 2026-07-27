@@ -2,14 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminCodingEvents,
   fetchAdminCodingStatus,
+  fetchAdminDeployEvents,
+  fetchAdminDeployStatus,
   fetchAdminSpendEvents,
   fetchAdminSpendStatus,
   setAdminCodingKillGlobal,
   setAdminCodingKillTenant,
+  setAdminDeployKillGlobal,
+  setAdminDeployKillTenant,
   setAdminSpendKillGlobal,
   setAdminSpendKillTenant,
   type AdminCodingAuthorityEvent,
   type AdminCodingAuthorityStatus,
+  type AdminDeployAuthorityEvent,
+  type AdminDeployAuthorityStatus,
   type AdminSpendAuthorityEvent,
   type AdminSpendAuthorityStatus,
 } from "@/api";
@@ -539,10 +545,213 @@ function AdminAuthoritySpendSection({
   );
 }
 
+function AdminAuthorityDeploySection({
+  status,
+  events,
+  loading,
+  savingKey,
+  onReload,
+  onToggleGlobal,
+  onToggleTenant,
+}: {
+  status: AdminDeployAuthorityStatus | null;
+  events: AdminDeployAuthorityEvent[];
+  loading: boolean;
+  savingKey: string | null;
+  onReload: () => void;
+  onToggleGlobal: (value: boolean) => void;
+  onToggleTenant: (tenantId: string, value: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Deploy</CardTitle>
+          <CardDescription>
+            Hard-stop kill switches for plugin esbuild, activate/install, and
+            worktree promote. Layer 4 ephemeral npm builds stay under Coding
+            builds kill.
+          </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {loading && !status ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : status ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={
+                    status.kills.envDisabled ? "destructive" : "secondary"
+                  }
+                >
+                  Env nuclear:{" "}
+                  {status.kills.envDisabled
+                    ? "PLATFORM_DEPLOY_DISABLED"
+                    : "off"}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3 sm:max-w-md">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="kill-deploy">Disable deploy</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Blocks plugin build, marketplace/agent activate, and coding
+                    worktree promote platform-wide.
+                  </p>
+                </div>
+                <Switch
+                  id="kill-deploy"
+                  checked={status.kills.global.deployDisabled}
+                  disabled={
+                    savingKey === "global:deploy" || status.kills.envDisabled
+                  }
+                  onCheckedChange={onToggleGlobal}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Failed to load deploy authority status.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {status ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per-tenant deploy kills</CardTitle>
+            <CardDescription>
+              Disable deploy for a single workspace without redeploying.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Deploy kill</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {status.tenants.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground">
+                      No tenants found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  status.tenants.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {t.id}
+                            {t.isOperator ? " (operator)" : ""}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={t.deployDisabled}
+                          disabled={
+                            savingKey === `${t.id}:deploy` ||
+                            status.kills.envDisabled ||
+                            status.kills.global.deployDisabled
+                          }
+                          onCheckedChange={(v) => onToggleTenant(t.id, v)}
+                          aria-label={`Disable deploy for ${t.name}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent deploy rejects</CardTitle>
+          <CardDescription>
+            Cross-tenant <code>tool_audit_log</code> rows with{" "}
+            <code>kill:*deploy*</code> results.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && events.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Result</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No deploy kill rejects logged yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {e.createdAt}
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-xs">
+                        {e.tenantName ?? e.tenantId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.agentId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.action}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{e.result}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 /** Admin → Authority: durable #96 control plane. */
 export function AdminAuthorityPanel() {
   const [codingLoading, setCodingLoading] = useState(true);
   const [spendLoading, setSpendLoading] = useState(true);
+  const [deployLoading, setDeployLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [codingStatus, setCodingStatus] =
     useState<AdminCodingAuthorityStatus | null>(null);
@@ -552,6 +761,11 @@ export function AdminAuthorityPanel() {
   const [spendStatus, setSpendStatus] =
     useState<AdminSpendAuthorityStatus | null>(null);
   const [spendEvents, setSpendEvents] = useState<AdminSpendAuthorityEvent[]>(
+    []
+  );
+  const [deployStatus, setDeployStatus] =
+    useState<AdminDeployAuthorityStatus | null>(null);
+  const [deployEvents, setDeployEvents] = useState<AdminDeployAuthorityEvent[]>(
     []
   );
 
@@ -591,10 +805,29 @@ export function AdminAuthorityPanel() {
       .finally(() => setSpendLoading(false));
   }, []);
 
+  const reloadDeploy = useCallback(() => {
+    setDeployLoading(true);
+    Promise.all([
+      fetchAdminDeployStatus(),
+      fetchAdminDeployEvents({ limit: 100 }),
+    ])
+      .then(([s, e]) => {
+        setDeployStatus(s);
+        setDeployEvents(e.events);
+      })
+      .catch((err) =>
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load deploy authority"
+        )
+      )
+      .finally(() => setDeployLoading(false));
+  }, []);
+
   useEffect(() => {
     reloadCoding();
     reloadSpend();
-  }, [reloadCoding, reloadSpend]);
+    reloadDeploy();
+  }, [reloadCoding, reloadSpend, reloadDeploy]);
 
   const onToggleCodingGlobal = async (
     field: "codingDisabled" | "buildsDisabled",
@@ -667,6 +900,34 @@ export function AdminAuthorityPanel() {
     }
   };
 
+  const onToggleDeployGlobal = async (value: boolean) => {
+    setSavingKey("global:deploy");
+    try {
+      await setAdminDeployKillGlobal({ deployDisabled: value });
+      toast.success(
+        value ? "Deploy disabled platform-wide" : "Deploy re-enabled"
+      );
+      reloadDeploy();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleDeployTenant = async (tenantId: string, value: boolean) => {
+    setSavingKey(`${tenantId}:deploy`);
+    try {
+      await setAdminDeployKillTenant(tenantId, { deployDisabled: value });
+      toast.success("Tenant deploy kill switch updated");
+      reloadDeploy();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -674,8 +935,8 @@ export function AdminAuthorityPanel() {
           <CardTitle>Authority</CardTitle>
           <CardDescription>
             Platform-admin control and visibility for bounded delegation (#96).
-            Each epic slice adds a section here. Coding and spend hard-stops are
-            live; send / deploy / delete follow later.
+            Each epic slice adds a section here. Coding, spend, and deploy
+            hard-stops are live; send / delete / agent pause follow later.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -698,6 +959,16 @@ export function AdminAuthorityPanel() {
         onReload={reloadSpend}
         onToggleGlobal={onToggleSpendGlobal}
         onToggleTenant={onToggleSpendTenant}
+      />
+
+      <AdminAuthorityDeploySection
+        status={deployStatus}
+        events={deployEvents}
+        loading={deployLoading}
+        savingKey={savingKey}
+        onReload={reloadDeploy}
+        onToggleGlobal={onToggleDeployGlobal}
+        onToggleTenant={onToggleDeployTenant}
       />
     </div>
   );
