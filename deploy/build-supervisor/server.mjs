@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Host build supervisor (#164 / #167 / #112 Layer 4).
+ * Host build supervisor (#164 / #167 / #170 / #112 Layer 4).
  * Owns Docker socket; Bridge calls POST /v1/build over localhost bearer auth.
  * Never expose this port publicly.
  *
  * Network:
  * - none (default): docker --network none
- * - allowlist: bridge + HTTP(S)_PROXY to a host CONNECT proxy (npm/git)
+ * - allowlist: Docker --internal network + HTTP(S)_PROXY to host CONNECT proxy
+ *   (no public internet route; proxy bypass closed)
  */
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -21,6 +22,11 @@ import {
   tenantWorkspaceHostPath,
 } from "./lib.mjs";
 import { startBuildEgressProxy } from "./egress-proxy.mjs";
+import {
+  buildDockerRunArgs,
+  ensureInternalBuildNetwork,
+  resolveBuildEgressNetworkName,
+} from "./egress-network.mjs";
 
 const HOST = process.env.CODING_BUILD_SUPERVISOR_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODING_BUILD_SUPERVISOR_PORT || "8792");
@@ -34,6 +40,7 @@ const EGRESS_PROXY_HOST =
 const EGRESS_PROXY_PORT = Number(
   process.env.CODING_BUILD_EGRESS_PROXY_PORT || "8793"
 );
+const EGRESS_NETWORK = resolveBuildEgressNetworkName();
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -51,6 +58,8 @@ let globalActive = 0;
 const tenantActive = new Map();
 /** @type {{ port: number, allowlist: string[], close: () => Promise<void> } | null} */
 let egressProxy = null;
+/** @type {string | null} */
+let egressNetworkReady = null;
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -94,41 +103,16 @@ function release(tenantId) {
 
 function runDocker(opts) {
   return new Promise((resolve) => {
-    const args = ["run", "--rm"];
-    if (opts.network === "none") {
-      args.push("--network", "none");
-    } else {
-      // Default bridge so the container can reach host.docker.internal → CONNECT proxy.
-      args.push("--add-host", "host.docker.internal:host-gateway");
-      const proxyUrl = `http://host.docker.internal:${opts.proxyPort}`;
-      args.push(
-        "-e",
-        `HTTP_PROXY=${proxyUrl}`,
-        "-e",
-        `HTTPS_PROXY=${proxyUrl}`,
-        "-e",
-        `http_proxy=${proxyUrl}`,
-        "-e",
-        `https_proxy=${proxyUrl}`,
-        "-e",
-        "NO_PROXY=localhost,127.0.0.1",
-        "-e",
-        "no_proxy=localhost,127.0.0.1",
-        "-e",
-        `npm_config_proxy=${proxyUrl}`,
-        "-e",
-        `npm_config_https_proxy=${proxyUrl}`
-      );
-    }
-    args.push(
-      "-v",
-      `${opts.bindHost}:/workspace:rw`,
-      "-w",
-      opts.workdir,
-      IMAGE,
-      ...opts.argv
-    );
-    const child = spawn(DOCKER_BIN, args, {
+    const runArgs = buildDockerRunArgs({
+      network: opts.network,
+      networkName: opts.networkName,
+      proxyPort: opts.proxyPort,
+      bindHost: opts.bindHost,
+      workdir: opts.workdir,
+      image: IMAGE,
+      argv: opts.argv,
+    });
+    const child = spawn(DOCKER_BIN, ["run", ...runArgs], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -190,6 +174,19 @@ async function ensureEgressProxy() {
   return egressProxy;
 }
 
+async function ensureEgressNetwork() {
+  if (egressNetworkReady) return egressNetworkReady;
+  const net = await ensureInternalBuildNetwork({
+    dockerBin: DOCKER_BIN,
+    networkName: EGRESS_NETWORK,
+  });
+  egressNetworkReady = net.name;
+  console.log(
+    `build egress Docker network ${net.name} internal=true created=${net.created}`
+  );
+  return egressNetworkReady;
+}
+
 async function handleBuild(body) {
   if (!DATA_DIR) throw new Error("PLATFORM_DATA_DIR is required");
   if (!TOKEN) throw new Error("CODING_BUILD_SUPERVISOR_TOKEN is required");
@@ -230,10 +227,12 @@ async function handleBuild(body) {
 
   let proxyPort;
   let allowlist;
+  let networkName;
   if (network === "allowlist") {
     const proxy = await ensureEgressProxy();
     proxyPort = proxy.port;
     allowlist = proxy.allowlist;
+    networkName = await ensureEgressNetwork();
   }
 
   const started = Date.now();
@@ -245,6 +244,7 @@ async function handleBuild(body) {
       timeoutMs,
       network,
       proxyPort,
+      networkName,
     });
     return {
       ...result,
@@ -254,7 +254,9 @@ async function handleBuild(body) {
       tenantId,
       image: IMAGE,
       network,
+      egressNetwork: network === "allowlist" ? networkName : undefined,
       egressHosts: network === "allowlist" ? allowlist : [],
+      egressEnforced: network === "allowlist" ? "docker-internal" : "network-none",
     };
   } finally {
     release(tenantId);
@@ -292,6 +294,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       service: "godmode-build-supervisor",
       defaultNet: DEFAULT_NET,
+      egressNetwork: EGRESS_NETWORK,
     });
     return;
   }
@@ -329,6 +332,6 @@ if (!DATA_DIR) {
 
 server.listen(PORT, HOST, () => {
   console.log(
-    `godmode-build-supervisor listening on http://${HOST}:${PORT} data=${DATA_DIR} image=${IMAGE} defaultNet=${DEFAULT_NET}`
+    `godmode-build-supervisor listening on http://${HOST}:${PORT} data=${DATA_DIR} image=${IMAGE} defaultNet=${DEFAULT_NET} egressNetwork=${EGRESS_NETWORK}`
   );
 });

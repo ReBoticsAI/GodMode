@@ -7,7 +7,7 @@
 #   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 #   CODING_BUILD_SUPERVISOR_TOKEN=<shared bearer>
 #   CODING_BUILD_NET=none
-#   # CODING_BUILD_NET=allowlist  (npm/git via supervisor CONNECT proxy)
+#   # CODING_BUILD_NET=allowlist  (Docker --internal net + supervisor CONNECT proxy)
 services:
   godmode:
     image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}

@@ -1,4 +1,4 @@
-# GodMode Layer 4 build supervisor (#164 / #167 / #112)
+# GodMode Layer 4 build supervisor (#164 / #167 / #170 / #112)
 #
 # Privileged host helper that runs ephemeral `docker run --rm` builds with a
 # single RW bind to `tenant-workspaces/<tenantId>`. Bridge never mounts
@@ -6,8 +6,9 @@
 #
 # Network modes (CODING_BUILD_NET):
 #   none (default) - docker --network none
-#   allowlist - default bridge + HTTP(S)_PROXY to a host CONNECT proxy
-#               (npm/git hosts; ports 80/443 only). Not a full shared network.
+#   allowlist - Docker --internal network (no public internet route) +
+#               HTTP(S)_PROXY to a host CONNECT proxy (npm/git; 80/443).
+#               Host allowlist still enforced on CONNECT. Not a shared network.
 #
 # Quick start (host with Docker):
 #   export CODING_BUILD_SUPERVISOR_TOKEN=$(openssl rand -hex 24)
@@ -24,3 +25,4 @@
 #   CODING_BUILD_NET=none
 #   # CODING_BUILD_NET=allowlist
 #   # CODING_BUILD_EGRESS_HOSTS=registry.npmjs.org,github.com
+#   # CODING_BUILD_EGRESS_NETWORK=godmode-build-egress
