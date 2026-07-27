@@ -66,7 +66,7 @@ describe("buildBubblewrapArgs", () => {
     expect(args).not.toContain("--unshare-net");
   });
 
-  it("allowlist omits --unshare-net and forces proxy env", () => {
+  it("allowlist uses --unshare-net and forces jail proxy env", () => {
     const root = tempDir("gm-bwrap-allow-");
     const args = buildBubblewrapArgs({
       codingRoot: root,
@@ -74,15 +74,18 @@ describe("buildBubblewrapArgs", () => {
       command: "true",
       net: "allowlist",
       proxyUrl: "http://127.0.0.1:18080",
+      socketRel: ".godmode-egress/proxy.sock",
+      wrappedCommand: "echo wrapped",
     });
-    expect(args).not.toContain("--unshare-net");
+    expect(args).toContain("--unshare-net");
     const httpsIdx = args.indexOf("HTTPS_PROXY");
     expect(httpsIdx).toBeGreaterThan(0);
     expect(args[httpsIdx + 1]).toBe("http://127.0.0.1:18080");
     expect(args).toContain("npm_config_https_proxy");
+    expect(args.slice(-3)).toEqual(["/bin/sh", "-c", "echo wrapped"]);
   });
 
-  it("allowlist without proxyUrl fails closed", () => {
+  it("allowlist without proxyUrl/socketRel fails closed", () => {
     const root = tempDir("gm-bwrap-allow-miss-");
     expect(() =>
       buildBubblewrapArgs({
@@ -91,7 +94,7 @@ describe("buildBubblewrapArgs", () => {
         command: "true",
         net: "allowlist",
       })
-    ).toThrow(/proxy URL/i);
+    ).toThrow(/proxyUrl and socketRel/i);
   });
 
   it("rejects cwd outside coding root", () => {
