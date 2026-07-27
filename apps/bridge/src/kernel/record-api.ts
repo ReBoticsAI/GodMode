@@ -33,6 +33,7 @@ import {
   listNativeRecords,
   updateNativeRecord,
 } from "./native-storage.js";
+import { assertDeleteAllowed } from "../services/authority/delete-authority.js";
 import {
   ensureOperationRunTables,
   recoverLeasedOperationRuns,
@@ -755,6 +756,12 @@ function deleteRecordImpl(
   ctx: OperationContext
 ): void {
   ctx = withKernelEventBus(requireContext(ctx));
+  assertDeleteAllowed({
+    tenantId: ctx.tenantId,
+    userId: ctx.userId,
+    agentId: ctx.agentId,
+    action: `object.delete.${objectType}`,
+  });
   const def = requireOt(objectType, ctx);
   ctx = withDataContext(db, def, ctx);
   requireOperation(def, "delete", ctx);
