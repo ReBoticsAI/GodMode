@@ -95,6 +95,7 @@ import {
   readTerminalSession,
   writeTerminalSession,
 } from "./coding/terminal-session-manager.js";
+import { runEphemeralBuild } from "./coding/ephemeral-build.js";
 import {
   createTenantWorktree,
   discardTenantWorktree,
@@ -2921,6 +2922,31 @@ export async function executeTool(
         ...built,
         next: "Call install_plugin to load at runtime and enable for this tenant (no Bridge restart).",
       };
+    }
+
+    case "run_ephemeral_build": {
+      const res = await runEphemeralBuild({
+        ...codingFsOpts(ctx),
+        command: String(args.command ?? ""),
+        cwd: args.cwd ? String(args.cwd) : undefined,
+        timeoutMs: args.timeoutMs != null ? Number(args.timeoutMs) : undefined,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "run_ephemeral_build",
+        cwd: res.cwdRel,
+        command: res.command,
+        exitCode: res.exitCode,
+        bytesOut:
+          Buffer.byteLength(res.stdout, "utf8") +
+          Buffer.byteLength(res.stderr, "utf8"),
+        result: res.timedOut
+          ? "timeout"
+          : res.exitCode === 0
+            ? "ok"
+            : "error",
+      });
+      return res;
     }
 
     case "prepare_marketplace_submission": {
