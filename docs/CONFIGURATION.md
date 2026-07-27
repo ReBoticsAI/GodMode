@@ -34,8 +34,9 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
 | `CODING_BUILD_SUPERVISOR_TOKEN` | empty | Bearer token shared only with the build supervisor |
-| `CODING_BUILD_NET` | `none` | Layer 4 build-container network (#167): `none` or `allowlist` (`shared` unsupported) |
+| `CODING_BUILD_NET` | `none` | Layer 4 build-container network (#167 / #170): `none` or `allowlist` (`shared` unsupported). `allowlist` uses a Docker `--internal` network plus host CONNECT proxy |
 | `CODING_BUILD_EGRESS_HOSTS` | empty | Optional comma-separated CONNECT hosts for `allowlist` (falls back to `CODING_TERMINAL_EGRESS_HOSTS`, then npm/GitHub defaults) |
+| `CODING_BUILD_EGRESS_NETWORK` | `godmode-build-egress` | Docker network name for `allowlist` builds (created with `--internal` if missing; fails closed if a non-internal network already uses the name) |
 
 ### GitHub OAuth apps (login vs Projects sync)
 
