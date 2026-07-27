@@ -61,7 +61,7 @@ describe("buildCursorLocalCreateOptions", () => {
   it("includes settingSources project when .cursor exists", () => {
     const cwd = tempDir();
     mkdirSync(join(cwd, ".cursor"));
-    expect(buildCursorLocalCreateOptions(cwd)).toEqual({
+    expect(buildCursorLocalCreateOptions(cwd, { sandboxEnabled: false })).toEqual({
       cwd,
       sandboxOptions: { enabled: false },
       settingSources: ["project"],
@@ -70,9 +70,18 @@ describe("buildCursorLocalCreateOptions", () => {
 
   it("passes empty settingSources without .cursor", () => {
     const cwd = tempDir();
-    expect(buildCursorLocalCreateOptions(cwd)).toEqual({
+    expect(buildCursorLocalCreateOptions(cwd, { sandboxEnabled: false })).toEqual({
       cwd,
       sandboxOptions: { enabled: false },
+      settingSources: [],
+    });
+  });
+
+  it("enables sandboxOptions when requested", () => {
+    const cwd = tempDir();
+    expect(buildCursorLocalCreateOptions(cwd, { sandboxEnabled: true })).toEqual({
+      cwd,
+      sandboxOptions: { enabled: true },
       settingSources: [],
     });
   });
@@ -86,6 +95,22 @@ describe("cursorSettingSourcesFingerprint", () => {
       cursorCloudCacheFingerprint("auto", "sys", "", "")
     ).not.toEqual(
       cursorCloudCacheFingerprint("auto", "sys", "", "project")
+    );
+  });
+
+  it("changes cache fingerprint when SDK sandbox flips", () => {
+    expect(
+      cursorCloudCacheFingerprint("auto", "sys", "", "", "agent", "", "")
+    ).not.toEqual(
+      cursorCloudCacheFingerprint(
+        "auto",
+        "sys",
+        "",
+        "",
+        "agent",
+        "",
+        "sdk-sandbox"
+      )
     );
   });
 });

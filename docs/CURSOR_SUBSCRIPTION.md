@@ -58,6 +58,8 @@ For **local / provider** backends (not `cursor_cloud`), Bridge imports the codin
 
 When the coding root (`agent.config.workspace` or Bridge `repoRoot`) contains a `.cursor/` directory, `Agent.create` / `resume` sets `local.settingSources: ["project"]` so Cursor **project** rules load from disk. Set **Coding workspace** on the Backend node for `cursor_cloud` (same idea as CLI working directory).
 
+On hub/client Linux, `CURSOR_SDK_SANDBOX=required` (default) enables SDK `sandboxOptions` so Cursor **built-in** Shell/FS stay under the tenant coding root. GodMode tools still go through Bridge Layers 1–4. Bridge may create `{cwd}/.cursor/sandbox.json` (network allowlist) if missing; it never writes `~/.cursor/sandbox.json`. Set `CURSOR_SDK_SANDBOX=off` only for emergency debug.
+
 ## System prompt shape (Cursor parity)
 
 GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v3`, prompt-flow v4):

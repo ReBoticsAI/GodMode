@@ -17,6 +17,7 @@ import {
   resolveMcpFromWorkspace,
   type CursorSdkMcpServers,
 } from "../coding/cursor-mcp-config.js";
+import { ensureTenantCursorSandboxJson } from "../coding/cursor-sandbox-policy.js";
 import { resolveCodingRoot } from "../coding/fs-tools.js";
 
 /** Only project rules; never user/team/mdm/all (Bridge/SaaS isolation). */
@@ -293,20 +294,34 @@ export function cursorCloudCacheFingerprint(
   paramsHash = "",
   settingSourcesKey = "",
   sdkMode: "agent" | "plan" = "agent",
-  mcpKey = ""
+  mcpKey = "",
+  sandboxKey = ""
 ): string {
-  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}|${mcpKey}`;
+  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}|${mcpKey}|${sandboxKey}`;
+}
+
+/** Whether cursor_cloud should enable SDK sandboxOptions (hub/client Linux when required). */
+export function cursorSdkSandboxEnabled(): boolean {
+  return config.cursorSdkSandbox === "required";
+}
+
+export function cursorSdkSandboxFingerprint(enabled: boolean): string {
+  return enabled ? "sdk-sandbox" : "";
 }
 
 /** Local Agent.create / resume options derived from coding root (exported for tests). */
-export function buildCursorLocalCreateOptions(cwd: string): {
+export function buildCursorLocalCreateOptions(
+  cwd: string,
+  opts?: { sandboxEnabled?: boolean }
+): {
   cwd: string;
-  sandboxOptions: { enabled: false };
+  sandboxOptions: { enabled: boolean };
   settingSources: CursorProjectSettingSource[];
 } {
+  const sandboxEnabled = opts?.sandboxEnabled ?? cursorSdkSandboxEnabled();
   return {
     cwd,
-    sandboxOptions: { enabled: false },
+    sandboxOptions: { enabled: sandboxEnabled },
     settingSources: resolveCursorSettingSources(cwd),
   };
 }
@@ -319,6 +334,7 @@ export function buildCursorSdkAgentOptions(args: {
   cwd: string;
   agentId?: string;
   mcpServers?: CursorSdkMcpServers;
+  sandboxEnabled?: boolean;
 }): {
   apiKey: string;
   agentId?: string;
@@ -334,7 +350,9 @@ export function buildCursorSdkAgentOptions(args: {
       ? { id: args.modelId, params: args.modelParams }
       : { id: args.modelId },
     mode: args.mode,
-    local: buildCursorLocalCreateOptions(args.cwd),
+    local: buildCursorLocalCreateOptions(args.cwd, {
+      sandboxEnabled: args.sandboxEnabled,
+    }),
     ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
   };
 }
@@ -353,6 +371,7 @@ export async function resolveCursorSdkAgent(args: {
   modelParams?: Array<{ id: string; value: string }>;
   mode: "agent" | "plan";
   mcpServers?: CursorSdkMcpServers;
+  sandboxEnabled?: boolean;
   /** Injectable for tests. */
   sdk?: {
     resume: (
@@ -385,6 +404,7 @@ export async function resolveCursorSdkAgent(args: {
     mode: args.mode,
     cwd: args.cwd,
     mcpServers: args.mcpServers,
+    sandboxEnabled: args.sandboxEnabled,
   });
 
   let sdk = args.sdk;
@@ -534,13 +554,18 @@ export class CursorCloudBackend implements AgentBackend {
       : undefined;
     const mcpKey = cursorMcpServersFingerprint(cwd, mcpEnabled, mcpDisabled);
     const sdkMode = toSdkAgentMode(chatMode);
+    const sandboxEnabled = cursorSdkSandboxEnabled();
+    if (sandboxEnabled) {
+      ensureTenantCursorSandboxJson(cwd);
+    }
     const fingerprint = cursorCloudCacheFingerprint(
       modelId,
       systemHash(sys),
       paramsHash,
       cursorSettingSourcesFingerprint(settingSources),
       sdkMode,
-      mcpKey
+      mcpKey,
+      cursorSdkSandboxFingerprint(sandboxEnabled)
     );
 
     const { agent: sdkAgent, continued } = await resolveCursorSdkAgent({
@@ -552,6 +577,7 @@ export class CursorCloudBackend implements AgentBackend {
       modelParams,
       mode: sdkMode,
       mcpServers,
+      sandboxEnabled,
     });
     const prompt = buildPrompt(req, {
       includeTranscript: shouldIncludeTranscriptAppendix(continued),
