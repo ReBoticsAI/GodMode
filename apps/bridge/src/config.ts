@@ -38,6 +38,20 @@ const installationSurface = (
 /** Official paid multi-tenant hub (ReBotics SaaS). Self-hosted hubs use `private_hub`. */
 const isSaas = isHub && installationSurface === "saas";
 
+/**
+ * SaaS coding gate (#178): unset defaults on for SaaS, off otherwise.
+ * Explicit `true` / `false` always win.
+ */
+export function resolveSaasAllowCodeAccess(
+  raw: string | undefined,
+  saas: boolean
+): boolean {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return saas;
+}
+
 export const config = {
   /** local = dev workstation; hub = multi-tenant; client = personal Docker instance. */
   deploymentMode: deploymentMode as "local" | "hub" | "client",
@@ -209,8 +223,14 @@ export const config = {
     },
   },
   businessWebsiteUrl: (process.env.BUSINESS_WEBSITE_URL ?? "").trim(),
-  /** When saas: deny agent codeAccess unless PLATFORM_SAAS_ALLOW_CODE_ACCESS=true */
-  saasAllowCodeAccess: process.env.PLATFORM_SAAS_ALLOW_CODE_ACCESS === "true",
+  /**
+   * When saas: agent codeAccess + Coding UI (#178).
+   * Unset → true on SaaS (opt-out); explicit true/false win; non-SaaS defaults false.
+   */
+  saasAllowCodeAccess: resolveSaasAllowCodeAccess(
+    process.env.PLATFORM_SAAS_ALLOW_CODE_ACCESS,
+    isSaas
+  ),
   /** When saas: block tenant Local plugin path registration unless true */
   saasAllowLocalPlugins: process.env.PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS === "true",
   /**

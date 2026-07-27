@@ -112,7 +112,7 @@ After a successful TypeScript/TSX write, the tool result also includes `verifica
 
 Sidebar **Coding** (`/coding`) is a human file tree and editor over the same sandboxed coding root agents use (`resolveCodingRoot`: local repo, or hub/SaaS `tenant-workspaces/<tenantId>/`, or the agent's **Coding workspace** path). Creates, saves, renames, and deletes go through `/api/ai/coding/*` and are audited. Paths cannot escape the root.
 
-On SaaS, the UI and those APIs stay off unless `PLATFORM_SAAS_ALLOW_CODE_ACCESS=true` (same gate as agent `codeAccess`). Interactive shell is separate (issue #148) and stays blocked until tenant sandbox isolation (#112).
+On SaaS, Coding UI and agent `codeAccess` are **on by default** (#178). Set `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` to disable. Interactive shared PTY and Layer 3/4 sandboxes apply when coding is enabled (see [SECURITY.md](./SECURITY.md)).
 
 ## CLI login ≠ SDK billing key
 

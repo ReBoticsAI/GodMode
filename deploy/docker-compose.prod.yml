@@ -1,13 +1,16 @@
 # Official multi-tenant SaaS hub (your VPS only).
 # Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to your public domain.
 #
-# Layer 4 (#164 / #167): do NOT mount /var/run/docker.sock here. Run the optional
-# build supervisor separately (deploy/build-supervisor/) and set on Bridge:
+# Layer 3: add cap_add SYS_ADMIN+NET_ADMIN and security_opt (seccomp/apparmor
+# unconfined) when enabling bubblewrap coding in-container (see saas-staging compose).
+#
+# Layer 4 (#164 / #167 / #178): do NOT mount /var/run/docker.sock here. Run the optional
+# build supervisor separately (deploy/build-supervisor/) against this SaaS data dir and set:
 #   CODING_BUILD_MODE=ephemeral
 #   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 #   CODING_BUILD_SUPERVISOR_TOKEN=<shared bearer>
-#   CODING_BUILD_NET=none
-#   # CODING_BUILD_NET=allowlist  (Docker --internal net + supervisor CONNECT proxy)
+#   CODING_BUILD_NET=allowlist
+#   # CODING_BUILD_NET=none  (no registry egress)
 services:
   godmode:
     image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}
