@@ -200,7 +200,7 @@ export function buildBubblewrapArgs(opts: {
     "--clearenv",
     "--setenv",
     "PATH",
-    "/usr/bin:/bin",
+    "/usr/local/bin:/usr/bin:/bin",
     "--setenv",
     "HOME",
     codingRoot,
