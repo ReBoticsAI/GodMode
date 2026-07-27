@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
@@ -46,6 +47,7 @@ import {
   type CodingTreeEntry,
 } from "@/api";
 import { toast } from "sonner";
+import { CodingTerminalPanel } from "./CodingTerminalPanel";
 
 type DialogMode = "new-file" | "new-folder" | "rename" | "delete" | null;
 
@@ -282,119 +284,134 @@ export default function CodingWorkspacePage() {
     <Page>
       <PageHeader
         title="Coding"
-        description="Browse and edit files in the active coding root."
+        description="Browse files and run sandboxed shell commands in the active coding root."
       />
-      <div className="flex min-h-[28rem] flex-col gap-4 md:flex-row md:items-stretch">
-        <aside className="flex w-full shrink-0 flex-col gap-2 rounded-xl border bg-card md:w-64">
-          <div className="flex items-center gap-1 border-b p-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => openDialog("new-file")}
-            >
-              <FilePlusIcon data-icon="inline-start" />
-              File
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => openDialog("new-folder")}
-            >
-              <FolderPlusIcon data-icon="inline-start" />
-              Folder
-            </Button>
-          </div>
-          <ScrollArea className="h-64 md:h-[calc(100%-3rem)]">
-            <div key={treeKey} className="p-1">
-              {loading && (
-                <p className="px-2 py-1 text-xs text-muted-foreground">
-                  Loading tree…
-                </p>
-              )}
-              {!loading && rootEntries.length === 0 && (
-                <p className="px-2 py-1 text-xs text-muted-foreground">
-                  Empty workspace
-                </p>
-              )}
-              {rootEntries.map((entry) => (
-                <TreeNode
-                  key={entry.path}
-                  entry={entry}
-                  depth={0}
-                  selectedPath={selectedPath}
-                  onSelectFile={(p) => void openFile(p)}
-                  onRefreshParent={() => void refreshTree()}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-          {codingRoot ? (
-            <p
-              className="truncate border-t px-2 py-1.5 text-[10px] text-muted-foreground"
-              title={codingRoot}
-            >
-              Root: {codingRoot}
-            </p>
-          ) : null}
-        </aside>
+      <Tabs defaultValue="files" className="flex flex-col gap-4">
+        <TabsList variant="line" className="w-full justify-start">
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="terminal">Terminal</TabsTrigger>
+        </TabsList>
 
-        <section className="flex min-w-0 flex-1 flex-col gap-2 rounded-xl border bg-card p-3">
-          {!selectedPath ? (
-            <Empty className="flex-1 border-0">
-              <EmptyHeader>
-                <EmptyTitle>Select a file</EmptyTitle>
-                <EmptyDescription>
-                  Open a file from the tree to edit it here. Saves write through
-                  the same sandboxed coding root agents use.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="min-w-0 flex-1 truncate text-xs">{selectedPath}</code>
-                {dirty ? <Badge variant="secondary">Unsaved</Badge> : null}
+        <TabsContent value="files" className="mt-0">
+          <div className="flex min-h-[28rem] flex-col gap-4 md:flex-row md:items-stretch">
+            <aside className="flex w-full shrink-0 flex-col gap-2 rounded-xl border bg-card md:w-64">
+              <div className="flex items-center gap-1 border-b p-2">
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => void save()}
-                  disabled={!dirty || fileLoading}
+                  variant="ghost"
+                  onClick={() => openDialog("new-file")}
                 >
-                  <SaveIcon data-icon="inline-start" />
-                  Save
+                  <FilePlusIcon data-icon="inline-start" />
+                  File
                 </Button>
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  onClick={() => openDialog("rename")}
+                  variant="ghost"
+                  onClick={() => openDialog("new-folder")}
                 >
-                  <PencilIcon data-icon="inline-start" />
-                  Rename
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => openDialog("delete")}
-                >
-                  <Trash2Icon data-icon="inline-start" />
-                  Delete
+                  <FolderPlusIcon data-icon="inline-start" />
+                  Folder
                 </Button>
               </div>
-              <Textarea
-                className="min-h-[24rem] flex-1 font-mono text-xs"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                disabled={fileLoading}
-                spellCheck={false}
-              />
-            </>
-          )}
-        </section>
-      </div>
+              <ScrollArea className="h-64 md:h-[calc(100%-3rem)]">
+                <div key={treeKey} className="p-1">
+                  {loading && (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">
+                      Loading tree…
+                    </p>
+                  )}
+                  {!loading && rootEntries.length === 0 && (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">
+                      Empty workspace
+                    </p>
+                  )}
+                  {rootEntries.map((entry) => (
+                    <TreeNode
+                      key={entry.path}
+                      entry={entry}
+                      depth={0}
+                      selectedPath={selectedPath}
+                      onSelectFile={(p) => void openFile(p)}
+                      onRefreshParent={() => void refreshTree()}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+              {codingRoot ? (
+                <p
+                  className="truncate border-t px-2 py-1.5 text-[10px] text-muted-foreground"
+                  title={codingRoot}
+                >
+                  Root: {codingRoot}
+                </p>
+              ) : null}
+            </aside>
+
+            <section className="flex min-w-0 flex-1 flex-col gap-2 rounded-xl border bg-card p-3">
+              {!selectedPath ? (
+                <Empty className="flex-1 border-0">
+                  <EmptyHeader>
+                    <EmptyTitle>Select a file</EmptyTitle>
+                    <EmptyDescription>
+                      Open a file from the tree to edit it here. Saves write through
+                      the same sandboxed coding root agents use.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="min-w-0 flex-1 truncate text-xs">
+                      {selectedPath}
+                    </code>
+                    {dirty ? <Badge variant="secondary">Unsaved</Badge> : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void save()}
+                      disabled={!dirty || fileLoading}
+                    >
+                      <SaveIcon data-icon="inline-start" />
+                      Save
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openDialog("rename")}
+                    >
+                      <PencilIcon data-icon="inline-start" />
+                      Rename
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => openDialog("delete")}
+                    >
+                      <Trash2Icon data-icon="inline-start" />
+                      Delete
+                    </Button>
+                  </div>
+                  <Textarea
+                    className="min-h-[24rem] flex-1 font-mono text-xs"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    disabled={fileLoading}
+                    spellCheck={false}
+                  />
+                </>
+              )}
+            </section>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="terminal" className="mt-0">
+          <CodingTerminalPanel />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
         <DialogContent>
