@@ -3473,6 +3473,61 @@ export function setAdminDeployKillTenant(
   );
 }
 
+export type AdminDeleteAuthorityStatus = {
+  kills: {
+    envDisabled: boolean;
+    global: { deleteDisabled: boolean };
+    tenants: Record<string, { deleteDisabled: boolean }>;
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    deleteDisabled: boolean;
+  }>;
+};
+
+export type AdminDeleteAuthorityEvent = {
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminDeleteStatus() {
+  return api<AdminDeleteAuthorityStatus>("/admin/authority/delete-status");
+}
+
+export function fetchAdminDeleteEvents(opts?: { limit?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<{ events: AdminDeleteAuthorityEvent[] }>(
+    `/admin/authority/delete-events${q ? `?${q}` : ""}`
+  );
+}
+
+export function setAdminDeleteKillGlobal(body: { deleteDisabled: boolean }) {
+  return api<AdminDeleteAuthorityStatus["kills"]>(
+    "/admin/authority/delete-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminDeleteKillTenant(
+  tenantId: string,
+  body: { deleteDisabled: boolean }
+) {
+  return api<AdminDeleteAuthorityStatus["kills"]>(
+    `/admin/authority/delete-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 
 export function signupPassword(
   email: string,

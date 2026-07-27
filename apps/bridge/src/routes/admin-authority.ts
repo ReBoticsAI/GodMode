@@ -32,6 +32,15 @@ import {
   getDeployAuthorityStatus,
   listDeployAuthorityEvents,
 } from "../services/authority/deploy-authority-admin.js";
+import {
+  getDeleteKillState,
+  setGlobalDeleteKill,
+  setTenantDeleteKill,
+} from "../services/authority/delete-kill-switch.js";
+import {
+  getDeleteAuthorityStatus,
+  listDeleteAuthorityEvents,
+} from "../services/authority/delete-authority-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
@@ -220,6 +229,65 @@ export function createAdminAuthorityRouter(): Router {
     }
     setTenantDeployKill(tenantId, { deployDisabled });
     res.json(getDeployKillState([tenantId]));
+  });
+
+  router.get("/delete-kills", (_req, res) => {
+    const tenantIds = listAllTenantIds(getCoreDb());
+    res.json(getDeleteKillState(tenantIds));
+  });
+
+  router.get("/delete-status", (_req, res) => {
+    try {
+      res.json(getDeleteAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/delete-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listDeleteAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/delete-kills/global", (req, res) => {
+    const deleteDisabled =
+      req.body?.deleteDisabled === undefined
+        ? undefined
+        : Boolean(req.body.deleteDisabled);
+    if (deleteDisabled === undefined) {
+      res.status(400).json({ error: "deleteDisabled required" });
+      return;
+    }
+    setGlobalDeleteKill({ deleteDisabled });
+    res.json(getDeleteKillState(listAllTenantIds(getCoreDb())));
+  });
+
+  router.post("/delete-kills/tenant/:tenantId", (req, res) => {
+    const tenantId =
+      typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+    if (!tenantId) {
+      res.status(400).json({ error: "tenantId required" });
+      return;
+    }
+    const deleteDisabled =
+      req.body?.deleteDisabled === undefined
+        ? undefined
+        : Boolean(req.body.deleteDisabled);
+    if (deleteDisabled === undefined) {
+      res.status(400).json({ error: "deleteDisabled required" });
+      return;
+    }
+    setTenantDeleteKill(tenantId, { deleteDisabled });
+    res.json(getDeleteKillState([tenantId]));
   });
 
   return router;
