@@ -11,6 +11,19 @@
 #
 # Family hub (example): http://172.16.1.95:8080  (private_hub)
 # SaaS staging:         http://172.16.1.95:9080  (saas paywall)
+#
+# Layer 3 (bubblewrap): SYS_ADMIN + NET_ADMIN + relaxed seccomp/apparmor so
+# namespaces work inside the Bridge container (same needs as a family hub with coding).
+#
+# Layer 4 (#178): do NOT mount /var/run/docker.sock here. Run a sibling host
+# build supervisor (deploy/build-supervisor/) against the SaaS PLATFORM_DATA_DIR
+# only (separate token/data root from private_hub). Bridge reaches it via
+# host.docker.internal (extra_hosts below). Example Bridge env (also in
+# .env.saas-staging.example):
+#   CODING_BUILD_MODE=ephemeral
+#   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
+#   CODING_BUILD_SUPERVISOR_TOKEN=<saas-only bearer>
+#   CODING_BUILD_NET=allowlist
 
 services:
   godmode:
@@ -22,6 +35,13 @@ services:
       - "${SAAS_HOST_PORT:-9080}:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Bubblewrap Layer 3 namespaces inside the container
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
     env_file:
       - .env.saas-staging
     volumes:
@@ -39,6 +59,12 @@ services:
       - EMBEDDINGS_SERVER_HOST=host.docker.internal
       - EMBEDDINGS_PORT=8082
       - EMBEDDINGS_QUEUE_ENABLED=true
+      # Coding / Layer 4 (values from env_file; passthrough for compose visibility)
+      - CODING_TERMINAL_NET=${CODING_TERMINAL_NET:-none}
+      - CODING_BUILD_MODE=${CODING_BUILD_MODE:-ephemeral}
+      - CODING_BUILD_SUPERVISOR_URL=${CODING_BUILD_SUPERVISOR_URL:-http://host.docker.internal:8792}
+      - CODING_BUILD_SUPERVISOR_TOKEN=${CODING_BUILD_SUPERVISOR_TOKEN:-}
+      - CODING_BUILD_NET=${CODING_BUILD_NET:-allowlist}
     restart: unless-stopped
 
 volumes:
