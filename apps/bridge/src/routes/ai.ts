@@ -3,6 +3,10 @@ import { v4 as uuidv4 } from "uuid";
 import type { EventEmitter } from "node:events";
 import { config } from "../config.js";
 import { requireEditorForMutation } from "../services/auth/middleware.js";
+import {
+  assertSpendAllowed,
+  isSpendAuthorityError,
+} from "../services/authority/spend-authority.js";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "../services/llm-manager.js";
 import { AI_CHAT_COMMANDS } from "../services/ai-commands-registry.js";
@@ -1166,6 +1170,25 @@ export function createAiRouter(
     if (!scope) {
       res.status(404).json({ error: "Agent not found" });
       return;
+    }
+
+    try {
+      assertSpendAllowed({
+        tenantId: req.tenantId ?? scope.tenantId,
+        userId: req.user?.id,
+        agentId: resolvedAgentId,
+        action: "ai_chat",
+      });
+    } catch (err) {
+      if (isSpendAuthorityError(err)) {
+        res.status(err.status).json({
+          error: err.message,
+          code: err.code,
+          spendDisabled: true,
+        });
+        return;
+      }
+      throw err;
     }
 
     let agent;

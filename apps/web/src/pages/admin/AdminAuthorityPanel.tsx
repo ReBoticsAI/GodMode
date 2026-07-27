@@ -2,10 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminCodingEvents,
   fetchAdminCodingStatus,
+  fetchAdminSpendEvents,
+  fetchAdminSpendStatus,
   setAdminCodingKillGlobal,
   setAdminCodingKillTenant,
+  setAdminSpendKillGlobal,
+  setAdminSpendKillTenant,
   type AdminCodingAuthorityEvent,
   type AdminCodingAuthorityStatus,
+  type AdminSpendAuthorityEvent,
+  type AdminSpendAuthorityStatus,
 } from "@/api";
 import {
   Card,
@@ -69,8 +75,7 @@ function AdminAuthorityCodingSection({
           <CardTitle>Coding</CardTitle>
           <CardDescription>
             Quotas, kill switches, and reject feed for shared-host coding
-            (Layers 1–4). Later Authority sections (spend, send, deploy,
-            delete) land beside this block.
+            (Layers 1–4).
           </CardDescription>
           <CardAction>
             <Button
@@ -332,33 +337,266 @@ function AdminAuthorityCodingSection({
   );
 }
 
-/** Admin → Authority: durable #96 control plane. Coding is Slice 2; more sections follow. */
-export function AdminAuthorityPanel() {
-  const [loading, setLoading] = useState(true);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [status, setStatus] = useState<AdminCodingAuthorityStatus | null>(null);
-  const [events, setEvents] = useState<AdminCodingAuthorityEvent[]>([]);
+function AdminAuthoritySpendSection({
+  status,
+  events,
+  loading,
+  savingKey,
+  onReload,
+  onToggleGlobal,
+  onToggleTenant,
+}: {
+  status: AdminSpendAuthorityStatus | null;
+  events: AdminSpendAuthorityEvent[];
+  loading: boolean;
+  savingKey: string | null;
+  onReload: () => void;
+  onToggleGlobal: (value: boolean) => void;
+  onToggleTenant: (tenantId: string, value: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Spend</CardTitle>
+          <CardDescription>
+            Hard-stop kill switches for credit debits, Intelligence chat, and
+            autonomous/queue work. Monthly caps, soft-warns, and Bank books stay
+            on #91.
+          </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {loading && !status ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : status ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={
+                    status.kills.envDisabled ? "destructive" : "secondary"
+                  }
+                >
+                  Env nuclear:{" "}
+                  {status.kills.envDisabled
+                    ? "PLATFORM_SPEND_DISABLED"
+                    : "off"}
+                </Badge>
+              </div>
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    Promise.all([fetchAdminCodingStatus(), fetchAdminCodingEvents({ limit: 100 })])
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3 sm:max-w-md">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="kill-spend">Disable spend</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Blocks new chat turns, autonomous ticks, queue jobs, and
+                    negative credit adjustments platform-wide.
+                  </p>
+                </div>
+                <Switch
+                  id="kill-spend"
+                  checked={status.kills.global.spendDisabled}
+                  disabled={
+                    savingKey === "global:spend" || status.kills.envDisabled
+                  }
+                  onCheckedChange={onToggleGlobal}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Failed to load spend authority status.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {status ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per-tenant spend kills</CardTitle>
+            <CardDescription>
+              Disable spend for a single workspace without redeploying.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Spend kill</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {status.tenants.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground">
+                      No tenants found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  status.tenants.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {t.id}
+                            {t.isOperator ? " (operator)" : ""}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={t.spendDisabled}
+                          disabled={
+                            savingKey === `${t.id}:spend` ||
+                            status.kills.envDisabled ||
+                            status.kills.global.spendDisabled
+                          }
+                          onCheckedChange={(v) => onToggleTenant(t.id, v)}
+                          aria-label={`Disable spend for ${t.name}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent spend rejects</CardTitle>
+          <CardDescription>
+            Cross-tenant <code>tool_audit_log</code> rows with{" "}
+            <code>kill:*spend*</code> results.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && events.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Result</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No spend kill rejects logged yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {e.createdAt}
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-xs">
+                        {e.tenantName ?? e.tenantId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.agentId}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {e.action}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{e.result}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Admin → Authority: durable #96 control plane. */
+export function AdminAuthorityPanel() {
+  const [codingLoading, setCodingLoading] = useState(true);
+  const [spendLoading, setSpendLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [codingStatus, setCodingStatus] =
+    useState<AdminCodingAuthorityStatus | null>(null);
+  const [codingEvents, setCodingEvents] = useState<AdminCodingAuthorityEvent[]>(
+    []
+  );
+  const [spendStatus, setSpendStatus] =
+    useState<AdminSpendAuthorityStatus | null>(null);
+  const [spendEvents, setSpendEvents] = useState<AdminSpendAuthorityEvent[]>(
+    []
+  );
+
+  const reloadCoding = useCallback(() => {
+    setCodingLoading(true);
+    Promise.all([
+      fetchAdminCodingStatus(),
+      fetchAdminCodingEvents({ limit: 100 }),
+    ])
       .then(([s, e]) => {
-        setStatus(s);
-        setEvents(e.events);
+        setCodingStatus(s);
+        setCodingEvents(e.events);
       })
       .catch((err) =>
         toast.error(
-          err instanceof Error ? err.message : "Failed to load authority status"
+          err instanceof Error ? err.message : "Failed to load coding authority"
         )
       )
-      .finally(() => setLoading(false));
+      .finally(() => setCodingLoading(false));
+  }, []);
+
+  const reloadSpend = useCallback(() => {
+    setSpendLoading(true);
+    Promise.all([
+      fetchAdminSpendStatus(),
+      fetchAdminSpendEvents({ limit: 100 }),
+    ])
+      .then(([s, e]) => {
+        setSpendStatus(s);
+        setSpendEvents(e.events);
+      })
+      .catch((err) =>
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load spend authority"
+        )
+      )
+      .finally(() => setSpendLoading(false));
   }, []);
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    reloadCoding();
+    reloadSpend();
+  }, [reloadCoding, reloadSpend]);
 
-  const onToggleGlobal = async (
+  const onToggleCodingGlobal = async (
     field: "codingDisabled" | "buildsDisabled",
     value: boolean
   ) => {
@@ -375,7 +613,7 @@ export function AdminAuthorityPanel() {
             ? "Builds disabled platform-wide"
             : "Builds re-enabled"
       );
-      reload();
+      reloadCoding();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -383,7 +621,7 @@ export function AdminAuthorityPanel() {
     }
   };
 
-  const onToggleTenant = async (
+  const onToggleCodingTenant = async (
     tenantId: string,
     field: "codingDisabled" | "buildsDisabled",
     value: boolean
@@ -393,7 +631,35 @@ export function AdminAuthorityPanel() {
     try {
       await setAdminCodingKillTenant(tenantId, { [field]: value });
       toast.success("Tenant kill switch updated");
-      reload();
+      reloadCoding();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleSpendGlobal = async (value: boolean) => {
+    setSavingKey("global:spend");
+    try {
+      await setAdminSpendKillGlobal({ spendDisabled: value });
+      toast.success(
+        value ? "Spend disabled platform-wide" : "Spend re-enabled"
+      );
+      reloadSpend();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleSpendTenant = async (tenantId: string, value: boolean) => {
+    setSavingKey(`${tenantId}:spend`);
+    try {
+      await setAdminSpendKillTenant(tenantId, { spendDisabled: value });
+      toast.success("Tenant spend kill switch updated");
+      reloadSpend();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -408,20 +674,30 @@ export function AdminAuthorityPanel() {
           <CardTitle>Authority</CardTitle>
           <CardDescription>
             Platform-admin control and visibility for bounded delegation (#96).
-            Each epic slice adds a section here. Coding quotas and kill switches
-            are first; spend / send / deploy / delete follow later.
+            Each epic slice adds a section here. Coding and spend hard-stops are
+            live; send / deploy / delete follow later.
           </CardDescription>
         </CardHeader>
       </Card>
 
       <AdminAuthorityCodingSection
-        status={status}
-        events={events}
-        loading={loading}
+        status={codingStatus}
+        events={codingEvents}
+        loading={codingLoading}
         savingKey={savingKey}
-        onReload={reload}
-        onToggleGlobal={onToggleGlobal}
-        onToggleTenant={onToggleTenant}
+        onReload={reloadCoding}
+        onToggleGlobal={onToggleCodingGlobal}
+        onToggleTenant={onToggleCodingTenant}
+      />
+
+      <AdminAuthoritySpendSection
+        status={spendStatus}
+        events={spendEvents}
+        loading={spendLoading}
+        savingKey={savingKey}
+        onReload={reloadSpend}
+        onToggleGlobal={onToggleSpendGlobal}
+        onToggleTenant={onToggleSpendTenant}
       />
     </div>
   );

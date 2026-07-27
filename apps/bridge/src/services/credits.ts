@@ -1,11 +1,15 @@
 import { v4 as uuidv4 } from "uuid";
 import type { CoreDatabase } from "../core-db.js";
+import { assertSpendAllowed, isSpendAuthorityError } from "./authority/spend-authority.js";
 
 export class CreditsError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Stable reject code when spend kill blocked a debit (#96 Slice 3). */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -30,8 +34,24 @@ export function adjustCredits(
     reason: string;
     refType?: string;
     refId?: string;
+    /** When debiting, optional tenant for per-workspace spend kill (#96 Slice 3). */
+    tenantId?: string | null;
   }
 ): number {
+  if (opts.delta < 0) {
+    try {
+      assertSpendAllowed({
+        tenantId: opts.tenantId,
+        userId: opts.userId,
+        action: "adjust_credits",
+      });
+    } catch (err) {
+      if (isSpendAuthorityError(err)) {
+        throw new CreditsError(err.status, err.message, err.code);
+      }
+      throw err;
+    }
+  }
   ensureWallet(core, opts.userId);
   const tx = core.transaction(() => {
     const row = core

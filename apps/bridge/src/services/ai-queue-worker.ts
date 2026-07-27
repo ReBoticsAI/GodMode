@@ -15,6 +15,7 @@ import { runEpisodicDistill } from "./episodic-distill.js";
 import { runWikiSynthesize } from "./wiki-synthesize.js";
 import type { EmbeddingManager } from "./embeddings/embedding-manager.js";
 import { config } from "../config.js";
+import { assertSpendAllowed } from "./authority/spend-authority.js";
 
 /** Workflow id of the durable autonomous executor (routed to the tick engine). */
 export const AUTONOMOUS_RUNNER_ID = "autonomous-task-runner";
@@ -270,6 +271,10 @@ export class AiQueueWorker {
   }
 
   private async runJob(job: QueueJobRow, db: AppDatabase): Promise<unknown> {
+    assertSpendAllowed({
+      tenantId: job.tenant_id,
+      action: "ai_queue",
+    });
     const ctx = job.context_json
       ? (JSON.parse(job.context_json) as Record<string, unknown>)
       : {};
