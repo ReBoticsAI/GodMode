@@ -109,6 +109,30 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-coding-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/coding-kills",
+    rationale:
+      "Platform-admin read of runtime coding/build kill switches (#96 Slice 1); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-coding-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/coding-kills/global",
+    rationale:
+      "Platform-admin global coding/build kill switch (#96 Slice 1); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-coding-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/coding-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant coding/build kill switch (#96 Slice 1); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",
