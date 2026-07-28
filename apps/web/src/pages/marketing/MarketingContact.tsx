@@ -7,12 +7,15 @@ export default function MarketingContact() {
       description="Product, security, and Cloud support channels."
     >
       <p>
-        Product and security contact for ReBotics / GodMode:{" "}
+        Product, Cloud, and billing:{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a>.
+      </p>
+      <p>
+        Security reports:{" "}
         <a href="mailto:security@rebotics.ai">security@rebotics.ai</a>.
       </p>
       <p>
-        Support for Cloud customers is also available inside the product Support surface when
-        signed in.
+        Signed-in Cloud customers can also use the in-product Support surface.
       </p>
       <p>
         Source:{" "}
