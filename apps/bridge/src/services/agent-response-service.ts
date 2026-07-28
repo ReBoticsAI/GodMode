@@ -3,6 +3,10 @@ import type { LlmManager } from "./llm-manager.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getAgent } from "./agents/agents-db.js";
 import { resolveAgent, getBackend } from "./agents/registry.js";
+import {
+  assertAgentExecutionAllowed,
+  isAgentPauseAuthorityError,
+} from "./authority/agent-pause-authority.js";
 import { assemblePrompt, loadPromptFlowConfig } from "./prompt-assembler.js";
 import type { AgentMessage } from "./ai-agent.js";
 import {
@@ -95,6 +99,16 @@ export async function checkAgentRelevance(
   agentId: string,
   messageText: string
 ): Promise<boolean> {
+  try {
+    assertAgentExecutionAllowed({
+      tenantId: agentTenantId,
+      agentId,
+      action: "agent_relevance",
+    });
+  } catch (err) {
+    if (isAgentPauseAuthorityError(err)) return false;
+    throw err;
+  }
   const agent = getAgent(getTenantDb(agentTenantId), agentId);
   if (!agent) return false;
   const roleHint = agent.description?.trim() || agent.systemPrompt.slice(0, 400);
@@ -159,7 +173,11 @@ async function generateAgentReply(
   }
 ): Promise<string> {
   const engineDb = getTenantDb(opts.agentTenantId);
-  const agent = resolveAgent(engineDb, opts.agentId);
+  const agent = resolveAgent(engineDb, opts.agentId, {
+    tenantId: opts.agentTenantId,
+    userId: opts.viewerUserId,
+    action: "agent_reply",
+  });
   const flowConfig = loadPromptFlowConfig(engineDb);
   const transcript = buildConversationHistory(
     opts.core,

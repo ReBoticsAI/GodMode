@@ -34,6 +34,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `PLATFORM_DEPLOY_DISABLED` | unset | When `true`/`1`, force deny plugin build/activate and worktree promote before `platform_meta` (#96 Slice 4) |
 | `PLATFORM_DELETE_DISABLED` | unset | When `true`/`1`, force deny record/FS/wiki/plugin uninstall deletes before `platform_meta` (#96 Slice 5) |
 | `PLATFORM_SEND_DISABLED` | unset | When `true`/`1`, force deny hook webhook/send_message before `platform_meta` (#96 Slice 6) |
+| `PLATFORM_AGENTS_DISABLED` | unset | When `true`/`1`, force deny agent LLM execution before `platform_meta` (#96 Slice 8) |
 | `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` | `false` | When SaaS, allow Local path plugin registration (keep false) |
 | `CODING_BUILD_MODE` | `off` | Layer 4 (#164): `off` or `ephemeral` (delegate allowlisted npm builds to host supervisor) |
 | `CODING_BUILD_SUPERVISOR_URL` | empty | Localhost HTTP base for build supervisor (`127.0.0.1`, `localhost`, or `host.docker.internal`) |
@@ -72,7 +73,9 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 **Send hard-stop (#96 Slice 6):** runtime global/per-tenant send kills block hook `webhook` and `send_message` actions (automation outbound). Optional env nuclear: `PLATFORM_SEND_DISABLED=true`. Auth verification/reset mail, human DMs, agent conversational replies, and in-app `notify` stay ungated.
 
-**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and a unified audit feed (#96 Slice 7). Agent pause follows in a later slice. API also available:
+**Agent pause (#96 Slice 8):** runtime global/per-tenant/per-agent pause blocks agent LLM execution (chat, autonomous, queue agent jobs, subagents, replies). Optional env nuclear: `PLATFORM_AGENTS_DISABLED=true`. Does not mutate `ai_agents.enabled`. Distinct from spend kill and user disable toggles.
+
+**Admin → Authority** (`?tab=authority`) is the durable ops UI for this epic: global/per-tenant kill toggles, configured limits, live load, and a unified audit feed (#96 Slice 7). API also available:
 
 - `GET /api/admin/authority/coding-status`
 - `GET /api/admin/authority/coding-events`
@@ -100,8 +103,14 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 - `POST /api/admin/authority/send-kills/global` body `{ "sendDisabled": true }`
 - `POST /api/admin/authority/send-kills/tenant/:tenantId` same shape
 - `GET /api/admin/authority/audit-events?limit=&domain=&tenantId=`
+- `GET /api/admin/authority/agent-pause-status`
+- `GET /api/admin/authority/agent-pause-events`
+- `GET /api/admin/authority/agent-pause-kills`
+- `POST /api/admin/authority/agent-pause-kills/global` body `{ "agentsPaused": true }`
+- `POST /api/admin/authority/agent-pause-kills/tenant/:tenantId` same shape
+- `POST /api/admin/authority/agent-pause-kills/tenant/:tenantId/agent/:agentId` body `{ "paused": true }`
 
-`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`. `PLATFORM_DELETE_DISABLED=true` forces delete deny even before `platform_meta`. `PLATFORM_SEND_DISABLED=true` forces send deny even before `platform_meta`.
+`PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`. `PLATFORM_DELETE_DISABLED=true` forces delete deny even before `platform_meta`. `PLATFORM_SEND_DISABLED=true` forces send deny even before `platform_meta`. `PLATFORM_AGENTS_DISABLED=true` forces agent execution pause even before `platform_meta`.
 
 ### GitHub OAuth apps (login vs Projects sync)
 
