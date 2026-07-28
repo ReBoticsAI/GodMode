@@ -9,7 +9,10 @@ export default function MarketingPrivacy() {
     >
       <h2>What we collect (GodMode Cloud)</h2>
       <ul>
-        <li>Account email, display name, and authentication secrets (hashed passwords / MFA).</li>
+        <li>
+          Account email, display name, and authentication secrets (hashed passwords; TOTP MFA
+          required for platform admins on Cloud; optional MFA for other accounts if enabled).
+        </li>
         <li>Billing identifiers from Stripe (customer and subscription IDs).</li>
         <li>Workspace content you create in Cloud (wiki, tasks, calendar, agents, etc.).</li>
         <li>Operational logs needed to run and secure the service (first-party Bridge logs).</li>

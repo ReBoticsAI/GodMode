@@ -26,9 +26,15 @@ Same tools work in the monorepo and on Docker hub/client:
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`). For native/`npm ci` deps when Layer 4 is enabled, use `run_ephemeral_build` (host build supervisor; Docker socket never on Bridge).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes.
 
-### SaaS coding isolation (#112)
+### SaaS coding isolation (#112 / #178)
 
-On hub/client SaaS, coding tools are confined so tenants cannot reach core or each other:
+On SaaS (`INSTALLATION_SURFACE=saas`), coding UI and agent coding tools are **on by
+default** (#178). Opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`. Arbitrary
+**Local** plugin folder registration stays **off** unless
+`PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS=true`. Tenants still author via Intelligence
+`scaffold_plugin` under the tenant workspace and install Official / Community packs.
+
+Coding tools are confined so tenants cannot reach core or each other:
 
 | Layer | Boundary |
 |-------|----------|
@@ -39,7 +45,7 @@ On hub/client SaaS, coding tools are confined so tenants cannot reach core or ea
 
 Intelligence tool cards show sandbox / net / worktree badges when tools return isolation metadata. Full threat model: [SECURITY.md](./SECURITY.md).
 
-This matches **Marketplace → Local**. Prefer `api.routes.mount` in `register` for Express routes (hot-reloads via route slots). Avoid raw `ctx.app.use` in `server:beforeListen`; that path cannot be swapped on reload. If you must mount from the hook, use `ctx.host.mountPluginRoute(pluginId, path, router)`.
+This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mount` in `register` for Express routes (hot-reloads via route slots). Avoid raw `ctx.app.use` in `server:beforeListen`; that path cannot be swapped on reload. If you must mount from the hook, use `ctx.host.mountPluginRoute(pluginId, path, router)`.
 
 ## Manifest (`godmode.plugin.json`)
 

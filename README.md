@@ -1,7 +1,7 @@
 # GodMode
 
 [![CI](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml/badge.svg)](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0)
+[![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
 **Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Open source. Local-first. Self-host or use Cloud for convenience. Extend through Marketplace. Share live resources with your team. Built to be the last platform stack you need.
@@ -21,15 +21,17 @@
 
 ## Why GodMode?
 
-GodMode is the Control Center where you **create, edit, organize, and monitor** work across knowledge and wiki, tasks and project management, contacts and relationships, accounting, and the day-to-day surfaces (calendar, vault, notifications, Home), with an org of agents and humans in one place. Niche domains ship as plugins; Marketplace is how you install them.
+GodMode is the Control Center where you **create, edit, organize, and monitor** work across knowledge and wiki, tasks and project management, contacts and relationships, Bank (wallets/ledger), and the day-to-day surfaces (calendar, vault, notifications, Home), with an org of agents and humans in one place. Full accounting depth is on the roadmap. Niche domains ship as plugins; Marketplace is how you install them.
 
-**Intelligence** reads, writes, and extends the workspace. **Digital You** is your twin that compounds from use. Open source and local-first by default; Cloud and Marketplace when you want convenience; Shared when your team needs live resources together.
+**Intelligence** reads, writes, and extends the workspace. **Digital You** is your twin that compounds from use. Open source and local-first by default (desktop app, clone, or private hub); Cloud when you want easier browser onboarding; Marketplace and Shared when you want commerce and team resources together.
 
 See [CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md) and the [feature catalog](docs/FEATURES.md).
 
 ## Roadmap
 
 Usable now. Core still grows toward the full Control Center (owned email and domains, accounting depth, robot/IoT actors, owned inference and training, and more). Track it on the [GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1).
+
+**Ready column doctrine:** P0 is Hostinger SaaS live (easier browser onboarding + revenue; local/desktop stay first-class). P1 is dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust. Core epic depth stays in Backlog until live and dogfood clear.
 
 ## Features (overview)
 
