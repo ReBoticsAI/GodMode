@@ -50,6 +50,16 @@ import {
   getSendAuthorityStatus,
   listSendAuthorityEvents,
 } from "../services/authority/send-authority-admin.js";
+import {
+  getAgentPauseKillState,
+  setAgentPause,
+  setGlobalAgentPause,
+  setTenantAgentPause,
+} from "../services/authority/agent-pause-switch.js";
+import {
+  getAgentPauseAuthorityStatus,
+  listAgentPauseAuthorityEvents,
+} from "../services/authority/agent-pause-authority-admin.js";
 import { listAuthorityAuditEvents } from "../services/authority/authority-audit-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
@@ -378,6 +388,87 @@ export function createAdminAuthorityRouter(): Router {
     setTenantSendKill(tenantId, { sendDisabled });
     res.json(getSendKillState([tenantId]));
   });
+
+  router.get("/agent-pause-kills", (_req, res) => {
+    const tenantIds = listAllTenantIds(getCoreDb());
+    res.json(getAgentPauseKillState(tenantIds));
+  });
+
+  router.get("/agent-pause-status", (_req, res) => {
+    try {
+      res.json(getAgentPauseAuthorityStatus());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.get("/agent-pause-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const events = listAgentPauseAuthorityEvents(limitRaw);
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post("/agent-pause-kills/global", (req, res) => {
+    const agentsPaused =
+      req.body?.agentsPaused === undefined
+        ? undefined
+        : Boolean(req.body.agentsPaused);
+    if (agentsPaused === undefined) {
+      res.status(400).json({ error: "agentsPaused required" });
+      return;
+    }
+    setGlobalAgentPause({ agentsPaused });
+    res.json(getAgentPauseKillState(listAllTenantIds(getCoreDb())));
+  });
+
+  router.post("/agent-pause-kills/tenant/:tenantId", (req, res) => {
+    const tenantId =
+      typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+    if (!tenantId) {
+      res.status(400).json({ error: "tenantId required" });
+      return;
+    }
+    const agentsPaused =
+      req.body?.agentsPaused === undefined
+        ? undefined
+        : Boolean(req.body.agentsPaused);
+    if (agentsPaused === undefined) {
+      res.status(400).json({ error: "agentsPaused required" });
+      return;
+    }
+    setTenantAgentPause(tenantId, { agentsPaused });
+    res.json(getAgentPauseKillState([tenantId]));
+  });
+
+  router.post(
+    "/agent-pause-kills/tenant/:tenantId/agent/:agentId",
+    (req, res) => {
+      const tenantId =
+        typeof req.params.tenantId === "string" ? req.params.tenantId.trim() : "";
+      const agentId =
+        typeof req.params.agentId === "string" ? req.params.agentId.trim() : "";
+      if (!tenantId || !agentId) {
+        res.status(400).json({ error: "tenantId and agentId required" });
+        return;
+      }
+      const paused =
+        req.body?.paused === undefined ? undefined : Boolean(req.body.paused);
+      if (paused === undefined) {
+        res.status(400).json({ error: "paused required" });
+        return;
+      }
+      setAgentPause(tenantId, agentId, { paused });
+      res.json(getAgentPauseKillState([tenantId]));
+    }
+  );
 
   return router;
 }

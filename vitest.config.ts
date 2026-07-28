@@ -35,6 +35,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/delete-authority.test.ts",
       "apps/bridge/src/services/__tests__/send-authority.test.ts",
       "apps/bridge/src/services/__tests__/authority-audit-admin.test.ts",
+      "apps/bridge/src/services/__tests__/agent-pause-authority.test.ts",
       "apps/bridge/src/services/__tests__/coding-terminal-route.test.ts",
       "apps/bridge/src/services/__tests__/terminal-session-manager.test.ts",
       "apps/bridge/src/services/__tests__/ephemeral-build.test.ts",

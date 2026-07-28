@@ -317,6 +317,54 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-agent-pause-kills-read",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/agent-pause-kills",
+    rationale:
+      "Platform-admin read of runtime agent pause switches (#96 Slice 8); ops flags in platform_meta, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-agent-pause-status",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/agent-pause-status",
+    rationale:
+      "Platform-admin agent pause status (#96 Slice 8): kills and per-agent pause flags; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-agent-pause-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/agent-pause-events",
+    rationale:
+      "Platform-admin cross-tenant agent pause reject feed (#96 Slice 8); tool_audit_log read, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-agent-pause-kills-global",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/agent-pause-kills/global",
+    rationale:
+      "Platform-admin global agent pause switch (#96 Slice 8); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-agent-pause-kills-tenant",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/agent-pause-kills/tenant/:",
+    rationale:
+      "Platform-admin per-tenant agent pause switch (#96 Slice 8); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-authority-agent-pause-kills-agent",
+    methods: ["POST"],
+    pathPattern: "/api/admin/authority/agent-pause-kills/tenant/:/agent/:",
+    rationale:
+      "Platform-admin per-agent pause switch (#96 Slice 8); platform_meta flags, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",

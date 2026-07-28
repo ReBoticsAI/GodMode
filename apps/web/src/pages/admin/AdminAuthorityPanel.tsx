@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminAuthorityAuditEvents,
+  fetchAdminAgentPauseStatus,
   fetchAdminCodingStatus,
   fetchAdminDeleteStatus,
   fetchAdminDeployStatus,
@@ -14,9 +15,13 @@ import {
   setAdminDeployKillTenant,
   setAdminSendKillGlobal,
   setAdminSendKillTenant,
+  setAdminAgentPauseKillGlobal,
+  setAdminAgentPauseKillTenant,
+  setAdminAgentPauseAgent,
   setAdminSpendKillGlobal,
   setAdminSpendKillTenant,
   type AdminAuthorityAuditEvent,
+  type AdminAgentPauseAuthorityStatus,
   type AdminCodingAuthorityStatus,
   type AdminDeleteAuthorityStatus,
   type AdminDeployAuthorityStatus,
@@ -53,7 +58,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type AuditDomain = "all" | "coding" | "spend" | "deploy" | "delete" | "send";
+type AuditDomain =
+  | "all"
+  | "coding"
+  | "spend"
+  | "deploy"
+  | "delete"
+  | "send"
+  | "agent";
 
 function limitLabel(n: number): string {
   return n <= 0 ? "unlimited" : String(n);
@@ -98,6 +110,7 @@ function AdminAuthorityAuditSection({
                   <SelectItem value="deploy">Deploy</SelectItem>
                   <SelectItem value="delete">Delete</SelectItem>
                   <SelectItem value="send">Send</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -973,6 +986,222 @@ function AdminAuthoritySendSection({
   );
 }
 
+function AdminAuthorityAgentPauseSection({
+  status,
+  loading,
+  savingKey,
+  onReload,
+  onToggleGlobal,
+  onToggleTenant,
+  onToggleAgent,
+}: {
+  status: AdminAgentPauseAuthorityStatus | null;
+  loading: boolean;
+  savingKey: string | null;
+  onReload: () => void;
+  onToggleGlobal: (value: boolean) => void;
+  onToggleTenant: (tenantId: string, value: boolean) => void;
+  onToggleAgent: (tenantId: string, agentId: string, value: boolean) => void;
+}) {
+  const agentRows =
+    status?.tenants.flatMap((t) =>
+      t.agents.map((a) => ({
+        tenantId: t.id,
+        tenantName: t.name,
+        isOperator: t.isOperator,
+        agentsPaused: t.agentsPaused,
+        ...a,
+      }))
+    ) ?? [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent pause</CardTitle>
+          <CardDescription>
+            Ops instant revoke for agent LLM execution (chat, autonomous, queue,
+            subagents, replies). Does not change user agent enabled toggles.
+          </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {loading && !status ? (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          ) : status ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={
+                    status.kills.envDisabled ? "destructive" : "secondary"
+                  }
+                >
+                  Env nuclear:{" "}
+                  {status.kills.envDisabled
+                    ? "PLATFORM_AGENTS_DISABLED"
+                    : "off"}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3 sm:max-w-md">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="pause-agents-global">Pause all agents</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Blocks agent execution platform-wide.
+                  </p>
+                </div>
+                <Switch
+                  id="pause-agents-global"
+                  checked={status.kills.global.agentsPaused}
+                  disabled={
+                    savingKey === "global:agents" || status.kills.envDisabled
+                  }
+                  onCheckedChange={onToggleGlobal}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Failed to load agent pause status.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {status ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per-tenant agent pause</CardTitle>
+            <CardDescription>
+              Pause all agents in one workspace without redeploying.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Tenant pause</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {status.tenants.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground">
+                      No tenants found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  status.tenants.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {t.id}
+                            {t.isOperator ? " (operator)" : ""}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={t.agentsPaused}
+                          disabled={
+                            savingKey === `${t.id}:agents` ||
+                            status.kills.envDisabled ||
+                            status.kills.global.agentsPaused
+                          }
+                          onCheckedChange={(v) => onToggleTenant(t.id, v)}
+                          aria-label={`Pause all agents for ${t.name}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {status ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per-agent pause</CardTitle>
+            <CardDescription>
+              Pause a single agent without changing its enabled toggle.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Pause</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {agentRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-muted-foreground">
+                      No agents found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  agentRows.map((row) => (
+                    <TableRow key={`${row.tenantId}:${row.id}`}>
+                      <TableCell className="max-w-[160px] truncate text-xs">
+                        {row.tenantName}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{row.name}</span>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {row.id}
+                            {!row.enabled ? " (disabled)" : ""}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={row.paused}
+                          disabled={
+                            savingKey === `${row.tenantId}:${row.id}:pause` ||
+                            status.kills.envDisabled ||
+                            status.kills.global.agentsPaused ||
+                            row.agentsPaused
+                          }
+                          onCheckedChange={(v) =>
+                            onToggleAgent(row.tenantId, row.id, v)
+                          }
+                          aria-label={`Pause agent ${row.name}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
 /** Admin → Authority: durable #96 control plane. */
 export function AdminAuthorityPanel() {
   const [codingLoading, setCodingLoading] = useState(true);
@@ -980,6 +1209,7 @@ export function AdminAuthorityPanel() {
   const [deployLoading, setDeployLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(true);
   const [sendLoading, setSendLoading] = useState(true);
+  const [agentPauseLoading, setAgentPauseLoading] = useState(true);
   const [auditLoading, setAuditLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [codingStatus, setCodingStatus] =
@@ -992,6 +1222,8 @@ export function AdminAuthorityPanel() {
     useState<AdminDeleteAuthorityStatus | null>(null);
   const [sendStatus, setSendStatus] =
     useState<AdminSendAuthorityStatus | null>(null);
+  const [agentPauseStatus, setAgentPauseStatus] =
+    useState<AdminAgentPauseAuthorityStatus | null>(null);
   const [auditEvents, setAuditEvents] = useState<AdminAuthorityAuditEvent[]>(
     []
   );
@@ -1057,6 +1289,20 @@ export function AdminAuthorityPanel() {
       .finally(() => setSendLoading(false));
   }, []);
 
+  const reloadAgentPause = useCallback(() => {
+    setAgentPauseLoading(true);
+    fetchAdminAgentPauseStatus()
+      .then(setAgentPauseStatus)
+      .catch((err) =>
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Failed to load agent pause authority"
+        )
+      )
+      .finally(() => setAgentPauseLoading(false));
+  }, []);
+
   const reloadAudit = useCallback(() => {
     setAuditLoading(true);
     fetchAdminAuthorityAuditEvents({
@@ -1078,12 +1324,14 @@ export function AdminAuthorityPanel() {
     reloadDeploy();
     reloadDelete();
     reloadSend();
+    reloadAgentPause();
   }, [
     reloadCoding,
     reloadSpend,
     reloadDeploy,
     reloadDelete,
     reloadSend,
+    reloadAgentPause,
   ]);
 
   useEffect(() => {
@@ -1243,6 +1491,51 @@ export function AdminAuthorityPanel() {
     }
   };
 
+  const onToggleAgentPauseGlobal = async (value: boolean) => {
+    setSavingKey("global:agents");
+    try {
+      await setAdminAgentPauseKillGlobal({ agentsPaused: value });
+      toast.success(
+        value ? "All agents paused platform-wide" : "Agents unpaused"
+      );
+      reloadAgentPause();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleAgentPauseTenant = async (tenantId: string, value: boolean) => {
+    setSavingKey(`${tenantId}:agents`);
+    try {
+      await setAdminAgentPauseKillTenant(tenantId, { agentsPaused: value });
+      toast.success("Tenant agent pause updated");
+      reloadAgentPause();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const onToggleAgentPauseAgent = async (
+    tenantId: string,
+    agentId: string,
+    value: boolean
+  ) => {
+    setSavingKey(`${tenantId}:${agentId}:pause`);
+    try {
+      await setAdminAgentPauseAgent(tenantId, agentId, { paused: value });
+      toast.success("Agent pause updated");
+      reloadAgentPause();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -1250,9 +1543,8 @@ export function AdminAuthorityPanel() {
           <CardTitle>Authority</CardTitle>
           <CardDescription>
             Platform-admin control and visibility for bounded delegation (#96).
-            Each epic slice adds a section here. Coding, spend, deploy, delete,
-            and send hard-stops plus unified audit are live; agent pause follows
-            later.
+            Coding, spend, deploy, delete, send hard-stops, unified audit, and
+            agent pause are live in this tab.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -1308,6 +1600,16 @@ export function AdminAuthorityPanel() {
         onReload={reloadSend}
         onToggleGlobal={onToggleSendGlobal}
         onToggleTenant={onToggleSendTenant}
+      />
+
+      <AdminAuthorityAgentPauseSection
+        status={agentPauseStatus}
+        loading={agentPauseLoading}
+        savingKey={savingKey}
+        onReload={reloadAgentPause}
+        onToggleGlobal={onToggleAgentPauseGlobal}
+        onToggleTenant={onToggleAgentPauseTenant}
+        onToggleAgent={onToggleAgentPauseAgent}
       />
     </div>
   );

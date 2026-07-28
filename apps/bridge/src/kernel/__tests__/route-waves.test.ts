@@ -31,6 +31,9 @@ function declaredRoutes(
 describe("legacy route wave", () => {
   it("exposes only the approved specialized POST transports", () => {
     expect(declaredRoutes("post|put|patch|delete")).toEqual([
+      "admin-authority.ts:post:/agent-pause-kills/global",
+      "admin-authority.ts:post:/agent-pause-kills/tenant/:tenantId",
+      "admin-authority.ts:post:/agent-pause-kills/tenant/:tenantId/agent/:agentId",
       "admin-authority.ts:post:/coding-kills/global",
       "admin-authority.ts:post:/coding-kills/tenant/:tenantId",
       "admin-authority.ts:post:/delete-kills/global",

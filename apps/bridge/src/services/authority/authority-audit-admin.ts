@@ -7,13 +7,15 @@ import { listDeleteAuthorityEvents } from "./delete-authority-admin.js";
 import { listDeployAuthorityEvents } from "./deploy-authority-admin.js";
 import { listSendAuthorityEvents } from "./send-authority-admin.js";
 import { listSpendAuthorityEvents } from "./spend-authority-admin.js";
+import { listAgentPauseAuthorityEvents } from "./agent-pause-authority-admin.js";
 
 export type AuthorityAuditDomain =
   | "coding"
   | "spend"
   | "deploy"
   | "delete"
-  | "send";
+  | "send"
+  | "agent";
 
 export const AUTHORITY_AUDIT_DOMAINS: AuthorityAuditDomain[] = [
   "coding",
@@ -21,6 +23,7 @@ export const AUTHORITY_AUDIT_DOMAINS: AuthorityAuditDomain[] = [
   "deploy",
   "delete",
   "send",
+  "agent",
 ];
 
 export type AuthorityAuditEvent = {
@@ -56,6 +59,7 @@ export function classifyAuthorityResult(
   if (r.includes("deploy")) return "deploy";
   if (r.includes("delete")) return "delete";
   if (r.includes("send")) return "send";
+  if (r.includes("agent")) return "agent";
   if (
     r.includes("coding") ||
     r.includes("builds") ||
@@ -74,6 +78,7 @@ function eventKey(e: Pick<RawEvent, "tenantId" | "createdAt" | "agentId" | "acti
 
 /** Prefer specific domains over coding when the same row appears twice. */
 const DOMAIN_PRIORITY: Record<AuthorityAuditDomain, number> = {
+  agent: 6,
   spend: 5,
   deploy: 4,
   delete: 3,
@@ -117,6 +122,7 @@ export function listAuthorityAuditEvents(
     ...tag(listDeployAuthorityEvents(perSource), "deploy"),
     ...tag(listDeleteAuthorityEvents(perSource), "delete"),
     ...tag(listSendAuthorityEvents(perSource), "send"),
+    ...tag(listAgentPauseAuthorityEvents(perSource), "agent"),
   ];
 
   const byKey = new Map<string, AuthorityAuditEvent>();

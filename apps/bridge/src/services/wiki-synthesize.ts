@@ -2,6 +2,10 @@ import type { AppDatabase } from "../db.js";
 import { getCoreDb } from "../core-db.js";
 import type { LlmManager } from "./llm-manager.js";
 import { createWikiProposal } from "./wiki-proposals.js";
+import {
+  assertAgentExecutionAllowed,
+  isAgentPauseAuthorityError,
+} from "./authority/agent-pause-authority.js";
 
 export interface WikiSynthesizeResult {
   ok: boolean;
@@ -20,9 +24,21 @@ export async function runWikiSynthesize(opts: {
   agentId?: string;
 }): Promise<WikiSynthesizeResult> {
   const { db, llm, tenantId } = opts;
+  const agentId = opts.agentId ?? "intelligence";
+  try {
+    assertAgentExecutionAllowed({
+      tenantId,
+      agentId,
+      action: "wiki_synthesize",
+    });
+  } catch (err) {
+    if (isAgentPauseAuthorityError(err)) {
+      return { ok: false, skipped: err.code };
+    }
+    throw err;
+  }
   if (!llm.isReady()) return { ok: false, skipped: "llm_not_ready" };
 
-  const agentId = opts.agentId ?? "intelligence";
   const memories = db
     .prepare(
       `SELECT text, category, source FROM ai_memories
