@@ -10,32 +10,40 @@ export default function MarketingPrivacy() {
       <h2>What we collect (GodMode Cloud)</h2>
       <ul>
         <li>
-          Account email, display name, and authentication secrets (hashed passwords; TOTP MFA
-          required for platform admins on Cloud; optional MFA for other accounts if enabled).
+          Your account email, display name, and sign-in secrets (passwords are stored hashed;
+          platform admins must use app-based two-factor authentication; other accounts may
+          enable it when available).
         </li>
-        <li>Billing identifiers from Stripe (customer and subscription IDs).</li>
-        <li>Workspace content you create in Cloud (wiki, tasks, calendar, agents, etc.).</li>
-        <li>Operational logs needed to run and secure the service (first-party Bridge logs).</li>
+        <li>Billing IDs from Stripe so we can manage your subscription.</li>
+        <li>
+          The workspace content you create in Cloud (wiki, tasks, calendar, agents, and so on).
+        </li>
+        <li>Operational logs we need to run and secure the service (kept in our own systems).</li>
       </ul>
       <h2>Self-hosted</h2>
       <p>
-        If you run GodMode yourself, data stays on your infrastructure. ReBotics does not
-        receive your workspace contents unless you intentionally connect outbound services.
+        If you run GodMode on your own computer or server, your data stays there. We do not
+        receive your workspace contents unless you choose to connect an outside service.
       </p>
-      <h2>Processors</h2>
+      <h2>Services we use</h2>
       <p>
-        Cloud may use Stripe for payments and Resend or SMTP for transactional email.
-        Marketplace payouts may use Stripe Connect, PayPal, or crypto rails you configure.
-        GodMode does not rely on third-party APM products for core logging.
+        Cloud may use Stripe for payments and Resend or SMTP for email such as verification and
+        password reset. Marketplace payouts may use Stripe Connect, PayPal, or crypto options
+        a seller configures. We do not depend on a third-party monitoring product for core
+        logging.
       </p>
       <h2>Retention &amp; deletion</h2>
       <p>
-        We retain account and billing records as required for operations and law. Contact us
-        to request account deletion subject to legal retention of payment records.
+        We keep account and billing records as needed to operate the service and meet legal
+        duties. Email{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a> to request
+        account deletion; payment records may still be retained where the law requires it.
       </p>
       <h2>Contact</h2>
       <p>
-        Privacy requests: see <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>.
+        Privacy questions:{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a> or{" "}
+        <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>.
       </p>
     </MarketingProse>
   );

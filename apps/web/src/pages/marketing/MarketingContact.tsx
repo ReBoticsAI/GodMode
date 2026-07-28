@@ -4,21 +4,30 @@ export default function MarketingContact() {
   return (
     <MarketingProse
       title="Contact"
-      description="Product, security, and Cloud support channels."
+      description="Questions, billing, and security reports for GodMode Cloud."
     >
       <p>
-        Product, Cloud, and billing:{" "}
-        <a href="mailto:support@godmode.software">support@godmode.software</a>.
+        Email us at{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a>. That covers
+        product questions, Cloud billing, privacy requests, and security reports.
       </p>
       <p>
-        Security reports:{" "}
-        <a href="mailto:security@rebotics.ai">security@rebotics.ai</a>.
+        If you are signed in to Cloud, you can also reach us from Support inside the app.
       </p>
       <p>
-        Signed-in Cloud customers can also use the in-product Support surface.
+        For security issues, prefer a private report: email support with enough detail to
+        reproduce, or use{" "}
+        <a
+          href="https://github.com/ReBoticsAI/GodMode/security"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub security advisories
+        </a>
+        . Please do not open a public issue for a vulnerability.
       </p>
       <p>
-        Source:{" "}
+        Developers and self-hosters: full docs and source live on{" "}
         <a
           href="https://github.com/ReBoticsAI/GodMode"
           target="_blank"
@@ -26,6 +35,7 @@ export default function MarketingContact() {
         >
           github.com/ReBoticsAI/GodMode
         </a>
+        .
       </p>
     </MarketingProse>
   );
