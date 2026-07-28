@@ -24,7 +24,7 @@ export default function MarketingFeaturesIndex() {
     <Page>
       <PageHeader
         title="Features"
-        description="Built-in GodMode capabilities. The same pages seed the platform wiki so agents and the public site share one product truth."
+        description="What GodMode can do out of the box. Skim here for the overview; open a feature for more detail. Full technical docs live on GitHub."
         descriptionClassName="max-w-5xl text-base leading-relaxed"
       />
 

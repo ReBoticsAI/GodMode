@@ -14,16 +14,16 @@ export default function MarketingTerms() {
       </p>
       <h2>1. Accounts</h2>
       <p>
-        You must provide accurate information and keep credentials secure. You are responsible
-        for activity under your account. GodMode Cloud may require email verification and
-        multi-factor authentication for administrators.
+        You must provide accurate information and keep your password secure. You are
+        responsible for activity under your account. GodMode Cloud may require email
+        verification and multi-factor authentication for administrators.
       </p>
       <h2>2. GodMode Cloud subscription</h2>
       <p>
-        Paid Cloud access is billed via Stripe. Plans renew until canceled in the Customer
-        Portal. Failure to pay may suspend access. Platform operators listed in INITIAL_ADMINS
-        may be exempt from paywall for operations. Refunds are limited as described in the{" "}
-        <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link>.
+        Paid Cloud access is billed through Stripe. Plans renew until you cancel in the
+        billing portal. Failure to pay may suspend access. Designated platform operators may
+        be exempt from the paywall so we can run the service. Refunds are limited as described
+        in the <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link>.
       </p>
       <h2>3. Acceptable use</h2>
       <p>
@@ -57,7 +57,9 @@ export default function MarketingTerms() {
       </p>
       <h2>7. Contact</h2>
       <p>
-        Questions: see <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>.
+        Questions:{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a> or{" "}
+        <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>.
       </p>
     </MarketingProse>
   );

@@ -16,7 +16,7 @@ export default function MarketingPricing() {
     <Page>
       <PageHeader
         title="Pricing"
-        description="Self-host for free (desktop, clone, or private hub). GodMode Cloud is hosted multi-tenant SaaS: choose a plan, pay with Stripe, then create your account. Marketplace purchases are separate from the Cloud subscription."
+        description="Use GodMode for free on your own computer, or subscribe to GodMode Cloud so you can open it in a browser from any device. Marketplace add-ons are priced separately from your Cloud plan."
         descriptionClassName="max-w-5xl text-base leading-relaxed"
       />
 
@@ -24,11 +24,16 @@ export default function MarketingPricing() {
         <Card>
           <CardHeader>
             <CardTitle>Self-hosted</CardTitle>
-            <CardDescription>Run locally or on your own private hub.</CardDescription>
+            <CardDescription>
+              Install on your machine or run your own private server. Best if you want full
+              control and do not mind setup.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$0</p>
-            <p className="mt-1 text-base text-muted-foreground">Your data, your machine.</p>
+            <p className="mt-1 text-base text-muted-foreground">
+              Your data stays with you. Open source on GitHub.
+            </p>
           </CardContent>
           <CardFooter>
             <Button
@@ -50,14 +55,14 @@ export default function MarketingPricing() {
           <CardHeader>
             <CardTitle>Cloud Monthly</CardTitle>
             <CardDescription>
-              Hosted SaaS seat. Flow: plan → Stripe Checkout → create account.
+              We host GodMode for you. Pick a plan, pay securely, then create your account.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$9.99</p>
             <p className="mt-1 text-base text-muted-foreground">
-              Cancel anytime in the Customer Portal. Email verification required after signup
-              (platform admins may be exempt for bootstrap).
+              Cancel anytime from the billing portal. After signup we ask you to verify your
+              email.
             </p>
           </CardContent>
           <CardFooter>
@@ -68,12 +73,14 @@ export default function MarketingPricing() {
         <Card>
           <CardHeader>
             <CardTitle>Cloud Yearly</CardTitle>
-            <CardDescription>Same Cloud product, billed annually.</CardDescription>
+            <CardDescription>
+              Same Cloud experience, billed once a year at a lower total cost.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$74.99</p>
             <p className="mt-1 text-base text-muted-foreground">
-              Exact Stripe Price IDs are configured per environment.
+              About two months free versus paying month to month.
             </p>
           </CardContent>
           <CardFooter>
@@ -83,15 +90,16 @@ export default function MarketingPricing() {
       </div>
 
       <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">
-        Before Checkout you must acknowledge the non-refund policy. Marketplace purchases are
-        separate from the Cloud subscription. See{" "}
+        Before you pay, you must acknowledge that Cloud subscriptions are generally
+        non-refundable (see the refund policy for the narrow exceptions). Buying something in
+        the Marketplace is separate from your Cloud subscription. Details:{" "}
         <Link
           to={`${MARKETING_BASE}/terms`}
           className="text-foreground underline underline-offset-4"
         >
           Terms
         </Link>{" "}
-        and the{" "}
+        and{" "}
         <Link
           to={`${MARKETING_BASE}/refund`}
           className="text-foreground underline underline-offset-4"

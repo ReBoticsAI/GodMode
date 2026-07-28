@@ -51,9 +51,11 @@ export default function MarketingRefund() {
 
       <h2>How to request a covered refund</h2>
       <p>
-        Contact us via <Link to={`${MARKETING_BASE}/contact`}>Contact</Link> with your
-        account email, approximate payment date, and what went wrong (duplicate charge,
-        failed provisioning, or similar). We use that to verify the payment and account
+        Email{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a> (or use{" "}
+        <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>) with your account email,
+        approximate payment date, and what went wrong (duplicate charge, account never
+        created after payment, or similar). We use that to verify the payment and account
         state.
       </p>
 
