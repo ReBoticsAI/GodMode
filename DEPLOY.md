@@ -27,7 +27,20 @@ Open http://localhost:5173 and sign up with email and password.
 ## Hub (production SaaS)
 
 Official paid multi-tenant hub uses `INSTALLATION_SURFACE=saas` and a Stripe
-paywall: **Sign up** → choose plan → Checkout → create account (no invite codes).
+paywall: **choose plan → Checkout → create account** (no invite codes). Local and
+desktop installs stay first-class; Cloud is the easier browser onboarding path and
+revenue product.
+
+### Ready doctrine (project board)
+
+[GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1) **Ready** prioritizes:
+
+1. **P0** - Hostinger SaaS live (public DNS gate below)
+2. **P1** - Dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust
+3. Core Control Center depth and plugin-backlog stay in **Backlog** until live + dogfood clear
+
+Do not treat Core epic checklist items as jump-the-queue ahead of launch.
+
 Self-hosted family/team hubs use `private_hub` and skip the paywall.
 
 1. Copy `deploy/.env.production.example` → `deploy/.env.production` and set:
@@ -213,14 +226,14 @@ Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 
 ## Public marketing site (Stripe business website)
 
-Deploy the public marketing site from **`apps/web` at `/www`** (shadcn) before enabling
-**live** Stripe keys. Cloudflare Pages / `www` DNS should serve that origin (or rewrite
-`/` → `/www`). See [`sites/www/README.md`](sites/www/README.md). Set the live URL in
-Stripe Dashboard → Business website and document it as `BUSINESS_WEBSITE_URL` for
-operators.
+Deploy the public marketing site from **`apps/web` routes at `/www`** (shadcn) before
+enabling **live** Stripe keys. Serve that origin on Cloudflare Pages or the same VPS app
+hostname (optional rewrite `/` → `/www`). Operator notes: [`sites/www/README.md`](sites/www/README.md)
+(documentation only; not a separate deploy tree). Set the live URL in Stripe Dashboard →
+Business website and document it as `BUSINESS_WEBSITE_URL` for operators.
 
 The public site must be viewable without GodMode auth (home, pricing, Terms,
-Privacy, security summary, contact).
+Privacy, security summary, contact, refund).
 
 ## Public DNS launch gate
 
@@ -231,7 +244,7 @@ Privacy, security summary, contact).
 3. Platform admin MFA enrolled and enforced on SaaS
 4. Cloudflare → Hostinger Full (strict), origin security headers, HTTPS cookies, firewall locked
 5. Durable rate limits + Hostinger cron backups + tested offsite restore
-6. SaaS `codeAccess` / Local plugin policy enabled (defaults deny)
+6. SaaS coding on by default (#178; opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`); Local plugin path registration blocked by default
 7. Live Stripe webhooks + Customer Portal verified on the Cloudflare hostname
 8. [docs/SECURITY.md](docs/SECURITY.md) / this file / [deploy/hostinger.md](deploy/hostinger.md) checklist signed off
 

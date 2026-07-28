@@ -23,14 +23,15 @@ Open [http://127.0.0.1:5173/www](http://127.0.0.1:5173/www) (port may vary).
 | `/www/privacy` | Privacy |
 | `/www/security` | Security |
 | `/www/contact` | Contact |
+| `/www/refund` | Refund policy |
 
-**Open Cloud** links to `/` (AuthGate / SaaS signup).
+**Open Cloud** links to `/` (AuthGate / SaaS pay-first signup).
 
 ## Production (Cloudflare Pages / www host)
 
 Prefer pointing `www` at the same GodMode web origin and serving `/www` as the
-public site (or rewrite `/` → `/www` on the Pages/hosting layer). Do **not**
-reintroduce a hand-rolled parallel design system here.
+public site (or rewrite `/` → `/www` on the Pages/hosting layer). Marketing UI lives
+in `apps/web`; this folder is operator documentation only.
 
 Set Stripe Dashboard → Business website to the live public URL (e.g.
 `https://www.example.com/www` or a rewrite to `/www`), and document it as

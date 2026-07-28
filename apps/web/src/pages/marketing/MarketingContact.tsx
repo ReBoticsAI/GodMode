@@ -8,8 +8,7 @@ export default function MarketingContact() {
     >
       <p>
         Product and security contact for ReBotics / GodMode:{" "}
-        <a href="mailto:security@rebotics.ai">security@rebotics.ai</a> (replace with your
-        production inbox before Stripe live).
+        <a href="mailto:security@rebotics.ai">security@rebotics.ai</a>.
       </p>
       <p>
         Support for Cloud customers is also available inside the product Support surface when

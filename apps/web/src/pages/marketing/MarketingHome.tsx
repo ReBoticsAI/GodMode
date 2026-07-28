@@ -224,9 +224,10 @@ export default function MarketingHome() {
           <CardTitle>One Control Center</CardTitle>
           <CardDescription>
             Create, edit, organize, and monitor knowledge and wiki, tasks and project
-            management, contacts and relationships, accounting, and day-to-day work, with
-            Intelligence as your platform guide and Digital You as your twin. Built to be the
-            last platform stack you need. Niche domains ship as plugins via Marketplace.
+            management, contacts and relationships, Bank (wallets and ledger), and day-to-day
+            work, with Intelligence as your platform guide and Digital You as your twin. Built
+            to be the last platform stack you need. Full accounting depth is on the roadmap.
+            Niche domains ship as plugins via Marketplace.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -343,8 +344,9 @@ export default function MarketingHome() {
               </CardDescription>
             </CardHeader>
             <CardContent className="text-base text-muted-foreground">
-              Ideal for private packs and development. SaaS surfaces focus Official + Community
-              commerce.
+              Ideal for private packs and development on local and private hubs. GodMode Cloud
+              blocks arbitrary Local folder registration by default; Official and Community
+              are the supported commerce path.
             </CardContent>
           </Card>
         </div>
@@ -391,15 +393,16 @@ export default function MarketingHome() {
       <section className="flex flex-col gap-4">
         <SectionHeading
           title="Run it your way"
-          description="Self-host for free on your machine or private hub. Or use GodMode Cloud for hosted multi-tenant SaaS with Marketplace commerce."
+          description="Local and desktop stay first-class. GodMode Cloud is the easier browser onboarding path and revenue product, not a replacement for self-host."
         />
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Self-hosted</CardTitle>
               <CardDescription>
-                Open source (Apache 2.0). Local-first on your machine or private hub. Local
-                LLMs, Cursor Cloud, or provider keys in Vault.
+                Open source (Apache 2.0). Signed Electron desktop app (Windows, macOS, Linux),
+                developer clone (`npm run dev`), or private hub / client Docker. Local LLMs,
+                Cursor Cloud, or provider keys in Vault.
               </CardDescription>
             </CardHeader>
             <CardFooter>
@@ -424,8 +427,9 @@ export default function MarketingHome() {
                 GodMode Cloud
               </CardTitle>
               <CardDescription>
-                Hosted seats with paywall signup, email verification, and admin MFA. Commerce
-                authority for paid Official and Community Marketplace.
+                Hosted seats: choose a plan, pay with Stripe, then create your account
+                (pay-first). Email verification and required TOTP MFA for platform admins.
+                Commerce authority for paid Official and Community Marketplace.
               </CardDescription>
             </CardHeader>
             <CardFooter className="flex flex-wrap gap-2">
@@ -445,11 +449,12 @@ export default function MarketingHome() {
         <CardHeader>
           <CardTitle>Get started</CardTitle>
           <CardDescription>
-            Open Cloud to sign in, compare plans, or reach us with questions.
+            Open Cloud to sign in, or start pay-first signup (plan then Stripe Checkout).
+            Compare plans or reach us with questions.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button render={<Link to="/" />}>Sign in / Sign up</Button>
+          <Button render={<Link to="/" />}>Open Cloud</Button>
           <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
             Pricing
           </Button>

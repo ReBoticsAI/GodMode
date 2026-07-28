@@ -23,7 +23,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `RESEND_API_KEY` | empty | Resend API key when `EMAIL_PROVIDER=resend` |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
 | `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
-| `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth (optional, Phase 6) |
+| `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth for sign-in (optional) |
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | GitHub OAuth for **Tasks ↔ Projects sync** (scopes: `read:user project repo`). Callback: `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
