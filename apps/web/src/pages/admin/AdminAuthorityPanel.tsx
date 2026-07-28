@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  fetchAdminCodingEvents,
+  fetchAdminAuthorityAuditEvents,
   fetchAdminCodingStatus,
-  fetchAdminDeleteEvents,
   fetchAdminDeleteStatus,
-  fetchAdminDeployEvents,
   fetchAdminDeployStatus,
-  fetchAdminSendEvents,
   fetchAdminSendStatus,
-  fetchAdminSpendEvents,
   fetchAdminSpendStatus,
   setAdminCodingKillGlobal,
   setAdminCodingKillTenant,
@@ -20,15 +16,11 @@ import {
   setAdminSendKillTenant,
   setAdminSpendKillGlobal,
   setAdminSpendKillTenant,
-  type AdminCodingAuthorityEvent,
+  type AdminAuthorityAuditEvent,
   type AdminCodingAuthorityStatus,
-  type AdminDeleteAuthorityEvent,
   type AdminDeleteAuthorityStatus,
-  type AdminDeployAuthorityEvent,
   type AdminDeployAuthorityStatus,
-  type AdminSendAuthorityEvent,
   type AdminSendAuthorityStatus,
-  type AdminSpendAuthorityEvent,
   type AdminSpendAuthorityStatus,
 } from "@/api";
 import {
@@ -52,15 +44,133 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+
+type AuditDomain = "all" | "coding" | "spend" | "deploy" | "delete" | "send";
 
 function limitLabel(n: number): string {
   return n <= 0 ? "unlimited" : String(n);
 }
 
+function AdminAuthorityAuditSection({
+  events,
+  loading,
+  domain,
+  onDomainChange,
+  onReload,
+}: {
+  events: AdminAuthorityAuditEvent[];
+  loading: boolean;
+  domain: AuditDomain;
+  onDomainChange: (domain: AuditDomain) => void;
+  onReload: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Audit feed</CardTitle>
+        <CardDescription>
+          Merged cross-tenant <code>tool_audit_log</code> rejects from coding,
+          spend, deploy, delete, and send authority gates.
+        </CardDescription>
+        <CardAction>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="audit-domain">Domain</Label>
+              <Select
+                value={domain}
+                onValueChange={(v) => onDomainChange(v as AuditDomain)}
+              >
+                <SelectTrigger id="audit-domain" className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="coding">Coding</SelectItem>
+                  <SelectItem value="spend">Spend</SelectItem>
+                  <SelectItem value="deploy">Deploy</SelectItem>
+                  <SelectItem value="delete">Delete</SelectItem>
+                  <SelectItem value="send">Send</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </div>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        {loading && events.length === 0 ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Domain</TableHead>
+                <TableHead>When</TableHead>
+                <TableHead>Workspace</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    No authority rejects logged yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                events.map((e, i) => (
+                  <TableRow key={`${e.domain}-${e.tenantId}-${e.createdAt}-${i}`}>
+                    <TableCell>
+                      <Badge variant="outline">{e.domain}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {e.createdAt}
+                    </TableCell>
+                    <TableCell className="max-w-[160px] truncate text-xs">
+                      {e.tenantName ?? e.tenantId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {e.agentId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {e.action}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{e.result}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AdminAuthorityCodingSection({
   status,
-  events,
   loading,
   savingKey,
   onReload,
@@ -68,7 +178,6 @@ function AdminAuthorityCodingSection({
   onToggleTenant,
 }: {
   status: AdminCodingAuthorityStatus | null;
-  events: AdminCodingAuthorityEvent[];
   loading: boolean;
   savingKey: string | null;
   onReload: () => void;
@@ -92,8 +201,7 @@ function AdminAuthorityCodingSection({
         <CardHeader>
           <CardTitle>Coding</CardTitle>
           <CardDescription>
-            Quotas, kill switches, and reject feed for shared-host coding
-            (Layers 1–4).
+            Quotas and kill switches for shared-host coding (Layers 1–4).
           </CardDescription>
           <CardAction>
             <Button
@@ -293,71 +401,12 @@ function AdminAuthorityCodingSection({
           </CardContent>
         </Card>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent rejects</CardTitle>
-          <CardDescription>
-            Cross-tenant <code>tool_audit_log</code> rows with{" "}
-            <code>quota:*</code> or <code>kill:*</code> results.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && events.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No quota or kill rejects logged yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  events.map((e, i) => (
-                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {e.createdAt}
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs">
-                        {e.tenantName ?? e.tenantId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.agentId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.action}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{e.result}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 function AdminAuthoritySpendSection({
   status,
-  events,
   loading,
   savingKey,
   onReload,
@@ -365,7 +414,6 @@ function AdminAuthoritySpendSection({
   onToggleTenant,
 }: {
   status: AdminSpendAuthorityStatus | null;
-  events: AdminSpendAuthorityEvent[];
   loading: boolean;
   savingKey: string | null;
   onReload: () => void;
@@ -495,71 +543,12 @@ function AdminAuthoritySpendSection({
           </CardContent>
         </Card>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent spend rejects</CardTitle>
-          <CardDescription>
-            Cross-tenant <code>tool_audit_log</code> rows with{" "}
-            <code>kill:*spend*</code> results.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && events.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No spend kill rejects logged yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  events.map((e, i) => (
-                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {e.createdAt}
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs">
-                        {e.tenantName ?? e.tenantId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.agentId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.action}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{e.result}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 function AdminAuthorityDeploySection({
   status,
-  events,
   loading,
   savingKey,
   onReload,
@@ -567,7 +556,6 @@ function AdminAuthorityDeploySection({
   onToggleTenant,
 }: {
   status: AdminDeployAuthorityStatus | null;
-  events: AdminDeployAuthorityEvent[];
   loading: boolean;
   savingKey: string | null;
   onReload: () => void;
@@ -697,71 +685,12 @@ function AdminAuthorityDeploySection({
           </CardContent>
         </Card>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent deploy rejects</CardTitle>
-          <CardDescription>
-            Cross-tenant <code>tool_audit_log</code> rows with{" "}
-            <code>kill:*deploy*</code> results.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && events.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No deploy kill rejects logged yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  events.map((e, i) => (
-                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {e.createdAt}
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs">
-                        {e.tenantName ?? e.tenantId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.agentId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.action}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{e.result}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 function AdminAuthorityDeleteSection({
   status,
-  events,
   loading,
   savingKey,
   onReload,
@@ -769,7 +698,6 @@ function AdminAuthorityDeleteSection({
   onToggleTenant,
 }: {
   status: AdminDeleteAuthorityStatus | null;
-  events: AdminDeleteAuthorityEvent[];
   loading: boolean;
   savingKey: string | null;
   onReload: () => void;
@@ -899,71 +827,12 @@ function AdminAuthorityDeleteSection({
           </CardContent>
         </Card>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent delete rejects</CardTitle>
-          <CardDescription>
-            Cross-tenant <code>tool_audit_log</code> rows with{" "}
-            <code>kill:*delete*</code> results.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && events.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No delete kill rejects logged yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  events.map((e, i) => (
-                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {e.createdAt}
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs">
-                        {e.tenantName ?? e.tenantId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.agentId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.action}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{e.result}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 function AdminAuthoritySendSection({
   status,
-  events,
   loading,
   savingKey,
   onReload,
@@ -971,7 +840,6 @@ function AdminAuthoritySendSection({
   onToggleTenant,
 }: {
   status: AdminSendAuthorityStatus | null;
-  events: AdminSendAuthorityEvent[];
   loading: boolean;
   savingKey: string | null;
   onReload: () => void;
@@ -1101,64 +969,6 @@ function AdminAuthoritySendSection({
           </CardContent>
         </Card>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent send rejects</CardTitle>
-          <CardDescription>
-            Cross-tenant <code>tool_audit_log</code> rows with{" "}
-            <code>kill:*send*</code> results.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && events.length === 0 ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No send kill rejects logged yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  events.map((e, i) => (
-                    <TableRow key={`${e.tenantId}-${e.createdAt}-${i}`}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {e.createdAt}
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-xs">
-                        {e.tenantName ?? e.tenantId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.agentId}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {e.action}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{e.result}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -1170,41 +980,27 @@ export function AdminAuthorityPanel() {
   const [deployLoading, setDeployLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(true);
   const [sendLoading, setSendLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [codingStatus, setCodingStatus] =
     useState<AdminCodingAuthorityStatus | null>(null);
-  const [codingEvents, setCodingEvents] = useState<AdminCodingAuthorityEvent[]>(
-    []
-  );
   const [spendStatus, setSpendStatus] =
     useState<AdminSpendAuthorityStatus | null>(null);
-  const [spendEvents, setSpendEvents] = useState<AdminSpendAuthorityEvent[]>(
-    []
-  );
   const [deployStatus, setDeployStatus] =
     useState<AdminDeployAuthorityStatus | null>(null);
-  const [deployEvents, setDeployEvents] = useState<AdminDeployAuthorityEvent[]>(
-    []
-  );
   const [deleteStatus, setDeleteStatus] =
     useState<AdminDeleteAuthorityStatus | null>(null);
-  const [deleteEvents, setDeleteEvents] = useState<AdminDeleteAuthorityEvent[]>(
-    []
-  );
   const [sendStatus, setSendStatus] =
     useState<AdminSendAuthorityStatus | null>(null);
-  const [sendEvents, setSendEvents] = useState<AdminSendAuthorityEvent[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AdminAuthorityAuditEvent[]>(
+    []
+  );
+  const [auditDomain, setAuditDomain] = useState<AuditDomain>("all");
 
   const reloadCoding = useCallback(() => {
     setCodingLoading(true);
-    Promise.all([
-      fetchAdminCodingStatus(),
-      fetchAdminCodingEvents({ limit: 100 }),
-    ])
-      .then(([s, e]) => {
-        setCodingStatus(s);
-        setCodingEvents(e.events);
-      })
+    fetchAdminCodingStatus()
+      .then(setCodingStatus)
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load coding authority"
@@ -1215,14 +1011,8 @@ export function AdminAuthorityPanel() {
 
   const reloadSpend = useCallback(() => {
     setSpendLoading(true);
-    Promise.all([
-      fetchAdminSpendStatus(),
-      fetchAdminSpendEvents({ limit: 100 }),
-    ])
-      .then(([s, e]) => {
-        setSpendStatus(s);
-        setSpendEvents(e.events);
-      })
+    fetchAdminSpendStatus()
+      .then(setSpendStatus)
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load spend authority"
@@ -1233,14 +1023,8 @@ export function AdminAuthorityPanel() {
 
   const reloadDeploy = useCallback(() => {
     setDeployLoading(true);
-    Promise.all([
-      fetchAdminDeployStatus(),
-      fetchAdminDeployEvents({ limit: 100 }),
-    ])
-      .then(([s, e]) => {
-        setDeployStatus(s);
-        setDeployEvents(e.events);
-      })
+    fetchAdminDeployStatus()
+      .then(setDeployStatus)
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load deploy authority"
@@ -1251,14 +1035,8 @@ export function AdminAuthorityPanel() {
 
   const reloadDelete = useCallback(() => {
     setDeleteLoading(true);
-    Promise.all([
-      fetchAdminDeleteStatus(),
-      fetchAdminDeleteEvents({ limit: 100 }),
-    ])
-      .then(([s, e]) => {
-        setDeleteStatus(s);
-        setDeleteEvents(e.events);
-      })
+    fetchAdminDeleteStatus()
+      .then(setDeleteStatus)
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load delete authority"
@@ -1269,14 +1047,8 @@ export function AdminAuthorityPanel() {
 
   const reloadSend = useCallback(() => {
     setSendLoading(true);
-    Promise.all([
-      fetchAdminSendStatus(),
-      fetchAdminSendEvents({ limit: 100 }),
-    ])
-      .then(([s, e]) => {
-        setSendStatus(s);
-        setSendEvents(e.events);
-      })
+    fetchAdminSendStatus()
+      .then(setSendStatus)
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load send authority"
@@ -1285,13 +1057,38 @@ export function AdminAuthorityPanel() {
       .finally(() => setSendLoading(false));
   }, []);
 
+  const reloadAudit = useCallback(() => {
+    setAuditLoading(true);
+    fetchAdminAuthorityAuditEvents({
+      limit: 100,
+      ...(auditDomain !== "all" ? { domain: auditDomain } : {}),
+    })
+      .then((res) => setAuditEvents(res.events))
+      .catch((err) =>
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load authority audit"
+        )
+      )
+      .finally(() => setAuditLoading(false));
+  }, [auditDomain]);
+
   useEffect(() => {
     reloadCoding();
     reloadSpend();
     reloadDeploy();
     reloadDelete();
     reloadSend();
-  }, [reloadCoding, reloadSpend, reloadDeploy, reloadDelete, reloadSend]);
+  }, [
+    reloadCoding,
+    reloadSpend,
+    reloadDeploy,
+    reloadDelete,
+    reloadSend,
+  ]);
+
+  useEffect(() => {
+    reloadAudit();
+  }, [reloadAudit]);
 
   const onToggleCodingGlobal = async (
     field: "codingDisabled" | "buildsDisabled",
@@ -1454,15 +1251,22 @@ export function AdminAuthorityPanel() {
           <CardDescription>
             Platform-admin control and visibility for bounded delegation (#96).
             Each epic slice adds a section here. Coding, spend, deploy, delete,
-            and send hard-stops are live; agent pause / unified audit follow
+            and send hard-stops plus unified audit are live; agent pause follows
             later.
           </CardDescription>
         </CardHeader>
       </Card>
 
+      <AdminAuthorityAuditSection
+        events={auditEvents}
+        loading={auditLoading}
+        domain={auditDomain}
+        onDomainChange={setAuditDomain}
+        onReload={reloadAudit}
+      />
+
       <AdminAuthorityCodingSection
         status={codingStatus}
-        events={codingEvents}
         loading={codingLoading}
         savingKey={savingKey}
         onReload={reloadCoding}
@@ -1472,7 +1276,6 @@ export function AdminAuthorityPanel() {
 
       <AdminAuthoritySpendSection
         status={spendStatus}
-        events={spendEvents}
         loading={spendLoading}
         savingKey={savingKey}
         onReload={reloadSpend}
@@ -1482,7 +1285,6 @@ export function AdminAuthorityPanel() {
 
       <AdminAuthorityDeploySection
         status={deployStatus}
-        events={deployEvents}
         loading={deployLoading}
         savingKey={savingKey}
         onReload={reloadDeploy}
@@ -1492,7 +1294,6 @@ export function AdminAuthorityPanel() {
 
       <AdminAuthorityDeleteSection
         status={deleteStatus}
-        events={deleteEvents}
         loading={deleteLoading}
         savingKey={savingKey}
         onReload={reloadDelete}
@@ -1502,7 +1303,6 @@ export function AdminAuthorityPanel() {
 
       <AdminAuthoritySendSection
         status={sendStatus}
-        events={sendEvents}
         loading={sendLoading}
         savingKey={savingKey}
         onReload={reloadSend}

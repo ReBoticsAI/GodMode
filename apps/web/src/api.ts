@@ -3583,6 +3583,32 @@ export function setAdminSendKillTenant(
   );
 }
 
+export type AdminAuthorityAuditEvent = {
+  domain: "coding" | "spend" | "deploy" | "delete" | "send";
+  tenantId: string;
+  tenantName: string | null;
+  agentId: string;
+  userId: string | null;
+  action: string;
+  result: string;
+  command: string | null;
+  createdAt: string;
+};
+
+export function fetchAdminAuthorityAuditEvents(opts?: {
+  limit?: number;
+  domain?: string;
+  tenantId?: string;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.domain) params.set("domain", opts.domain);
+  if (opts?.tenantId) params.set("tenantId", opts.tenantId);
+  const q = params.toString();
+  return api<{ events: AdminAuthorityAuditEvent[] }>(
+    `/admin/authority/audit-events${q ? `?${q}` : ""}`
+  );
+}
 
 export function signupPassword(
   email: string,
