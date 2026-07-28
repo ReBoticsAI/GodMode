@@ -50,10 +50,31 @@ import {
   getSendAuthorityStatus,
   listSendAuthorityEvents,
 } from "../services/authority/send-authority-admin.js";
+import { listAuthorityAuditEvents } from "../services/authority/authority-audit-admin.js";
 
 export function createAdminAuthorityRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
+
+  router.get("/audit-events", (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit ?? 100);
+      const domain =
+        typeof req.query.domain === "string" ? req.query.domain : undefined;
+      const tenantId =
+        typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
+      const events = listAuthorityAuditEvents({
+        limit: limitRaw,
+        domain,
+        tenantId,
+      });
+      res.json({ events });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
 
   router.get("/coding-kills", (_req, res) => {
     const tenantIds = listAllTenantIds(getCoreDb());

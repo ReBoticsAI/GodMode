@@ -309,6 +309,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-authority-audit-events",
+    methods: ["GET"],
+    pathPattern: "/api/admin/authority/audit-events",
+    rationale:
+      "Platform-admin unified authority reject feed (#96 Slice 7); merged tool_audit_log read across domains, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-admin-access",
     methods: ["POST"],
     pathPattern: "/api/admin/saas/customers/:/access",
