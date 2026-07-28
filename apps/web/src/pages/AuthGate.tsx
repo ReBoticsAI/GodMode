@@ -267,6 +267,7 @@ export default function AuthGate() {
         await verifyMfaLogin(mfaToken, mfaCode.trim());
         await finishLogin();
       } catch (err) {
+        setMfaCode("");
         toast.error(err instanceof Error ? err.message : "MFA failed");
       } finally {
         setBusy(false);

@@ -41,7 +41,9 @@ import {
   confirmMfaEnroll,
   consumeAuthToken,
   disableMfa,
+  findValidAuthToken,
   issueAuthToken,
+  markAuthTokenConsumed,
   markEmailVerified,
   markEmailVerifiedIfNull,
   mfaEnabled,
@@ -467,16 +469,21 @@ export function createAuthRouter(): Router {
       return;
     }
     const core = getCoreDb();
-    const consumed = consumeAuthToken(core, { rawToken: mfaToken, purpose: "mfa_login" });
-    if (!consumed) {
+    // Peek first: a wrong TOTP must not burn the step-up token (user can retry).
+    const pending = findValidAuthToken(core, { rawToken: mfaToken, purpose: "mfa_login" });
+    if (!pending) {
       res.status(401).json({ error: "Invalid or expired MFA token" });
       return;
     }
-    if (!verifyMfaChallenge(core, consumed.userId, code)) {
+    if (!verifyMfaChallenge(core, pending.userId, code)) {
       res.status(401).json({ error: "Invalid MFA code" });
       return;
     }
-    const user = core.prepare("SELECT * FROM users WHERE id=?").get(consumed.userId) as CoreUser;
+    if (!markAuthTokenConsumed(core, pending.id)) {
+      res.status(401).json({ error: "Invalid or expired MFA token" });
+      return;
+    }
+    const user = core.prepare("SELECT * FROM users WHERE id=?").get(pending.userId) as CoreUser;
     touchUserLastSeen(user.id);
     const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
     res.setHeader(

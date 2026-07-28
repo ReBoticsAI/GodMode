@@ -85,10 +85,11 @@ export function issueAuthToken(
   return raw;
 }
 
-export function consumeAuthToken(
+/** Look up a still-valid token without consuming it (e.g. MFA retries). */
+export function findValidAuthToken(
   core: CoreDatabase,
   opts: { rawToken: string; purpose: AuthTokenPurpose }
-): { userId: string } | null {
+): { id: string; userId: string } | null {
   const hash = hashAuthToken(opts.rawToken);
   const row = core
     .prepare(
@@ -98,12 +99,32 @@ export function consumeAuthToken(
     )
     .get(hash, opts.purpose) as { id: string; user_id: string } | undefined;
   if (!row) return null;
-  core
+  return { id: row.id, userId: row.user_id };
+}
+
+export function consumeAuthToken(
+  core: CoreDatabase,
+  opts: { rawToken: string; purpose: AuthTokenPurpose }
+): { userId: string } | null {
+  const found = findValidAuthToken(core, opts);
+  if (!found) return null;
+  const result = core
     .prepare(
       `UPDATE auth_tokens SET consumed_at=datetime('now') WHERE id=? AND consumed_at IS NULL`
     )
-    .run(row.id);
-  return { userId: row.user_id };
+    .run(found.id);
+  if (result.changes === 0) return null;
+  return { userId: found.userId };
+}
+
+/** Mark a previously looked-up token consumed. Returns false if already used. */
+export function markAuthTokenConsumed(core: CoreDatabase, tokenId: string): boolean {
+  const result = core
+    .prepare(
+      `UPDATE auth_tokens SET consumed_at=datetime('now') WHERE id=? AND consumed_at IS NULL`
+    )
+    .run(tokenId);
+  return result.changes > 0;
 }
 
 /** Base32 encode for otpauth URIs. */

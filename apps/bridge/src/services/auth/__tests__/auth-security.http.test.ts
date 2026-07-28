@@ -427,12 +427,27 @@ describe("auth security HTTP integration", () => {
       expect(login.json.mfaRequired).toBe(true);
       const mfaToken = login.json.mfaToken as string;
 
+      const wrong = await api(base, "POST", "/api/auth/mfa/verify-login", {
+        body: { mfaToken, code: "000000" },
+        origin: ALLOWED_ORIGIN,
+      });
+      expect(wrong.status).toBe(401);
+      expect(wrong.json.error).toBe("Invalid MFA code");
+
+      // Same step-up token must still work after a wrong code (do not burn on failure).
       const good = await api(base, "POST", "/api/auth/mfa/verify-login", {
         body: { mfaToken, code: totpCode(enroll.secretBase32) },
         origin: ALLOWED_ORIGIN,
       });
       expect(good.status).toBe(200);
       expect(good.json.sessionToken).toBeTruthy();
+
+      const reused = await api(base, "POST", "/api/auth/mfa/verify-login", {
+        body: { mfaToken, code: totpCode(enroll.secretBase32) },
+        origin: ALLOWED_ORIGIN,
+      });
+      expect(reused.status).toBe(401);
+      expect(reused.json.error).toBe("Invalid or expired MFA token");
 
       const login2 = await api(base, "POST", "/api/auth/login", {
         body: { email: "mfa@example.com", password: "secret12" },
