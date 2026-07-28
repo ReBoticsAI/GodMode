@@ -11,19 +11,43 @@ import { CursorBackend } from "./cursor-backend.js";
 import { CursorCloudBackend } from "./cursor-cloud-backend.js";
 import { RemoteInferenceBackend } from "./remote-backend.js";
 import { getCoreDb } from "../../core-db.js";
+import {
+  assertAgentExecutionAllowed,
+} from "../authority/agent-pause-authority.js";
 
 export const MAX_DELEGATION_DEPTH = 3;
 
-export function resolveAgent(db: AppDatabase, id?: string | null): AiAgent {
+export type AgentPauseScope = {
+  tenantId?: string | null;
+  userId?: string | null;
+  action?: string;
+};
+
+export function resolveAgent(
+  db: AppDatabase,
+  id?: string | null,
+  pauseScope?: AgentPauseScope
+): AiAgent {
   const agentId = id?.trim() || "intelligence";
   const agent = getAgent(db, agentId);
+  let resolved: AiAgent;
   if (!agent) {
     const fallback = getAgent(db, "intelligence");
     if (!fallback) throw new Error("Default Intelligence agent not seeded");
-    return fallback;
+    resolved = fallback;
+  } else {
+    resolved = agent;
   }
-  if (!agent.enabled) throw new Error(`Agent "${agent.name}" is disabled`);
-  return agent;
+
+  assertAgentExecutionAllowed({
+    tenantId: pauseScope?.tenantId,
+    userId: pauseScope?.userId,
+    agentId: resolved.id,
+    action: pauseScope?.action ?? "resolve_agent",
+  });
+
+  if (!resolved.enabled) throw new Error(`Agent "${resolved.name}" is disabled`);
+  return resolved;
 }
 
 export function getBackend(

@@ -15,11 +15,15 @@ vi.mock("../authority/delete-authority-admin.js", () => ({
 vi.mock("../authority/send-authority-admin.js", () => ({
   listSendAuthorityEvents: vi.fn(),
 }));
+vi.mock("../authority/agent-pause-authority-admin.js", () => ({
+  listAgentPauseAuthorityEvents: vi.fn(),
+}));
 
 import { listCodingAuthorityEvents } from "../coding/coding-authority-admin.js";
 import { listDeleteAuthorityEvents } from "../authority/delete-authority-admin.js";
 import { listDeployAuthorityEvents } from "../authority/deploy-authority-admin.js";
 import { listSendAuthorityEvents } from "../authority/send-authority-admin.js";
+import { listAgentPauseAuthorityEvents } from "../authority/agent-pause-authority-admin.js";
 import { listSpendAuthorityEvents } from "../authority/spend-authority-admin.js";
 import {
   classifyAuthorityResult,
@@ -31,6 +35,7 @@ const spendList = vi.mocked(listSpendAuthorityEvents);
 const deployList = vi.mocked(listDeployAuthorityEvents);
 const deleteList = vi.mocked(listDeleteAuthorityEvents);
 const sendList = vi.mocked(listSendAuthorityEvents);
+const agentPauseList = vi.mocked(listAgentPauseAuthorityEvents);
 
 function base(overrides: Partial<{
   tenantId: string;
@@ -67,6 +72,7 @@ describe("classifyAuthorityResult", () => {
     expect(classifyAuthorityResult("kill:global_deploy")).toBe("deploy");
     expect(classifyAuthorityResult("kill:tenant_delete")).toBe("delete");
     expect(classifyAuthorityResult("kill:env_send")).toBe("send");
+    expect(classifyAuthorityResult("kill:agent_paused")).toBe("agent");
   });
 });
 
@@ -95,6 +101,7 @@ describe("listAuthorityAuditEvents", () => {
         action: "hook_webhook",
       }),
     ]);
+    agentPauseList.mockReturnValue([]);
 
     const events = listAuthorityAuditEvents({ limit: 10 });
     expect(events.map((e) => e.domain)).toEqual(["spend", "send", "coding"]);
@@ -112,6 +119,7 @@ describe("listAuthorityAuditEvents", () => {
     deployList.mockReturnValue([]);
     deleteList.mockReturnValue([]);
     sendList.mockReturnValue([]);
+    agentPauseList.mockReturnValue([]);
 
     const events = listAuthorityAuditEvents();
     expect(events).toHaveLength(1);
@@ -136,6 +144,7 @@ describe("listAuthorityAuditEvents", () => {
     deployList.mockReturnValue([]);
     deleteList.mockReturnValue([]);
     sendList.mockReturnValue([]);
+    agentPauseList.mockReturnValue([]);
 
     expect(listAuthorityAuditEvents({ domain: "coding" })).toHaveLength(1);
     expect(listAuthorityAuditEvents({ domain: "coding" })[0].domain).toBe(

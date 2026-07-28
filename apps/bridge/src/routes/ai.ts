@@ -7,6 +7,10 @@ import {
   assertSpendAllowed,
   isSpendAuthorityError,
 } from "../services/authority/spend-authority.js";
+import {
+  assertAgentExecutionAllowed,
+  isAgentPauseAuthorityError,
+} from "../services/authority/agent-pause-authority.js";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "../services/llm-manager.js";
 import { AI_CHAT_COMMANDS } from "../services/ai-commands-registry.js";
@@ -1191,9 +1195,32 @@ export function createAiRouter(
       throw err;
     }
 
+    try {
+      assertAgentExecutionAllowed({
+        tenantId: req.tenantId ?? scope.tenantId,
+        userId: req.user?.id,
+        agentId: resolvedAgentId,
+        action: "ai_chat",
+      });
+    } catch (err) {
+      if (isAgentPauseAuthorityError(err)) {
+        res.status(err.status).json({
+          error: err.message,
+          code: err.code,
+          agentPaused: true,
+        });
+        return;
+      }
+      throw err;
+    }
+
     let agent;
     try {
-      agent = resolveAgent(scope.db, resolvedAgentId);
+      agent = resolveAgent(scope.db, resolvedAgentId, {
+        tenantId: req.tenantId ?? scope.tenantId,
+        userId: req.user?.id,
+        action: "ai_chat",
+      });
     } catch (err) {
       res.status(404).json({ error: err instanceof Error ? err.message : "Agent not found" });
       return;

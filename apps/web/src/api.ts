@@ -3584,7 +3584,7 @@ export function setAdminSendKillTenant(
 }
 
 export type AdminAuthorityAuditEvent = {
-  domain: "coding" | "spend" | "deploy" | "delete" | "send";
+  domain: "coding" | "spend" | "deploy" | "delete" | "send" | "agent";
   tenantId: string;
   tenantName: string | null;
   agentId: string;
@@ -3607,6 +3607,60 @@ export function fetchAdminAuthorityAuditEvents(opts?: {
   const q = params.toString();
   return api<{ events: AdminAuthorityAuditEvent[] }>(
     `/admin/authority/audit-events${q ? `?${q}` : ""}`
+  );
+}
+
+export type AdminAgentPauseAuthorityStatus = {
+  kills: {
+    envDisabled: boolean;
+    global: { agentsPaused: boolean };
+    tenants: Record<string, { agentsPaused: boolean }>;
+  };
+  tenants: Array<{
+    id: string;
+    name: string;
+    isOperator: boolean;
+    agentsPaused: boolean;
+    agents: Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      paused: boolean;
+    }>;
+  }>;
+};
+
+export function fetchAdminAgentPauseStatus() {
+  return api<AdminAgentPauseAuthorityStatus>(
+    "/admin/authority/agent-pause-status"
+  );
+}
+
+export function setAdminAgentPauseKillGlobal(body: { agentsPaused: boolean }) {
+  return api<AdminAgentPauseAuthorityStatus["kills"]>(
+    "/admin/authority/agent-pause-kills/global",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminAgentPauseKillTenant(
+  tenantId: string,
+  body: { agentsPaused: boolean }
+) {
+  return api<AdminAgentPauseAuthorityStatus["kills"]>(
+    `/admin/authority/agent-pause-kills/tenant/${encodeURIComponent(tenantId)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function setAdminAgentPauseAgent(
+  tenantId: string,
+  agentId: string,
+  body: { paused: boolean }
+) {
+  return api<AdminAgentPauseAuthorityStatus["kills"]>(
+    `/admin/authority/agent-pause-kills/tenant/${encodeURIComponent(tenantId)}/agent/${encodeURIComponent(agentId)}`,
+    { method: "POST", body: JSON.stringify(body) }
   );
 }
 

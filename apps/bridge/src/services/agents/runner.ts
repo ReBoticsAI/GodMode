@@ -26,7 +26,11 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
     throw new Error(`Subagent delegation depth limit (${MAX_DELEGATION_DEPTH}) exceeded`);
   }
 
-  const agent = resolveAgent(opts.db, opts.agentId);
+  const agent = resolveAgent(opts.db, opts.agentId, {
+    tenantId: opts.toolCtx.tenantId,
+    userId: opts.toolCtx.userId,
+    action: "run_subagent",
+  });
   const backend = getBackend(agent, opts.db, opts.llm);
 
   const messages: AgentMessage[] = [

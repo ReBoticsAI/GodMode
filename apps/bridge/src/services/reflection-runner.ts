@@ -19,6 +19,7 @@ import type { EmbeddingClient } from "./embeddings/embedding-client.js";
 export interface ReflectionRunDeps {
   db: AppDatabase;
   llm: LlmManager;
+  tenantId?: string | null;
   bus?: EventEmitter;
   embedder?: EmbeddingClient | null;
 }
@@ -102,7 +103,10 @@ export async function runReflection(
     };
   }
 
-  const agent = resolveAgent(db, agentId);
+  const agent = resolveAgent(db, agentId, {
+    tenantId: deps.tenantId,
+    action: "reflection",
+  });
   const watermark = config.watermark ?? "1970-01-01 00:00:00";
   const brief = assembleReflectionBrief(db, agentId, watermark);
 

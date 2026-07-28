@@ -1,7 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
-import { getAgent } from "./agents/agents-db.js";
+import { resolveAgent } from "./agents/registry.js";
+import {
+  assertAgentExecutionAllowed,
+  isAgentPauseAuthorityError,
+} from "./authority/agent-pause-authority.js";
 import { indexMemory } from "./embeddings/memory-embeddings.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
 
@@ -24,10 +28,23 @@ export async function runEpisodicDistill(opts: {
   llm: LlmManager;
   chatId: string;
   agentId: string;
+  tenantId?: string | null;
   embedder?: EmbeddingClient | null;
   force?: boolean;
 }): Promise<EpisodicDistillResult> {
   const { db, llm, chatId, agentId } = opts;
+  try {
+    assertAgentExecutionAllowed({
+      tenantId: opts.tenantId,
+      agentId,
+      action: "episodic_distill",
+    });
+  } catch (err) {
+    if (isAgentPauseAuthorityError(err)) {
+      return { ok: false, skipped: err.code };
+    }
+    throw err;
+  }
   if (!llm.isReady()) return { ok: false, skipped: "llm_not_ready" };
 
   const chat = db
@@ -124,7 +141,10 @@ export async function runEpisodicDistill(opts: {
     };
   }
 
-  const agent = getAgent(db, agentId);
+  const agent = resolveAgent(db, agentId, {
+    tenantId: opts.tenantId,
+    action: "episodic_distill",
+  });
   const auto =
     Boolean((agent?.config as { episodicDistillAuto?: boolean } | null)?.episodicDistillAuto) ||
     readAutoSetting(db);

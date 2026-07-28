@@ -300,7 +300,7 @@ export class AiQueueWorker {
 
     if (ctx.reflectionAgentId) {
       return runReflection(
-        deps,
+        { ...deps, tenantId: job.tenant_id },
         String(ctx.reflectionAgentId),
         (ctx.reflectionTrigger as "manual" | "scheduled" | "idle" | "queued") ?? "queued"
       );
@@ -312,6 +312,7 @@ export class AiQueueWorker {
         llm: this.llm,
         chatId: String(ctx.episodicDistillChatId),
         agentId: String(ctx.episodicDistillAgentId ?? "intelligence"),
+        tenantId: job.tenant_id,
         embedder: deps.embedder,
         force: Boolean(ctx.episodicDistillForce),
       });
