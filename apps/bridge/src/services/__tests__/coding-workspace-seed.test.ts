@@ -72,6 +72,34 @@ describe("seedCodingWorkspaceStarter", () => {
       CODING_STARTER_MARKDOWN
     );
   });
+
+  it("seeds when only .bash_history is present", () => {
+    const root = tempDir("gm-coding-seed-hist-");
+    writeFileSync(join(root, ".bash_history"), "ls\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(true);
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toBe(
+      CODING_STARTER_MARKDOWN
+    );
+    expect(existsSync(join(root, ".bash_history"))).toBe(true);
+  });
+
+  it("does not overwrite hello.md when shell history is also present", () => {
+    const root = tempDir("gm-coding-seed-hist-keep-");
+    writeFileSync(join(root, CODING_STARTER_FILENAME), "keep me\n", "utf8");
+    writeFileSync(join(root, ".bash_history"), "pwd\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(false);
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toBe(
+      "keep me\n"
+    );
+  });
+
+  it("does not seed when a real user file is present alongside shell noise", () => {
+    const root = tempDir("gm-coding-seed-real-");
+    writeFileSync(join(root, ".bash_history"), "ls\n", "utf8");
+    writeFileSync(join(root, "notes.txt"), "x\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(false);
+    expect(existsSync(join(root, CODING_STARTER_FILENAME))).toBe(false);
+  });
 });
 
 describe("resolveCodingRoot seeds empty hub tenants", () => {
@@ -126,6 +154,27 @@ describe("resolveCodingRoot seeds empty hub tenants", () => {
     const listed = listDir({
       path: ".",
       tenantId: "tenant-egress",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(listed.entries.map((e) => e.name)).toEqual([CODING_STARTER_FILENAME]);
+  });
+
+  it("hides .bash_history from listDir and still seeds hello.md", () => {
+    const workspaces = tempDir("gm-coding-seed-ws-");
+    const tenantRoot = join(workspaces, "tenant-hist");
+    mkdirSync(tenantRoot, { recursive: true });
+    writeFileSync(join(tenantRoot, ".bash_history"), "echo hi\n", "utf8");
+    resolveCodingRoot({
+      tenantId: "tenant-hist",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(existsSync(join(tenantRoot, ".bash_history"))).toBe(true);
+    expect(existsSync(join(tenantRoot, CODING_STARTER_FILENAME))).toBe(true);
+    const listed = listDir({
+      path: ".",
+      tenantId: "tenant-hist",
       tenantWorkspacesDir: workspaces,
       isolatedDeployment: true,
     });
