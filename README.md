@@ -4,7 +4,9 @@
 [![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
-**Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Open source. Local-first. Self-host or use Cloud for convenience. Extend through Marketplace. Share live resources with your team. Built to be the last platform stack you need.
+**Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Built to be the last platform stack you need.
+
+Open source (Apache 2.0). Local-first. Self-host or use Cloud for convenience. **Self-expanding:** Intelligence builds and extends GodMode from inside GodMode. **Digital You** is your twin (thinking partner and stand-in). **Connect anything** via Marketplace packs, plugins, and connectors. Share live resources with your team.
 
 ![GodMode home hub](docs/assets/readme/hero-home.png)
 
@@ -16,16 +18,19 @@
 |------|---------|
 | **Intelligence** | The built-in platform agent: your guide to GodMode itself |
 | **Chat panel** | The sidebar floating window where you talk to agents (not the agent's name) |
-| **Digital You** | Your digital twin: learns from how you use the platform; can stand in when you are unavailable |
+| **Digital You** | Your digital twin: private thinking partner and stand-in; compounds via Reflection and memory as you use the platform |
 | **Agents → Pipeline** | Where you configure models, tools, rules, and profiles |
 
 ## Why GodMode?
 
-GodMode is the Control Center where you **create, edit, organize, and monitor** work across knowledge and wiki, tasks and project management, contacts and relationships, Bank (wallets/ledger), and the day-to-day surfaces (calendar, vault, notifications, Home), with an org of agents and humans in one place. Full accounting depth is on the roadmap. Niche domains ship as plugins; Marketplace is how you install them.
+GodMode is the **last platform stack** for everything you do digitally: one Control Center where you **create, edit, organize, and monitor** knowledge, work, people, money surfaces, and agents.
 
-**Intelligence** reads, writes, and extends the workspace. **Digital You** is your twin that compounds from use. Open source and local-first by default (desktop app, clone, or private hub); Cloud when you want easier browser onboarding; Marketplace and Shared when you want commerce and team resources together.
+- **Self-expansion:** Intelligence scaffolds, codes, and installs plugins and workspace structure from chat (GodMode-from-GodMode). You extend the product without leaving it.
+- **Digital You:** twin agent for personal judgment and voice; stand-in quality deepens as memories and Reflection accumulate. Distinct from Intelligence (platform builder/guide).
+- **Connect anything:** Marketplace Official/Community packs, Local plugins on self-host, Connector for hardware-bound plugins, coding tools for custom integrations. Niche professions stay packs; Core stays universal.
+- **Open source + install flexibility:** desktop, clone, private hub, or Cloud. Cloud is browser onboarding and commerce authority; local/desktop stay first-class.
 
-See [CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md) and the [feature catalog](docs/FEATURES.md).
+Full accounting, owned email/domains, robot/IoT actor plane, and GodMode Inference by ReBotics are Core depth on the roadmap. See [CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md) and the [feature catalog](docs/FEATURES.md).
 
 ## Roadmap
 
@@ -39,7 +44,7 @@ Usable now. Core still grows toward the full Control Center (owned email and dom
 
 - **Home** (`/home`)  -  dashboard and quick links
 - **Intelligence**  -  platform companion; setup, structure, cross-cutting work
-- **Digital You**  -  digital twin; learns from use and can stand in when you are unavailable
+- **Digital You**  -  twin: thinking partner + stand-in; compounds with use
 - **Chat panel**  -  talk to any agent; history, tools, model picker
 - **Agents** (`/agents`)  -  org chart and Pipeline configuration
 
@@ -142,7 +147,7 @@ transfer stay specialized transports (not Record CRUD). Details for contributors
 
 ## Quick start
 
-**Requirements:** Node.js 20+, npm 10+
+**Requirements:** Node.js 22.13+, npm 10+
 
 ```powershell
 git clone https://github.com/ReBoticsAI/GodMode.git

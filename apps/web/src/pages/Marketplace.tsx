@@ -1113,7 +1113,9 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Marketplace Terms</CardTitle>
               <CardDescription>
-                Digital goods are final once delivered. A chargeback or payment dispute results in a
+                Official sales and delivered digital goods are final. Community disputes are between
+                buyer and seller via the payment processor; failed access provisioning goes to
+                support@godmode.software. A chargeback or payment dispute after delivery results in a
                 permanent Marketplace ban (no buying or earning). Current ToS version: {tosVersion}.
               </CardDescription>
             </CardHeader>
