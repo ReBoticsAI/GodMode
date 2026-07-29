@@ -9,26 +9,37 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Page, PageHeader } from "@/components/PageHeader";
-import { MARKETING_BASE } from "./MarketingLayout";
+import {
+  MARKETING_BASE,
+  marketingCardClass,
+  marketingCardDescriptionClass,
+  marketingCardTitleClass,
+  marketingPageDescriptionClass,
+} from "./MarketingLayout";
 
 export default function MarketingPricing() {
   return (
     <Page>
       <PageHeader
         title="Pricing"
-        description="Self-host for free. GodMode Cloud is the hosted multi-tenant SaaS with Marketplace commerce authority."
-        descriptionClassName="max-w-5xl text-base leading-relaxed"
+        description="Open-source Control Center in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
+        descriptionClassName={marketingPageDescriptionClass}
       />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Self-hosted</CardTitle>
-            <CardDescription>Run locally or on your own private hub.</CardDescription>
+            <CardTitle className={marketingCardTitleClass}>Self-hosted</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
+              Install on your machine or run your own private server. Best if you want full
+              control and do not mind setup.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$0</p>
-            <p className="mt-1 text-base text-muted-foreground">Your data, your machine.</p>
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Your data stays with you. Open source on GitHub.
+            </p>
           </CardContent>
           <CardFooter>
             <Button
@@ -46,48 +57,57 @@ export default function MarketingPricing() {
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Cloud Monthly</CardTitle>
-            <CardDescription>Hosted SaaS seat with Stripe Checkout.</CardDescription>
+            <CardTitle className={marketingCardTitleClass}>Cloud Monthly</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
+              We host GodMode for you. Choose a plan, pay with Stripe, then create your
+              account and verify email.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$9.99</p>
-            <p className="mt-1 text-base text-muted-foreground">
-              Cancel anytime in the Customer Portal.
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Per month. Cancel anytime from the billing portal.
             </p>
           </CardContent>
           <CardFooter>
-            <Button render={<Link to="/" />}>Subscribe</Button>
+            <Button render={<Link to="/" />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Cloud Yearly</CardTitle>
-            <CardDescription>Same Cloud product, billed annually.</CardDescription>
+            <CardTitle className={marketingCardTitleClass}>Cloud Yearly</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
+              Same Cloud experience, billed once a year at a lower total cost.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$74.99</p>
-            <p className="mt-1 text-base text-muted-foreground">
-              Exact Stripe Price IDs are configured per environment.
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Lower yearly total than twelve monthly payments (about 4.5 months of savings).
             </p>
           </CardContent>
           <CardFooter>
-            <Button render={<Link to="/" />}>Subscribe</Button>
+            <Button render={<Link to="/" />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
       </div>
 
       <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">
-        Marketplace purchases are separate from the Cloud subscription. See{" "}
+        Before you pay, you must acknowledge that Cloud subscriptions are non-refundable
+        (no refunds, no liability). Official Marketplace sales are likewise final. Community
+        Marketplace purchases settle through the payment processor; disputes are between
+        buyer and seller, except we look into failed access provisioning via support. Buying
+        in the Marketplace is separate from your Cloud subscription. Details:{" "}
         <Link
           to={`${MARKETING_BASE}/terms`}
           className="text-foreground underline underline-offset-4"
         >
           Terms
         </Link>{" "}
-        and the{" "}
+        and{" "}
         <Link
           to={`${MARKETING_BASE}/refund`}
           className="text-foreground underline underline-offset-4"

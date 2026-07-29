@@ -21,7 +21,7 @@ Do **not** point public DNS at SaaS until:
 3. Platform admin MFA enrolled and hard-gated (Auth interstitial + `MFA_SETUP_REQUIRED` on product APIs)
 4. Cloudflare → Hostinger Full (strict), origin headers, HTTPS cookies, firewall locked
 5. Durable SQLite rate limits + cron backups + tested offsite restore
-6. SaaS defaults: deny agent `codeAccess`; block arbitrary Local plugin paths
+6. SaaS coding on by default (#178; opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`); Local plugin path registration blocked by default (`PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` unset/false)
 7. Live Stripe webhooks + Customer Portal on the Cloudflare hostname
 8. DEPLOY.md / this file / `deploy/hostinger.md` signed off
 
@@ -37,8 +37,10 @@ A public repository is a **public attack map**. Assume attackers read every rout
 default, and compose file.
 
 - Never commit secrets (`.env`, Stripe keys, session secrets, OAuth client secrets).
-- Public SaaS must sit behind Cloudflare (or equivalent) with invite/paywall + MFA.
+- Public SaaS must sit behind Cloudflare (or equivalent) with paywall + MFA.
 - Edge WAF is mandatory for internet-facing hubs; LAN staging is not a substitute.
+  **Bot Fight Mode** on Cloudflare Free is optional for v1 (pay-first signup already
+  gates tenants); enable and test Stripe webhooks if you turn it on.
 
 ## Production checklist
 

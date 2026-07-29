@@ -1,8 +1,8 @@
 # Official multi-tenant SaaS hub (your VPS only).
-# Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to your public domain.
+# Set WEB_PUBLIC_URL, AUTH_PUBLIC_URL, and WEB_ORIGIN to the same public hostname.
 #
-# Layer 3: add cap_add SYS_ADMIN+NET_ADMIN and security_opt (seccomp/apparmor
-# unconfined) when enabling bubblewrap coding in-container (see saas-staging compose).
+# Layer 3: bubblewrap coding namespaces inside the container (required when SaaS
+# coding is on by default, #178). Match saas-staging compose.
 #
 # Layer 4 (#164 / #167 / #178): do NOT mount /var/run/docker.sock here. Run the optional
 # build supervisor separately (deploy/build-supervisor/) against this SaaS data dir and set:
@@ -18,6 +18,12 @@ services:
       - "80:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
     env_file:
       - .env.production
     volumes:

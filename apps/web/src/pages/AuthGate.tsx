@@ -461,7 +461,7 @@ export default function AuthGate() {
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {plan.interval === "year"
-                          ? "Billed yearly via Stripe — about 2 months free vs monthly."
+                          ? "Billed yearly via Stripe. Lower total than twelve monthly payments (about 4.5 months of savings)."
                           : plan.interval === "month"
                             ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
                             : checkoutMode === "subscription"
@@ -481,15 +481,11 @@ export default function AuthGate() {
               <div className="rounded-md border border-border p-3 text-left">
                 <p className="text-sm font-medium">Refund policy</p>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  All sales are final. No refunds for change of mind, unused
-                  access, or dissatisfaction with the cloud service. Try the free
-                  open-source install first if you want to evaluate GodMode
-                  without paying.
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  We will refund payment failures, duplicate charges, and cases
-                  where an account was never provisioned after a successful
-                  payment.
+                  All sales are final. There are no refunds and no liability for
+                  GodMode Cloud purchases, including change of mind, unused
+                  access, dissatisfaction, outages, or agent behavior. Try the
+                  free open-source / self-hosted install first if you want to
+                  evaluate GodMode without paying.
                 </p>
               </div>
 
@@ -513,9 +509,8 @@ export default function AuthGate() {
                   onChange={(e) => setRefundAck(e.target.checked)}
                 />
                 <span>
-                  I understand GodMode Cloud purchases are non-refundable except
-                  for payment failures, duplicates, or failed provisioning, and
-                  that a free self-hosted option exists.
+                  I understand GodMode Cloud purchases are non-refundable with no
+                  liability, and that a free self-hosted / desktop option exists.
                 </span>
               </label>
 
