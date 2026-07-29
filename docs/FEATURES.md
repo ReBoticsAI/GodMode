@@ -6,7 +6,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 
 ## Hubs
 
-- [GodMode overview](features/godmode-overview.md) - What GodMode is, and how Intelligence relates to the Control Center.
+- [GodMode overview](features/godmode-overview.md) - Last platform stack, self-expansion, Digital You, connect anything.
 - [Workspace structure](features/workspace-structure.md) - Departments, divisions, and pages. New workspaces start empty.
 - [Shared and Marketplace](features/shared-and-marketplace.md) - Live grants and the pack marketplace at a glance.
 - [Personal tools](features/personal-tools.md) - Calendar, Tasks, Wiki, Vault, Bank, Notifications, Support.
@@ -16,7 +16,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Admin Updates](features/admin-updates.md) - Stable/nightly channels, signed release checks, defer/skip, host-supervisor apply.
 - [Home hub](features/home-hub.md) - Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace.
 - [Intelligence](features/intelligence.md) - Platform-wide companion for setup, structure, wiki, and cross-cutting work.
-- [Digital You](features/digital-you.md) - Digital twin created on first login; learns from use and can stand in when you are unavailable.
+- [Digital You](features/digital-you.md) - Twin: thinking partner + stand-in; compounds via Reflection/memory.
 - [Chat panel](features/chat-panel.md) - Floating window for agent chat, history, model picker, tools, and in-panel tabs.
 - [Model picker](features/model-picker.md) - Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared endpoints.
 - [Model harness profiles](features/model-harness-profiles.md) - Per-family tool mode, sampling, and discovery middleware.

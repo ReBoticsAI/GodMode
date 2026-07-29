@@ -4,8 +4,10 @@ GodMode public SaaS runs on a **Hostinger VPS** (Docker Compose) as the origin.
 **Cloudflare** is the public edge (TLS, WAF, DDoS). Z440 LAN hubs are staging only
 and are **not** the public DNS cutover target.
 
-Prefer hosting the marketing site (`sites/www`) on **Cloudflare Pages** so the VPS
-only runs the authenticated app origin.
+Prefer serving marketing from **`apps/web` `/www`** on Cloudflare Pages or the same VPS
+app origin (optional rewrite `/` → `/www`) so the VPS primarily runs the authenticated
+app. See [`sites/www/README.md`](../sites/www/README.md) for operator notes (not a separate
+deploy tree).
 
 ## 1. Provision Hostinger VPS
 
@@ -22,7 +24,9 @@ only runs the authenticated app origin.
 
 1. Point the app hostname A/AAAA (orange cloud) at the Hostinger VPS public IP.
 2. SSL/TLS mode: **Full (strict)**.
-3. Enable WAF managed rules and Bot Fight / equivalent.
+3. Enable WAF managed rules. **Bot Fight Mode is optional for v1** on Cloudflare Free
+   (pay-first signup already gates tenants); if you enable it, verify Stripe webhooks
+   and uptime checks still succeed.
 4. Optional: edge rate limits on `/api/auth/*` and checkout paths.
 5. Install a **Cloudflare Origin CA** certificate (or Let’s Encrypt) on the Hostinger
    nginx/container so Full (strict) works.
