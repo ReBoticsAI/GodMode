@@ -94,9 +94,9 @@ describe("cross-tenant file tools", () => {
     expect(readFileSync(join(workspaces, "tenant-b", "secret.txt"), "utf8")).toBe(
       "b-only\n"
     );
-    expect(listDir({ path: ".", ...optsA }).entries.map((e) => e.name)).toEqual([
-      "ok.txt",
-    ]);
+    expect(
+      listDir({ path: ".", ...optsA }).entries.map((e) => e.name).sort()
+    ).toEqual(["hello.md", "ok.txt"]);
     expect(() => readFile({ path: "secret.txt", ...optsA })).toThrow(/not found/i);
     expect(() =>
       resolveRepoPath("../tenant-b/secret.txt", optsA)
