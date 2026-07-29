@@ -9,29 +9,35 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Page, PageHeader } from "@/components/PageHeader";
-import { MARKETING_BASE } from "./MarketingLayout";
+import {
+  MARKETING_BASE,
+  marketingCardClass,
+  marketingCardDescriptionClass,
+  marketingCardTitleClass,
+  marketingPageDescriptionClass,
+} from "./MarketingLayout";
 
 export default function MarketingPricing() {
   return (
     <Page>
       <PageHeader
         title="Pricing"
-        description="Use GodMode for free on your own computer, or subscribe to GodMode Cloud so you can open it in a browser from any device. Marketplace add-ons are priced separately from your Cloud plan."
-        descriptionClassName="max-w-5xl text-base leading-relaxed"
+        description="Open-source Control Center in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
+        descriptionClassName={marketingPageDescriptionClass}
       />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Self-hosted</CardTitle>
-            <CardDescription>
+            <CardTitle className={marketingCardTitleClass}>Self-hosted</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
               Install on your machine or run your own private server. Best if you want full
               control and do not mind setup.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$0</p>
-            <p className="mt-1 text-base text-muted-foreground">
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Your data stays with you. Open source on GitHub.
             </p>
           </CardContent>
@@ -51,18 +57,18 @@ export default function MarketingPricing() {
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Cloud Monthly</CardTitle>
-            <CardDescription>
-              We host GodMode for you. Pick a plan, pay securely, then create your account.
+            <CardTitle className={marketingCardTitleClass}>Cloud Monthly</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
+              We host GodMode for you. Choose a plan, pay with Stripe, then create your
+              account and verify email.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$9.99</p>
-            <p className="mt-1 text-base text-muted-foreground">
-              Cancel anytime from the billing portal. After signup we ask you to verify your
-              email.
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Per month. Cancel anytime from the billing portal.
             </p>
           </CardContent>
           <CardFooter>
@@ -70,17 +76,17 @@ export default function MarketingPricing() {
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className={marketingCardClass}>
           <CardHeader>
-            <CardTitle>Cloud Yearly</CardTitle>
-            <CardDescription>
+            <CardTitle className={marketingCardTitleClass}>Cloud Yearly</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
               Same Cloud experience, billed once a year at a lower total cost.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$74.99</p>
-            <p className="mt-1 text-base text-muted-foreground">
-              About two months free versus paying month to month.
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Lower yearly total than twelve monthly payments (about 4.5 months of savings).
             </p>
           </CardContent>
           <CardFooter>
@@ -90,9 +96,11 @@ export default function MarketingPricing() {
       </div>
 
       <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">
-        Before you pay, you must acknowledge that Cloud subscriptions are generally
-        non-refundable (see the refund policy for the narrow exceptions). Buying something in
-        the Marketplace is separate from your Cloud subscription. Details:{" "}
+        Before you pay, you must acknowledge that Cloud subscriptions are non-refundable
+        (no refunds, no liability). Official Marketplace sales are likewise final. Community
+        Marketplace purchases settle through the payment processor; disputes are between
+        buyer and seller, except we look into failed access provisioning via support. Buying
+        in the Marketplace is separate from your Cloud subscription. Details:{" "}
         <Link
           to={`${MARKETING_BASE}/terms`}
           className="text-foreground underline underline-offset-4"

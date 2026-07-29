@@ -7,8 +7,10 @@ import {
   CloudIcon,
   LayersIcon,
   PackageIcon,
+  PlugIcon,
   PuzzleIcon,
   Share2Icon,
+  SparklesIcon,
   StoreIcon,
   UsersIcon,
   VaultIcon,
@@ -27,7 +29,17 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { APP_NAME } from "@/lib/navigation";
-import { MARKETING_BASE } from "./MarketingLayout";
+import {
+  MARKETING_BASE,
+  marketingBadgeClass,
+  marketingCardClass,
+  marketingCardDescriptionClass,
+  marketingCardTitleClass,
+  marketingPageDescriptionClass,
+  marketingSectionDescriptionClass,
+  marketingSectionTitleClass,
+} from "./MarketingLayout";
+import { cn } from "@/lib/utils";
 
 function SectionHeading({
   title,
@@ -41,12 +53,12 @@ function SectionHeading({
   return (
     <div className="flex flex-col gap-2">
       {badge ? (
-        <Badge variant="secondary" className="w-fit">
+        <Badge variant="secondary" className={marketingBadgeClass}>
           {badge}
         </Badge>
       ) : null}
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-      <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">{description}</p>
+      <h2 className={marketingSectionTitleClass}>{title}</h2>
+      <p className={marketingSectionDescriptionClass}>{description}</p>
     </div>
   );
 }
@@ -64,20 +76,22 @@ function FeatureCard({
 }) {
   const header = (
     <CardHeader>
-      <CardTitle className="flex items-center gap-2 text-base">
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <CardTitle className={cn("flex items-center gap-2", marketingCardTitleClass)}>
+        <Icon className="size-5 shrink-0 text-muted-foreground" />
         {title}
       </CardTitle>
-      <CardDescription className="text-base leading-relaxed">{description}</CardDescription>
+      <CardDescription className={marketingCardDescriptionClass}>
+        {description}
+      </CardDescription>
     </CardHeader>
   );
 
   if (!to) {
-    return <Card>{header}</Card>;
+    return <Card className={marketingCardClass}>{header}</Card>;
   }
 
   return (
-    <Card className="transition-colors hover:bg-muted/40">
+    <Card className={cn(marketingCardClass, "transition-colors hover:bg-muted/40")}>
       <Link to={to} className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {header}
       </Link>
@@ -85,34 +99,63 @@ function FeatureCard({
   );
 }
 
-const EXTEND_ITEMS = [
+const PILLAR_ITEMS = [
   {
-    title: "Grow your workspace",
+    title: "The last platform",
     description:
-      "Start simple, then add departments, pages, and areas as life gets busier. Build the layout yourself, or ask Intelligence to help shape it from chat.",
-    Icon: LayersIcon,
-    slug: "structure",
+      "One Control Center for everything you do digitally: yourself, your agents, and your people. Stop stacking another app for every job.",
+    Icon: SparklesIcon,
   },
   {
-    title: "Add-ons and plugins",
+    title: "Self-expanding",
     description:
-      "Install ready-made packs from the Marketplace, or ask Intelligence to help build something new. Extra tools and pages plug into the same Control Center.",
+      "Intelligence builds and extends GodMode from inside GodMode: your layout, tools, packs, and connections grow without leaving the product.",
     Icon: PuzzleIcon,
     slug: "plugin-pipeline",
   },
   {
-    title: "Custom records and actions",
+    title: "Digital You",
     description:
-      "Extensions can add their own kinds of records and buttons that feel native. Specialized workflows live beside your everyday tasks and notes.",
-    Icon: WorkflowIcon,
-    slug: "objecttype-records",
+      "Your twin: a private thinking partner and stand-in. It gets sharper as you use the platform, learning how you think and decide.",
+    Icon: UsersIcon,
+    slug: "digital-you",
   },
   {
-    title: "Share with people you trust",
+    title: "Connect anything",
     description:
-      "Grant live access to parts of your workspace so a teammate, partner, or collaborator can work in the same Control Center with you.",
+      "Wire services, APIs, hardware connectors, and custom packs into the same workspace. Automate and integrate in one home, not a separate silo.",
+    Icon: PlugIcon,
+    slug: "marketplace",
+  },
+] as const;
+
+const EXTEND_ITEMS = [
+  {
+    title: "Grow your workspace",
+    description:
+      "Start simple, then add departments, pages, and areas as life gets busier. Build it yourself, or ask Intelligence to shape it from chat.",
+    Icon: LayersIcon,
+    slug: "structure",
+  },
+  {
+    title: "Build and install packs",
+    description:
+      "Ask Intelligence to scaffold and install what you need, or grab ready-made packs from the Marketplace. Everything lands in the same Control Center.",
+    Icon: PuzzleIcon,
+    slug: "plugin-pipeline",
+  },
+  {
+    title: "Share live, not files",
+    description:
+      "Grant live access so teammates work in the same Control Center with you, without export ping-pong.",
     Icon: Share2Icon,
     slug: "shared",
+  },
+  {
+    title: "Open source at the core",
+    description:
+      "Apache 2.0. Run it yourself for free, or use Cloud when you want the browser path. You are never locked into a black box.",
+    Icon: PackageIcon,
   },
 ] as const;
 
@@ -120,56 +163,56 @@ const OS_FEATURES = [
   {
     title: "Intelligence",
     description:
-      "Your in-app guide: chat to set things up, organize work, edit the wiki, and get help across GodMode.",
+      "The platform guide that builds with you: setup, structure, wiki, plugins, and cross-cutting work from chat.",
     Icon: BrainIcon,
     slug: "intelligence",
   },
   {
     title: "Digital You",
     description:
-      "A digital twin that learns how you work and can stand in when you are busy. Separate from Intelligence, the platform guide.",
+      "Stand-in and private thinking partner. Distinct from Intelligence. Grows with Reflection and memory as you use GodMode.",
     Icon: UsersIcon,
     slug: "digital-you",
   },
   {
     title: "Agents",
     description:
-      "Organize helpers under Intelligence and Digital You. Configure models, tools, and rules so each agent has a clear job.",
+      "Specialized helpers under Intelligence for areas of your workspace. Digital You sits beside them as your twin.",
     Icon: BotIcon,
     slug: "agents",
   },
   {
     title: "Wiki and memory",
     description:
-      "A living knowledge base: notes, rules, skills, and longer-term memory so context sticks around between chats.",
+      "A living knowledge base so context sticks: notes, rules, skills, and memory that compounds over time.",
     Icon: PackageIcon,
     slug: "wiki",
   },
   {
     title: "Tasks",
     description:
-      "Boards with priorities and comments. Mark a card for auto when you want an agent to pick it up.",
+      "Boards with priorities and comments. Hand work to helpers when you want momentum.",
     Icon: WorkflowIcon,
     slug: "tasks",
   },
   {
     title: "Calendar",
     description:
-      "Your events and activity in one place. Agents can work from their own calendar view in chat.",
+      "Your schedule and activity in one place, with calendar views in chat when helpers need them.",
     Icon: CalendarDaysIcon,
     slug: "calendar",
   },
   {
     title: "Vault",
     description:
-      "A safe place for API keys and connected accounts, available from Settings and from chat when you need them.",
+      "Keys and connections in one safe place, ready for Intelligence and your tools when you need them.",
     Icon: VaultIcon,
     slug: "vault",
   },
   {
     title: "Shared",
     description:
-      "See what others have shared with you, and collaborate without exporting files back and forth.",
+      "Live collaboration with people you trust, without leaving GodMode.",
     Icon: Share2Icon,
     slug: "shared",
   },
@@ -180,14 +223,11 @@ export default function MarketingHome() {
     <Page>
       <PageHeader
         title={APP_NAME}
-        description="Your Control Center for life and work: notes, tasks, calendar, people, money tracking, and AI helpers in one place. Use GodMode Cloud in the browser from any device when you want simplicity. Or run it yourself for free. Open source either way."
-        descriptionClassName="max-w-5xl text-base leading-relaxed"
+        description="Create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Built to be the last platform stack you need."
+        descriptionClassName={marketingPageDescriptionClass}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button render={<Link to="/" />}>Open Cloud</Button>
-            <Button variant="outline" render={<Link to={`${MARKETING_BASE}/features`} />}>
-              Features
-            </Button>
             <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
               View pricing
             </Button>
@@ -203,62 +243,69 @@ export default function MarketingHome() {
             >
               Get the source
             </Button>
-            <Button
-              variant="outline"
-              render={
-                <a
-                  href="https://github.com/users/ReBoticsAI/projects/1"
-                  target="_blank"
-                  rel="noreferrer"
-                />
-              }
-            >
-              Roadmap
+            <Button variant="outline" render={<Link to={`${MARKETING_BASE}/features`} />}>
+              Features
             </Button>
           </div>
         }
       />
 
-      <Card>
+      <Card className={marketingCardClass}>
         <CardHeader>
-          <CardTitle>One place for everything</CardTitle>
-          <CardDescription>
-            GodMode is built so you are not juggling a dozen apps for the same life. Keep a
-            wiki of what you know, run projects on boards, track contacts, watch wallets and a
-            simple ledger in Bank, and lean on Intelligence when you want a guide. Digital You
-            is your twin for when you need coverage. Deeper bookkeeping-style accounting is
-            still growing. Niche hobbies and professional domains arrive as Marketplace
-            add-ons so the core stays clean.
+          <CardTitle className={marketingCardTitleClass}>The last digital home you need</CardTitle>
+          <CardDescription className={marketingCardDescriptionClass}>
+            GodMode is an open-source Control Center for everything you do digitally. Knowledge,
+            work, people, money, and agents live in one place. Intelligence expands the product
+            with you. Digital You learns how you think. Connect the services and packs you need
+            without stacking another separate tool for every job.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card>
+      <section className="flex flex-col gap-4">
+        <SectionHeading
+          badge="Why GodMode"
+          title="Built around what actually matters"
+          description="A platform that grows with you, stays open, and aims to be the last stack you adopt."
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          {PILLAR_ITEMS.map(({ title, description, Icon, ...rest }) => (
+            <FeatureCard
+              key={title}
+              title={title}
+              description={description}
+              Icon={Icon}
+              to={"slug" in rest && rest.slug ? `${MARKETING_BASE}/features/${rest.slug}` : undefined}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card className={marketingCardClass}>
         <CardHeader>
-          <CardTitle>Why Cloud</CardTitle>
-          <CardDescription>
-            GodMode Cloud is for people who want GodMode without installing or babysitting
-            software. Open a browser on your phone, laptop, or work machine and pick up where
-            you left off. We host it, keep it updated, and handle the boring ops. Prefer to
-            own every bit yourself? Self-host stays free and first-class. Developers can dig
-            into setup and architecture on GitHub.
+          <CardTitle className={marketingCardTitleClass}>Why Cloud</CardTitle>
+          <CardDescription className={marketingCardDescriptionClass}>
+            Open GodMode in a browser from any device. We host it and keep it updated so you can
+            focus on building your life and work inside the Control Center. Prefer full control?
+            Self-host for free. Open source either way.
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-wrap gap-2">
-          <Button render={<Link to="/" />}>Try Cloud</Button>
+          <Button render={<Link to="/" />}>Open Cloud</Button>
           <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
             See plans
           </Button>
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card className={marketingCardClass}>
         <CardHeader>
-          <CardTitle>What is coming next</CardTitle>
-          <CardDescription>
-            GodMode is useful today and still expanding: richer email and domains, deeper
-            money tools, robots and devices, and more ownership of AI infrastructure over
-            time. Follow the public roadmap if you like watching the build.
+          <CardTitle className={marketingCardTitleClass}>Where it is going</CardTitle>
+          <CardDescription className={marketingCardDescriptionClass}>
+            The same product keeps getting deeper: owned email and domains, fuller money and
+            accounting, robots and devices, and GodMode Inference by ReBotics over time. Niche
+            professions arrive as Marketplace packs so the core stays universal. Follow the
+            public roadmap if you want the build in the open.
           </CardDescription>
         </CardHeader>
         <CardFooter>
@@ -281,9 +328,9 @@ export default function MarketingHome() {
 
       <section className="flex flex-col gap-4">
         <SectionHeading
-          badge="Made to grow with you"
-          title="Start simple. Add depth when you need it"
-          description="You do not have to configure everything on day one. Grow your workspace layout, install add-ons when a new need appears, and share live access with people you trust."
+          badge="Self-expansion"
+          title="It grows from the inside"
+          description="You do not outgrow GodMode and migrate. Intelligence helps you extend it: layout, packs, plugins, and connections in the same Control Center."
         />
         <div className="grid gap-4 md:grid-cols-2">
           {EXTEND_ITEMS.map(({ title, description, Icon, slug }) => (
@@ -292,7 +339,7 @@ export default function MarketingHome() {
               title={title}
               description={description}
               Icon={Icon}
-              to={`${MARKETING_BASE}/features/${slug}`}
+              to={slug ? `${MARKETING_BASE}/features/${slug}` : undefined}
             />
           ))}
         </div>
@@ -303,27 +350,27 @@ export default function MarketingHome() {
       <section className="flex flex-col gap-4">
         <SectionHeading
           badge="Marketplace"
-          title="Extend GodMode with packs from us and the community"
-          description="Need a specialty workflow? Browse Official packs we curate, or Community listings from other creators. Sellers keep most of what they earn. Buying a pack is separate from your Cloud subscription."
+          title="Connect packs from us and the community"
+          description="Need a specialty workflow? Install Official packs or Community listings. Sellers keep most of what they earn. Real money checkout, no credits. Packs are separate from your Cloud subscription."
         />
 
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card>
+          <Card className={marketingCardClass}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <StoreIcon className="size-4 shrink-0 text-muted-foreground" />
+              <CardTitle className={cn("flex items-center gap-2", marketingCardTitleClass)}>
+                <StoreIcon className="size-5 shrink-0 text-muted-foreground" />
                 Community
               </CardTitle>
-              <CardDescription>
-                Buy and sell add-ons person to person. Checkout supports card, PayPal, and
-                crypto where the seller enables them. Sellers keep{" "}
+              <CardDescription className={marketingCardDescriptionClass}>
+                Buy and sell add-ons person to person. Card, PayPal, and crypto where the seller
+                enables them. Sellers keep{" "}
                 <strong className="text-foreground">90%</strong>; we take 10%.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-base text-muted-foreground">
+            <CardContent className="flex flex-col gap-2 text-base leading-relaxed text-muted-foreground">
               <p>
-                Creators connect payout methods, publish a listing, and manage what they sell.
-                Buyers pay for a real product, not platform credits.
+                Creators connect payout methods (such as Stripe), publish a listing, and get paid
+                for real products.
               </p>
             </CardContent>
             <CardFooter className="flex flex-wrap gap-2">
@@ -340,54 +387,42 @@ export default function MarketingHome() {
             </CardFooter>
           </Card>
 
-          <Card>
+          <Card className={marketingCardClass}>
             <CardHeader>
-              <CardTitle className="text-base">Official</CardTitle>
-              <CardDescription>
-                Packs we curate ourselves, free or paid. Paid Official purchases go to the
-                platform as merchant of record.
+              <CardTitle className={marketingCardTitleClass}>Official</CardTitle>
+              <CardDescription className={marketingCardDescriptionClass}>
+                Packs we curate, free or paid. Paid Official purchases go to the platform as
+                merchant of record.
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-base text-muted-foreground">
+            <CardContent className="text-base leading-relaxed text-muted-foreground">
               Cloud is where paid Official and Community checkout happens. Self-hosted installs
               can still browse and install from the Official catalog.
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={marketingCardClass}>
             <CardHeader>
-              <CardTitle className="text-base">On your own machine</CardTitle>
-              <CardDescription>
-                Self-hosters can also load private or development plugins on their own
-                computer or private server.
+              <CardTitle className={marketingCardTitleClass}>On your own machine</CardTitle>
+              <CardDescription className={marketingCardDescriptionClass}>
+                Self-hosters can load private or development plugins on their own computer or
+                private server.
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-base text-muted-foreground">
-              On GodMode Cloud we keep installs on the Marketplace path so everyone gets a
-              consistent, safer experience. Power users who want custom folders should self-host;
-              setup details are on GitHub.
+            <CardContent className="text-base leading-relaxed text-muted-foreground">
+              On GodMode Cloud, installs stay on the Marketplace path for a consistent, safer
+              experience. Custom folders are a self-host story; details live on GitHub.
             </CardContent>
           </Card>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Why this matters</CardTitle>
-            <CardDescription>
-              GodMode is meant to grow with you, not lock you into one fixed set of screens.
-              Intelligence can help you build and install add-ons. The Marketplace is how those
-              packs reach other people with clear listings, orders, and payouts.
-            </CardDescription>
-          </CardHeader>
-        </Card>
       </section>
 
       <Separator />
 
       <section className="flex flex-col gap-4">
         <SectionHeading
-          title="What you get in the Control Center"
-          description="These capabilities ship in the core product. Features pages go deeper; GitHub has the full technical docs."
+          title="Inside the Control Center"
+          description="Core capabilities that make the last-platform story real. Features pages go deeper; GitHub has the technical docs."
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {OS_FEATURES.map(({ title, description, Icon, slug }) => (
@@ -411,20 +446,20 @@ export default function MarketingHome() {
 
       <section className="flex flex-col gap-4">
         <SectionHeading
-          title="Cloud convenience, or run it yourself"
-          description="Most people who want GodMode from any device without managing installs choose Cloud. Builders and privacy maximalists can still download and self-host for free."
+          title="Cloud for convenience. Open source for freedom."
+          description="Most people who want GodMode from any device choose Cloud. Builders and privacy-first users self-host for free."
         />
         <div className="grid gap-4 md:grid-cols-2">
-          <Card>
+          <Card className={marketingCardClass}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CloudIcon className="size-4 shrink-0 text-muted-foreground" />
+              <CardTitle className={cn("flex items-center gap-2", marketingCardTitleClass)}>
+                <CloudIcon className="size-5 shrink-0 text-muted-foreground" />
                 GodMode Cloud
               </CardTitle>
-              <CardDescription>
-                Open GodMode in your browser from phone, tablet, or computer. We host and
-                update it. Choose a plan, pay with Stripe, create your account, verify email,
-                and you are in. Cloud is also where paid Marketplace checkout lives.
+              <CardDescription className={marketingCardDescriptionClass}>
+                Browser access from phone, tablet, or computer. Choose a plan, pay with Stripe,
+                create your account, verify email, and you are in. Bring your own AI keys. Cloud
+                is also where paid Marketplace checkout lives.
               </CardDescription>
             </CardHeader>
             <CardFooter className="flex flex-wrap gap-2">
@@ -437,13 +472,13 @@ export default function MarketingHome() {
               </Button>
             </CardFooter>
           </Card>
-          <Card>
+          <Card className={marketingCardClass}>
             <CardHeader>
-              <CardTitle className="text-base">Self-hosted</CardTitle>
-              <CardDescription>
+              <CardTitle className={marketingCardTitleClass}>Self-hosted</CardTitle>
+              <CardDescription className={marketingCardDescriptionClass}>
                 Free and open source (Apache 2.0). Desktop apps for Windows, macOS, and Linux,
-                or run from source if you are comfortable with that. Connect local AI models or
-                your own provider keys. Best when you want everything on hardware you control.
+                or run from source. Local models or your own provider keys. Your machine, your
+                rules.
               </CardDescription>
             </CardHeader>
             <CardFooter>
@@ -464,12 +499,12 @@ export default function MarketingHome() {
         </div>
       </section>
 
-      <Card>
+      <Card className={marketingCardClass}>
         <CardHeader>
-          <CardTitle>Ready when you are</CardTitle>
-          <CardDescription>
-            Open Cloud to sign in or start a plan. Prefer to explore first? Read features,
-            compare pricing, or email support. Technical deep-dives stay on GitHub.
+          <CardTitle className={marketingCardTitleClass}>Start in Cloud</CardTitle>
+          <CardDescription className={marketingCardDescriptionClass}>
+            Choose a Cloud plan, pay, then create your account. Explore features and pricing
+            first if you prefer. Technical deep-dives stay on GitHub.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">

@@ -16,6 +16,7 @@ import {
   ReceiptIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ModeToggle";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { APP_NAME } from "@/lib/navigation";
@@ -24,6 +25,20 @@ import { cn } from "@/lib/utils";
 import { getFeatureDoc } from "@/lib/feature-docs";
 
 export const MARKETING_BASE = "/www";
+
+/** Match feature-doc body scale (text-base), not default Card text-sm. */
+export const marketingCardClass = "text-base";
+export const marketingCardTitleClass = "text-lg font-semibold leading-snug";
+export const marketingCardDescriptionClass = "text-base leading-relaxed";
+export const marketingBadgeClass =
+  "h-7 w-fit px-3 text-sm font-medium [&_svg]:size-3.5!";
+export const marketingSectionTitleClass =
+  "text-xl font-semibold tracking-tight text-foreground";
+export const marketingSectionDescriptionClass =
+  "max-w-5xl text-base leading-relaxed text-muted-foreground";
+export const marketingPageDescriptionClass =
+  "max-w-5xl text-base leading-relaxed";
+
 
 const NAV_ITEMS = [
   { to: MARKETING_BASE, end: true, label: "Home", Icon: HomeIcon },
@@ -189,9 +204,7 @@ function MarketingHeader({ onOpenNav }: { onOpenNav?: () => void }) {
           })}
         </ol>
       </nav>
-      <Button size="sm" variant="outline" className="hidden sm:inline-flex" render={<Link to="/" />}>
-        Open Cloud
-      </Button>
+      <ModeToggle className="shrink-0" />
     </header>
   );
 }
@@ -264,7 +277,7 @@ export function MarketingProse({
       <PageHeader
         title={title}
         description={description}
-        descriptionClassName="max-w-5xl text-base leading-relaxed"
+        descriptionClassName={marketingPageDescriptionClass}
       />
       <div className="flex max-w-5xl flex-col gap-4 text-base leading-relaxed text-muted-foreground [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1 [&_strong]:text-foreground [&_ul]:my-2 [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-1.5">
         {children}

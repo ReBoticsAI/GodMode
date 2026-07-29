@@ -5,58 +5,78 @@ export default function MarketingRefund() {
   return (
     <MarketingProse
       title="Refund policy"
-      description="GodMode Cloud subscriptions and Marketplace digital goods"
+      description="Effective 2026-07-28 · Cloud and Official sales are final; Community disputes are party/processor"
     >
       <p>
-        This page covers refunds for <strong>GodMode Cloud</strong> (hosted SaaS) and the{" "}
-        <strong>Marketplace</strong> (Official and Community digital packs). Self-hosted
-        open-source software is free and is not a paid purchase.
+        This page states the refund rules for <strong>GodMode Cloud</strong> (hosted SaaS)
+        and the <strong>Marketplace</strong> (Official and Community digital packs).
+        Self-hosted open-source software, desktop apps, private hub, and Docker installs are
+        free and are not paid purchases. Operator: <strong>ReBotics AI</strong>.
+      </p>
+
+      <h2>No refunds (Cloud and Official)</h2>
+      <p>
+        <strong>
+          GodMode Cloud subscriptions and Official Marketplace sales are final. There are no
+          refunds
+        </strong>{" "}
+        and no liability for paid Cloud access or Official catalog digital goods. That
+        includes change of mind, unused time, dissatisfaction, feature gaps, outages, data
+        loss, agent behavior, security incidents, and delivered Official Marketplace items.
+      </p>
+      <p>
+        Open-source desktop and self-host options exist so you can evaluate GodMode without
+        paying. Cloud is convenience hosting only. Paying does not purchase refund rights.
+        Details and liability terms:{" "}
+        <Link to={`${MARKETING_BASE}/terms`}>Terms of Service</Link>.
       </p>
 
       <h2>GodMode Cloud</h2>
       <p>
-        All Cloud subscription sales are final. There are no refunds for change of mind,
-        unused access, or dissatisfaction with the cloud service. If you want to evaluate
-        GodMode without paying, use the free open-source / self-hosted install first.
-      </p>
-      <p>We will refund:</p>
-      <ul>
-        <li>Payment failures that still charged your payment method</li>
-        <li>Duplicate charges for the same purchase</li>
-        <li>Cases where an account was never provisioned after a successful payment</li>
-      </ul>
-      <p>
-        Plans renew until you cancel in the Stripe Customer Portal (or equivalent billing
-        portal). Canceling stops future renewals; it does not refund the current paid period.
+        Cloud subscription payments are non-refundable. Plans renew until you cancel in the
+        Stripe Customer Portal (or equivalent billing portal). Canceling stops future
+        renewals; it does not refund the current paid period.
       </p>
 
       <h2>Marketplace digital goods</h2>
       <p>
         Marketplace items are software (packs, plugins, and related digital content). Once
         payment succeeds and the item is delivered or install entitlement is granted, you
-        have usable software. There are no refunds for delivered digital goods.
+        have usable software.
+      </p>
+      <p>
+        <strong>Official</strong> catalog items are sold by the platform (revenue to ReBotics
+        AI). There are no refunds for delivered Official digital goods.
+      </p>
+      <p>
+        <strong>Community</strong> listings are buyer-to-seller with a 10% platform fee. The
+        payment goes through the payment processor. Disputes about the purchase are between
+        the two transacting parties (buyer and seller), including through the processor&apos;s
+        dispute tools where available. GodMode is not the seller of Community listings and
+        does not mediate ordinary buyer/seller disagreements.
+      </p>
+      <p>
+        <strong>Exception:</strong> if you paid but GodMode did not register the transaction
+        to grant access or deliver the purchased software, email{" "}
+        <a href="mailto:support@godmode.software">support@godmode.software</a> with details
+        (account email, approximate payment date, item, and any payment reference). We will
+        look into it. That path is for failed access provisioning only. It does not create a
+        general right to a refund for delivered Community goods, or for Cloud or Official
+        sales.
       </p>
       <p>
         Chargebacks or payment disputes after delivery may result in a permanent Marketplace
-        ban (buy and sell). See the{" "}
-        <a
-          href="https://github.com/ReBoticsAI/GodMode/blob/main/docs/MARKETPLACE_TOS.md"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Marketplace Terms
-        </a>{" "}
-        and the in-product acceptance flow.
+        ban (buy and sell). Full Marketplace terms are inline in the{" "}
+        <Link to={`${MARKETING_BASE}/terms`}>Terms of Service</Link>.
       </p>
 
-      <h2>How to request a covered refund</h2>
+      <h2>Billing questions</h2>
       <p>
-        Email{" "}
+        For billing questions, email{" "}
         <a href="mailto:support@godmode.software">support@godmode.software</a> (or use{" "}
-        <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>) with your account email,
-        approximate payment date, and what went wrong (duplicate charge, account never
-        created after payment, or similar). We use that to verify the payment and account
-        state.
+        <Link to={`${MARKETING_BASE}/contact`}>Contact</Link>) with your account email and
+        approximate payment date. Contacting support does not create a right to a refund,
+        except for the Community failed-provisioning path above.
       </p>
 
       <h2>Related</h2>

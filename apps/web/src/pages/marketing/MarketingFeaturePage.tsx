@@ -19,7 +19,7 @@ import {
 } from "@/lib/feature-docs";
 import { safeMarkdownHref } from "@/lib/safe-markdown-href";
 import { cn } from "@/lib/utils";
-import { MARKETING_BASE } from "./MarketingLayout";
+import { MARKETING_BASE, marketingPageDescriptionClass } from "./MarketingLayout";
 
 type LightboxImage = { src: string; alt: string };
 
@@ -48,7 +48,7 @@ export default function MarketingFeaturePage() {
           [doc.section, doc.location].filter(Boolean).join(" · ") ||
           doc.summary
         }
-        descriptionClassName="max-w-5xl text-base leading-relaxed"
+        descriptionClassName={marketingPageDescriptionClass}
         actions={
           <Button
             variant="outline"
