@@ -2073,7 +2073,9 @@ export const closeCodingTerminalSession = (
 /** Authenticated WS for shared PTY attach (#162). */
 export function connectCodingTerminalWs(handlers: {
   onMessage?: (msg: unknown) => void;
-  onClose?: () => void;
+  onOpen?: () => void;
+  onClose?: (ev: CloseEvent, meta: { closedByClient: boolean }) => void;
+  onError?: () => void;
 }): { send: (msg: object) => void; close: () => void } {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
@@ -2084,7 +2086,9 @@ export function connectCodingTerminalWs(handlers: {
   if (sessionToken) params.set("session", sessionToken);
   const qs = params.size ? `?${params.toString()}` : "";
   const ws = new WebSocket(`${protocol}//${host}/ws/terminal${qs}`);
+  let closedByClient = false;
 
+  ws.onopen = () => handlers.onOpen?.();
   ws.onmessage = (ev) => {
     try {
       handlers.onMessage?.(JSON.parse(String(ev.data)));
@@ -2092,7 +2096,12 @@ export function connectCodingTerminalWs(handlers: {
       /* ignore */
     }
   };
-  ws.onclose = () => handlers.onClose?.();
+  ws.onerror = () => {
+    if (!closedByClient) handlers.onError?.();
+  };
+  ws.onclose = (ev) => {
+    handlers.onClose?.(ev, { closedByClient });
+  };
 
   return {
     send: (msg) => {
@@ -2106,6 +2115,7 @@ export function connectCodingTerminalWs(handlers: {
       }
     },
     close: () => {
+      closedByClient = true;
       try {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "detach" }));
