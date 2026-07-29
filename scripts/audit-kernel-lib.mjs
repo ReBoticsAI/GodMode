@@ -463,14 +463,7 @@ export function discoverMutationRoutes(repoRoot) {
   if (fs.existsSync(bootstrap)) {
     const source = sourceFile(bootstrap);
     const constants = constMap([bootstrap]);
-    visit(source, (node) => {
-      if (
-        !ts.isNewExpression(node) ||
-        !ts.isIdentifier(node.expression) ||
-        node.expression.text !== "WebSocketServer"
-      ) return;
-      const options = node.arguments?.[0];
-      const wsPath = staticText(property(options, "path"), constants);
+    const pushWsRoute = (wsPath, node) => {
       if (wsPath?.startsWith("/")) {
         allRoutes.push({
           file: slash(path.relative(repoRoot, bootstrap)),
@@ -480,6 +473,29 @@ export function discoverMutationRoutes(repoRoot) {
           localPath: wsPath,
           fullPath: normalizePath(wsPath),
         });
+      }
+    };
+    visit(source, (node) => {
+      // Legacy: new WebSocketServer({ server, path: "/ws" })
+      if (
+        ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "WebSocketServer"
+      ) {
+        const options = node.arguments?.[0];
+        pushWsRoute(staticText(property(options, "path"), constants), node);
+        return;
+      }
+      // Current: attachWsUpgradeRouter(server, [{ path: "/ws", wss }, ...])
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "attachWsUpgradeRouter"
+      ) {
+        const routesArg = node.arguments?.[1];
+        for (const entry of staticArray(routesArg, constants)) {
+          pushWsRoute(staticText(property(entry, "path"), constants), node);
+        }
       }
     });
   }

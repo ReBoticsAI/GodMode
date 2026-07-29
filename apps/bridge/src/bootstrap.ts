@@ -69,6 +69,7 @@ import { setWikiEmbedder } from "./services/wiki-service.js";
 import { syncAdaptersFromDisk } from "./services/ai-adapters.js";
 import { attachWebSocket } from "./ws.js";
 import { attachTerminalWebSocket } from "./terminal-ws.js";
+import { attachWsUpgradeRouter } from "./ws-upgrade-router.js";
 import { EngineRegistry } from "./services/engines/registry.js";
 import { EngineReconciler } from "./services/engines/reconciler.js";
 import { startDbMaintenance } from "./services/db-maintenance.js";
@@ -451,10 +452,16 @@ pluginRuntime.setApp(app);
 pluginRuntime.mountOn(app);
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: "/ws" });
+// Multiple path-based WebSocketServers on one HTTP server race: a non-match
+// abortHandshake(400)s before the other server can accept (#210 /ws/terminal).
+const wss = new WebSocketServer({ noServer: true });
 const broadcast = attachWebSocket(wss, bus);
-const terminalWss = new WebSocketServer({ server, path: "/ws/terminal" });
+const terminalWss = new WebSocketServer({ noServer: true });
 attachTerminalWebSocket(terminalWss);
+attachWsUpgradeRouter(server, [
+  { path: "/ws", wss },
+  { path: "/ws/terminal", wss: terminalWss },
+]);
 
 await pluginRuntime.emitHook("server:beforeListen", {
   operatorTenantId,

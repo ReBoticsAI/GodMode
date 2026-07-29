@@ -324,9 +324,16 @@ export default function CodingWorkspacePage() {
                     </p>
                   )}
                   {!loading && rootEntries.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">
-                      Empty workspace
-                    </p>
+                    <div className="flex flex-col gap-1 px-2 py-2">
+                      <p className="text-xs font-medium text-foreground">
+                        Empty tenant workspace
+                      </p>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        This is the sandboxed coding root for the active tenant
+                        (not the GodMode install tree). Use + File / + Folder, or
+                        let agents scaffold here.
+                      </p>
+                    </div>
                   )}
                   {rootEntries.map((entry) => (
                     <TreeNode

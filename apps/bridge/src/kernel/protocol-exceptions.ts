@@ -433,6 +433,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "websocket-terminal",
+    methods: ["GET"],
+    pathPattern: "/ws/terminal",
+    rationale:
+      "Shared PTY Coding Terminal attach (#162); negotiated over WS, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "dm-binary-upload",
     methods: ["POST"],
     pathPattern: "/api/dm/uploads",
