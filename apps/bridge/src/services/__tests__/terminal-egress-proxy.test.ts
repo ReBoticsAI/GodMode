@@ -7,7 +7,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   attachEgressConnectHandler,
@@ -147,12 +147,17 @@ describe.skipIf(process.platform === "win32")("startTerminalEgressProxy UDS", ()
   // This host denies AF_UNIX filesystem sockets (EACCES); Linux CI covers UDS listen.
   it("denies CONNECT to non-allowlisted hosts over UDS", async () => {
     const root = tempDir("gm-egress-");
+    const egress = tempDir("gm-egress-runtime-");
     const proxy = await startTerminalEgressProxy({
       codingRoot: root,
+      egressDir: egress,
       allowlist: ["github.com"],
     });
     proxies.push(proxy);
     expect(fs.existsSync(proxy.socketPath)).toBe(true);
+    expect(proxy.hostEgressDir).toBe(resolve(egress));
+    expect(proxy.jailSocketPath.startsWith("/run/godmode-egress/")).toBe(true);
+    expect(fs.existsSync(join(root, ".godmode-egress"))).toBe(false);
 
     const response = await connectRequest(
       { path: proxy.socketPath },
@@ -165,8 +170,10 @@ describe.skipIf(process.platform === "win32")("startTerminalEgressProxy UDS", ()
 
   it("rejects non-CONNECT methods", async () => {
     const root = tempDir("gm-egress2-");
+    const egress = tempDir("gm-egress2-runtime-");
     const proxy = await startTerminalEgressProxy({
       codingRoot: root,
+      egressDir: egress,
       allowlist: ["github.com"],
     });
     proxies.push(proxy);
@@ -178,18 +185,34 @@ describe.skipIf(process.platform === "win32")("startTerminalEgressProxy UDS", ()
 
     expect(response).toMatch(/400/);
   });
+
+  it("removes legacy coding-root .godmode-egress on start", async () => {
+    const root = tempDir("gm-egress-legacy-");
+    const egress = tempDir("gm-egress-legacy-rt-");
+    const legacy = join(root, ".godmode-egress");
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(join(legacy, "tcp-to-uds.mjs"), "old\n", "utf8");
+    const proxy = await startTerminalEgressProxy({
+      codingRoot: root,
+      egressDir: egress,
+      allowlist: ["github.com"],
+    });
+    proxies.push(proxy);
+    expect(fs.existsSync(legacy)).toBe(false);
+    expect(fs.existsSync(join(egress, "tcp-to-uds.mjs"))).toBe(true);
+  });
 });
 
 describe("wrapAllowlistCommand", () => {
   it("starts the TCP-to-UDS bridge before the user command", () => {
-    const root = tempDir("gm-wrap-");
-    ensureEgressBridgeScript(root);
+    const egress = tempDir("gm-wrap-");
+    ensureEgressBridgeScript(egress);
     const wrapped = wrapAllowlistCommand({
-      codingRoot: root,
-      socketRel: ".godmode-egress/proxy.sock",
+      jailSocketPath: "/run/godmode-egress/proxy.sock",
       command: "echo hi",
     });
     expect(wrapped).toContain("tcp-to-uds.mjs");
+    expect(wrapped).toContain("/run/godmode-egress/proxy.sock");
     expect(wrapped).toContain("echo hi");
     expect(wrapped).toContain("command -v node");
     expect(wrapped).toContain("/usr/local/bin/node");
