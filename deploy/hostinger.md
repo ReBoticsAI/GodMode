@@ -20,18 +20,31 @@ deploy tree).
 6. Start with `deploy/docker-compose.prod.yml` (or SaaS compose) — never expose
    Bridge port `3847` on the public internet.
 
-## 2. Cloudflare edge
+## 2. Cloudflare edge (`app.godmode.software`)
 
-1. Point the app hostname A/AAAA (orange cloud) at the Hostinger VPS public IP.
-2. SSL/TLS mode: **Full (strict)**.
-3. Enable WAF managed rules. **Bot Fight Mode is optional for v1** on Cloudflare Free
+Full operator checklist: [`deploy/cloudflare-app-edge.md`](cloudflare-app-edge.md)
+(issue #195). Summary:
+
+1. Orange-cloud **A/AAAA** for `app` only (not apex app routes, not `login.`).
+2. SSL/TLS mode: **Full (strict)** with Origin CA (or Let’s Encrypt) on origin `:443`.
+3. WAF managed rules on. **Bot Fight Mode is optional for v1** on Cloudflare Free
    (pay-first signup already gates tenants); if you enable it, verify Stripe webhooks
    and uptime checks still succeed.
 4. Optional: edge rate limits on `/api/auth/*` and checkout paths.
-5. Install a **Cloudflare Origin CA** certificate (or Let’s Encrypt) on the Hostinger
-   nginx/container so Full (strict) works.
+
+Apex / `www` stay on Cloudflare Pages (#196). Public NS cutover is #200.
 
 ## 3. Origin firewall (`ufw`)
+
+Prefer the script (SSH IP-restricted; never opens `:3847`):
+
+```bash
+sudo ADMIN_SSH_IP=YOUR.ADMIN.IP ./deploy/ufw-origin.sh
+# Optional: Cloudflare IP ranges only for 80/443
+sudo CLOUDFLARE_ONLY=1 ADMIN_SSH_IP=YOUR.ADMIN.IP ./deploy/ufw-origin.sh
+```
+
+Manual equivalent:
 
 ```bash
 ufw default deny incoming
@@ -47,8 +60,9 @@ Never publish `3847` publicly. SSH should be IP-restricted.
 ## 4. Client IP for rate limits
 
 Bridge trusts `CF-Connecting-IP` then `X-Forwarded-For` (see
-`apps/bridge/src/services/auth/rate-limit.ts`). Configure nginx `real_ip` from
-Cloudflare ranges (commented example in `deploy/nginx.conf`).
+`apps/bridge/src/services/auth/rate-limit.ts`). Production nginx includes
+`deploy/cloudflare-realip.conf` (refresh via
+`node deploy/scripts/refresh-cloudflare-realip.mjs`).
 
 ## 5. Cookies and CSRF
 
@@ -98,7 +112,7 @@ GodMode does **not** use external APM (no Sentry). Prefer first-party signals:
 - Docker / Bridge **JSON request logs** on stdout (Hostinger `docker logs`)
 - Warn/error rows persisted to `core.sqlite` (`platform_request_log`); API
   `GET /api/admin/observability/requests` (soft-capped at ~5k newest rows)
-- External uptime check against `https://<cloudflare-host>/api/health` (not the raw VPS IP)
+- External uptime check against `https://app.godmode.software/api/health` (not the raw VPS IP)
 
 ## 9. Marketing / Stripe business URL
 
