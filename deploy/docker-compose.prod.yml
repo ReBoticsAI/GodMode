@@ -15,6 +15,8 @@ services:
   godmode:
     image: ${GODMODE_IMAGE:?Set GODMODE_IMAGE to an immutable ghcr.io image digest}
     ports:
+      # HTTP to container nginx. For Cloudflare Full (strict), terminate TLS on the
+      # host (or publish 443 with Origin CA) per deploy/cloudflare-app-edge.md.
       - "80:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"

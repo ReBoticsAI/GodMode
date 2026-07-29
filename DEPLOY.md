@@ -217,8 +217,8 @@ Some domain packs require a **local connector** on the user's machine. See `apps
 Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 
 - Ubuntu 22.04+, Docker + Compose plugin (not shared PHP hosting)
-- Cloudflare orange-cloud → VPS IP; SSL **Full (strict)**; WAF enabled
-- Firewall: SSH IP-restricted; 80/443 only; **never** publish Bridge `3847`
+- Cloudflare orange-cloud for `app.godmode.software` → VPS IP; SSL **Full (strict)**; WAF enabled ([deploy/cloudflare-app-edge.md](deploy/cloudflare-app-edge.md))
+- Firewall: SSH IP-restricted; 80/443 only; **never** publish Bridge `3847` (`deploy/ufw-origin.sh`)
 - `deploy/.env.production` with real secrets (never commit)
 - Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
 - Cron backups via `scripts/backup/snapshot-platform.mjs` + `BACKUP_S3_*`

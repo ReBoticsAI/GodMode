@@ -34,6 +34,7 @@ COPY --from=build /app/packages packages/
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY deploy/cloudflare-realip.conf /etc/nginx/cloudflare-realip.conf
 ENV NODE_ENV=production
 ENV GODMODE_VERSION=${GODMODE_VERSION}
 ENV GODMODE_COMMIT=${GODMODE_COMMIT}
