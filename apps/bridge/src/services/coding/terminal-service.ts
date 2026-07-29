@@ -84,7 +84,8 @@ export async function runTerminal(
           command,
           net: netMode,
           proxyUrl: proxy?.jailProxyUrl,
-          socketRel: proxy?.socketRel,
+          jailSocketPath: proxy?.jailSocketPath,
+          hostEgressDir: proxy?.hostEgressDir,
         });
         proc = spawn("bwrap", bwrapArgs, {
           cwd: codingRoot,

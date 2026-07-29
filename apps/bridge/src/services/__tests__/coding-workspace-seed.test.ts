@@ -60,6 +60,18 @@ describe("seedCodingWorkspaceStarter", () => {
     expect(seedCodingWorkspaceStarter(root)).toBe(false);
     expect(existsSync(join(root, CODING_STARTER_FILENAME))).toBe(false);
   });
+
+  it("seeds when only legacy .godmode-egress is present and removes it", () => {
+    const root = tempDir("gm-coding-seed-egress-");
+    const legacy = join(root, ".godmode-egress");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(join(legacy, "tcp-to-uds.mjs"), "old\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(true);
+    expect(existsSync(legacy)).toBe(false);
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toBe(
+      CODING_STARTER_MARKDOWN
+    );
+  });
 });
 
 describe("resolveCodingRoot seeds empty hub tenants", () => {
@@ -94,5 +106,29 @@ describe("resolveCodingRoot seeds empty hub tenants", () => {
       isolatedDeployment: true,
     });
     expect(existsSync(join(tenantRoot, CODING_STARTER_FILENAME))).toBe(false);
+  });
+
+  it("hides legacy .godmode-egress from listDir after ensure", () => {
+    const workspaces = tempDir("gm-coding-seed-ws-");
+    const tenantRoot = join(workspaces, "tenant-egress");
+    mkdirSync(join(tenantRoot, ".godmode-egress"), { recursive: true });
+    writeFileSync(
+      join(tenantRoot, ".godmode-egress", "tcp-to-uds.mjs"),
+      "x\n",
+      "utf8"
+    );
+    resolveCodingRoot({
+      tenantId: "tenant-egress",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(existsSync(join(tenantRoot, ".godmode-egress"))).toBe(false);
+    const listed = listDir({
+      path: ".",
+      tenantId: "tenant-egress",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(listed.entries.map((e) => e.name)).toEqual([CODING_STARTER_FILENAME]);
   });
 });

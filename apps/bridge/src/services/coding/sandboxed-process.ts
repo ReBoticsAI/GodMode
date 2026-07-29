@@ -58,10 +58,11 @@ export type RunSandboxedArgvOpts = {
   abortSignal?: AbortSignal;
   onOutput?: (chunk: { stream: "stdout" | "stderr"; text: string }) => void;
   /**
-   * Allowlist-only: jail proxy URL + UDS rel (required when net=allowlist).
+   * Allowlist-only: jail proxy URL + host egress bind (required when net=allowlist).
    */
   proxyUrl?: string;
-  socketRel?: string;
+  jailSocketPath?: string;
+  hostEgressDir?: string;
 };
 
 function resolvePaths(opts: RunSandboxedArgvOpts): {
@@ -147,7 +148,8 @@ export function runSandboxedArgv(
         command,
         net,
         proxyUrl: opts.proxyUrl,
-        socketRel: opts.socketRel,
+        jailSocketPath: opts.jailSocketPath,
+        hostEgressDir: opts.hostEgressDir,
       });
       proc = spawn("bwrap", bwrapArgs, {
         cwd: codingRoot,
@@ -245,7 +247,8 @@ export function runSandboxedArgvSync(
       command,
       net,
       proxyUrl: opts.proxyUrl,
-      socketRel: opts.socketRel,
+      jailSocketPath: opts.jailSocketPath,
+      hostEgressDir: opts.hostEgressDir,
     });
     const res = spawnSync("bwrap", bwrapArgs, {
       cwd: codingRoot,
