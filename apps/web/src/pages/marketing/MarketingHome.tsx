@@ -333,13 +333,13 @@ export default function MarketingHome() {
           description="You do not outgrow GodMode and migrate. Intelligence helps you extend it: layout, packs, plugins, and connections in the same Control Center."
         />
         <div className="grid gap-4 md:grid-cols-2">
-          {EXTEND_ITEMS.map(({ title, description, Icon, slug }) => (
+          {EXTEND_ITEMS.map(({ title, description, Icon, ...rest }) => (
             <FeatureCard
               key={title}
               title={title}
               description={description}
               Icon={Icon}
-              to={slug ? `${MARKETING_BASE}/features/${slug}` : undefined}
+              to={"slug" in rest && rest.slug ? `${MARKETING_BASE}/features/${rest.slug}` : undefined}
             />
           ))}
         </div>
