@@ -79,6 +79,9 @@ artifacts/
 **/from_sc.txt
 **/to_sc.txt
 
+# Private operator positioning / vision (not part of OSS core; keep local or in operator pack)
+docs/vision.md
+
 # Local operator AI pack (clone from godmode-operator-pack; never commit to OSS core)
 apps/bridge/data/ai/rules/
 apps/bridge/data/ai/skills/
