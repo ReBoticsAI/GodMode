@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildBubblewrapArgs,
@@ -67,15 +67,17 @@ describe("buildBubblewrapArgs", () => {
     expect(args).not.toContain("--unshare-net");
   });
 
-  it("allowlist uses --unshare-net and forces jail proxy env", () => {
+  it("allowlist uses --unshare-net, binds host egress, and forces jail proxy env", () => {
     const root = tempDir("gm-bwrap-allow-");
+    const egress = tempDir("gm-bwrap-egress-");
     const args = buildBubblewrapArgs({
       codingRoot: root,
       cwd: root,
       command: "true",
       net: "allowlist",
       proxyUrl: "http://127.0.0.1:18080",
-      socketRel: ".godmode-egress/proxy.sock",
+      jailSocketPath: "/run/godmode-egress/proxy.sock",
+      hostEgressDir: egress,
       wrappedCommand: "echo wrapped",
     });
     expect(args).toContain("--unshare-net");
@@ -83,10 +85,14 @@ describe("buildBubblewrapArgs", () => {
     expect(httpsIdx).toBeGreaterThan(0);
     expect(args[httpsIdx + 1]).toBe("http://127.0.0.1:18080");
     expect(args).toContain("npm_config_https_proxy");
+    expect(args).toContain("/run/godmode-egress");
+    const egressBind = args.indexOf(resolve(egress));
+    expect(egressBind).toBeGreaterThan(0);
+    expect(args[egressBind + 1]).toBe("/run/godmode-egress");
     expect(args.slice(-3)).toEqual(["/bin/sh", "-c", "echo wrapped"]);
   });
 
-  it("allowlist without proxyUrl/socketRel fails closed", () => {
+  it("allowlist without proxyUrl/jailSocketPath/hostEgressDir fails closed", () => {
     const root = tempDir("gm-bwrap-allow-miss-");
     expect(() =>
       buildBubblewrapArgs({
@@ -95,7 +101,7 @@ describe("buildBubblewrapArgs", () => {
         command: "true",
         net: "allowlist",
       })
-    ).toThrow(/proxyUrl and socketRel/i);
+    ).toThrow(/proxyUrl, jailSocketPath, and hostEgressDir/i);
   });
 
   it("rejects cwd outside coding root", () => {

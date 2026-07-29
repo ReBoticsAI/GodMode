@@ -165,7 +165,8 @@ async function spawnSandboxedPty(opts: {
   cols: number;
   rows: number;
   proxyUrl?: string;
-  socketRel?: string;
+  jailSocketPath?: string;
+  hostEgressDir?: string;
   env: NodeJS.ProcessEnv;
 }): Promise<PtyHandle> {
   const pty = await loadPty();
@@ -175,7 +176,8 @@ async function spawnSandboxedPty(opts: {
     net: opts.net,
     command: opts.shellCmd,
     proxyUrl: opts.proxyUrl,
-    socketRel: opts.socketRel,
+    jailSocketPath: opts.jailSocketPath,
+    hostEgressDir: opts.hostEgressDir,
   });
   const proc = pty.spawn("bwrap", bwrapArgs, {
     name: "xterm-256color",
@@ -299,7 +301,8 @@ export async function createTerminalSession(opts: {
         cols,
         rows,
         proxyUrl: proxy?.jailProxyUrl,
-        socketRel: proxy?.socketRel,
+        jailSocketPath: proxy?.jailSocketPath,
+        hostEgressDir: proxy?.hostEgressDir,
         env,
       });
     } else {

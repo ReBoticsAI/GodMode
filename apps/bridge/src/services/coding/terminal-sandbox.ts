@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { config } from "../../config.js";
 import {
+  JAIL_EGRESS_MOUNT,
   resolveEgressAllowlist,
   wrapAllowlistCommand,
 } from "./terminal-egress-proxy.js";
@@ -138,8 +139,10 @@ export function buildBubblewrapArgs(opts: {
   command: string;
   /** Jail-facing proxy URL (http://127.0.0.1:PORT) when net=allowlist. */
   proxyUrl?: string;
-  /** Relative UDS path under coding root when net=allowlist. */
-  socketRel?: string;
+  /** Absolute UDS path inside the jail when net=allowlist. */
+  jailSocketPath?: string;
+  /** Host egress directory bind-mounted at JAIL_EGRESS_MOUNT. */
+  hostEgressDir?: string;
   /** Pre-wrapped allowlist command (bridge + user cmd); if omitted, wraps here. */
   wrappedCommand?: string;
 }): string[] {
@@ -152,10 +155,11 @@ export function buildBubblewrapArgs(opts: {
   const net = codingTerminalNetPolicy({ net: opts.net });
   if (net === "allowlist") {
     const url = String(opts.proxyUrl ?? "").trim();
-    const sock = String(opts.socketRel ?? "").trim();
-    if (!url || !sock) {
+    const sock = String(opts.jailSocketPath ?? "").trim();
+    const egressHost = String(opts.hostEgressDir ?? "").trim();
+    if (!url || !sock || !egressHost) {
       throw new Error(
-        "CODING_TERMINAL_NET=allowlist requires proxyUrl and socketRel from the Bridge UDS egress proxy"
+        "CODING_TERMINAL_NET=allowlist requires proxyUrl, jailSocketPath, and hostEgressDir from the Bridge UDS egress proxy"
       );
     }
   }
@@ -194,7 +198,15 @@ export function buildBubblewrapArgs(opts: {
     "/tmp",
     "--bind",
     codingRoot,
-    codingRoot,
+    codingRoot
+  );
+
+  if (net === "allowlist" && opts.hostEgressDir?.trim()) {
+    const hostEgressDir = path.resolve(opts.hostEgressDir.trim());
+    args.push("--bind", hostEgressDir, JAIL_EGRESS_MOUNT);
+  }
+
+  args.push(
     "--chdir",
     cwd,
     "--clearenv",
@@ -213,7 +225,7 @@ export function buildBubblewrapArgs(opts: {
   );
 
   let command = opts.command;
-  if (net === "allowlist" && opts.proxyUrl && opts.socketRel) {
+  if (net === "allowlist" && opts.proxyUrl && opts.jailSocketPath) {
     const proxyUrl = opts.proxyUrl.trim();
     for (const key of [
       "HTTP_PROXY",
@@ -232,8 +244,7 @@ export function buildBubblewrapArgs(opts: {
     command =
       opts.wrappedCommand ??
       wrapAllowlistCommand({
-        codingRoot,
-        socketRel: opts.socketRel,
+        jailSocketPath: opts.jailSocketPath,
         command: opts.command,
       });
   }
