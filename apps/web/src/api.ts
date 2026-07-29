@@ -2070,24 +2070,6 @@ export const closeCodingTerminalSession = (
     { method: "DELETE" }
   );
 
-export const readCodingTerminalSession = (
-  sessionId: string,
-  opts?: { sinceOffset?: number; maxChars?: number; agentId?: string }
-) => {
-  const extra: Record<string, string> = {};
-  if (opts?.sinceOffset != null) extra.sinceOffset = String(opts.sinceOffset);
-  if (opts?.maxChars != null) extra.maxChars = String(opts.maxChars);
-  return api<{
-    sessionId: string;
-    data: string;
-    offset: number;
-    running: boolean;
-    exitCode: number | null;
-  }>(
-    `/ai/coding/terminal/sessions/${encodeURIComponent(sessionId)}${codingQs(opts?.agentId, extra)}`
-  );
-};
-
 /** Authenticated WS for shared PTY attach (#162). */
 export function connectCodingTerminalWs(handlers: {
   onMessage?: (msg: unknown) => void;

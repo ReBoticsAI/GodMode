@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Coding Terminal blank PTY (#210)** - route `/ws` and `/ws/terminal` through
+  a single upgrade dispatcher so the main WebSocket server no longer
+  `abortHandshake(400)`s terminal attach; nginx proxies `/ws*` without path rewrite
 - **Hardened plugin CSP (#145)** - drop `'unsafe-eval'` from production
   `script-src`; plugin web bundles must precompile validators (see DEPLOY.md)
 - **Plugin UI under production CSP** - allowlist the Vite import-map sha256 at
