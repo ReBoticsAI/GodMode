@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../config.js";
 import { ensureTenantWorkspaceDir } from "../personal-os-seed.js";
-import { seedCodingWorkspaceStarter } from "./coding-workspace-seed.js";
+import {
+  isCodingWorkspaceHiddenName,
+  seedCodingWorkspaceStarter,
+} from "./coding-workspace-seed.js";
 import { runSandboxedArgv } from "./sandboxed-process.js";
 import { assertDeleteAllowed } from "../authority/delete-authority.js";
 
@@ -245,7 +248,7 @@ export function listDir(opts: {
   const entries: Array<{ name: string; type: "file" | "dir" }> = [];
   const walk = (dir: string, prefix: string) => {
     for (const name of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (name.name === "node_modules" || name.name === ".git") continue;
+      if (isCodingWorkspaceHiddenName(name.name)) continue;
       const relPath = prefix ? `${prefix}/${name.name}` : name.name;
       entries.push({ name: relPath, type: name.isDirectory() ? "dir" : "file" });
       if (opts.recursive && name.isDirectory()) {
@@ -278,7 +281,7 @@ export function globFiles(opts: {
   const matches: string[] = [];
   const walk = (dir: string, prefix: string) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (ent.name === "node_modules" || ent.name === ".git") continue;
+      if (isCodingWorkspaceHiddenName(ent.name)) continue;
       const rel = prefix ? `${prefix}/${ent.name}` : ent.name;
       const abs = path.join(dir, ent.name);
       if (ent.isDirectory()) walk(abs, rel);
@@ -322,7 +325,7 @@ function grepNode(opts: {
   else {
     const visit = (dir: string, prefix: string) => {
       for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (ent.name === "node_modules" || ent.name === ".git") continue;
+        if (isCodingWorkspaceHiddenName(ent.name)) continue;
         const rel = prefix ? `${prefix}/${ent.name}` : ent.name;
         const abs = path.join(dir, ent.name);
         if (ent.isDirectory()) visit(abs, rel);
