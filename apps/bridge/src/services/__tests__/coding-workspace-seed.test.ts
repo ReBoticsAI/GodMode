@@ -1,0 +1,98 @@
+/**
+ * Starter hello.md for empty tenant coding roots.
+ */
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  CODING_STARTER_FILENAME,
+  CODING_STARTER_MARKDOWN,
+  seedCodingWorkspaceStarter,
+} from "../coding/coding-workspace-seed.js";
+import { listDir, resolveCodingRoot } from "../coding/fs-tools.js";
+
+const temps: string[] = [];
+
+afterEach(() => {
+  while (temps.length) {
+    rmSync(temps.pop()!, { recursive: true, force: true });
+  }
+});
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
+
+describe("seedCodingWorkspaceStarter", () => {
+  it("writes hello.md into an empty directory once", () => {
+    const root = tempDir("gm-coding-seed-");
+    expect(seedCodingWorkspaceStarter(root)).toBe(true);
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toBe(
+      CODING_STARTER_MARKDOWN
+    );
+    expect(seedCodingWorkspaceStarter(root)).toBe(false);
+    expect(readdirSync(root)).toEqual([CODING_STARTER_FILENAME]);
+  });
+
+  it("does not overwrite an existing hello.md", () => {
+    const root = tempDir("gm-coding-seed-");
+    writeFileSync(join(root, CODING_STARTER_FILENAME), "keep me\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(false);
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toBe(
+      "keep me\n"
+    );
+  });
+
+  it("does not seed when the directory already has other files", () => {
+    const root = tempDir("gm-coding-seed-");
+    writeFileSync(join(root, "notes.txt"), "x\n", "utf8");
+    expect(seedCodingWorkspaceStarter(root)).toBe(false);
+    expect(existsSync(join(root, CODING_STARTER_FILENAME))).toBe(false);
+  });
+});
+
+describe("resolveCodingRoot seeds empty hub tenants", () => {
+  it("creates hello.md when an isolated tenant root is first resolved", () => {
+    const workspaces = tempDir("gm-coding-seed-ws-");
+    const root = resolveCodingRoot({
+      tenantId: "tenant-new",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(root).toBe(join(workspaces, "tenant-new"));
+    expect(readFileSync(join(root, CODING_STARTER_FILENAME), "utf8")).toContain(
+      "sandboxed coding root"
+    );
+    const listed = listDir({
+      path: ".",
+      tenantId: "tenant-new",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(listed.entries.map((e) => e.name)).toEqual([CODING_STARTER_FILENAME]);
+  });
+
+  it("does not reseed a non-empty tenant root without hello.md", () => {
+    const workspaces = tempDir("gm-coding-seed-ws-");
+    const tenantRoot = join(workspaces, "tenant-used");
+    mkdirSync(tenantRoot, { recursive: true });
+    writeFileSync(join(tenantRoot, "project.ts"), "export {}\n", "utf8");
+    resolveCodingRoot({
+      tenantId: "tenant-used",
+      tenantWorkspacesDir: workspaces,
+      isolatedDeployment: true,
+    });
+    expect(existsSync(join(tenantRoot, CODING_STARTER_FILENAME))).toBe(false);
+  });
+});

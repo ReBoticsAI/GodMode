@@ -8,6 +8,7 @@ import {
   syncPersonalBootstrapKnowledge,
   repairPersonalTenantDefaults,
 } from "./knowledge-store.js";
+import { seedCodingWorkspaceStarter } from "./coding/coding-workspace-seed.js";
 
 /**
  * Personal-OS bootstrap for new user workspaces (not operator Trading plugins).
@@ -28,6 +29,7 @@ export function seedPersonalOsForNewTenant(db: AppDatabase): void {
 export function ensureTenantWorkspaceDir(tenantId: string): string {
   const dir = tenantWorkspaceDir(tenantId);
   fs.mkdirSync(dir, { recursive: true });
+  seedCodingWorkspaceStarter(dir);
   return dir;
 }
 

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../config.js";
 import { ensureTenantWorkspaceDir } from "../personal-os-seed.js";
+import { seedCodingWorkspaceStarter } from "./coding-workspace-seed.js";
 import { runSandboxedArgv } from "./sandboxed-process.js";
 import { assertDeleteAllowed } from "../authority/delete-authority.js";
 
@@ -43,6 +44,7 @@ function tenantWorkspaceRoot(tenantId: string, opts?: FsRootOpts): string {
   if (opts?.tenantWorkspacesDir?.trim()) {
     const dir = path.join(path.resolve(opts.tenantWorkspacesDir.trim()), id);
     fs.mkdirSync(dir, { recursive: true });
+    seedCodingWorkspaceStarter(dir);
     return path.resolve(dir);
   }
   return path.resolve(ensureTenantWorkspaceDir(id));

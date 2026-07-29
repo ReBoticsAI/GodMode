@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Coding Files starter `hello.md`** - empty hub/SaaS tenant coding roots get
+  a one-time sandboxed-workspace welcome file on first ensure/list so Files is
+  not blank for new tenants (never overwrites existing files)
 - **Platform analytics DuckDB (#140)** - core `TimeseriesStore` is a thin
   wrapper over per-tenant `analytics.duckdb` for platform/plugin telemetry
   only; Sierra SC backfill/rollup removed from Bridge boot
