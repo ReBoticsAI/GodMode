@@ -38,6 +38,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/agent-pause-authority.test.ts",
       "apps/bridge/src/services/__tests__/coding-terminal-route.test.ts",
       "apps/bridge/src/services/__tests__/terminal-session-manager.test.ts",
+      "apps/bridge/src/services/__tests__/ws-upgrade-router.test.ts",
       "apps/bridge/src/services/__tests__/ephemeral-build.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-lib.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-egress-network.test.ts",

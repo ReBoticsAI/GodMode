@@ -52,7 +52,7 @@ function proxy(req, res) {
 }
 
 const server = createServer((req, res) => {
-  if (req.url?.startsWith("/api/") || req.url === "/ws") return proxy(req, res);
+  if (req.url?.startsWith("/api/") || req.url?.startsWith("/ws")) return proxy(req, res);
   const pathname = decodeURIComponent(new URL(req.url ?? "/", "http://localhost").pathname);
   const candidate = path.resolve(webRoot, `.${pathname}`);
   let file = candidate.startsWith(`${webRoot}${path.sep}`) ? candidate : path.join(webRoot, "index.html");
