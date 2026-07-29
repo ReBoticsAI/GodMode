@@ -11,11 +11,25 @@ import {
 
 export const CODING_STARTER_FILENAME = "hello.md";
 
-/** Names that must not appear in user-facing Files listings. */
+/**
+ * Names that must not appear in user-facing Files listings and do not count
+ * as user content when deciding whether to seed `hello.md`.
+ *
+ * Includes Bridge internals (egress plumbing) and common jail/shell noise
+ * that terminal sessions create under HOME=coding-root (e.g. `.bash_history`).
+ */
 export const CODING_WORKSPACE_HIDDEN_NAMES = new Set([
   "node_modules",
   ".git",
   EGRESS_DIR_NAME,
+  ".bash_history",
+  ".ash_history",
+  ".zsh_history",
+  ".bashrc",
+  ".bash_logout",
+  ".profile",
+  ".zshrc",
+  ".zprofile",
 ]);
 
 export function isCodingWorkspaceHiddenName(name: string): boolean {
@@ -34,9 +48,9 @@ export const CODING_STARTER_MARKDOWN = [
 ].join("\n");
 
 /**
- * If `dir` exists, is empty (ignoring internal Bridge dirs), and has no starter
- * file, write `hello.md`. Never overwrites an existing file. Safe to call on
- * every ensure/list.
+ * If `dir` exists, is empty (ignoring Bridge internals and shell/jail noise),
+ * and has no starter file, write `hello.md`. Never overwrites an existing file.
+ * Safe to call on every ensure/list.
  *
  * Also removes legacy coding-root `.godmode-egress` left by older Bridge builds.
  *
