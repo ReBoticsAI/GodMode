@@ -15,10 +15,15 @@ deploy tree).
 2. Install Docker Engine + Compose plugin.
 3. Clone or sync this repo; use digest-pinned `GODMODE_IMAGE` from a signed release.
 4. Copy `deploy/.env.production.example` → `deploy/.env.production` and set public
-   `https://` URLs (`WEB_PUBLIC_URL`, `AUTH_PUBLIC_URL`, `WEB_ORIGIN`).
+   `https://` URLs (`WEB_PUBLIC_URL`, `AUTH_PUBLIC_URL`, `WEB_ORIGIN`) plus a
+   digest-pinned `GODMODE_IMAGE`.
 5. Put `PLATFORM_DATA_DIR` on a durable volume sized for SQLite growth + local backups.
-6. Start with `deploy/docker-compose.prod.yml` (or SaaS compose) — never expose
-   Bridge port `3847` on the public internet.
+6. Start with `deploy/docker-compose.prod.yml` using `--env-file .env.production`
+   so Compose can interpolate `GODMODE_IMAGE` (or `ln -sfn .env.production .env`).
+   Never expose Bridge port `3847` on the public internet.
+7. If you enable Cloudflare-only `ufw` (`CLOUDFLARE_ONLY=1`), publish the container
+   on loopback only and terminate HTTP(S) with host nginx/Caddy. Docker's published
+   `0.0.0.0` ports bypass UFW unless you do this.
 
 ## 2. Cloudflare edge (`app.godmode.software`)
 
