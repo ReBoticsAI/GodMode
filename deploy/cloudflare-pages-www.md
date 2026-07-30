@@ -11,20 +11,25 @@ is authoritative (#200).
 | Repository | `ReBoticsAI/GodMode` |
 | Production branch | `main` |
 | Framework preset | None (or Vite) |
-| Build command | `npm ci && npm run build:packages && npm run build -w @godmode/web` |
+| Build command | `npm ci --ignore-scripts && npm run build:packages && npm run build -w @godmode/web` |
 | Build output directory | `apps/web/dist` |
 | Root directory | `/` (repo root) |
 | Node version | `22` (Pages env `NODE_VERSION=22`) |
 
-Required Pages env (Production):
+Required Pages env (Production and Preview):
 
 ```text
 NODE_VERSION=22
 NPM_CONFIG_IGNORE_SCRIPTS=true
 ```
 
-`NPM_CONFIG_IGNORE_SCRIPTS` is required so monorepo `npm ci` does not try to
-compile native addons such as `node-pty` (bridge) on the Pages Linux builder.
+Prefer baking `--ignore-scripts` into the build command so Preview builds still
+work when Preview env vars are unset (Pages Production and Preview env are
+separate).
+
+`NPM_CONFIG_IGNORE_SCRIPTS` / `--ignore-scripts` is required so monorepo `npm ci`
+does not try to compile native addons such as `node-pty` (bridge) on the Pages
+Linux builder.
 
 `build:packages` is required after ignore-scripts so workspace TypeScript packages
 (`kernel`, `flow-core`, `plugin-api`, `plugin-host`) emit `dist/` before `@godmode/web`
