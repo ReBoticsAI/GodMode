@@ -16,6 +16,7 @@ import {
   marketingCardTitleClass,
   marketingPageDescriptionClass,
 } from "./MarketingLayout";
+import { CLOUD_APP_HOME } from "./cloudAppUrl";
 
 export default function MarketingPricing() {
   return (
@@ -72,7 +73,7 @@ export default function MarketingPricing() {
             </p>
           </CardContent>
           <CardFooter>
-            <Button render={<Link to="/" />}>Start Cloud signup</Button>
+            <Button render={<a href={CLOUD_APP_HOME} />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
 
@@ -90,7 +91,7 @@ export default function MarketingPricing() {
             </p>
           </CardContent>
           <CardFooter>
-            <Button render={<Link to="/" />}>Start Cloud signup</Button>
+            <Button render={<a href={CLOUD_APP_HOME} />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
       </div>
