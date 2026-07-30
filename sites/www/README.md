@@ -25,14 +25,14 @@ Open [http://127.0.0.1:5173/www](http://127.0.0.1:5173/www) (port may vary).
 | `/www/contact` | Contact |
 | `/www/refund` | Refund policy |
 
-**Open Cloud** links to `/` (AuthGate / SaaS pay-first signup).
+**Open Cloud** links to `https://app.godmode.software` (override with
+`VITE_CLOUD_APP_ORIGIN`).
 
-## Production (Cloudflare Pages / www host)
+## Production (Cloudflare Pages)
 
-Prefer pointing `www` at the same GodMode web origin and serving `/www` as the
-public site (or rewrite `/` → `/www` on the Pages/hosting layer). Marketing UI lives
-in `apps/web`; this folder is operator documentation only.
+Connect `ReBoticsAI/GodMode` to Cloudflare Pages and auto-deploy from `main`.
+Operator runbook: [`deploy/cloudflare-pages-www.md`](../../deploy/cloudflare-pages-www.md).
 
-Set Stripe Dashboard → Business website to the live public URL (e.g.
-`https://www.example.com/www` or a rewrite to `/www`), and document it as
+Custom domains `godmode.software` / `www` attach after DNS cutover (#200). Until
+then, use the Pages `*.pages.dev` hostname for Stripe business website and
 `BUSINESS_WEBSITE_URL`.

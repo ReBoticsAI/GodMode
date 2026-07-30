@@ -40,6 +40,7 @@ import {
   marketingSectionTitleClass,
 } from "./MarketingLayout";
 import { cn } from "@/lib/utils";
+import { CLOUD_APP_HOME } from "./cloudAppUrl";
 
 function SectionHeading({
   title,
@@ -227,7 +228,7 @@ export default function MarketingHome() {
         descriptionClassName={marketingPageDescriptionClass}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button render={<Link to="/" />}>Open Cloud</Button>
+            <Button render={<a href={CLOUD_APP_HOME} />}>Open Cloud</Button>
             <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
               View pricing
             </Button>
@@ -291,7 +292,7 @@ export default function MarketingHome() {
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-wrap gap-2">
-          <Button render={<Link to="/" />}>Open Cloud</Button>
+          <Button render={<a href={CLOUD_APP_HOME} />}>Open Cloud</Button>
           <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
             See plans
           </Button>
@@ -508,7 +509,7 @@ export default function MarketingHome() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button render={<Link to="/" />}>Open Cloud</Button>
+          <Button render={<a href={CLOUD_APP_HOME} />}>Open Cloud</Button>
           <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
             Pricing
           </Button>
