@@ -50,16 +50,22 @@ Self-hosted family/team hubs use `private_hub` and skip the paywall.
    - `STRIPE_SECRET_KEY`, `STRIPE_SAAS_PRICE_MONTHLY`, `STRIPE_SAAS_PRICE_YEARLY`,
      `STRIPE_WEBHOOK_SECRET` (optional legacy `STRIPE_SAAS_PRICE_ID` fallback)
    - Keep `AUTH_ALLOW_SIGNUP=false` — SaaS signup is unlocked only after Checkout
-2. Resolve the desired stable release to its signed immutable GHCR digest, set
-   `GODMODE_IMAGE` in the host environment, then pull and run:
+2. Resolve the desired stable release to its signed immutable GHCR digest, put it
+   in `deploy/.env.production` as `GODMODE_IMAGE`, then pull and run. Compose
+   interpolates `GODMODE_IMAGE` from `--env-file` (or a `deploy/.env` symlink);
+   `env_file:` alone only injects vars into the container:
 
 ```bash
 cd deploy
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+# optional convenience: ln -sfn .env.production .env
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ```
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
+   Behind Cloudflare-only `ufw`, bind the container to loopback (for example
+   `127.0.0.1:8080:80`) and put host nginx on `:80`/`:443` so Docker does not
+   bypass the firewall.
 4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` with:
    - `checkout.session.completed`
    - `customer.subscription.updated`

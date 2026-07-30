@@ -62,6 +62,9 @@ placeholder; never point Proxied at a random IP.
 1. SSL/TLS → Overview → encryption mode **Full (strict)**.
 2. SSL/TLS → Origin Server → **Create certificate** (Cloudflare Origin CA),
    hostnames: `app.godmode.software` (and `*.godmode.software` only if needed).
+   Origin CA creation requires an **active** zone (nameservers verified). On a
+   pending zone, Cloudflare rejects hostname validation; finish after #200 NS
+   cutover (or use Let's Encrypt on the origin once `app` resolves publicly).
 3. Install the Origin CA cert + key on the VPS so origin serves HTTPS on **443**.
    Options:
    - Host nginx/Caddy terminates TLS and proxies to the GodMode container `:80`
