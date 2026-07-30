@@ -97,6 +97,9 @@ export function featureDocsForIndex(): FeatureDocMeta[] {
 
 /** Turn [[slug]] wikilinks into marketing feature hrefs for public pages. */
 export function preprocessMarketingWikiLinks(markdown: string): string {
+  // Inline resolve keeps this module free of a pages → lib cycle via MarketingLayout.
+  const atRoot = import.meta.env.VITE_MARKETING_AT_ROOT === "true";
+  const base = atRoot ? "" : "/www";
   return markdown.replace(
     /\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g,
     (_m, target, label) => {
@@ -104,8 +107,8 @@ export function preprocessMarketingWikiLinks(markdown: string): string {
       const text = String(label ?? target).trim();
       const href =
         slug === "_index" || slug === "features"
-          ? "/www/features"
-          : `/www/features/${slug}`;
+          ? `${base}/features`
+          : `${base}/features/${slug}`;
       return `[${text}](${href})`;
     }
   );
