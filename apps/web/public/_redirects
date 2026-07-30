@@ -1,0 +1,3 @@
+# Cloudflare Pages: marketing host serves /www; SPA fallback for client routes.
+/  /www  302
+/*  /index.html  200
