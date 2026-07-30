@@ -211,6 +211,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Rebuild native addons
+        run: npm rebuild better-sqlite3 node-pty
       - name: Build runtime
         run: |
           npm run build:packages
@@ -274,6 +276,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Rebuild native addons
+        run: npm rebuild better-sqlite3 node-pty
       - name: Build runtime and desktop shell
         run: |
           npm run build:packages
