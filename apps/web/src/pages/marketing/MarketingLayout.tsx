@@ -23,6 +23,7 @@ import { APP_NAME } from "@/lib/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { getFeatureDoc } from "@/lib/feature-docs";
+import { CLOUD_APP_HOME } from "./cloudAppUrl";
 
 export const MARKETING_BASE = "/www";
 
@@ -94,10 +95,14 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-1 pt-2">
-        <NavLink to="/" onClick={onNavigate} className={navLinkClass}>
+        <a
+          href={CLOUD_APP_HOME}
+          onClick={onNavigate}
+          className={navLinkClass({ isActive: false })}
+        >
           <CloudIcon className="size-4 shrink-0" />
           Open Cloud
-        </NavLink>
+        </a>
         <a
           href="https://github.com/ReBoticsAI/GodMode"
           target="_blank"
