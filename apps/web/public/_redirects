@@ -1,3 +1,4 @@
-# Cloudflare Pages: marketing host serves /www; SPA fallback for client routes.
-/  /www  302
+# Cloudflare Pages: marketing at `/`. Legacy `/www/*` redirects to `/*`. SPA fallback.
+/www  /  301
+/www/*  /:splat  301
 /*  /index.html  200

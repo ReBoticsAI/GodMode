@@ -210,7 +210,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      - run: NPM_CONFIG_IGNORE_SCRIPTS=false npm ci
       - name: Build runtime
         run: |
           npm run build:packages
@@ -273,7 +273,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      - run: NPM_CONFIG_IGNORE_SCRIPTS=false npm ci
       - name: Build runtime and desktop shell
         run: |
           npm run build:packages

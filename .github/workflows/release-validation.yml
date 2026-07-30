@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      - run: NPM_CONFIG_IGNORE_SCRIPTS=false npm ci
       - name: Build workspace packages
         run: npm run build:packages
       - name: Validate release contract

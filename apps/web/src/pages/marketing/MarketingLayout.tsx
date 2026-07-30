@@ -24,8 +24,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { getFeatureDoc } from "@/lib/feature-docs";
 import { CLOUD_APP_HOME } from "./cloudAppUrl";
+import { MARKETING_BASE, MARKETING_HOME } from "./marketingBase";
 
-export const MARKETING_BASE = "/www";
+export { MARKETING_BASE, MARKETING_HOME } from "./marketingBase";
 
 /** Match feature-doc body scale (text-base), not default Card text-sm. */
 export const marketingCardClass = "text-base";
@@ -42,7 +43,7 @@ export const marketingPageDescriptionClass =
 
 
 const NAV_ITEMS = [
-  { to: MARKETING_BASE, end: true, label: "Home", Icon: HomeIcon },
+  { to: MARKETING_HOME, end: true, label: "Home", Icon: HomeIcon },
   { to: `${MARKETING_BASE}/features`, label: "Features", Icon: LayoutGridIcon },
   { to: `${MARKETING_BASE}/pricing`, label: "Pricing", Icon: DollarSignIcon },
   { to: `${MARKETING_BASE}/security`, label: "Security", Icon: ShieldIcon },
@@ -66,7 +67,7 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <>
       <div className="flex w-full justify-center px-2 py-1.5">
         <NavLink
-          to={MARKETING_BASE}
+          to={MARKETING_HOME}
           end
           onClick={onNavigate}
           className="font-heading truncate text-4xl font-extrabold leading-none tracking-tight transition-opacity hover:opacity-80"
@@ -121,13 +122,14 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 type MarketingCrumb = { label: string; to?: string };
 
 function marketingCrumbs(pathname: string): MarketingCrumb[] {
-  const home: MarketingCrumb = { label: "Home", to: MARKETING_BASE };
+  const home: MarketingCrumb = { label: "Home", to: MARKETING_HOME };
   const isHome =
-    pathname === MARKETING_BASE || pathname === `${MARKETING_BASE}/`;
+    pathname === MARKETING_HOME || pathname === `${MARKETING_HOME}/`;
   if (isHome) return [{ label: "Home" }];
 
+  const featurePrefix = `${MARKETING_BASE}/features`;
   const featureMatch = pathname.match(
-    new RegExp(`^${MARKETING_BASE}/features(?:/([^/]+))?$`)
+    new RegExp(`^${featurePrefix.replace(/\//g, "\\/")}(?:\\/([^/]+))?$`)
   );
   if (featureMatch) {
     if (!featureMatch[1]) {
@@ -135,14 +137,14 @@ function marketingCrumbs(pathname: string): MarketingCrumb[] {
     }
     return [
       home,
-      { label: "Features", to: `${MARKETING_BASE}/features` },
+      { label: "Features", to: featurePrefix },
       { label: getFeatureDoc(featureMatch[1])?.title ?? "Feature" },
     ];
   }
 
   const item = NAV_ITEMS.find(
     (n) =>
-      n.to !== MARKETING_BASE &&
+      n.to !== MARKETING_HOME &&
       (pathname === n.to || pathname.startsWith(`${n.to}/`))
   );
   if (item) return [home, { label: item.label }];
