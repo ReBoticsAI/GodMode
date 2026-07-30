@@ -23,13 +23,16 @@ NODE_VERSION=22
 NPM_CONFIG_IGNORE_SCRIPTS=true
 ```
 
-Prefer baking `--ignore-scripts` into the build command so Preview builds still
-work when Preview env vars are unset (Pages Production and Preview env are
-separate).
+Prefer baking `--ignore-scripts` into the build command **and** root `.npmrc`
+(`ignore-scripts=true`) so Preview builds still work when Preview env vars are
+unset. Pages Production and Preview env are separate; Pages also runs
+`npm clean-install` before the configured build command, which must skip native
+addon compiles.
 
-`NPM_CONFIG_IGNORE_SCRIPTS` / `--ignore-scripts` is required so monorepo `npm ci`
-does not try to compile native addons such as `node-pty` (bridge) on the Pages
-Linux builder.
+`NPM_CONFIG_IGNORE_SCRIPTS` / `--ignore-scripts` / `.npmrc` is required so
+monorepo `npm ci` does not try to compile native addons such as `node-pty`
+(bridge) on the Pages Linux builder. After a local `npm ci`, rebuild bridge
+natives with `npm rebuild node-pty` if the coding terminal is needed.
 
 `build:packages` is required after ignore-scripts so workspace TypeScript packages
 (`kernel`, `flow-core`, `plugin-api`, `plugin-host`) emit `dist/` before `@godmode/web`
