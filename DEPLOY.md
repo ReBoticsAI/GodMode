@@ -233,8 +233,8 @@ Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 ## Public marketing site (Stripe business website)
 
 Deploy the public marketing site from **`apps/web`** (shadcn) before enabling
-**live** Stripe keys. Prefer **Cloudflare Pages** connected to GitHub (`main`) with
-`VITE_MARKETING_AT_ROOT=true` so marketing is at `/` on `godmode.software`
+**live** Stripe keys. Prefer **Cloudflare Pages** connected to GitHub (`main`) so
+marketing is at `/` on `godmode.software`
 (see [`deploy/cloudflare-pages-www.md`](deploy/cloudflare-pages-www.md)). On the
 app origin, marketing remains under `/www`. Operator notes:
 [`sites/www/README.md`](sites/www/README.md) (documentation only; not a separate

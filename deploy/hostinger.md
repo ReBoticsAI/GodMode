@@ -4,10 +4,10 @@ GodMode public SaaS runs on a **Hostinger VPS** (Docker Compose) as the origin.
 **Cloudflare** is the public edge (TLS, WAF, DDoS). Z440 LAN hubs are staging only
 and are **not** the public DNS cutover target.
 
-Prefer serving marketing from **Cloudflare Pages** at `/` on `godmode.software`
-(`VITE_MARKETING_AT_ROOT=true`), or from **`apps/web` `/www`** on the same VPS
-app origin, so the VPS primarily runs the authenticated app. See
-[`sites/www/README.md`](../sites/www/README.md) for notes (not a separate deploy tree).
+Prefer serving marketing from **Cloudflare Pages** at `/` on `godmode.software`,
+or from **`apps/web` `/www`** on the same VPS app origin, so the VPS primarily
+runs the authenticated app. See [`sites/www/README.md`](../sites/www/README.md)
+for notes (not a separate deploy tree).
 
 ## 1. Provision Hostinger VPS
 

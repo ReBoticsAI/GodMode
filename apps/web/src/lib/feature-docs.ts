@@ -97,9 +97,7 @@ export function featureDocsForIndex(): FeatureDocMeta[] {
 
 /** Turn [[slug]] wikilinks into marketing feature hrefs for public pages. */
 export function preprocessMarketingWikiLinks(markdown: string): string {
-  // Inline resolve keeps this module free of a pages → lib cycle via MarketingLayout.
-  const atRoot = import.meta.env.VITE_MARKETING_AT_ROOT === "true";
-  const base = atRoot ? "" : "/www";
+  const base = wikiMarketingBase();
   return markdown.replace(
     /\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g,
     (_m, target, label) => {
@@ -112,4 +110,18 @@ export function preprocessMarketingWikiLinks(markdown: string): string {
       return `[${text}](${href})`;
     }
   );
+}
+
+/** Same host rules as marketingBase.ts (local copy avoids pages↔lib cycles). */
+function wikiMarketingBase(): string {
+  const forced = import.meta.env.VITE_MARKETING_AT_ROOT;
+  const hostname =
+    typeof window !== "undefined" ? window.location.hostname : "";
+  const atRoot =
+    forced === "true" ||
+    (forced !== "false" &&
+      (hostname === "godmode.software" ||
+        hostname === "www.godmode.software" ||
+        (hostname.endsWith(".pages.dev") && hostname.includes("godmode-www"))));
+  return atRoot ? "" : "/www";
 }
