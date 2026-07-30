@@ -33,8 +33,9 @@ app.
 ## Production (Cloudflare Pages)
 
 Connect `ReBoticsAI/GodMode` to Cloudflare Pages and auto-deploy from `main`.
-Set `VITE_MARKETING_AT_ROOT=true` so the public host serves marketing at `/`
-(`/pricing`, `/terms`, …). Legacy `/www/*` URLs 301 to the root paths.
+On `godmode.software` (and Pages previews) marketing is at `/` (`/pricing`,
+`/terms`, …). Legacy `/www/*` URLs 301 to the root paths. Local and the app
+origin keep `/www`.
 
 Runbook: [`deploy/cloudflare-pages-www.md`](../../deploy/cloudflare-pages-www.md).
 

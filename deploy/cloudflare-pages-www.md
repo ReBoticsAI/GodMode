@@ -21,7 +21,6 @@ Required Pages env (Production):
 ```text
 NODE_VERSION=22
 NPM_CONFIG_IGNORE_SCRIPTS=true
-VITE_MARKETING_AT_ROOT=true
 ```
 
 `NPM_CONFIG_IGNORE_SCRIPTS` is required so monorepo `npm ci` does not try to
@@ -31,9 +30,14 @@ compile native addons such as `node-pty` (bridge) on the Pages Linux builder.
 (`kernel`, `flow-core`, `plugin-api`, `plugin-host`) emit `dist/` before `@godmode/web`
 runs `tsc -b && vite build`.
 
-`VITE_MARKETING_AT_ROOT=true` mounts marketing at `/` (home, `/pricing`, `/terms`,
-etc.) instead of `/www`. Without it, the same SPA still serves marketing under
-`/www` for the app origin.
+Marketing mounts at `/` automatically on `godmode.software`, `www.godmode.software`,
+and `godmode-www*.pages.dev` hosts. Optional force:
+
+```text
+VITE_MARKETING_AT_ROOT=true
+```
+
+Without a marketing host (local / app origin), marketing stays under `/www`.
 
 Optional Pages env:
 
