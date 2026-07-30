@@ -12,6 +12,8 @@ npm run dev -w @godmode/web
 ```
 
 Open [http://127.0.0.1:5173/www](http://127.0.0.1:5173/www) (port may vary).
+Local and the app origin keep marketing under `/www` so `/` stays the authenticated
+app.
 
 | Path | Page |
 |------|------|
@@ -31,7 +33,11 @@ Open [http://127.0.0.1:5173/www](http://127.0.0.1:5173/www) (port may vary).
 ## Production (Cloudflare Pages)
 
 Connect `ReBoticsAI/GodMode` to Cloudflare Pages and auto-deploy from `main`.
-Operator runbook: [`deploy/cloudflare-pages-www.md`](../../deploy/cloudflare-pages-www.md).
+On `godmode.software` (and Pages previews) marketing is at `/` (`/pricing`,
+`/terms`, …). Legacy `/www/*` URLs 301 to the root paths. Local and the app
+origin keep `/www`.
+
+Runbook: [`deploy/cloudflare-pages-www.md`](../../deploy/cloudflare-pages-www.md).
 
 Custom domains `godmode.software` / `www` attach after DNS cutover (#200). Until
 then, use the Pages `*.pages.dev` hostname for Stripe business website and

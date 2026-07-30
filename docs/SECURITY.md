@@ -16,7 +16,7 @@ remain signature-auth).
 
 Do **not** point public DNS at SaaS until:
 
-1. Marketing site live (`/www` on the web app, shadcn) and Stripe business URL accepted (`BUSINESS_WEBSITE_URL`)
+1. Marketing site live (`godmode.software` via Pages at `/`, or `/www` on the app origin) and Stripe business URL accepted (`BUSINESS_WEBSITE_URL`)
 2. Email verify + password reset working with production mail
 3. Platform admin MFA enrolled and hard-gated (Auth interstitial + `MFA_SETUP_REQUIRED` on product APIs)
 4. Cloudflare → Hostinger Full (strict), origin headers, HTTPS cookies, firewall locked

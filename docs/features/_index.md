@@ -2,7 +2,7 @@
 slug: _index
 title: "Features"
 section: "Hubs"
-location: "Marketing /www/features and Wiki space platform"
+location: "Marketing /features (and /www/features on app origin) and Wiki space platform"
 summary: "Catalog of built-in GodMode features. Same pages seed the platform wiki for agents."
 ---
 
@@ -10,7 +10,7 @@ summary: "Catalog of built-in GodMode features. Same pages seed the platform wik
 
 GodMode is your Control Center. These pages describe every built-in feature.
 
-Marketing pages under `/www/features` may include platform screenshots. The same
+Marketing pages under `/features` (Pages) or `/www/features` (app origin) may include platform screenshots. The same
 markdown seeds the **platform** wiki for agents with **images stripped** (token
 cost and non-vision models).
 
