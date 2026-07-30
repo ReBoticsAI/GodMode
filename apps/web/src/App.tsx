@@ -13,6 +13,10 @@ import Users from "./pages/Users";
 import Shared from "./pages/Shared";
 import AuthGate from "./pages/AuthGate";
 import MarketingRoutes from "./pages/marketing/MarketingRoutes";
+import {
+  MARKETING_BASE,
+  marketingAtRoot,
+} from "./pages/marketing/marketingBase";
 import { FirstRunWizard, useOnboardingGate } from "@/components/FirstRunWizard";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
@@ -435,8 +439,17 @@ export default function App() {
     <TooltipProvider delay={200}>
       <TenantProvider>
         <Routes>
-          <Route path="/www/*" element={<MarketingRoutes />} />
-          <Route path="*" element={<AuthGatedApp />} />
+          {marketingAtRoot ? (
+            <Route path="/*" element={<MarketingRoutes />} />
+          ) : (
+            <>
+              <Route
+                path={`${MARKETING_BASE}/*`}
+                element={<MarketingRoutes />}
+              />
+              <Route path="*" element={<AuthGatedApp />} />
+            </>
+          )}
         </Routes>
       </TenantProvider>
     </TooltipProvider>

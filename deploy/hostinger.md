@@ -4,10 +4,10 @@ GodMode public SaaS runs on a **Hostinger VPS** (Docker Compose) as the origin.
 **Cloudflare** is the public edge (TLS, WAF, DDoS). Z440 LAN hubs are staging only
 and are **not** the public DNS cutover target.
 
-Prefer serving marketing from **`apps/web` `/www`** on Cloudflare Pages or the same VPS
-app origin (optional rewrite `/` → `/www`) so the VPS primarily runs the authenticated
-app. See [`sites/www/README.md`](../sites/www/README.md) for operator notes (not a separate
-deploy tree).
+Prefer serving marketing from **Cloudflare Pages** at `/` on `godmode.software`
+(`VITE_MARKETING_AT_ROOT=true`), or from **`apps/web` `/www`** on the same VPS
+app origin, so the VPS primarily runs the authenticated app. See
+[`sites/www/README.md`](../sites/www/README.md) for notes (not a separate deploy tree).
 
 ## 1. Provision Hostinger VPS
 
@@ -121,7 +121,8 @@ GodMode does **not** use external APM (no Sentry). Prefer first-party signals:
 
 ## 9. Marketing / Stripe business URL
 
-Deploy the marketing routes at `/www` (shadcn in `apps/web`; see `sites/www/README.md`).
+Deploy marketing on Pages at `/` (`godmode.software`) or keep `/www` on the app
+origin (shadcn in `apps/web`; see `sites/www/README.md`).
 Put the live public URL in Stripe Dashboard → Business website and set
 `BUSINESS_WEBSITE_URL` in operator docs. Public site must be live before enabling live
 Stripe keys.
