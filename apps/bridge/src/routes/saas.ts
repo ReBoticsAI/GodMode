@@ -33,6 +33,10 @@ export function createSaasRouter(): Router {
   router.post("/checkout", requireSaas, limiter, async (req, res) => {
     const email =
       typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "Valid email is required" });
+      return;
+    }
     const plan =
       typeof req.body?.plan === "string"
         ? req.body.plan.trim()
@@ -51,7 +55,7 @@ export function createSaasRouter(): Router {
 
     try {
       const session = await createSaasCheckoutSession({
-        email: email || undefined,
+        email,
         plan: plan || undefined,
         successUrl,
         cancelUrl,

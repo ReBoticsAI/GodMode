@@ -4184,8 +4184,8 @@ export function fetchSaasPaywall() {
   }>("/saas/paywall");
 }
 
-export function startSaasCheckout(input?: {
-  email?: string;
+export function startSaasCheckout(input: {
+  email: string;
   plan?: string;
   successUrl?: string;
   cancelUrl?: string;
@@ -4194,7 +4194,7 @@ export function startSaasCheckout(input?: {
     "/saas/checkout",
     {
       method: "POST",
-      body: JSON.stringify(input ?? {}),
+      body: JSON.stringify(input),
     }
   );
 }
