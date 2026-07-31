@@ -17,7 +17,7 @@ import {
   MARKETING_BASE,
   marketingAtRoot,
 } from "./pages/marketing/marketingBase";
-import { FirstRunWizard, useOnboardingGate } from "@/components/FirstRunWizard";
+import { FirstRunWizard, OnboardingWizardProvider, useOnboardingGate } from "@/components/FirstRunWizard";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
 import UserCalendarPage from "./pages/UserCalendar";
@@ -371,7 +371,7 @@ function buildDivisionRoutes(
 }
 function AuthGatedApp() {
   const { authenticated, loading, user } = useTenant();
-  const { checking, needsWizard, refresh } = useOnboardingGate();
+  const { checking, needsWizard, wizardEpoch, onFinished, onOpenVault, control } = useOnboardingGate();
   const [pluginsReady, setPluginsReady] = useState(false);
   const [saas, setSaas] = useState(false);
 
@@ -426,8 +426,15 @@ function AuthGatedApp() {
     <StructureProvider>
       <IntelligenceProvider>
         <PageChromeProvider>
-          <FirstRunWizard open={needsWizard} onFinished={() => void refresh()} />
-          {webPluginRuntime.wrapWithRootProviders(<AppShell />)}
+          <OnboardingWizardProvider control={control}>
+            <FirstRunWizard
+              open={needsWizard}
+              epoch={wizardEpoch}
+              onFinished={onFinished}
+              onOpenVault={onOpenVault}
+            />
+            {webPluginRuntime.wrapWithRootProviders(<AppShell />)}
+          </OnboardingWizardProvider>
         </PageChromeProvider>
       </IntelligenceProvider>
     </StructureProvider>

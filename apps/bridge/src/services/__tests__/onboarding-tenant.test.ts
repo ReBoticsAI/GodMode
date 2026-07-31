@@ -9,9 +9,8 @@ import Database from "better-sqlite3";
 import type { AppDatabase } from "../../db.js";
 import type { LlmManager } from "../llm-manager.js";
 
-const { getOnboardingStatus, markLlmReady, markOnboardingComplete } = await import(
-  "../onboarding.js"
-);
+const { getOnboardingStatus, markLlmReady, markOnboardingComplete, resetOnboarding } =
+  await import("../onboarding.js");
 
 function emptyTenantDb(): AppDatabase {
   const db = new Database(":memory:");
@@ -51,6 +50,11 @@ const stubLlm = {
   const after = getOnboardingStatus(stubLlm, db);
   assert.equal(after.completed, true);
   assert.equal(after.llmReady, true);
+
+  resetOnboarding(db);
+  const reset = getOnboardingStatus(stubLlm, db);
+  assert.equal(reset.completed, false);
+  assert.equal(reset.llmReady, false);
 }
 
 {

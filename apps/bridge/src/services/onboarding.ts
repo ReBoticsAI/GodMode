@@ -89,6 +89,12 @@ export function markLlmReady(tenantDb: AppDatabase): void {
   writeTenantSetting(tenantDb, META_LLM_READY, "true");
 }
 
+/** Clear flags so the first-run wizard can show again (Settings → reopen). */
+export function resetOnboarding(tenantDb: AppDatabase): void {
+  writeTenantSetting(tenantDb, META_COMPLETED, "false");
+  writeTenantSetting(tenantDb, META_LLM_READY, "false");
+}
+
 export async function detectOllama(): Promise<{
   available: boolean;
   models: string[];
