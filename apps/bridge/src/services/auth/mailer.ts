@@ -7,6 +7,69 @@ export interface SendMailInput {
   html?: string;
 }
 
+export type TransactionalMailStatus = {
+  provider: "none" | "resend" | "smtp";
+  ready: boolean;
+  /** Safe for logs/health; never includes secrets. */
+  detail: string;
+};
+
+/** Resend live keys are `re_` + a long secret. Reject placeholders like `re_...`. */
+export function looksLikeResendApiKey(key: string): boolean {
+  const k = key.trim();
+  return /^re_[A-Za-z0-9_]{20,}$/.test(k);
+}
+
+/**
+ * Whether transactional mail can be sent with the current env.
+ * Used by /api/health and authenticated resend so misconfig is visible.
+ */
+export function getTransactionalMailStatus(): TransactionalMailStatus {
+  const provider = config.email.provider;
+  if (provider === "resend") {
+    const key = config.email.resendApiKey;
+    if (!key) {
+      return {
+        provider,
+        ready: false,
+        detail: "RESEND_API_KEY is missing",
+      };
+    }
+    if (!looksLikeResendApiKey(key)) {
+      return {
+        provider,
+        ready: false,
+        detail:
+          "RESEND_API_KEY looks invalid (expected re_ plus a long secret from Resend)",
+      };
+    }
+    const from = config.email.from.trim();
+    if (!from || /localhost/i.test(from)) {
+      return {
+        provider,
+        ready: false,
+        detail: "EMAIL_FROM must be a verified Resend sender (not localhost)",
+      };
+    }
+    return { provider, ready: true, detail: "resend configured" };
+  }
+  if (provider === "smtp") {
+    if (!config.email.smtp.host.trim()) {
+      return {
+        provider,
+        ready: false,
+        detail: "SMTP_HOST is missing",
+      };
+    }
+    return { provider, ready: true, detail: "smtp configured" };
+  }
+  return {
+    provider: "none",
+    ready: false,
+    detail: "EMAIL_PROVIDER is not set (use resend or smtp)",
+  };
+}
+
 /**
  * Transactional mail: Resend HTTP API or SMTP (nodemailer optional dynamic import).
  * When no provider is configured, logs in non-production and throws in production hubs.
@@ -18,6 +81,11 @@ export async function sendMail(input: SendMailInput): Promise<void> {
   if (provider === "resend") {
     const key = config.email.resendApiKey;
     if (!key) throw new Error("RESEND_API_KEY is not configured");
+    if (!looksLikeResendApiKey(key)) {
+      throw new Error(
+        "RESEND_API_KEY looks invalid (expected re_ plus a long secret from Resend)"
+      );
+    }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {

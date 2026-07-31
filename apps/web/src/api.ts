@@ -3153,6 +3153,14 @@ export function requestEmailVerification(email: string) {
   });
 }
 
+/** Authenticated resend for the current session user. Surfaces mail config/send errors. */
+export function resendEmailVerification() {
+  return api<{ ok: boolean; alreadyVerified?: boolean }>("/auth/resend-verification", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function verifyEmailToken(token: string) {
   return api<{ ok: boolean }>("/auth/verify-email", {
     method: "POST",
@@ -3680,7 +3688,11 @@ export function signupPassword(
   name: string,
   opts?: { inviteCode?: string; checkoutSessionId?: string }
 ) {
-  return api<{ user: AuthUser; sessionToken?: string }>("/auth/signup", {
+  return api<{
+    user: AuthUser;
+    sessionToken?: string;
+    verificationEmailSent?: boolean;
+  }>("/auth/signup", {
     method: "POST",
     body: JSON.stringify({
       email,
@@ -4164,6 +4176,11 @@ export function fetchBridgeHealth() {
     client?: boolean;
     saas?: boolean;
     installationSurface?: string;
+    email?: {
+      provider: string;
+      ready: boolean;
+      detail: string;
+    };
   }>("/health");
 }
 
