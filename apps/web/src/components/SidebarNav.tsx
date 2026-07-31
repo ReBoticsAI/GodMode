@@ -66,6 +66,7 @@ import {
   userAgentIdForUser,
 } from "@/lib/structure-agents";
 import { NavBadge } from "@/components/NavBadge";
+import { FitText } from "@/components/FitText";
 import { NewUserOnboardingDialog } from "@/components/NewUserOnboardingDialog";
 import {
   readOnboardingCompleted,
@@ -293,14 +294,14 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             aria-label={`Open ${personalLabel}'s profile`}
             title={`Open ${personalLabel}'s profile`}
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-3xl font-bold leading-none tracking-tight transition-colors",
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 font-bold leading-none tracking-tight transition-colors",
               pathname.startsWith(USERS_PATH) || pathname.startsWith(CONTACTS_PATH)
                 ? "text-sidebar-accent-foreground"
                 : "text-foreground hover:text-sidebar-accent-foreground"
             )}
           >
             <BrainIcon className="size-6 shrink-0 text-sidebar-accent-foreground" />
-            <span className="truncate">{personalLabel}</span>
+            <FitText text={personalLabel} maxPx={30} minPx={13} />
           </button>
           <CollapsibleTrigger
             aria-label={`Collapse ${personalLabel}`}
