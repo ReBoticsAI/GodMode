@@ -76,6 +76,18 @@ placeholder; never point Proxied at a random IP.
 
 Do not enable Full (strict) against an HTTP-only origin (525 errors).
 
+#### Universal SSL stuck on Pending Validation (TXT)
+
+Pages custom-domain certs cover apex/`www` only. Proxied hostnames like
+`app` need zone **Universal SSL** (`*.godmode.software`). If Edge Certificates
+shows **Pending Validation (TXT)** and `https://app...` fails TLS handshake
+(no peer certificate), check SSL verification tokens and ensure matching
+`_acme-challenge.godmode.software` **TXT** records exist in the Cloudflare DNS
+zone (not only as opaque auto-DCV). After adding/updating TXT values from
+SSL/TLS → Edge Certificates / verification API, PATCH recheck or wait until
+the pack status is **Active**. Grey-cloud then re-proxy of `app` can also
+nudge issuance.
+
 ### 3. WAF / Bot Fight
 
 1. Security → WAF: keep managed rules enabled (Free plan defaults).
