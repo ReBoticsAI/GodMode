@@ -1,11 +1,20 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   completeOnboarding,
   fetchBridgeHealth,
   fetchOnboardingDetect,
   fetchOnboardingStatus,
   markOnboardingCloudReady,
+  resetOnboarding,
   startOnboardingLocalLlm,
 } from "@/api";
 import {
@@ -26,17 +35,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { writeOnboardingCompleted } from "@/lib/storage-keys";
+import {
+  clearOnboardingCompleted,
+  writeOnboardingCompleted,
+} from "@/lib/storage-keys";
 import { useTenant } from "@/lib/tenant-context";
 import { VAULT_PATH } from "@/lib/navigation";
 
 type Props = {
   open: boolean;
+  /** Bumps when Settings reopens the wizard so steps reset. */
+  epoch: number;
   onFinished: () => void;
+  /** Soft-dismiss so Vault is usable; onboarding stays incomplete. */
+  onOpenVault: () => void;
 };
 
-export function FirstRunWizard({ open, onFinished }: Props) {
+export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) {
   const { activeTenantId } = useTenant();
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [saas, setSaas] = useState(false);
   const [localModels, setLocalModels] = useState<string[]>([]);
@@ -45,8 +62,11 @@ export function FirstRunWizard({ open, onFinished }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
     setStep(0);
+  }, [activeTenantId, epoch]);
+
+  useEffect(() => {
+    if (!open) return;
     void fetchBridgeHealth()
       .then((h) => setSaas(Boolean(h.saas)))
       .catch(() => setSaas(false));
@@ -81,7 +101,13 @@ export function FirstRunWizard({ open, onFinished }: Props) {
     }
   };
 
-  const useCloud = async () => {
+  const openVault = () => {
+    onOpenVault();
+    navigate(VAULT_PATH);
+    toast.message("Add your API key in Vault, then return to Chat when you are ready.");
+  };
+
+  const markCloudAndContinue = async () => {
     setLoading(true);
     try {
       await markOnboardingCloudReady();
@@ -93,7 +119,7 @@ export function FirstRunWizard({ open, onFinished }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={() => undefined}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         {step === 0 ? (
           <>
             <DialogHeader>
@@ -119,27 +145,38 @@ export function FirstRunWizard({ open, onFinished }: Props) {
             <DialogHeader>
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
-                GodMode Cloud uses your own API keys (BYOK). Add a Cursor subscription key or a
-                cloud provider key in Vault, then continue.
+                GodMode Cloud uses your own API keys (BYOK). Open Vault to add a Cursor
+                subscription key or a cloud provider key, then come back to finish setup.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
               <p>
-                Open{" "}
-                <Link to={VAULT_PATH} className="text-foreground underline underline-offset-4">
+                You can also open{" "}
+                <Link to={VAULT_PATH} className="text-foreground underline underline-offset-4" onClick={onOpenVault}>
                   Vault
                 </Link>{" "}
-                to connect Cursor or store OpenAI / Anthropic secrets. You can finish this step
-                now and add keys before your first chat.
+                from the sidebar later. Reopen this wizard anytime from Settings.
               </p>
             </div>
-            <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button onClick={() => void useCloud()} disabled={loading}>
-                Continue with Vault
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <Button variant="ghost" onClick={() => setStep(0)} disabled={loading}>
+                Back
               </Button>
-              <Button variant="ghost" onClick={() => void finish()} disabled={loading}>
-                Skip for now
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={openVault} disabled={loading}>
+                  Open Vault
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void markCloudAndContinue()}
+                  disabled={loading}
+                >
+                  Continue
+                </Button>
+                <Button variant="ghost" onClick={() => void finish()} disabled={loading}>
+                  Skip for now
+                </Button>
+              </div>
             </DialogFooter>
           </>
         ) : null}
@@ -149,8 +186,8 @@ export function FirstRunWizard({ open, onFinished }: Props) {
             <DialogHeader>
               <DialogTitle>Choose your LLM</DialogTitle>
               <DialogDescription>
-                Run a local GGUF model, use Ollama if detected, or skip and add a cloud API key in
-                Vault later.
+                Run a local GGUF model, use Ollama if detected, or open Vault to add a cloud API
+                key.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3">
@@ -186,18 +223,30 @@ export function FirstRunWizard({ open, onFinished }: Props) {
                 </p>
               ) : null}
             </div>
-            <DialogFooter className="flex-col gap-2 sm:flex-row">
-              {localModels.length > 0 ? (
-                <Button onClick={() => void startLocal()} disabled={loading}>
-                  Start local model
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <Button variant="ghost" onClick={() => setStep(0)} disabled={loading}>
+                Back
+              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {localModels.length > 0 ? (
+                  <Button onClick={() => void startLocal()} disabled={loading}>
+                    Start local model
+                  </Button>
+                ) : null}
+                <Button variant="outline" onClick={openVault} disabled={loading}>
+                  Open Vault
                 </Button>
-              ) : null}
-              <Button variant="outline" onClick={() => void useCloud()} disabled={loading}>
-                Use cloud API (Vault)
-              </Button>
-              <Button variant="ghost" onClick={() => void finish()} disabled={loading}>
-                Skip for now
-              </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => void markCloudAndContinue()}
+                  disabled={loading}
+                >
+                  I already added a key
+                </Button>
+                <Button variant="ghost" onClick={() => void finish()} disabled={loading}>
+                  Skip for now
+                </Button>
+              </div>
             </DialogFooter>
           </>
         ) : null}
@@ -212,7 +261,10 @@ export function FirstRunWizard({ open, onFinished }: Props) {
                   : "Open Chat and talk to Intelligence. Browse Marketplace for starter packs anytime."}
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="sm:justify-between">
+              <Button variant="ghost" onClick={() => setStep(1)}>
+                Back
+              </Button>
               <Button onClick={() => void finish()}>Get started</Button>
             </DialogFooter>
           </>
@@ -222,6 +274,16 @@ export function FirstRunWizard({ open, onFinished }: Props) {
   );
 }
 
+type OnboardingWizardControl = {
+  reopenWizard: () => Promise<void>;
+};
+
+const OnboardingWizardControlContext = createContext<OnboardingWizardControl | null>(null);
+
+export function useOnboardingWizardControl(): OnboardingWizardControl | null {
+  return useContext(OnboardingWizardControlContext);
+}
+
 /**
  * Show FirstRunWizard when the active workspace has neither completed onboarding
  * nor marked an LLM ready.
@@ -229,11 +291,18 @@ export function FirstRunWizard({ open, onFinished }: Props) {
  * SaaS email-verify (and admin MFA) gates block `/onboarding/status` with 403.
  * Swallowing that as `needsWizard=false` without re-checking after verify left
  * new Cloud tenants on an empty Home with no wizard. Re-run when auth gates clear.
+ *
+ * Soft-dismiss (Open Vault) pauses the modal so Vault is usable; leaving Vault
+ * while still incomplete brings the wizard back. Settings can force-reopen.
  */
 export function useOnboardingGate() {
   const { authenticated, activeTenantId, user } = useTenant();
+  const location = useLocation();
   const [checking, setChecking] = useState(true);
   const [needsWizard, setNeedsWizard] = useState(false);
+  const [forceShow, setForceShow] = useState(false);
+  const [pausedForVault, setPausedForVault] = useState(false);
+  const [wizardEpoch, setWizardEpoch] = useState(0);
 
   const emailGateOpen = Boolean(
     authenticated && user && user.emailVerified === false && user.isAdmin !== true
@@ -243,7 +312,7 @@ export function useOnboardingGate() {
   );
   const authProductGateOpen = emailGateOpen || mfaGateOpen;
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setChecking(true);
     try {
       const s = await fetchOnboardingStatus();
@@ -254,12 +323,14 @@ export function useOnboardingGate() {
     } finally {
       setChecking(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!authenticated) {
       setNeedsWizard(false);
       setChecking(false);
+      setForceShow(false);
+      setPausedForVault(false);
       return;
     }
     if (authProductGateOpen) {
@@ -276,7 +347,67 @@ export function useOnboardingGate() {
     user?.emailVerified,
     user?.mfaEnabled,
     user?.isAdmin,
+    refresh,
   ]);
 
-  return { checking, needsWizard, refresh };
+  // After Open Vault, resume the wizard once the user leaves Vault (if still incomplete).
+  useEffect(() => {
+    if (!pausedForVault) return;
+    if (location.pathname.startsWith(VAULT_PATH)) return;
+    setPausedForVault(false);
+  }, [location.pathname, pausedForVault]);
+
+  const openWizard = forceShow || (!pausedForVault && needsWizard);
+
+  const onFinished = useCallback(() => {
+    setForceShow(false);
+    setPausedForVault(false);
+    void refresh();
+  }, [refresh]);
+
+  const onOpenVault = useCallback(() => {
+    setPausedForVault(true);
+    setForceShow(false);
+  }, []);
+
+  const reopenWizard = useCallback(async () => {
+    setPausedForVault(false);
+    setForceShow(true);
+    setWizardEpoch((n) => n + 1);
+    try {
+      await resetOnboarding();
+      clearOnboardingCompleted(activeTenantId);
+      await refresh();
+      toast.success("Onboarding wizard reopened");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reopen onboarding");
+      setForceShow(false);
+    }
+  }, [activeTenantId, refresh]);
+
+  const control = useMemo(() => ({ reopenWizard }), [reopenWizard]);
+
+  return {
+    checking,
+    needsWizard: openWizard,
+    wizardEpoch,
+    refresh,
+    onFinished,
+    onOpenVault,
+    control,
+  };
+}
+
+export function OnboardingWizardProvider({
+  control,
+  children,
+}: {
+  control: OnboardingWizardControl;
+  children: ReactNode;
+}) {
+  return (
+    <OnboardingWizardControlContext.Provider value={control}>
+      {children}
+    </OnboardingWizardControlContext.Provider>
+  );
 }
