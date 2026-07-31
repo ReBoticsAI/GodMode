@@ -14,7 +14,11 @@ import {
   markLlmReady,
   markOnboardingComplete,
 } from "../../services/onboarding.js";
-import { isCursorSubscriptionReady } from "../../services/cursor-subscription.js";
+import {
+  getCursorAuthStatus,
+  isCursorSubscriptionReady,
+} from "../../services/cursor-subscription.js";
+import { config } from "../../config.js";
 import type { AppDatabase } from "../../db.js";
 import type {
   OperationContext,
@@ -143,13 +147,16 @@ function onboardingRecord(
   if (!tenantId) throw httpError(403, "Tenant context required");
   const configured = services.getOnboardingStatus?.(db);
   const cursorConnected = configured?.cursorConnected ?? isCursorSubscriptionReady(db);
+  const cursorReadyForTenant =
+    cursorConnected &&
+    (!config.isHub || getCursorAuthStatus(db).source === "vault");
   return record(def, tenantId, {
     tenant_id: tenantId,
     completed:
       configured?.completed ?? readFlag(db, "onboarding.completed"),
     llm_ready:
       configured?.llmReady ??
-      (readFlag(db, "onboarding.llm_ready") || cursorConnected),
+      (readFlag(db, "onboarding.llm_ready") || cursorReadyForTenant),
     cursor_connected: cursorConnected,
     llm_status: configured?.llmStatus ?? null,
   });

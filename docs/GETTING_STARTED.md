@@ -52,11 +52,11 @@ under **Admin → Updates** for platform administrators.
 
 ## First-run wizard
 
-After signup, the **FirstRunWizard** guides three steps:
+After signup (and email verify on Cloud), the **FirstRunWizard** guides three steps:
 
-1. **Welcome** — overview of Intelligence and why an LLM is required
-2. **Choose your LLM** — local GGUF, detect Ollama, or use a cloud / Cursor path via Vault
-3. **Ready** — open Chat and start with Intelligence
+1. **Welcome**: overview of Intelligence and why an LLM is required
+2. **LLM**: self-host: local GGUF, Ollama, or Vault; Cloud: Vault BYOK (Cursor / cloud keys), no GGUF
+3. **Ready**: open Chat and start with Intelligence
 
 Complete the wizard, then open **Chat** from the sidebar. Details: [ONBOARDING.md](./ONBOARDING.md).
 

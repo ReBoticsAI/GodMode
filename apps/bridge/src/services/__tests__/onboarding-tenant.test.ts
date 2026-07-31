@@ -69,4 +69,23 @@ const stubLlm = {
   assert.equal(none.llmReady, false);
 }
 
+{
+  // Hub: process-env CURSOR_API_KEY must not skip the wizard for every tenant.
+  const prevKey = process.env.CURSOR_API_KEY;
+  process.env.CURSOR_API_KEY = "test-platform-cursor-key";
+  try {
+    const db = emptyTenantDb();
+    const status = getOnboardingStatus(stubLlm, db);
+    assert.equal(status.cursorConnected, true, "env key is visible as connected");
+    assert.equal(
+      status.llmReady,
+      false,
+      "hub must not treat platform CURSOR_API_KEY as tenant llmReady"
+    );
+  } finally {
+    if (prevKey === undefined) delete process.env.CURSOR_API_KEY;
+    else process.env.CURSOR_API_KEY = prevKey;
+  }
+}
+
 console.log("onboarding-tenant.test.ts: ok");
