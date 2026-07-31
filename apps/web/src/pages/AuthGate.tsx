@@ -317,16 +317,23 @@ export default function AuthGate() {
     }
   };
 
+  const planEmail = email.trim();
+  const planEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(planEmail);
+
   const continueToPayment = async () => {
     if (!selectedPlanId) {
       toast.error("Select a plan");
+      return;
+    }
+    if (!planEmailValid) {
+      toast.error("Enter a valid email");
       return;
     }
     setBusy(true);
     try {
       const origin = window.location.origin;
       const { url } = await startSaasCheckout({
-        email: email.trim() || undefined,
+        email: planEmail,
         plan: selectedPlanId,
         successUrl: `${origin}/?saas_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/?saas_checkout=cancel`,
@@ -435,7 +442,7 @@ export default function AuthGate() {
               <div className="rounded-md border border-border bg-muted/40 p-3">
                 <p className="text-sm font-medium">GodMode Cloud</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Hosted convenience — we run the infrastructure. Prefer to
+                  Hosted convenience: we run the infrastructure. Prefer to
                   self-host? The open-source local install is free.
                 </p>
               </div>
@@ -490,7 +497,7 @@ export default function AuthGate() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="auth-email-plan">Email (optional)</Label>
+                <Label htmlFor="auth-email-plan">Email</Label>
                 <Input
                   id="auth-email-plan"
                   type="email"
@@ -498,7 +505,11 @@ export default function AuthGate() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   autoComplete="email"
+                  required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Used for Stripe Checkout and your GodMode account signup.
+                </p>
               </div>
 
               <label className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
@@ -516,7 +527,13 @@ export default function AuthGate() {
 
               <Button
                 type="button"
-                disabled={busy || !paywallReady || !refundAck || !selectedPlanId}
+                disabled={
+                  busy ||
+                  !paywallReady ||
+                  !refundAck ||
+                  !selectedPlanId ||
+                  !planEmailValid
+                }
                 className="w-full"
                 onClick={() => void continueToPayment()}
               >
