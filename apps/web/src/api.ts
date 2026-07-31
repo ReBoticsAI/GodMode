@@ -4326,6 +4326,15 @@ export function completeOnboarding() {
   ).then(() => ({ ok: true }));
 }
 
+export function resetOnboarding() {
+  return actionDto<RecordRowClient>(
+    "TenantOnboardingConfig",
+    "reset",
+    {},
+    getActiveTenantId() ?? undefined
+  ).then(() => ({ ok: true }));
+}
+
 export function fetchMarketplaceWallet() {
   return api<{
     balance: number;

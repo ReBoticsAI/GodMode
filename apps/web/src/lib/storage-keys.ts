@@ -107,6 +107,12 @@ export function writeOnboardingCompleted(tenantId?: string | null): void {
   writeStorageKey(onboardingCompletedKey(tenantId), "1");
 }
 
+export function clearOnboardingCompleted(tenantId?: string | null): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.removeItem(onboardingCompletedKey(tenantId));
+  localStorage.removeItem(ONBOARDING_COMPLETED_KEY);
+}
+
 export function readMigratedKey(newKey: string, legacyKey: string): string | null {
   return readStorageKey(newKey, legacyKey);
 }
