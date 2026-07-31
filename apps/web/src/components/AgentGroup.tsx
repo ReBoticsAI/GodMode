@@ -18,7 +18,6 @@ import {
 import { useIntelligence, type PanelTab } from "@/lib/intelligence-context";
 import { AGENTS_PATH } from "@/lib/navigation";
 import { NavBadge } from "@/components/NavBadge";
-import { FitText } from "@/components/FitText";
 import { cn } from "@/lib/utils";
 
 /**
@@ -90,14 +89,14 @@ export function AgentGroup({
           aria-label={`Open ${label}`}
           title={`Chat with ${label} and open its Agent Profile`}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 font-bold leading-none tracking-tight transition-colors",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-base font-bold leading-none tracking-tight transition-colors",
             headerActive
               ? "text-sidebar-accent-foreground"
               : "text-foreground hover:text-sidebar-accent-foreground"
           )}
         >
           <Icon className="size-5 shrink-0 text-sidebar-accent-foreground" />
-          <FitText text={label} maxPx={16} minPx={11} />
+          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
         </button>
         <CollapsibleTrigger
           aria-label={`Collapse ${label}`}
