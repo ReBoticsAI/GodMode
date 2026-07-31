@@ -73,7 +73,7 @@ export function getSaasPaywallPublicConfig(): {
 }
 
 export async function createSaasCheckoutSession(opts: {
-  email?: string;
+  email: string;
   plan?: string;
   successUrl: string;
   cancelUrl: string;
@@ -86,6 +86,10 @@ export async function createSaasCheckoutSession(opts: {
       new Error("No SaaS plan configured (set STRIPE_SAAS_PRICE_MONTHLY / YEARLY)"),
       { status: 503 }
     );
+  }
+  const email = opts.email.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw Object.assign(new Error("Valid email is required"), { status: 400 });
   }
   const requested = (opts.plan ?? "").trim();
   const plan = requested
@@ -105,13 +109,11 @@ export async function createSaasCheckoutSession(opts: {
     "metadata[godmode_plan]": plan.id,
     "subscription_data[metadata][godmode_saas]": "1",
     "subscription_data[metadata][godmode_plan]": plan.id,
+    customer_email: email,
   };
   if (config.saas.checkoutMode !== "subscription") {
     delete params["subscription_data[metadata][godmode_saas]"];
     delete params["subscription_data[metadata][godmode_plan]"];
-  }
-  if (opts.email?.trim()) {
-    params.customer_email = opts.email.trim().toLowerCase();
   }
 
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
