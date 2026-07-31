@@ -13,6 +13,7 @@ import {
 import {
   markLlmReady,
   markOnboardingComplete,
+  resetOnboarding,
 } from "../../services/onboarding.js";
 import {
   getCursorAuthStatus,
@@ -187,6 +188,11 @@ export const tenantOnboardingConfigAdapter: RecordAdapter = {
       markLlmReady(db);
       return onboardingRecord(db, def, ctx);
     },
+    reset(db, def, _id, _input, ctx) {
+      requireUser(ctx);
+      resetOnboarding(db);
+      return onboardingRecord(db, def, ctx);
+    },
   },
 };
 
@@ -238,6 +244,7 @@ export const PLATFORM_CONFIG_ACTIONS: Record<string, ActionDef[]> = {
   TenantOnboardingConfig: [
     action("complete"),
     action("mark_llm_ready"),
+    action("reset"),
   ],
 };
 

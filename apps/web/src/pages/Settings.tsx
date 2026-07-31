@@ -6,6 +6,7 @@ import {
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
+  SparklesIcon,
   SunIcon,
   UserIcon,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
+import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
 
 const THEME_OPTIONS = [
@@ -97,6 +99,41 @@ function AccountCard() {
           <UserIcon className="size-4" />
           Open profile
         </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OnboardingCard() {
+  const control = useOnboardingWizardControl();
+  const [busy, setBusy] = useState(false);
+
+  const reopen = async () => {
+    if (!control) {
+      toast.error("Onboarding is not available right now");
+      return;
+    }
+    setBusy(true);
+    try {
+      await control.reopenWizard();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Setup wizard</CardTitle>
+        <CardDescription>
+          Reopen the first-run wizard to connect an LLM key or review setup tips.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button type="button" variant="outline" disabled={busy || !control} onClick={() => void reopen()}>
+          <SparklesIcon data-icon="inline-start" />
+          Reopen onboarding wizard
+        </Button>
       </CardContent>
     </Card>
   );
@@ -394,6 +431,7 @@ export default function Settings() {
       />
       <div className="flex flex-col gap-4">
         <AccountCard />
+        <OnboardingCard />
         <MfaCard />
         <GithubConnectCard />
         <SubscriptionCard />
