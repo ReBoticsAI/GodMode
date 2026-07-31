@@ -4,7 +4,10 @@ import { getCoreDb, getPlatformMeta } from "../core-db.js";
 import { config } from "../config.js";
 import type { LlmManager } from "./llm-manager.js";
 import { isEmbeddingGguf } from "./llm-manager.js";
-import { isCursorSubscriptionReady } from "./cursor-subscription.js";
+import {
+  getCursorAuthStatus,
+  isCursorSubscriptionReady,
+} from "./cursor-subscription.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
 const META_COMPLETED = "onboarding.completed";
@@ -68,9 +71,13 @@ export function getOnboardingStatus(
   const completed = readTenantSetting(tenantDb, META_COMPLETED) === "true";
   const llmReadyFlag = readTenantSetting(tenantDb, META_LLM_READY) === "true";
   const cursorConnected = isCursorSubscriptionReady(tenantDb);
-  // Do not treat a process-global local llama as ready for every workspace —
-  // that skipped the wizard for all hub users after one install completed.
-  const llmReady = llmReadyFlag || cursorConnected;
+  // Do not treat process-global LLM credentials as ready for every workspace.
+  // Hub/SaaS: only a tenant Vault Cursor key (or explicit llm_ready) skips the wizard.
+  // Local/client may still use CURSOR_API_KEY from the environment.
+  const cursorReadyForTenant =
+    cursorConnected &&
+    (!config.isHub || getCursorAuthStatus(tenantDb).source === "vault");
+  const llmReady = llmReadyFlag || cursorReadyForTenant;
   return { completed, llmReady, llmStatus, cursorConnected };
 }
 

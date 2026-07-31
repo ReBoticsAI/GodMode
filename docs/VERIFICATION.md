@@ -39,10 +39,10 @@ Expect: `{ ok: true, deploymentMode: "local", hub: false }`
 
 ## 3. First-run onboarding
 
-On a fresh **workspace** (or reset tenant onboarding settings), the **FirstRunWizard** appears before the workspace:
+On a fresh **workspace** (or reset tenant onboarding settings), the **FirstRunWizard** appears after auth gates clear (SaaS: email verified):
 
 1. Welcome step
-2. Choose local GGUF, Ollama detect, or **Use cloud API (Vault)**
+2. LLM setup: local GGUF / Ollama / Vault on self-host; Vault BYOK only on Cloud (`INSTALLATION_SURFACE=saas`)
 3. **Get started** opens the workspace
 
 Each user/workspace completes this independently on multi-tenant hubs.
