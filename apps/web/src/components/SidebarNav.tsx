@@ -66,7 +66,6 @@ import {
   userAgentIdForUser,
 } from "@/lib/structure-agents";
 import { NavBadge } from "@/components/NavBadge";
-import { FitText } from "@/components/FitText";
 import { NewUserOnboardingDialog } from "@/components/NewUserOnboardingDialog";
 import {
   readOnboardingCompleted,
@@ -162,10 +161,13 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     onNavigate?.();
   };
 
-  // Label the top group with the signed-in user's name, falling back to the
-  // local-part of their email, then a generic "Personal".
-  const personalLabel =
+  // Sidebar headers use first name only so they fit; tooltips keep the full name.
+  const personalFullName =
     user?.displayName?.trim() || user?.email?.split("@")[0] || "Personal";
+  const personalLabel =
+    personalFullName === "Personal"
+      ? "Personal"
+      : personalFullName.split(/\s+/)[0] || personalFullName;
 
   // User group: collapsed by default, auto-expands while on the user's pages
   // (their profile node in the Users chart or the standalone profile page).
@@ -291,20 +293,20 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               navigate(`${CONTACTS_PATH}?node=self`);
               onNavigate?.();
             }}
-            aria-label={`Open ${personalLabel}'s profile`}
-            title={`Open ${personalLabel}'s profile`}
+            aria-label={`Open ${personalFullName}'s profile`}
+            title={`Open ${personalFullName}'s profile`}
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 font-bold leading-none tracking-tight transition-colors",
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-3xl font-bold leading-none tracking-tight transition-colors",
               pathname.startsWith(USERS_PATH) || pathname.startsWith(CONTACTS_PATH)
                 ? "text-sidebar-accent-foreground"
                 : "text-foreground hover:text-sidebar-accent-foreground"
             )}
           >
             <BrainIcon className="size-6 shrink-0 text-sidebar-accent-foreground" />
-            <FitText text={personalLabel} maxPx={30} minPx={13} />
+            <span className="min-w-0 flex-1 truncate text-left">{personalLabel}</span>
           </button>
           <CollapsibleTrigger
-            aria-label={`Collapse ${personalLabel}`}
+            aria-label={`Collapse ${personalFullName}`}
             className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-foreground [&[data-state=open]>svg]:rotate-90"
           >
             <ChevronRightIcon className="size-4 transition-transform duration-200" />
