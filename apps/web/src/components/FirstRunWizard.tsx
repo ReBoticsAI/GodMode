@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -117,8 +118,11 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
     }
   };
 
+  // Hard-unmount when closed so Base UI portal/overlay cannot linger over Vault.
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={() => undefined}>
+    <Dialog open onOpenChange={() => undefined}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         {step === 0 ? (
           <>
@@ -303,6 +307,8 @@ export function useOnboardingGate() {
   const [forceShow, setForceShow] = useState(false);
   const [pausedForVault, setPausedForVault] = useState(false);
   const [wizardEpoch, setWizardEpoch] = useState(0);
+  /** Prevents clearing pause before navigate(/vault) commits (race that left modal stuck). */
+  const visitedVaultWhilePaused = useRef(false);
 
   const emailGateOpen = Boolean(
     authenticated && user && user.emailVerified === false && user.isAdmin !== true
@@ -311,6 +317,7 @@ export function useOnboardingGate() {
     authenticated && user?.isAdmin && user.mfaEnabled === false
   );
   const authProductGateOpen = emailGateOpen || mfaGateOpen;
+  const onVaultRoute = location.pathname.startsWith(VAULT_PATH);
 
   const refresh = useCallback(async () => {
     setChecking(true);
@@ -331,6 +338,7 @@ export function useOnboardingGate() {
       setChecking(false);
       setForceShow(false);
       setPausedForVault(false);
+      visitedVaultWhilePaused.current = false;
       return;
     }
     if (authProductGateOpen) {
@@ -351,17 +359,30 @@ export function useOnboardingGate() {
   ]);
 
   // After Open Vault, resume the wizard once the user leaves Vault (if still incomplete).
+  // Do not clear pause until we have observed /vault: navigate is async and the old
+  // pathname would otherwise clear pause immediately and leave the dialog stuck open.
   useEffect(() => {
-    if (!pausedForVault) return;
-    if (location.pathname.startsWith(VAULT_PATH)) return;
+    if (!pausedForVault) {
+      visitedVaultWhilePaused.current = false;
+      return;
+    }
+    if (onVaultRoute) {
+      visitedVaultWhilePaused.current = true;
+      return;
+    }
+    if (!visitedVaultWhilePaused.current) return;
+    visitedVaultWhilePaused.current = false;
     setPausedForVault(false);
-  }, [location.pathname, pausedForVault]);
+  }, [onVaultRoute, pausedForVault]);
 
-  const openWizard = forceShow || (!pausedForVault && needsWizard);
+  // Hide on Vault route even if pause raced; Soft-dismiss also hides before navigate lands.
+  const openWizard =
+    forceShow || (needsWizard && !pausedForVault && !onVaultRoute);
 
   const onFinished = useCallback(() => {
     setForceShow(false);
     setPausedForVault(false);
+    visitedVaultWhilePaused.current = false;
     void refresh();
   }, [refresh]);
 
@@ -372,6 +393,7 @@ export function useOnboardingGate() {
 
   const reopenWizard = useCallback(async () => {
     setPausedForVault(false);
+    visitedVaultWhilePaused.current = false;
     setForceShow(true);
     setWizardEpoch((n) => n + 1);
     try {
