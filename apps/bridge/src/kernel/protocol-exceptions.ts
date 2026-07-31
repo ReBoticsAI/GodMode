@@ -44,6 +44,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "authentication-email-resend-verification",
+    methods: ["POST"],
+    pathPattern: "/api/auth/resend-verification",
+    rationale:
+      "Authenticated verification resend is authentication transport (surfaces mail delivery errors).",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "authentication-email-verify-consume",
     methods: ["POST"],
     pathPattern: "/api/auth/verify-email",

@@ -46,6 +46,7 @@ import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
 import { createAdminAuthorityRouter } from "./routes/admin-authority.js";
 import { createSaasRouter, saasStripeWebhookHandler } from "./routes/saas.js";
+import { getTransactionalMailStatus } from "./services/auth/mailer.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
 import { createAdminMarketplaceRouter, createAdminObservabilityRouter } from "./routes/admin-marketplace.js";
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
@@ -332,6 +333,7 @@ app.use(structuredRequestLog);
 app.use(requireTrustedOrigin);
 
 app.get("/api/health", (_req, res) => {
+  const email = getTransactionalMailStatus();
   res.json({
     ok: true,
     deploymentMode: config.deploymentMode,
@@ -339,6 +341,11 @@ app.get("/api/health", (_req, res) => {
     hub: config.isHub,
     client: config.isClient,
     saas: config.isSaas,
+    email: {
+      provider: email.provider,
+      ready: email.ready,
+      detail: email.detail,
+    },
   });
 });
 app.use("/api", attachAuthContext, (req, res, next) => {
@@ -496,6 +503,17 @@ server.listen(config.port, config.host, () => {
   }
   if (config.isClient) {
     console.log(`[client] Marketplace proxy -> ${config.cloudHubUrl || "(CLOUD_HUB_URL not set)"}`);
+  }
+  if (config.isSaas) {
+    const email = getTransactionalMailStatus();
+    if (!email.ready) {
+      console.error(
+        `[mail] SaaS transactional email is not ready (${email.detail}). ` +
+          `Verification and password-reset mail will fail until EMAIL_PROVIDER/RESEND_API_KEY/EMAIL_FROM are fixed.`
+      );
+    } else {
+      console.log(`[mail] SaaS transactional email ready (${email.provider})`);
+    }
   }
   console.log(`IPC directory: ${config.ipcDir}`);
   console.log(`Database (operator tenant): ${config.tenantsDir}/${operatorTenantId}.sqlite`);

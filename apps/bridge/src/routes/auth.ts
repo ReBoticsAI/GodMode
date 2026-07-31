@@ -52,6 +52,7 @@ import {
   verifyMfaChallenge,
 } from "../services/auth/mfa-and-tokens.js";
 import {
+  getTransactionalMailStatus,
   resetPasswordEmail,
   sendMail,
   verificationEmail,
@@ -226,6 +227,7 @@ export function createAuthRouter(): Router {
         });
       }
       const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
+      let verificationEmailSent = Boolean(user.email_verified_at);
       // Seeded INITIAL_ADMINS may already be verified; otherwise send verify link.
       if (!user.email_verified_at) {
         try {
@@ -235,11 +237,11 @@ export function createAuthRouter(): Router {
             ttlMinutes: 60 * 24,
           });
           const link = `${config.web.publicUrl.replace(/\/$/, "")}/login?verify=${encodeURIComponent(token)}`;
-          void sendMail(verificationEmail({ to: normalized, link })).catch((err) =>
-            console.error("[auth] signup verification mail failed", err)
-          );
+          await sendMail(verificationEmail({ to: normalized, link }));
+          verificationEmailSent = true;
         } catch (err) {
-          console.error("[auth] signup verification token failed", err);
+          console.error("[auth] signup verification mail failed", err);
+          verificationEmailSent = false;
         }
       }
       const sessionId = createSession(core, user.id, config.auth.sessionTtlDays);
@@ -249,6 +251,7 @@ export function createAuthRouter(): Router {
       );
       res.status(201).json({
         user: coreUserToAuth(user, { mfaEnabled: false }),
+        verificationEmailSent,
         ...(config.isProduction ? {} : { sessionToken: sessionId }),
       });
     } catch (err) {
@@ -519,6 +522,62 @@ export function createAuthRouter(): Router {
       console.error("[auth] verification mail failed", err);
     }
   });
+
+  /**
+   * Authenticated resend for the logged-in user. Surfaces real delivery errors
+   * (unlike opaque /request-verification) so AuthGate can stop claiming success
+   * when Resend/SMTP is misconfigured.
+   */
+  router.post(
+    "/resend-verification",
+    authLimiter,
+    attachAuthContext,
+    requireAuth,
+    async (req, res) => {
+      if (req.user!.emailVerified) {
+        res.json({ ok: true, alreadyVerified: true });
+        return;
+      }
+      const mailStatus = getTransactionalMailStatus();
+      if (!mailStatus.ready) {
+        res.status(503).json({
+          error:
+            "Email delivery is not configured on this server. Contact support or try again after mail is fixed.",
+          code: "EMAIL_NOT_CONFIGURED",
+          detail: mailStatus.detail,
+        });
+        return;
+      }
+      try {
+        const core = getCoreDb();
+        const user = core.prepare("SELECT * FROM users WHERE id=?").get(req.user!.id) as
+          | CoreUser
+          | undefined;
+        if (!user) {
+          res.status(404).json({ error: "User not found" });
+          return;
+        }
+        if (user.email_verified_at) {
+          res.json({ ok: true, alreadyVerified: true });
+          return;
+        }
+        const token = issueAuthToken(core, {
+          userId: user.id,
+          purpose: "verify",
+          ttlMinutes: 60 * 24,
+        });
+        const link = `${config.web.publicUrl.replace(/\/$/, "")}/login?verify=${encodeURIComponent(token)}`;
+        await sendMail(verificationEmail({ to: user.email, link }));
+        res.json({ ok: true });
+      } catch (err) {
+        console.error("[auth] resend-verification mail failed", err);
+        res.status(502).json({
+          error: "Could not send verification email. Try again later.",
+          code: "EMAIL_SEND_FAILED",
+        });
+      }
+    }
+  );
 
   router.post("/verify-email", authLimiter, (req, res) => {
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
