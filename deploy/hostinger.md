@@ -77,8 +77,21 @@ SPA. Mutating cookie-auth API calls require matching `Origin`/`Referer`.
 
 ## 6. Email
 
-Use **Resend** (`EMAIL_PROVIDER=resend`) or generic SMTP — do not rely on Hostinger
+Use **Resend** (`EMAIL_PROVIDER=resend`) or generic SMTP. Do not rely on Hostinger
 shared mailbox for transactional auth mail.
+
+Required for SaaS live:
+
+1. Create an API key in the [Resend dashboard](https://resend.com/api-keys) (starts with `re_` and is long; do not paste the `re_...` placeholder from `.env.production.example`).
+2. Verify the sending domain for `EMAIL_FROM` (example: `GodMode <noreply@godmode.software>`).
+3. Set on the VPS in `/opt/godmode/deploy/.env.production`:
+   - `EMAIL_PROVIDER=resend`
+   - `EMAIL_FROM=GodMode <noreply@your-verified-domain>`
+   - `RESEND_API_KEY=<real key>`
+4. Recreate the container so Bridge picks up env: `docker compose -f docker-compose.prod.yml up -d`.
+5. Confirm `GET /api/health` includes `"email":{"ready":true,...}`.
+
+If `RESEND_API_KEY` is missing or invalid, signup still creates the account but verification mail fails (logged as `Resend failed: 401`). Logged-in **Resend verification email** returns a real error once the authenticated resend path is deployed.
 
 ## 7. Backups (cron)
 

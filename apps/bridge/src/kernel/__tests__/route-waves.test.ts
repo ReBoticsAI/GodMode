@@ -58,6 +58,7 @@ describe("legacy route wave", () => {
       "auth.ts:post:/mfa/disable",
       "auth.ts:post:/mfa/verify-login",
       "auth.ts:post:/request-verification",
+      "auth.ts:post:/resend-verification",
       "auth.ts:post:/reset-password",
       "auth.ts:post:/signup",
       "auth.ts:post:/verify-email",

@@ -8,6 +8,7 @@ import {
   forgotPassword,
   loginPassword,
   requestEmailVerification,
+  resendEmailVerification,
   resetPassword,
   startOauth,
   startSaasCheckout,
@@ -301,13 +302,19 @@ export default function AuthGate() {
         }
         await finishLogin();
       } else if (mode === "signup") {
-        await signupPassword(email.trim(), password, name.trim(), {
+        const created = await signupPassword(email.trim(), password, name.trim(), {
           inviteCode: !saas && inviteCode.trim() ? inviteCode.trim() : undefined,
           checkoutSessionId: saas ? checkoutSessionId.trim() : undefined,
         });
         clearStoredCheckoutSession();
         await refresh();
-        toast.success("Account created — check your email to verify");
+        if (created.verificationEmailSent === false) {
+          toast.error(
+            "Account created, but we could not send the verification email. Use Resend below or contact support."
+          );
+        } else {
+          toast.success("Account created — check your email to verify");
+        }
         setMode("verify-banner");
       }
     } catch (err) {
@@ -346,15 +353,20 @@ export default function AuthGate() {
   };
 
   const resendVerification = async () => {
-    const target = email.trim() || user?.email || "";
-    if (!target) {
-      toast.error("Enter your email");
-      return;
-    }
     setBusy(true);
     try {
-      await requestEmailVerification(target);
-      toast.success("If that email exists, a verification link was sent");
+      if (user) {
+        await resendEmailVerification();
+        toast.success("Verification link sent");
+      } else {
+        const target = email.trim();
+        if (!target) {
+          toast.error("Enter your email");
+          return;
+        }
+        await requestEmailVerification(target);
+        toast.success("If that email exists, a verification link was sent");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send email");
     } finally {

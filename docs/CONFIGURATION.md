@@ -19,8 +19,8 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `INITIAL_ADMIN_PASSWORD` | empty | Optional password for seeded admins |
 | `AUTH_SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `EMAIL_PROVIDER` | `none` | `none`, `resend`, or `smtp` (required in production SaaS) |
-| `EMAIL_FROM` | `GodMode <noreply@localhost>` | From header for transactional mail |
-| `RESEND_API_KEY` | empty | Resend API key when `EMAIL_PROVIDER=resend` |
+| `EMAIL_FROM` | `GodMode <noreply@localhost>` | From header for transactional mail (must be a Resend-verified domain in SaaS) |
+| `RESEND_API_KEY` | empty | Real Resend API key when `EMAIL_PROVIDER=resend` (not the `re_...` placeholder) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
 | `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
 | `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth for sign-in (optional) |
