@@ -104,12 +104,14 @@ describe("productivity adapter actions", () => {
       "assign",
       "transition",
       "add_comment",
+      "archive_from_project",
     ]);
     expect(TASK_CARD_ACTIONS.map((action) => action.name)).toEqual([
       "move",
       "assign",
       "transition",
       "add_comment",
+      "archive_from_project",
     ]);
     expect(Object.keys(cardCommentServiceAdapter.actions ?? {})).toEqual([
       "add_comment",

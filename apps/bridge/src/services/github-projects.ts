@@ -20,6 +20,11 @@ export type GithubProjectSummary = {
   owner: string;
 };
 
+export type GithubRepoSummary = {
+  fullName: string;
+  private: boolean;
+};
+
 type StatusOption = { id: string; name: string };
 
 type ProjectMeta = {
@@ -109,6 +114,53 @@ type ProjectNode = {
   number: number;
   url: string;
 };
+
+/**
+ * List repositories the connected GitHub token can access (for Issue create).
+ */
+export async function listGithubReposForUser(
+  _userId: string,
+  db: AppDatabase
+): Promise<GithubRepoSummary[]> {
+  const accessToken = await requireToken(db);
+  const out: GithubRepoSummary[] = [];
+  let page = 1;
+  while (page <= 5) {
+    const url = new URL("https://api.github.com/user/repos");
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("sort", "updated");
+    url.searchParams.set("affiliation", "owner,collaborator,organization_member");
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "GodMode",
+      },
+    });
+    if (!res.ok) {
+      const status = res.status === 401 || res.status === 403 ? 403 : 502;
+      throw Object.assign(
+        new Error(`GitHub repos list failed (${res.status})`),
+        { status }
+      );
+    }
+    const batch = (await res.json()) as Array<{
+      full_name?: string;
+      private?: boolean;
+    }>;
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const r of batch) {
+      if (typeof r.full_name === "string" && r.full_name.includes("/")) {
+        out.push({ fullName: r.full_name, private: Boolean(r.private) });
+      }
+    }
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  out.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  return out;
+}
 
 /**
  * List Projects the connected GitHub account can see.
@@ -1511,6 +1563,42 @@ export async function pushCardDeleteToGithub(opts: {
     // Item may already be gone on GitHub.
     console.warn("[github-projects] deleteProjectV2Item", err);
   });
+}
+
+/**
+ * Archive the linked Project item (keeps Issue/PR). Caller removes the local card.
+ */
+export async function pushCardArchiveToGithub(opts: {
+  userId: string;
+  db: AppDatabase;
+  contextJson: string | null;
+  projectId: string;
+}): Promise<{ archived: boolean }> {
+  const board = getUserBoard(opts.userId, opts.db, opts.projectId);
+  if (!board?.sync_enabled || !board.github_project_node_id) {
+    return { archived: false };
+  }
+  const gh = parseGithubContext(opts.contextJson);
+  if (!gh.projectItemId) return { archived: false };
+  const accessToken = await requireToken(opts.db);
+  try {
+    await githubGraphql(
+      accessToken,
+      `mutation($projectId: ID!, $itemId: ID!) {
+        archiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+          item { id }
+        }
+      }`,
+      {
+        projectId: board.github_project_node_id,
+        itemId: String(gh.projectItemId),
+      }
+    );
+    return { archived: true };
+  } catch (err) {
+    console.warn("[github-projects] archiveProjectV2Item", err);
+    throw err;
+  }
 }
 
 export function updateBoardStatusMap(

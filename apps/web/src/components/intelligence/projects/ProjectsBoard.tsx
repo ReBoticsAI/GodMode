@@ -22,6 +22,7 @@ import {
   ListTree,
   MoreHorizontal,
   Paperclip,
+  Archive,
   Pencil,
   Plus,
   Search,
@@ -30,9 +31,11 @@ import {
   X,
 } from "lucide-react";
 import {
+  archiveUserProjectCard,
   fetchAiProjects,
   fetchUserProjects,
   fetchAiAgents,
+  fetchGithubReposList,
   moveProjectCard,
   moveUserProjectCard,
   createProjectCard,
@@ -60,6 +63,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Avatar,
   AvatarFallback,
@@ -136,9 +147,45 @@ type GithubCardMeta = {
   repo?: string;
   issueNumber?: number;
   url?: string;
+  projectItemId?: string;
   assignees?: GithubAssignee[];
   milestone?: GithubMilestone | null;
 };
+
+type GithubCreateMode = "draft" | "issue" | "none";
+
+function createPrefsKey(boardKey: string) {
+  return `godmode.tasks.createPrefs.${boardKey}`;
+}
+
+function loadCreatePrefs(boardKey: string): {
+  mode: GithubCreateMode;
+  repo: string;
+} {
+  try {
+    const raw = sessionStorage.getItem(createPrefsKey(boardKey));
+    if (!raw) return { mode: "draft", repo: "" };
+    const parsed = JSON.parse(raw) as { mode?: string; repo?: string };
+    const mode =
+      parsed.mode === "issue" || parsed.mode === "none" || parsed.mode === "draft"
+        ? parsed.mode
+        : "draft";
+    return { mode, repo: typeof parsed.repo === "string" ? parsed.repo : "" };
+  } catch {
+    return { mode: "draft", repo: "" };
+  }
+}
+
+function saveCreatePrefs(
+  boardKey: string,
+  prefs: { mode: GithubCreateMode; repo: string }
+) {
+  try {
+    sessionStorage.setItem(createPrefsKey(boardKey), JSON.stringify(prefs));
+  } catch {
+    /* ignore */
+  }
+}
 
 type CardFaceVisibility = {
   priority: boolean;
@@ -488,6 +535,7 @@ function CardEditorDialog({
   scope,
   columns,
   labelSuggestions,
+  githubSyncEnabled,
   onSaved,
   onDeleted,
   onNavigate,
@@ -498,6 +546,7 @@ function CardEditorDialog({
   scope: ProductivityScope;
   columns: AiProjectColumn[];
   labelSuggestions: string[];
+  githubSyncEnabled?: boolean;
   onSaved: () => void;
   onDeleted: () => void;
   onNavigate: (cardId: string) => void;
@@ -863,8 +912,22 @@ function CardEditorDialog({
     }
   };
 
+  const linkedGh = useMemo(
+    () => (card ? parseGithubCardMeta(card.context_json) : {}),
+    [card]
+  );
+  const hasProjectItem = Boolean(linkedGh.projectItemId);
+  const showGithubLifecycle = Boolean(githubSyncEnabled && isUserScope(scope));
+
   const onDelete = async () => {
     if (!card) return;
+    const linked = showGithubLifecycle && hasProjectItem;
+    const ok = window.confirm(
+      linked
+        ? "Remove this card from the board and from the GitHub Project? The underlying Issue or PR is kept."
+        : "Delete this card from the board? This cannot be undone."
+    );
+    if (!ok) return;
     setBusy(true);
     try {
       if (isUserScope(scope)) {
@@ -872,8 +935,41 @@ function CardEditorDialog({
       } else {
         await deleteProjectCard(card.id, scope.agentId);
       }
+      toast.success(
+        linked
+          ? "Removed from Project (Issue/PR kept)"
+          : "Card deleted"
+      );
       onDeleted();
       onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onArchive = async () => {
+    if (!card || !isUserScope(scope)) return;
+    const ok = window.confirm(
+      hasProjectItem
+        ? "Archive this item on the GitHub Project and remove it from this board? The underlying Issue or PR is kept."
+        : "Remove this local card from the board? It was never linked to a Project item."
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      if (hasProjectItem) {
+        await archiveUserProjectCard(card.id);
+        toast.success("Archived on GitHub Project (Issue/PR kept)");
+      } else {
+        await deleteUserProjectCard(card.id);
+        toast.success("Card removed");
+      }
+      onDeleted();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Archive failed");
     } finally {
       setBusy(false);
     }
@@ -1317,25 +1413,50 @@ function CardEditorDialog({
             )}
           </div>
         </div>
-        <SheetFooter className="flex-row justify-between gap-2 border-t sm:justify-between">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="text-destructive hover:text-destructive"
-            onClick={() => void onDelete()}
-            disabled={busy || readOnly}
-          >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Delete
-          </Button>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => void onSave()} disabled={busy || readOnly}>
-              Save
-            </Button>
-            <Button type="button" size="sm" onClick={() => void onRun()} disabled={busy}>
-              Run with Intelligence
-            </Button>
+        <SheetFooter className="flex-col items-stretch gap-2 border-t sm:flex-col">
+          {showGithubLifecycle ? (
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Archive keeps the Issue/PR and archives the Project item. Remove from
+              Project deletes the Project item only (Issue/PR stays). Sync drops
+              local cards when items are archived or removed on GitHub.
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {showGithubLifecycle ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void onArchive()}
+                  disabled={busy || readOnly}
+                >
+                  <Archive className="mr-1 h-3.5 w-3.5" />
+                  Archive
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => void onDelete()}
+                disabled={busy || readOnly}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                {showGithubLifecycle && hasProjectItem
+                  ? "Remove from Project"
+                  : "Delete"}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => void onSave()} disabled={busy || readOnly}>
+                Save
+              </Button>
+              <Button type="button" size="sm" onClick={() => void onRun()} disabled={busy}>
+                Run with Intelligence
+              </Button>
+            </div>
           </div>
         </SheetFooter>
       </SheetContent>
@@ -1346,8 +1467,8 @@ function CardEditorDialog({
 export function ProjectsBoard({
   scope,
   projectId,
-  githubSyncEnabled: _githubSyncEnabled,
-  defaultGithubRepo: _defaultGithubRepo,
+  githubSyncEnabled = false,
+  defaultGithubRepo = "",
 }: {
   scope: ProductivityScope;
   projectId?: string;
@@ -1360,6 +1481,12 @@ export function ProjectsBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editing, setEditing] = useState<AiProjectCard | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("New task");
+  const [createMode, setCreateMode] = useState<GithubCreateMode>("draft");
+  const [createRepo, setCreateRepo] = useState("");
+  const [repoOptions, setRepoOptions] = useState<string[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
   const boardKey =
     projectId ||
     (isUserScope(scope) ? scope.userId : scope.agentId) ||
@@ -1377,7 +1504,26 @@ export function ProjectsBoard({
   useEffect(() => {
     setFace(loadCardFaceVisibility(boardKey));
     setFilter(loadBoardFilter(boardKey));
-  }, [boardKey]);
+    const prefs = loadCreatePrefs(boardKey);
+    setCreateMode(prefs.mode);
+    setCreateRepo(prefs.repo || defaultGithubRepo);
+  }, [boardKey, defaultGithubRepo]);
+
+  useEffect(() => {
+    if (!createOpen || !githubSyncEnabled || createMode !== "issue") return;
+    if (repoOptions.length > 0) return;
+    setReposLoading(true);
+    fetchGithubReposList()
+      .then((r) => {
+        const names = r.repos.map((x) => x.fullName);
+        setRepoOptions(names);
+        if (!createRepo && names[0]) setCreateRepo(names[0]);
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Could not list repos");
+      })
+      .finally(() => setReposLoading(false));
+  }, [createOpen, githubSyncEnabled, createMode, repoOptions.length, createRepo]);
 
   const setFaceField = (key: keyof CardFaceVisibility, checked: boolean) => {
     setFace((prev) => {
@@ -1454,7 +1600,20 @@ export function ProjectsBoard({
     if (overCol) void onMove(cardId, overCol);
   };
 
-  const addCard = async () => {
+  const openCreate = () => {
+    if (readOnly) return;
+    if (githubSyncEnabled && isUserScope(scope)) {
+      const prefs = loadCreatePrefs(boardKey);
+      setCreateTitle("New task");
+      setCreateMode(prefs.mode);
+      setCreateRepo(prefs.repo || defaultGithubRepo);
+      setCreateOpen(true);
+      return;
+    }
+    void addCardQuick();
+  };
+
+  const addCardQuick = async () => {
     if (readOnly) return;
     const firstCol = firstVisibleColumnId(columns);
     try {
@@ -1471,6 +1630,37 @@ export function ProjectsBoard({
           agentId: scope.agentId,
         });
       }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add card");
+    }
+  };
+
+  const submitCreate = async () => {
+    if (readOnly) return;
+    const title = createTitle.trim() || "New task";
+    if (createMode === "issue" && !createRepo.includes("/")) {
+      toast.error("Pick a repository (owner/name) to create an Issue");
+      return;
+    }
+    const firstCol = firstVisibleColumnId(columns);
+    setCreateOpen(false);
+    saveCreatePrefs(boardKey, { mode: createMode, repo: createRepo });
+    try {
+      await createUserProjectCard({
+        title,
+        columnId: firstCol,
+        projectId,
+        githubCreateMode: createMode,
+        githubRepo: createMode === "issue" ? createRepo : undefined,
+      });
+      toast.success(
+        createMode === "issue"
+          ? "Card created as Issue on the Project"
+          : createMode === "draft"
+            ? "Card created as Draft on the Project"
+            : "Local card created"
+      );
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add card");
@@ -1551,7 +1741,7 @@ export function ProjectsBoard({
               variant="outline"
               className="h-7 text-xs"
               disabled={readOnly}
-              onClick={() => void addCard()}
+              onClick={() => openCreate()}
             >
               Add card
             </Button>
@@ -1890,10 +2080,91 @@ export function ProjectsBoard({
         scope={scope}
         columns={columns}
         labelSuggestions={labelSuggestions}
+        githubSyncEnabled={githubSyncEnabled}
         onSaved={load}
         onDeleted={load}
         onNavigate={navigateToCard}
       />
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add card</DialogTitle>
+            <DialogDescription>
+              On a linked board, create a Draft Project item, a real Issue in a
+              repo, or a local-only card.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="create-title">Title</Label>
+              <Input
+                id="create-title"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Create as</Label>
+              <Select
+                value={createMode}
+                onValueChange={(v) =>
+                  setCreateMode((v as GithubCreateMode) ?? "draft")
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft on Project (default)</SelectItem>
+                  <SelectItem value="issue">Issue in a repository</SelectItem>
+                  <SelectItem value="none">Local only (no GitHub)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {createMode === "issue" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label>Repository</Label>
+                <Select
+                  value={createRepo || undefined}
+                  onValueChange={(v) => setCreateRepo(v ?? "")}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue
+                      placeholder={
+                        reposLoading ? "Loading repos…" : "Select repo"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repoOptions.map((repo) => (
+                      <SelectItem key={repo} value={repo}>
+                        {repo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  Repos the connected GitHub App / token can access.
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCreateOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={() => void submitCreate()}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
