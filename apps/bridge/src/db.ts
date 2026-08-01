@@ -284,6 +284,7 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 12, name: "archive_lessons_schema_v1", up: migrateArchiveLessonsSchema },
   { version: 13, name: "holdings_schema_v1", up: createHoldingsSchema },
   { version: 14, name: "multi_board_tasks_github_v1", up: migrateMultiBoardTasksSchema },
+  { version: 17, name: "tasks_github_sync_health_v1", up: migrateTasksGithubSyncHealthSchema },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
@@ -297,6 +298,17 @@ function migrateMultiBoardTasksSchema(db: Database.Database): void {
   addColumn(db, "ai_projects", "columns_json", "TEXT");
   db.exec(`
     CREATE INDEX IF NOT EXISTS ai_projects_user_idx ON ai_projects(user_id);
+  `);
+}
+
+/** Sync health for GitHub Project poll + manual Sync (last error / in-progress lease). */
+function migrateTasksGithubSyncHealthSchema(db: Database.Database): void {
+  addColumn(db, "ai_projects", "last_sync_error", "TEXT");
+  addColumn(db, "ai_projects", "sync_started_at", "TEXT");
+  addColumn(db, "ai_projects", "last_sync_attempt_at", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS ai_projects_sync_enabled_idx
+      ON ai_projects(sync_enabled) WHERE sync_enabled = 1;
   `);
 }
 
@@ -768,11 +780,17 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   addCol("ai_projects", "github_status_map_json", "TEXT");
   addCol("ai_projects", "sync_enabled", "INTEGER NOT NULL DEFAULT 0");
   addCol("ai_projects", "last_synced_at", "TEXT");
+  addCol("ai_projects", "columns_json", "TEXT");
+  addCol("ai_projects", "last_sync_error", "TEXT");
+  addCol("ai_projects", "sync_started_at", "TEXT");
+  addCol("ai_projects", "last_sync_attempt_at", "TEXT");
   db.exec(`
       CREATE INDEX IF NOT EXISTS ai_calendar_events_user_idx
         ON ai_calendar_events(user_id, start_at);
       CREATE INDEX IF NOT EXISTS ai_projects_user_idx
         ON ai_projects(user_id);
+      CREATE INDEX IF NOT EXISTS ai_projects_sync_enabled_idx
+        ON ai_projects(sync_enabled) WHERE sync_enabled = 1;
     `);
   db.prepare(`UPDATE ai_workflows SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
   db.prepare(`UPDATE ai_projects SET agent_id = 'intelligence' WHERE agent_id IS NULL AND user_id IS NULL`).run();
