@@ -135,6 +135,12 @@ export function ensureUserProject(userId: string, db: AppDatabase): string {
   return id;
 }
 
+export type BoardColumnDef = {
+  id: string;
+  name: string;
+  sort_order: number;
+};
+
 export type UserBoardRow = {
   id: string;
   name: string;
@@ -143,11 +149,50 @@ export type UserBoardRow = {
   github_project_node_id: string | null;
   github_project_url: string | null;
   github_status_map_json: string | null;
+  columns_json: string | null;
   sync_enabled: number;
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export function defaultBoardColumns(): BoardColumnDef[] {
+  return CANONICAL_COLUMNS.map(([id, name, sort_order]) => ({
+    id,
+    name,
+    sort_order,
+  }));
+}
+
+export function parseBoardColumns(raw: string | null | undefined): BoardColumnDef[] {
+  if (!raw) return defaultBoardColumns();
+  try {
+    const parsed = JSON.parse(raw) as BoardColumnDef[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return defaultBoardColumns();
+    return parsed
+      .filter((c) => c && typeof c.id === "string" && typeof c.name === "string")
+      .map((c, i) => ({
+        id: c.id,
+        name: c.name,
+        sort_order: Number.isFinite(c.sort_order) ? Number(c.sort_order) : i,
+      }))
+      .sort((a, b) => a.sort_order - b.sort_order);
+  } catch {
+    return defaultBoardColumns();
+  }
+}
+
+export function columnsForBoard(board: UserBoardRow): BoardColumnDef[] {
+  return parseBoardColumns(board.columns_json);
+}
+
+export function slugBoardColumnId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "column";
+}
 
 /** List non-archived (or all) user-owned kanban boards. */
 export function listUserBoards(

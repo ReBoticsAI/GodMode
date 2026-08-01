@@ -2615,6 +2615,7 @@ export type UserTaskBoard = {
   github_project_node_id: string | null;
   github_project_url: string | null;
   github_status_map_json: string | null;
+  columns_json?: string | null;
   sync_enabled: number;
   last_synced_at: string | null;
 };
