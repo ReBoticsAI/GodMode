@@ -10,7 +10,7 @@ import {
   type UserBoardRow,
   userProjectId,
 } from "./user-productivity.js";
-import { readGithubProjectsToken } from "./github-integration.js";
+import { readGithubProjectsToken, resolveGithubProjectsAccessToken } from "./github-integration.js";
 
 export type GithubProjectSummary = {
   id: string;
@@ -70,15 +70,8 @@ const DEFAULT_STATUS_ALIASES: Record<string, string[]> = {
   done: ["done", "complete", "completed", "closed", "finished"],
 };
 
-function requireToken(db: AppDatabase): string {
-  const token = readGithubProjectsToken(db);
-  if (!token?.accessToken) {
-    throw Object.assign(
-      new Error("Connect GitHub in Settings before linking a Project"),
-      { status: 400 }
-    );
-  }
-  return token.accessToken;
+async function requireToken(db: AppDatabase): Promise<string> {
+  return resolveGithubProjectsAccessToken(db);
 }
 
 async function githubGraphql<T>(
@@ -126,7 +119,7 @@ export async function listGithubProjectsForUser(
   _userId: string,
   db: AppDatabase
 ): Promise<GithubProjectSummary[]> {
-  const accessToken = requireToken(db);
+  const accessToken = await requireToken(db);
   const out: GithubProjectSummary[] = [];
   const seen = new Set<string>();
 
@@ -598,7 +591,7 @@ export async function linkBoardToGithubProject(opts: {
   if (!board || board.archived_at) {
     throw Object.assign(new Error("Board not found"), { status: 404 });
   }
-  const accessToken = requireToken(opts.db);
+  const accessToken = await requireToken(opts.db);
 
   // Enforce one board per GitHub Project per user
   const conflict = opts.db
@@ -849,7 +842,7 @@ async function pullBoardFromGithub(opts: {
     );
   }
 
-  const accessToken = requireToken(opts.db);
+  const accessToken = await requireToken(opts.db);
   const meta = await loadProjectMeta(accessToken, board.github_project_node_id);
   const fromGh = columnsFromStatusOptions(meta.statusOptions);
   let statusMap: Record<string, string> = {};
@@ -1091,7 +1084,7 @@ export async function pushCardColumnToGithub(opts: {
   const optionId = statusMap[opts.columnId];
   if (!optionId) return;
 
-  const accessToken = requireToken(opts.db);
+  const accessToken = await requireToken(opts.db);
   const meta = await loadProjectMeta(accessToken, card.github_project_node_id);
   if (!meta.statusFieldId) return;
 
@@ -1122,7 +1115,7 @@ export async function pushCardFieldsToGithub(opts: {
   };
   if (!gh.projectItemId) return;
 
-  const accessToken = requireToken(opts.db);
+  const accessToken = await requireToken(opts.db);
   const meta = await loadProjectMeta(accessToken, card.github_project_node_id);
   const contentId = gh.contentId ? String(gh.contentId) : null;
   const title = card.title;
@@ -1248,7 +1241,7 @@ export async function getGithubProjectMetaForUser(
   defaultStatusMap: Record<string, string>;
 }> {
   void userId;
-  const accessToken = requireToken(db);
+  const accessToken = await requireToken(db);
   const meta = await loadProjectMeta(accessToken, projectNodeId);
   return {
     id: meta.id,

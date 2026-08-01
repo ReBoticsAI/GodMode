@@ -42,6 +42,7 @@ import { createWikiRouter } from "./routes/wiki.js";
 import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createGithubIntegrationRouter } from "./routes/github-integration.js";
+import { githubAppWebhookHandler } from "./services/github-app-webhook.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
 import { createAdminAuthorityRouter } from "./routes/admin-authority.js";
@@ -333,6 +334,14 @@ if (config.isSaas) {
     marketplaceStripeWebhookHandler
   );
 }
+// GitHub App webhooks (Projects sync) — raw body + HMAC.
+app.post(
+  "/api/integrations/github/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    void githubAppWebhookHandler(req, res);
+  }
+);
 app.use(express.json({ limit: "25mb" }));
 app.use(legacyEndpointTelemetry(coreDb));
 app.use(structuredRequestLog);

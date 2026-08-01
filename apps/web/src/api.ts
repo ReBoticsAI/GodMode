@@ -2699,9 +2699,14 @@ export const updateUserBoardStatusMap = (
   );
 
 export const fetchGithubIntegrationStatus = () =>
-  api<{ connected: boolean; login: string | null; configured: boolean }>(
-    "/integrations/github/status"
-  );
+  api<{
+    connected: boolean;
+    login: string | null;
+    configured: boolean;
+    githubApp?: boolean;
+    installationId?: number | null;
+    installUrl?: string | null;
+  }>("/integrations/github/status");
 
 export const startGithubIntegrationConnect = () =>
   api<{ url: string }>("/integrations/github/connect", { method: "POST" });
