@@ -12,6 +12,14 @@ import {
   listArtifacts,
   deleteArtifact,
 } from "./ai-artifacts.js";
+import {
+  cloudRequiresExaByok,
+  exaErrorPayload,
+  exaFetchUrl,
+  exaWebSearch,
+  missingExaKeyMessage,
+  resolveExaApiKey,
+} from "./exa-web.js";
 import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
 import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
 import type { LlmManager } from "./llm-manager.js";
@@ -1238,6 +1246,23 @@ export async function executeTool(
       const query = String(args.query ?? "").trim();
       if (!query) throw new Error("query required");
       const limit = Math.min(Math.max(Number(args.limit ?? 5) || 5, 1), 10);
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const exaKey = resolveExaApiKey(ctx.db, agentId);
+      if (exaKey) {
+        try {
+          return await exaWebSearch(exaKey, { query, limit });
+        } catch (err) {
+          return exaErrorPayload("web_search", err, { query, results: [] });
+        }
+      }
+      if (cloudRequiresExaByok()) {
+        return {
+          query,
+          results: [],
+          error: missingExaKeyMessage(),
+          code: "exa:missing_key",
+        };
+      }
       const endpoint = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
       let results: WebSearchResult[] = [];
       try {
@@ -1263,12 +1288,18 @@ export async function executeTool(
           query,
           results: [],
           note: `DuckDuckGo request failed: ${(err as Error).message}`,
+          provider: "duckduckgo",
         };
       }
       if (results.length === 0) {
-        return { query, results: [], note: "No results parsed from DuckDuckGo." };
+        return {
+          query,
+          results: [],
+          note: "No results parsed from DuckDuckGo.",
+          provider: "duckduckgo",
+        };
       }
-      return { query, results: results.slice(0, limit) };
+      return { query, results: results.slice(0, limit), provider: "duckduckgo" };
     }
     case "fetch_url": {
       const url = String(args.url ?? "").trim();
@@ -1279,6 +1310,22 @@ export async function executeTool(
         Math.max(Number(args.maxChars ?? 6000) || 6000, 500),
         20000
       );
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const exaKey = resolveExaApiKey(ctx.db, agentId);
+      if (exaKey) {
+        try {
+          return await exaFetchUrl(exaKey, { url, maxChars });
+        } catch (err) {
+          return exaErrorPayload("fetch_url", err, { url });
+        }
+      }
+      if (cloudRequiresExaByok()) {
+        return {
+          url,
+          error: missingExaKeyMessage(),
+          code: "exa:missing_key",
+        };
+      }
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
       try {
@@ -1292,7 +1339,12 @@ export async function executeTool(
           contentType.includes("html") || (!contentType && /<html[\s>]/i.test(raw));
         if (!isHtml) {
           const text = raw.slice(0, maxChars);
-          return { url, text, truncated: raw.length > maxChars };
+          return {
+            url,
+            text,
+            truncated: raw.length > maxChars,
+            provider: "direct",
+          };
         }
         const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(raw);
         const title = titleMatch ? stripHtml(titleMatch[1]) : "";
@@ -1305,9 +1357,10 @@ export async function executeTool(
           title,
           text: text.slice(0, maxChars),
           truncated: text.length > maxChars,
+          provider: "direct",
         };
       } catch (err) {
-        return { url, error: (err as Error).message };
+        return { url, error: (err as Error).message, provider: "direct" };
       } finally {
         clearTimeout(timer);
       }
