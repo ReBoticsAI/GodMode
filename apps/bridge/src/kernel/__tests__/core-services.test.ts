@@ -49,6 +49,7 @@ describe("core service ObjectType adapters", () => {
       );
       CREATE TABLE ai_projects (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT, agent_id TEXT,
+        columns_json TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
