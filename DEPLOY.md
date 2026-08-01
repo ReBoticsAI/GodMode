@@ -227,7 +227,9 @@ Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 - Firewall: SSH IP-restricted; 80/443 only; **never** publish Bridge `3847` (`deploy/ufw-origin.sh`)
 - `deploy/.env.production` with real secrets (never commit)
 - Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
-- Cron backups via `scripts/backup/snapshot-platform.mjs` + `BACKUP_S3_*`
+- Cron backups via `deploy/scripts/run-platform-backup.sh` (Docker volume +
+  `scripts/backup/snapshot-platform.mjs`) and optional `BACKUP_S3_*` offsite
+  ([deploy/hostinger.md](deploy/hostinger.md) §7)
 - Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
 
 ## Public marketing site (Stripe business website)
