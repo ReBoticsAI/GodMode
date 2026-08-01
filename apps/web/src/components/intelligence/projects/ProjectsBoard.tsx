@@ -18,7 +18,7 @@ import {
   CheckCircle2,
   Circle,
   ListTree,
-  MessageSquareText,
+  MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
@@ -57,13 +57,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,13 +84,31 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const PRIORITY_META: Record<number, { label: string; badge: string }> = {
-  1: { label: "High", badge: "bg-red-500/15 text-red-400 border-red-500/30" },
-  2: { label: "Medium", badge: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
-  3: { label: "Low", badge: "bg-slate-500/15 text-slate-400 border-slate-500/30" },
+  0: { label: "P0", badge: "bg-red-500/20 text-red-400 border-red-500/40" },
+  1: { label: "P1", badge: "bg-orange-500/20 text-orange-400 border-orange-500/40" },
+  2: { label: "P2", badge: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
+  3: { label: "P3", badge: "bg-slate-500/20 text-slate-400 border-slate-500/40" },
 };
 
 function priorityMeta(p: number | null | undefined) {
-  return PRIORITY_META[p ?? 2] ?? PRIORITY_META[2];
+  const key = p ?? 2;
+  return PRIORITY_META[key] ?? PRIORITY_META[2];
+}
+
+function parseGithubCardMeta(raw: string | null): {
+  repo?: string;
+  issueNumber?: number;
+  url?: string;
+} {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as {
+      github?: { repo?: string; issueNumber?: number; url?: string };
+    };
+    return parsed.github ?? {};
+  } catch {
+    return {};
+  }
 }
 
 interface CardAttachment {
@@ -131,48 +149,87 @@ function parseTags(raw: string | null): string[] {
 
 function SortableCard({
   card,
+  columns,
   subtaskProgress,
   onMove,
   onEdit,
 }: {
   card: AiProjectCard;
+  columns: AiProjectColumn[];
   subtaskProgress?: { total: number; done: number };
   onMove: (id: string, columnId: string) => void;
   onEdit: (card: AiProjectCard) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id, data: { columnId: card.column_id } });
-  const attachmentCount = useMemo(
-    () => parseAttachments(card.context_json).length,
+  const tags = useMemo(() => parseTags(card.tags_json), [card.tags_json]);
+  const gh = useMemo(
+    () => parseGithubCardMeta(card.context_json),
     [card.context_json]
   );
-  const tags = useMemo(() => parseTags(card.tags_json), [card.tags_json]);
-  const hasPrompt = Boolean(card.prompt && card.prompt.trim());
   const pm = priorityMeta(card.priority);
+  const repoLabel = gh.repo?.includes("/")
+    ? gh.repo.split("/")[1]
+    : gh.repo;
+  const issueRef =
+    repoLabel && gh.issueNumber != null
+      ? `${repoLabel} #${gh.issueNumber}`
+      : null;
+
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative rounded-md border bg-card p-2 text-xs shadow-sm",
+        "group relative rounded-md border bg-card p-2.5 text-xs shadow-sm",
         isDragging && "opacity-60"
       )}
     >
-      <button
-        type="button"
-        aria-label="Edit card"
-        className="absolute right-1 top-1 z-10 rounded p-1 text-muted-foreground opacity-50 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onEdit(card);
-        }}
-      >
-        <Pencil className="h-3 w-3" />
-      </button>
+      <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="h-6 w-6 opacity-50 group-hover:opacity-100"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+                <span className="sr-only">Move card</span>
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-40">
+            {columns
+              .filter((c) => c.id !== card.column_id)
+              .map((c) => (
+                <DropdownMenuItem
+                  key={c.id}
+                  onClick={() => onMove(card.id, c.id)}
+                >
+                  Move to {c.name}
+                </DropdownMenuItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <button
+          type="button"
+          aria-label="Edit card"
+          className="rounded p-1 text-muted-foreground opacity-50 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(card);
+          }}
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      </div>
       <div
         title="Click to view card"
-        className="cursor-pointer"
+        className="cursor-pointer pr-12"
         {...attributes}
         {...listeners}
         onClick={() => onEdit(card)}
@@ -183,10 +240,14 @@ function SortableCard({
           }
         }}
       >
-        <div className="flex items-start gap-1 pr-5">
+        {issueRef ? (
+          <div className="mb-1 text-[10px] text-muted-foreground">{issueRef}</div>
+        ) : null}
+        <div className="font-medium leading-snug text-[12px]">{card.title}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
           <Badge
             variant="outline"
-            className={cn("h-3.5 shrink-0 px-1 text-[8px] font-semibold", pm.badge)}
+            className={cn("h-4 shrink-0 px-1.5 text-[9px] font-semibold", pm.badge)}
             title={`Priority: ${pm.label}`}
           >
             {pm.label}
@@ -194,65 +255,23 @@ function SortableCard({
           {card.status === "blocked" && (
             <Badge
               variant="outline"
-              className="h-3.5 shrink-0 border-amber-500/50 bg-amber-500/15 px-1 text-[8px] font-semibold text-amber-600"
-              title="Blocked — needs attention (see card comments for the reason)"
+              className="h-4 shrink-0 border-amber-500/50 bg-amber-500/15 px-1.5 text-[9px] font-semibold text-amber-600"
             >
               BLOCKED
             </Badge>
           )}
-          <span className="font-medium leading-tight">{card.title}</span>
+          {tags.slice(0, 4).map((t) => (
+            <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[9px]">
+              {t}
+            </Badge>
+          ))}
+          {subtaskProgress && subtaskProgress.total > 0 ? (
+            <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
+              <ListTree className="h-2.5 w-2.5" />
+              {subtaskProgress.done}/{subtaskProgress.total}
+            </span>
+          ) : null}
         </div>
-        {card.description && (
-          <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">{card.description}</p>
-        )}
-        {(hasPrompt || attachmentCount > 0 || tags.length > 0 ||
-          (subtaskProgress && subtaskProgress.total > 0)) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
-            {subtaskProgress && subtaskProgress.total > 0 && (
-              <span className="inline-flex items-center gap-0.5" title="Subtask progress">
-                <ListTree className="h-2.5 w-2.5" />
-                {subtaskProgress.done}/{subtaskProgress.total}
-              </span>
-            )}
-            {hasPrompt && (
-              <span className="inline-flex items-center gap-0.5" title="Has an LLM prompt">
-                <MessageSquareText className="h-2.5 w-2.5" />
-                prompt
-              </span>
-            )}
-            {attachmentCount > 0 && (
-              <span className="inline-flex items-center gap-0.5" title="Attached context">
-                <Paperclip className="h-2.5 w-2.5" />
-                {attachmentCount}
-              </span>
-            )}
-            {tags.map((t) => (
-              <Badge key={t} variant="secondary" className="h-3.5 px-1 text-[8px]">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="mt-2 flex gap-1">
-        {(
-          ["backlog", "ready", "in_progress", "review", "done"] as const
-        ).map((col) =>
-          col !== card.column_id ? (
-            <button
-              key={col}
-              type="button"
-              className="rounded border px-1 py-0.5 text-[9px] hover:bg-muted"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onMove(card.id, col);
-              }}
-            >
-              → {col.replace("_", " ")}
-            </button>
-          ) : null
-        )}
       </div>
     </div>
   );
@@ -589,9 +608,12 @@ function CardEditorDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
+      >
+        <SheetHeader className="border-b">
           {card?.parent_card_id && (
             <button
               type="button"
@@ -602,12 +624,12 @@ function CardEditorDialog({
               Back to parent
             </button>
           )}
-          <DialogTitle>{card?.parent_card_id ? "Edit subtask" : "Edit card"}</DialogTitle>
-          <DialogDescription>
-            Give this task a prompt and attach context, then run it with Intelligence.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex max-h-[60vh] flex-col gap-3 overflow-auto pr-1">
+          <SheetTitle>{card?.parent_card_id ? "Edit subtask" : "Edit card"}</SheetTitle>
+          <SheetDescription>
+            Fields and GodMode actions for this task. Drag cards on the board to change status.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4">
           <div className="grid gap-1.5">
             <Label htmlFor="card-title">Title</Label>
             <Input
@@ -624,9 +646,10 @@ function CardEditorDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">High</SelectItem>
-                <SelectItem value="2">Medium</SelectItem>
-                <SelectItem value="3">Low</SelectItem>
+                <SelectItem value="0">P0</SelectItem>
+                <SelectItem value="1">P1</SelectItem>
+                <SelectItem value="2">P2</SelectItem>
+                <SelectItem value="3">P3</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -909,7 +932,7 @@ function CardEditorDialog({
             )}
           </div>
         </div>
-        <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
+        <SheetFooter className="flex-row justify-between gap-2 border-t sm:justify-between">
           <Button
             type="button"
             size="sm"
@@ -929,9 +952,9 @@ function CardEditorDialog({
               Run with Intelligence
             </Button>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1067,16 +1090,25 @@ export function ProjectsBoard({
         onDragStart={(e) => setActiveId(String(e.active.id))}
         onDragEnd={onDragEnd}
       >
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-auto md:grid-cols-4">
+        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
           {columns.map((col) => (
-            <div key={col.id} className="flex min-h-[120px] flex-col rounded-lg border bg-muted/20 p-2">
-              <div className="mb-2 text-[11px] font-semibold">{col.name}</div>
+            <div
+              key={col.id}
+              className="flex w-[260px] shrink-0 flex-col rounded-lg border bg-muted/20 p-2"
+            >
+              <div className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
+                <div className="text-[11px] font-semibold">{col.name}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {byColumn(col.id).length}
+                </div>
+              </div>
               <SortableContext items={byColumn(col.id).map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                <div className="flex flex-col gap-1.5" data-column-id={col.id}>
+                <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto" data-column-id={col.id}>
                   {byColumn(col.id).map((card) => (
                     <div key={card.id} data-column-id={col.id}>
                       <SortableCard
                         card={card}
+                        columns={columns}
                         subtaskProgress={subtaskProgressByParent.get(card.id)}
                         onMove={onMove}
                         onEdit={openEditor}

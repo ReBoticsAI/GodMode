@@ -53,6 +53,21 @@ const COLUMN_LABELS: Array<{ id: string; label: string }> = [
   { id: "done", label: "Done" },
 ];
 
+function columnLabelsForBoard(
+  board: UserTaskBoard | null,
+  fallback: Array<{ id: string; label: string }>
+): Array<{ id: string; label: string }> {
+  const raw = board?.columns_json;
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as Array<{ id: string; name: string }>;
+    if (!Array.isArray(parsed) || parsed.length === 0) return fallback;
+    return parsed.map((c) => ({ id: c.id, label: c.name }));
+  } catch {
+    return fallback;
+  }
+}
+
 export default function UserTasksPage() {
   const { user } = useTenant();
   const userId = user?.id ?? "";
@@ -453,7 +468,7 @@ export default function UserTasksPage() {
                     <Label className="text-xs text-muted-foreground">
                       Column ↔ GitHub Status
                     </Label>
-                    {COLUMN_LABELS.map((col) => (
+                    {columnLabelsForBoard(activeBoard, COLUMN_LABELS).map((col) => (
                       <div
                         key={col.id}
                         className="flex items-center justify-between gap-2"

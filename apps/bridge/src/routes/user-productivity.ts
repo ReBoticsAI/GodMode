@@ -7,7 +7,9 @@ import {
 } from "../services/auth/middleware.js";
 import {
   archiveUserBoard,
+  columnsForBoard,
   createUserBoard,
+  getUserBoard,
   listUserBoards,
   renameUserBoard,
   requireWriteAccess,
@@ -120,9 +122,15 @@ export function createUserProductivityRouter(): Router {
         access.db,
         parseProjectId(req)
       );
-      const columns = access.db
-        .prepare(`SELECT * FROM ai_project_columns ORDER BY sort_order ASC`)
-        .all();
+      const board =
+        boards.find((b) => b.id === pid) ??
+        getUserBoard(access.ownerUserId, access.db, pid);
+      const columns = (board ? columnsForBoard(board) : []).map((c) => ({
+        id: c.id,
+        project_id: pid,
+        name: c.name,
+        sort_order: c.sort_order,
+      }));
       const cards = access.db
         .prepare(
           `SELECT * FROM ai_project_cards WHERE project_id = ? ORDER BY sort_order ASC`
