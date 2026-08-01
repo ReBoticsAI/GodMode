@@ -6,8 +6,12 @@ import {
   requirePlatformAdmin,
 } from "../services/auth/middleware.js";
 import {
+  grantComplimentaryAccess,
   listSaasCustomersForAdmin,
+  revokeComplimentaryAccess,
   setUserAccessDisabled,
+  subscriptionGrantsAccess,
+  userHasActiveComplimentaryAccess,
 } from "../services/saas-subscriptions.js";
 import { syncMissingSaasSubscriptionsFromStripe } from "../services/saas-billing.js";
 
@@ -52,6 +56,55 @@ export function createAdminSaasRouter(): Router {
       userId: user.id,
       accessDisabled: Boolean(user.access_disabled),
     });
+  });
+
+  /**
+   * Grant or revoke complimentary Cloud access (not platform admin).
+   * Body: `{ grant: boolean, expiresAt?: string | null }`
+   * Revoke leaves the account able to log in credentials-wise but
+   * `assertSaasUserMayAccess` returns 403 until they subscribe.
+   */
+  router.post("/customers/:userId/complimentary", (req, res) => {
+    const userId =
+      typeof req.params.userId === "string" ? req.params.userId.trim() : "";
+    if (!userId) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+    if (typeof req.body?.grant !== "boolean") {
+      res.status(400).json({ error: "grant boolean required" });
+      return;
+    }
+
+    try {
+      const sub = req.body.grant
+        ? grantComplimentaryAccess(userId, {
+            expiresAt:
+              req.body.expiresAt === undefined ? undefined : req.body.expiresAt,
+          })
+        : revokeComplimentaryAccess(userId);
+      res.json({
+        userId,
+        grant: req.body.grant,
+        complimentaryAccess: userHasActiveComplimentaryAccess(userId),
+        accessGranted: subscriptionGrantsAccess(sub),
+        planId: sub.plan_id,
+        status: sub.status,
+        currentPeriodEnd: sub.current_period_end,
+      });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: unknown }).status)
+          : 500;
+      const message = err instanceof Error ? err.message : "Update failed";
+      if (status >= 400 && status < 500) {
+        res.status(status).json({ error: message });
+        return;
+      }
+      console.error("[admin-saas] complimentary", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   return router;

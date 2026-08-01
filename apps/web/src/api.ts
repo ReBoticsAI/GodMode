@@ -3109,6 +3109,7 @@ export interface AdminUserRow {
   displayName: string;
   avatarUrl: string | null;
   isAdmin: boolean;
+  complimentaryCloudAccess?: boolean;
   createdAt: string;
   tenants: TenantSummary[];
 }
@@ -4325,6 +4326,7 @@ export type AdminSaasCustomerRow = {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   accessRevoked: boolean;
+  complimentaryAccess: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   stripeDashboardUrl: string | null;
@@ -4343,6 +4345,28 @@ export function setAdminSaasCustomerAccess(userId: string, disabled: boolean) {
       body: JSON.stringify({ disabled }),
     }
   );
+}
+
+export function setAdminSaasComplimentaryAccess(
+  userId: string,
+  grant: boolean,
+  opts?: { expiresAt?: string | null }
+) {
+  return api<{
+    userId: string;
+    grant: boolean;
+    complimentaryAccess: boolean;
+    accessGranted: boolean;
+    planId: string | null;
+    status: string;
+    currentPeriodEnd: string | null;
+  }>(`/admin/saas/customers/${encodeURIComponent(userId)}/complimentary`, {
+    method: "POST",
+    body: JSON.stringify({
+      grant,
+      ...(opts?.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+    }),
+  });
 }
 
 export function fetchOnboardingStatus() {

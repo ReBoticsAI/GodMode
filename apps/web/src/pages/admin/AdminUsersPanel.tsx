@@ -6,6 +6,7 @@ import {
   deleteAdminTenant,
   deleteAdminUser,
   fetchUsers,
+  setAdminSaasComplimentaryAccess,
   updateAdminTenant,
   updateAdminUser,
   type AdminUserRow,
@@ -50,7 +51,7 @@ type TenantDialogState =
   | { kind: "create"; userId: string }
   | { kind: "edit"; userId: string; tenant: TenantSummary };
 
-export function AdminUsersPanel() {
+export function AdminUsersPanel({ isSaas = false }: { isSaas?: boolean }) {
   const { user: sessionUser } = useTenant();
   const [users, setUsers] = useState<AdminUserRow[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -129,8 +130,8 @@ export function AdminUsersPanel() {
         <CardHeader>
           <CardTitle>Users & workspaces</CardTitle>
           <CardDescription>
-            Create accounts, reset passwords, grant admin access, and manage
-            personal workspaces.
+            Create accounts, reset passwords, grant admin or complimentary Cloud
+            access, and manage personal workspaces.
           </CardDescription>
           <CardAction>
             <Button size="sm" onClick={() => setUserDialog({ kind: "create" })}>
@@ -149,6 +150,7 @@ export function AdminUsersPanel() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Admin</TableHead>
+                  {isSaas ? <TableHead>Cloud</TableHead> : null}
                   <TableHead>Workspaces</TableHead>
                   <TableHead className="w-[120px] text-right">Actions</TableHead>
                 </TableRow>
@@ -162,13 +164,24 @@ export function AdminUsersPanel() {
                       {u.isAdmin ? (
                         <Badge variant="secondary">Admin</Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
+                    {isSaas ? (
+                      <TableCell>
+                        {u.complimentaryCloudAccess ? (
+                          <Badge variant="outline">Complimentary</Badge>
+                        ) : u.isAdmin ? (
+                          <span className="text-muted-foreground">Exempt</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {u.tenants.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">-</span>
                         ) : (
                           u.tenants.map((t) => (
                             <Badge
@@ -215,6 +228,7 @@ export function AdminUsersPanel() {
 
       <UserDialog
         mode={userDialog}
+        isSaas={isSaas}
         onClose={() => setUserDialog(null)}
         onSaved={async (saved) => {
           await reload();
@@ -251,6 +265,7 @@ export function AdminUsersPanel() {
 
 function UserDialog({
   mode,
+  isSaas,
   onClose,
   onSaved,
   onAddTenant,
@@ -258,6 +273,7 @@ function UserDialog({
   onDeleteTenant,
 }: {
   mode: UserDialogMode | null;
+  isSaas: boolean;
   onClose: () => void;
   onSaved: (user: AdminUserRow) => Promise<void>;
   onAddTenant: (userId: string) => void;
@@ -271,8 +287,10 @@ function UserDialog({
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [complimentaryCloudAccess, setComplimentaryCloudAccess] = useState(false);
   const [provisionDefaultTenant, setProvisionDefaultTenant] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [complimentaryBusy, setComplimentaryBusy] = useState(false);
 
   useEffect(() => {
     if (!mode) return;
@@ -281,12 +299,14 @@ function UserDialog({
       setDisplayName("");
       setPassword("");
       setIsAdmin(false);
+      setComplimentaryCloudAccess(false);
       setProvisionDefaultTenant(true);
     } else {
       setEmail(mode.user.email);
       setDisplayName(mode.user.displayName);
       setPassword("");
       setIsAdmin(mode.user.isAdmin);
+      setComplimentaryCloudAccess(Boolean(mode.user.complimentaryCloudAccess));
     }
   }, [mode]);
 
@@ -301,7 +321,14 @@ function UserDialog({
           isAdmin,
           provisionDefaultTenant,
         });
-        toast.success("User created");
+        if (isSaas && complimentaryCloudAccess && !isAdmin) {
+          await setAdminSaasComplimentaryAccess(res.user.id, true);
+        }
+        toast.success(
+          isSaas && complimentaryCloudAccess && !isAdmin
+            ? "User created with complimentary Cloud access"
+            : "User created"
+        );
         await onSaved(res.user);
         onClose();
       } else if (user) {
@@ -318,6 +345,36 @@ function UserDialog({
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleComplimentary = async () => {
+    if (!user) return;
+    const grant = !user.complimentaryCloudAccess;
+    if (
+      !grant &&
+      !window.confirm(
+        `Revoke complimentary Cloud access for ${user.email}? They will need to subscribe before logging in again.`
+      )
+    ) {
+      return;
+    }
+    setComplimentaryBusy(true);
+    try {
+      await setAdminSaasComplimentaryAccess(user.id, grant);
+      toast.success(
+        grant
+          ? "Complimentary Cloud access granted"
+          : "Complimentary access revoked. They must subscribe to continue."
+      );
+      await onSaved({
+        ...user,
+        complimentaryCloudAccess: grant,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setComplimentaryBusy(false);
     }
   };
 
@@ -374,6 +431,17 @@ function UserDialog({
             />
             Platform admin
           </label>
+          {isSaas && isCreate && !isAdmin ? (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={complimentaryCloudAccess}
+                onCheckedChange={(checked) =>
+                  setComplimentaryCloudAccess(!!checked)
+                }
+              />
+              Complimentary Cloud access
+            </label>
+          ) : null}
           {isCreate && (
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
@@ -383,6 +451,33 @@ function UserDialog({
               Create default personal workspace
             </label>
           )}
+
+          {user && isSaas && !user.isAdmin ? (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <p className="text-sm font-medium">GodMode Cloud</p>
+              <p className="text-sm text-muted-foreground">
+                {user.complimentaryCloudAccess
+                  ? "This user has complimentary access (not a platform admin)."
+                  : "No complimentary access. Without a paid subscription they cannot log in."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="self-start"
+                disabled={complimentaryBusy}
+                onClick={() => void toggleComplimentary()}
+              >
+                {complimentaryBusy ? (
+                  <Spinner className="size-3.5" />
+                ) : user.complimentaryCloudAccess ? (
+                  "Revoke complimentary (require pay)"
+                ) : (
+                  "Grant complimentary access"
+                )}
+              </Button>
+            </div>
+          ) : null}
 
           {user && (
             <div className="flex flex-col gap-2 border-t pt-4">

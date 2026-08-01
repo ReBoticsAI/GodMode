@@ -381,6 +381,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-admin-complimentary",
+    methods: ["POST"],
+    pathPattern: "/api/admin/saas/customers/:/complimentary",
+    rationale:
+      "Platform-admin grant/revoke complimentary Cloud access via saas_subscriptions; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "admin-platform-backup",
     methods: ["POST"],
     pathPattern: "/api/admin/marketplace/backup",
