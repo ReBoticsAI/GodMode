@@ -17,7 +17,9 @@
 #   node server.mjs
 #
 # Or: docker compose -f docker-compose.yml up -d --build
-# (image includes Docker CLI; socket is mounted read/write for docker run)
+# (image includes Docker CLI; socket is mounted; GODMODE_DATA_DIR is bind-mounted
+# onto the same host path so ephemeral `docker run -v` binds resolve correctly)
+
 #
 # Publish notes: compose binds 8792/8793 on 0.0.0.0 so Linux containers can
 # reach the supervisor via host.docker.internal (host-gateway). Firewall WAN.

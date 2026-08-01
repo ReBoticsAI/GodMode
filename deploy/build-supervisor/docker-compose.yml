@@ -3,6 +3,10 @@
 # Bridge reaches this via CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 # (or compose network DNS if both services share a network).
 #
+# PLATFORM_DATA_DIR must be the *host* path (same string as GODMODE_DATA_DIR).
+# Compose bind-mounts that path onto itself so `docker run -v` (via the host
+# daemon) and supervisor fs.existsSync agree. Mapping host→/data breaks binds.
+#
 # Publish on 0.0.0.0 (not 127.0.0.1): on Linux, containers using
 # host.docker.internal:host-gateway cannot reach ports bound only to loopback.
 # Keep bearer token required; firewall WAN if the host has a public NIC.
@@ -22,7 +26,7 @@ services:
       - CODING_BUILD_SUPERVISOR_HOST=0.0.0.0
       - CODING_BUILD_SUPERVISOR_PORT=8792
       - CODING_BUILD_SUPERVISOR_TOKEN=${CODING_BUILD_SUPERVISOR_TOKEN:?Set CODING_BUILD_SUPERVISOR_TOKEN}
-      - PLATFORM_DATA_DIR=/data
+      - PLATFORM_DATA_DIR=${GODMODE_DATA_DIR:?Set GODMODE_DATA_DIR to host tenant data root}
       - CODING_BUILD_IMAGE=${CODING_BUILD_IMAGE:-node:22-bookworm-slim}
       - CODING_BUILD_NET=${CODING_BUILD_NET:-none}
       - CODING_BUILD_EGRESS_PROXY_HOST=0.0.0.0
@@ -34,6 +38,6 @@ services:
       - CODING_TERMINAL_EGRESS_HOSTS=${CODING_TERMINAL_EGRESS_HOSTS:-}
     volumes:
       - ./:/supervisor:ro
-      - ${GODMODE_DATA_DIR:?Set GODMODE_DATA_DIR to host tenant data root}:/data
+      - ${GODMODE_DATA_DIR:?Set GODMODE_DATA_DIR to host tenant data root}:${GODMODE_DATA_DIR}
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
