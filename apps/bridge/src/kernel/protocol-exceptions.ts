@@ -397,6 +397,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "tenant-database-download",
+    methods: ["GET"],
+    pathPattern: "/api/tenant/database/download",
+    rationale:
+      "Owner-authenticated streaming of a consistent tenant SQLite snapshot for Cloud-to-local continuity (#235); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-official-catalog-public",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/catalog/official/public",

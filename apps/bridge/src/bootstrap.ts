@@ -50,6 +50,7 @@ import { getTransactionalMailStatus } from "./services/auth/mailer.js";
 import { createAdminUsersRouter } from "./routes/admin-users.js";
 import { createAdminMarketplaceRouter, createAdminObservabilityRouter } from "./routes/admin-marketplace.js";
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
+import { createTenantDataRouter } from "./routes/tenant-data.js";
 import { setDispatcherDeps } from "./services/hook-dispatcher.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { ensureLocalConnection } from "./services/bridge-connections.js";
@@ -452,6 +453,7 @@ app.use("/api/admin/workspace-template", createAdminWorkspaceTemplateRouter());
 app.use("/api/inference", createInferenceRouter(llmManager));
 app.use("/api/connections", createConnectionsRouter());
 app.use("/api/user", createUserProductivityRouter());
+app.use("/api/tenant", createTenantDataRouter());
 app.use("/api/federation", createFederationRouter({
   pingSc: () =>
     getPluginHost().pingHealthProbe?.("chart-ipc") ??

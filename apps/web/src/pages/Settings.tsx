@@ -35,6 +35,8 @@ import {
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
+import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
+import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
@@ -436,6 +438,7 @@ export default function Settings() {
         <MfaCard />
         <GithubConnectCard />
         <SubscriptionCard />
+        <WorkspaceDataCard />
         <AppearanceCard />
         <SessionCard />
       </div>
