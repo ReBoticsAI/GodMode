@@ -233,6 +233,17 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [LOCAL_LLM.md](./LOCAL_LLM.md).
 | `MORALIS_API_KEY` | Crypto balance lookups |
 | `PAYPAL_*` | PayPal sandbox/live for Bank |
 
+### Exa web tools (BYOK)
+
+Agent `web_search` / `fetch_url` on **Cloud SaaS** (`INSTALLATION_SURFACE=saas`) require a tenant or agent Exa API key. There is **no** platform `EXA_API_KEY` env fallback (shared pool is intentionally not used).
+
+| Where | How |
+|-------|-----|
+| Vault | Secret name `exa_api_key` |
+| Agent accounts | Provider `exa` (API key) |
+
+Self-host / local: Exa is optional. With a key, tools use Exa's search/contents APIs; without a key, DuckDuckGo / direct fetch remain available. See [vault feature doc](./features/vault.md).
+
 Domain-specific paths (chart host directories, codegen output, backtest charts) are set by optional plugins via their own env documentation — OSS core defaults these to empty.
 
 ## Web dev

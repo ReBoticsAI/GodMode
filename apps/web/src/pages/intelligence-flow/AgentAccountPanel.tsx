@@ -60,7 +60,8 @@ export function AgentAccountPanel({ agentId }: { agentId: string }) {
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
         Per-agent API keys used before tenant-wide Vault secrets. Add provider
-        keys here so this agent can call external LLM or tool APIs.
+        keys here so this agent can call external LLM or tool APIs (for example
+        openai, anthropic, or exa for web_search / fetch_url on Cloud).
       </p>
 
       <div className="flex flex-col gap-2">
@@ -111,7 +112,7 @@ export function AgentAccountPanel({ agentId }: { agentId: string }) {
         <Label className="text-xs font-medium">Add API key</Label>
         <Input
           className="h-8 text-xs"
-          placeholder="Provider (openai, anthropic, …)"
+          placeholder="Provider (openai, anthropic, exa, …)"
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
         />
