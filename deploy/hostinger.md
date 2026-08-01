@@ -204,8 +204,12 @@ Each stamp includes:
 - DuckDB: `timeseries/tenant=*/analytics.duckdb` (platform analytics; consistent
   `COPY FROM DATABASE` snapshot, not a live file copy)
 
-Tenant self-serve download (#235) remains SQLite-only for that tenant's workspace
-file. Operator DR is SQLite **and** DuckDB.
+Tenant self-serve download (#235): Cloud **Settings → Workspace data → Download my
+database** (`GET /api/tenant/database/download`) streams an owner-only SQLite
+snapshot of that tenant's workspace file. Rate-limited; audited as
+`tenant.database.download`. SQLite-only for that tenant (not DuckDB, not
+`core.sqlite`, not other tenants). Operator DR above is SQLite **and** DuckDB for
+the whole platform.
 
 Host path for stamps:
 
