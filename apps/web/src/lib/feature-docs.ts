@@ -95,6 +95,49 @@ export function featureDocsForIndex(): FeatureDocMeta[] {
   return FEATURE_DOCS.filter((d) => d.slug !== "_index");
 }
 
+/**
+ * Drop agent-only H2 sections before public marketing render.
+ * Same markdown still seeds the in-product platform wiki for agents.
+ */
+export function stripAgentFacingSections(markdown: string): string {
+  const text = String(markdown ?? "");
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      const title = heading[1].trim().toLowerCase();
+      skipping = isAgentFacingHeading(title);
+      if (skipping) continue;
+    } else if (skipping) {
+      continue;
+    }
+    out.push(line);
+  }
+
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+function isAgentFacingHeading(titleLower: string): boolean {
+  if (titleLower === "agent notes" || titleLower === "narrative for agents") {
+    return true;
+  }
+  if (titleLower === "for agents" || titleLower === "agent guidance") {
+    return true;
+  }
+  if (titleLower.startsWith("agent notes") || titleLower.startsWith("narrative for agents")) {
+    return true;
+  }
+  return false;
+}
+
+/** Prepare feature markdown for public marketing pages. */
+export function prepareMarketingFeatureMarkdown(markdown: string): string {
+  return preprocessMarketingWikiLinks(stripAgentFacingSections(markdown));
+}
+
 /** Turn [[slug]] wikilinks into marketing feature hrefs for public pages. */
 export function preprocessMarketingWikiLinks(markdown: string): string {
   const base = wikiMarketingBase();
