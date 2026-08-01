@@ -46,6 +46,7 @@ describe("legacy route wave", () => {
       "admin-authority.ts:post:/spend-kills/tenant/:tenantId",
       "admin-marketplace.ts:post:/backup",
       "admin-saas.ts:post:/customers/:userId/access",
+      "admin-saas.ts:post:/customers/:userId/complimentary",
       "ai.ts:post:/chat",
       "ai.ts:post:/workspace-knowledge/import",
       "api-core.ts:post:/analytics/timeseries/query",
