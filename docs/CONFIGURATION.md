@@ -27,8 +27,8 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | GitHub OAuth for **Tasks ↔ Projects sync** (scopes: `read:user project repo`). Callback: `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
-| `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Offsite backup upload |
-| `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix (local snapshots are the platform default) |
+| `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see `deploy/hostinger.md`) |
+| `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix when using S3/R2 |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
 | `PLATFORM_SPEND_DISABLED` | unset | When `true`/`1`, force deny all spend (credits debit, chat, autonomous/queue) before `platform_meta` (#96 Slice 3) |
 | `PLATFORM_DEPLOY_DISABLED` | unset | When `true`/`1`, force deny plugin build/activate and worktree promote before `platform_meta` (#96 Slice 4) |
