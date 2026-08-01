@@ -14,7 +14,11 @@ Tasks are personal Kanban boards with columns, priorities (P0–P3), subtasks, a
 
 ## Filter, search, and sort
 
-Each board has a filter bar (search, priority, labels, assignees, milestone, column/Status, and sort). Filters apply to visible cards only and do not break drag-and-drop or GitHub push-on-edit. Preferences persist for the browser session per board. Clear filters when nothing matches. Swimlanes / group-by stay in #274.
+Each board has a filter bar (search, priority, labels, assignees, milestone, column/Status, and sort). Filters apply to visible cards only and do not break drag-and-drop or GitHub push-on-edit. Preferences persist for the browser session per board. Clear filters when nothing matches.
+
+## Swimlanes / group-by
+
+Optional **Group by** on the board toolbar: None, Priority (P0–P3 lanes), or Assignee (plus Unassigned). Lanes stack vertically; columns stay horizontal inside each lane. Dragging a card into another Priority lane updates that card’s priority. Works on local and GitHub-linked boards. Preference persists for the browser session per board.
 
 ## Multiple boards
 
@@ -59,7 +63,7 @@ Field map: title, description, column↔Status, due date, priority (P0–P3 ↔ 
 
 Boards created before multi-column sync get a default five-column `columns_json` on next open (schema backfill v19). Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
 
-Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276) and lifecycle polish (#278) are shipped. Remaining Ready follow-ups: swimlanes / group-by (#274), Project field parity leftovers (#277).
+Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276), lifecycle polish (#278), and swimlanes / group-by (#274) are shipped. Remaining Ready follow-up: Project field parity leftovers (#277).
 
 ## Route
 

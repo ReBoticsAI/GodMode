@@ -116,6 +116,14 @@ import {
   type BoardFilterState,
   type BoardSortKey,
 } from "@/lib/tasks-board-filters";
+import {
+  buildSwimlanes,
+  cardsInSwimlane,
+  loadSwimlaneGroupBy,
+  saveSwimlaneGroupBy,
+  type Swimlane,
+  type SwimlaneGroupBy,
+} from "@/lib/tasks-board-swimlanes";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -354,6 +362,7 @@ function SortableCard({
   columns,
   subtaskProgress,
   face,
+  lanePriority,
   onMove,
   onEdit,
 }: {
@@ -361,11 +370,18 @@ function SortableCard({
   columns: AiProjectColumn[];
   subtaskProgress?: { total: number; done: number };
   face: CardFaceVisibility;
+  lanePriority?: number | null;
   onMove: (id: string, columnId: string) => void;
   onEdit: (card: AiProjectCard) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id, data: { columnId: card.column_id } });
+    useSortable({
+      id: card.id,
+      data: {
+        columnId: card.column_id,
+        lanePriority: lanePriority ?? undefined,
+      },
+    });
   const tags = useMemo(() => parseTags(card.tags_json), [card.tags_json]);
   const gh = useMemo(
     () => parseGithubCardMeta(card.context_json),
@@ -1497,6 +1513,9 @@ export function ProjectsBoard({
   const [filter, setFilter] = useState<BoardFilterState>(() =>
     loadBoardFilter(boardKey)
   );
+  const [groupBy, setGroupBy] = useState<SwimlaneGroupBy>(() =>
+    loadSwimlaneGroupBy(boardKey)
+  );
   const { clearReviewUnread } = useIntelligence();
   const readOnly = scopeReadOnly(scope);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -1504,6 +1523,7 @@ export function ProjectsBoard({
   useEffect(() => {
     setFace(loadCardFaceVisibility(boardKey));
     setFilter(loadBoardFilter(boardKey));
+    setGroupBy(loadSwimlaneGroupBy(boardKey));
     const prefs = loadCreatePrefs(boardKey);
     setCreateMode(prefs.mode);
     setCreateRepo(prefs.repo || defaultGithubRepo);
@@ -1579,13 +1599,40 @@ export function ProjectsBoard({
     return map;
   }, [cards, columns]);
 
-  const onMove = async (id: string, columnId: string) => {
+  const onMove = async (
+    id: string,
+    columnId: string,
+    lanePriority?: number | null
+  ) => {
     if (readOnly) return;
     try {
       if (isUserScope(scope)) {
         await moveUserProjectCard(id, columnId);
+        if (
+          groupBy === "priority" &&
+          lanePriority != null &&
+          Number.isFinite(lanePriority)
+        ) {
+          const current = cards.find((c) => c.id === id);
+          if (current && (current.priority ?? 2) !== lanePriority) {
+            await updateUserProjectCard(id, { priority: lanePriority });
+          }
+        }
       } else {
         await moveProjectCard(id, columnId, undefined, scope.agentId);
+        if (
+          groupBy === "priority" &&
+          lanePriority != null &&
+          Number.isFinite(lanePriority)
+        ) {
+          const current = cards.find((c) => c.id === id);
+          if (current && (current.priority ?? 2) !== lanePriority) {
+            await updateProjectCard(id, {
+              priority: lanePriority,
+              agentId: scope.agentId,
+            });
+          }
+        }
       }
       load();
     } catch (err) {
@@ -1597,7 +1644,10 @@ export function ProjectsBoard({
     setActiveId(null);
     const cardId = String(e.active.id);
     const overCol = e.over?.data.current?.columnId as string | undefined;
-    if (overCol) void onMove(cardId, overCol);
+    const overPriority = e.over?.data.current?.lanePriority as
+      | number
+      | undefined;
+    if (overCol) void onMove(cardId, overCol, overPriority);
   };
 
   const openCreate = () => {
@@ -1690,9 +1740,85 @@ export function ProjectsBoard({
     return ids.size;
   }, [cards, columns, filter]);
 
+  const lanes = useMemo(
+    () => buildSwimlanes(cards, groupBy),
+    [cards, groupBy]
+  );
+
   // Board shows top-level cards only (subtasks are managed inside the editor).
-  const byColumn = (colId: string) =>
-    cardsForColumn(cards, colId, filter) as AiProjectCard[];
+  const byColumn = (colId: string, lane?: Swimlane) => {
+    const pool =
+      groupBy === "none" || !lane
+        ? cards
+        : (cardsInSwimlane(cards, lane, groupBy) as AiProjectCard[]);
+    return cardsForColumn(pool, colId, filter) as AiProjectCard[];
+  };
+
+  const visibleColumns = columns.filter(
+    (col) => filter.columns.length === 0 || filter.columns.includes(col.id)
+  );
+
+  const renderColumn = (col: AiProjectColumn, lane: Swimlane) => {
+    const visible = byColumn(col.id, lane);
+    const count = visible.length;
+    const totalInCol = (
+      groupBy === "none"
+        ? cards
+        : cardsInSwimlane(cards, lane, groupBy)
+    ).filter((c) => c.column_id === col.id && !c.parent_card_id).length;
+    const wip =
+      col.wip_limit != null && col.wip_limit > 0 ? col.wip_limit : null;
+    const overWip = wip != null && totalInCol > wip;
+    return (
+      <div
+        key={`${lane.id}:${col.id}`}
+        className="flex min-h-0 min-w-[260px] grow basis-[260px] shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/20 p-2"
+      >
+        <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2 px-0.5">
+          <div className="text-[11px] font-semibold">{col.name}</div>
+          <div
+            className={cn(
+              "text-[10px]",
+              overWip
+                ? "font-medium text-destructive"
+                : "text-muted-foreground"
+            )}
+          >
+            {wip != null
+              ? `${totalInCol}/${wip}`
+              : filterNarrowing && count !== totalInCol
+                ? `${count}/${totalInCol}`
+                : count}
+          </div>
+        </div>
+        <SortableContext
+          items={visible.map((c) => c.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div
+            className="flex min-h-[120px] flex-1 flex-col gap-1.5 overflow-y-auto"
+            data-column-id={col.id}
+          >
+            {visible.map((card) => (
+              <div key={card.id} data-column-id={col.id}>
+                <SortableCard
+                  card={card}
+                  columns={columns}
+                  face={face}
+                  lanePriority={lane.priority}
+                  subtaskProgress={subtaskProgressByParent.get(card.id)}
+                  onMove={(id, columnId) =>
+                    void onMove(id, columnId, lane.priority)
+                  }
+                  onEdit={openEditor}
+                />
+              </div>
+            ))}
+          </div>
+        </SortableContext>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
@@ -1954,6 +2080,23 @@ export function ProjectsBoard({
               <SelectItem value="manual">Sort: Manual</SelectItem>
             </SelectContent>
           </Select>
+          <Select
+            value={groupBy}
+            onValueChange={(v) => {
+              const next = (v as SwimlaneGroupBy) ?? "none";
+              setGroupBy(next);
+              saveSwimlaneGroupBy(boardKey, next);
+            }}
+          >
+            <SelectTrigger className="h-7 w-[150px] text-xs" size="sm">
+              <SelectValue placeholder="Group by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Group: None</SelectItem>
+              <SelectItem value="priority">Group: Priority</SelectItem>
+              <SelectItem value="assignee">Group: Assignee</SelectItem>
+            </SelectContent>
+          </Select>
           {filterIsActive ? (
             <Button
               type="button"
@@ -1998,71 +2141,34 @@ export function ProjectsBoard({
           onDragStart={(e) => setActiveId(String(e.active.id))}
           onDragEnd={onDragEnd}
         >
-          <div className="flex h-full min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
-            {columns
-              .filter(
-                (col) =>
-                  filter.columns.length === 0 || filter.columns.includes(col.id)
-              )
-              .map((col) => {
-              const visible = byColumn(col.id);
-              const count = visible.length;
-              const totalInCol = cards.filter(
-                (c) => c.column_id === col.id && !c.parent_card_id
-              ).length;
-              const wip =
-                col.wip_limit != null && col.wip_limit > 0
-                  ? col.wip_limit
-                  : null;
-              const overWip = wip != null && totalInCol > wip;
-              return (
-              <div
-                key={col.id}
-                className="flex min-h-0 min-w-[260px] grow basis-[260px] shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/20 p-2"
-              >
-                <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2 px-0.5">
-                  <div className="text-[11px] font-semibold">{col.name}</div>
-                  <div
-                    className={cn(
-                      "text-[10px]",
-                      overWip
-                        ? "font-medium text-destructive"
-                        : "text-muted-foreground"
-                    )}
-                  >
-                    {wip != null
-                      ? `${totalInCol}/${wip}`
-                      : filterNarrowing && count !== totalInCol
-                        ? `${count}/${totalInCol}`
-                        : count}
+          {groupBy === "none" ? (
+            <div className="flex h-full min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
+              {visibleColumns.map((col) =>
+                renderColumn(col, lanes[0] ?? {
+                  id: "none",
+                  label: "All cards",
+                  priority: null,
+                  assignee: null,
+                })
+              )}
+            </div>
+          ) : (
+            <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-1">
+              {lanes.map((lane) => (
+                <div
+                  key={lane.id}
+                  className="flex shrink-0 flex-col gap-1.5 rounded-lg border border-border/60 bg-background/40 p-2"
+                >
+                  <div className="px-0.5 text-[11px] font-semibold tracking-wide text-muted-foreground">
+                    {lane.label}
+                  </div>
+                  <div className="flex min-h-[160px] gap-2 overflow-x-auto">
+                    {visibleColumns.map((col) => renderColumn(col, lane))}
                   </div>
                 </div>
-                <SortableContext
-                  items={visible.map((c) => c.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div
-                    className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto"
-                    data-column-id={col.id}
-                  >
-                    {visible.map((card) => (
-                      <div key={card.id} data-column-id={col.id}>
-                        <SortableCard
-                          card={card}
-                          columns={columns}
-                          face={face}
-                          subtaskProgress={subtaskProgressByParent.get(card.id)}
-                          onMove={onMove}
-                          onEdit={openEditor}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </SortableContext>
-              </div>
-            );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
           <DragOverlay>
             {activeId ? (
               <div className="rounded-md border bg-card p-2 text-xs shadow-lg opacity-90">
