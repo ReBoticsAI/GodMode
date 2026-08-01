@@ -57,13 +57,13 @@ Hidden columns keep their cards; they are just omitted from the board until unhi
 | Remove from Project | Removed | Deleted | Kept |
 | Sync after GH archive/remove | Removed | (already gone) | Kept |
 
-Field map: title, description, column↔Status, due date, priority (P0–P3 ↔ Project Priority), labels, assignees, milestone. Agent assignment and prompts stay local. Card face fields (priority, labels, assignees, due, milestone) can be shown or hidden per board in the **Card fields** menu. Saving a card keeps GitHub sync metadata in `context_json` alongside attachments. You cannot sync a Project your token cannot access.
+Field map: title, description, column↔Status, **due/target date** (not start), **start date** (distinct), priority (P0–P3 ↔ Project Priority), labels, assignees, milestone, **iteration** (badge + edit when the Project has Iteration), **estimate** / number (named Estimate, Story Points, etc.), **text/note** custom fields (named Text, Notes, etc.). Fields sync when present and mapped by name. Agent assignment and prompts stay local. Card face fields (priority, labels, assignees, due, milestone, iteration, estimate) can be shown or hidden per board in the **Card fields** menu. Saving a card keeps GitHub sync metadata in `context_json` alongside attachments. You cannot sync a Project your token cannot access.
 
 ### Migration for existing boards
 
 Boards created before multi-column sync get a default five-column `columns_json` on next open (schema backfill v19). Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
 
-Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276), lifecycle polish (#278), and swimlanes / group-by (#274) are shipped. Remaining Ready follow-up: Project field parity leftovers (#277).
+Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276), lifecycle polish (#278), swimlanes / group-by (#274), and Project field parity leftovers (#277) are shipped.
 
 ## Route
 
