@@ -12,14 +12,23 @@
 #   /opt/godmode/deploy/scripts/run-platform-backup.sh
 #
 # Env file: deploy/.env.production (GODMODE_IMAGE, optional BACKUP_S3_*).
-#   GODMODE_BACKUP_SKIP_STOP=1  — do not stop/start (fails if DuckDB locked)
+#   GODMODE_BACKUP_SKIP_STOP=1  - do not stop/start (fails if DuckDB locked)
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 ENV_FILE="${GODMODE_ENV_FILE:-$DEPLOY_DIR/.env.production}"
 COMPOSE_FILE="${GODMODE_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.prod.yml}"
+OVERRIDE_FILE="${GODMODE_COMPOSE_OVERRIDE:-$DEPLOY_DIR/docker-compose.override.yml}"
 LOG_TAG="godmode-backup"
+
+compose_prod() {
+  local args=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+  if [[ "${GODMODE_COMPOSE_NO_OVERRIDE:-0}" != "1" && -f "$OVERRIDE_FILE" ]]; then
+    args+=(-f "$OVERRIDE_FILE")
+  fi
+  (cd "$DEPLOY_DIR" && docker compose "${args[@]}" "$@")
+}
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "$LOG_TAG: missing env file: $ENV_FILE" >&2
@@ -73,16 +82,16 @@ STOPPED=0
 start_godmode_if_needed() {
   if [[ "$STOPPED" -eq 1 ]]; then
     echo "$LOG_TAG: starting godmode after snapshot"
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" start godmode || true
+    compose_prod start godmode || true
     STOPPED=0
   fi
 }
 trap start_godmode_if_needed EXIT
 
 if [[ "${GODMODE_BACKUP_SKIP_STOP:-0}" != "1" ]]; then
-  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps --status running --services 2>/dev/null | grep -qx godmode; then
+  if compose_prod ps --status running --services 2>/dev/null | grep -qx godmode; then
     echo "$LOG_TAG: stopping godmode briefly for DuckDB-consistent snapshot"
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" stop godmode
+    compose_prod stop godmode
     STOPPED=1
   fi
 fi

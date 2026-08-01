@@ -25,6 +25,66 @@ for notes (not a separate deploy tree).
    on loopback only and terminate HTTP(S) with host nginx/Caddy. Docker's published
    `0.0.0.0` ports bypass UFW unless you do this.
 
+### Clean host checkout (recommended layout)
+
+Mental model:
+
+- **App**: digest-pinned GHCR image via Compose (`GODMODE_IMAGE` in `.env.production`)
+- **Data**: Docker volume `deploy_godmode-data` (never delete)
+- **Host**: thin git tree at `/opt/godmode` matching `origin/main`, plus local-only secrets
+
+Keep these **on the VPS only** (gitignored; never `git add`, never push):
+
+| Path | Purpose |
+|------|---------|
+| `deploy/.env.production` | Secrets + `GODMODE_IMAGE` pin |
+| `deploy/.env` | Optional symlink to `.env.production` |
+| `deploy/docker-compose.override.yml` | Machine port bind (see example below) |
+
+Do **not** fork tracked `deploy/docker-compose.prod.yml` for `8080` or loopback.
+Copy the example override instead:
+
+```bash
+cp /opt/godmode/deploy/docker-compose.hostinger-override.example.yml \
+  /opt/godmode/deploy/docker-compose.override.yml
+```
+
+Bring the stack up (override required so host nginx can reach `127.0.0.1:8080`):
+
+```bash
+cd /opt/godmode/deploy
+docker compose --env-file .env.production \
+  -f docker-compose.prod.yml -f docker-compose.override.yml up -d
+```
+
+Cron paths stay under `/opt/godmode/deploy/scripts/` (see §7). Backup/prune scripts
+auto-include `docker-compose.override.yml` when that file exists.
+
+#### Refresh tracked files from `main` without losing secrets
+
+```bash
+# 1) Backup local-only files outside the repo (mode 600/700)
+mkdir -p /root/godmode-env-backup && chmod 700 /root/godmode-env-backup
+cp -a /opt/godmode/deploy/.env.production /root/godmode-env-backup/
+cp -a /opt/godmode/deploy/docker-compose.override.yml /root/godmode-env-backup/ 2>/dev/null || true
+
+# 2) Hard-reset tracked tree to origin/main (does not delete gitignored env)
+cd /opt/godmode
+git fetch origin main
+git reset --hard origin/main
+
+# 3) Restore override if needed, then recreate (volume name unchanged)
+cp -a /root/godmode-env-backup/docker-compose.override.yml \
+  /opt/godmode/deploy/docker-compose.override.yml
+cd /opt/godmode/deploy
+docker compose --env-file .env.production \
+  -f docker-compose.prod.yml -f docker-compose.override.yml up -d
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/health
+```
+
+Delete editor junk (`.env.production.bak*`, `*.bak`, `*~`) from the deploy dir;
+keep a single backup under `/root/godmode-env-backup/` if you need history.
+
 ## 2. Cloudflare edge (`app.godmode.software`)
 
 Full operator checklist: [`deploy/cloudflare-app-edge.md`](cloudflare-app-edge.md)
@@ -232,8 +292,10 @@ cd /opt/godmode/deploy
 # 1) note the prior pin before editing .env.production
 PRIOR="$GODMODE_IMAGE"   # or: grep '^GODMODE_IMAGE=' .env.production
 # 2) set GODMODE_IMAGE to the new digest, then:
-docker compose --env-file .env.production -f docker-compose.prod.yml pull
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production \
+  -f docker-compose.prod.yml -f docker-compose.override.yml pull
+docker compose --env-file .env.production \
+  -f docker-compose.prod.yml -f docker-compose.override.yml up -d
 # 3) prune older digests (current + previous only)
 ./scripts/prune-old-images.sh --previous "$PRIOR"
 ```

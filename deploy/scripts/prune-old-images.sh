@@ -18,7 +18,16 @@ DRY_RUN=0
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${GODMODE_ENV_FILE:-$DEPLOY_DIR/.env.production}"
 COMPOSE_FILE="${GODMODE_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.prod.yml}"
+OVERRIDE_FILE="${GODMODE_COMPOSE_OVERRIDE:-$DEPLOY_DIR/docker-compose.override.yml}"
 LOG_TAG="prune-old-images"
+
+compose_prod() {
+  local args=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+  if [[ "${GODMODE_COMPOSE_NO_OVERRIDE:-0}" != "1" && -f "$OVERRIDE_FILE" ]]; then
+    args+=(-f "$OVERRIDE_FILE")
+  fi
+  (cd "$DEPLOY_DIR" && docker compose "${args[@]}" "$@")
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,7 +68,7 @@ resolve_image_id() {
 
 current_id=""
 if [[ -f "$ENV_FILE" ]]; then
-  cid="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q godmode 2>/dev/null || true)"
+  cid="$(compose_prod ps -q godmode 2>/dev/null || true)"
   if [[ -n "${cid:-}" ]]; then
     current_id="$(docker inspect --format '{{.Image}}' "$cid")"
   fi
