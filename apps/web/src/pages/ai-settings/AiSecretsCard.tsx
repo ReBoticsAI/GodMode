@@ -41,8 +41,11 @@ export function AiSecretsCard() {
           AI platform secrets
         </CardTitle>
         <CardDescription>
-          Shared API keys for provider backends. Referenced by agents in Agents → Pipeline →
-          Backend; not scoped to individual subagents.
+          Shared API keys for provider backends and web tools. Referenced by
+          agents in Agents → Pipeline → Backend; not scoped to individual
+          subagents. For Cloud web_search / fetch_url, add a secret named{" "}
+          <span className="font-mono text-xs">exa_api_key</span> (or link
+          provider <span className="font-mono text-xs">exa</span> on the agent).
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -78,7 +81,7 @@ export function AiSecretsCard() {
             <Input
               value={secretName}
               onChange={(e) => setSecretName(e.target.value)}
-              placeholder="openai-prod"
+              placeholder="exa_api_key"
             />
           </div>
           <div className="flex flex-1 flex-col gap-1">
