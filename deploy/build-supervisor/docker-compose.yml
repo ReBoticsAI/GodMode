@@ -9,7 +9,10 @@
 # Egress CONNECT proxy (8793) must be reachable the same way for allowlist builds.
 services:
   build-supervisor:
-    image: node:22-bookworm-slim
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: godmode-build-supervisor:local
     working_dir: /supervisor
     command: ["node", "server.mjs"]
     ports:

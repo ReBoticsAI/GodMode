@@ -82,7 +82,7 @@ fi
 echo "Starting build supervisor (project=${COMPOSE_PROJECT} data=${GODMODE_DATA_DIR} net=${BUILD_NET})"
 cd "${SUPERVISOR_DIR}"
 # Interpolation uses exported shell env (token never written to a compose .env file here).
-docker compose -p "${COMPOSE_PROJECT}" -f docker-compose.yml up -d
+docker compose -p "${COMPOSE_PROJECT}" -f docker-compose.yml up -d --build
 
 echo "Waiting for /health..."
 for _ in $(seq 1 30); do
