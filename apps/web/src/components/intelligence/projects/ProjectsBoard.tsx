@@ -15,6 +15,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeft,
+  Calendar,
   CheckCircle2,
   Circle,
   ListTree,
@@ -22,6 +23,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -57,6 +59,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -66,8 +74,11 @@ import {
 } from "@/components/ui/sheet";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -95,20 +106,84 @@ function priorityMeta(p: number | null | undefined) {
   return PRIORITY_META[key] ?? PRIORITY_META[2];
 }
 
-function parseGithubCardMeta(raw: string | null): {
+type GithubAssignee = {
+  login: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+};
+
+type GithubMilestone = {
+  title: string;
+  dueOn?: string | null;
+  url?: string | null;
+};
+
+type GithubCardMeta = {
   repo?: string;
   issueNumber?: number;
   url?: string;
-} {
+  assignees?: GithubAssignee[];
+  milestone?: GithubMilestone | null;
+};
+
+type CardFaceVisibility = {
+  priority: boolean;
+  labels: boolean;
+  assignees: boolean;
+  due: boolean;
+  milestone: boolean;
+};
+
+const DEFAULT_CARD_FACE: CardFaceVisibility = {
+  priority: true,
+  labels: true,
+  assignees: true,
+  due: true,
+  milestone: true,
+};
+
+function cardFaceStorageKey(boardKey: string) {
+  return `godmode.tasks.cardFace.${boardKey}`;
+}
+
+function loadCardFaceVisibility(boardKey: string): CardFaceVisibility {
+  try {
+    const raw = localStorage.getItem(cardFaceStorageKey(boardKey));
+    if (!raw) return { ...DEFAULT_CARD_FACE };
+    const parsed = JSON.parse(raw) as Partial<CardFaceVisibility>;
+    return { ...DEFAULT_CARD_FACE, ...parsed };
+  } catch {
+    return { ...DEFAULT_CARD_FACE };
+  }
+}
+
+function saveCardFaceVisibility(boardKey: string, value: CardFaceVisibility) {
+  try {
+    localStorage.setItem(cardFaceStorageKey(boardKey), JSON.stringify(value));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function normalizeContextObject(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw) as {
-      github?: { repo?: string; issueNumber?: number; url?: string };
-    };
-    return parsed.github ?? {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return { attachments: parsed };
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
   } catch {
-    return {};
+    /* ignore malformed */
   }
+  return {};
+}
+
+function parseGithubCardMeta(raw: string | null): GithubCardMeta {
+  const base = normalizeContextObject(raw);
+  const github = base.github;
+  if (github && typeof github === "object") return github as GithubCardMeta;
+  return {};
 }
 
 interface CardAttachment {
@@ -119,18 +194,23 @@ interface CardAttachment {
 type CardActivityComment = AiCardComment & { cardTitle?: string };
 
 function parseAttachments(raw: string | null): CardAttachment[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((a) => a && typeof a.id === "string")
-        .map((a) => ({ id: String(a.id), label: String(a.label ?? a.id) }));
-    }
-  } catch {
-    /* ignore malformed context */
-  }
-  return [];
+  const base = normalizeContextObject(raw);
+  const source = Array.isArray(base.attachments)
+    ? (base.attachments as unknown[])
+    : [];
+  return source
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
+    .filter((a) => typeof a.id === "string")
+    .map((a) => ({ id: String(a.id), label: String(a.label ?? a.id) }));
+}
+
+/** Keep github sync metadata while updating attachments. */
+function buildCardContextJson(
+  existingRaw: string | null,
+  attachments: CardAttachment[]
+): Record<string, unknown> {
+  const base = normalizeContextObject(existingRaw);
+  return { ...base, attachments };
 }
 
 function parseTags(raw: string | null): string[] {
@@ -147,16 +227,42 @@ function parseTags(raw: string | null): string[] {
   return [];
 }
 
+function formatDueLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const day = iso.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return iso;
+  const d = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return day;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function dueInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const day = iso.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "";
+}
+
+function assigneeInitials(a: GithubAssignee): string {
+  const source = (a.name || a.login || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
 function SortableCard({
   card,
   columns,
   subtaskProgress,
+  face,
   onMove,
   onEdit,
 }: {
   card: AiProjectCard;
   columns: AiProjectColumn[];
   subtaskProgress?: { total: number; done: number };
+  face: CardFaceVisibility;
   onMove: (id: string, columnId: string) => void;
   onEdit: (card: AiProjectCard) => void;
 }) {
@@ -175,6 +281,9 @@ function SortableCard({
     repoLabel && gh.issueNumber != null
       ? `${repoLabel} #${gh.issueNumber}`
       : null;
+  const dueLabel = formatDueLabel(card.due_at);
+  const assignees = gh.assignees ?? [];
+  const milestoneTitle = gh.milestone?.title;
 
   return (
     <div
@@ -245,13 +354,15 @@ function SortableCard({
         ) : null}
         <div className="font-medium leading-snug text-[12px]">{card.title}</div>
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          <Badge
-            variant="outline"
-            className={cn("h-4 shrink-0 px-1.5 text-[9px] font-semibold", pm.badge)}
-            title={`Priority: ${pm.label}`}
-          >
-            {pm.label}
-          </Badge>
+          {face.priority ? (
+            <Badge
+              variant="outline"
+              className={cn("h-4 shrink-0 px-1.5 text-[9px] font-semibold", pm.badge)}
+              title={`Priority: ${pm.label}`}
+            >
+              {pm.label}
+            </Badge>
+          ) : null}
           {card.status === "blocked" && (
             <Badge
               variant="outline"
@@ -260,16 +371,58 @@ function SortableCard({
               BLOCKED
             </Badge>
           )}
-          {tags.slice(0, 4).map((t) => (
-            <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[9px]">
-              {t}
+          {face.labels
+            ? tags.slice(0, 4).map((t) => (
+                <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[9px]">
+                  {t}
+                </Badge>
+              ))
+            : null}
+          {face.milestone && milestoneTitle ? (
+            <Badge
+              variant="outline"
+              className="h-4 max-w-[110px] truncate px-1.5 text-[9px]"
+              title={milestoneTitle}
+            >
+              {milestoneTitle}
             </Badge>
-          ))}
+          ) : null}
+          {face.due && dueLabel ? (
+            <span
+              className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground"
+              title={card.due_at ?? undefined}
+            >
+              <Calendar className="h-2.5 w-2.5" />
+              {dueLabel}
+            </span>
+          ) : null}
           {subtaskProgress && subtaskProgress.total > 0 ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
               <ListTree className="h-2.5 w-2.5" />
               {subtaskProgress.done}/{subtaskProgress.total}
             </span>
+          ) : null}
+          {face.assignees && assignees.length > 0 ? (
+            <AvatarGroup className="ml-auto">
+              {assignees.slice(0, 3).map((a) => (
+                <Avatar
+                  key={a.login}
+                  size="sm"
+                  className="size-5"
+                  title={a.name || a.login}
+                >
+                  {a.avatarUrl ? <AvatarImage src={a.avatarUrl} alt={a.login} /> : null}
+                  <AvatarFallback className="text-[8px]">
+                    {assigneeInitials(a)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+              {assignees.length > 3 ? (
+                <span className="flex size-5 items-center justify-center rounded-full bg-muted text-[8px] text-muted-foreground ring-2 ring-background">
+                  +{assignees.length - 3}
+                </span>
+              ) : null}
+            </AvatarGroup>
           ) : null}
         </div>
       </div>
@@ -282,6 +435,7 @@ function CardEditorDialog({
   open,
   onOpenChange,
   scope,
+  labelSuggestions,
   onSaved,
   onDeleted,
   onNavigate,
@@ -290,6 +444,7 @@ function CardEditorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scope: ProductivityScope;
+  labelSuggestions: string[];
   onSaved: () => void;
   onDeleted: () => void;
   onNavigate: (cardId: string) => void;
@@ -306,7 +461,9 @@ function CardEditorDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [dueAt, setDueAt] = useState("");
   const [priority, setPriority] = useState(2);
   const [attachments, setAttachments] = useState<CardAttachment[]>([]);
   const [busy, setBusy] = useState(false);
@@ -320,6 +477,10 @@ function CardEditorDialog({
   const [assignedAgentId, setAssignedAgentId] = useState<string>("");
 
   const isReview = card?.column_id === "review";
+  const ghMeta = useMemo(
+    () => parseGithubCardMeta(card?.context_json ?? null),
+    [card?.context_json]
+  );
 
   useEffect(() => {
     fetchAiAgents()
@@ -394,7 +555,9 @@ function CardEditorDialog({
     setTitle(card.title ?? "");
     setDescription(card.description ?? "");
     setPrompt(card.prompt ?? "");
-    setTags(parseTags(card.tags_json).join(", "));
+    setTags(parseTags(card.tags_json));
+    setTagDraft("");
+    setDueAt(dueInputValue(card.due_at));
     setPriority(card.priority ?? 2);
     setAssignedAgentId(card.assigned_agent_id ?? "intelligence");
     setAttachments(parseAttachments(card.context_json));
@@ -529,12 +692,9 @@ function CardEditorDialog({
       description,
       prompt,
       priority,
-      contextJson: attachments,
-      tags: tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .join(", "),
+      dueAt: dueAt || null,
+      contextJson: buildCardContextJson(card.context_json, attachments),
+      tags: tags.join(", "),
       assignedAgentId: assignedAgentId || null,
     };
     if (isUserScope(scope)) {
@@ -542,7 +702,29 @@ function CardEditorDialog({
     } else {
       await updateProjectCard(card.id, { ...patch, agentId: scope.agentId });
     }
-  }, [card, title, description, prompt, priority, attachments, tags, assignedAgentId, scope]);
+  }, [card, title, description, prompt, priority, dueAt, attachments, tags, assignedAgentId, scope]);
+
+  const toggleTag = (tag: string) => {
+    const next = tag.trim();
+    if (!next) return;
+    setTags((prev) =>
+      prev.includes(next) ? prev.filter((t) => t !== next) : [...prev, next]
+    );
+  };
+
+  const addTagDraft = () => {
+    const parts = tagDraft
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (!parts.length) return;
+    setTags((prev) => {
+      const set = new Set(prev);
+      for (const p of parts) set.add(p);
+      return [...set];
+    });
+    setTagDraft("");
+  };
 
   const onSave = async () => {
     if (!card) return;
@@ -654,6 +836,64 @@ function CardEditorDialog({
             </Select>
           </div>
           <div className="grid gap-1.5">
+            <Label htmlFor="card-due">Due / target date</Label>
+            <Input
+              id="card-due"
+              type="date"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+          {(ghMeta.assignees?.length || ghMeta.milestone) && (
+            <div className="grid gap-2 rounded-md border p-2">
+              <Label className="text-muted-foreground">GitHub fields</Label>
+              {ghMeta.assignees && ghMeta.assignees.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Assignees</span>
+                  <AvatarGroup>
+                    {ghMeta.assignees.map((a) => (
+                      <Avatar key={a.login} size="sm" title={a.name || a.login}>
+                        {a.avatarUrl ? (
+                          <AvatarImage src={a.avatarUrl} alt={a.login} />
+                        ) : null}
+                        <AvatarFallback>{assigneeInitials(a)}</AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </AvatarGroup>
+                  <span className="text-[11px] text-muted-foreground">
+                    {ghMeta.assignees.map((a) => a.login).join(", ")}
+                  </span>
+                </div>
+              ) : null}
+              {ghMeta.milestone ? (
+                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className="text-[10px] text-muted-foreground">Milestone</span>
+                  {ghMeta.milestone.url ? (
+                    <a
+                      href={ghMeta.milestone.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                    >
+                      {ghMeta.milestone.title}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{ghMeta.milestone.title}</span>
+                  )}
+                  {ghMeta.milestone.dueOn ? (
+                    <span className="text-muted-foreground">
+                      due {formatDueLabel(ghMeta.milestone.dueOn)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <p className="text-[10px] text-muted-foreground">
+                Assignees and milestone update on Sync GitHub (read-only here).
+              </p>
+            </div>
+          )}
+          <div className="grid gap-1.5">
             <Label>Assigned subagent</Label>
             <Select
               value={assignedAgentId}
@@ -748,13 +988,69 @@ function CardEditorDialog({
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="card-tags">Tags</Label>
-            <Input
-              id="card-tags"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="comma, separated, tags"
-            />
+            <Label htmlFor="card-tags">Labels</Label>
+            <div className="flex flex-wrap gap-1">
+              {tags.length === 0 && (
+                <span className="text-[10px] text-muted-foreground">No labels yet.</span>
+              )}
+              {tags.map((t) => (
+                <Badge key={t} variant="secondary" className="gap-1">
+                  {t}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${t}`}
+                    onClick={() => toggleTag(t)}
+                    className="rounded hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            {labelSuggestions.filter((s) => !tags.includes(s)).length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {labelSuggestions
+                  .filter((s) => !tags.includes(s))
+                  .slice(0, 12)
+                  .map((s) => (
+                    <Button
+                      key={s}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => toggleTag(s)}
+                    >
+                      <Plus data-icon="inline-start" className="h-3 w-3" />
+                      {s}
+                    </Button>
+                  ))}
+              </div>
+            ) : null}
+            <div className="flex gap-1.5">
+              <Input
+                id="card-tags"
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addTagDraft();
+                  }
+                }}
+                placeholder="Add label"
+                className="h-7 text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={addTagDraft}
+              >
+                Add
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-1.5">
@@ -970,9 +1266,33 @@ export function ProjectsBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editing, setEditing] = useState<AiProjectCard | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const boardKey = projectId || (isUserScope(scope) ? scope.userId : scope.agentId);
+  const [face, setFace] = useState<CardFaceVisibility>(() =>
+    loadCardFaceVisibility(boardKey)
+  );
   const { clearReviewUnread } = useIntelligence();
   const readOnly = scopeReadOnly(scope);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  useEffect(() => {
+    setFace(loadCardFaceVisibility(boardKey));
+  }, [boardKey]);
+
+  const setFaceField = (key: keyof CardFaceVisibility, checked: boolean) => {
+    setFace((prev) => {
+      const next = { ...prev, [key]: checked };
+      saveCardFaceVisibility(boardKey, next);
+      return next;
+    });
+  };
+
+  const labelSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of cards) {
+      for (const t of parseTags(c.tags_json)) set.add(t);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [cards]);
 
   const load = useCallback(() => {
     const req = isUserScope(scope)
@@ -1073,17 +1393,55 @@ export function ProjectsBoard({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between gap-2 px-1">
         <span className="text-xs font-medium text-muted-foreground">Tasks</span>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs"
-          disabled={readOnly}
-          onClick={() => void addCard()}
-        >
-          Add card
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                >
+                  <SlidersHorizontal data-icon="inline-start" className="h-3.5 w-3.5" />
+                  Card fields
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="min-w-44">
+              <DropdownMenuLabel>Show on card face</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {(
+                [
+                  ["priority", "Priority"],
+                  ["labels", "Labels"],
+                  ["assignees", "Assignees"],
+                  ["due", "Due date"],
+                  ["milestone", "Milestone"],
+                ] as Array<[keyof CardFaceVisibility, string]>
+              ).map(([key, label]) => (
+                <DropdownMenuCheckboxItem
+                  key={key}
+                  checked={face[key]}
+                  onCheckedChange={(v) => setFaceField(key, !!v)}
+                >
+                  {label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={readOnly}
+            onClick={() => void addCard()}
+          >
+            Add card
+          </Button>
+        </div>
       </div>
       <DndContext
         sensors={sensors}
@@ -1109,6 +1467,7 @@ export function ProjectsBoard({
                       <SortableCard
                         card={card}
                         columns={columns}
+                        face={face}
                         subtaskProgress={subtaskProgressByParent.get(card.id)}
                         onMove={onMove}
                         onEdit={openEditor}
@@ -1133,6 +1492,7 @@ export function ProjectsBoard({
         open={editorOpen}
         onOpenChange={setEditorOpen}
         scope={scope}
+        labelSuggestions={labelSuggestions}
         onSaved={load}
         onDeleted={load}
         onNavigate={navigateToCard}
