@@ -13,6 +13,8 @@ import { emitEvent } from "./event-bus.js";
 import {
   listSupportStaffUserIds,
 } from "./platform-groups.js";
+import { createCoreGithubIssue } from "./github-app-issues.js";
+import { githubAppConfigured } from "./github-app.js";
 
 export class SupportError extends Error {
   constructor(
@@ -71,6 +73,35 @@ export function buildGithubIssueUrl(subject: string, body: string): string {
   return qs ? `${GITHUB_ISSUES_NEW_URL}?${qs}` : GITHUB_ISSUES_NEW_URL;
 }
 
+/** App-backed Core issue create for Support (async; use from HTTP handlers). */
+export async function createPlatformGithubSupportIssue(opts: {
+  subject: string;
+  body: string;
+}): Promise<{ htmlUrl: string; number: number } | { redirectUrl: string }> {
+  if (githubAppConfigured()) {
+    try {
+      const issue = await createCoreGithubIssue({
+        title: opts.subject.trim() || "GodMode support",
+        body: [
+          opts.body?.trim() || "",
+          "",
+          "_Filed via GodMode Support (GitHub App). Do not include secrets or PII._",
+        ]
+          .join("\n")
+          .trim(),
+        labels: ["support"],
+      });
+      return { htmlUrl: issue.htmlUrl, number: issue.number };
+    } catch (err) {
+      console.warn(
+        "[support] App issue create failed, falling back to issues/new:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  return { redirectUrl: buildGithubIssueUrl(opts.subject, opts.body) };
+}
+
 export interface CreateTicketInput {
   requesterKind: SupportRequesterKind;
   requesterId: string;
@@ -89,6 +120,7 @@ export function createTicket(
   db: CoreDatabase = getCoreDb()
 ): CoreSupportTicket | { redirectUrl: string; kind: "platform_github" } {
   if (input.targetKind === "platform_github") {
+    // Interactive Support UI may call createCoreGithubIssue separately when App is configured.
     return {
       kind: "platform_github",
       redirectUrl: buildGithubIssueUrl(input.subject, input.body),

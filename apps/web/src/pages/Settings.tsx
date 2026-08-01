@@ -319,6 +319,9 @@ function GithubConnectCard() {
     connected: boolean;
     login: string | null;
     configured: boolean;
+    githubApp?: boolean;
+    installationId?: number | null;
+    installUrl?: string | null;
   } | null>(null);
 
   const reload = () => {
@@ -377,8 +380,8 @@ function GithubConnectCard() {
       <CardHeader>
         <CardTitle>Connect GitHub</CardTitle>
         <CardDescription>
-          Link your GitHub account to sync personal Tasks boards with GitHub
-          Projects you can access. Separate from sign-in OAuth.
+          One GitHub App connection for Projects sync (and the same App powers
+          sign-in on this host). Install on the account that owns your Projects.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -389,8 +392,25 @@ function GithubConnectCard() {
               <span className="font-medium text-foreground">
                 {status.login ?? "GitHub user"}
               </span>
+              {status.installationId
+                ? ` (install #${status.installationId})`
+                : null}
               . Open Tasks → Board settings to link a Project.
             </p>
+            {!status.installationId && status.installUrl ? (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                App install not detected yet.{" "}
+                <a
+                  className="underline"
+                  href={status.installUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Install GodMode Cloud
+                </a>{" "}
+                then Connect again.
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -404,9 +424,9 @@ function GithubConnectCard() {
           <>
             {!status?.configured ? (
               <p className="text-sm text-muted-foreground">
-                GitHub OAuth is not configured on this host. Set{" "}
-                <code className="text-xs">OAUTH_GITHUB_INTEGRATION_CLIENT_*</code>{" "}
-                (or login GitHub client) and the callback URL in Configuration.
+                GitHub App is not configured on this host. Set{" "}
+                <code className="text-xs">GITHUB_APP_*</code> (see Configuration)
+                including private key path and webhook secret.
               </p>
             ) : null}
             <Button
