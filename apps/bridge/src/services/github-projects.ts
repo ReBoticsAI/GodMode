@@ -93,35 +93,30 @@ async function githubGraphql<T>(
   return json.data as T;
 }
 
+type ProjectNode = {
+  id: string;
+  title: string;
+  number: number;
+  url: string;
+};
+
+/**
+ * List Projects the connected GitHub account can see.
+ * User-owned projects and org projects are queried separately so a missing
+ * `read:org` scope cannot fail the whole list (INSUFFICIENT_SCOPES on orgs).
+ */
 export async function listGithubProjectsForUser(
   _userId: string,
   db: AppDatabase
 ): Promise<GithubProjectSummary[]> {
   const accessToken = requireToken(db);
-  const data = await githubGraphql<{
+  const out: GithubProjectSummary[] = [];
+  const seen = new Set<string>();
+
+  const userData = await githubGraphql<{
     viewer: {
       login: string;
-      projectsV2: {
-        nodes: Array<{
-          id: string;
-          title: string;
-          number: number;
-          url: string;
-        }>;
-      };
-      organizations: {
-        nodes: Array<{
-          login: string;
-          projectsV2: {
-            nodes: Array<{
-              id: string;
-              title: string;
-              number: number;
-              url: string;
-            }>;
-          };
-        }>;
-      };
+      projectsV2: { nodes: Array<ProjectNode | null> };
     };
   }>(
     accessToken,
@@ -131,38 +126,67 @@ export async function listGithubProjectsForUser(
         projectsV2(first: 40) {
           nodes { id title number url }
         }
-        organizations(first: 20) {
-          nodes {
-            login
-            projectsV2(first: 40) {
-              nodes { id title number url }
-            }
-          }
-        }
       }
     }`
   );
-  const out: GithubProjectSummary[] = [];
-  for (const p of data.viewer.projectsV2.nodes ?? []) {
+  const ownerLogin = userData.viewer.login;
+  for (const p of userData.viewer.projectsV2.nodes ?? []) {
+    if (!p?.id || seen.has(p.id)) continue;
+    seen.add(p.id);
     out.push({
       id: p.id,
       title: p.title,
       url: p.url,
       number: p.number,
-      owner: data.viewer.login,
+      owner: ownerLogin,
     });
   }
-  for (const org of data.viewer.organizations.nodes ?? []) {
-    for (const p of org.projectsV2.nodes ?? []) {
-      out.push({
-        id: p.id,
-        title: p.title,
-        url: p.url,
-        number: p.number,
-        owner: org.login,
-      });
+
+  try {
+    const orgData = await githubGraphql<{
+      viewer: {
+        organizations: {
+          nodes: Array<{
+            login: string;
+            projectsV2: { nodes: Array<ProjectNode | null> };
+          } | null>;
+        };
+      };
+    }>(
+      accessToken,
+      `query {
+        viewer {
+          organizations(first: 20) {
+            nodes {
+              login
+              projectsV2(first: 40) {
+                nodes { id title number url }
+              }
+            }
+          }
+        }
+      }`
+    );
+    for (const org of orgData.viewer.organizations.nodes ?? []) {
+      if (!org?.login) continue;
+      for (const p of org.projectsV2.nodes ?? []) {
+        if (!p?.id || seen.has(p.id)) continue;
+        seen.add(p.id);
+        out.push({
+          id: p.id,
+          title: p.title,
+          url: p.url,
+          number: p.number,
+          owner: org.login,
+        });
+      }
     }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Without read:org, GitHub rejects the organizations field entirely.
+    if (!/read:org|INSUFFICIENT_SCOPES/i.test(msg)) throw err;
   }
+
   return out;
 }
 

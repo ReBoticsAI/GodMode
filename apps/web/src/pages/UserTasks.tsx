@@ -438,6 +438,13 @@ export default function UserTasksPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {ghProjects.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No Projects found for the connected GitHub account. If
+                      you expected org projects, disconnect and reconnect
+                      GitHub in Settings so the newer permissions are granted.
+                    </p>
+                  ) : null}
                 </div>
 
                 {statusOptions.length > 0 ? (
