@@ -284,7 +284,7 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 12, name: "archive_lessons_schema_v1", up: migrateArchiveLessonsSchema },
   { version: 13, name: "holdings_schema_v1", up: createHoldingsSchema },
   { version: 14, name: "multi_board_tasks_github_v1", up: migrateMultiBoardTasksSchema },
-  { version: 15, name: "tasks_github_sync_health_v1", up: migrateTasksGithubSyncHealthSchema },
+  { version: 17, name: "tasks_github_sync_health_v1", up: migrateTasksGithubSyncHealthSchema },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */

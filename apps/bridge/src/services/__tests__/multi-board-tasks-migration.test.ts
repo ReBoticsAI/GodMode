@@ -36,7 +36,7 @@ describe("multi_board_tasks_github_v1 migration", () => {
 describe("tasks_github_sync_health_v1 migration", () => {
   it("adds sync health columns and is idempotent", () => {
     const migration = TENANT_BOOT_MIGRATIONS.find(
-      (m) => m.version === 15 && m.name === "tasks_github_sync_health_v1"
+      (m) => m.version === 17 && m.name === "tasks_github_sync_health_v1"
     );
     expect(migration).toBeTruthy();
     expect(GITHUB_SYNC_LEASE_MS).toBeGreaterThanOrEqual(5 * 60 * 1000);
