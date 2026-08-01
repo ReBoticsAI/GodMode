@@ -18,7 +18,7 @@ export type PlatformBackupResult = {
   updatedAt: string;
 };
 
-function backupLocalDir(): string {
+export function backupLocalDir(): string {
   const configured = config.backups.localDir.trim();
   return configured || path.join(config.dataDir, "backups");
 }

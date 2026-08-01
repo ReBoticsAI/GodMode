@@ -189,6 +189,15 @@ VPS onto a machine you control (not live `core.sqlite` / `tenants/` /
 `timeseries/` while Bridge writers are open). Cron stays on the VPS; offsite
 means copies leave the VPS.
 
+**Preferred (no SSH):** signed-in platform admin with MFA → **Admin →
+Observability** → **Download latest backup** (or pick a stamp / **Snapshot then
+download**). That hits `GET /api/admin/marketplace/backup/download` and streams
+a closed stamp as `godmode-backup-<stamp>.tar.gz` (SQLite + DuckDB timeseries +
+manifest). Rate-limited; audited in `platform_action_log`. Tenant users cannot
+use this path (contrast tenant SQLite self-serve, #235).
+
+**SSH fallback** when the Admin UI is unavailable:
+
 Each stamp includes:
 
 - SQLite: `databases/core.sqlite` + `tenants/*.sqlite`
@@ -201,8 +210,6 @@ file. Operator DR is SQLite **and** DuckDB.
 Host path for stamps:
 
 `/var/lib/docker/volumes/deploy_godmode-data/_data/backups/<stamp>/`
-
-From a workstation with SSH (OpenSSH `scp` on Windows is fine):
 
 ```bash
 # helper (Git Bash / macOS / Linux)
