@@ -8,14 +8,12 @@ import { getUserOwnerTenantId } from "../services/user-scope.js";
 import { getCoreDb } from "../core-db.js";
 import {
   addMessage,
-  createPlatformGithubSupportIssue,
   createTicket,
   getTicket,
   getTicketMessages,
   listAllTickets,
   listTicketsForRequester,
   listTicketsForOwner,
-  SupportError,
   updateTicket,
 } from "../services/support-service.js";
 import {
@@ -51,44 +49,6 @@ export function createSupportRouter(): Router {
 
   router.get("/tickets", (req, res) => {
     res.json({ tickets: listTicketsForRequester("user", req.user!.id) });
-  });
-
-  /** Core / OSS bug: create issue on ReBoticsAI/GodMode via platform App install. */
-  router.post("/github-issue", async (req, res) => {
-    try {
-      const subject =
-        typeof req.body?.subject === "string" ? req.body.subject.trim() : "";
-      const body = typeof req.body?.body === "string" ? req.body.body : "";
-      if (!subject) {
-        res.status(400).json({ error: "Subject is required" });
-        return;
-      }
-      const result = await createPlatformGithubSupportIssue({ subject, body });
-      if ("htmlUrl" in result) {
-        res.status(201).json({
-          ok: true,
-          htmlUrl: result.htmlUrl,
-          number: result.number,
-          createdVia: "github_app",
-        });
-        return;
-      }
-      res.status(200).json({
-        ok: true,
-        redirectUrl: result.redirectUrl,
-        createdVia: "issues_new_fallback",
-      });
-    } catch (err) {
-      const status =
-        err instanceof SupportError
-          ? err.status
-          : typeof (err as { status?: number })?.status === "number"
-            ? (err as { status: number }).status
-            : 500;
-      res.status(status).json({
-        error: err instanceof Error ? err.message : "Failed to create GitHub issue",
-      });
-    }
   });
 
   router.get("/staff/tickets", (req, res) => {

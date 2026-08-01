@@ -32,6 +32,7 @@ import {
 } from "../../services/blob-store.js";
 import {
   addMessage,
+  createPlatformGithubSupportIssue,
   createTicket,
   getTicket,
   getTicketMessages,
@@ -631,7 +632,41 @@ export const supportTicketAdapter: RecordAdapter = {
     return record(def, row as unknown as Record<string, unknown>);
   },
   actions: {
-    open(db, def, _id, input, ctx) {
+    async open(db, def, _id, input, ctx) {
+      const targetKind =
+        typeof input.target_kind === "string" ? input.target_kind : undefined;
+      if (targetKind === "platform_github") {
+        const subject = requiredText(input, "subject");
+        const body = typeof input.body === "string" ? input.body : "";
+        const result = await createPlatformGithubSupportIssue({ subject, body });
+        if ("htmlUrl" in result) {
+          return {
+            id: `github-issue-${result.number}`,
+            objectType: def.name,
+            data: {
+              id: `github-issue-${result.number}`,
+              subject,
+              body,
+              status: "open",
+              target_kind: "platform_github",
+              html_url: result.htmlUrl,
+              github_issue_number: result.number,
+            },
+          };
+        }
+        return {
+          id: "github-issue-redirect",
+          objectType: def.name,
+          data: {
+            id: "github-issue-redirect",
+            subject,
+            body,
+            status: "open",
+            target_kind: "platform_github",
+            redirect_url: result.redirectUrl,
+          },
+        };
+      }
       return supportTicketAdapter.create!(db, def, input, ctx);
     },
     reply(_db, def, id, input, ctx) {

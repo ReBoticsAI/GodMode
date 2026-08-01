@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPlatformGithubIssue, createSupportTicket, fetchBridgeHealth } from "@/api";
+import { createSupportTicket, fetchBridgeHealth } from "@/api";
 
 type SupportTarget =
   | "platform_admin"
@@ -54,44 +54,35 @@ export function SupportRequestDialog({
     }
     setSubmitting(true);
     try {
-      if (targetKind === "platform_github") {
-        const res = await createPlatformGithubIssue({
-          subject: subject.trim(),
-          body: body.trim(),
-        });
-        if ("htmlUrl" in res && res.htmlUrl) {
-          toast.success(
-            res.number
-              ? `Opened GitHub issue #${res.number}`
-              : "Opened GitHub issue"
-          );
-          window.open(res.htmlUrl, "_blank", "noopener,noreferrer");
-        } else if ("redirectUrl" in res && res.redirectUrl) {
-          toast.message("Opening GitHub to finish filing the issue");
-          window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
-        } else {
-          toast.error("Could not create GitHub issue");
-          return;
-        }
-      } else {
-        const res = await createSupportTicket({
-          subject: subject.trim(),
-          body: body.trim(),
-          targetKind,
-          category:
-            targetKind === "platform_admin"
-              ? "hub_operator"
+      const res = await createSupportTicket({
+        subject: subject.trim(),
+        body: body.trim(),
+        targetKind,
+        category:
+          targetKind === "platform_admin"
+            ? "hub_operator"
+            : targetKind === "platform_github"
+              ? "oss_core"
               : "shared_resource",
-        });
-        if (res.redirectUrl) {
-          window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
-        } else {
-          toast.success(
-            targetKind === "platform_admin"
-              ? "Support request sent to hub administrators. Track replies on the Support page."
-              : "Support request submitted"
-          );
+      });
+      if (res.htmlUrl) {
+        toast.success(
+          res.number
+            ? `Opened GitHub issue #${res.number}`
+            : "Opened GitHub issue"
+        );
+        window.open(res.htmlUrl, "_blank", "noopener,noreferrer");
+      } else if (res.redirectUrl) {
+        if (targetKind === "platform_github") {
+          toast.message("Opening GitHub to finish filing the issue");
         }
+        window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
+      } else {
+        toast.success(
+          targetKind === "platform_admin"
+            ? "Support request sent to hub administrators. Track replies on the Support page."
+            : "Support request submitted"
+        );
       }
       setOpen(false);
       setSubject("");
