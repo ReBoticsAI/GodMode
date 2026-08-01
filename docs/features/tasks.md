@@ -14,17 +14,18 @@ Tasks are personal Kanban boards with columns, priorities (P0–P3), subtasks, a
 
 ## Multiple boards
 
-Use the board switcher on `/tasks` to create, rename, or archive boards. The default **My Tasks** board is always available. Board settings also cover columns and optional GitHub linking (below).
+Use the board switcher on `/tasks` to create, rename, or archive boards. The default **My Tasks** board is always available. Board settings also cover optional GitHub linking (below).
 
 Sidebar **Project** (tenant/workspace) is separate: use Tasks boards for kanbans, not `+` new workspace.
 
 ## Columns
 
-Board settings let you **add, rename, reorder, hide, and remove** columns, and set an optional **WIP limit** (shown as `count/limit` on the header; over-limit count turns destructive). Hidden columns keep their cards but are omitted from the board view.
+Board columns live in `columns_json` on each board (not a hard-coded Backlog/Ready-only set).
 
-Unlinked boards use a default Backlog / Ready / In Progress / Review / Done set until you customize them. Existing boards without `columns_json` get that default on first open (backfill).
+- **Local boards:** Board settings → **Columns** to add, rename, reorder, hide, or remove columns. Optional **WIP** limit shows `count/limit` on the column header (warning style when over). Removing a column moves its cards to the first remaining visible column.
+- **GitHub-linked boards:** On link and each Sync, column names and order refresh from the Project **Status** field options. Local **hide** and **WIP** values are preserved across Sync. Manage Status option names in GitHub Project settings when you need the shared board to change; then Sync.
 
-Linked GitHub boards: **Sync** refreshes column names and order from the Project **Status** options. Local **hide** and **WIP** values are preserved across Sync when the Status option still matches. Manage Status options themselves on GitHub; use GodMode hide/WIP for view polish. The Status map in board settings is driven by the board’s actual columns.
+Hidden columns keep their cards; they are just omitted from the board until unhidden.
 
 ## GitHub Project sync (optional)
 
@@ -32,8 +33,8 @@ Linked GitHub boards: **Sync** refreshes column names and order from the Project
 2. Open a board’s settings and pick a GitHub Project you can access.
 3. On link / Sync, board **columns follow the Project Status options** (and remap cards). Adjust the Status map in board settings if needed.
 4. **Sync GitHub** pulls items into cards; moving/editing cards pushes Status, title, body, due, priority, labels, **assignees**, and **milestone** when mapped (Issues/PRs for assignees and milestone).
-5. **Create:** New cards on a linked board are added to the Project as **Draft issues** by default. Edit assignees (comma-separated logins) and milestone title in the card Sheet; they push for linked Issues/PRs. Use `github_create_mode: "issue"` with `github_repo: "owner/name"` to create a repo Issue and add it to the Project, or `"none"` for a local-only card.
-6. **Delete / remove:** Deleting a card in GodMode removes that item from the GitHub Project (the underlying Issue/PR is not deleted; Draft issues go away with the Project item). Sync removes GodMode cards whose Project items were archived or removed on GitHub. Cards that never linked (no Project item id) stay local-only.
+5. **Create:** New cards on a linked board are added to the Project as **Draft issues** by default. Edit assignees (comma-separated logins) and milestone title in the card Sheet; they push for linked Issues/PRs.
+6. **Delete / remove:** Deleting a card in GodMode removes that item from the GitHub Project (the underlying Issue/PR is not deleted). Sync removes GodMode cards whose Project items were archived or removed on GitHub. Cards that never linked (no Project item id) stay local-only.
 7. Linked boards **poll** GitHub in the background (default **1 minute**, clamped 1-30 min via `GITHUB_PROJECTS_SYNC_POLL_MS`). That poll is the near-real-time path for **user-owned** Projects. With a GitHub App installed on an **organization** that owns the Project, live `projects_v2_item` webhooks also drive pulls (handler is ready; GitHub only emits those events for org-owned Projects). Manual Sync always works. The toolbar shows last success, in-progress, and last error. Set `GITHUB_PROJECTS_SYNC_POLL_ENABLED=0` on the Bridge to disable background poll.
 8. **Conflict policy:** last-write-wins. Pull overwrites mapped card fields from GitHub; push-on-edit overwrites those fields on GitHub. Matching is by stored Project item id.
 
@@ -41,9 +42,9 @@ Field map: title, description, column↔Status, due date, priority (P0–P3 ↔ 
 
 ### Migration for existing boards
 
-Boards created before multi-column sync get a default five-column `columns_json` on next open. Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
+Boards created before multi-column sync get a default five-column `columns_json` on next open (schema backfill v19). Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
 
-Kanban parity epic #259; GitHub App epic #266. Swimlanes / group-by are tracked separately when needed (#274).
+Kanban parity epic #259; GitHub App epic #266. Swimlanes / group-by are tracked separately when needed.
 
 ## Route
 
