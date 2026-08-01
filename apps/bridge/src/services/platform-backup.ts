@@ -1,5 +1,5 @@
 /**
- * Local platform snapshot (core + tenant DBs) for Admin / cron parity.
+ * Local platform snapshot (SQLite + DuckDB timeseries) for Admin / cron parity.
  * Optional S3 remains operator-owned via scripts/backup/snapshot-platform.mjs.
  */
 import fs from "node:fs";
@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { config } from "../config.js";
 import { listAllTenantIds, type CoreDatabase } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
+import { getTimeseriesStore } from "./timeseries-store.js";
 
 export type PlatformBackupResult = {
   status: "ok" | "failed";
@@ -73,7 +74,7 @@ function writeBackupMeta(
     .run(row.status, row.localPath, row.remoteUri, row.error);
 }
 
-/** Run a local SQLite snapshot and update platform_backup_meta. */
+/** Run a local SQLite + DuckDB timeseries snapshot and update platform_backup_meta. */
 export async function runLocalPlatformBackup(
   core: CoreDatabase
 ): Promise<PlatformBackupResult> {
@@ -93,6 +94,10 @@ export async function runLocalPlatformBackup(
       );
     }
 
+    const duckdbFiles = await getTimeseriesStore().snapshotAnalyticsTo(
+      path.join(dest, "timeseries")
+    );
+
     fs.writeFileSync(
       path.join(dest, "manifest.json"),
       JSON.stringify(
@@ -101,6 +106,10 @@ export async function runLocalPlatformBackup(
           dataDir: config.dataDir,
           dest,
           source: "admin",
+          includes: {
+            sqlite: true,
+            duckdbTimeseries: duckdbFiles,
+          },
         },
         null,
         2

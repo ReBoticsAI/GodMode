@@ -5,12 +5,14 @@
 #   1. Pick latest local snapshot under BACKUP_LOCAL_DIR (or /data/backups)
 #   2. Copy snapshot into a scratch directory
 #   3. Run SQLite integrity_check on core + each tenant DB
-#   4. Optionally download the same stamp from S3 into another scratch dir and
+#   4. Verify DuckDB timeseries files present, non-empty, and openable
+#   5. Optionally download the same stamp from S3 into another scratch dir and
 #      compare file sizes / integrity
 #
 # Full cutover restore (--apply) stops the godmode container, replaces live
-# SQLite files from the snapshot, and starts the container again. Use only when
-# intentionally practicing a real restore; keep the pre-restore tree.
+# SQLite + timeseries DuckDB files from the snapshot, and starts the container
+# again. Use only when intentionally practicing a real restore; keep the
+# pre-restore tree.
 #
 # Usage:
 #   /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only
@@ -19,6 +21,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 ENV_FILE="${GODMODE_ENV_FILE:-$DEPLOY_DIR/.env.production}"
 COMPOSE_FILE="${GODMODE_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.prod.yml}"
 MODE="verify-only"
@@ -61,7 +64,6 @@ fi
 
 DATA_MOUNT="/var/lib/docker/volumes/${VOLUME_NAME}/_data"
 BACKUP_ROOT="${BACKUP_LOCAL_DIR:-$DATA_MOUNT/backups}"
-# BACKUP_LOCAL_DIR inside container is /data/backups → host path under volume
 if [[ "$BACKUP_ROOT" == /data/* ]]; then
   BACKUP_ROOT="$DATA_MOUNT/${BACKUP_ROOT#/data/}"
 fi
@@ -89,6 +91,39 @@ integrity_check() {
     /app/sqlite-integrity-check.mjs
 }
 
+duckdb_open_check() {
+  local db="$1"
+  local label
+  label="$(basename "$(dirname "$db")")/$(basename "$db")"
+  echo -n "  $label: "
+  if [[ ! -s "$db" ]]; then
+    echo "empty or missing" >&2
+    return 1
+  fi
+  local duck_helper="$REPO_ROOT/scripts/backup/duckdb-consistent-copy.mjs"
+  local duck_check="$REPO_ROOT/scripts/backup/duckdb-open-check.mjs"
+  if docker run --rm --entrypoint test "$GODMODE_IMAGE" -f /app/scripts/backup/duckdb-open-check.mjs; then
+    duck_helper=""
+  fi
+  if [[ -n "$duck_helper" ]]; then
+    docker run --rm \
+      -v "$db:/db.duckdb:ro" \
+      -v "$duck_helper:/app/scripts/backup/duckdb-consistent-copy.mjs:ro" \
+      -v "$duck_check:/app/scripts/backup/duckdb-open-check.mjs:ro" \
+      -w /app \
+      --entrypoint node \
+      "$GODMODE_IMAGE" \
+      /app/scripts/backup/duckdb-open-check.mjs /db.duckdb
+  else
+    docker run --rm \
+      -v "$db:/db.duckdb:ro" \
+      -w /app \
+      --entrypoint node \
+      "$GODMODE_IMAGE" \
+      /app/scripts/backup/duckdb-open-check.mjs /db.duckdb
+  fi
+}
+
 verify_tree() {
   local root="$1"
   local label="$2"
@@ -100,6 +135,16 @@ verify_tree() {
       [[ -e "$f" ]] || continue
       integrity_check "$f"
     done
+  fi
+  if [[ -d "$root/timeseries" ]]; then
+    echo "== duckdb: $label =="
+    local d
+    for d in "$root/timeseries"/tenant=*/analytics.duckdb; do
+      [[ -e "$d" ]] || continue
+      duckdb_open_check "$d"
+    done
+  else
+    echo "  (no timeseries/ in stamp; DuckDB not present)"
   fi
   [[ -f "$root/manifest.json" ]] && echo "manifest: $(tr -d '\n' < "$root/manifest.json" | head -c 200)..."
 }
@@ -122,8 +167,6 @@ if [[ "$FROM_S3" -eq 1 ]]; then
   rm -rf "$S3_DIR"
   mkdir -p "$S3_DIR"
   echo "== download s3://$BACKUP_S3_BUCKET/${PREFIX}${STAMP}/ =="
-  # Reuse the app image + a tiny node fetch via the same SigV4 helper in snapshot script
-  # by copying objects listed in the local manifest tree keys.
   docker run --rm \
     -e BACKUP_S3_ENDPOINT -e BACKUP_S3_REGION -e BACKUP_S3_BUCKET \
     -e BACKUP_S3_ACCESS_KEY_ID -e BACKUP_S3_SECRET_ACCESS_KEY -e BACKUP_S3_PREFIX \
@@ -143,7 +186,7 @@ if [[ "$MODE" == "verify-only" ]]; then
   exit 0
 fi
 
-echo "APPLY mode: stopping Bridge and replacing live SQLite from $SNAP"
+echo "APPLY mode: stopping Bridge and replacing live SQLite + timeseries from $SNAP"
 PRE_DIR="$SCRATCH_ROOT/pre-apply-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$PRE_DIR"
 cd "$DEPLOY_DIR"
@@ -151,17 +194,29 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" stop godmode
 
 cp -a "$DATA_MOUNT/core.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/tenants" "$PRE_DIR/" 2>/dev/null || true
+cp -a "$DATA_MOUNT/timeseries" "$PRE_DIR/" 2>/dev/null || true
 
 cp -a "$SNAP/databases/core.sqlite" "$DATA_MOUNT/core.sqlite"
 rm -f "$DATA_MOUNT/core.sqlite-wal" "$DATA_MOUNT/core.sqlite-shm"
 mkdir -p "$DATA_MOUNT/tenants"
-# Replace tenant files present in the snapshot; leave unknown tenants alone.
 for f in "$SNAP/tenants"/*.sqlite; do
   [[ -e "$f" ]] || continue
   base="$(basename "$f")"
   cp -a "$f" "$DATA_MOUNT/tenants/$base"
   rm -f "$DATA_MOUNT/tenants/${base}-wal" "$DATA_MOUNT/tenants/${base}-shm"
 done
+
+if [[ -d "$SNAP/timeseries" ]]; then
+  mkdir -p "$DATA_MOUNT/timeseries"
+  for d in "$SNAP/timeseries"/tenant=*; do
+    [[ -d "$d" ]] || continue
+    base="$(basename "$d")"
+    mkdir -p "$DATA_MOUNT/timeseries/$base"
+    if [[ -f "$d/analytics.duckdb" ]]; then
+      cp -a "$d/analytics.duckdb" "$DATA_MOUNT/timeseries/$base/analytics.duckdb"
+    fi
+  done
+fi
 
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" start godmode
 sleep 3

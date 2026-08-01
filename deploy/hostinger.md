@@ -112,12 +112,66 @@ Default schedule: `15 3 * * *` (03:15 UTC) → `/var/log/godmode-backup.log`.
 
 The runner loads `deploy/.env.production`, mounts the `godmode-data` volume at
 `/data`, and executes `scripts/backup/snapshot-platform.mjs` (from the image when
-present, otherwise host-mounted from the repo checkout).
+present, otherwise host-mounted from the repo checkout). The snapshot covers
+SQLite (core + tenants) and DuckDB platform analytics under `timeseries/`.
 
-### Offsite (`BACKUP_S3_*`)
+### Offsite (operator PC download)
 
-Set S3-compatible credentials in `/opt/godmode/deploy/.env.production` (never
-commit real values):
+Primary offsite for launch: copy the latest **nightly snapshot stamp** from the
+VPS onto a machine you control (not live `core.sqlite` / `tenants/` /
+`timeseries/` while Bridge writers are open). Cron stays on the VPS; offsite
+means copies leave the VPS.
+
+Each stamp includes:
+
+- SQLite: `databases/core.sqlite` + `tenants/*.sqlite`
+- DuckDB: `timeseries/tenant=*/analytics.duckdb` (platform analytics; consistent
+  `COPY FROM DATABASE` snapshot, not a live file copy)
+
+Tenant self-serve download (#235) remains SQLite-only for that tenant's workspace
+file. Operator DR is SQLite **and** DuckDB.
+
+Host path for stamps:
+
+`/var/lib/docker/volumes/deploy_godmode-data/_data/backups/<stamp>/`
+
+From a workstation with SSH (OpenSSH `scp` on Windows is fine):
+
+```bash
+# helper (Git Bash / macOS / Linux)
+GODMODE_VPS=root@YOUR.VPS.IP DEST="$HOME/GodMode-backups" \
+  ./deploy/scripts/pull-platform-backup.sh
+
+# or one-shot scp of the latest stamp
+STAMP=2026-08-01T00-14-00-338Z   # ls the backups dir on the VPS for latest
+scp -r "root@YOUR.VPS.IP:/var/lib/docker/volumes/deploy_godmode-data/_data/backups/$STAMP" \
+  "$HOME/GodMode-backups/"
+```
+
+Integrity on the offsite copy:
+
+1. SHA-256 the local `databases/core.sqlite`, each `tenants/*.sqlite`, each
+   `timeseries/tenant=*/analytics.duckdb`, and `manifest.json`; confirm they
+   match the same paths on the VPS stamp.
+2. On the VPS, run the verify-only drill for that stamp (SQLite
+   `integrity_check` plus DuckDB open/`SELECT 1` on a scratch copy; does not
+   stop prod):
+
+```bash
+sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --stamp "$STAMP"
+```
+
+Matching checksums plus a green integrity drill means the PC tree is a verified
+offsite copy of that stamp. Treat the files as sensitive (tenant data).
+
+You can also trigger a **local-only** snapshot from **Admin → Observability →
+Run local snapshot** (`POST /api/admin/marketplace/backup`). That updates
+`platform_backup_meta` the same way as cron (without uploading anywhere).
+
+### Optional later: `BACKUP_S3_*` / Hostinger paid backups
+
+S3-compatible upload (Cloudflare R2, etc.) and Hostinger paid backups are
+optional follow-ups. They are not required for the PC-download offsite path.
 
 ```bash
 BACKUP_LOCAL_DIR=/data/backups
@@ -129,14 +183,8 @@ BACKUP_S3_SECRET_ACCESS_KEY=...
 BACKUP_S3_PREFIX=godmode/
 ```
 
-Cloudflare R2 is the usual choice (enable R2 in the dashboard, create a bucket,
-then an R2 S3 API token with Object Read & Write on that bucket). Recreate or
-restart is not required for cron: the runner passes `BACKUP_S3_*` into a one-shot
-container. Bridge Admin local snapshot does not upload to S3.
-
-You can also trigger a **local-only** snapshot from **Admin → Observability →
-Run local snapshot** (`POST /api/admin/marketplace/backup`). That updates
-`platform_backup_meta` the same way as cron (without S3 upload).
+If configured, the cron runner passes `BACKUP_S3_*` into a one-shot container.
+Bridge Admin local snapshot does not upload to S3.
 
 ### Restore drill
 
@@ -145,21 +193,22 @@ not stop prod):
 
 ```bash
 sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only
-# after offsite is configured:
+# only if BACKUP_S3_* is configured:
 sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --from-s3
 ```
 
 Manual / apply cutover (stops Bridge; keep the pre-restore tree):
 
 1. Pick a snapshot under the volume backups dir
-   (`/var/lib/docker/volumes/deploy_godmode-data/_data/backups/<stamp>`).
+   (`/var/lib/docker/volumes/deploy_godmode-data/_data/backups/<stamp>`), or use
+   a PC-downloaded stamp you have verified.
 2. Stop Bridge: `docker compose -f docker-compose.prod.yml stop godmode`.
 3. Replace live files from the snapshot:
    - `databases/core.sqlite` → volume `core.sqlite` (remove `-wal`/`-shm`)
    - each `tenants/*.sqlite` → volume `tenants/<same-name>`
+   - each `timeseries/tenant=*/analytics.duckdb` → volume
+     `timeseries/tenant=*/analytics.duckdb`
 4. Start Bridge and hit `/api/health`, then Admin → Observability.
-5. For offsite: download the stamp with
-   `restore-platform-drill.sh --verify-only --from-s3`, then apply from that tree.
 
 Never restore over a running Bridge. Keep the pre-restore tree until health checks pass.
 Or use `restore-platform-drill.sh --apply --stamp <stamp>` only when intentionally

@@ -385,7 +385,7 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/admin/marketplace/backup",
     rationale:
-      "Platform-admin local SQLite snapshot trigger; durable meta via platform_backup_meta, not Record CRUD.",
+      "Platform-admin local SQLite + DuckDB timeseries snapshot trigger; durable meta via platform_backup_meta, not Record CRUD.",
     authenticatedDomainMutations: "none",
   },
   {

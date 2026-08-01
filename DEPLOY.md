@@ -233,8 +233,9 @@ Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 - `deploy/.env.production` with real secrets (never commit)
 - Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
 - Cron backups via `deploy/scripts/run-platform-backup.sh` (Docker volume +
-  `scripts/backup/snapshot-platform.mjs`) and optional `BACKUP_S3_*` offsite
-  ([deploy/hostinger.md](deploy/hostinger.md) §7)
+  `scripts/backup/snapshot-platform.mjs`, SQLite + DuckDB timeseries); offsite via
+  operator PC download of the nightly stamp (`deploy/scripts/pull-platform-backup.sh`),
+  optional `BACKUP_S3_*` later ([deploy/hostinger.md](deploy/hostinger.md) §7)
 - Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
 
 ## Public marketing site (Stripe business website)
@@ -260,6 +261,7 @@ Privacy, security summary, contact, refund).
 3. Platform admin MFA enrolled and enforced on SaaS
 4. Cloudflare → Hostinger Full (strict), origin security headers, HTTPS cookies, firewall locked
 5. Durable rate limits + Hostinger cron backups + tested offsite restore
+   (operator PC download of a nightly stamp + integrity verify; S3/R2 optional)
 6. SaaS coding on by default (#178; opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`); Local plugin path registration blocked by default
 7. Live Stripe webhooks + Customer Portal verified on the Cloudflare hostname
 8. [docs/SECURITY.md](docs/SECURITY.md) / this file / [deploy/hostinger.md](deploy/hostinger.md) checklist signed off
