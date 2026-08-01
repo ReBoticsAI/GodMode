@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { config } from "../config.js";
+import { resolveGithubOauthClient } from "../services/github-app.js";
 import {
   getCoreDb,
   type CoreUser,
@@ -698,7 +699,12 @@ export function createAuthRouter(): Router {
       return;
     }
     if (provider === "github") {
-      const { clientId } = config.oauth.github;
+      let clientId = "";
+      try {
+        clientId = resolveGithubOauthClient().clientId;
+      } catch {
+        clientId = config.oauth.github.clientId;
+      }
       if (!clientId) {
         res.status(503).json({ error: "GitHub OAuth not configured" });
         return;
@@ -706,6 +712,7 @@ export function createAuthRouter(): Router {
       const url = new URL("https://github.com/login/oauth/authorize");
       url.searchParams.set("client_id", clientId);
       url.searchParams.set("redirect_uri", redirectUri);
+      // Classic OAuth scopes; GitHub App uses App permissions (email/profile).
       url.searchParams.set("scope", "read:user user:email");
       res.json({ url: url.toString() });
       return;
@@ -829,7 +836,7 @@ async function exchangeOauthCode(
     };
   }
   if (provider === "github") {
-    const { clientId, clientSecret } = config.oauth.github;
+    const { clientId, clientSecret } = resolveGithubOauthClient();
     const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: {

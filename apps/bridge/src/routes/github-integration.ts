@@ -80,6 +80,10 @@ export function createGithubIntegrationRouter(): Router {
   router.get("/callback", async (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
+    const installationIdRaw =
+      typeof req.query.installation_id === "string"
+        ? req.query.installation_id
+        : "";
     const pending = state ? pendingStates.get(state) : undefined;
     if (pending) pendingStates.delete(state);
     const webBase = config.web.publicUrl.replace(/\/$/, "");
@@ -89,6 +93,10 @@ export function createGithubIntegrationRouter(): Router {
     }
     try {
       const token = await exchangeGithubIntegrationCode(code);
+      const fromQuery = Number(installationIdRaw);
+      if (Number.isFinite(fromQuery) && fromQuery > 0) {
+        token.installationId = fromQuery;
+      }
       const db = getUserOwnerTenantDb(pending.userId);
       upsertGithubProjectsToken(db, token);
       res.redirect(`${webBase}/settings?github=connected`);
