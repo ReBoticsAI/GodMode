@@ -105,6 +105,7 @@ import {
   reconcileInstalledVersion,
   ReleasePoller,
 } from "./services/release-flow.js";
+import { githubProjectsSyncPoller } from "./services/github-projects-sync-poller.js";
 
 export async function startBridge(): Promise<void> {
 const coreDb = initCoreDb();
@@ -566,6 +567,7 @@ server.listen(config.port, config.host, () => {
   aiQueueWorker.start();
   operationRunWorker.start();
   releasePoller.start();
+  githubProjectsSyncPoller.start();
   aiScheduler.start();
   reflectionService.start();
   memoryMaintenance.start();
@@ -607,6 +609,7 @@ function gracefulShutdown() {
   stopEventsRelay();
   operationRunWorker.stop();
   releasePoller.stop();
+  githubProjectsSyncPoller.stop();
   workerPool.shutdown();
   stopScheduler();
   aiScheduler.stop();

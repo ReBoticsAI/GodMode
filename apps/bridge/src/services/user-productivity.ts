@@ -152,6 +152,9 @@ export type UserBoardRow = {
   columns_json: string | null;
   sync_enabled: number;
   last_synced_at: string | null;
+  last_sync_error: string | null;
+  sync_started_at: string | null;
+  last_sync_attempt_at: string | null;
   created_at: string;
   updated_at: string;
 };

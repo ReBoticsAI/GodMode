@@ -123,6 +123,13 @@ Register callback URLs on the GitHub OAuth App:
 
 Integration OAuth uses scopes `read:user project repo` and stores tokens in the tenant Vault (`github_projects_oauth`). Prefer a dedicated OAuth App via `OAUTH_GITHUB_INTEGRATION_CLIENT_*`; if unset, the login GitHub client is reused (ensure that app has the integration callback and sufficient scopes).
 
+Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). Projects webhooks need a GitHub App and are not enabled yet.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GITHUB_PROJECTS_SYNC_POLL_ENABLED` | on (unset) | Set to `0` to disable background poll |
+| `GITHUB_PROJECTS_SYNC_POLL_MS` | `180000` | Poll interval in ms (clamped ~1–30 min) |
+
 ## Bridge and data paths
 
 | Variable | Default | Description |

@@ -2618,6 +2618,9 @@ export type UserTaskBoard = {
   columns_json?: string | null;
   sync_enabled: number;
   last_synced_at: string | null;
+  last_sync_error?: string | null;
+  sync_started_at?: string | null;
+  last_sync_attempt_at?: string | null;
 };
 
 export const createUserTaskBoard = (name: string) =>

@@ -683,13 +683,155 @@ export function unlinkBoardGithub(
        github_status_map_json=NULL,
        sync_enabled=0,
        last_synced_at=NULL,
+       last_sync_error=NULL,
+       sync_started_at=NULL,
+       last_sync_attempt_at=NULL,
        updated_at=datetime('now')
      WHERE id=? AND user_id=?`
   ).run(boardId, userId);
   return getUserBoard(userId, db, boardId)!;
 }
 
+/** Lease window: concurrent Sync/poll skip while a sync is in progress. */
+export const GITHUB_SYNC_LEASE_MS = 10 * 60 * 1000;
+
+function boardSyncInProgress(board: UserBoardRow, nowMs = Date.now()): boolean {
+  if (!board.sync_started_at) return false;
+  const started = Date.parse(board.sync_started_at);
+  if (!Number.isFinite(started)) return true;
+  return nowMs - started < GITHUB_SYNC_LEASE_MS;
+}
+
+function markGithubSyncStarted(
+  db: AppDatabase,
+  boardId: string,
+  userId: string
+): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE ai_projects SET
+       sync_started_at=?,
+       last_sync_attempt_at=?,
+       updated_at=datetime('now')
+     WHERE id=? AND user_id=?`
+  ).run(now, now, boardId, userId);
+}
+
+function markGithubSyncSucceeded(
+  db: AppDatabase,
+  boardId: string,
+  userId: string
+): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE ai_projects SET
+       last_synced_at=?,
+       last_sync_error=NULL,
+       sync_started_at=NULL,
+       last_sync_attempt_at=?,
+       updated_at=datetime('now')
+     WHERE id=? AND user_id=?`
+  ).run(now, now, boardId, userId);
+}
+
+function markGithubSyncFailed(
+  db: AppDatabase,
+  boardId: string,
+  userId: string,
+  error: unknown
+): void {
+  const message =
+    error instanceof Error
+      ? error.message.slice(0, 500)
+      : String(error).slice(0, 500);
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE ai_projects SET
+       last_sync_error=?,
+       sync_started_at=NULL,
+       last_sync_attempt_at=?,
+       updated_at=datetime('now')
+     WHERE id=? AND user_id=?`
+  ).run(message || "Sync failed", now, boardId, userId);
+}
+
+/** Boards with GitHub sync enabled (for background poll). */
+export function listGithubSyncedBoards(db: AppDatabase): Array<{
+  id: string;
+  user_id: string;
+  name: string;
+  sync_started_at: string | null;
+}> {
+  return db
+    .prepare(
+      `SELECT id, user_id, name, sync_started_at FROM ai_projects
+       WHERE sync_enabled=1
+         AND github_project_node_id IS NOT NULL
+         AND archived_at IS NULL
+         AND user_id IS NOT NULL`
+    )
+    .all() as Array<{
+    id: string;
+    user_id: string;
+    name: string;
+    sync_started_at: string | null;
+  }>;
+}
+
 export async function syncBoardWithGithub(opts: {
+  userId: string;
+  db: AppDatabase;
+  boardId: string;
+  /** When true, skip if another sync holds the lease (used by poller). */
+  skipIfBusy?: boolean;
+}): Promise<{
+  project: UserBoardRow;
+  pulled: number;
+  updated: number;
+  created: number;
+  skipped?: boolean;
+}> {
+  const board = getUserBoard(opts.userId, opts.db, opts.boardId);
+  if (!board || board.archived_at) {
+    throw Object.assign(new Error("Board not found"), { status: 404 });
+  }
+  if (!board.github_project_node_id || !board.sync_enabled) {
+    throw Object.assign(
+      new Error("Board is not linked to a GitHub Project"),
+      { status: 400 }
+    );
+  }
+
+  if (boardSyncInProgress(board)) {
+    if (opts.skipIfBusy) {
+      return {
+        project: board,
+        pulled: 0,
+        updated: 0,
+        created: 0,
+        skipped: true,
+      };
+    }
+    throw Object.assign(new Error("GitHub sync already in progress"), {
+      status: 409,
+    });
+  }
+
+  markGithubSyncStarted(opts.db, opts.boardId, opts.userId);
+  try {
+    const result = await pullBoardFromGithub(opts);
+    markGithubSyncSucceeded(opts.db, opts.boardId, opts.userId);
+    return {
+      ...result,
+      project: getUserBoard(opts.userId, opts.db, opts.boardId)!,
+    };
+  } catch (err) {
+    markGithubSyncFailed(opts.db, opts.boardId, opts.userId, err);
+    throw err;
+  }
+}
+
+async function pullBoardFromGithub(opts: {
   userId: string;
   db: AppDatabase;
   boardId: string;
@@ -699,11 +841,8 @@ export async function syncBoardWithGithub(opts: {
   updated: number;
   created: number;
 }> {
-  const board = getUserBoard(opts.userId, opts.db, opts.boardId);
-  if (!board || board.archived_at) {
-    throw Object.assign(new Error("Board not found"), { status: 404 });
-  }
-  if (!board.github_project_node_id || !board.sync_enabled) {
+  const board = getUserBoard(opts.userId, opts.db, opts.boardId)!;
+  if (!board.github_project_node_id) {
     throw Object.assign(
       new Error("Board is not linked to a GitHub Project"),
       { status: 400 }
@@ -842,13 +981,6 @@ export async function syncBoardWithGithub(opts: {
       created += 1;
     }
   }
-
-  opts.db
-    .prepare(
-      `UPDATE ai_projects SET last_synced_at=datetime('now'), updated_at=datetime('now')
-       WHERE id=? AND user_id=?`
-    )
-    .run(opts.boardId, opts.userId);
 
   return {
     project: getUserBoard(opts.userId, opts.db, opts.boardId)!,
