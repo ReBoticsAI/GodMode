@@ -33,7 +33,7 @@ export default function MarketingFeaturesIndex() {
     <Page>
       <PageHeader
         title="Features"
-        description="What ships in the Control Center. Marketing tells the story; these pages go deeper for humans and agents. Full operator docs live on GitHub."
+        description="What ships in the Control Center. Start here for a deeper look at each built-in feature."
         descriptionClassName={marketingPageDescriptionClass}
       />
 

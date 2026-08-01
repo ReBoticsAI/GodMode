@@ -2,21 +2,17 @@
 slug: _index
 title: "Features"
 section: "Hubs"
-location: "Marketing /features (and /www/features on app origin) and Wiki space platform"
-summary: "Catalog of built-in GodMode features. Same pages seed the platform wiki for agents."
+location: "/features"
+summary: "Catalog of built-in GodMode features."
 ---
 
 # Features
 
-GodMode is your Control Center. These pages describe every built-in feature.
-
-Marketing pages under `/features` (Pages) or `/www/features` (app origin) may include platform screenshots. The same
-markdown seeds the **platform** wiki for agents with **images stripped** (token
-cost and non-vision models).
+GodMode is your Control Center. These pages describe every built-in feature, with screenshots where they help.
 
 ## How to use this catalog
 
-- Open a feature page for route, behavior, and agent notes.
+- Open a feature page for what it does, where to find it, and how it fits the rest of the product.
 - Related hubs: [[godmode-overview]], [[workspace-structure]], [[personal-tools]], [[shared-and-marketplace]].
 
 ## Sections
