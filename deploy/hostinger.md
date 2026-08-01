@@ -115,6 +115,13 @@ The runner loads `deploy/.env.production`, mounts the `godmode-data` volume at
 present, otherwise host-mounted from the repo checkout). The snapshot covers
 SQLite (core + tenants) and DuckDB platform analytics under `timeseries/`.
 
+DuckDB holds an exclusive process lock while Bridge is running, so the cron
+runner briefly `compose stop godmode` around the one-shot snapshot container,
+then `start` again (trap-safe). Set `GODMODE_BACKUP_SKIP_STOP=1` only when
+Bridge is already down. For zero-downtime snapshots, use **Admin → Observability →
+Run local snapshot** (`POST /api/admin/marketplace/backup`), which copies
+DuckDB in-process.
+
 ### Offsite (operator PC download)
 
 Primary offsite for launch: copy the latest **nightly snapshot stamp** from the
@@ -164,8 +171,9 @@ sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --stamp
 Matching checksums plus a green integrity drill means the PC tree is a verified
 offsite copy of that stamp. Treat the files as sensitive (tenant data).
 
-You can also trigger a **local-only** snapshot from **Admin → Observability →
-Run local snapshot** (`POST /api/admin/marketplace/backup`). That updates
+You can also trigger a **local-only** zero-downtime snapshot from **Admin →
+Observability → Run local snapshot** (`POST /api/admin/marketplace/backup`).
+That uses in-process DuckDB COPY (no Bridge stop) and updates
 `platform_backup_meta` the same way as cron (without uploading anywhere).
 
 ### Optional later: `BACKUP_S3_*` / Hostinger paid backups
