@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import {
   getUserBoard,
+  slugBoardColumnId,
+  type BoardColumnDef,
   type UserBoardRow,
   userProjectId,
 } from "./user-productivity.js";
@@ -425,19 +427,32 @@ function columnForStatus(
       for (const [col, optionId] of Object.entries(statusMap)) {
         if (optionId === opt.id) return col;
       }
+      return slugBoardColumnId(opt.name);
     }
     for (const [col, aliases] of Object.entries(DEFAULT_STATUS_ALIASES)) {
       if (aliases.includes(statusName.toLowerCase())) return col;
     }
+    const slug = slugBoardColumnId(statusName);
+    if (statusMap[slug]) return slug;
   }
-  return "backlog";
+  return Object.keys(statusMap)[0] || "backlog";
 }
 
 function priorityFromName(name: string | null): number {
   if (!name) return 2;
-  const n = name.toLowerCase();
-  if (n.includes("high") || n.includes("p0") || n.includes("urgent")) return 1;
-  if (n.includes("low") || n.includes("p3") || n.includes("p4")) return 3;
+  const n = name.toLowerCase().trim();
+  if (/(^|[^a-z])p0([^a-z]|$)/.test(n) || n.includes("urgent") || n.includes("critical")) {
+    return 0;
+  }
+  if (/(^|[^a-z])p1([^a-z]|$)/.test(n) || n === "high") return 1;
+  if (/(^|[^a-z])p3([^a-z]|$)/.test(n) || /(^|[^a-z])p4([^a-z]|$)/.test(n) || n === "low") {
+    return 3;
+  }
+  if (/(^|[^a-z])p2([^a-z]|$)/.test(n) || n.includes("medium") || n.includes("normal")) {
+    return 2;
+  }
+  if (n.includes("high")) return 1;
+  if (n.includes("low")) return 3;
   return 2;
 }
 
@@ -467,6 +482,51 @@ function mergeGithubContext(
     }
   }
   return JSON.stringify({ ...base, github });
+}
+
+function columnsFromStatusOptions(options: StatusOption[]): {
+  columns: BoardColumnDef[];
+  statusMap: Record<string, string>;
+} {
+  const used = new Set<string>();
+  const columns: BoardColumnDef[] = [];
+  const statusMap: Record<string, string> = {};
+  options.forEach((o, i) => {
+    let id = slugBoardColumnId(o.name);
+    if (used.has(id)) id = `${id}_${i}`;
+    used.add(id);
+    columns.push({ id, name: o.name, sort_order: i });
+    statusMap[id] = o.id;
+  });
+  return { columns, statusMap };
+}
+
+function remapCardColumnId(
+  oldId: string,
+  columns: BoardColumnDef[]
+): string {
+  if (columns.some((c) => c.id === oldId)) return oldId;
+  const lower = oldId.toLowerCase().replace(/_/g, " ");
+  const byName = columns.find(
+    (c) =>
+      c.id === oldId ||
+      c.name.toLowerCase() === lower ||
+      slugBoardColumnId(c.name) === oldId
+  );
+  if (byName) return byName.id;
+  for (const [canon, aliases] of Object.entries(DEFAULT_STATUS_ALIASES)) {
+    if (oldId !== canon && !aliases.includes(oldId.replace(/_/g, " "))) continue;
+    const hit = columns.find((c) => {
+      const n = c.name.toLowerCase();
+      return (
+        slugBoardColumnId(c.name) === canon ||
+        n === canon.replace(/_/g, " ") ||
+        aliases.includes(n)
+      );
+    });
+    if (hit) return hit.id;
+  }
+  return columns[0]?.id ?? oldId;
 }
 
 export async function linkBoardToGithubProject(opts: {
@@ -501,10 +561,32 @@ export async function linkBoardToGithubProject(opts: {
   }
 
   const meta = await loadProjectMeta(accessToken, opts.projectNodeId);
+  const fromGh = columnsFromStatusOptions(meta.statusOptions);
   const statusMap =
     opts.statusMap && Object.keys(opts.statusMap).length > 0
       ? opts.statusMap
-      : defaultStatusMap(meta.statusOptions);
+      : fromGh.statusMap;
+  const columns =
+    fromGh.columns.length > 0
+      ? fromGh.columns
+      : ([
+          { id: "backlog", name: "Backlog", sort_order: 0 },
+          { id: "ready", name: "Ready", sort_order: 1 },
+          { id: "in_progress", name: "In Progress", sort_order: 2 },
+          { id: "review", name: "Review", sort_order: 3 },
+          { id: "done", name: "Done", sort_order: 4 },
+        ] satisfies BoardColumnDef[]);
+
+  const cards = opts.db
+    .prepare(`SELECT id, column_id FROM ai_project_cards WHERE project_id=?`)
+    .all(opts.boardId) as Array<{ id: string; column_id: string }>;
+  const updateCol = opts.db.prepare(
+    `UPDATE ai_project_cards SET column_id=?, updated_at=datetime('now') WHERE id=?`
+  );
+  for (const card of cards) {
+    const next = remapCardColumnId(card.column_id, columns);
+    if (next !== card.column_id) updateCol.run(next, card.id);
+  }
 
   opts.db
     .prepare(
@@ -512,6 +594,7 @@ export async function linkBoardToGithubProject(opts: {
          github_project_node_id=?,
          github_project_url=?,
          github_status_map_json=?,
+         columns_json=?,
          sync_enabled=1,
          updated_at=datetime('now')
        WHERE id=? AND user_id=?`
@@ -520,6 +603,7 @@ export async function linkBoardToGithubProject(opts: {
       meta.id,
       meta.url,
       JSON.stringify(statusMap),
+      JSON.stringify(columns),
       opts.boardId,
       opts.userId
     );
@@ -570,6 +654,7 @@ export async function syncBoardWithGithub(opts: {
 
   const accessToken = requireToken(opts.db);
   const meta = await loadProjectMeta(accessToken, board.github_project_node_id);
+  const fromGh = columnsFromStatusOptions(meta.statusOptions);
   let statusMap: Record<string, string> = {};
   try {
     statusMap = board.github_status_map_json
@@ -578,18 +663,31 @@ export async function syncBoardWithGithub(opts: {
   } catch {
     statusMap = {};
   }
-  if (Object.keys(statusMap).length === 0) {
-    statusMap = defaultStatusMap(meta.statusOptions);
-  } else {
-    // Boards linked before the Ready column existed may map GitHub "Ready"
-    // onto backlog. Prefer the canonical Ready column when present.
-    const defaults = defaultStatusMap(meta.statusOptions);
-    if (defaults.ready) {
-      if (statusMap.backlog === defaults.ready) {
-        statusMap.backlog = defaults.backlog ?? statusMap.backlog;
-      }
-      if (!statusMap.ready) statusMap.ready = defaults.ready;
+  if (fromGh.columns.length > 0) {
+    statusMap = fromGh.statusMap;
+    const cards = opts.db
+      .prepare(`SELECT id, column_id FROM ai_project_cards WHERE project_id=?`)
+      .all(opts.boardId) as Array<{ id: string; column_id: string }>;
+    const updateCol = opts.db.prepare(
+      `UPDATE ai_project_cards SET column_id=? WHERE id=?`
+    );
+    for (const card of cards) {
+      const next = remapCardColumnId(card.column_id, fromGh.columns);
+      if (next !== card.column_id) updateCol.run(next, card.id);
     }
+    opts.db
+      .prepare(
+        `UPDATE ai_projects SET columns_json=?, github_status_map_json=?, updated_at=datetime('now')
+         WHERE id=? AND user_id=?`
+      )
+      .run(
+        JSON.stringify(fromGh.columns),
+        JSON.stringify(statusMap),
+        opts.boardId,
+        opts.userId
+      );
+  } else if (Object.keys(statusMap).length === 0) {
+    statusMap = defaultStatusMap(meta.statusOptions);
   }
 
   const items = await fetchProjectItems(
@@ -736,11 +834,17 @@ function priorityOptionId(
 ): string | null {
   if (!options.length) return null;
   const want =
-    priority <= 1 ? ["high", "urgent", "p0", "p1"] : priority >= 3 ? ["low", "p3", "p4"] : ["medium", "normal", "p2", "mid"];
+    priority <= 0
+      ? ["p0", "urgent", "critical"]
+      : priority === 1
+        ? ["p1", "high"]
+        : priority >= 3
+          ? ["p3", "p4", "low"]
+          : ["p2", "medium", "normal", "mid"];
   const hit = options.find((o) =>
     want.some((w) => o.name.toLowerCase().includes(w))
   );
-  return hit?.id ?? options[Math.min(1, options.length - 1)]?.id ?? null;
+  return hit?.id ?? options[Math.min(Math.max(priority, 0), options.length - 1)]?.id ?? null;
 }
 
 async function setProjectSingleSelect(opts: {

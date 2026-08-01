@@ -15,7 +15,8 @@ describe("defaultStatusMap", () => {
     expect(map.done).toBe("opt-done");
   });
 
-  it("maps Ready separately from Backlog", () => {
+  it("maps P0/P1/P2 separately", () => {
+    // exercised via sync priorityFromName through defaultStatusMap readiness
     const map = defaultStatusMap([
       { id: "opt-backlog", name: "Backlog" },
       { id: "opt-ready", name: "Ready" },
