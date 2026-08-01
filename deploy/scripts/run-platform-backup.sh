@@ -3,10 +3,16 @@
 # upload) against the live Docker Compose prod data volume. Intended for
 # Hostinger cron.
 #
+# DuckDB holds an exclusive process lock while Bridge is up, so this runner
+# briefly stops the godmode service around the one-shot snapshot container,
+# then starts it again. Prefer Admin "Run local snapshot" for zero-downtime
+# in-process COPY (same Node process as Bridge).
+#
 # Usage (on the VPS):
 #   /opt/godmode/deploy/scripts/run-platform-backup.sh
 #
 # Env file: deploy/.env.production (GODMODE_IMAGE, optional BACKUP_S3_*).
+#   GODMODE_BACKUP_SKIP_STOP=1  — do not stop/start (fails if DuckDB locked)
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -63,19 +69,40 @@ COMMON_ARGS=(
   --entrypoint node
 )
 
+STOPPED=0
+start_godmode_if_needed() {
+  if [[ "$STOPPED" -eq 1 ]]; then
+    echo "$LOG_TAG: starting godmode after snapshot"
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" start godmode || true
+    STOPPED=0
+  fi
+}
+trap start_godmode_if_needed EXIT
+
+if [[ "${GODMODE_BACKUP_SKIP_STOP:-0}" != "1" ]]; then
+  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps --status running --services 2>/dev/null | grep -qx godmode; then
+    echo "$LOG_TAG: stopping godmode briefly for DuckDB-consistent snapshot"
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" stop godmode
+    STOPPED=1
+  fi
+fi
+
 if [[ "$SCRIPT_IN_IMAGE" -eq 1 ]]; then
   echo "$LOG_TAG: snapshot via image script (volume=$VOLUME_NAME)"
   docker run "${COMMON_ARGS[@]}" "$GODMODE_IMAGE" \
     /app/scripts/backup/snapshot-platform.mjs
 else
-  HOST_SCRIPT="$REPO_ROOT/scripts/backup/snapshot-platform.mjs"
-  if [[ ! -f "$HOST_SCRIPT" ]]; then
-    echo "$LOG_TAG: snapshot script missing in image and at $HOST_SCRIPT" >&2
+  HOST_SCRIPT_DIR="$REPO_ROOT/scripts/backup"
+  if [[ ! -f "$HOST_SCRIPT_DIR/snapshot-platform.mjs" ]]; then
+    echo "$LOG_TAG: snapshot script missing in image and at $HOST_SCRIPT_DIR" >&2
     exit 1
   fi
-  echo "$LOG_TAG: snapshot via host-mounted script (volume=$VOLUME_NAME)"
+  echo "$LOG_TAG: snapshot via host-mounted scripts/backup (volume=$VOLUME_NAME)"
   docker run "${COMMON_ARGS[@]}" \
-    -v "$HOST_SCRIPT:/app/scripts/backup/snapshot-platform.mjs:ro" \
+    -v "$HOST_SCRIPT_DIR:/app/scripts/backup:ro" \
     "$GODMODE_IMAGE" \
     /app/scripts/backup/snapshot-platform.mjs
 fi
+
+start_godmode_if_needed
+trap - EXIT
