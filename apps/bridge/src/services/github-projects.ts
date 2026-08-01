@@ -1253,42 +1253,45 @@ export async function pushCardFieldsToGithub(opts: {
       "User-Agent": "GodMode",
     };
 
-    const logins = (ctxGh.assignees ?? []).map((a) => a.login).filter(Boolean);
-    await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${gh.issueNumber}`,
-      {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ assignees: logins }),
-      }
-    ).catch(() => undefined);
-
-    let milestoneNumber: number | null = null;
-    const title = ctxGh.milestone?.title?.trim();
-    if (title) {
-      const listRes = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/milestones?state=all&per_page=100`,
+    if ("assignees" in ctxGh) {
+      const logins = (ctxGh.assignees ?? [])
+        .map((a) => a.login)
+        .filter(Boolean);
+      await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/issues/${gh.issueNumber}`,
         {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "GodMode",
-          },
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ assignees: logins }),
         }
-      ).catch(() => null);
-      if (listRes?.ok) {
-        const milestones = (await listRes.json()) as Array<{
-          number: number;
-          title: string;
-        }>;
-        const hit = milestones.find(
-          (m) => m.title.toLowerCase() === title.toLowerCase()
-        );
-        milestoneNumber = hit?.number ?? null;
-      }
+      ).catch(() => undefined);
     }
-    // Only clear/set milestone when context includes the milestone key (incl. null clear).
+
     if ("milestone" in ctxGh) {
+      let milestoneNumber: number | null = null;
+      const title = ctxGh.milestone?.title?.trim();
+      if (title) {
+        const listRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/milestones?state=all&per_page=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: "application/vnd.github+json",
+              "User-Agent": "GodMode",
+            },
+          }
+        ).catch(() => null);
+        if (listRes?.ok) {
+          const milestones = (await listRes.json()) as Array<{
+            number: number;
+            title: string;
+          }>;
+          const hit = milestones.find(
+            (m) => m.title.toLowerCase() === title.toLowerCase()
+          );
+          milestoneNumber = hit?.number ?? null;
+        }
+      }
       await fetch(
         `https://api.github.com/repos/${owner}/${repo}/issues/${gh.issueNumber}`,
         {
