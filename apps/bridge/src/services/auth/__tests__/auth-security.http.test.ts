@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import express from "express";
+import cors from "cors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { HOLDINGS_KEY, ALLOWED_ORIGIN, mailCalls, mem } = vi.hoisted(() => {
@@ -202,6 +203,20 @@ function insertUser(opts: {
 
 function buildApp(): express.Express {
   const app = express();
+  // Mirror production CORS deny: reject untrusted Origin without throwing
+  // (Error callbacks become HTTP 500 and hide CSRF 403).
+  app.use(
+    cors({
+      origin(origin, callback) {
+        if (!origin || origin === ALLOWED_ORIGIN) {
+          callback(null, true);
+          return;
+        }
+        callback(null, false);
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json());
   app.use(requireTrustedOrigin);
   app.use("/api/auth", createAuthRouter());
