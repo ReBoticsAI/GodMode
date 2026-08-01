@@ -18,11 +18,13 @@ import {
   Calendar,
   CheckCircle2,
   Circle,
+  Filter,
   ListTree,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
+  Search,
   SlidersHorizontal,
   Trash2,
   X,
@@ -91,6 +93,18 @@ import {
 import { useIntelligence } from "@/lib/intelligence-context";
 import type { ProductivityScope } from "@/lib/productivity-scope";
 import { isUserScope, scopeReadOnly } from "@/lib/productivity-scope";
+import {
+  boardFilterActive,
+  boardFilterNarrowing,
+  cardsForColumn,
+  collectFilterOptions,
+  DEFAULT_BOARD_FILTER,
+  loadBoardFilter,
+  saveBoardFilter,
+  toggleFilterValue,
+  type BoardFilterState,
+  type BoardSortKey,
+} from "@/lib/tasks-board-filters";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -1353,12 +1367,16 @@ export function ProjectsBoard({
   const [face, setFace] = useState<CardFaceVisibility>(() =>
     loadCardFaceVisibility(boardKey)
   );
+  const [filter, setFilter] = useState<BoardFilterState>(() =>
+    loadBoardFilter(boardKey)
+  );
   const { clearReviewUnread } = useIntelligence();
   const readOnly = scopeReadOnly(scope);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
     setFace(loadCardFaceVisibility(boardKey));
+    setFilter(loadBoardFilter(boardKey));
   }, [boardKey]);
 
   const setFaceField = (key: keyof CardFaceVisibility, checked: boolean) => {
@@ -1367,6 +1385,11 @@ export function ProjectsBoard({
       saveCardFaceVisibility(boardKey, next);
       return next;
     });
+  };
+
+  const updateFilter = (next: BoardFilterState) => {
+    setFilter(next);
+    saveBoardFilter(boardKey, next);
   };
 
   const labelSuggestions = useMemo(() => {
@@ -1466,21 +1489,87 @@ export function ProjectsBoard({
     if (target) openEditor(target);
   };
 
-  // Board shows top-level cards only (subtasks are managed inside the editor),
-  // sorted by priority then manual order.
+  const filterOptions = useMemo(() => collectFilterOptions(cards), [cards]);
+  const filterNarrowing = boardFilterNarrowing(filter);
+  const filterIsActive = boardFilterActive(filter);
+  const matchedCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const col of columns) {
+      for (const c of cardsForColumn(cards, col.id, filter)) ids.add(c.id);
+    }
+    return ids.size;
+  }, [cards, columns, filter]);
+
+  // Board shows top-level cards only (subtasks are managed inside the editor).
   const byColumn = (colId: string) =>
-    cards
-      .filter((c) => c.column_id === colId && !c.parent_card_id)
-      .sort(
-        (a, b) =>
-          (a.priority ?? 2) - (b.priority ?? 2) || a.sort_order - b.sort_order
-      );
+    cardsForColumn(cards, colId, filter) as AiProjectCard[];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-2 px-1">
-        <span className="text-xs font-medium text-muted-foreground">Tasks</span>
-        <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 flex-col gap-2 px-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Tasks</span>
+          <div className="flex items-center gap-1.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                  >
+                    <SlidersHorizontal data-icon="inline-start" className="h-3.5 w-3.5" />
+                    Card fields
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="min-w-44">
+                <DropdownMenuLabel>Show on card face</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(
+                  [
+                    ["priority", "Priority"],
+                    ["labels", "Labels"],
+                    ["assignees", "Assignees"],
+                    ["due", "Due date"],
+                    ["milestone", "Milestone"],
+                  ] as Array<[keyof CardFaceVisibility, string]>
+                ).map(([key, label]) => (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={face[key]}
+                    onCheckedChange={(v) => setFaceField(key, !!v)}
+                  >
+                    {label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={readOnly}
+              onClick={() => void addCard()}
+            >
+              Add card
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="relative min-w-[160px] flex-1 basis-[180px]">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={filter.query}
+              onChange={(e) =>
+                updateFilter({ ...filter, query: e.target.value })
+              }
+              placeholder="Search title or body"
+              className="h-7 pl-7 text-xs"
+              aria-label="Search cards"
+            />
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -1488,60 +1577,254 @@ export function ProjectsBoard({
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className={cn(
+                    "h-7 text-xs",
+                    filter.priorities.length > 0 && "border-primary/50"
+                  )}
                 >
-                  <SlidersHorizontal data-icon="inline-start" className="h-3.5 w-3.5" />
-                  Card fields
+                  <Filter data-icon="inline-start" className="h-3.5 w-3.5" />
+                  Priority
+                  {filter.priorities.length > 0
+                    ? ` (${filter.priorities.length})`
+                    : ""}
                 </Button>
               }
             />
-            <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuLabel>Show on card face</DropdownMenuLabel>
+            <DropdownMenuContent align="start" className="min-w-36">
+              <DropdownMenuLabel>Priority</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {(
-                [
-                  ["priority", "Priority"],
-                  ["labels", "Labels"],
-                  ["assignees", "Assignees"],
-                  ["due", "Due date"],
-                  ["milestone", "Milestone"],
-                ] as Array<[keyof CardFaceVisibility, string]>
-              ).map(([key, label]) => (
+              {[0, 1, 2, 3].map((p) => (
                 <DropdownMenuCheckboxItem
-                  key={key}
-                  checked={face[key]}
-                  onCheckedChange={(v) => setFaceField(key, !!v)}
+                  key={p}
+                  checked={filter.priorities.includes(p)}
+                  onCheckedChange={() =>
+                    updateFilter(toggleFilterValue(filter, "priorities", p))
+                  }
+                >
+                  P{p}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "h-7 text-xs",
+                    filter.labels.length > 0 && "border-primary/50"
+                  )}
+                  disabled={filterOptions.labels.length === 0}
+                >
+                  Labels
+                  {filter.labels.length > 0 ? ` (${filter.labels.length})` : ""}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" className="min-w-40">
+              <DropdownMenuLabel>Labels</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {filterOptions.labels.map((label) => (
+                <DropdownMenuCheckboxItem
+                  key={label}
+                  checked={filter.labels.includes(label)}
+                  onCheckedChange={() =>
+                    updateFilter(toggleFilterValue(filter, "labels", label))
+                  }
                 >
                   {label}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            disabled={readOnly}
-            onClick={() => void addCard()}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "h-7 text-xs",
+                    filter.assignees.length > 0 && "border-primary/50"
+                  )}
+                  disabled={filterOptions.assignees.length === 0}
+                >
+                  Assignees
+                  {filter.assignees.length > 0
+                    ? ` (${filter.assignees.length})`
+                    : ""}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" className="min-w-40">
+              <DropdownMenuLabel>Assignees</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {filterOptions.assignees.map((login) => (
+                <DropdownMenuCheckboxItem
+                  key={login}
+                  checked={filter.assignees.includes(login)}
+                  onCheckedChange={() =>
+                    updateFilter(toggleFilterValue(filter, "assignees", login))
+                  }
+                >
+                  {login}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "h-7 text-xs",
+                    filter.milestones.length > 0 && "border-primary/50"
+                  )}
+                  disabled={filterOptions.milestones.length === 0}
+                >
+                  Milestone
+                  {filter.milestones.length > 0
+                    ? ` (${filter.milestones.length})`
+                    : ""}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" className="min-w-40">
+              <DropdownMenuLabel>Milestone</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {filterOptions.milestones.map((m) => (
+                <DropdownMenuCheckboxItem
+                  key={m}
+                  checked={filter.milestones.includes(m)}
+                  onCheckedChange={() =>
+                    updateFilter(toggleFilterValue(filter, "milestones", m))
+                  }
+                >
+                  {m}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "h-7 text-xs",
+                    filter.columns.length > 0 && "border-primary/50"
+                  )}
+                  disabled={columns.length === 0}
+                >
+                  Status
+                  {filter.columns.length > 0
+                    ? ` (${filter.columns.length})`
+                    : ""}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" className="min-w-40">
+              <DropdownMenuLabel>Column / Status</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {columns.map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={filter.columns.includes(col.id)}
+                  onCheckedChange={() =>
+                    updateFilter(toggleFilterValue(filter, "columns", col.id))
+                  }
+                >
+                  {col.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Select
+            value={filter.sort}
+            onValueChange={(v) =>
+              updateFilter({ ...filter, sort: v as BoardSortKey })
+            }
           >
-            Add card
-          </Button>
+            <SelectTrigger className="h-7 w-[140px] text-xs" size="sm">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="priority">Sort: Priority</SelectItem>
+              <SelectItem value="due">Sort: Due date</SelectItem>
+              <SelectItem value="updated">Sort: Updated</SelectItem>
+              <SelectItem value="manual">Sort: Manual</SelectItem>
+            </SelectContent>
+          </Select>
+          {filterIsActive ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => updateFilter({ ...DEFAULT_BOARD_FILTER })}
+            >
+              <X data-icon="inline-start" className="h-3.5 w-3.5" />
+              Clear
+            </Button>
+          ) : null}
+          {filterNarrowing ? (
+            <span className="text-[10px] text-muted-foreground">
+              {matchedCount} match{matchedCount === 1 ? "" : "es"}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
+        {filterNarrowing && matchedCount === 0 ? (
+          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed bg-muted/10 p-6 text-center">
+            <div>
+              <p className="text-sm font-medium">No cards match</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Clear filters or adjust search to see cards again.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-3 h-7 text-xs"
+                onClick={() => updateFilter({ ...DEFAULT_BOARD_FILTER })}
+              >
+                Clear filters
+              </Button>
+            </div>
+          </div>
+        ) : (
         <DndContext
           sensors={sensors}
           onDragStart={(e) => setActiveId(String(e.active.id))}
           onDragEnd={onDragEnd}
         >
           <div className="flex h-full min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
-            {columns.map((col) => {
-              const count = byColumn(col.id).length;
+            {columns
+              .filter(
+                (col) =>
+                  filter.columns.length === 0 || filter.columns.includes(col.id)
+              )
+              .map((col) => {
+              const visible = byColumn(col.id);
+              const count = visible.length;
+              const totalInCol = cards.filter(
+                (c) => c.column_id === col.id && !c.parent_card_id
+              ).length;
               const wip =
                 col.wip_limit != null && col.wip_limit > 0
                   ? col.wip_limit
                   : null;
-              const overWip = wip != null && count > wip;
+              const overWip = wip != null && totalInCol > wip;
               return (
               <div
                 key={col.id}
@@ -1557,18 +1840,22 @@ export function ProjectsBoard({
                         : "text-muted-foreground"
                     )}
                   >
-                    {wip != null ? `${count}/${wip}` : count}
+                    {wip != null
+                      ? `${totalInCol}/${wip}`
+                      : filterNarrowing && count !== totalInCol
+                        ? `${count}/${totalInCol}`
+                        : count}
                   </div>
                 </div>
                 <SortableContext
-                  items={byColumn(col.id).map((c) => c.id)}
+                  items={visible.map((c) => c.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   <div
                     className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto"
                     data-column-id={col.id}
                   >
-                    {byColumn(col.id).map((card) => (
+                    {visible.map((card) => (
                       <div key={card.id} data-column-id={col.id}>
                         <SortableCard
                           card={card}
@@ -1594,6 +1881,7 @@ export function ProjectsBoard({
             ) : null}
           </DragOverlay>
         </DndContext>
+        )}
       </div>
       <CardEditorDialog
         card={editing}
