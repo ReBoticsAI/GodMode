@@ -11,6 +11,15 @@ import {
   userProjectId,
 } from "./user-productivity.js";
 import { readGithubProjectsToken, resolveGithubProjectsAccessToken } from "./github-integration.js";
+import {
+  emptyExtraFields,
+  isDueDateFieldName,
+  isEstimateFieldName,
+  isIterationFieldName,
+  isStartDateFieldName,
+  isTextNoteFieldName,
+  type ExtraProjectFields,
+} from "./github-projects-fields.js";
 
 export type GithubProjectSummary = {
   id: string;
@@ -34,8 +43,13 @@ type ProjectMeta = {
   statusFieldId: string | null;
   statusOptions: StatusOption[];
   dateFieldId: string | null;
+  startDateFieldId: string | null;
   priorityFieldId: string | null;
   priorityOptions: StatusOption[];
+  estimateFieldId: string | null;
+  textFieldId: string | null;
+  iterationFieldId: string | null;
+  iterationOptions: Array<{ id: string; title: string }>;
 };
 
 type GithubAssignee = {
@@ -65,7 +79,7 @@ type ProjectItem = {
   issueNumber: number | null;
   repo: string | null;
   contentId: string | null;
-};
+} & ExtraProjectFields;
 
 const DEFAULT_STATUS_ALIASES: Record<string, string[]> = {
   backlog: ["todo", "backlog", "new", "triage"],
@@ -267,6 +281,9 @@ async function loadProjectMeta(
           name?: string;
           options?: StatusOption[];
           dataType?: string;
+          configuration?: {
+            iterations?: Array<{ id: string; title: string }>;
+          };
         }>;
       };
     } | null;
@@ -282,6 +299,12 @@ async function loadProjectMeta(
               ... on ProjectV2SingleSelectField {
                 id name dataType
                 options { id name }
+              }
+              ... on ProjectV2IterationField {
+                id name dataType
+                configuration {
+                  iterations { id title }
+                }
               }
             }
           }
@@ -303,14 +326,22 @@ async function loadProjectMeta(
     fields.find((f) => f.name?.toLowerCase() === "status" && f.options) ??
     fields.find((f) => f.options && f.options.length > 0);
   const dateField =
-    fields.find((f) =>
-      ["target date", "due date", "due", "date"].includes(
-        (f.name ?? "").toLowerCase()
-      )
-    ) ?? null;
+    fields.find((f) => isDueDateFieldName(f.name ?? "")) ?? null;
+  const startDateField =
+    fields.find((f) => isStartDateFieldName(f.name ?? "")) ?? null;
   const priorityField =
     fields.find((f) => (f.name ?? "").toLowerCase() === "priority" && f.options) ??
     null;
+  const estimateField =
+    fields.find((f) => isEstimateFieldName(f.name ?? "")) ?? null;
+  const textField =
+    fields.find((f) => isTextNoteFieldName(f.name ?? "")) ?? null;
+  const iterationField =
+    fields.find(
+      (f) =>
+        isIterationFieldName(f.name ?? "") ||
+        (f.dataType ?? "").toUpperCase() === "ITERATION"
+    ) ?? null;
   return {
     id: data.node.id,
     title: data.node.title,
@@ -318,8 +349,13 @@ async function loadProjectMeta(
     statusFieldId: status?.id ?? null,
     statusOptions: status?.options ?? [],
     dateFieldId: dateField?.id ?? null,
+    startDateFieldId: startDateField?.id ?? null,
     priorityFieldId: priorityField?.id ?? null,
     priorityOptions: priorityField?.options ?? [],
+    estimateFieldId: estimateField?.id ?? null,
+    textFieldId: textField?.id ?? null,
+    iterationFieldId: iterationField?.id ?? null,
+    iterationOptions: iterationField?.configuration?.iterations ?? [],
   };
 }
 
@@ -367,6 +403,8 @@ async function fetchProjectItems(
               name?: string;
               date?: string;
               text?: string;
+              number?: number;
+              title?: string;
               field?: { name?: string };
             }>;
           };
@@ -408,7 +446,7 @@ async function fetchProjectItems(
               pageInfo { hasNextPage endCursor }
               nodes {
                 id
-                fieldValues(first: 20) {
+                fieldValues(first: 30) {
                   nodes {
                     ... on ProjectV2ItemFieldSingleSelectValue {
                       name
@@ -420,6 +458,14 @@ async function fetchProjectItems(
                     }
                     ... on ProjectV2ItemFieldTextValue {
                       text
+                      field { ... on ProjectV2FieldCommon { name } }
+                    }
+                    ... on ProjectV2ItemFieldNumberValue {
+                      number
+                      field { ... on ProjectV2FieldCommon { name } }
+                    }
+                    ... on ProjectV2ItemFieldIterationValue {
+                      title
                       field { ... on ProjectV2FieldCommon { name } }
                     }
                   }
@@ -461,16 +507,27 @@ async function fetchProjectItems(
       let statusName: string | null = null;
       let dueAt: string | null = null;
       let priorityName: string | null = null;
+      const extra = emptyExtraFields();
       for (const fv of node.fieldValues.nodes ?? []) {
-        const fieldName = (fv.field?.name ?? "").toLowerCase();
-        if (fieldName === "status" && fv.name) statusName = fv.name;
-        if (
-          ["target date", "due date", "due", "date"].includes(fieldName) &&
-          fv.date
-        ) {
+        const fieldName = fv.field?.name ?? "";
+        const fieldKey = fieldName.toLowerCase();
+        if (fieldKey === "status" && fv.name) statusName = fv.name;
+        if (isDueDateFieldName(fieldName) && fv.date) {
           dueAt = fv.date;
         }
-        if (fieldName === "priority" && fv.name) priorityName = fv.name;
+        if (isStartDateFieldName(fieldName) && fv.date) {
+          extra.startAt = fv.date;
+        }
+        if (fieldKey === "priority" && fv.name) priorityName = fv.name;
+        if (isEstimateFieldName(fieldName) && typeof fv.number === "number") {
+          extra.estimate = fv.number;
+        }
+        if (isTextNoteFieldName(fieldName) && typeof fv.text === "string") {
+          extra.textNote = fv.text;
+        }
+        if (isIterationFieldName(fieldName) && (fv.title || fv.name)) {
+          extra.iteration = String(fv.title || fv.name);
+        }
       }
       const assignees: GithubAssignee[] =
         content?.assignees?.nodes?.map((a) => ({
@@ -500,6 +557,7 @@ async function fetchProjectItems(
         issueNumber: content?.number ?? null,
         repo: content?.repository?.nameWithOwner ?? null,
         contentId: content?.id ?? null,
+        ...extra,
       });
     }
     if (!connection.pageInfo.hasNextPage) break;
@@ -993,6 +1051,10 @@ async function pullBoardFromGithub(opts: {
       url: item.url,
       assignees: item.assignees,
       milestone: item.milestone,
+      startAt: item.startAt,
+      estimate: item.estimate,
+      textNote: item.textNote,
+      iteration: item.iteration,
       lastSyncedAt: new Date().toISOString(),
     };
     const prev = byItemId.get(item.itemId);
@@ -1273,6 +1335,101 @@ export async function pushCardFieldsToGithub(opts: {
         date,
       }
     );
+  }
+
+  const fieldGh = parseGithubContext(card.context_json) as {
+    startAt?: string | null;
+    estimate?: number | null;
+    textNote?: string | null;
+    iteration?: string | null;
+  };
+
+  if (meta.startDateFieldId && fieldGh.startAt) {
+    const date = String(fieldGh.startAt).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      await githubGraphql(
+        accessToken,
+        `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $date: Date!) {
+          updateProjectV2ItemFieldValue(input: {
+            projectId: $projectId
+            itemId: $itemId
+            fieldId: $fieldId
+            value: { date: $date }
+          }) { projectV2Item { id } }
+        }`,
+        {
+          projectId: card.github_project_node_id,
+          itemId: gh.projectItemId,
+          fieldId: meta.startDateFieldId,
+          date,
+        }
+      );
+    }
+  }
+
+  if (meta.estimateFieldId && typeof fieldGh.estimate === "number") {
+    await githubGraphql(
+      accessToken,
+      `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $number: Float!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { number: $number }
+        }) { projectV2Item { id } }
+      }`,
+      {
+        projectId: card.github_project_node_id,
+        itemId: gh.projectItemId,
+        fieldId: meta.estimateFieldId,
+        number: fieldGh.estimate,
+      }
+    );
+  }
+
+  if (meta.textFieldId && typeof fieldGh.textNote === "string") {
+    await githubGraphql(
+      accessToken,
+      `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $text: String!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { text: $text }
+        }) { projectV2Item { id } }
+      }`,
+      {
+        projectId: card.github_project_node_id,
+        itemId: gh.projectItemId,
+        fieldId: meta.textFieldId,
+        text: fieldGh.textNote,
+      }
+    );
+  }
+
+  if (meta.iterationFieldId && fieldGh.iteration) {
+    const hit = meta.iterationOptions.find(
+      (o) => o.title.toLowerCase() === String(fieldGh.iteration).toLowerCase()
+    );
+    if (hit) {
+      await githubGraphql(
+        accessToken,
+        `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: ID!) {
+          updateProjectV2ItemFieldValue(input: {
+            projectId: $projectId
+            itemId: $itemId
+            fieldId: $fieldId
+            value: { iterationId: $iterationId }
+          }) { projectV2Item { id } }
+        }`,
+        {
+          projectId: card.github_project_node_id,
+          itemId: gh.projectItemId,
+          fieldId: meta.iterationFieldId,
+          iterationId: hit.id,
+        }
+      );
+    }
   }
 
   if (meta.priorityFieldId) {
