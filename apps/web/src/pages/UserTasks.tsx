@@ -269,10 +269,10 @@ export default function UserTasksPage() {
   };
 
   return (
-    <Page>
+    <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-3 overflow-hidden">
       <PageHeader
         title="Tasks"
-        description="Personal kanban boards — create as many as you need; optionally sync one with a GitHub Project."
+        description="Personal kanban boards: create as many as you need; optionally sync one with a GitHub Project."
         actions={
           userId ? (
             <ShareDialog
@@ -284,7 +284,7 @@ export default function UserTasksPage() {
         }
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Select
           value={activeBoardId ?? undefined}
           onValueChange={(v) => {
@@ -349,7 +349,7 @@ export default function UserTasksPage() {
         ) : null}
       </div>
 
-      <div className="flex min-h-[560px] flex-1 flex-col rounded-lg border bg-card/30 p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card/30 p-2">
         {activeBoardId ? (
           <ProjectsBoard
             key={`${activeBoardId}-${boardKey}`}
