@@ -432,10 +432,12 @@ app.use("/api/events", createEventsRouter());
 app.use("/api/support", createSupportRouter());
 app.use("/api/wiki", createWikiRouter(embeddingManager));
 app.use("/api/bank", createBankRouter());
+// Calendar/email status helpers are local-connector oriented (client installs).
 if (!config.isHub) {
   app.use("/api/integrations", createIntegrationsRouter());
-  app.use("/api/integrations/github", createGithubIntegrationRouter());
 }
+// GitHub Projects OAuth (Settings → Connect GitHub) is required on hub/SaaS too.
+app.use("/api/integrations/github", createGithubIntegrationRouter());
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
   app.use("/api/admin/authority", createAdminAuthorityRouter());
