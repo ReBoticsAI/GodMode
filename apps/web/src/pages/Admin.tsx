@@ -145,7 +145,7 @@ export default function Admin() {
           <StructureAdminPanel />
         </TabsContent>
         <TabsContent value="users" className="mt-4">
-          <AdminUsersPanel />
+          <AdminUsersPanel isSaas={isSaas} />
         </TabsContent>
         <TabsContent value="support" className="mt-4 space-y-4">
           <AdminSupportGroupCard />

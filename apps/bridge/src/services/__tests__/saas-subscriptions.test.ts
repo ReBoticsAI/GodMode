@@ -38,8 +38,10 @@ import { handleSaasStripeWebhook } from "../saas-billing.js";
 import {
   applyStripeSubscriptionObject,
   assertSaasUserMayAccess,
+  grantComplimentaryAccess,
   linkSubscriptionToUser,
   listSaasCustomersForAdmin,
+  revokeComplimentaryAccess,
   setUserAccessDisabled,
   subscriptionGrantsAccess,
   upsertSubscriptionFromCheckout,
@@ -307,5 +309,47 @@ describe("saas subscriptions", () => {
     const updated = setUserAccessDisabled(user.id, true);
     expect(updated?.access_disabled).toBe(1);
     expect(assertSaasUserMayAccess(updated!).ok).toBe(false);
+  });
+
+  it("grants and revokes complimentary access without Stripe or is_admin", () => {
+    const user = insertUser({ email: "gift@example.com" });
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+
+    const granted = grantComplimentaryAccess(user.id);
+    expect(granted.plan_id).toBe("complimentary");
+    expect(granted.stripe_subscription_id).toBeNull();
+    expect(user.is_admin).toBe(0);
+    expect(assertSaasUserMayAccess(user).ok).toBe(true);
+
+    const customers = listSaasCustomersForAdmin();
+    const row = customers.find((c) => c.userId === user.id);
+    expect(row?.complimentaryAccess).toBe(true);
+    expect(row?.planLabel).toBe("Complimentary");
+
+    const revoked = revokeComplimentaryAccess(user.id);
+    expect(revoked.access_revoked).toBe(1);
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+    const denied = assertSaasUserMayAccess(user);
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) {
+      expect(denied.error).toMatch(/subscription is inactive/i);
+    }
+  });
+
+  it("re-grants complimentary access after revoke", () => {
+    const user = insertUser({ email: "regift@example.com" });
+    grantComplimentaryAccess(user.id);
+    revokeComplimentaryAccess(user.id);
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+    grantComplimentaryAccess(user.id);
+    expect(assertSaasUserMayAccess(user).ok).toBe(true);
+  });
+
+  it("expired complimentary access does not pass the gate", () => {
+    const user = insertUser({ email: "expired@example.com" });
+    grantComplimentaryAccess(user.id, {
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
   });
 });

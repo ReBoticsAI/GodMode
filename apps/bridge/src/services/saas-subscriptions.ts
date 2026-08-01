@@ -3,6 +3,9 @@ import type { CoreDatabase, CoreUser } from "../core-db.js";
 import { getCoreDb } from "../core-db.js";
 import { config } from "../config.js";
 
+/** Admin-granted Cloud access without Stripe. Distinct from platform admin (`is_admin`). */
+export const COMPLIMENTARY_PLAN_ID = "complimentary";
+
 function planMeta(planIdOrPriceId: string | null | undefined): {
   id: string | null;
   label: string | null;
@@ -10,10 +13,26 @@ function planMeta(planIdOrPriceId: string | null | undefined): {
 } {
   const key = (planIdOrPriceId ?? "").trim();
   if (!key) return { id: null, label: null, amountLabel: null };
+  if (key === COMPLIMENTARY_PLAN_ID) {
+    return {
+      id: COMPLIMENTARY_PLAN_ID,
+      label: "Complimentary",
+      amountLabel: "Free",
+    };
+  }
   const plan = config.saas.plans.find((p) => p.id === key || p.priceId === key);
   return plan
     ? { id: plan.id, label: plan.label, amountLabel: plan.amountLabel }
     : { id: key, label: key, amountLabel: null };
+}
+
+export function isComplimentarySubscription(
+  sub: SaasSubscription | undefined
+): boolean {
+  if (!sub) return false;
+  return (
+    sub.plan_id === COMPLIMENTARY_PLAN_ID && !sub.stripe_subscription_id
+  );
 }
 
 export type SaasSubscriptionStatus =
@@ -67,14 +86,15 @@ export function findSubscriptionByUserId(
   core: CoreDatabase,
   userId: string
 ): SaasSubscription | undefined {
-  return core
+  const rows = core
     .prepare(
       `SELECT * FROM saas_subscriptions
        WHERE user_id=?
-       ORDER BY datetime(updated_at) DESC
-       LIMIT 1`
+       ORDER BY datetime(updated_at) DESC`
     )
-    .get(userId) as SaasSubscription | undefined;
+    .all(userId) as SaasSubscription[];
+  if (rows.length === 0) return undefined;
+  return rows.find((row) => subscriptionGrantsAccess(row)) ?? rows[0];
 }
 
 export function findSubscriptionByCustomerId(
@@ -335,11 +355,143 @@ export function linkSubscriptionToUser(opts: {
 export function subscriptionGrantsAccess(sub: SaasSubscription | undefined): boolean {
   if (!sub) return false;
   if (sub.access_revoked) return false;
-  if (ALLOWED_STATUSES.has(sub.status)) return true;
+  if (ALLOWED_STATUSES.has(sub.status)) {
+    if (
+      isComplimentarySubscription(sub) &&
+      sub.current_period_end &&
+      !periodStillActive(sub.current_period_end)
+    ) {
+      return false;
+    }
+    return true;
+  }
   if (sub.status === "canceled" && periodStillActive(sub.current_period_end)) {
     return true;
   }
   return false;
+}
+
+/**
+ * Grant complimentary GodMode Cloud access (no Stripe).
+ * Restores a prior complimentary row when present; otherwise inserts one.
+ * Does not change `is_admin`. Optional `expiresAt` uses `current_period_end`.
+ */
+export function grantComplimentaryAccess(
+  userId: string,
+  opts?: { expiresAt?: string | null }
+): SaasSubscription {
+  const core = getCoreDb();
+  const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as
+    | CoreUser
+    | undefined;
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { status: 404 });
+  }
+
+  const expiresAt =
+    typeof opts?.expiresAt === "string" && opts.expiresAt.trim()
+      ? opts.expiresAt.trim()
+      : null;
+  if (expiresAt) {
+    const t = Date.parse(expiresAt);
+    if (!Number.isFinite(t)) {
+      throw Object.assign(new Error("expiresAt must be a valid ISO date"), {
+        status: 400,
+      });
+    }
+  }
+
+  const rows = core
+    .prepare(
+      `SELECT * FROM saas_subscriptions
+       WHERE user_id=?
+       ORDER BY datetime(updated_at) DESC`
+    )
+    .all(userId) as SaasSubscription[];
+  const complimentary = rows.find((r) => isComplimentarySubscription(r));
+  if (complimentary) {
+    core
+      .prepare(
+        `UPDATE saas_subscriptions SET
+          plan_id=?,
+          status='active',
+          access_revoked=0,
+          current_period_end=?,
+          cancel_at_period_end=0,
+          email=COALESCE(?, email),
+          updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(
+        COMPLIMENTARY_PLAN_ID,
+        expiresAt,
+        user.email,
+        complimentary.id
+      );
+    return core
+      .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+      .get(complimentary.id) as SaasSubscription;
+  }
+
+  const id = randomUUID();
+  core
+    .prepare(
+      `INSERT INTO saas_subscriptions (
+        id, user_id, email, plan_id, status, current_period_end,
+        cancel_at_period_end, access_revoked
+      ) VALUES (?, ?, ?, ?, 'active', ?, 0, 0)`
+    )
+    .run(id, userId, user.email, COMPLIMENTARY_PLAN_ID, expiresAt);
+  return core
+    .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+    .get(id) as SaasSubscription;
+}
+
+/**
+ * Revoke complimentary Cloud access so the user must subscribe again.
+ * Login then fails `assertSaasUserMayAccess` with the inactive-subscription
+ * message (client should show that error and point them at signup/billing).
+ * Paid Stripe rows are left alone; use Disable access for those.
+ */
+export function revokeComplimentaryAccess(userId: string): SaasSubscription {
+  const core = getCoreDb();
+  const user = core.prepare(`SELECT id FROM users WHERE id=?`).get(userId) as
+    | { id: string }
+    | undefined;
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { status: 404 });
+  }
+
+  const rows = core
+    .prepare(
+      `SELECT * FROM saas_subscriptions
+       WHERE user_id=?
+       ORDER BY datetime(updated_at) DESC`
+    )
+    .all(userId) as SaasSubscription[];
+  const complimentary = rows.find((r) => isComplimentarySubscription(r));
+  if (!complimentary) {
+    throw Object.assign(
+      new Error("User has no complimentary Cloud access to revoke"),
+      { status: 400 }
+    );
+  }
+
+  core
+    .prepare(
+      `UPDATE saas_subscriptions
+       SET access_revoked=1, status='canceled', updated_at=datetime('now')
+       WHERE id=?`
+    )
+    .run(complimentary.id);
+  return core
+    .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+    .get(complimentary.id) as SaasSubscription;
+}
+
+export function userHasActiveComplimentaryAccess(userId: string): boolean {
+  const sub = findSubscriptionByUserId(getCoreDb(), userId);
+  return isComplimentarySubscription(sub) && subscriptionGrantsAccess(sub);
 }
 
 /**
@@ -445,6 +597,7 @@ export type SaasCustomerAdminRow = {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   accessRevoked: boolean;
+  complimentaryAccess: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   stripeDashboardUrl: string | null;
@@ -549,6 +702,17 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     const planId = typeof r.plan_id === "string" ? r.plan_id : null;
     const priceId = typeof r.price_id === "string" ? r.price_id : null;
     const meta = planMeta(planId ?? priceId);
+    const stripeSubscriptionId =
+      typeof r.stripe_subscription_id === "string"
+        ? r.stripe_subscription_id
+        : null;
+    const accessRevoked = Boolean(r.access_revoked);
+    const status = typeof r.status === "string" ? r.status : null;
+    const complimentaryAccess =
+      planId === COMPLIMENTARY_PLAN_ID &&
+      !stripeSubscriptionId &&
+      !accessRevoked &&
+      (status === null || ALLOWED_STATUSES.has(status));
     return {
     userId: typeof r.user_id === "string" ? r.user_id : null,
     email: typeof r.email === "string" ? r.email : null,
@@ -562,17 +726,15 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     planLabel: meta.label,
     amountLabel: meta.amountLabel,
     priceId,
-    status: typeof r.status === "string" ? r.status : null,
+    status,
     currentPeriodEnd:
       typeof r.current_period_end === "string" ? r.current_period_end : null,
     cancelAtPeriodEnd: Boolean(r.cancel_at_period_end),
-    accessRevoked: Boolean(r.access_revoked),
+    accessRevoked,
+    complimentaryAccess,
     stripeCustomerId:
       typeof r.stripe_customer_id === "string" ? r.stripe_customer_id : null,
-    stripeSubscriptionId:
-      typeof r.stripe_subscription_id === "string"
-        ? r.stripe_subscription_id
-        : null,
+    stripeSubscriptionId,
     stripeDashboardUrl: stripeDashboardCustomerUrl(
       typeof r.stripe_customer_id === "string" ? r.stripe_customer_id : null
     ),
