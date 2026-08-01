@@ -28,6 +28,7 @@ describe("multi_board_tasks_github_v1 migration", () => {
     expect(columnExists(db, "ai_projects", "archived_at")).toBe(true);
     expect(columnExists(db, "ai_projects", "github_project_node_id")).toBe(true);
     expect(columnExists(db, "ai_projects", "sync_enabled")).toBe(true);
+    expect(columnExists(db, "ai_projects", "columns_json")).toBe(true);
     migration!.up(db); // idempotent
     db.close();
   });
@@ -56,6 +57,32 @@ describe("tasks_github_sync_health_v1 migration", () => {
     expect(columnExists(db, "ai_projects", "last_sync_error")).toBe(true);
     expect(columnExists(db, "ai_projects", "sync_started_at")).toBe(true);
     expect(columnExists(db, "ai_projects", "last_sync_attempt_at")).toBe(true);
+    migration!.up(db);
+    db.close();
+  });
+});
+
+describe("ai_projects_columns_json_v1 migration", () => {
+  it("adds columns_json when missing after an early v14 apply", () => {
+    const migration = TENANT_BOOT_MIGRATIONS.find(
+      (m) => m.version === 18 && m.name === "ai_projects_columns_json_v1"
+    );
+    expect(migration).toBeTruthy();
+
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE ai_projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sync_enabled INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    expect(columnExists(db, "ai_projects", "columns_json")).toBe(false);
+    migration!.up(db);
+    expect(columnExists(db, "ai_projects", "columns_json")).toBe(true);
     migration!.up(db);
     db.close();
   });

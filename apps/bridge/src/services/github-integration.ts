@@ -303,14 +303,18 @@ export async function exchangeGithubIntegrationCode(
 export function buildGithubIntegrationAuthorizeUrl(state: string): string {
   const { clientId, source } = resolveGithubOauthClient();
   const redirectUri = `${config.auth.publicUrl.replace(/\/$/, "")}/api/integrations/github/callback`;
-  if (source === "github_app" && githubAppConfigured()) {
-    // Install + user authorize in one step (App setting: request OAuth during install).
-    return buildGithubAppInstallUrl(state);
-  }
+  // Always use the user OAuth authorize URL for Connect.
+  // The App install URL (`/apps/.../installations/new`) only runs OAuth on a *new*
+  // install; when the App is already installed it opens the configure page and
+  // never returns `code` + `installation_id` to our callback. After OAuth,
+  // exchangeGithubIntegrationCode lists installations and stores installationId.
+  // First-time install remains a separate link via status.installUrl.
   const url = new URL("https://github.com/login/oauth/authorize");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", GITHUB_PROJECTS_OAUTH_SCOPES);
+  if (source !== "github_app") {
+    url.searchParams.set("scope", GITHUB_PROJECTS_OAUTH_SCOPES);
+  }
   url.searchParams.set("state", state);
   return url.toString();
 }
