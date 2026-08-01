@@ -95,31 +95,75 @@ If `RESEND_API_KEY` is missing or invalid, signup still creates the account but 
 
 ## 7. Backups (cron)
 
-Keep at least one local snapshot on the VPS disk, then upload offsite:
+Prod Compose mounts durable data at container `/data` (Docker volume
+`deploy_godmode-data` on Hostinger). The host has no Node runtime; run snapshots
+through the digest-pinned `GODMODE_IMAGE` instead of bare `node` on the VPS.
 
-```cron
-15 3 * * * cd /opt/godmode && PLATFORM_DATA_DIR=/var/lib/godmode node scripts/backup/snapshot-platform.mjs >> /var/log/godmode-backup.log 2>&1
+### Install nightly cron
+
+```bash
+chmod +x /opt/godmode/deploy/scripts/*.sh
+sudo /opt/godmode/deploy/scripts/install-backup-cron.sh
+# optional: run once now
+sudo /opt/godmode/deploy/scripts/run-platform-backup.sh
 ```
 
-Set `BACKUP_S3_*` for S3-compatible offsite. Test restore before launch.
+Default schedule: `15 3 * * *` (03:15 UTC) → `/var/log/godmode-backup.log`.
+
+The runner loads `deploy/.env.production`, mounts the `godmode-data` volume at
+`/data`, and executes `scripts/backup/snapshot-platform.mjs` (from the image when
+present, otherwise host-mounted from the repo checkout).
+
+### Offsite (`BACKUP_S3_*`)
+
+Set S3-compatible credentials in `/opt/godmode/deploy/.env.production` (never
+commit real values):
+
+```bash
+BACKUP_LOCAL_DIR=/data/backups
+BACKUP_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+BACKUP_S3_REGION=auto
+BACKUP_S3_BUCKET=godmode-backups
+BACKUP_S3_ACCESS_KEY_ID=...
+BACKUP_S3_SECRET_ACCESS_KEY=...
+BACKUP_S3_PREFIX=godmode/
+```
+
+Cloudflare R2 is the usual choice (enable R2 in the dashboard, create a bucket,
+then an R2 S3 API token with Object Read & Write on that bucket). Recreate or
+restart is not required for cron: the runner passes `BACKUP_S3_*` into a one-shot
+container. Bridge Admin local snapshot does not upload to S3.
 
 You can also trigger a **local-only** snapshot from **Admin → Observability →
 Run local snapshot** (`POST /api/admin/marketplace/backup`). That updates
 `platform_backup_meta` the same way as cron (without S3 upload).
 
-### Restore drill (local snapshot)
+### Restore drill
 
-1. Pick a snapshot directory under `BACKUP_LOCAL_DIR` (or `{data}/backups/<stamp>`).
-2. Stop Bridge (and any process holding open SQLite handles).
+Prefer the scripted verify-only drill (integrity check on a scratch copy; does
+not stop prod):
+
+```bash
+sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only
+# after offsite is configured:
+sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --from-s3
+```
+
+Manual / apply cutover (stops Bridge; keep the pre-restore tree):
+
+1. Pick a snapshot under the volume backups dir
+   (`/var/lib/docker/volumes/deploy_godmode-data/_data/backups/<stamp>`).
+2. Stop Bridge: `docker compose -f docker-compose.prod.yml stop godmode`.
 3. Replace live files from the snapshot:
-   - `databases/core.sqlite` → `{PLATFORM_DATA_DIR}/core.sqlite`
-   - each `tenants/*.sqlite` → `{PLATFORM_DATA_DIR}/tenants/<same-name>`
-4. Restore file permissions to the runtime user.
-5. Start Bridge and hit `/api/health`, then Admin → Observability to confirm.
-6. If you keep offsite copies, practice restoring from S3 the same way after
-   downloading into a temporary directory.
+   - `databases/core.sqlite` → volume `core.sqlite` (remove `-wal`/`-shm`)
+   - each `tenants/*.sqlite` → volume `tenants/<same-name>`
+4. Start Bridge and hit `/api/health`, then Admin → Observability.
+5. For offsite: download the stamp with
+   `restore-platform-drill.sh --verify-only --from-s3`, then apply from that tree.
 
 Never restore over a running Bridge. Keep the pre-restore tree until health checks pass.
+Or use `restore-platform-drill.sh --apply --stamp <stamp>` only when intentionally
+practicing a full cutover.
 
 ## 8. Observability
 

@@ -26,14 +26,32 @@ const dest = path.join(localRoot, stamp);
 fs.mkdirSync(path.join(dest, "databases"), { recursive: true });
 fs.mkdirSync(path.join(dest, "tenants"), { recursive: true });
 
-function backupSqlite(src, destFile) {
+async function backupSqlite(src, destFile) {
   if (!fs.existsSync(src)) {
     console.warn(`skip missing ${src}`);
     return false;
   }
   const db = new Database(src, { readonly: true, fileMustExist: true });
   try {
-    db.backup(destFile);
+    // better-sqlite3 returns a Promise from backup(); must await before close.
+    await db.backup(destFile);
+    const verification = new Database(destFile, { readonly: true, fileMustExist: true });
+    try {
+      const result = verification.pragma("quick_check", { simple: true });
+      if (result !== "ok") {
+        throw new Error(`Snapshot verification failed for ${src}: ${String(result)}`);
+      }
+    } finally {
+      verification.close();
+    }
+    // Readonly open can leave -wal/-shm beside the snapshot; remove sidecars.
+    for (const side of [`${destFile}-wal`, `${destFile}-shm`]) {
+      try {
+        fs.unlinkSync(side);
+      } catch {
+        /* ignore */
+      }
+    }
   } finally {
     db.close();
   }
@@ -41,13 +59,13 @@ function backupSqlite(src, destFile) {
 }
 
 const coreSrc = path.join(dataDir, "core.sqlite");
-backupSqlite(coreSrc, path.join(dest, "databases", "core.sqlite"));
+await backupSqlite(coreSrc, path.join(dest, "databases", "core.sqlite"));
 
 const tenantsDir = path.join(dataDir, "tenants");
 if (fs.existsSync(tenantsDir)) {
   for (const name of fs.readdirSync(tenantsDir)) {
     if (!name.endsWith(".sqlite")) continue;
-    backupSqlite(
+    await backupSqlite(
       path.join(tenantsDir, name),
       path.join(dest, "tenants", name)
     );
