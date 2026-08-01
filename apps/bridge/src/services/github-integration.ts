@@ -115,7 +115,8 @@ export function ownerDbForUser(userId: string): AppDatabase {
 
 /**
  * Token for Projects GraphQL / REST.
- * Prefers installation access token when App + installationId are present.
+ * Prefers user-to-server token (covers user-owned Projects). Falls back to
+ * installation token when only the install id is stored.
  */
 export async function resolveGithubProjectsAccessToken(
   db: AppDatabase
@@ -126,10 +127,6 @@ export async function resolveGithubProjectsAccessToken(
       new Error("Connect GitHub in Settings before linking a Project"),
       { status: 400 }
     );
-  }
-  if (githubAppConfigured() && stored.installationId) {
-    const { token } = await createInstallationAccessToken(stored.installationId);
-    return token;
   }
   if (stored.accessToken) {
     if (stored.expiresAt && stored.refreshToken && githubAppConfigured()) {
@@ -147,6 +144,10 @@ export async function resolveGithubProjectsAccessToken(
       }
     }
     return stored.accessToken;
+  }
+  if (githubAppConfigured() && stored.installationId) {
+    const { token } = await createInstallationAccessToken(stored.installationId);
+    return token;
   }
   throw Object.assign(
     new Error("Connect GitHub in Settings before linking a Project"),

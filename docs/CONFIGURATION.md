@@ -24,9 +24,9 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
 | `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
 | `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth for sign-in (optional) |
-| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Legacy GitHub OAuth for **sign-in** (optional; prefer `GITHUB_APP_*`) |
-| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Legacy Tasks ↔ Projects OAuth (prefer `GITHUB_APP_*`) |
-| `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **GitHub App** for sign-in + Connect + webhooks + Core Support issues |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | **Deprecated** classic GitHub OAuth for sign-in. Unused when `GITHUB_APP_*` is set; keep only as local/dev fallback |
+| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | **Deprecated** classic Tasks ↔ Projects OAuth. Unused when `GITHUB_APP_*` is set |
+| `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **Preferred** GitHub App for sign-in + Connect + webhooks + Core Support issues |
 | `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on Hostinger) |
 | `GITHUB_APP_WEBHOOK_SECRET` | empty | App webhook HMAC secret |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
@@ -117,7 +117,7 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 ### GitHub App (sign-in + Connect + Projects webhooks)
 
-Prefer a single **GitHub App** for SaaS (`GITHUB_APP_*`). Classic `OAUTH_GITHUB_*` remains a local/dev fallback when the App is unset.
+**Preferred** for SaaS: one GitHub App (`GITHUB_APP_*`) covers sign-in, Settings Connect, Projects sync/webhooks, and Core Support issue create. Classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` are deprecated and only used when the App client id/secret are unset (local/dev fallback). Do not register new classic OAuth Apps for GodMode Cloud.
 
 | Variable | Description |
 |----------|-------------|
@@ -128,7 +128,7 @@ Prefer a single **GitHub App** for SaaS (`GITHUB_APP_*`). Classic `OAUTH_GITHUB_
 | `GITHUB_APP_PRIVATE_KEY` | PEM contents with `\n` escapes (alternative to path) |
 | `GITHUB_APP_WEBHOOK_SECRET` | Webhook secret from App settings |
 | `GITHUB_APP_SLUG` | Install URL slug (default `godmode-cloud`) |
-| `GITHUB_APP_PLATFORM_INSTALLATION_ID` | Optional install id on ReBoticsAI for Core Support issues |
+| `GITHUB_APP_PLATFORM_INSTALLATION_ID` | Optional install id on the platform account for Core Support issues |
 | `GITHUB_APP_PLATFORM_ACCOUNT_LOGIN` | Account login for platform install discovery (default `ReBoticsAI`) |
 
 Callback URLs on the App (add both):
@@ -139,23 +139,27 @@ Callback URLs on the App (add both):
 
 Webhook URL: `{AUTH_PUBLIC_URL}/api/integrations/github/webhook` (subscribe to Projects v2 item + installation events).
 
-### Legacy GitHub OAuth apps (login vs Projects sync)
+**Projects webhooks note:** GitHub delivers `projects_v2_item` for **organization-owned** Projects when the App is installed on that org. User-owned Projects sync via poll + manual Sync; signed webhook deliveries still verify HMAC and the handler runs, but GitHub may not emit item events for user-owned boards. Prefer linking org Projects when near-real-time webhooks matter.
 
-Only when `GITHUB_APP_*` is not configured:
+### Deprecated classic GitHub OAuth apps
+
+Only when `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` are not configured:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Classic OAuth for **sign-in** |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Classic OAuth for Tasks ↔ Projects |
 
-Register callback URLs on the classic OAuth App if still used:
+Hostinger may still list these env keys as unused leftovers; safe to leave until cutover is verified, then remove from `.env.production` and archive the classic OAuth App registrations on GitHub.
+
+Register callback URLs on the classic OAuth App only if still used:
 
 | Purpose | Callback URL |
 |---------|----------------|
 | Sign-in | `{AUTH_PUBLIC_URL}/api/auth/oauth/github/callback` |
 | Tasks ↔ GitHub Projects | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 
-Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). With a GitHub App, `projects_v2_item` webhooks also drive pulls; poll remains fallback.
+Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). With a GitHub App on an **org-owned** Project, `projects_v2_item` webhooks also drive pulls; poll remains fallback for misses and for user-owned Projects.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
