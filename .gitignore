@@ -66,6 +66,18 @@ apps/bridge/data/**/artifacts/
 *.pfx
 *.p12
 
+# Host-local Compose overrides (ports, machine pins). Keep on the VPS only.
+docker-compose.override.yml
+**/docker-compose.override.yml
+!deploy/docker-compose.hostinger-override.example.yml
+
+# Editor / backup junk (never commit)
+*~
+*.bak
+*.bak-*
+**/*.bak
+**/*.bak-*
+
 # Logs, temp, runtime artifacts
 *.log
 *.tmp
