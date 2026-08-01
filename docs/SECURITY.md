@@ -21,6 +21,7 @@ Do **not** point public DNS at SaaS until:
 3. Platform admin MFA enrolled and hard-gated (Auth interstitial + `MFA_SETUP_REQUIRED` on product APIs)
 4. Cloudflare → Hostinger Full (strict), origin headers, HTTPS cookies, firewall locked
 5. Durable SQLite rate limits + cron backups + tested offsite restore
+   (operator PC download of a nightly stamp + integrity verify; S3/R2 optional)
 6. SaaS coding on by default (#178; opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`); Local plugin path registration blocked by default (`PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` unset/false)
 7. Live Stripe webhooks + Customer Portal on the Cloudflare hostname
 8. DEPLOY.md / this file / `deploy/hostinger.md` signed off
