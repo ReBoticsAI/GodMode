@@ -10,7 +10,7 @@ summary: "Multiple personal kanban boards; optional GitHub Project sync; tag a c
 ![tasks in GodMode](/features/tasks.png)
 
 
-Tasks are personal Kanban boards with columns, priorities, subtasks, and comments. Create as many boards as you need (personal, family, roadmap, …) on the same sidebar workspace. Tag a card `auto` to queue autonomous agent work.
+Tasks are personal Kanban boards with columns, priorities (P0–P3), subtasks, and comments. Create as many boards as you need (personal, family, roadmap, …) on the same sidebar workspace. Tag a card `auto` to queue autonomous agent work. The board layout scrolls horizontally so every column stays reachable; card detail opens in a side panel.
 
 ## Multiple boards
 
@@ -22,10 +22,12 @@ Sidebar **Project** (tenant/workspace) is separate: use Tasks boards for kanbans
 
 1. **Settings → Connect GitHub** (integration OAuth; tokens stored in Vault).
 2. Open a board’s settings and pick a GitHub Project you can access.
-3. Map GodMode columns ↔ Project **Status** options (defaults are applied on link).
+3. On link / Sync, board **columns follow the Project Status options** (and remap cards). Adjust the Status map in board settings if needed.
 4. **Sync GitHub** pulls items into cards; moving/editing cards pushes Status / title / body / due / priority / labels when mapped.
 
-Field map (v1): title, description, column↔Status, due date, priority, labels. Agent assignment and prompts stay local. You cannot sync a Project your token cannot access.
+Field map (v1+): title, description, column↔Status, due date, priority (P0–P3 ↔ Project Priority), labels. Agent assignment and prompts stay local. You cannot sync a Project your token cannot access.
+
+Kanban parity epic: continue toward full GitHub Projects board fidelity (webhooks, assignees, custom fields) tracked in the roadmap.
 
 ## Route
 

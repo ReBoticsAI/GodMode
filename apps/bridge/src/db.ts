@@ -294,6 +294,7 @@ function migrateMultiBoardTasksSchema(db: Database.Database): void {
   addColumn(db, "ai_projects", "github_status_map_json", "TEXT");
   addColumn(db, "ai_projects", "sync_enabled", "INTEGER NOT NULL DEFAULT 0");
   addColumn(db, "ai_projects", "last_synced_at", "TEXT");
+  addColumn(db, "ai_projects", "columns_json", "TEXT");
   db.exec(`
     CREATE INDEX IF NOT EXISTS ai_projects_user_idx ON ai_projects(user_id);
   `);
