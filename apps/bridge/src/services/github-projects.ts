@@ -33,6 +33,18 @@ type ProjectMeta = {
   priorityOptions: StatusOption[];
 };
 
+type GithubAssignee = {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
+type GithubMilestone = {
+  title: string;
+  dueOn: string | null;
+  url: string | null;
+};
+
 type ProjectItem = {
   itemId: string;
   title: string;
@@ -42,6 +54,8 @@ type ProjectItem = {
   dueAt: string | null;
   priorityName: string | null;
   labels: string[];
+  assignees: GithubAssignee[];
+  milestone: GithubMilestone | null;
   url: string | null;
   issueNumber: number | null;
   repo: string | null;
@@ -319,6 +333,18 @@ async function fetchProjectItems(
             id?: string;
             repository?: { nameWithOwner?: string };
             labels?: { nodes: Array<{ name: string }> };
+            assignees?: {
+              nodes: Array<{
+                login: string;
+                name?: string | null;
+                avatarUrl?: string | null;
+              }>;
+            };
+            milestone?: {
+              title: string;
+              dueOn?: string | null;
+              url?: string | null;
+            } | null;
           } | null;
         }>;
       };
@@ -359,11 +385,19 @@ async function fetchProjectItems(
                     id title body number url
                     repository { nameWithOwner }
                     labels(first: 20) { nodes { name } }
+                    assignees(first: 10) {
+                      nodes { login name avatarUrl }
+                    }
+                    milestone { title dueOn url }
                   }
                   ... on PullRequest {
                     id title body number url
                     repository { nameWithOwner }
                     labels(first: 20) { nodes { name } }
+                    assignees(first: 10) {
+                      nodes { login name avatarUrl }
+                    }
+                    milestone { title dueOn url }
                   }
                 }
               }
@@ -393,6 +427,19 @@ async function fetchProjectItems(
         }
         if (fieldName === "priority" && fv.name) priorityName = fv.name;
       }
+      const assignees: GithubAssignee[] =
+        content?.assignees?.nodes?.map((a) => ({
+          login: a.login,
+          name: a.name ?? null,
+          avatarUrl: a.avatarUrl ?? null,
+        })) ?? [];
+      const milestone: GithubMilestone | null = content?.milestone
+        ? {
+            title: content.milestone.title,
+            dueOn: content.milestone.dueOn ?? null,
+            url: content.milestone.url ?? null,
+          }
+        : null;
       items.push({
         itemId: node.id,
         title,
@@ -402,6 +449,8 @@ async function fetchProjectItems(
         dueAt,
         priorityName,
         labels: content?.labels?.nodes?.map((l: { name: string }) => l.name) ?? [],
+        assignees,
+        milestone,
         url: content?.url ?? null,
         issueNumber: content?.number ?? null,
         repo: content?.repository?.nameWithOwner ?? null,
@@ -456,31 +505,40 @@ function priorityFromName(name: string | null): number {
   return 2;
 }
 
+/** Normalize legacy array context_json into an object so github + attachments coexist. */
+export function normalizeCardContextObject(
+  raw: string | null
+): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return { attachments: parsed };
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* ignore malformed */
+  }
+  return {};
+}
+
 function parseGithubContext(raw: string | null): {
   projectItemId?: string;
   [k: string]: unknown;
 } {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as { github?: Record<string, unknown> };
-    return (parsed.github as { projectItemId?: string }) ?? {};
-  } catch {
-    return {};
+  const base = normalizeCardContextObject(raw);
+  const github = base.github;
+  if (github && typeof github === "object") {
+    return github as { projectItemId?: string };
   }
+  return {};
 }
 
 function mergeGithubContext(
   existingRaw: string | null,
   github: Record<string, unknown>
 ): string {
-  let base: Record<string, unknown> = {};
-  if (existingRaw) {
-    try {
-      base = JSON.parse(existingRaw) as Record<string, unknown>;
-    } catch {
-      base = {};
-    }
-  }
+  const base = normalizeCardContextObject(existingRaw);
   return JSON.stringify({ ...base, github });
 }
 
@@ -728,6 +786,8 @@ export async function syncBoardWithGithub(opts: {
       issueNumber: item.issueNumber,
       repo: item.repo,
       url: item.url,
+      assignees: item.assignees,
+      milestone: item.milestone,
       lastSyncedAt: new Date().toISOString(),
     };
     const prev = byItemId.get(item.itemId);
