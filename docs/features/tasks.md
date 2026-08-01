@@ -44,7 +44,7 @@ Field map: title, description, column↔Status, due date, priority (P0–P3 ↔ 
 
 Boards created before multi-column sync get a default five-column `columns_json` on next open (schema backfill v19). Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
 
-Kanban parity epic #259; GitHub App epic #266. Swimlanes / group-by are tracked separately when needed.
+Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Remaining Ready follow-ups: swimlanes / group-by (#274), board filter / search / sort (#276), Project field parity leftovers (#277), lifecycle polish for Issue create and archive vs delete (#278).
 
 ## Route
 
