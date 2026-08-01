@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Snapshot core.sqlite + tenants/*.sqlite, optionally upload to S3-compatible storage.
+ * Snapshot core.sqlite + tenants/*.sqlite + timeseries DuckDB, optionally upload
+ * to S3-compatible storage.
  *
  * Env:
  *   PLATFORM_DATA_DIR   — GodMode data root (required)
@@ -12,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, createHmac } from "node:crypto";
 import Database from "better-sqlite3";
+import { snapshotTimeseriesTree } from "./duckdb-consistent-copy.mjs";
 
 const dataDir = process.env.PLATFORM_DATA_DIR?.trim();
 if (!dataDir) {
@@ -72,10 +74,27 @@ if (fs.existsSync(tenantsDir)) {
   }
 }
 
+const duckdbFiles = await snapshotTimeseriesTree(
+  dataDir,
+  path.join(dest, "timeseries")
+);
+
 const metaPath = path.join(dest, "manifest.json");
 fs.writeFileSync(
   metaPath,
-  JSON.stringify({ createdAt: new Date().toISOString(), dataDir, dest }, null, 2)
+  JSON.stringify(
+    {
+      createdAt: new Date().toISOString(),
+      dataDir,
+      dest,
+      includes: {
+        sqlite: true,
+        duckdbTimeseries: duckdbFiles,
+      },
+    },
+    null,
+    2
+  )
 );
 
 console.log(`Local snapshot: ${dest}`);

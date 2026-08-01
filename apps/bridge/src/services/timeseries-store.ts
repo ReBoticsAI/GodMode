@@ -60,6 +60,81 @@ type TenantHandle = {
   conn: DuckConn;
 };
 
+function sqlPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/'/g, "''");
+}
+
+async function consistentCopyDuckDbFile(
+  src: string,
+  destFile: string
+): Promise<void> {
+  if (!fs.existsSync(src)) {
+    throw new Error(`DuckDB source missing: ${src}`);
+  }
+  if (fs.statSync(src).size <= 0) {
+    throw new Error(`DuckDB source empty: ${src}`);
+  }
+  const mod = await loadDuckDb();
+  if (!mod || typeof mod.Database !== "function") {
+    throw new Error("DuckDB unavailable; cannot snapshot timeseries analytics");
+  }
+
+  fs.mkdirSync(path.dirname(destFile), { recursive: true });
+  if (fs.existsSync(destFile)) fs.unlinkSync(destFile);
+
+  const db = new mod.Database(":memory:");
+  const conn = typeof db.connect === "function" ? db.connect() : db;
+  const runSql = (sql: string) =>
+    new Promise<void>((resolve, reject) => {
+      conn.run(sql, (err: Error | null) => (err ? reject(err) : resolve()));
+    });
+
+  try {
+    await runSql(`ATTACH '${sqlPath(src)}' AS src (READ_ONLY)`);
+    await runSql(`ATTACH '${sqlPath(destFile)}' AS dst`);
+    await runSql(`COPY FROM DATABASE src TO dst`);
+    await runSql(`DETACH dst`);
+    await runSql(`DETACH src`);
+  } finally {
+    try {
+      conn.close?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      db.close?.();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!fs.existsSync(destFile) || fs.statSync(destFile).size <= 0) {
+    throw new Error(`DuckDB snapshot empty after copy: ${destFile}`);
+  }
+  const verify = new mod.Database(destFile, { access_mode: "READ_ONLY" });
+  const vconn = typeof verify.connect === "function" ? verify.connect() : verify;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      vconn.all("SELECT 1 AS ok", (err: Error | null, rows: unknown[] | undefined) => {
+        if (err) reject(err);
+        else if (!rows?.length) reject(new Error(`DuckDB open check failed: ${destFile}`));
+        else resolve();
+      });
+    });
+  } finally {
+    try {
+      vconn.close?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      verify.close?.();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /**
  * Service wrapper around persistent platform-analytics.duckdb files.
  * Dataset + entity are opaque labels (not trading symbols).
@@ -259,6 +334,41 @@ export class TimeseriesStore {
 
   dbFilePath(tenantId: string = DEFAULT_TENANT): string {
     return analyticsDbPath(tenantId);
+  }
+
+  /**
+   * Consistent online snapshot of platform analytics DuckDB files (#199).
+   * Flushes + CHECKPOINT open handles, then COPY FROM DATABASE (READ_ONLY attach)
+   * into destTimeseriesRoot under each tenant=* folder as analytics.duckdb.
+   */
+  async snapshotAnalyticsTo(destTimeseriesRoot: string): Promise<string[]> {
+    const written: string[] = [];
+    if (this.ready) {
+      await this.flushAll();
+      for (const handle of this.handles.values()) {
+        try {
+          await this.run(handle.conn, "CHECKPOINT");
+        } catch (err) {
+          console.warn(
+            "[timeseries] CHECKPOINT before snapshot failed:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+    }
+
+    const root = timeseriesRoot();
+    if (!fs.existsSync(root)) return written;
+
+    for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!ent.isDirectory() || !ent.name.startsWith("tenant=")) continue;
+      const src = path.join(root, ent.name, "analytics.duckdb");
+      if (!fs.existsSync(src)) continue;
+      const dest = path.join(destTimeseriesRoot, ent.name, "analytics.duckdb");
+      await consistentCopyDuckDbFile(src, dest);
+      written.push(`timeseries/${ent.name}/analytics.duckdb`);
+    }
+    return written;
   }
 
   shutdown(): void {

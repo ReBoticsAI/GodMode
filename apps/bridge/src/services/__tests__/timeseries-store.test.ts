@@ -47,6 +47,18 @@ describe("TimeseriesStore platform analytics", () => {
     expect(fs.existsSync(store.dbFilePath("platform"))).toBe(true);
   });
 
+  it("snapshotAnalyticsTo copies openable DuckDB files", async () => {
+    if (!store.isReady()) return;
+    store.appendPlatformMetric("backup_probe", "snap", { n: 1, ts: Date.now() });
+    await store.flushAll();
+    const destRoot = path.join(tmpRoot, "snap-out");
+    const written = await store.snapshotAnalyticsTo(destRoot);
+    expect(written.some((p) => p.includes("analytics.duckdb"))).toBe(true);
+    const dest = path.join(destRoot, "tenant=platform", "analytics.duckdb");
+    expect(fs.existsSync(dest)).toBe(true);
+    expect(fs.statSync(dest).size).toBeGreaterThan(0);
+  });
+
   it("module source has no Sierra table residue", () => {
     const srcPath = fileURLToPath(new URL("../timeseries-store.ts", import.meta.url));
     const text = fs.readFileSync(srcPath, "utf8");

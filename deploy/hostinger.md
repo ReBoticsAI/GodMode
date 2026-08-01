@@ -112,13 +112,24 @@ Default schedule: `15 3 * * *` (03:15 UTC) → `/var/log/godmode-backup.log`.
 
 The runner loads `deploy/.env.production`, mounts the `godmode-data` volume at
 `/data`, and executes `scripts/backup/snapshot-platform.mjs` (from the image when
-present, otherwise host-mounted from the repo checkout).
+present, otherwise host-mounted from the repo checkout). The snapshot covers
+SQLite (core + tenants) and DuckDB platform analytics under `timeseries/`.
 
 ### Offsite (operator PC download)
 
 Primary offsite for launch: copy the latest **nightly snapshot stamp** from the
-VPS onto a machine you control (not live `core.sqlite` / `tenants/` while Bridge
-writers are open). Cron stays on the VPS; offsite means copies leave the VPS.
+VPS onto a machine you control (not live `core.sqlite` / `tenants/` /
+`timeseries/` while Bridge writers are open). Cron stays on the VPS; offsite
+means copies leave the VPS.
+
+Each stamp includes:
+
+- SQLite: `databases/core.sqlite` + `tenants/*.sqlite`
+- DuckDB: `timeseries/tenant=*/analytics.duckdb` (platform analytics; consistent
+  `COPY FROM DATABASE` snapshot, not a live file copy)
+
+Tenant self-serve download (#235) remains SQLite-only for that tenant's workspace
+file. Operator DR is SQLite **and** DuckDB.
 
 Host path for stamps:
 
@@ -139,10 +150,12 @@ scp -r "root@YOUR.VPS.IP:/var/lib/docker/volumes/deploy_godmode-data/_data/backu
 
 Integrity on the offsite copy:
 
-1. SHA-256 the local `databases/core.sqlite`, each `tenants/*.sqlite`, and
-   `manifest.json`; confirm they match the same paths on the VPS stamp.
+1. SHA-256 the local `databases/core.sqlite`, each `tenants/*.sqlite`, each
+   `timeseries/tenant=*/analytics.duckdb`, and `manifest.json`; confirm they
+   match the same paths on the VPS stamp.
 2. On the VPS, run the verify-only drill for that stamp (SQLite
-   `integrity_check` on a scratch copy; does not stop prod):
+   `integrity_check` plus DuckDB open/`SELECT 1` on a scratch copy; does not
+   stop prod):
 
 ```bash
 sudo /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --stamp "$STAMP"
@@ -193,6 +206,8 @@ Manual / apply cutover (stops Bridge; keep the pre-restore tree):
 3. Replace live files from the snapshot:
    - `databases/core.sqlite` → volume `core.sqlite` (remove `-wal`/`-shm`)
    - each `tenants/*.sqlite` → volume `tenants/<same-name>`
+   - each `timeseries/tenant=*/analytics.duckdb` → volume
+     `timeseries/tenant=*/analytics.duckdb`
 4. Start Bridge and hit `/api/health`, then Admin → Observability.
 
 Never restore over a running Bridge. Keep the pre-restore tree until health checks pass.

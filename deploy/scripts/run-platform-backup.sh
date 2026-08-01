@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run platform SQLite snapshot (local + optional BACKUP_S3_* upload) against the
-# live Docker Compose prod data volume. Intended for Hostinger cron.
+# Run platform SQLite + DuckDB timeseries snapshot (local + optional BACKUP_S3_*
+# upload) against the live Docker Compose prod data volume. Intended for
+# Hostinger cron.
 #
 # Usage (on the VPS):
 #   /opt/godmode/deploy/scripts/run-platform-backup.sh

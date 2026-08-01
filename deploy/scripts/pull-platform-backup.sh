@@ -8,7 +8,8 @@
 #   GODMODE_VPS=root@IP DEST="$HOME/GodMode-backups" STAMP=2026-08-01T00-14-00-338Z \
 #     ./deploy/scripts/pull-platform-backup.sh
 #
-# After pull: compare SHA-256 of *.sqlite + manifest.json to the VPS, then run
+# After pull: compare SHA-256 of *.sqlite, timeseries/**/*.duckdb, and
+# manifest.json to the VPS, then run
 #   ssh "$GODMODE_VPS" '/opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --stamp <stamp>'
 # (integrity uses the same stamp; matching checksums means your local tree is that verified copy.)
 #
@@ -40,5 +41,5 @@ echo "Pulling $GODMODE_VPS:$REMOTE -> $DEST/$STAMP"
 scp -o BatchMode=yes -r "$GODMODE_VPS:$REMOTE" "$DEST/"
 
 echo "Local copy: $DEST/$STAMP"
-echo "Next: sha256sum the *.sqlite files here and on the VPS; then:"
+echo "Next: sha256sum the *.sqlite and timeseries/**/*.duckdb files here and on the VPS; then:"
 echo "  ssh $GODMODE_VPS '/opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only --stamp $STAMP'"
