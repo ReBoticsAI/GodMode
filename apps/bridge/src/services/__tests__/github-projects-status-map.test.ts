@@ -15,14 +15,18 @@ describe("defaultStatusMap", () => {
     expect(map.done).toBe("opt-done");
   });
 
-  it("fills gaps when only some options exist", () => {
+  it("maps Ready separately from Backlog", () => {
     const map = defaultStatusMap([
-      { id: "a", name: "Backlog" },
-      { id: "b", name: "Done" },
+      { id: "opt-backlog", name: "Backlog" },
+      { id: "opt-ready", name: "Ready" },
+      { id: "opt-wip", name: "In Progress" },
+      { id: "opt-review", name: "In Review" },
+      { id: "opt-done", name: "Done" },
     ]);
-    expect(map.backlog).toBe("a");
-    expect(map.done).toBe("b");
-    expect(map.in_progress).toBeUndefined();
-    expect(map.review).toBeUndefined();
+    expect(map.backlog).toBe("opt-backlog");
+    expect(map.ready).toBe("opt-ready");
+    expect(map.in_progress).toBe("opt-wip");
+    expect(map.review).toBe("opt-review");
+    expect(map.done).toBe("opt-done");
   });
 });
