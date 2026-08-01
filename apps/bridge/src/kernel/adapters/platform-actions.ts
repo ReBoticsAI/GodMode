@@ -1914,6 +1914,9 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
           body: { type: "string" },
           category: { type: "string" },
           priority: { type: "string" },
+          target_kind: { type: "string" },
+          shared_grant_id: { type: "string" },
+          owner_user_id: { type: "string" },
         },
         ["subject"]
       ),

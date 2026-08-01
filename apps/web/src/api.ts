@@ -5332,7 +5332,24 @@ export function createSupportTicket(body: {
     subject: body.subject,
     body: body.body,
     category: body.category,
+    target_kind: body.targetKind,
+    shared_grant_id: body.sharedGrantId,
+    owner_user_id: body.ownerUserId,
   }).then((row) => ({ ticket: rowDto<SupportTicket>(row) }));
+}
+
+/** Create a Core GitHub issue via the platform App install (Support → OSS bug). */
+export function createPlatformGithubIssue(body: {
+  subject: string;
+  body: string;
+}): Promise<{ htmlUrl?: string; number?: number; redirectUrl?: string }> {
+  return api("/support/github-issue", {
+    method: "POST",
+    body: JSON.stringify({
+      subject: body.subject,
+      body: body.body,
+    }),
+  });
 }
 
 export function fetchOwnerSupportTickets() {

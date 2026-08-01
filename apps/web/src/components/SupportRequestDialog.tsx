@@ -19,10 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createSupportTicket, fetchBridgeHealth } from "@/api";
-
-const GITHUB_ISSUES =
-  "https://github.com/ReBoticsAI/GodMode/issues/new?template=bug_report.md";
+import { createPlatformGithubIssue, createSupportTicket, fetchBridgeHealth } from "@/api";
 
 type SupportTarget =
   | "platform_admin"
@@ -55,33 +52,46 @@ export function SupportRequestDialog({
       toast.error("Subject is required");
       return;
     }
-    if (targetKind === "platform_github") {
-      const params = new URLSearchParams();
-      params.set("title", subject.trim());
-      if (body.trim()) params.set("body", body.trim());
-      window.open(`${GITHUB_ISSUES}&${params.toString()}`, "_blank", "noopener,noreferrer");
-      setOpen(false);
-      return;
-    }
     setSubmitting(true);
     try {
-      const res = await createSupportTicket({
-        subject: subject.trim(),
-        body: body.trim(),
-        targetKind,
-        category:
-          targetKind === "platform_admin"
-            ? "hub_operator"
-            : "shared_resource",
-      });
-      if (res.redirectUrl) {
-        window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
+      if (targetKind === "platform_github") {
+        const res = await createPlatformGithubIssue({
+          subject: subject.trim(),
+          body: body.trim(),
+        });
+        if ("htmlUrl" in res && res.htmlUrl) {
+          toast.success(
+            res.number
+              ? `Opened GitHub issue #${res.number}`
+              : "Opened GitHub issue"
+          );
+          window.open(res.htmlUrl, "_blank", "noopener,noreferrer");
+        } else if ("redirectUrl" in res && res.redirectUrl) {
+          toast.message("Opening GitHub to finish filing the issue");
+          window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
+        } else {
+          toast.error("Could not create GitHub issue");
+          return;
+        }
       } else {
-        toast.success(
-          targetKind === "platform_admin"
-            ? "Support request sent to hub administrators. Track replies on the Support page."
-            : "Support request submitted"
-        );
+        const res = await createSupportTicket({
+          subject: subject.trim(),
+          body: body.trim(),
+          targetKind,
+          category:
+            targetKind === "platform_admin"
+              ? "hub_operator"
+              : "shared_resource",
+        });
+        if (res.redirectUrl) {
+          window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
+        } else {
+          toast.success(
+            targetKind === "platform_admin"
+              ? "Support request sent to hub administrators. Track replies on the Support page."
+              : "Support request submitted"
+          );
+        }
       }
       setOpen(false);
       setSubject("");
@@ -159,7 +169,11 @@ export function SupportRequestDialog({
               Cancel
             </Button>
             <Button onClick={() => void submit()} disabled={submitting}>
-              {targetKind === "platform_github" ? "Open GitHub issue" : "Submit"}
+              {targetKind === "platform_github"
+                ? submitting
+                  ? "Creating…"
+                  : "Create GitHub issue"
+                : "Submit"}
             </Button>
           </DialogFooter>
         </DialogContent>
