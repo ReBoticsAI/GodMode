@@ -3,6 +3,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAdminSaasCustomers,
+  setAdminSaasComplimentaryAccess,
   setAdminSaasCustomerAccess,
   type AdminSaasCustomerRow,
 } from "@/api";
@@ -18,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 
 function formatWhen(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "n/a";
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return iso;
   return new Date(t).toLocaleString();
@@ -60,12 +61,43 @@ export function AdminSaasCustomersPanel() {
     }
   };
 
+  const toggleComplimentary = async (row: AdminSaasCustomerRow) => {
+    if (!row.userId) {
+      toast.error("This checkout has not created an account yet");
+      return;
+    }
+    const grant = !row.complimentaryAccess;
+    if (
+      !grant &&
+      !window.confirm(
+        `Revoke complimentary Cloud access for ${row.email ?? row.displayName ?? "this user"}? They will need to subscribe before logging in again.`
+      )
+    ) {
+      return;
+    }
+    setBusyUserId(row.userId);
+    try {
+      await setAdminSaasComplimentaryAccess(row.userId, grant);
+      toast.success(
+        grant
+          ? "Complimentary Cloud access granted"
+          : "Complimentary access revoked. They must subscribe to continue."
+      );
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>SaaS customers</CardTitle>
         <CardDescription>
-          Paid GodMode Cloud accounts, subscription status, and access controls.
+          Paid and complimentary GodMode Cloud accounts, subscription status, and
+          access controls. Complimentary access is separate from platform admin.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -98,7 +130,7 @@ export function AdminSaasCustomersPanel() {
                       <div className="font-medium">
                         {row.displayName ?? row.email ?? "Pending signup"}
                       </div>
-                      <div className="text-muted-foreground">{row.email ?? "—"}</div>
+                      <div className="text-muted-foreground">{row.email ?? "n/a"}</div>
                       {row.tenantName ? (
                         <div className="text-xs text-muted-foreground">
                           {row.tenantName}
@@ -106,7 +138,7 @@ export function AdminSaasCustomersPanel() {
                       ) : null}
                     </td>
                     <td className="py-3 pr-3">
-                      {row.planLabel ?? row.planId ?? "—"}
+                      {row.planLabel ?? row.planId ?? "n/a"}
                       {row.amountLabel ? (
                         <div className="text-xs text-muted-foreground">
                           {row.amountLabel}
@@ -124,6 +156,9 @@ export function AdminSaasCustomersPanel() {
                           <Badge variant="secondary">
                             {row.status.replace(/_/g, " ")}
                           </Badge>
+                        ) : null}
+                        {row.complimentaryAccess ? (
+                          <Badge variant="outline">complimentary</Badge>
                         ) : null}
                         {row.accessDisabled ? (
                           <Badge variant="destructive">disabled</Badge>
@@ -154,21 +189,38 @@ export function AdminSaasCustomersPanel() {
                           </a>
                         ) : null}
                         {row.userId && !row.isAdmin ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={busyUserId === row.userId}
-                            onClick={() => void toggleAccess(row)}
-                          >
-                            {busyUserId === row.userId ? (
-                              <Spinner className="size-3.5" />
-                            ) : row.accessDisabled ? (
-                              "Enable access"
-                            ) : (
-                              "Disable access"
-                            )}
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busyUserId === row.userId}
+                              onClick={() => void toggleComplimentary(row)}
+                            >
+                              {busyUserId === row.userId ? (
+                                <Spinner className="size-3.5" />
+                              ) : row.complimentaryAccess ? (
+                                "Revoke complimentary"
+                              ) : (
+                                "Grant complimentary"
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busyUserId === row.userId}
+                              onClick={() => void toggleAccess(row)}
+                            >
+                              {busyUserId === row.userId ? (
+                                <Spinner className="size-3.5" />
+                              ) : row.accessDisabled ? (
+                                "Enable access"
+                              ) : (
+                                "Disable access"
+                              )}
+                            </Button>
+                          </>
                         ) : null}
                       </div>
                     </td>
