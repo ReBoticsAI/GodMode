@@ -233,9 +233,11 @@ Full topology: [deploy/hostinger.md](deploy/hostinger.md).
 - `deploy/.env.production` with real secrets (never commit)
 - Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
 - Cron backups via `deploy/scripts/run-platform-backup.sh` (Docker volume +
-  `scripts/backup/snapshot-platform.mjs`, SQLite + DuckDB timeseries); offsite via
-  operator PC download of the nightly stamp (`deploy/scripts/pull-platform-backup.sh`),
-  optional `BACKUP_S3_*` later ([deploy/hostinger.md](deploy/hostinger.md) §7)
+  `scripts/backup/snapshot-platform.mjs`, SQLite + DuckDB timeseries; brief
+  Bridge stop/start so DuckDB is not locked; Admin in-process snapshot for
+  zero downtime); offsite via operator PC download of the nightly stamp
+  (`deploy/scripts/pull-platform-backup.sh`), optional `BACKUP_S3_*` later
+  ([deploy/hostinger.md](deploy/hostinger.md) §7)
 - Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
 
 ## Public marketing site (Stripe business website)
