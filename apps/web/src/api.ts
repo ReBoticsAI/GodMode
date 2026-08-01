@@ -1322,6 +1322,8 @@ export interface AiProjectCard {
   parent_card_id: string | null;
   status: string | null;
   assigned_agent_id: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type AgentBackendKind =
