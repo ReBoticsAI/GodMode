@@ -1,6 +1,7 @@
 /**
  * Background poll: GitHub → GodMode for linked Tasks boards.
- * Webhooks need a GitHub App; OAuth-only installs use this poller.
+ * Primary near-real-time path for user-owned Projects (GitHub does not emit
+ * projects_v2_item for personal boards). Org-owned Projects also get App webhooks.
  */
 import { getCoreDb, listAllTenantIds } from "../core-db.js";
 import { config } from "../config.js";
@@ -11,7 +12,7 @@ import {
   syncBoardWithGithub,
 } from "./github-projects.js";
 
-const DEFAULT_POLL_MS = 3 * 60 * 1000;
+const DEFAULT_POLL_MS = 60_000;
 const MIN_POLL_MS = 60_000;
 const MAX_POLL_MS = 30 * 60 * 1000;
 

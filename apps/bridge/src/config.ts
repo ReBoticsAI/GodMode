@@ -130,12 +130,13 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN ?? "",
   /**
    * Background poll for linked Tasks ↔ GitHub Projects boards.
-   * Webhooks require a GitHub App; OAuth installs use this poller.
+   * Default 1 minute: near-real-time for user-owned boards. Org-owned Projects
+   * also receive App `projects_v2_item` webhooks when GitHub emits them.
    */
   githubProjectsSync: {
     pollEnabled: process.env.GITHUB_PROJECTS_SYNC_POLL_ENABLED !== "0",
     pollIntervalMs: Number(
-      process.env.GITHUB_PROJECTS_SYNC_POLL_MS ?? 3 * 60 * 1000
+      process.env.GITHUB_PROJECTS_SYNC_POLL_MS ?? 60_000
     ),
   },
   dataDir: appData,
