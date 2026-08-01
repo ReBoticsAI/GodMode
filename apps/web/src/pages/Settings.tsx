@@ -323,9 +323,10 @@ function GithubConnectCard() {
   const reload = () => {
     void fetchGithubIntegrationStatus()
       .then(setStatus)
-      .catch(() =>
-        setStatus({ connected: false, login: null, configured: false })
-      );
+      .catch(() => {
+        // Do not treat auth/routing failures as "OAuth not configured".
+        setStatus(null);
+      });
   };
 
   useEffect(() => {
