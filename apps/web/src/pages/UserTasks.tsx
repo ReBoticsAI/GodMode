@@ -41,13 +41,59 @@ import {
   renameUserTaskBoard,
   syncUserBoardGithub,
   unlinkUserBoardGithub,
+  updateUserBoardColumns,
   updateUserBoardStatusMap,
   type UserTaskBoard,
 } from "@/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const GITHUB_SYNC_LEASE_MS = 10 * 60 * 1000;
+
+type ColumnDraft = {
+  id: string;
+  name: string;
+  sort_order: number;
+  hidden: boolean;
+  wip_limit: number | null;
+};
+
+function columnsFromBoard(board: UserTaskBoard | null): ColumnDraft[] {
+  const raw = board?.columns_json;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Array<{
+        id: string;
+        name: string;
+        sort_order?: number;
+        hidden?: boolean;
+        wip_limit?: number | null;
+      }>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((c, i) => ({
+          id: c.id,
+          name: c.name,
+          sort_order: Number.isFinite(c.sort_order) ? Number(c.sort_order) : i,
+          hidden: Boolean(c.hidden),
+          wip_limit:
+            c.wip_limit != null && Number(c.wip_limit) > 0
+              ? Math.floor(Number(c.wip_limit))
+              : null,
+        }));
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return [
+    { id: "backlog", name: "Backlog", sort_order: 0, hidden: false, wip_limit: null },
+    { id: "ready", name: "Ready", sort_order: 1, hidden: false, wip_limit: null },
+    { id: "in_progress", name: "In Progress", sort_order: 2, hidden: false, wip_limit: null },
+    { id: "review", name: "Review", sort_order: 3, hidden: false, wip_limit: null },
+    { id: "done", name: "Done", sort_order: 4, hidden: false, wip_limit: null },
+  ];
+}
 
 function formatSyncTime(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -76,29 +122,6 @@ function isSyncInProgress(board: UserTaskBoard | null | undefined): boolean {
   return Date.now() - started < GITHUB_SYNC_LEASE_MS;
 }
 
-const COLUMN_LABELS: Array<{ id: string; label: string }> = [
-  { id: "backlog", label: "Backlog" },
-  { id: "ready", label: "Ready" },
-  { id: "in_progress", label: "In Progress" },
-  { id: "review", label: "Review" },
-  { id: "done", label: "Done" },
-];
-
-function columnLabelsForBoard(
-  board: UserTaskBoard | null,
-  fallback: Array<{ id: string; label: string }>
-): Array<{ id: string; label: string }> {
-  const raw = board?.columns_json;
-  if (!raw) return fallback;
-  try {
-    const parsed = JSON.parse(raw) as Array<{ id: string; name: string }>;
-    if (!Array.isArray(parsed) || parsed.length === 0) return fallback;
-    return parsed.map((c) => ({ id: c.id, label: c.name }));
-  } catch {
-    return fallback;
-  }
-}
-
 export default function UserTasksPage() {
   const { user } = useTenant();
   const userId = user?.id ?? "";
@@ -117,6 +140,7 @@ export default function UserTasksPage() {
     Array<{ id: string; name: string }>
   >([]);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
+  const [columnDrafts, setColumnDrafts] = useState<ColumnDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [boardKey, setBoardKey] = useState(0);
 
@@ -210,6 +234,32 @@ export default function UserTasksPage() {
     setBoardName(activeBoard?.name ?? "");
     setStatusOptions([]);
     setStatusMap({});
+    if (userId && activeBoardId) {
+      try {
+        const snap = await fetchUserProjects(userId, activeBoardId);
+        const all = snap.allColumns ?? snap.columns;
+        if (all.length > 0) {
+          setColumnDrafts(
+            all.map((c, i) => ({
+              id: c.id,
+              name: c.name,
+              sort_order: Number.isFinite(c.sort_order) ? c.sort_order : i,
+              hidden: Boolean(c.hidden),
+              wip_limit:
+                c.wip_limit != null && Number(c.wip_limit) > 0
+                  ? Math.floor(Number(c.wip_limit))
+                  : null,
+            }))
+          );
+        } else {
+          setColumnDrafts(columnsFromBoard(activeBoard));
+        }
+      } catch {
+        setColumnDrafts(columnsFromBoard(activeBoard));
+      }
+    } else {
+      setColumnDrafts(columnsFromBoard(activeBoard));
+    }
     if (ghConnected) {
       try {
         const { projects } = await fetchGithubProjectsList();
@@ -224,6 +274,37 @@ export default function UserTasksPage() {
           err instanceof Error ? err.message : "Could not list GitHub Projects"
         );
       }
+    }
+  };
+
+  const saveColumns = async () => {
+    if (!activeBoardId) return;
+    const named = columnDrafts
+      .map((c, i) => ({
+        ...c,
+        name: c.name.trim(),
+        sort_order: i,
+      }))
+      .filter((c) => c.name);
+    if (named.length === 0) {
+      toast.error("At least one column is required");
+      return;
+    }
+    if (!named.some((c) => !c.hidden)) {
+      toast.error("At least one visible column is required");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateUserBoardColumns(activeBoardId, named);
+      await reloadBoards();
+      setBoardKey((k) => k + 1);
+      setColumnDrafts(named);
+      toast.success("Columns saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save columns");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -436,6 +517,7 @@ export default function UserTasksPage() {
             key={`${activeBoardId}-${boardKey}`}
             scope={{ kind: "user", userId }}
             projectId={activeBoardId}
+            githubSyncEnabled={Boolean(activeBoard?.sync_enabled)}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -499,6 +581,171 @@ export default function UserTasksPage() {
               </div>
             </div>
 
+            <div className="flex flex-col gap-2 rounded-md border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs text-muted-foreground">Columns</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  disabled={busy}
+                  onClick={() =>
+                    setColumnDrafts((cols) => [
+                      ...cols,
+                      {
+                        id: `column_${Date.now()}`,
+                        name: "New column",
+                        sort_order: cols.length,
+                        hidden: false,
+                        wip_limit: null,
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </div>
+              {activeBoard?.sync_enabled ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Linked boards refresh names and order from GitHub Status on
+                  Sync. Hide and WIP limits stay local.
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2">
+                {columnDrafts.map((col, idx) => (
+                  <div
+                    key={col.id}
+                    className="flex flex-wrap items-center gap-2 rounded border bg-muted/20 p-2"
+                  >
+                    <Input
+                      className="h-8 min-w-[8rem] flex-1 text-xs"
+                      value={col.name}
+                      onChange={(e) =>
+                        setColumnDrafts((cols) =>
+                          cols.map((c, i) =>
+                            i === idx ? { ...c, name: e.target.value } : c
+                          )
+                        )
+                      }
+                    />
+                    <Input
+                      className="h-8 w-16 text-xs"
+                      type="number"
+                      min={1}
+                      placeholder="WIP"
+                      value={col.wip_limit ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        setColumnDrafts((cols) =>
+                          cols.map((c, i) =>
+                            i === idx
+                              ? {
+                                  ...c,
+                                  wip_limit:
+                                    v && Number(v) > 0
+                                      ? Math.floor(Number(v))
+                                      : null,
+                                }
+                              : c
+                          )
+                        );
+                      }}
+                    />
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Checkbox
+                        checked={col.hidden}
+                        onCheckedChange={(v) =>
+                          setColumnDrafts((cols) =>
+                            cols.map((c, i) =>
+                              i === idx ? { ...c, hidden: !!v } : c
+                            )
+                          )
+                        }
+                      />
+                      Hide
+                    </label>
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          setColumnDrafts((cols) => {
+                            if (idx === 0) return cols;
+                            const next = [...cols];
+                            const tmp = next[idx - 1]!;
+                            next[idx - 1] = next[idx]!;
+                            next[idx] = tmp;
+                            return next.map((c, i) => ({
+                              ...c,
+                              sort_order: i,
+                            }));
+                          })
+                        }
+                      >
+                        Up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        disabled={idx >= columnDrafts.length - 1}
+                        onClick={() =>
+                          setColumnDrafts((cols) => {
+                            if (idx >= cols.length - 1) return cols;
+                            const next = [...cols];
+                            const tmp = next[idx + 1]!;
+                            next[idx + 1] = next[idx]!;
+                            next[idx] = tmp;
+                            return next.map((c, i) => ({
+                              ...c,
+                              sort_order: i,
+                            }));
+                          })
+                        }
+                      >
+                        Down
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-destructive"
+                        disabled={columnDrafts.length <= 1}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Remove column "${col.name}"? Cards in this column will move to the first remaining column.`
+                            )
+                          ) {
+                            return;
+                          }
+                          setColumnDrafts((cols) =>
+                            cols.filter((_, i) => i !== idx)
+                          );
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void saveColumns()}
+              >
+                Save columns
+              </Button>
+            </div>
+
             {!ghConnected ? (
               <p className="text-muted-foreground">
                 GitHub is not connected. Open Settings → Connect GitHub, then
@@ -549,12 +796,15 @@ export default function UserTasksPage() {
                     <Label className="text-xs text-muted-foreground">
                       Column ↔ GitHub Status
                     </Label>
-                    {columnLabelsForBoard(activeBoard, COLUMN_LABELS).map((col) => (
+                    {(columnDrafts.filter((c) => !c.hidden).length > 0
+                      ? columnDrafts.filter((c) => !c.hidden)
+                      : columnDrafts
+                    ).map((col) => (
                       <div
                         key={col.id}
                         className="flex items-center justify-between gap-2"
                       >
-                        <span className="text-xs w-24 shrink-0">{col.label}</span>
+                        <span className="text-xs w-24 shrink-0">{col.name}</span>
                         <Select
                           value={statusMap[col.id] || undefined}
                           onValueChange={(v) =>

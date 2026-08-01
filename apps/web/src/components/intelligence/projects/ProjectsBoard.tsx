@@ -204,13 +204,22 @@ function parseAttachments(raw: string | null): CardAttachment[] {
     .map((a) => ({ id: String(a.id), label: String(a.label ?? a.id) }));
 }
 
-/** Keep github sync metadata while updating attachments. */
+/** Keep github sync metadata while updating attachments (and optional GH field edits). */
 function buildCardContextJson(
   existingRaw: string | null,
-  attachments: CardAttachment[]
+  attachments: CardAttachment[],
+  githubPatch?: Record<string, unknown>
 ): Record<string, unknown> {
   const base = normalizeContextObject(existingRaw);
-  return { ...base, attachments };
+  const next: Record<string, unknown> = { ...base, attachments };
+  if (githubPatch) {
+    const prevGh =
+      base.github && typeof base.github === "object"
+        ? (base.github as Record<string, unknown>)
+        : {};
+    next.github = { ...prevGh, ...githubPatch };
+  }
+  return next;
 }
 
 function parseTags(raw: string | null): string[] {
@@ -249,6 +258,34 @@ function assigneeInitials(a: GithubAssignee): string {
     return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
   }
   return source.slice(0, 2).toUpperCase();
+}
+
+function firstVisibleColumnId(columns: AiProjectColumn[]): string {
+  return columns[0]?.id ?? "backlog";
+}
+
+function pickSubtaskColumnId(
+  columns: AiProjectColumn[],
+  parentColumnId: string
+): string {
+  if (columns.some((c) => c.id === parentColumnId)) return parentColumnId;
+  const inProgress = columns.find((c) => c.id === "in_progress");
+  if (inProgress) return inProgress.id;
+  return firstVisibleColumnId(columns);
+}
+
+function doneColumnId(columns: AiProjectColumn[]): string {
+  if (columns.some((c) => c.id === "done")) return "done";
+  return columns[columns.length - 1]?.id ?? "done";
+}
+
+function workingColumnId(
+  columns: AiProjectColumn[],
+  parentColumnId: string
+): string {
+  if (columns.some((c) => c.id === "in_progress")) return "in_progress";
+  if (columns.some((c) => c.id === parentColumnId)) return parentColumnId;
+  return firstVisibleColumnId(columns);
 }
 
 function SortableCard({
@@ -435,6 +472,7 @@ function CardEditorDialog({
   open,
   onOpenChange,
   scope,
+  columns,
   labelSuggestions,
   onSaved,
   onDeleted,
@@ -444,6 +482,7 @@ function CardEditorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scope: ProductivityScope;
+  columns: AiProjectColumn[];
   labelSuggestions: string[];
   onSaved: () => void;
   onDeleted: () => void;
@@ -475,12 +514,15 @@ function CardEditorDialog({
   const [awaitingRunId, setAwaitingRunId] = useState<string | null>(null);
   const [agents, setAgents] = useState<AiAgent[]>([]);
   const [assignedAgentId, setAssignedAgentId] = useState<string>("");
+  const [assigneeLogins, setAssigneeLogins] = useState("");
+  const [milestoneTitleEdit, setMilestoneTitleEdit] = useState("");
 
   const isReview = card?.column_id === "review";
   const ghMeta = useMemo(
     () => parseGithubCardMeta(card?.context_json ?? null),
     [card?.context_json]
   );
+  const showGithubFields = isUserScope(scope);
 
   useEffect(() => {
     fetchAiAgents()
@@ -561,6 +603,9 @@ function CardEditorDialog({
     setPriority(card.priority ?? 2);
     setAssignedAgentId(card.assigned_agent_id ?? "intelligence");
     setAttachments(parseAttachments(card.context_json));
+    const meta = parseGithubCardMeta(card.context_json);
+    setAssigneeLogins((meta.assignees ?? []).map((a) => a.login).join(", "));
+    setMilestoneTitleEdit(meta.milestone?.title ?? "");
     setComposer("");
     setNewSubtask("");
     void reloadSubtasks();
@@ -574,30 +619,33 @@ function CardEditorDialog({
   }, [card, reloadSubtasks, reloadComments]);
 
   const subtaskProgress = useMemo(() => {
+    const doneId = doneColumnId(columns);
     const total = subtasks.length;
     const done = subtasks.filter(
-      (s) => s.column_id === "done" || s.status === "accepted"
+      (s) => s.column_id === doneId || s.status === "accepted"
     ).length;
     return { total, done };
-  }, [subtasks]);
+  }, [subtasks, columns]);
   const displayedComments: CardActivityComment[] = card?.parent_card_id
     ? comments.map((comment) => ({ ...comment }))
     : activityComments;
 
   const addSubtask = async () => {
     if (!card || !newSubtask.trim()) return;
+    const columnId = pickSubtaskColumnId(columns, card.column_id);
     try {
       if (isUserScope(scope)) {
         await createUserProjectCard({
           title: newSubtask.trim(),
-          columnId: "in_progress",
+          columnId,
           parentCardId: card.id,
           priority,
+          projectId: card.project_id,
         });
       } else {
         await createProjectCard({
           title: newSubtask.trim(),
-          columnId: "in_progress",
+          columnId,
           parentCardId: card.id,
           priority,
           agentId: scope.agentId,
@@ -611,9 +659,11 @@ function CardEditorDialog({
   };
 
   const toggleSubtask = async (sub: AiProjectCard) => {
-    const isDone = sub.column_id === "done" || sub.status === "accepted";
+    const doneId = doneColumnId(columns);
+    const workId = workingColumnId(columns, card?.column_id ?? doneId);
+    const isDone = sub.column_id === doneId || sub.status === "accepted";
     const patch = {
-      columnId: isDone ? "in_progress" : "done",
+      columnId: isDone ? workId : doneId,
       status: isDone ? "working" : "accepted",
     };
     try {
@@ -687,13 +737,29 @@ function CardEditorDialog({
 
   const persist = useCallback(async () => {
     if (!card) return;
+    const githubPatch: Record<string, unknown> | undefined = showGithubFields
+      ? {
+          assignees: assigneeLogins
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((login) => ({ login })),
+          milestone: milestoneTitleEdit.trim()
+            ? { title: milestoneTitleEdit.trim() }
+            : null,
+        }
+      : undefined;
     const patch = {
       title: title.trim() || "Untitled",
       description,
       prompt,
       priority,
       dueAt: dueAt || null,
-      contextJson: buildCardContextJson(card.context_json, attachments),
+      contextJson: buildCardContextJson(
+        card.context_json,
+        attachments,
+        githubPatch
+      ),
       tags: tags.join(", "),
       assignedAgentId: assignedAgentId || null,
     };
@@ -702,7 +768,21 @@ function CardEditorDialog({
     } else {
       await updateProjectCard(card.id, { ...patch, agentId: scope.agentId });
     }
-  }, [card, title, description, prompt, priority, dueAt, attachments, tags, assignedAgentId, scope]);
+  }, [
+    card,
+    title,
+    description,
+    prompt,
+    priority,
+    dueAt,
+    attachments,
+    tags,
+    assignedAgentId,
+    scope,
+    showGithubFields,
+    assigneeLogins,
+    milestoneTitleEdit,
+  ]);
 
   const toggleTag = (tag: string) => {
     const next = tag.trim();
@@ -845,54 +925,48 @@ function CardEditorDialog({
               className="h-8 text-xs"
             />
           </div>
-          {(ghMeta.assignees?.length || ghMeta.milestone) && (
+          {showGithubFields ? (
             <div className="grid gap-2 rounded-md border p-2">
-              <Label className="text-muted-foreground">GitHub fields</Label>
-              {ghMeta.assignees && ghMeta.assignees.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground">Assignees</span>
-                  <AvatarGroup>
-                    {ghMeta.assignees.map((a) => (
-                      <Avatar key={a.login} size="sm" title={a.name || a.login}>
-                        {a.avatarUrl ? (
-                          <AvatarImage src={a.avatarUrl} alt={a.login} />
-                        ) : null}
-                        <AvatarFallback>{assigneeInitials(a)}</AvatarFallback>
-                      </Avatar>
-                    ))}
-                  </AvatarGroup>
-                  <span className="text-[11px] text-muted-foreground">
-                    {ghMeta.assignees.map((a) => a.login).join(", ")}
-                  </span>
-                </div>
-              ) : null}
-              {ghMeta.milestone ? (
-                <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                  <span className="text-[10px] text-muted-foreground">Milestone</span>
-                  {ghMeta.milestone.url ? (
-                    <a
-                      href={ghMeta.milestone.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-medium text-foreground underline-offset-2 hover:underline"
-                    >
-                      {ghMeta.milestone.title}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{ghMeta.milestone.title}</span>
-                  )}
-                  {ghMeta.milestone.dueOn ? (
-                    <span className="text-muted-foreground">
-                      due {formatDueLabel(ghMeta.milestone.dueOn)}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              <p className="text-[10px] text-muted-foreground">
-                Assignees and milestone update on Sync GitHub (read-only here).
-              </p>
+              <Label className="text-muted-foreground">GitHub</Label>
+              <div className="grid gap-1.5">
+                <Label htmlFor="gh-assignees" className="text-xs">
+                  Assignees
+                </Label>
+                <Input
+                  id="gh-assignees"
+                  value={assigneeLogins}
+                  onChange={(e) => setAssigneeLogins(e.target.value)}
+                  placeholder="login1, login2"
+                  className="h-8 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="gh-milestone" className="text-xs">
+                  Milestone
+                </Label>
+                <Input
+                  id="gh-milestone"
+                  value={milestoneTitleEdit}
+                  onChange={(e) => setMilestoneTitleEdit(e.target.value)}
+                  placeholder="Milestone title"
+                  className="h-8 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              {ghMeta.repo && ghMeta.issueNumber != null ? (
+                <p className="text-[10px] text-muted-foreground">
+                  Linked to {ghMeta.repo} #{ghMeta.issueNumber}. Changes push to
+                  GitHub when you save.
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  Assignees and milestone apply to linked Issues and PRs. Draft
+                  issues ignore them until promoted.
+                </p>
+              )}
             </div>
-          )}
+          ) : null}
           <div className="grid gap-1.5">
             <Label>Assigned subagent</Label>
             <Select
@@ -1077,7 +1151,8 @@ function CardEditorDialog({
                 <span className="text-[10px] text-muted-foreground">No subtasks yet.</span>
               )}
               {subtasks.map((sub) => {
-                const done = sub.column_id === "done" || sub.status === "accepted";
+                const doneId = doneColumnId(columns);
+                const done = sub.column_id === doneId || sub.status === "accepted";
                 return (
                   <div
                     key={sub.id}
@@ -1257,9 +1332,14 @@ function CardEditorDialog({
 export function ProjectsBoard({
   scope,
   projectId,
+  githubSyncEnabled: _githubSyncEnabled,
+  defaultGithubRepo: _defaultGithubRepo,
 }: {
   scope: ProductivityScope;
   projectId?: string;
+  /** Linked user board: adapter defaults new cards to GitHub draft on create. */
+  githubSyncEnabled?: boolean;
+  defaultGithubRepo?: string;
 }) {
   const [columns, setColumns] = useState<AiProjectColumn[]>([]);
   const [cards, setCards] = useState<AiProjectCard[]>([]);
@@ -1318,16 +1398,17 @@ export function ProjectsBoard({
 
   // Per-parent subtask progress derived from the full card list.
   const subtaskProgressByParent = useMemo(() => {
+    const doneId = doneColumnId(columns);
     const map = new Map<string, { total: number; done: number }>();
     for (const c of cards) {
       if (!c.parent_card_id) continue;
       const cur = map.get(c.parent_card_id) ?? { total: 0, done: 0 };
       cur.total += 1;
-      if (c.column_id === "done" || c.status === "accepted") cur.done += 1;
+      if (c.column_id === doneId || c.status === "accepted") cur.done += 1;
       map.set(c.parent_card_id, cur);
     }
     return map;
-  }, [cards]);
+  }, [cards, columns]);
 
   const onMove = async (id: string, columnId: string) => {
     if (readOnly) return;
@@ -1352,17 +1433,18 @@ export function ProjectsBoard({
 
   const addCard = async () => {
     if (readOnly) return;
+    const firstCol = firstVisibleColumnId(columns);
     try {
       if (isUserScope(scope)) {
         await createUserProjectCard({
           title: "New task",
-          columnId: "backlog",
+          columnId: firstCol,
           projectId,
         });
       } else {
         await createProjectCard({
           title: "New task",
-          columnId: "backlog",
+          columnId: firstCol,
           agentId: scope.agentId,
         });
       }
@@ -1453,15 +1535,29 @@ export function ProjectsBoard({
           onDragEnd={onDragEnd}
         >
           <div className="flex h-full min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
-            {columns.map((col) => (
+            {columns.map((col) => {
+              const count = byColumn(col.id).length;
+              const wip =
+                col.wip_limit != null && col.wip_limit > 0
+                  ? col.wip_limit
+                  : null;
+              const overWip = wip != null && count > wip;
+              return (
               <div
                 key={col.id}
                 className="flex min-h-0 min-w-[260px] grow basis-[260px] shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/20 p-2"
               >
                 <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2 px-0.5">
                   <div className="text-[11px] font-semibold">{col.name}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {byColumn(col.id).length}
+                  <div
+                    className={cn(
+                      "text-[10px]",
+                      overWip
+                        ? "font-medium text-destructive"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    {wip != null ? `${count}/${wip}` : count}
                   </div>
                 </div>
                 <SortableContext
@@ -1487,7 +1583,8 @@ export function ProjectsBoard({
                   </div>
                 </SortableContext>
               </div>
-            ))}
+            );
+            })}
           </div>
           <DragOverlay>
             {activeId ? (
@@ -1503,6 +1600,7 @@ export function ProjectsBoard({
         open={editorOpen}
         onOpenChange={setEditorOpen}
         scope={scope}
+        columns={columns}
         labelSuggestions={labelSuggestions}
         onSaved={load}
         onDeleted={load}

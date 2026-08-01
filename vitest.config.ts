@@ -14,6 +14,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/release-flow.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-status-map.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-context.test.ts",
+      "apps/bridge/src/services/__tests__/board-columns-crud.test.ts",
       "apps/bridge/src/services/__tests__/github-app-webhook-sig.test.ts",
       "apps/bridge/src/services/__tests__/github-integration-authorize-url.test.ts",
       "apps/bridge/src/services/__tests__/multi-board-tasks-migration.test.ts",

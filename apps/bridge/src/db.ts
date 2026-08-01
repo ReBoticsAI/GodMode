@@ -287,6 +287,7 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 17, name: "tasks_github_sync_health_v1", up: migrateTasksGithubSyncHealthSchema },
   // columns_json was appended to v14 after some SaaS tenants already applied it.
   { version: 18, name: "ai_projects_columns_json_v1", up: migrateAiProjectsColumnsJson },
+  { version: 19, name: "ai_projects_columns_json_backfill_v1", up: migrateAiProjectsColumnsJsonBackfill },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
@@ -320,6 +321,23 @@ function migrateTasksGithubSyncHealthSchema(db: Database.Database): void {
  */
 function migrateAiProjectsColumnsJson(db: Database.Database): void {
   addColumn(db, "ai_projects", "columns_json", "TEXT");
+}
+
+/** Seed default columns_json for user boards that still lack a column layout. */
+function migrateAiProjectsColumnsJsonBackfill(db: Database.Database): void {
+  addColumn(db, "ai_projects", "columns_json", "TEXT");
+  const defaults = JSON.stringify([
+    { id: "backlog", name: "Backlog", sort_order: 0 },
+    { id: "ready", name: "Ready", sort_order: 1 },
+    { id: "in_progress", name: "In Progress", sort_order: 2 },
+    { id: "review", name: "Review", sort_order: 3 },
+    { id: "done", name: "Done", sort_order: 4 },
+  ]);
+  db.prepare(
+    `UPDATE ai_projects SET columns_json=?
+     WHERE user_id IS NOT NULL
+       AND (columns_json IS NULL OR columns_json='')`
+  ).run(defaults);
 }
 
 function migrateStructureObjectType(db: Database.Database): void {
