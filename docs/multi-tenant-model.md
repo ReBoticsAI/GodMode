@@ -43,6 +43,24 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 
 Domain-specific tables (trading, external integrations) are added by **plugins** when installed.
 
+## Tenant export (Cloud to local)
+
+Workspace owners can download a consistent snapshot of **their** tenant SQLite file
+from Cloud Settings (**Download my database**), via `GET /api/tenant/database/download`.
+
+- Authz: session + membership; **owner** role only. Tenant id comes from membership
+  resolution (`X-Tenant-Id` / session), never from a client-supplied filesystem path.
+- Snapshot: better-sqlite3 `backup()` API (not a raw copy of a live WAL-open file).
+- Scope: one `tenants/<tenantId>.sqlite` only. No `core.sqlite`, no other tenants,
+  no DuckDB analytics. Platform-admin DR of full stamps is a separate path (#243 /
+  Admin Observability).
+- Rate-limited; success/failure audited in core `platform_action_log`
+  (`tenant.database.download`). Response is `Cache-Control: no-store`.
+- Local import: place the file under `PLATFORM_DATA_DIR/tenants/` (or the desktop
+  data dir equivalent) with a matching GodMode version, or migrate after open.
+  Older desktop builds may refuse or require schema migrations. Treat the file as
+  sensitive (vault, holdings, chat).
+
 ## Tenant context contract
 
 Every HTTP request, WebSocket connection, and background job must carry:
