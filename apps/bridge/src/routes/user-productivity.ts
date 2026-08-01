@@ -16,6 +16,9 @@ import {
   resolveUserBoardId,
   resolveUserCalendarAccess,
   resolveUserTasksAccess,
+  updateBoardColumns,
+  visibleColumnsForBoard,
+  type BoardColumnDef,
 } from "../services/user-productivity.js";
 import type { ShareError } from "../services/share-service.js";
 import {
@@ -125,12 +128,16 @@ export function createUserProductivityRouter(): Router {
       const board =
         boards.find((b) => b.id === pid) ??
         getUserBoard(access.ownerUserId, access.db, pid);
-      const columns = (board ? columnsForBoard(board) : []).map((c) => ({
+      const mapCol = (c: BoardColumnDef) => ({
         id: c.id,
         project_id: pid,
         name: c.name,
         sort_order: c.sort_order,
-      }));
+        hidden: Boolean(c.hidden),
+        wip_limit: c.wip_limit ?? null,
+      });
+      const columns = (board ? visibleColumnsForBoard(board) : []).map(mapCol);
+      const allColumns = (board ? columnsForBoard(board) : []).map(mapCol);
       const cards = access.db
         .prepare(
           `SELECT * FROM ai_project_cards WHERE project_id = ? ORDER BY sort_order ASC`
@@ -140,9 +147,50 @@ export function createUserProductivityRouter(): Router {
         projects: boards,
         activeProjectId: pid,
         columns,
+        allColumns,
         cards,
         role: access.role,
         ownerUserId: access.ownerUserId,
+      });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.put("/projects/:id/columns", (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const boardId = String(req.params.id);
+      const raw = req.body?.columns;
+      if (!Array.isArray(raw)) {
+        res.status(400).json({ error: "columns array required" });
+        return;
+      }
+      const columns = raw as BoardColumnDef[];
+      const fallbackColumnId =
+        typeof req.body?.fallbackColumnId === "string"
+          ? req.body.fallbackColumnId
+          : typeof req.body?.moveCardsToColumnId === "string"
+            ? req.body.moveCardsToColumnId
+            : undefined;
+      const board = updateBoardColumns(
+        access.ownerUserId,
+        access.db,
+        boardId,
+        columns,
+        { fallbackColumnId }
+      );
+      res.json({
+        project: board,
+        columns: columnsForBoard(board).map((c) => ({
+          id: c.id,
+          project_id: boardId,
+          name: c.name,
+          sort_order: c.sort_order,
+          hidden: Boolean(c.hidden),
+          wip_limit: c.wip_limit ?? null,
+        })),
       });
     } catch (err) {
       sendErr(err, res);

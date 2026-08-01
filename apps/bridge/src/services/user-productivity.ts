@@ -123,14 +123,15 @@ export function ensureUserProject(userId: string, db: AppDatabase): string {
   const byId = db
     .prepare(`SELECT id FROM ai_projects WHERE id = ?`)
     .get(id) as { id: string } | undefined;
-  if (byId) {
-    seedCanonicalColumns(db, id);
-    return id;
+  if (!byId) {
+    db.prepare(
+      `INSERT OR IGNORE INTO ai_projects (id, name, user_id, agent_id, columns_json) VALUES (?, ?, ?, NULL, ?)`
+    ).run(id, "My Tasks", userId, JSON.stringify(defaultBoardColumns()));
   }
-
+  // Backfill columns_json for boards created before multi-board schema.
   db.prepare(
-    `INSERT OR IGNORE INTO ai_projects (id, name, user_id, agent_id) VALUES (?, ?, ?, NULL)`
-  ).run(id, "My Tasks", userId);
+    `UPDATE ai_projects SET columns_json=? WHERE id=? AND (columns_json IS NULL OR columns_json='')`
+  ).run(JSON.stringify(defaultBoardColumns()), id);
   seedCanonicalColumns(db, id);
   return id;
 }
@@ -139,6 +140,10 @@ export type BoardColumnDef = {
   id: string;
   name: string;
   sort_order: number;
+  /** When true, column is omitted from the board (cards stay in place). */
+  hidden?: boolean;
+  /** Soft WIP limit shown in the column header; null/undefined = no limit. */
+  wip_limit?: number | null;
 };
 
 export type UserBoardRow = {
@@ -174,11 +179,22 @@ export function parseBoardColumns(raw: string | null | undefined): BoardColumnDe
     if (!Array.isArray(parsed) || parsed.length === 0) return defaultBoardColumns();
     return parsed
       .filter((c) => c && typeof c.id === "string" && typeof c.name === "string")
-      .map((c, i) => ({
-        id: c.id,
-        name: c.name,
-        sort_order: Number.isFinite(c.sort_order) ? Number(c.sort_order) : i,
-      }))
+      .map((c, i) => {
+        const wip =
+          c.wip_limit == null || c.wip_limit === undefined
+            ? null
+            : Number(c.wip_limit);
+        return {
+          id: c.id,
+          name: c.name,
+          sort_order: Number.isFinite(c.sort_order) ? Number(c.sort_order) : i,
+          hidden: Boolean(c.hidden),
+          wip_limit:
+            wip != null && Number.isFinite(wip) && wip > 0
+              ? Math.floor(wip)
+              : null,
+        };
+      })
       .sort((a, b) => a.sort_order - b.sort_order);
   } catch {
     return defaultBoardColumns();
@@ -189,12 +205,130 @@ export function columnsForBoard(board: UserBoardRow): BoardColumnDef[] {
   return parseBoardColumns(board.columns_json);
 }
 
+/** Visible columns for the kanban (hidden ones stay in columns_json for card ids). */
+export function visibleColumnsForBoard(board: UserBoardRow): BoardColumnDef[] {
+  return columnsForBoard(board).filter((c) => !c.hidden);
+}
+
+export function firstVisibleColumnId(board: UserBoardRow): string {
+  return visibleColumnsForBoard(board)[0]?.id ?? columnsForBoard(board)[0]?.id ?? "backlog";
+}
+
+export function boardHasColumn(board: UserBoardRow, columnId: string): boolean {
+  return columnsForBoard(board).some((c) => c.id === columnId);
+}
+
 export function slugBoardColumnId(name: string): string {
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   return slug || "column";
+}
+
+function uniqueColumnId(name: string, existing: Set<string>): string {
+  let id = slugBoardColumnId(name);
+  if (!existing.has(id)) return id;
+  let n = 2;
+  while (existing.has(`${id}_${n}`)) n += 1;
+  return `${id}_${n}`;
+}
+
+/**
+ * Replace board columns_json. Cards in removed columns move to `fallbackColumnId`
+ * or the first remaining column. Status map keys for removed columns are dropped.
+ */
+export function updateBoardColumns(
+  userId: string,
+  db: AppDatabase,
+  boardId: string,
+  columnsInput: BoardColumnDef[],
+  opts?: { fallbackColumnId?: string }
+): UserBoardRow {
+  const board = getUserBoard(userId, db, boardId);
+  if (!board || board.archived_at) {
+    throw Object.assign(new Error("Board not found"), { status: 404 });
+  }
+  if (!Array.isArray(columnsInput) || columnsInput.length === 0) {
+    throw Object.assign(new Error("At least one column is required"), {
+      status: 400,
+    });
+  }
+
+  const used = new Set<string>();
+  const columns: BoardColumnDef[] = columnsInput.map((c, i) => {
+    const name = typeof c.name === "string" ? c.name.trim() : "";
+    if (!name) {
+      throw Object.assign(new Error("Column name required"), { status: 400 });
+    }
+    let id =
+      typeof c.id === "string" && c.id.trim() ? c.id.trim() : slugBoardColumnId(name);
+    if (used.has(id)) id = uniqueColumnId(name, used);
+    used.add(id);
+    const wip =
+      c.wip_limit == null || c.wip_limit === undefined
+        ? null
+        : Number(c.wip_limit);
+    return {
+      id,
+      name,
+      sort_order: Number.isFinite(c.sort_order) ? Number(c.sort_order) : i,
+      hidden: Boolean(c.hidden),
+      wip_limit:
+        wip != null && Number.isFinite(wip) && wip > 0 ? Math.floor(wip) : null,
+    };
+  });
+
+  const visible = columns.filter((c) => !c.hidden);
+  if (visible.length === 0) {
+    throw Object.assign(new Error("At least one visible column is required"), {
+      status: 400,
+    });
+  }
+
+  const idSet = new Set(columns.map((c) => c.id));
+  const fallback =
+    (opts?.fallbackColumnId && idSet.has(opts.fallbackColumnId)
+      ? opts.fallbackColumnId
+      : null) ??
+    visible[0]!.id;
+
+  const cards = db
+    .prepare(`SELECT id, column_id FROM ai_project_cards WHERE project_id=?`)
+    .all(boardId) as Array<{ id: string; column_id: string }>;
+  const updateCol = db.prepare(
+    `UPDATE ai_project_cards SET column_id=?, updated_at=datetime('now') WHERE id=?`
+  );
+  for (const card of cards) {
+    if (!idSet.has(card.column_id)) {
+      updateCol.run(fallback, card.id);
+    }
+  }
+
+  let statusMap: Record<string, string> = {};
+  try {
+    statusMap = board.github_status_map_json
+      ? (JSON.parse(board.github_status_map_json) as Record<string, string>)
+      : {};
+  } catch {
+    statusMap = {};
+  }
+  const nextMap: Record<string, string> = {};
+  for (const [k, v] of Object.entries(statusMap)) {
+    if (idSet.has(k)) nextMap[k] = v;
+  }
+
+  db.prepare(
+    `UPDATE ai_projects SET columns_json=?, github_status_map_json=?, updated_at=datetime('now')
+     WHERE id=? AND user_id=?`
+  ).run(
+    JSON.stringify(columns),
+    Object.keys(nextMap).length ? JSON.stringify(nextMap) : board.github_status_map_json,
+    boardId,
+    userId
+  );
+
+  return getUserBoard(userId, db, boardId)!;
 }
 
 /** List non-archived (or all) user-owned kanban boards. */
@@ -242,9 +376,11 @@ export function createUserBoard(
   const trimmed = name.trim();
   if (!trimmed) throw Object.assign(new Error("name required"), { status: 400 });
   const id = uuidv4();
+  const columns = defaultBoardColumns();
   db.prepare(
-    `INSERT INTO ai_projects (id, name, user_id, agent_id) VALUES (?, ?, ?, NULL)`
-  ).run(id, trimmed, userId);
+    `INSERT INTO ai_projects (id, name, user_id, agent_id, columns_json) VALUES (?, ?, ?, NULL, ?)`
+  ).run(id, trimmed, userId, JSON.stringify(columns));
+  seedCanonicalColumns(db, id);
   db.prepare(
     `UPDATE ai_projects SET updated_at=datetime('now') WHERE id=?`
   ).run(id);
