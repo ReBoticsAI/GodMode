@@ -13,6 +13,7 @@ export default defineConfig({
       "apps/bridge/src/routes/__tests__/marketplace-listings-query.test.ts",
       "apps/bridge/src/services/__tests__/release-flow.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-status-map.test.ts",
+      "apps/bridge/src/services/__tests__/github-projects-context.test.ts",
       "apps/bridge/src/services/__tests__/multi-board-tasks-migration.test.ts",
       "apps/bridge/src/services/__tests__/prompt-assembler-order.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-transcript.test.ts",

@@ -2358,7 +2358,7 @@ export const updateProjectCard = (
     prompt?: string;
     contextJson?: unknown;
     tags?: string;
-    dueAt?: string;
+    dueAt?: string | null;
     columnId?: string;
     sortOrder?: number;
     priority?: number;
@@ -2751,7 +2751,7 @@ export const updateUserProjectCard = (
     prompt?: string;
     contextJson?: unknown;
     tags?: string;
-    dueAt?: string;
+    dueAt?: string | null;
     columnId?: string;
     sortOrder?: number;
     priority?: number;

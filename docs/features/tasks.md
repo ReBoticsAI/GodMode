@@ -25,9 +25,9 @@ Sidebar **Project** (tenant/workspace) is separate: use Tasks boards for kanbans
 3. On link / Sync, board **columns follow the Project Status options** (and remap cards). Adjust the Status map in board settings if needed.
 4. **Sync GitHub** pulls items into cards; moving/editing cards pushes Status / title / body / due / priority / labels when mapped.
 
-Field map (v1+): title, description, column↔Status, due date, priority (P0–P3 ↔ Project Priority), labels. Agent assignment and prompts stay local. You cannot sync a Project your token cannot access.
+Field map (v1+): title, description, column↔Status, due date, priority (P0–P3 ↔ Project Priority), labels, **assignees** and **milestone** (pulled into card face / detail on Sync; assignees and milestone are read-only in GodMode until a later slice). Agent assignment and prompts stay local. Card face fields (priority, labels, assignees, due, milestone) can be shown or hidden per board in the **Card fields** menu. Saving a card keeps GitHub sync metadata in `context_json` alongside attachments. You cannot sync a Project your token cannot access.
 
-Kanban parity epic: continue toward full GitHub Projects board fidelity (webhooks, assignees, custom fields) tracked in the roadmap.
+Kanban parity epic: continue toward full GitHub Projects board fidelity (webhooks, assignee push, custom fields) tracked in the roadmap.
 
 ## Route
 
