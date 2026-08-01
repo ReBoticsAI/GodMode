@@ -14,7 +14,7 @@ summary: "Twin agent: private thinking partner and stand-in; compounds via Refle
 
 Stand-in quality **compounds with use**: Reflection, profile, and saved memories build a model of how you think and decide. It is usable immediately as a sounding board; it is not a finished auto-coverage product on day one. Deeper stand-in automation is tracked under roadmap #79.
 
-Prefer the name **Digital You** (not “Digital user”).
+The product name is **Digital You** (not “Digital user”).
 
 ## Where to open
 

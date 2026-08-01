@@ -2,7 +2,7 @@
 slug: godmode-overview
 title: "GodMode overview"
 section: "Hubs"
-location: "Platform wiki"
+location: "Control Center"
 summary: "Control Center / last platform stack: self-expanding, Digital You, connect anything, open source."
 ---
 # GodMode overview
@@ -16,17 +16,15 @@ Open source (Apache 2.0). Local-first. Self-host or use Cloud for convenience. *
 
 **Intelligence** is GodMode's built-in platform agent (the robot in the sidebar). It is not the platform name.
 
-## Narrative for agents
+## What GodMode stands for
 
-When explaining GodMode to the user, lean on:
+1. Last platform: an all-encompassing Control Center
+2. Self-expansion: build packs and structure from chat
+3. Clear roles: Digital You for personal judgment; Intelligence for platform building
+4. Connect anything: Marketplace, plugins, and connectors
+5. Open source plus Cloud convenience, without lock-in as your identity
 
-1. Last platform / all-encompassing Control Center
-2. Self-expansion (build packs and structure from chat)
-3. Digital You vs Intelligence role split
-4. Connect anything (Marketplace, plugins, connectors)
-5. Open source + Cloud convenience without lock-in identity
-
-Do not invent shipped features. Core depth still growing (owned email, accounting, robots/IoT, GodMode Inference by ReBotics) lives on the public roadmap.
+Core depth is still growing (owned email, accounting, robots/IoT, GodMode Inference by ReBotics). Track that work on the public roadmap.
 
 ## Key pieces
 
@@ -34,7 +32,7 @@ Do not invent shipped features. Core depth still growing (owned email, accountin
 - **Intelligence**: platform builder/guide; scaffold plugins, structure, wiki, tasks from chat ([[intelligence]])
 - **Structure**: departments / divisions / pages (empty tree on day one) ([[structure]])
 - **Agents**: specialized AIs under Intelligence for scoped work ([[agents]])
-- **Wiki / memory**: durable knowledge + hybrid RAG (no knowledge graph shipped yet; #206 backlog)
+- **Wiki / memory**: durable knowledge + hybrid RAG (knowledge graph is on the roadmap)
 - **Shared**: live grants for your team ([[shared]])
 - **Marketplace**: Official / Community / Local (self-host); real-money commerce, no credits ([[marketplace]])
 
