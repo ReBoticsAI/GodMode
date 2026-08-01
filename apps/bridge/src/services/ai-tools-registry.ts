@@ -65,7 +65,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "web_search",
     description:
-      "Search the web via DuckDuckGo and return a list of result titles, URLs, and snippets. Use for live/current information not in your training data.",
+      "Search the web and return result titles, URLs, and snippets. On GodMode Cloud this uses Exa with a tenant/agent BYOK key (Vault secret exa_api_key or agent provider exa). Self-host may fall back to DuckDuckGo when no Exa key is configured. Use for live/current information not in your training data.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -79,7 +79,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "fetch_url",
     description:
-      "Fetch a web page (or any URL) and return its readable text content. Use after web_search to read a specific result, or when given a URL directly.",
+      "Fetch a web page (or any URL) and return its readable text content. On GodMode Cloud this uses Exa contents with a tenant/agent BYOK key (same as web_search). Self-host may fall back to a direct fetch when no Exa key is configured. Use after web_search to read a specific result, or when given a URL directly.",
     mode: "auto",
     parameters: {
       type: "object",
