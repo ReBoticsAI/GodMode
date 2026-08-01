@@ -1293,7 +1293,17 @@ export interface AiProjectColumn {
   project_id: string;
   name: string;
   sort_order: number;
+  hidden?: boolean;
+  wip_limit?: number | null;
 }
+
+export type BoardColumnDef = {
+  id: string;
+  name: string;
+  sort_order: number;
+  hidden?: boolean;
+  wip_limit?: number | null;
+};
 
 export interface AiProjectCard {
   id: string;
@@ -1434,6 +1444,7 @@ export interface AiProjectRow {
 export interface AiProjectsSnapshot {
   projects: AiProjectRow[];
   columns: AiProjectColumn[];
+  allColumns?: AiProjectColumn[];
   cards: AiProjectCard[];
 }
 
@@ -2698,6 +2709,19 @@ export const updateUserBoardStatusMap = (
     { method: "POST", body: JSON.stringify({ statusMap }) }
   );
 
+export const updateUserBoardColumns = (
+  boardId: string,
+  columns: BoardColumnDef[],
+  fallbackColumnId?: string
+) =>
+  api<{ project: UserTaskBoard; columns: AiProjectColumn[] }>(
+    `/user/projects/${encodeURIComponent(boardId)}/columns`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ columns, fallbackColumnId }),
+    }
+  );
+
 export const fetchGithubIntegrationStatus = () =>
   api<{
     connected: boolean;
@@ -2727,8 +2751,11 @@ export const createUserProjectCard = (body: {
   status?: string;
   assignedAgentId?: string;
   projectId?: string;
-}) =>
-  createDto<AiProjectCard>("TaskCard", {
+  /** Linked boards: draft (default), issue (needs githubRepo), or none (local only). */
+  githubCreateMode?: "draft" | "issue" | "none";
+  githubRepo?: string;
+}) => {
+  const data: Record<string, unknown> = {
     column_id: body.columnId,
     title: body.title,
     description: body.description,
@@ -2741,7 +2768,15 @@ export const createUserProjectCard = (body: {
     status: body.status,
     assigned_agent_id: body.assignedAgentId,
     project_id: body.projectId,
-  });
+  };
+  if (body.githubCreateMode != null) {
+    data.github_create_mode = body.githubCreateMode;
+  }
+  if (body.githubRepo != null) {
+    data.github_repo = body.githubRepo;
+  }
+  return createDto<AiProjectCard>("TaskCard", data);
+};
 
 export const moveUserProjectCard = (id: string, columnId: string, sortOrder?: number) =>
   actionDto<RecordRowClient>(

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GitHub Projects (v2) list + board sync into GodMode TaskCards.
  */
 import { v4 as uuidv4 } from "uuid";
@@ -854,6 +854,27 @@ async function pullBoardFromGithub(opts: {
     statusMap = {};
   }
   if (fromGh.columns.length > 0) {
+    const prevCols = (() => {
+      try {
+        return board.columns_json
+          ? (JSON.parse(board.columns_json) as BoardColumnDef[])
+          : [];
+      } catch {
+        return [] as BoardColumnDef[];
+      }
+    })();
+    const prevById = new Map(prevCols.map((c) => [c.id, c]));
+    const prevByName = new Map(
+      prevCols.map((c) => [c.name.toLowerCase(), c])
+    );
+    const mergedColumns = fromGh.columns.map((c) => {
+      const prev = prevById.get(c.id) ?? prevByName.get(c.name.toLowerCase());
+      return {
+        ...c,
+        hidden: prev?.hidden ?? false,
+        wip_limit: prev?.wip_limit ?? null,
+      };
+    });
     statusMap = fromGh.statusMap;
     const cards = opts.db
       .prepare(`SELECT id, column_id FROM ai_project_cards WHERE project_id=?`)
@@ -862,7 +883,7 @@ async function pullBoardFromGithub(opts: {
       `UPDATE ai_project_cards SET column_id=? WHERE id=?`
     );
     for (const card of cards) {
-      const next = remapCardColumnId(card.column_id, fromGh.columns);
+      const next = remapCardColumnId(card.column_id, mergedColumns);
       if (next !== card.column_id) updateCol.run(next, card.id);
     }
     opts.db
@@ -871,7 +892,7 @@ async function pullBoardFromGithub(opts: {
          WHERE id=? AND user_id=?`
       )
       .run(
-        JSON.stringify(fromGh.columns),
+        JSON.stringify(mergedColumns),
         JSON.stringify(statusMap),
         opts.boardId,
         opts.userId
@@ -975,6 +996,20 @@ async function pullBoardFromGithub(opts: {
     }
   }
 
+  // Remove GodMode cards whose Project items were archived/removed on GitHub.
+  const seenItemIds = new Set(items.map((i) => i.itemId));
+  let removed = 0;
+  for (const card of existing) {
+    const gh = parseGithubContext(card.context_json);
+    if (!gh.projectItemId) continue;
+    if (seenItemIds.has(String(gh.projectItemId))) continue;
+    opts.db
+      .prepare(`DELETE FROM ai_project_cards WHERE id=? AND project_id=?`)
+      .run(card.id, opts.boardId);
+    removed += 1;
+  }
+  void removed;
+
   return {
     project: getUserBoard(opts.userId, opts.db, opts.boardId)!,
     pulled: items.length,
@@ -1060,7 +1095,7 @@ async function setProjectSingleSelect(opts: {
 
 /**
  * Push a card's column (Status) to GitHub after a local move.
- * Best-effort — failures are logged by callers.
+ * Best-effort â€” failures are logged by callers.
  */
 export async function pushCardColumnToGithub(opts: {
   userId: string;
@@ -1203,6 +1238,276 @@ export async function pushCardFieldsToGithub(opts: {
       });
     }
   }
+
+  // Assignees + milestone (Issues / PRs only).
+  if (contentId && gh.issueNumber != null && gh.repo && gh.repo.includes("/")) {
+    const ctxGh = parseGithubContext(card.context_json) as {
+      assignees?: Array<{ login: string }>;
+      milestone?: { title: string } | null;
+    };
+    const [owner, repo] = gh.repo.split("/");
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "GodMode",
+    };
+
+    const logins = (ctxGh.assignees ?? []).map((a) => a.login).filter(Boolean);
+    await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/issues/${gh.issueNumber}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ assignees: logins }),
+      }
+    ).catch(() => undefined);
+
+    let milestoneNumber: number | null = null;
+    const title = ctxGh.milestone?.title?.trim();
+    if (title) {
+      const listRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/milestones?state=all&per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github+json",
+            "User-Agent": "GodMode",
+          },
+        }
+      ).catch(() => null);
+      if (listRes?.ok) {
+        const milestones = (await listRes.json()) as Array<{
+          number: number;
+          title: string;
+        }>;
+        const hit = milestones.find(
+          (m) => m.title.toLowerCase() === title.toLowerCase()
+        );
+        milestoneNumber = hit?.number ?? null;
+      }
+    }
+    // Only clear/set milestone when context includes the milestone key (incl. null clear).
+    if ("milestone" in ctxGh) {
+      await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/issues/${gh.issueNumber}`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ milestone: milestoneNumber }),
+        }
+      ).catch(() => undefined);
+    }
+  }
+}
+
+/**
+ * Create a Draft Issue (or repo Issue) on the linked Project and store ids on the card.
+ */
+export async function pushCardCreateToGithub(opts: {
+  userId: string;
+  db: AppDatabase;
+  cardId: string;
+  mode: "draft" | "issue";
+  repo?: string;
+}): Promise<void> {
+  const card = opts.db
+    .prepare(
+      `SELECT c.id, c.title, c.description, c.column_id, c.context_json,
+              p.github_project_node_id, p.github_status_map_json, p.sync_enabled, p.user_id
+       FROM ai_project_cards c
+       JOIN ai_projects p ON p.id = c.project_id
+       WHERE c.id=? AND p.user_id=?`
+    )
+    .get(opts.cardId, opts.userId) as
+    | {
+        id: string;
+        title: string;
+        description: string | null;
+        column_id: string;
+        context_json: string | null;
+        github_project_node_id: string | null;
+        github_status_map_json: string | null;
+        sync_enabled: number;
+      }
+    | undefined;
+  if (!card?.sync_enabled || !card.github_project_node_id) return;
+
+  const existing = parseGithubContext(card.context_json);
+  if (existing.projectItemId) return;
+
+  const accessToken = await requireToken(opts.db);
+  const meta = await loadProjectMeta(accessToken, card.github_project_node_id);
+  const title = card.title || "Untitled";
+  const body = card.description ?? "";
+
+  let contentId: string | null = null;
+  let itemId: string | null = null;
+  let issueNumber: number | null = null;
+  let repo: string | null = null;
+  let url: string | null = null;
+
+  if (opts.mode === "issue") {
+    const repoFull = (opts.repo ?? "").trim();
+    if (!repoFull.includes("/")) {
+      throw Object.assign(
+        new Error("github_repo required as owner/name for issue create"),
+        { status: 400 }
+      );
+    }
+    const [owner, name] = repoFull.split("/");
+    const created = await githubGraphql<{
+      createIssue: {
+        issue: { id: string; number: number; url: string };
+      };
+    }>(
+      accessToken,
+      `mutation($repoId: ID!, $title: String!, $body: String) {
+        createIssue(input: { repositoryId: $repoId, title: $title, body: $body }) {
+          issue { id number url }
+        }
+      }`,
+      {
+        repoId: await resolveRepositoryId(accessToken, owner, name),
+        title,
+        body,
+      }
+    );
+    contentId = created.createIssue.issue.id;
+    issueNumber = created.createIssue.issue.number;
+    repo = repoFull;
+    url = created.createIssue.issue.url;
+    const added = await githubGraphql<{
+      addProjectV2ItemById: { item: { id: string } };
+    }>(
+      accessToken,
+      `mutation($projectId: ID!, $contentId: ID!) {
+        addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+          item { id }
+        }
+      }`,
+      { projectId: card.github_project_node_id, contentId }
+    );
+    itemId = added.addProjectV2ItemById.item.id;
+  } else {
+    const draft = await githubGraphql<{
+      addProjectV2DraftIssue: {
+        projectItem: { id: string; content: { id: string; title: string } };
+      };
+    }>(
+      accessToken,
+      `mutation($projectId: ID!, $title: String!, $body: String) {
+        addProjectV2DraftIssue(input: { projectId: $projectId, title: $title, body: $body }) {
+          projectItem {
+            id
+            content {
+              ... on DraftIssue { id title }
+            }
+          }
+        }
+      }`,
+      { projectId: card.github_project_node_id, title, body }
+    );
+    itemId = draft.addProjectV2DraftIssue.projectItem.id;
+    contentId = draft.addProjectV2DraftIssue.projectItem.content?.id ?? null;
+  }
+
+  if (!itemId) return;
+
+  opts.db
+    .prepare(
+      `UPDATE ai_project_cards SET context_json=?, updated_at=datetime('now') WHERE id=?`
+    )
+    .run(
+      mergeGithubContext(card.context_json, {
+        projectItemId: itemId,
+        contentId,
+        issueNumber,
+        repo,
+        url,
+        assignees: [],
+        milestone: null,
+        lastSyncedAt: new Date().toISOString(),
+        createdFromGodMode: true,
+      }),
+      opts.cardId
+    );
+
+  // Push Status to match the local column.
+  let statusMap: Record<string, string> = {};
+  try {
+    statusMap = card.github_status_map_json
+      ? (JSON.parse(card.github_status_map_json) as Record<string, string>)
+      : {};
+  } catch {
+    statusMap = {};
+  }
+  const optionId = statusMap[card.column_id];
+  if (meta.statusFieldId && optionId) {
+    await setProjectSingleSelect({
+      accessToken,
+      projectId: card.github_project_node_id,
+      itemId,
+      fieldId: meta.statusFieldId,
+      optionId,
+    });
+  }
+}
+
+async function resolveRepositoryId(
+  accessToken: string,
+  owner: string,
+  name: string
+): Promise<string> {
+  const data = await githubGraphql<{
+    repository: { id: string } | null;
+  }>(
+    accessToken,
+    `query($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) { id }
+    }`,
+    { owner, name }
+  );
+  if (!data.repository?.id) {
+    throw Object.assign(new Error(`Repository ${owner}/${name} not found`), {
+      status: 404,
+    });
+  }
+  return data.repository.id;
+}
+
+/**
+ * Remove the linked Project item when a GodMode card is deleted.
+ * Does not delete the underlying Issue/PR; only removes it from the Project
+ * (draft issues are deleted with the item).
+ */
+export async function pushCardDeleteToGithub(opts: {
+  userId: string;
+  db: AppDatabase;
+  cardId: string;
+  contextJson: string | null;
+  projectId: string;
+}): Promise<void> {
+  const board = getUserBoard(opts.userId, opts.db, opts.projectId);
+  if (!board?.sync_enabled || !board.github_project_node_id) return;
+  const gh = parseGithubContext(opts.contextJson);
+  if (!gh.projectItemId) return;
+  const accessToken = await requireToken(opts.db);
+  await githubGraphql(
+    accessToken,
+    `mutation($projectId: ID!, $itemId: ID!) {
+      deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+        deletedItemId
+      }
+    }`,
+    {
+      projectId: board.github_project_node_id,
+      itemId: String(gh.projectItemId),
+    }
+  ).catch((err) => {
+    // Item may already be gone on GitHub.
+    console.warn("[github-projects] deleteProjectV2Item", err);
+  });
 }
 
 export function updateBoardStatusMap(
