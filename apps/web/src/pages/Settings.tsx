@@ -397,19 +397,39 @@ function GithubConnectCard() {
                 : null}
               . Open Tasks → Board settings to link a Project.
             </p>
-            {!status.installationId && status.installUrl ? (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                App install not detected yet.{" "}
-                <a
-                  className="underline"
-                  href={status.installUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Install GodMode Cloud
-                </a>{" "}
-                then Connect again.
-              </p>
+            {!status.installationId ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  App install not detected yet. If the App is not installed on
+                  the account that owns your Projects, install it first, then
+                  reconnect.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {status.installUrl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        window.open(
+                          status.installUrl!,
+                          "_blank",
+                          "noopener,noreferrer"
+                        );
+                      }}
+                    >
+                      Install GodMode Cloud
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    disabled={busy || status.configured === false}
+                    onClick={() => void connect()}
+                  >
+                    <FolderGit2Icon data-icon="inline-start" />
+                    Connect again
+                  </Button>
+                </div>
+              </div>
             ) : null}
             <Button
               type="button"

@@ -285,6 +285,8 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 13, name: "holdings_schema_v1", up: createHoldingsSchema },
   { version: 14, name: "multi_board_tasks_github_v1", up: migrateMultiBoardTasksSchema },
   { version: 17, name: "tasks_github_sync_health_v1", up: migrateTasksGithubSyncHealthSchema },
+  // columns_json was appended to v14 after some SaaS tenants already applied it.
+  { version: 18, name: "ai_projects_columns_json_v1", up: migrateAiProjectsColumnsJson },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
@@ -310,6 +312,14 @@ function migrateTasksGithubSyncHealthSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS ai_projects_sync_enabled_idx
       ON ai_projects(sync_enabled) WHERE sync_enabled = 1;
   `);
+}
+
+/**
+ * Ensure Status-column board layout storage exists on tenants that applied v14
+ * before columns_json was added to that migration.
+ */
+function migrateAiProjectsColumnsJson(db: Database.Database): void {
+  addColumn(db, "ai_projects", "columns_json", "TEXT");
 }
 
 function migrateStructureObjectType(db: Database.Database): void {
