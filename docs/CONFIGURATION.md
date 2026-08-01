@@ -24,8 +24,11 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
 | `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
 | `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth for sign-in (optional) |
-| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
-| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | GitHub OAuth for **Tasks ↔ Projects sync** (scopes: `read:user project repo`). Callback: `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Legacy GitHub OAuth for **sign-in** (optional; prefer `GITHUB_APP_*`) |
+| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Legacy Tasks ↔ Projects OAuth (prefer `GITHUB_APP_*`) |
+| `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **GitHub App** for sign-in + Connect + webhooks + Core Support issues |
+| `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on Hostinger) |
+| `GITHUB_APP_WEBHOOK_SECRET` | empty | App webhook HMAC secret |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see `deploy/hostinger.md`) |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix when using S3/R2 |
@@ -112,18 +115,47 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 
 `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` remains the env-level nuclear opt-out for all coding. `PLATFORM_SPEND_DISABLED=true` forces spend deny even before `platform_meta`. `PLATFORM_DEPLOY_DISABLED=true` forces deploy deny even before `platform_meta`. `PLATFORM_DELETE_DISABLED=true` forces delete deny even before `platform_meta`. `PLATFORM_SEND_DISABLED=true` forces send deny even before `platform_meta`. `PLATFORM_AGENTS_DISABLED=true` forces agent execution pause even before `platform_meta`.
 
-### GitHub OAuth apps (login vs Projects sync)
+### GitHub App (sign-in + Connect + Projects webhooks)
 
-Register callback URLs on the GitHub OAuth App:
+Prefer a single **GitHub App** for SaaS (`GITHUB_APP_*`). Classic `OAUTH_GITHUB_*` remains a local/dev fallback when the App is unset.
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_APP_ID` | Numeric App ID |
+| `GITHUB_APP_CLIENT_ID` | App client ID (also used for sign-in + Connect OAuth) |
+| `GITHUB_APP_CLIENT_SECRET` | App client secret |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | Path to downloaded `.pem` on the host (preferred) |
+| `GITHUB_APP_PRIVATE_KEY` | PEM contents with `\n` escapes (alternative to path) |
+| `GITHUB_APP_WEBHOOK_SECRET` | Webhook secret from App settings |
+| `GITHUB_APP_SLUG` | Install URL slug (default `godmode-cloud`) |
+| `GITHUB_APP_PLATFORM_INSTALLATION_ID` | Optional install id on ReBoticsAI for Core Support issues |
+| `GITHUB_APP_PLATFORM_ACCOUNT_LOGIN` | Account login for platform install discovery (default `ReBoticsAI`) |
+
+Callback URLs on the App (add both):
+| Purpose | Callback URL |
+|---------|----------------|
+| Sign-in | `{AUTH_PUBLIC_URL}/api/auth/oauth/github/callback` |
+| Connect / install | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
+
+Webhook URL: `{AUTH_PUBLIC_URL}/api/integrations/github/webhook` (subscribe to Projects v2 item + installation events).
+
+### Legacy GitHub OAuth apps (login vs Projects sync)
+
+Only when `GITHUB_APP_*` is not configured:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | GitHub OAuth for **sign-in** (optional) |
+| `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Classic OAuth for Tasks ↔ Projects |
+
+Register callback URLs on the classic OAuth App if still used:
 
 | Purpose | Callback URL |
 |---------|----------------|
 | Sign-in | `{AUTH_PUBLIC_URL}/api/auth/oauth/github/callback` |
 | Tasks ↔ GitHub Projects | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 
-Integration OAuth uses scopes `read:user project repo` and stores tokens in the tenant Vault (`github_projects_oauth`). Prefer a dedicated OAuth App via `OAUTH_GITHUB_INTEGRATION_CLIENT_*`; if unset, the login GitHub client is reused (ensure that app has the integration callback and sufficient scopes).
-
-Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). Projects webhooks need a GitHub App and are not enabled yet.
+Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). With a GitHub App, `projects_v2_item` webhooks also drive pulls; poll remains fallback.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

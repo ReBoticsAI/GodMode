@@ -207,7 +207,7 @@ export const config = {
       clientId: (process.env.OAUTH_GITHUB_CLIENT_ID ?? "").trim(),
       clientSecret: (process.env.OAUTH_GITHUB_CLIENT_SECRET ?? "").trim(),
     },
-    /** Projects sync OAuth (broader scopes). Falls back to login GitHub app if unset. */
+    /** Projects sync OAuth (legacy). Prefer githubApp when configured. */
     githubIntegration: {
       clientId: (
         process.env.OAUTH_GITHUB_INTEGRATION_CLIENT_ID ??
@@ -220,6 +220,36 @@ export const config = {
         ""
       ).trim(),
     },
+  },
+  /**
+   * GitHub App (sign-in + Connect / Projects + webhooks + Core Support issues).
+   * When appId+client+private key are set, this supersedes classic OAuth clients.
+   */
+  githubApp: {
+    appId: (process.env.GITHUB_APP_ID ?? "").trim(),
+    clientId: (
+      process.env.GITHUB_APP_CLIENT_ID ??
+      process.env.OAUTH_GITHUB_CLIENT_ID ??
+      ""
+    ).trim(),
+    clientSecret: (
+      process.env.GITHUB_APP_CLIENT_SECRET ??
+      process.env.OAUTH_GITHUB_CLIENT_SECRET ??
+      ""
+    ).trim(),
+    /** PEM contents (use \\n for newlines) or leave empty and set privateKeyPath. */
+    privateKey: (process.env.GITHUB_APP_PRIVATE_KEY ?? "").trim(),
+    privateKeyPath: (process.env.GITHUB_APP_PRIVATE_KEY_PATH ?? "").trim(),
+    webhookSecret: (process.env.GITHUB_APP_WEBHOOK_SECRET ?? "").trim(),
+    /** URL slug for install links, e.g. godmode-cloud */
+    slug: (process.env.GITHUB_APP_SLUG ?? "godmode-cloud").trim(),
+    /** Optional fixed install id for ReBoticsAI / platform Core issues */
+    platformInstallationId: (
+      process.env.GITHUB_APP_PLATFORM_INSTALLATION_ID ?? ""
+    ).trim(),
+    platformAccountLogin: (
+      process.env.GITHUB_APP_PLATFORM_ACCOUNT_LOGIN ?? "ReBoticsAI"
+    ).trim(),
   },
   backups: {
     localDir: process.env.BACKUP_LOCAL_DIR ?? "",
