@@ -16,7 +16,7 @@ Tasks are personal Kanban boards with columns, priorities, subtasks, and comment
 
 Use the board switcher on `/tasks` to create, rename, or archive boards. The default **My Tasks** board is always available. Board settings also cover optional GitHub linking (below).
 
-Sidebar **Project** (tenant/workspace) is separate — use Tasks boards for kanbans, not `+` new workspace.
+Sidebar **Project** (tenant/workspace) is separate: use Tasks boards for kanbans, not `+` new workspace.
 
 ## GitHub Project sync (optional)
 
