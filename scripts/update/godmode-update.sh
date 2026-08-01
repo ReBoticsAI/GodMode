@@ -111,6 +111,12 @@ while [ "$attempt" -le 60 ]; do
     -H "Authorization: Bearer $UPDATE_READINESS_TOKEN" \
     "$HEALTH_URL" >/dev/null; then
     committed=1
+    prune_script="$(CDPATH= cd -- "$(dirname "$0")/../../deploy/scripts" && pwd)/prune-old-images.sh"
+    if [ -x "$prune_script" ]; then
+      # Keep only the new current image plus the pre-update image for rollback.
+      "$prune_script" --previous "$old_image" || \
+        printf '%s\n' "prune-old-images: non-fatal failure after successful update" >&2
+    fi
     printf 'Updated GodMode to %s; snapshot retained at %s\n' "$IMAGE" "$SNAPSHOT"
     exit 0
   fi

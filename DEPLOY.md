@@ -58,9 +58,14 @@ Self-hosted family/team hubs use `private_hub` and skip the paywall.
 ```bash
 cd deploy
 # optional convenience: ln -sfn .env.production .env
+PRIOR="$GODMODE_IMAGE"   # capture before changing the pin
 docker compose --env-file .env.production -f docker-compose.prod.yml pull
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+# keep only current + previous digest (avoids disk bloat from frequent pins)
+./scripts/prune-old-images.sh --previous "$PRIOR"
 ```
+
+See [deploy/hostinger.md](deploy/hostinger.md) §8 for Hostinger VPS notes.
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
    Behind Cloudflare-only `ufw`, bind the container to loopback (for example
