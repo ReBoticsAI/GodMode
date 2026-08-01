@@ -294,6 +294,8 @@ new EngineReconciler(bus, engineRegistry);
 
 
 const app = express();
+// Do not advertise Express; reduces trivial fingerprinting on the public edge.
+app.disable("x-powered-by");
 app.use(
   cors({
     origin(origin, callback) {
@@ -309,7 +311,9 @@ app.use(
         callback(null, true);
         return;
       }
-      callback(new Error("Not allowed by CORS"));
+      // Deny without throwing: Error callbacks become HTTP 500 and mask the
+      // CSRF 403 from requireTrustedOrigin. False omits ACAO and continues.
+      callback(null, false);
     },
     credentials: true,
   })
