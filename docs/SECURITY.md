@@ -30,6 +30,11 @@ Observability for launch: Admin → Observability (request/error table + backup
 status), first-party Bridge JSON logs + `platform_request_log`, and external
 `/api/health` uptime. Do not rely on a third-party APM.
 
+Tenant self-serve workspace download (`GET /api/tenant/database/download`) is
+owner-only, rate-limited, audited (`tenant.database.download`), and streams a
+consistent SQLite snapshot of the caller's tenant only. It is not a substitute
+for platform backup DR.
+
 See [DEPLOY.md](../DEPLOY.md) and [deploy/hostinger.md](../deploy/hostinger.md).
 
 ## Open-source threat model (public repo)

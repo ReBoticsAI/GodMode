@@ -83,6 +83,7 @@ Slash commands (type `/` in the composer) include `/help`, `/clear`, and workspa
 |------|--------|
 | Edit navigation tree | **Structure** (`/structure`) |
 | Install a plugin pack | **Marketplace → Local** (local folder or catalog) |
+| Leave Cloud / run local | **Settings → Download my database**, then place under `PLATFORM_DATA_DIR/tenants/` ([multi-tenant model](./multi-tenant-model.md#tenant-export-cloud-to-local)) |
 | Private plugin | [MARKETPLACE.md](./MARKETPLACE.md#private-plugins) |
 | Local Gemma / hub attach | [LOCAL_LLM.md](./LOCAL_LLM.md) |
 | Cursor subscription chat | [CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md) |

@@ -3351,6 +3351,48 @@ export async function downloadAdminPlatformBackup(stamp?: string): Promise<void>
   }
 }
 
+/** Download the active tenant workspace SQLite snapshot (owner only; #235). */
+export async function downloadTenantDatabase(): Promise<void> {
+  const tenantId = getActiveTenantId();
+  const headers = new Headers();
+  if (tenantId) headers.set("X-Tenant-Id", tenantId);
+  const sessionToken = allowSessionTokenFallback ? readSessionToken() : null;
+  if (sessionToken) {
+    headers.set("Authorization", `Bearer ${sessionToken}`);
+    headers.set("X-Godmode-Session", sessionToken);
+  }
+  const apiPath = withSessionQuery(`/tenant/database/download`, sessionToken);
+  const res = await fetch(`${API_BASE}${apiPath}`, {
+    credentials: "include",
+    headers,
+  });
+  if (!res.ok) {
+    if (res.status === 401) clearSessionToken();
+    const payload = await res.json().catch(() => ({ error: res.statusText }));
+    const error = (payload as { error?: unknown }).error;
+    throw new ApiError(
+      res.status,
+      typeof error === "string" ? error : res.statusText
+    );
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/i.exec(cd);
+  const filename = match?.[1] ?? "godmode-workspace.sqlite";
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export type AdminCodingAuthorityStatus = {
   kills: {
     global: { codingDisabled: boolean; buildsDisabled: boolean };
