@@ -63,7 +63,9 @@ function toDoc(raw: string, fallbackSlug: string): FeatureDocMeta {
     section: meta.section?.trim() || "Features",
     location: meta.location?.trim() || "",
     summary: meta.summary?.trim() || "",
-    bodyMarkdown: body.trim() + "\n",
+    // Marketing-only bundle: drop agent guidance so it never ships in public Pages assets.
+    // Bridge wiki seed still loads full docs/features markdown separately.
+    bodyMarkdown: stripAgentFacingSections(body.trim() + "\n"),
   };
 }
 
