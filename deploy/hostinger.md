@@ -336,4 +336,81 @@ Put the live public URL in Stripe Dashboard → Business website and set
 `BUSINESS_WEBSITE_URL` in operator docs. Public site must be live before enabling live
 Stripe keys.
 
+## 11. Layer 4 ephemeral builds (coding)
+
+SaaS coding Layers 1–3 run inside Bridge (hub defaults + bubblewrap). Layer 4
+delegates allowlisted npm builds to a **host build supervisor** so Bridge never
+mounts `docker.sock`. See [`deploy/build-supervisor/README.md`](build-supervisor/README.md)
+and [`docs/SECURITY.md`](../docs/SECURITY.md).
+
+### Checklist (Hostinger prod)
+
+1. Ensure `/opt/godmode` tracks `origin/main` (refresh per §1; keep `.env.production`
+   and `docker-compose.override.yml` on the VPS only).
+2. Generate a SaaS-only bearer (never commit; never paste into GitHub issues):
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. In `/opt/godmode/deploy/.env.production` set:
+
+   ```bash
+   CODING_BUILD_MODE=ephemeral
+   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
+   CODING_BUILD_SUPERVISOR_TOKEN=<generated token>
+   CODING_BUILD_NET=allowlist
+   CODING_BUILD_EGRESS_HOSTS=registry.npmjs.org,github.com,api.github.com
+   ```
+
+   Prefer a token bound only to this SaaS data volume (do not share with a private hub).
+
+4. Start the supervisor against the Compose data volume (creates
+   `tenant-workspaces/` if missing; does **not** delete `deploy_godmode-data`):
+
+   ```bash
+   chmod +x /opt/godmode/deploy/scripts/start-build-supervisor.sh \
+     /opt/godmode/deploy/scripts/lock-build-supervisor-wan.sh
+   sudo /opt/godmode/deploy/scripts/start-build-supervisor.sh
+   ```
+
+5. Lock WAN access to supervisor ports. Docker publishes `8792`/`8793` on
+   `0.0.0.0` so Linux Bridge can use `host.docker.internal`; UFW alone does not
+   cover Docker-published ports:
+
+   ```bash
+   sudo /opt/godmode/deploy/scripts/lock-build-supervisor-wan.sh
+   # optional persist after reboot:
+   sudo apt-get install -y iptables-persistent
+   sudo netfilter-persistent save
+   ```
+
+6. Recreate Bridge so it picks up `CODING_BUILD_*` from `.env.production`:
+
+   ```bash
+   cd /opt/godmode/deploy
+   docker compose --env-file .env.production \
+     -f docker-compose.prod.yml -f docker-compose.override.yml up -d
+   ```
+
+7. Verify (no secrets in output):
+
+   ```bash
+   curl -fsS http://127.0.0.1:8792/health
+   # From Bridge network path:
+   docker compose --env-file .env.production \
+     -f docker-compose.prod.yml -f docker-compose.override.yml exec godmode \
+     wget -qO- http://host.docker.internal:8792/health
+   # Admin UI: Admin → Authority → Build mode ephemeral + Supervisor reachable
+   # API: GET /api/admin/authority/coding-status (platform admin + MFA)
+   ```
+
+8. Smoke fail-closed: with token removed from Bridge env (or wrong token),
+   `run_ephemeral_build` must refuse. Missing `CODING_BUILD_MODE=ephemeral` also
+   fails closed. In-process `build_plugin` (esbuild) stays available and is
+   unchanged by Layer 4.
+
+Do **not** mount `/var/run/docker.sock` into the `godmode` service. Residual
+shared-host isolation is tracked in #172.
+
 See also: [DEPLOY.md](../DEPLOY.md) launch gate, [docs/SECURITY.md](../docs/SECURITY.md).
