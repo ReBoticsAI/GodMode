@@ -1456,7 +1456,7 @@ export function ProjectsBoard({
             {columns.map((col) => (
               <div
                 key={col.id}
-                className="flex min-h-0 min-w-[260px] flex-1 basis-[260px] flex-col rounded-lg border bg-muted/20 p-2"
+                className="flex min-h-0 min-w-[260px] grow basis-[260px] shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/20 p-2"
               >
                 <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2 px-0.5">
                   <div className="text-[11px] font-semibold">{col.name}</div>
