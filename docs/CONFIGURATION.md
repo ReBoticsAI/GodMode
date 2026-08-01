@@ -139,7 +139,7 @@ Callback URLs on the App (add both):
 
 Webhook URL: `{AUTH_PUBLIC_URL}/api/integrations/github/webhook` (subscribe to Projects v2 item + installation events).
 
-**Projects webhooks note:** GitHub delivers `projects_v2_item` for **organization-owned** Projects when the App is installed on that org. User-owned Projects sync via poll + manual Sync; signed webhook deliveries still verify HMAC and the handler runs, but GitHub may not emit item events for user-owned boards. Prefer linking org Projects when near-real-time webhooks matter.
+**Projects webhooks note:** Live `projects_v2_item` delivery is **organization-level only** (GitHub limitation). User-owned Projects (for example `users/*/projects/N`) sync via the **1-minute poll** (or manual Sync). The Bridge HMAC webhook handler is ready for org-owned Projects when the App is installed on that org.
 
 ### Deprecated classic GitHub OAuth apps
 
@@ -150,21 +150,21 @@ Only when `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` are not configured
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Classic OAuth for **sign-in** |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Classic OAuth for Tasks ↔ Projects |
 
-Hostinger may still list these env keys as unused leftovers; safe to leave until cutover is verified, then remove from `.env.production` and archive the classic OAuth App registrations on GitHub.
+On GodMode Cloud (Hostinger), leave classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` blank or omit them once `GITHUB_APP_*` is set. They are not required for sign-in or Connect. Archive classic OAuth App registrations on GitHub when unused.
 
-Register callback URLs on the classic OAuth App only if still used:
+Register callback URLs on a classic OAuth App only for local/dev without a GitHub App:
 
 | Purpose | Callback URL |
 |---------|----------------|
 | Sign-in | `{AUTH_PUBLIC_URL}/api/auth/oauth/github/callback` |
 | Tasks ↔ GitHub Projects | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 
-Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). With a GitHub App on an **org-owned** Project, `projects_v2_item` webhooks also drive pulls; poll remains fallback for misses and for user-owned Projects.
+Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync / push-on-edit). Default poll is **1 minute** (near-real-time for user-owned boards). Live `projects_v2_item` webhooks require an **org-owned** Project with the App installed on that org; the Bridge webhook handler is ready, but GitHub does not emit item events for user-owned Projects. Poll covers user boards and acts as backup for org boards.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GITHUB_PROJECTS_SYNC_POLL_ENABLED` | on (unset) | Set to `0` to disable background poll |
-| `GITHUB_PROJECTS_SYNC_POLL_MS` | `180000` | Poll interval in ms (clamped ~1–30 min) |
+| `GITHUB_PROJECTS_SYNC_POLL_MS` | `60000` | Poll interval in ms (clamped 1-30 min; min 60000) |
 
 ## Bridge and data paths
 

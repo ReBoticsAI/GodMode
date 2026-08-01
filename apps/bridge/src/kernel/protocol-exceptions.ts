@@ -524,6 +524,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "user-task-board-columns",
+    methods: ["PUT"],
+    pathPattern: "/api/user/projects/:/columns",
+    rationale:
+      "Replace personal kanban columns_json (add/rename/reorder/hide/WIP); board metadata, not TaskCard Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "user-task-board-github-link",
     methods: ["POST"],
     pathPattern: "/api/user/projects/:/github/link",
