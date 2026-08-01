@@ -2665,6 +2665,21 @@ export const fetchGithubProjectsList = () =>
     }>;
   }>("/user/github/projects");
 
+export const fetchGithubReposList = () =>
+  api<{
+    repos: Array<{ fullName: string; private: boolean }>;
+  }>("/user/github/repos");
+
+/** Archive linked Project item (Issue/PR kept), then remove local card. */
+export const archiveUserProjectCard = (id: string) =>
+  actionDto<{ ok: boolean; archived?: boolean }>(
+    "TaskCard",
+    "archive_from_project",
+    {},
+    id,
+    true
+  );
+
 export const linkUserBoardGithub = (
   boardId: string,
   body: { projectNodeId: string; statusMap?: Record<string, string> }

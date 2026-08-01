@@ -24,6 +24,7 @@ import type { ShareError } from "../services/share-service.js";
 import {
   linkBoardToGithubProject,
   listGithubProjectsForUser,
+  listGithubReposForUser,
   syncBoardWithGithub,
   updateBoardStatusMap,
   getGithubProjectMetaForUser,
@@ -332,6 +333,19 @@ export function createUserProductivityRouter(): Router {
         access.db
       );
       res.json({ projects });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/github/repos", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const repos = await listGithubReposForUser(
+        access.ownerUserId,
+        access.db
+      );
+      res.json({ repos });
     } catch (err) {
       sendErr(err, res);
     }
