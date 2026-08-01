@@ -12,13 +12,13 @@ describe("normalizeCardContextObject", () => {
   it("preserves object context with github metadata", () => {
     const raw = JSON.stringify({
       attachments: [{ id: "a", label: "A" }],
-      github: { projectItemId: "PVTI_1", assignees: [{ login: "dane" }] },
+      github: { projectItemId: "PVTI_1", assignees: [{ login: "octocat" }] },
     });
     const out = normalizeCardContextObject(raw);
     expect(out.attachments).toEqual([{ id: "a", label: "A" }]);
     expect(out.github).toEqual({
       projectItemId: "PVTI_1",
-      assignees: [{ login: "dane" }],
+      assignees: [{ login: "octocat" }],
     });
   });
 
