@@ -150,7 +150,7 @@ Only when `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` are not configured
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Classic OAuth for **sign-in** |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Classic OAuth for Tasks ↔ Projects |
 
-On GodMode Cloud (Hostinger), leave classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` blank or omit them once `GITHUB_APP_*` is set. They are not required for sign-in or Connect. Archive classic OAuth App registrations on GitHub when unused.
+On GodMode Cloud (Hostinger), classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` are already blanked once `GITHUB_APP_*` is set. They are not required for sign-in or Connect. After you confirm App-only Connect and GitHub sign-in work in production, you can delete the unused classic OAuth Apps at [github.com/settings/developers](https://github.com/settings/developers) (OAuth Apps). No need to keep them archived.
 
 Register callback URLs on a classic OAuth App only for local/dev without a GitHub App:
 
