@@ -5,8 +5,35 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { stripAgentFacingSections } from "./src/lib/strip-agent-facing-sections";
 
 const require = createRequire(import.meta.url);
+
+/**
+ * Public marketing Pages must not embed agent-only H2 sections from docs/features.
+ * Override Vite ?raw loads for those markdown files so the strings never enter the bundle.
+ */
+function stripAgentFacingFeatureDocsPlugin(): Plugin {
+  return {
+    name: "godmode-strip-agent-facing-feature-docs",
+    enforce: "pre",
+    load(id) {
+      const qIndex = id.indexOf("?");
+      if (qIndex < 0) return null;
+      const filepath = id.slice(0, qIndex);
+      const query = id.slice(qIndex + 1);
+      if (!query.split("&").includes("raw")) return null;
+      const normalized = filepath.replace(/\\/g, "/");
+      if (!normalized.includes("/docs/features/") || !normalized.endsWith(".md")) {
+        return null;
+      }
+      if (!fs.existsSync(filepath)) return null;
+      const raw = fs.readFileSync(filepath, "utf8");
+      const stripped = stripAgentFacingSections(raw);
+      return `export default ${JSON.stringify(stripped)}`;
+    },
+  };
+}
 const bridgeHttp = process.env.BRIDGE_TARGET ?? "http://127.0.0.1:3847";
 const bridgeWs = bridgeHttp.replace(/^http/, "ws");
 const rootNodeModules = path.resolve(__dirname, "../../node_modules");
@@ -215,7 +242,13 @@ const alias: Record<string, string> = {
 };
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), importMapPlugin(), pluginShimPlugin()],
+  plugins: [
+    stripAgentFacingFeatureDocsPlugin(),
+    react(),
+    tailwindcss(),
+    importMapPlugin(),
+    pluginShimPlugin(),
+  ],
   resolve: { alias },
   assetsInclude: ["**/*.md"],
   optimizeDeps: {

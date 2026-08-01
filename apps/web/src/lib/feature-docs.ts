@@ -1,3 +1,5 @@
+import { stripAgentFacingSections } from "./strip-agent-facing-sections";
+
 export type FeatureDocMeta = {
   slug: string;
   title: string;
@@ -15,6 +17,8 @@ export const FEATURE_SECTION_ORDER = [
   "Social and extension",
   "Chat modes and commands",
 ] as const;
+
+export { stripAgentFacingSections } from "./strip-agent-facing-sections";
 
 function parseFeatureDoc(raw: string): { meta: Record<string, string>; body: string } {
   const text = String(raw ?? "").replace(/^\uFEFF/, "");
@@ -63,8 +67,7 @@ function toDoc(raw: string, fallbackSlug: string): FeatureDocMeta {
     section: meta.section?.trim() || "Features",
     location: meta.location?.trim() || "",
     summary: meta.summary?.trim() || "",
-    // Marketing-only bundle: drop agent guidance so it never ships in public Pages assets.
-    // Bridge wiki seed still loads full docs/features markdown separately.
+    // Vite already strips agent H2s for docs/features ?raw imports; keep as defense in depth.
     bodyMarkdown: stripAgentFacingSections(body.trim() + "\n"),
   };
 }
@@ -95,44 +98,6 @@ export function getFeatureDoc(slug: string): FeatureDocMeta | undefined {
 
 export function featureDocsForIndex(): FeatureDocMeta[] {
   return FEATURE_DOCS.filter((d) => d.slug !== "_index");
-}
-
-/**
- * Drop agent-only H2 sections before public marketing render.
- * Same markdown still seeds the in-product platform wiki for agents.
- */
-export function stripAgentFacingSections(markdown: string): string {
-  const text = String(markdown ?? "");
-  const lines = text.split(/\r?\n/);
-  const out: string[] = [];
-  let skipping = false;
-
-  for (const line of lines) {
-    const heading = /^##\s+(.+?)\s*$/.exec(line);
-    if (heading) {
-      const title = heading[1].trim().toLowerCase();
-      skipping = isAgentFacingHeading(title);
-      if (skipping) continue;
-    } else if (skipping) {
-      continue;
-    }
-    out.push(line);
-  }
-
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
-}
-
-function isAgentFacingHeading(titleLower: string): boolean {
-  if (titleLower === "agent notes" || titleLower === "narrative for agents") {
-    return true;
-  }
-  if (titleLower === "for agents" || titleLower === "agent guidance") {
-    return true;
-  }
-  if (titleLower.startsWith("agent notes") || titleLower.startsWith("narrative for agents")) {
-    return true;
-  }
-  return false;
 }
 
 /** Prepare feature markdown for public marketing pages. */
