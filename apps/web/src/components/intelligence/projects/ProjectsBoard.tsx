@@ -1395,8 +1395,8 @@ export function ProjectsBoard({
       );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex items-center justify-between gap-2 px-1">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-1">
         <span className="text-xs font-medium text-muted-foreground">Tasks</span>
         <div className="flex items-center gap-1.5">
           <DropdownMenu>
@@ -1446,50 +1446,58 @@ export function ProjectsBoard({
           </Button>
         </div>
       </div>
-      <DndContext
-        sensors={sensors}
-        onDragStart={(e) => setActiveId(String(e.active.id))}
-        onDragEnd={onDragEnd}
-      >
-        <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
-          {columns.map((col) => (
-            <div
-              key={col.id}
-              className="flex w-[260px] shrink-0 flex-col rounded-lg border bg-muted/20 p-2"
-            >
-              <div className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
-                <div className="text-[11px] font-semibold">{col.name}</div>
-                <div className="text-[10px] text-muted-foreground">
-                  {byColumn(col.id).length}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e) => setActiveId(String(e.active.id))}
+          onDragEnd={onDragEnd}
+        >
+          <div className="flex h-full min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1">
+            {columns.map((col) => (
+              <div
+                key={col.id}
+                className="flex min-h-0 min-w-[260px] grow basis-[260px] shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/20 p-2"
+              >
+                <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2 px-0.5">
+                  <div className="text-[11px] font-semibold">{col.name}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {byColumn(col.id).length}
+                  </div>
                 </div>
+                <SortableContext
+                  items={byColumn(col.id).map((c) => c.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div
+                    className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto"
+                    data-column-id={col.id}
+                  >
+                    {byColumn(col.id).map((card) => (
+                      <div key={card.id} data-column-id={col.id}>
+                        <SortableCard
+                          card={card}
+                          columns={columns}
+                          face={face}
+                          subtaskProgress={subtaskProgressByParent.get(card.id)}
+                          onMove={onMove}
+                          onEdit={openEditor}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </SortableContext>
               </div>
-              <SortableContext items={byColumn(col.id).map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto" data-column-id={col.id}>
-                  {byColumn(col.id).map((card) => (
-                    <div key={card.id} data-column-id={col.id}>
-                      <SortableCard
-                        card={card}
-                        columns={columns}
-                        face={face}
-                        subtaskProgress={subtaskProgressByParent.get(card.id)}
-                        onMove={onMove}
-                        onEdit={openEditor}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </SortableContext>
-            </div>
-          ))}
-        </div>
-        <DragOverlay>
-          {activeId ? (
-            <div className="rounded-md border bg-card p-2 text-xs shadow-lg opacity-90">
-              {cards.find((c) => c.id === activeId)?.title}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+            ))}
+          </div>
+          <DragOverlay>
+            {activeId ? (
+              <div className="rounded-md border bg-card p-2 text-xs shadow-lg opacity-90">
+                {cards.find((c) => c.id === activeId)?.title}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </div>
       <CardEditorDialog
         card={editing}
         open={editorOpen}
