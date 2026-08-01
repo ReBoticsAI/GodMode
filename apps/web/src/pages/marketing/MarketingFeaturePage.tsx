@@ -15,7 +15,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Page, PageHeader } from "@/components/PageHeader";
 import {
   getFeatureDoc,
-  preprocessMarketingWikiLinks,
+  prepareMarketingFeatureMarkdown,
 } from "@/lib/feature-docs";
 import { safeMarkdownHref } from "@/lib/safe-markdown-href";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export default function MarketingFeaturePage() {
     let md = doc.bodyMarkdown;
     // PageHeader already shows the title; drop a leading H1 if present.
     md = md.replace(/^#\s+[^\n]+\n+/, "");
-    return preprocessMarketingWikiLinks(md);
+    return prepareMarketingFeatureMarkdown(md);
   }, [doc]);
 
   if (!doc) {
