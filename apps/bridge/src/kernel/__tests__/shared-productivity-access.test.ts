@@ -55,6 +55,7 @@ function tenantDb(): Database.Database {
       github_status_map_json TEXT,
       sync_enabled INTEGER NOT NULL DEFAULT 0,
       last_synced_at TEXT,
+      columns_json TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
