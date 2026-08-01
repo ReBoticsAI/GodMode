@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  downloadAdminPlatformBackup,
+  fetchAdminBackupStamps,
   fetchAdminBackupStatus,
   fetchAdminObservabilityRequests,
   triggerAdminPlatformBackup,
+  type AdminBackupStamp,
   type AdminRequestLogRow,
 } from "@/api";
 import {
@@ -32,14 +35,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
-
 type LevelFilter = "all" | "warn" | "error";
-
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 export function AdminObservabilityPanel() {
   const [loading, setLoading] = useState(true);
   const [backingUp, setBackingUp] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [requests, setRequests] = useState<AdminRequestLogRow[]>([]);
+  const [stamps, setStamps] = useState<AdminBackupStamp[]>([]);
+  const [selectedStamp, setSelectedStamp] = useState<string>("latest");
   const [backup, setBackup] = useState<{
     status: string;
     localPath: string | null;
@@ -47,16 +56,22 @@ export function AdminObservabilityPanel() {
     error: string | null;
     updatedAt: string;
   } | null>(null);
-
   const reload = useCallback(() => {
     setLoading(true);
     Promise.all([
       fetchAdminObservabilityRequests({ limit: 200, level }),
       fetchAdminBackupStatus(),
+      fetchAdminBackupStamps(30),
     ])
-      .then(([obs, backupRes]) => {
+      .then(([obs, backupRes, stampsRes]) => {
         setRequests(obs.requests);
         setBackup(backupRes.backup);
+        setStamps(stampsRes.stamps);
+        setSelectedStamp((prev) => {
+          if (prev === "latest") return prev;
+          if (stampsRes.stamps.some((s) => s.stamp === prev)) return prev;
+          return "latest";
+        });
       })
       .catch((err) =>
         toast.error(
@@ -65,17 +80,17 @@ export function AdminObservabilityPanel() {
       )
       .finally(() => setLoading(false));
   }, [level]);
-
   useEffect(() => {
     reload();
   }, [reload]);
-
   const runBackup = async () => {
     setBackingUp(true);
     try {
       const res = await triggerAdminPlatformBackup();
       setBackup(res.backup);
       toast.success("Local snapshot complete");
+      const stampsRes = await fetchAdminBackupStamps(30);
+      setStamps(stampsRes.stamps);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Backup failed");
       await reload();
@@ -83,7 +98,44 @@ export function AdminObservabilityPanel() {
       setBackingUp(false);
     }
   };
-
+  const runDownload = async (stamp?: string) => {
+    setDownloading(true);
+    try {
+      await downloadAdminPlatformBackup(
+        stamp && stamp !== "latest" ? stamp : undefined
+      );
+      toast.success("Backup download started");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
+  const runSnapshotThenDownload = async () => {
+    setBackingUp(true);
+    setDownloading(true);
+    try {
+      const res = await triggerAdminPlatformBackup();
+      setBackup(res.backup);
+      const stampsRes = await fetchAdminBackupStamps(30);
+      setStamps(stampsRes.stamps);
+      const stampFromPath = res.backup.localPath
+        ? res.backup.localPath.replace(/\\/g, "/").split("/").pop()
+        : stampsRes.stamps[0]?.stamp;
+      await downloadAdminPlatformBackup(stampFromPath);
+      toast.success("Snapshot complete; download started");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Snapshot or download failed"
+      );
+      await reload();
+    } finally {
+      setBackingUp(false);
+      setDownloading(false);
+    }
+  };
+  const busy = backingUp || downloading;
+  const hasStamps = stamps.length > 0;
   return (
     <div className="space-y-4">
       <Card>
@@ -93,17 +145,51 @@ export function AdminObservabilityPanel() {
             Latest entry from <code>platform_backup_meta</code>. Cron and this
             one-click local snapshot write here. Soft retention for request logs
             keeps the newest ~5k warn/error rows in core.sqlite. Optional S3
-            upload stays on the operator cron script.
+            upload stays on the operator cron script. Download streams a closed
+            stamp (SQLite + DuckDB timeseries) as tar.gz for offsite PC copy;
+            platform admin only.
           </CardDescription>
           <CardAction>
-            <Button
-              type="button"
-              size="sm"
-              disabled={backingUp}
-              onClick={() => void runBackup()}
-            >
-              {backingUp ? "Snapshotting..." : "Run local snapshot"}
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy}
+                onClick={() => void runBackup()}
+              >
+                {backingUp && !downloading
+                  ? "Snapshotting..."
+                  : "Run local snapshot"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || !hasStamps}
+                onClick={() =>
+                  void runDownload(
+                    selectedStamp === "latest" ? undefined : selectedStamp
+                  )
+                }
+              >
+                {downloading && !backingUp
+                  ? "Downloading..."
+                  : selectedStamp === "latest"
+                    ? "Download latest backup"
+                    : "Download selected backup"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void runSnapshotThenDownload()}
+              >
+                {busy && backingUp && downloading
+                  ? "Working..."
+                  : "Snapshot then download"}
+              </Button>
+            </div>
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -147,9 +233,34 @@ export function AdminObservabilityPanel() {
               Hostinger cron.
             </p>
           )}
+          {hasStamps ? (
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <p className="text-muted-foreground text-sm shrink-0">
+                Download stamp
+              </p>
+              <Select
+                value={selectedStamp}
+                onValueChange={(v) => setSelectedStamp(v ?? "latest")}
+              >
+                <SelectTrigger className="w-full sm:max-w-md">
+                  <SelectValue placeholder="Latest" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">
+                    Latest ({stamps[0]?.stamp})
+                  </SelectItem>
+                  {stamps.map((s) => (
+                    <SelectItem key={s.stamp} value={s.stamp}>
+                      {s.stamp}
+                      {s.bytes > 0 ? ` Â· ${formatBytes(s.bytes)}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
-
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
           <div className="space-y-1.5">
