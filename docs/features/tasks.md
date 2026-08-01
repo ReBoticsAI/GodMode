@@ -24,10 +24,12 @@ Sidebar **Project** (tenant/workspace) is separate: use Tasks boards for kanbans
 2. Open a board’s settings and pick a GitHub Project you can access.
 3. On link / Sync, board **columns follow the Project Status options** (and remap cards). Adjust the Status map in board settings if needed.
 4. **Sync GitHub** pulls items into cards; moving/editing cards pushes Status / title / body / due / priority / labels when mapped.
+5. Linked boards also **poll GitHub in the background** (default about every 3 minutes). The toolbar shows last success, in-progress, and last error. Set `GITHUB_PROJECTS_SYNC_POLL_MS` / `GITHUB_PROJECTS_SYNC_POLL_ENABLED=0` on the Bridge if needed.
+6. **Conflict policy:** last-write-wins. Pull overwrites mapped card fields from GitHub; push-on-edit overwrites those fields on GitHub. Matching is by stored Project item id. Deletes/archive both ways are a later slice. Projects **webhooks** need a GitHub App (not yet); poll covers near-continuous sync on OAuth.
 
 Field map (v1+): title, description, column↔Status, due date, priority (P0–P3 ↔ Project Priority), labels, **assignees** and **milestone** (pulled into card face / detail on Sync; assignees and milestone are read-only in GodMode until a later slice). Agent assignment and prompts stay local. Card face fields (priority, labels, assignees, due, milestone) can be shown or hidden per board in the **Card fields** menu. Saving a card keeps GitHub sync metadata in `context_json` alongside attachments. You cannot sync a Project your token cannot access.
 
-Kanban parity epic: continue toward full GitHub Projects board fidelity (webhooks, assignee push, custom fields) tracked in the roadmap.
+Kanban parity epic: continue toward full GitHub Projects board fidelity (App webhooks, assignee push, custom fields) tracked in the roadmap.
 
 ## Route
 

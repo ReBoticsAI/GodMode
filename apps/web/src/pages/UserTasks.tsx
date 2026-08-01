@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FolderGit2,
   FolderKanban,
   Link2Off,
+  Loader2,
   Plus,
   RefreshCw,
   Settings2,
@@ -44,6 +45,36 @@ import {
   type UserTaskBoard,
 } from "@/api";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+const GITHUB_SYNC_LEASE_MS = 10 * 60 * 1000;
+
+function formatSyncTime(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  const delta = Date.now() - ms;
+  if (delta < 60_000) return "just now";
+  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m ago`;
+  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h ago`;
+  try {
+    return new Date(ms).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function isSyncInProgress(board: UserTaskBoard | null | undefined): boolean {
+  if (!board?.sync_started_at) return false;
+  const started = Date.parse(board.sync_started_at);
+  if (!Number.isFinite(started)) return true;
+  return Date.now() - started < GITHUB_SYNC_LEASE_MS;
+}
 
 const COLUMN_LABELS: Array<{ id: string; label: string }> = [
   { id: "backlog", label: "Backlog" },
@@ -93,6 +124,7 @@ export default function UserTasksPage() {
     () => boards.find((b) => b.id === activeBoardId) ?? null,
     [boards, activeBoardId]
   );
+  const syncBusy = busy || isSyncInProgress(activeBoard);
 
   const reloadBoards = useCallback(async () => {
     if (!userId) return;
@@ -117,6 +149,30 @@ export default function UserTasksPage() {
       .then((s) => setGhConnected(s.connected))
       .catch(() => setGhConnected(false));
   }, []);
+
+  // Refresh sync health (and cards after background poll) while a board is linked.
+  useEffect(() => {
+    if (!activeBoard?.sync_enabled) return;
+    const id = window.setInterval(() => {
+      void reloadBoards().catch(() => {
+        /* ignore transient poll errors */
+      });
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [activeBoard?.sync_enabled, reloadBoards]);
+
+  const prevSyncedAtRef = useRef<string | null>(null);
+  useEffect(() => {
+    const next = activeBoard?.last_synced_at ?? null;
+    if (
+      prevSyncedAtRef.current != null &&
+      next != null &&
+      next !== prevSyncedAtRef.current
+    ) {
+      setBoardKey((k) => k + 1);
+    }
+    prevSyncedAtRef.current = next;
+  }, [activeBoard?.last_synced_at]);
 
   const loadStatusMeta = async (projectNodeId: string, existingMapJson?: string | null) => {
     const meta = await fetchGithubProjectMeta(projectNodeId);
@@ -325,16 +381,41 @@ export default function UserTasksPage() {
           Board
         </Button>
         {activeBoard?.sync_enabled ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            disabled={busy}
-            onClick={() => void syncGithub()}
-          >
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            Sync GitHub
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={syncBusy}
+              onClick={() => void syncGithub()}
+            >
+              {syncBusy ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              )}
+              Sync GitHub
+            </Button>
+            <span
+              className={cn(
+                "max-w-[280px] truncate text-xs text-muted-foreground",
+                activeBoard.last_sync_error && "text-destructive"
+              )}
+              title={
+                activeBoard.last_sync_error
+                  ? activeBoard.last_sync_error
+                  : activeBoard.last_synced_at
+                    ? `Last synced ${activeBoard.last_synced_at}`
+                    : "Not synced yet"
+              }
+            >
+              {isSyncInProgress(activeBoard)
+                ? "Syncing…"
+                : activeBoard.last_sync_error
+                  ? `Sync error: ${activeBoard.last_sync_error}`
+                  : `Last sync ${formatSyncTime(activeBoard.last_synced_at)}`}
+            </span>
+          </>
         ) : null}
         {activeBoard?.github_project_url ? (
           <a

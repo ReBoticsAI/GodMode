@@ -128,6 +128,16 @@ export const config = {
   corsPermissive: process.env.CORS_PERMISSIVE === "true",
   /** Optional token for cloning private GitHub plugin repos via Marketplace install. */
   githubToken: process.env.GITHUB_TOKEN ?? "",
+  /**
+   * Background poll for linked Tasks ↔ GitHub Projects boards.
+   * Webhooks require a GitHub App; OAuth installs use this poller.
+   */
+  githubProjectsSync: {
+    pollEnabled: process.env.GITHUB_PROJECTS_SYNC_POLL_ENABLED !== "0",
+    pollIntervalMs: Number(
+      process.env.GITHUB_PROJECTS_SYNC_POLL_MS ?? 3 * 60 * 1000
+    ),
+  },
   dataDir: appData,
   /** Root directory for per-agent sandboxes ({dataDir}/agents/<agentId>). */
   agentsDir: path.join(appData, "agents"),
