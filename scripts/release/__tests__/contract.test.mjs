@@ -104,6 +104,8 @@ test("host updaters snapshot stopped writers and retain rollback paths", async (
   assert.match(shell, /restore_snapshot/);
   assert.match(shell, /api\/update\/readiness/);
   assert.match(shell, /GODMODE_IMAGE="\$old_image"/);
+  assert.match(shell, /prune-old-images\.sh/);
+  assert.match(shell, /--previous "\$old_image"/);
 
   const powershell = await readFile(
     "scripts/update/godmode-update.ps1",
