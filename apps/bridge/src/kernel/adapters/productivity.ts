@@ -12,11 +12,17 @@ import {
   reconcileParentProgress,
 } from "../../services/card-progress.js";
 import {
+  boardHasColumn,
+  columnsForBoard,
   ensureAgentProject,
   ensureUserProject,
+  firstVisibleColumnId,
+  type UserBoardRow,
 } from "../../services/user-productivity.js";
 import {
   pushCardColumnToGithub,
+  pushCardCreateToGithub,
+  pushCardDeleteToGithub,
   pushCardFieldsToGithub,
 } from "../../services/github-projects.js";
 import {
@@ -629,7 +635,20 @@ function taskAccess(
   return null;
 }
 
-function canonicalColumnExists(db: AppDatabase, columnId: string): boolean {
+function projectColumnExists(
+  db: AppDatabase,
+  projectId: string,
+  columnId: string
+): boolean {
+  const board = db
+    .prepare(`SELECT * FROM ai_projects WHERE id=?`)
+    .get(projectId) as UserBoardRow | undefined;
+  if (board?.columns_json) {
+    return boardHasColumn(board, columnId);
+  }
+  if (board?.user_id) {
+    return columnsForBoard(board).some((c) => c.id === columnId);
+  }
   return Boolean(
     db.prepare(`SELECT id FROM ai_project_columns WHERE id=?`).get(columnId)
   );
@@ -776,8 +795,17 @@ export const taskCardServiceAdapter: RecordAdapter = {
   },
   create(db, def, data, ctx) {
     const projectId = resolveOwnedProjectId(db, ctx, data);
+    const boardRow = db
+      .prepare(`SELECT * FROM ai_projects WHERE id=?`)
+      .get(projectId) as UserBoardRow | undefined;
+    const defaultCol = boardRow ? firstVisibleColumnId(boardRow) : "backlog";
     const columnId =
-      typeof data.column_id === "string" ? data.column_id : "backlog";
+      typeof data.column_id === "string" && data.column_id
+        ? data.column_id
+        : defaultCol;
+    if (!projectColumnExists(db, projectId, columnId)) {
+      badRequest("unknown project column");
+    }
     const id = typeof data.id === "string" && data.id ? data.id : uuidv4();
     const order = (
       db
@@ -811,7 +839,29 @@ export const taskCardServiceAdapter: RecordAdapter = {
       data.assigned_agent_id ?? null,
       order + 1
     );
-    return record(def, cardRow(db, id, projectId)!);
+    const created = record(def, cardRow(db, id, projectId)!);
+    if (boardRow?.user_id && boardRow.sync_enabled && boardRow.github_project_node_id) {
+      const createMode =
+        data.github_create_mode === "issue"
+          ? "issue"
+          : data.github_create_mode === "none"
+            ? "none"
+            : "draft";
+      const repo =
+        typeof data.github_repo === "string" ? data.github_repo : undefined;
+      if (createMode !== "none") {
+        void pushCardCreateToGithub({
+          userId: boardRow.user_id,
+          db,
+          cardId: id,
+          mode: createMode === "issue" ? "issue" : "draft",
+          repo,
+        }).catch((err) => {
+          console.warn("[github-projects] push create failed", err);
+        });
+      }
+    }
+    return created;
   },
   update(db, def, id, data, ctx) {
     const resolved = taskAccess(db, id, ctx, true);
@@ -844,6 +894,7 @@ export const taskCardServiceAdapter: RecordAdapter = {
         "due_at",
         "priority",
         "tags_json",
+        "context_json",
       ].some((k) => Object.prototype.hasOwnProperty.call(data, k));
       if (pushed) {
         void pushCardFieldsToGithub({
@@ -860,9 +911,22 @@ export const taskCardServiceAdapter: RecordAdapter = {
   delete(db, _def, id, ctx) {
     const resolved = taskAccess(db, id, ctx, true);
     if (!resolved) notFound("TaskCard");
-    const result = resolved.access.db
+    const { access, projectId, row } = resolved;
+    const ownerUserId = access.ownerUserId;
+    if (ownerUserId) {
+      void pushCardDeleteToGithub({
+        userId: ownerUserId,
+        db: access.db,
+        cardId: id,
+        contextJson: (row.context_json as string | null) ?? null,
+        projectId,
+      }).catch((err) => {
+        console.warn("[github-projects] push delete failed", err);
+      });
+    }
+    const result = access.db
       .prepare(`DELETE FROM ai_project_cards WHERE id=? AND project_id=?`)
-      .run(id, resolved.projectId);
+      .run(id, projectId);
     if (!result.changes) notFound("TaskCard");
   },
   actions: {
@@ -872,7 +936,7 @@ export const taskCardServiceAdapter: RecordAdapter = {
       const { access, projectId, row: current } = resolved;
       const targetCtx = routedContext(ctx, access);
       const columnId = requiredText(input, "column_id");
-      if (!canonicalColumnExists(access.db, columnId)) {
+      if (!projectColumnExists(access.db, projectId, columnId)) {
         badRequest("unknown project column");
       }
       let sortOrder: number;
