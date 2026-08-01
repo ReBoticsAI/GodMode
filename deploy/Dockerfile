@@ -33,6 +33,8 @@ COPY --from=build /app/apps/bridge/package.json apps/bridge/
 COPY --from=build /app/packages packages/
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+# Platform backup cron runs this from the image (or host-mounted until redeploy).
+COPY scripts/backup /app/scripts/backup
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY deploy/cloudflare-realip.conf /etc/nginx/cloudflare-realip.conf
 ENV NODE_ENV=production
