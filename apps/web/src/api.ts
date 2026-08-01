@@ -3287,6 +3287,68 @@ export function triggerAdminPlatformBackup() {
   }>("/admin/marketplace/backup", { method: "POST", body: "{}" });
 }
 
+export type AdminBackupStamp = {
+  stamp: string;
+  createdAt: string | null;
+  hasManifest: boolean;
+  bytes: number;
+};
+
+export function fetchAdminBackupStamps(limit = 30) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  return api<{ stamps: AdminBackupStamp[] }>(
+    `/admin/marketplace/backup/stamps?${q}`
+  );
+}
+
+/** Download a closed backup stamp as tar.gz (platform admin only). */
+export async function downloadAdminPlatformBackup(stamp?: string): Promise<void> {
+  const tenantId = getActiveTenantId();
+  const headers = new Headers();
+  if (tenantId) headers.set("X-Tenant-Id", tenantId);
+  const sessionToken = allowSessionTokenFallback ? readSessionToken() : null;
+  if (sessionToken) {
+    headers.set("Authorization", `Bearer ${sessionToken}`);
+    headers.set("X-Godmode-Session", sessionToken);
+  }
+  const params = new URLSearchParams();
+  if (stamp && stamp !== "latest") params.set("stamp", stamp);
+  const q = params.toString();
+  const apiPath = withSessionQuery(
+    `/admin/marketplace/backup/download${q ? `?${q}` : ""}`,
+    sessionToken
+  );
+  const res = await fetch(`${API_BASE}${apiPath}`, {
+    credentials: "include",
+    headers,
+  });
+  if (!res.ok) {
+    if (res.status === 401) clearSessionToken();
+    const payload = await res.json().catch(() => ({ error: res.statusText }));
+    const error = (payload as { error?: unknown }).error;
+    throw new ApiError(
+      res.status,
+      typeof error === "string" ? error : res.statusText
+    );
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/i.exec(cd);
+  const filename = match?.[1] ?? "godmode-backup.tar.gz";
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export type AdminCodingAuthorityStatus = {
   kills: {
     global: { codingDisabled: boolean; buildsDisabled: boolean };

@@ -5,8 +5,22 @@ import {
   requireAuth,
   requirePlatformAdmin,
 } from "../services/auth/middleware.js";
+import { rateLimit } from "../services/auth/rate-limit.js";
 import { listPlatformRequestLogs } from "../services/request-log.js";
 import { runLocalPlatformBackup } from "../services/platform-backup.js";
+import {
+  BackupStampError,
+  listBackupStamps,
+  logBackupDownloadAudit,
+  resolveBackupStampDir,
+  streamBackupStampTarGz,
+} from "../services/platform-backup-archive.js";
+
+const backupDownloadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: "Too many backup downloads; try again later",
+});
 
 /** Read-only U2U marketplace fee ledger + backup status for platform admins. */
 export function createAdminMarketplaceRouter(): Router {
@@ -104,6 +118,76 @@ export function createAdminMarketplaceRouter(): Router {
         updatedAt: result.updatedAt,
       },
     });
+  });
+
+  router.get("/backup/stamps", (_req, res) => {
+    const limit = Number(_req.query.limit ?? 30);
+    const stamps = listBackupStamps(Number.isFinite(limit) ? limit : 30).map(
+      (s) => ({
+        stamp: s.stamp,
+        createdAt: s.createdAt,
+        hasManifest: s.hasManifest,
+        bytes: s.bytes,
+      })
+    );
+    res.json({ stamps });
+  });
+
+  router.get("/backup/download", backupDownloadLimiter, async (req, res) => {
+    const raw =
+      typeof req.query.stamp === "string" && req.query.stamp.trim()
+        ? req.query.stamp.trim()
+        : "latest";
+    const userId = req.user!.id;
+    try {
+      const { stamp, dir } = resolveBackupStampDir(raw);
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="godmode-backup-${stamp}.tar.gz"`
+      );
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      const stats = await streamBackupStampTarGz(stamp, dir, res);
+      logBackupDownloadAudit(getCoreDb(), {
+        userId,
+        stamp,
+        bytesIn: stats.bytesIn,
+        fileCount: stats.fileCount,
+        result: "ok",
+      });
+    } catch (err) {
+      if (err instanceof BackupStampError) {
+        if (!res.headersSent) {
+          res.status(err.status).json({ error: err.message });
+        } else {
+          res.end();
+        }
+        logBackupDownloadAudit(getCoreDb(), {
+          userId,
+          stamp: raw,
+          bytesIn: 0,
+          fileCount: 0,
+          result: "failed",
+          error: err.message,
+        });
+        return;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logBackupDownloadAudit(getCoreDb(), {
+        userId,
+        stamp: raw,
+        bytesIn: 0,
+        fileCount: 0,
+        result: "failed",
+        error: message,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Backup download failed" });
+      } else {
+        res.end();
+      }
+    }
   });
 
   return router;
