@@ -14,8 +14,9 @@ import { getUserOwnerTenantDb } from "./user-scope.js";
 export const GITHUB_PROJECTS_SECRET_ID = "github-projects-oauth";
 export const GITHUB_PROJECTS_SECRET_NAME = "github_projects_oauth";
 
-/** Scopes for Projects sync + issue field updates. */
-export const GITHUB_PROJECTS_OAUTH_SCOPES = "read:user project repo";
+/** Scopes for Projects sync + issue field updates + org project listing. */
+export const GITHUB_PROJECTS_OAUTH_SCOPES =
+  "read:user read:org project repo";
 
 export type GithubProjectsToken = {
   accessToken: string;
