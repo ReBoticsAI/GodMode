@@ -1266,7 +1266,10 @@ export function ProjectsBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editing, setEditing] = useState<AiProjectCard | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const boardKey = projectId || (isUserScope(scope) ? scope.userId : scope.agentId);
+  const boardKey =
+    projectId ||
+    (isUserScope(scope) ? scope.userId : scope.agentId) ||
+    "default";
   const [face, setFace] = useState<CardFaceVisibility>(() =>
     loadCardFaceVisibility(boardKey)
   );
