@@ -158,6 +158,10 @@ type GithubCardMeta = {
   projectItemId?: string;
   assignees?: GithubAssignee[];
   milestone?: GithubMilestone | null;
+  startAt?: string | null;
+  estimate?: number | null;
+  textNote?: string | null;
+  iteration?: string | null;
 };
 
 type GithubCreateMode = "draft" | "issue" | "none";
@@ -201,6 +205,8 @@ type CardFaceVisibility = {
   assignees: boolean;
   due: boolean;
   milestone: boolean;
+  iteration: boolean;
+  estimate: boolean;
 };
 
 const DEFAULT_CARD_FACE: CardFaceVisibility = {
@@ -209,6 +215,8 @@ const DEFAULT_CARD_FACE: CardFaceVisibility = {
   assignees: true,
   due: true,
   milestone: true,
+  iteration: true,
+  estimate: true,
 };
 
 function cardFaceStorageKey(boardKey: string) {
@@ -510,6 +518,24 @@ function SortableCard({
               {dueLabel}
             </span>
           ) : null}
+          {face.iteration && gh.iteration ? (
+            <Badge
+              variant="outline"
+              className="h-4 max-w-[120px] truncate px-1.5 text-[9px]"
+              title={`Iteration: ${gh.iteration}`}
+            >
+              {gh.iteration}
+            </Badge>
+          ) : null}
+          {face.estimate && gh.estimate != null ? (
+            <Badge
+              variant="secondary"
+              className="h-4 px-1.5 text-[9px]"
+              title={`Estimate: ${gh.estimate}`}
+            >
+              {gh.estimate}
+            </Badge>
+          ) : null}
           {subtaskProgress && subtaskProgress.total > 0 ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
               <ListTree className="h-2.5 w-2.5" />
@@ -595,6 +621,10 @@ function CardEditorDialog({
   const [assignedAgentId, setAssignedAgentId] = useState<string>("");
   const [assigneeLogins, setAssigneeLogins] = useState("");
   const [milestoneTitleEdit, setMilestoneTitleEdit] = useState("");
+  const [startAt, setStartAt] = useState("");
+  const [estimate, setEstimate] = useState("");
+  const [textNote, setTextNote] = useState("");
+  const [iteration, setIteration] = useState("");
 
   const isReview = card?.column_id === "review";
   const ghMeta = useMemo(
@@ -685,6 +715,14 @@ function CardEditorDialog({
     const meta = parseGithubCardMeta(card.context_json);
     setAssigneeLogins((meta.assignees ?? []).map((a) => a.login).join(", "));
     setMilestoneTitleEdit(meta.milestone?.title ?? "");
+    setStartAt(dueInputValue(meta.startAt));
+    setEstimate(
+      typeof meta.estimate === "number" && Number.isFinite(meta.estimate)
+        ? String(meta.estimate)
+        : ""
+    );
+    setTextNote(typeof meta.textNote === "string" ? meta.textNote : "");
+    setIteration(typeof meta.iteration === "string" ? meta.iteration : "");
     setComposer("");
     setNewSubtask("");
     void reloadSubtasks();
@@ -816,6 +854,7 @@ function CardEditorDialog({
 
   const persist = useCallback(async () => {
     if (!card) return;
+    const estimateNum = estimate.trim() === "" ? null : Number(estimate);
     const githubPatch: Record<string, unknown> | undefined = showGithubFields
       ? {
           assignees: assigneeLogins
@@ -826,6 +865,13 @@ function CardEditorDialog({
           milestone: milestoneTitleEdit.trim()
             ? { title: milestoneTitleEdit.trim() }
             : null,
+          startAt: startAt || null,
+          estimate:
+            estimateNum != null && Number.isFinite(estimateNum)
+              ? estimateNum
+              : null,
+          textNote: textNote,
+          iteration: iteration.trim() || null,
         }
       : undefined;
     const patch = {
@@ -861,6 +907,10 @@ function CardEditorDialog({
     showGithubFields,
     assigneeLogins,
     milestoneTitleEdit,
+    startAt,
+    estimate,
+    textNote,
+    iteration,
   ]);
 
   const toggleTag = (tag: string) => {
@@ -1055,6 +1105,59 @@ function CardEditorDialog({
             <div className="grid gap-2 rounded-md border p-2">
               <Label className="text-muted-foreground">GitHub</Label>
               <div className="grid gap-1.5">
+                <Label htmlFor="gh-start" className="text-xs">
+                  Start date
+                </Label>
+                <Input
+                  id="gh-start"
+                  type="date"
+                  value={startAt}
+                  onChange={(e) => setStartAt(e.target.value)}
+                  className="h-8 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="gh-estimate" className="text-xs">
+                  Estimate
+                </Label>
+                <Input
+                  id="gh-estimate"
+                  type="number"
+                  value={estimate}
+                  onChange={(e) => setEstimate(e.target.value)}
+                  placeholder="Story points / estimate"
+                  className="h-8 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="gh-iteration" className="text-xs">
+                  Iteration
+                </Label>
+                <Input
+                  id="gh-iteration"
+                  value={iteration}
+                  onChange={(e) => setIteration(e.target.value)}
+                  placeholder="Iteration / sprint title"
+                  className="h-8 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="gh-text-note" className="text-xs">
+                  Text / note
+                </Label>
+                <Textarea
+                  id="gh-text-note"
+                  value={textNote}
+                  onChange={(e) => setTextNote(e.target.value)}
+                  placeholder="Mapped Project text field"
+                  className="min-h-16 text-xs"
+                  disabled={readOnly}
+                />
+              </div>
+              <div className="grid gap-1.5">
                 <Label htmlFor="gh-assignees" className="text-xs">
                   Assignees
                 </Label>
@@ -1088,7 +1191,8 @@ function CardEditorDialog({
               ) : (
                 <p className="text-[10px] text-muted-foreground">
                   Assignees and milestone apply to linked Issues and PRs. Draft
-                  issues ignore them until promoted.
+                  issues ignore them until promoted. Start date, estimate,
+                  iteration, and text sync when those Project fields exist.
                 </p>
               )}
             </div>
@@ -1850,6 +1954,8 @@ export function ProjectsBoard({
                     ["assignees", "Assignees"],
                     ["due", "Due date"],
                     ["milestone", "Milestone"],
+                    ["iteration", "Iteration"],
+                    ["estimate", "Estimate"],
                   ] as Array<[keyof CardFaceVisibility, string]>
                 ).map(([key, label]) => (
                   <DropdownMenuCheckboxItem
