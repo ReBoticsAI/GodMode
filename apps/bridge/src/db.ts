@@ -711,9 +711,10 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       db.prepare(`INSERT INTO ai_projects (id, name) VALUES ('default', 'Intelligence Projects')`).run();
       const cols = [
         ["backlog", "Backlog", 0],
-        ["in_progress", "In Progress", 1],
-        ["review", "Review", 2],
-        ["done", "Done", 3],
+        ["ready", "Ready", 1],
+        ["in_progress", "In Progress", 2],
+        ["review", "Review", 3],
+        ["done", "Done", 4],
       ] as const;
       for (const [id, name, order] of cols) {
         db.prepare(

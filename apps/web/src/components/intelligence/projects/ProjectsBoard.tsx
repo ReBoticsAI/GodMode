@@ -235,7 +235,9 @@ function SortableCard({
         )}
       </div>
       <div className="mt-2 flex gap-1">
-        {(["backlog", "in_progress", "review", "done"] as const).map((col) =>
+        {(
+          ["backlog", "ready", "in_progress", "review", "done"] as const
+        ).map((col) =>
           col !== card.column_id ? (
             <button
               key={col}

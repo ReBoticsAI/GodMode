@@ -100,15 +100,19 @@ export function userProjectId(userId: string): string {
 
 const CANONICAL_COLUMNS = [
   ["backlog", "Backlog", 0],
-  ["in_progress", "In Progress", 1],
-  ["review", "Review", 2],
-  ["done", "Done", 3],
+  ["ready", "Ready", 1],
+  ["in_progress", "In Progress", 2],
+  ["review", "Review", 3],
+  ["done", "Done", 4],
 ] as const;
 
 function seedCanonicalColumns(db: AppDatabase, projectId: string): void {
   for (const [colId, name, order] of CANONICAL_COLUMNS) {
     db.prepare(
-      `INSERT OR IGNORE INTO ai_project_columns (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)`
+      `INSERT INTO ai_project_columns (id, project_id, name, sort_order) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         sort_order = excluded.sort_order`
     ).run(colId, projectId, name, order);
   }
 }

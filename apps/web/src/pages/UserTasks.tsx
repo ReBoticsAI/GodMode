@@ -47,6 +47,7 @@ import { toast } from "sonner";
 
 const COLUMN_LABELS: Array<{ id: string; label: string }> = [
   { id: "backlog", label: "Backlog" },
+  { id: "ready", label: "Ready" },
   { id: "in_progress", label: "In Progress" },
   { id: "review", label: "Review" },
   { id: "done", label: "Done" },

@@ -47,7 +47,8 @@ type ProjectItem = {
 };
 
 const DEFAULT_STATUS_ALIASES: Record<string, string[]> = {
-  backlog: ["todo", "backlog", "ready", "new", "triage"],
+  backlog: ["todo", "backlog", "new", "triage"],
+  ready: ["ready"],
   in_progress: ["in progress", "in_progress", "doing", "active", "wip"],
   review: ["in review", "review", "needs review", "waiting"],
   done: ["done", "complete", "completed", "closed", "finished"],
@@ -273,7 +274,13 @@ function defaultStatusMap(options: StatusOption[]): Record<string, string> {
   }
   // Fill gaps with first unused options in order
   const used = new Set(Object.values(map));
-  for (const columnId of ["backlog", "in_progress", "review", "done"]) {
+  for (const columnId of [
+    "backlog",
+    "ready",
+    "in_progress",
+    "review",
+    "done",
+  ]) {
     if (map[columnId]) continue;
     const next = options.find((o) => !used.has(o.id));
     if (next) {
@@ -573,6 +580,16 @@ export async function syncBoardWithGithub(opts: {
   }
   if (Object.keys(statusMap).length === 0) {
     statusMap = defaultStatusMap(meta.statusOptions);
+  } else {
+    // Boards linked before the Ready column existed may map GitHub "Ready"
+    // onto backlog. Prefer the canonical Ready column when present.
+    const defaults = defaultStatusMap(meta.statusOptions);
+    if (defaults.ready) {
+      if (statusMap.backlog === defaults.ready) {
+        statusMap.backlog = defaults.backlog ?? statusMap.backlog;
+      }
+      if (!statusMap.ready) statusMap.ready = defaults.ready;
+    }
   }
 
   const items = await fetchProjectItems(
