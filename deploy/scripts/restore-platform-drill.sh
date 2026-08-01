@@ -24,10 +24,19 @@ DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 ENV_FILE="${GODMODE_ENV_FILE:-$DEPLOY_DIR/.env.production}"
 COMPOSE_FILE="${GODMODE_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.prod.yml}"
+OVERRIDE_FILE="${GODMODE_COMPOSE_OVERRIDE:-$DEPLOY_DIR/docker-compose.override.yml}"
 MODE="verify-only"
 FROM_S3=0
 STAMP=""
 SCRATCH_ROOT="${GODMODE_RESTORE_SCRATCH:-/var/tmp/godmode-restore-drill}"
+
+compose_prod() {
+  local args=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+  if [[ "${GODMODE_COMPOSE_NO_OVERRIDE:-0}" != "1" && -f "$OVERRIDE_FILE" ]]; then
+    args+=(-f "$OVERRIDE_FILE")
+  fi
+  (cd "$DEPLOY_DIR" && docker compose "${args[@]}" "$@")
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -189,8 +198,7 @@ fi
 echo "APPLY mode: stopping Bridge and replacing live SQLite + timeseries from $SNAP"
 PRE_DIR="$SCRATCH_ROOT/pre-apply-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$PRE_DIR"
-cd "$DEPLOY_DIR"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" stop godmode
+compose_prod stop godmode
 
 cp -a "$DATA_MOUNT/core.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/tenants" "$PRE_DIR/" 2>/dev/null || true
@@ -218,7 +226,7 @@ if [[ -d "$SNAP/timeseries" ]]; then
   done
 fi
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" start godmode
+compose_prod start godmode
 sleep 3
 curl -fsS "${AUTH_PUBLIC_URL:-http://127.0.0.1}/api/health" | head -c 400
 echo
