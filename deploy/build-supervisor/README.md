@@ -16,7 +16,8 @@
 #   export PLATFORM_DATA_DIR=$GODMODE_DATA_DIR
 #   node server.mjs
 #
-# Or: docker compose -f docker-compose.yml up -d
+# Or: docker compose -f docker-compose.yml up -d --build
+# (image includes Docker CLI; socket is mounted read/write for docker run)
 #
 # Publish notes: compose binds 8792/8793 on 0.0.0.0 so Linux containers can
 # reach the supervisor via host.docker.internal (host-gateway). Firewall WAN.
