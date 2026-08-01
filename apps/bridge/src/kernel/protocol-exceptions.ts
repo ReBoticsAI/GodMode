@@ -563,14 +563,6 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
-    id: "user-task-card-archive",
-    methods: ["POST"],
-    pathPattern: "/api/user/projects/cards/:/archive",
-    rationale:
-      "Archive a linked GitHub Project item then drop the local TaskCard; Issue/PR content is kept. Not generic Record delete.",
-    authenticatedDomainMutations: "none",
-  },
-  {
     id: "ai-workspace-knowledge-import",
     methods: ["POST"],
     pathPattern: "/api/ai/workspace-knowledge/import",

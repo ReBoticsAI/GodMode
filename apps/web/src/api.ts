@@ -2672,9 +2672,12 @@ export const fetchGithubReposList = () =>
 
 /** Archive linked Project item (Issue/PR kept), then remove local card. */
 export const archiveUserProjectCard = (id: string) =>
-  api<{ ok: boolean }>(
-    `/user/projects/cards/${encodeURIComponent(id)}/archive`,
-    { method: "POST" }
+  actionDto<{ ok: boolean; archived?: boolean }>(
+    "TaskCard",
+    "archive_from_project",
+    {},
+    id,
+    true
   );
 
 export const linkUserBoardGithub = (

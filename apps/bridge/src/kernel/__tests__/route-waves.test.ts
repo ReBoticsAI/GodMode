@@ -89,7 +89,6 @@ describe("legacy route wave", () => {
       "user-productivity.ts:post:/projects/:id/github/status-map",
       "user-productivity.ts:post:/projects/:id/github/sync",
       "user-productivity.ts:post:/projects/:id/github/unlink",
-      "user-productivity.ts:post:/projects/cards/:id/archive",
       "user-productivity.ts:put:/projects/:id/columns",
     ]);
   });
