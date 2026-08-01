@@ -24,6 +24,8 @@ import type { ShareError } from "../services/share-service.js";
 import {
   linkBoardToGithubProject,
   listGithubProjectsForUser,
+  listGithubReposForUser,
+  pushCardArchiveToGithub,
   syncBoardWithGithub,
   updateBoardStatusMap,
   getGithubProjectMetaForUser,
@@ -332,6 +334,52 @@ export function createUserProductivityRouter(): Router {
         access.db
       );
       res.json({ projects });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/github/repos", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const repos = await listGithubReposForUser(
+        access.ownerUserId,
+        access.db
+      );
+      res.json({ repos });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  /** Archive Project item on GitHub, then drop the local card (Issue/PR kept). */
+  router.post("/projects/cards/:id/archive", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const card = access.db
+        .prepare(
+          `SELECT c.id, c.project_id, c.context_json FROM ai_project_cards c
+           JOIN ai_projects p ON p.id = c.project_id
+           WHERE c.id=? AND p.user_id=?`
+        )
+        .get(req.params.id, access.ownerUserId) as
+        | { id: string; project_id: string; context_json: string | null }
+        | undefined;
+      if (!card) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      await pushCardArchiveToGithub({
+        userId: access.ownerUserId,
+        db: access.db,
+        contextJson: card.context_json,
+        projectId: card.project_id,
+      });
+      access.db
+        .prepare(`DELETE FROM ai_project_cards WHERE id=? AND project_id=?`)
+        .run(card.id, card.project_id);
+      res.json({ ok: true });
     } catch (err) {
       sendErr(err, res);
     }

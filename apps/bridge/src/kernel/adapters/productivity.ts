@@ -20,6 +20,7 @@ import {
   type UserBoardRow,
 } from "../../services/user-productivity.js";
 import {
+  pushCardArchiveToGithub,
   pushCardColumnToGithub,
   pushCardCreateToGithub,
   pushCardDeleteToGithub,
@@ -246,6 +247,22 @@ export const TASK_CARD_ACTIONS: ActionDef[] = [
           enum: ["note", "action", "result", "issue"],
         },
       },
+    },
+  },
+  {
+    name: "archive_from_project",
+    label: "Archive from project",
+    description:
+      "Archive the linked GitHub Project item and remove the local card. Underlying Issue/PR is kept.",
+    target: "record",
+    effect: "write",
+    execution: "sync",
+    roles: [...WRITE_ACTION_ROLES],
+    confirmation: { required: true },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
     },
   },
 ];
@@ -1049,6 +1066,27 @@ export const taskCardServiceAdapter: RecordAdapter = {
     },
     add_comment(db, _def, id, input, ctx) {
       return appendScopedComment(db, CARD_COMMENT_RECORD_DEF, id, input, ctx);
+    },
+    async archive_from_project(db, _def, id, _input, ctx) {
+      const resolved = taskAccess(db, id, ctx, true);
+      if (!resolved) notFound("TaskCard");
+      const { access, projectId, row } = resolved;
+      const ownerUserId = access.ownerUserId;
+      if (!ownerUserId) {
+        badRequest("archive_from_project requires a user-owned board");
+      }
+      const contextJson = (row.context_json as string | null) ?? null;
+      await pushCardArchiveToGithub({
+        userId: ownerUserId,
+        db: access.db,
+        contextJson,
+        projectId,
+      });
+      const result = access.db
+        .prepare(`DELETE FROM ai_project_cards WHERE id=? AND project_id=?`)
+        .run(id, projectId);
+      if (!result.changes) notFound("TaskCard");
+      return { ok: true, archived: true };
     },
   },
 };
