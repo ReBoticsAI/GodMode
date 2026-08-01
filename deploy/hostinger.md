@@ -165,7 +165,33 @@ Never restore over a running Bridge. Keep the pre-restore tree until health chec
 Or use `restore-platform-drill.sh --apply --stamp <stamp>` only when intentionally
 practicing a full cutover.
 
-## 8. Observability
+## 8. Redeploy image retention
+
+Digest-pinned redeploys leave unused `ghcr.io/reboticsai/godmode` layers on the
+host. Keep only the **running** image and the **immediate previous** (rollback):
+
+```bash
+cd /opt/godmode/deploy
+# 1) note the prior pin before editing .env.production
+PRIOR="$GODMODE_IMAGE"   # or: grep '^GODMODE_IMAGE=' .env.production
+# 2) set GODMODE_IMAGE to the new digest, then:
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+# 3) prune older digests (current + previous only)
+./scripts/prune-old-images.sh --previous "$PRIOR"
+```
+
+Without `--previous`, the script keeps the newest non-running local digest for
+that repo automatically. `scripts/update/godmode-update.sh` (promote workflow)
+calls the same prune after a successful readiness check.
+
+One-off cleanup of leftover digests (same policy):
+
+```bash
+/opt/godmode/deploy/scripts/prune-old-images.sh
+```
+
+## 9. Observability
 
 GodMode does **not** use external APM (no Sentry). Prefer first-party signals:
 
@@ -176,7 +202,7 @@ GodMode does **not** use external APM (no Sentry). Prefer first-party signals:
   `GET /api/admin/observability/requests` (soft-capped at ~5k newest rows)
 - External uptime check against `https://app.godmode.software/api/health` (not the raw VPS IP)
 
-## 9. Marketing / Stripe business URL
+## 10. Marketing / Stripe business URL
 
 Deploy marketing on Pages at `/` (`godmode.software`) or keep `/www` on the app
 origin (shadcn in `apps/web`; see `sites/www/README.md`).

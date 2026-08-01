@@ -100,6 +100,14 @@ done
     Start-Sleep -Seconds 2
   }
   if (-not $committed) { throw "Updated container did not become ready" }
+  $pruneScript = Join-Path $PSScriptRoot "..\..\deploy\scripts\prune-old-images.sh"
+  if (Test-Path $pruneScript) {
+    # Keep only the new current image plus the pre-update image for rollback.
+    & bash $pruneScript --previous $oldImage
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "prune-old-images: non-fatal failure after successful update"
+    }
+  }
 } finally {
   if (-not $committed -and $oldImage) {
     Write-Warning "Update failed; restoring prior runtime and snapshot"
