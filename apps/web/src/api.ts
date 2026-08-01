@@ -5327,12 +5327,49 @@ export function createSupportTicket(body: {
   targetKind?: "platform_github" | "platform_admin" | "resource_owner";
   sharedGrantId?: string | null;
   ownerUserId?: string | null;
-}): Promise<{ ticket?: SupportTicket; redirectUrl?: string; kind?: string }> {
+}): Promise<{
+  ticket?: SupportTicket & {
+    html_url?: string;
+    github_issue_number?: number;
+    redirect_url?: string;
+  };
+  redirectUrl?: string;
+  kind?: string;
+  htmlUrl?: string;
+  number?: number;
+}> {
   return actionDto<RecordRowClient>("SupportTicket", "open", {
     subject: body.subject,
     body: body.body,
     category: body.category,
-  }).then((row) => ({ ticket: rowDto<SupportTicket>(row) }));
+    target_kind: body.targetKind,
+    shared_grant_id: body.sharedGrantId,
+    owner_user_id: body.ownerUserId,
+  }).then((row) => {
+    const ticket = rowDto<
+      SupportTicket & {
+        html_url?: string;
+        github_issue_number?: number;
+        redirect_url?: string;
+      }
+    >(row);
+    if (ticket.html_url) {
+      return {
+        ticket,
+        htmlUrl: ticket.html_url,
+        number: ticket.github_issue_number,
+        kind: "platform_github",
+      };
+    }
+    if (ticket.redirect_url) {
+      return {
+        ticket,
+        redirectUrl: ticket.redirect_url,
+        kind: "platform_github",
+      };
+    }
+    return { ticket };
+  });
 }
 
 export function fetchOwnerSupportTickets() {

@@ -69,7 +69,7 @@ See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 
 1. Open **Support** (`/support`)
 2. **New request** → choose type:
-   - **GodMode platform (GitHub)** opens a prefilled [GitHub issue](https://github.com/ReBoticsAI/GodMode/issues/new)
+   - **GodMode open-source bug (GitHub)** creates a Core issue via the platform GitHub App (or opens GitHub `issues/new` if the App is unavailable)
    - **Shared resource owner** creates a ticket routed to the grant owner
 3. On hubs: Admin can staff a **Support group** (users and/or agents) who answer inbound tickets
 

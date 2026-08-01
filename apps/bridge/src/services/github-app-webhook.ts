@@ -56,9 +56,17 @@ export async function githubAppWebhookHandler(
   }
 
   // Acknowledge quickly; sync in background.
-  res.status(202).json({ ok: true, accepted: true });
+  console.info(
+    `[github-webhook] accepted projects_v2_item action=${payload.action ?? "unknown"} project=${projectNodeId}`
+  );
+  res.status(202).json({
+    ok: true,
+    accepted: true,
+    action: payload.action ?? null,
+    projectNodeId,
+  });
 
-  void syncBoardsForProject(projectNodeId).catch((err) => {
+  void syncBoardsForProject(projectNodeId, payload.action).catch((err) => {
     console.warn(
       "[github-webhook] sync failed:",
       err instanceof Error ? err.message : err
@@ -66,8 +74,14 @@ export async function githubAppWebhookHandler(
   });
 }
 
-async function syncBoardsForProject(projectNodeId: string): Promise<void> {
+async function syncBoardsForProject(
+  projectNodeId: string,
+  action?: string
+): Promise<void> {
   const core = getCoreDb();
+  let matched = 0;
+  let synced = 0;
+  let skipped = 0;
   for (const tenantId of listAllTenantIds(core)) {
     let db;
     try {
@@ -89,14 +103,26 @@ async function syncBoardsForProject(projectNodeId: string): Promise<void> {
     } catch {
       continue;
     }
+    matched += rows.length;
     for (const row of rows) {
       try {
-        await syncBoardWithGithub({
+        const result = await syncBoardWithGithub({
           userId: row.user_id,
           db,
           boardId: row.id,
           skipIfBusy: true,
         });
+        if (result.skipped) {
+          skipped += 1;
+          console.info(
+            `[github-webhook] skipped busy tenant=${tenantId} board=${row.id} project=${projectNodeId}`
+          );
+        } else {
+          synced += 1;
+          console.info(
+            `[github-webhook] synced tenant=${tenantId} board=${row.id} pulled=${result.pulled} action=${action ?? ""}`
+          );
+        }
       } catch (err) {
         console.warn(
           `[github-webhook] tenant=${tenantId} board=${row.id}:`,
@@ -104,5 +130,14 @@ async function syncBoardsForProject(projectNodeId: string): Promise<void> {
         );
       }
     }
+  }
+  if (matched === 0) {
+    console.info(
+      `[github-webhook] no linked boards for project=${projectNodeId} action=${action ?? ""}`
+    );
+  } else {
+    console.info(
+      `[github-webhook] done project=${projectNodeId} matched=${matched} synced=${synced} skipped=${skipped}`
+    );
   }
 }

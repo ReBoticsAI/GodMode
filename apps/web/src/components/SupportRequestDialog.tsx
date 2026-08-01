@@ -21,9 +21,6 @@ import {
 } from "@/components/ui/select";
 import { createSupportTicket, fetchBridgeHealth } from "@/api";
 
-const GITHUB_ISSUES =
-  "https://github.com/ReBoticsAI/GodMode/issues/new?template=bug_report.md";
-
 type SupportTarget =
   | "platform_admin"
   | "platform_github"
@@ -55,14 +52,6 @@ export function SupportRequestDialog({
       toast.error("Subject is required");
       return;
     }
-    if (targetKind === "platform_github") {
-      const params = new URLSearchParams();
-      params.set("title", subject.trim());
-      if (body.trim()) params.set("body", body.trim());
-      window.open(`${GITHUB_ISSUES}&${params.toString()}`, "_blank", "noopener,noreferrer");
-      setOpen(false);
-      return;
-    }
     setSubmitting(true);
     try {
       const res = await createSupportTicket({
@@ -72,9 +61,21 @@ export function SupportRequestDialog({
         category:
           targetKind === "platform_admin"
             ? "hub_operator"
-            : "shared_resource",
+            : targetKind === "platform_github"
+              ? "oss_core"
+              : "shared_resource",
       });
-      if (res.redirectUrl) {
+      if (res.htmlUrl) {
+        toast.success(
+          res.number
+            ? `Opened GitHub issue #${res.number}`
+            : "Opened GitHub issue"
+        );
+        window.open(res.htmlUrl, "_blank", "noopener,noreferrer");
+      } else if (res.redirectUrl) {
+        if (targetKind === "platform_github") {
+          toast.message("Opening GitHub to finish filing the issue");
+        }
         window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
       } else {
         toast.success(
@@ -159,7 +160,11 @@ export function SupportRequestDialog({
               Cancel
             </Button>
             <Button onClick={() => void submit()} disabled={submitting}>
-              {targetKind === "platform_github" ? "Open GitHub issue" : "Submit"}
+              {targetKind === "platform_github"
+                ? submitting
+                  ? "Creating…"
+                  : "Create GitHub issue"
+                : "Submit"}
             </Button>
           </DialogFooter>
         </DialogContent>

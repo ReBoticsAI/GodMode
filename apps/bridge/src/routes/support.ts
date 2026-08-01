@@ -14,7 +14,6 @@ import {
   listAllTickets,
   listTicketsForRequester,
   listTicketsForOwner,
-  SupportError,
   updateTicket,
 } from "../services/support-service.js";
 import {
