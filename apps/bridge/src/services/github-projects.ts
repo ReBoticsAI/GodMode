@@ -1806,4 +1806,209 @@ export async function getGithubProjectMetaForUser(
   };
 }
 
+export type GithubIssueComment = {
+  id: number;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  authorLogin: string;
+  authorAvatarUrl: string | null;
+};
+
+export type GithubIssueRef = {
+  repo: string;
+  owner: string;
+  name: string;
+  issueNumber: number;
+  url: string | null;
+};
+
+/** Resolve owner/repo + issue number from a TaskCard context_json github blob. */
+export function resolveGithubIssueRef(
+  contextJson: string | null
+): GithubIssueRef | null {
+  const gh = parseGithubContext(contextJson);
+  const repo = typeof gh.repo === "string" ? gh.repo.trim() : "";
+  const issueNumber =
+    typeof gh.issueNumber === "number" && Number.isFinite(gh.issueNumber)
+      ? Math.floor(gh.issueNumber)
+      : null;
+  if (!repo.includes("/") || issueNumber == null || issueNumber <= 0) {
+    return null;
+  }
+  const [owner, name] = repo.split("/", 2);
+  if (!owner || !name) return null;
+  const url = typeof gh.url === "string" ? gh.url : null;
+  return { repo, owner, name, issueNumber, url };
+}
+
+function mapRestIssueComment(raw: {
+  id?: number;
+  body?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  html_url?: string;
+  user?: { login?: string; avatar_url?: string | null } | null;
+}): GithubIssueComment | null {
+  if (typeof raw.id !== "number" || !Number.isFinite(raw.id)) return null;
+  return {
+    id: raw.id,
+    body: typeof raw.body === "string" ? raw.body : "",
+    createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+    updatedAt: typeof raw.updated_at === "string" ? raw.updated_at : "",
+    url: typeof raw.html_url === "string" ? raw.html_url : "",
+    authorLogin: raw.user?.login?.trim() || "unknown",
+    authorAvatarUrl:
+      typeof raw.user?.avatar_url === "string" ? raw.user.avatar_url : null,
+  };
+}
+
+async function loadOwnedCardGithubContext(
+  cardId: string,
+  userId: string,
+  db: AppDatabase
+): Promise<{ context_json: string | null }> {
+  const card = db
+    .prepare(
+      `SELECT c.context_json FROM ai_project_cards c
+       JOIN ai_projects p ON p.id = c.project_id
+       WHERE c.id=? AND p.user_id=?`
+    )
+    .get(cardId, userId) as { context_json: string | null } | undefined;
+  if (!card) {
+    throw Object.assign(new Error("Card not found"), { status: 404 });
+  }
+  return card;
+}
+
+/**
+ * List GitHub Issue comments for a linked Issue/PR TaskCard.
+ * Draft Project items (no issue number) return linked:false.
+ */
+export async function listGithubIssueCommentsForCard(opts: {
+  userId: string;
+  db: AppDatabase;
+  cardId: string;
+}): Promise<{
+  linked: boolean;
+  repo: string | null;
+  issueNumber: number | null;
+  url: string | null;
+  comments: GithubIssueComment[];
+}> {
+  const card = await loadOwnedCardGithubContext(
+    opts.cardId,
+    opts.userId,
+    opts.db
+  );
+  const ref = resolveGithubIssueRef(card.context_json);
+  if (!ref) {
+    return {
+      linked: false,
+      repo: null,
+      issueNumber: null,
+      url: null,
+      comments: [],
+    };
+  }
+  const accessToken = await requireToken(opts.db);
+  const comments: GithubIssueComment[] = [];
+  let page = 1;
+  while (page <= 10) {
+    const url = new URL(
+      `https://api.github.com/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.name)}/issues/${ref.issueNumber}/comments`
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "GodMode",
+      },
+    });
+    if (!res.ok) {
+      const status = res.status === 401 || res.status === 403 ? 403 : 502;
+      throw Object.assign(
+        new Error(`GitHub comments list failed (${res.status})`),
+        { status }
+      );
+    }
+    const batch = (await res.json()) as Array<Parameters<typeof mapRestIssueComment>[0]>;
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const row of batch) {
+      const mapped = mapRestIssueComment(row);
+      if (mapped) comments.push(mapped);
+    }
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return {
+    linked: true,
+    repo: ref.repo,
+    issueNumber: ref.issueNumber,
+    url: ref.url,
+    comments,
+  };
+}
+
+/** Post a GitHub Issue comment on a linked Issue/PR TaskCard. */
+export async function postGithubIssueCommentForCard(opts: {
+  userId: string;
+  db: AppDatabase;
+  cardId: string;
+  body: string;
+}): Promise<GithubIssueComment> {
+  const text = opts.body.trim();
+  if (!text) {
+    throw Object.assign(new Error("Comment body required"), { status: 400 });
+  }
+  const card = await loadOwnedCardGithubContext(
+    opts.cardId,
+    opts.userId,
+    opts.db
+  );
+  const ref = resolveGithubIssueRef(card.context_json);
+  if (!ref) {
+    throw Object.assign(
+      new Error("Card is not linked to a GitHub Issue or Pull Request"),
+      { status: 400 }
+    );
+  }
+  const accessToken = await requireToken(opts.db);
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.name)}/issues/${ref.issueNumber}/comments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "GodMode",
+      },
+      body: JSON.stringify({ body: text }),
+    }
+  );
+  if (!res.ok) {
+    const status = res.status === 401 || res.status === 403 ? 403 : 502;
+    let detail = `GitHub comment create failed (${res.status})`;
+    try {
+      const errJson = (await res.json()) as { message?: string };
+      if (errJson.message) detail = errJson.message;
+    } catch {
+      /* keep default */
+    }
+    throw Object.assign(new Error(detail), { status });
+  }
+  const raw = (await res.json()) as Parameters<typeof mapRestIssueComment>[0];
+  const mapped = mapRestIssueComment(raw);
+  if (!mapped) {
+    throw Object.assign(new Error("GitHub returned an invalid comment"), {
+      status: 502,
+    });
+  }
+  return mapped;
+}
+
 export { userProjectId, defaultStatusMap, loadProjectMeta };

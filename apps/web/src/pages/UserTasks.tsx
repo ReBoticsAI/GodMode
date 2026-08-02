@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FolderGit2,
   FolderKanban,
@@ -185,19 +185,6 @@ export default function UserTasksPage() {
     return () => window.clearInterval(id);
   }, [activeBoard?.sync_enabled, reloadBoards]);
 
-  const prevSyncedAtRef = useRef<string | null>(null);
-  useEffect(() => {
-    const next = activeBoard?.last_synced_at ?? null;
-    if (
-      prevSyncedAtRef.current != null &&
-      next != null &&
-      next !== prevSyncedAtRef.current
-    ) {
-      setBoardKey((k) => k + 1);
-    }
-    prevSyncedAtRef.current = next;
-  }, [activeBoard?.last_synced_at]);
-
   const loadStatusMeta = async (projectNodeId: string, existingMapJson?: string | null) => {
     const meta = await fetchGithubProjectMeta(projectNodeId);
     setStatusOptions(meta.statusOptions);
@@ -376,7 +363,7 @@ export default function UserTasksPage() {
     setBusy(true);
     try {
       const res = await syncUserBoardGithub(activeBoardId);
-      setBoardKey((k) => k + 1);
+      // Soft-refresh via last_synced_at / syncRevision; do not remount the board.
       await reloadBoards();
       toast.success(
         `Synced ${res.pulled} items (${res.created} new, ${res.updated} updated)`
@@ -518,6 +505,7 @@ export default function UserTasksPage() {
             scope={{ kind: "user", userId }}
             projectId={activeBoardId}
             githubSyncEnabled={Boolean(activeBoard?.sync_enabled)}
+            syncRevision={activeBoard?.last_synced_at ?? null}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">

@@ -25,6 +25,8 @@ import {
   linkBoardToGithubProject,
   listGithubProjectsForUser,
   listGithubReposForUser,
+  listGithubIssueCommentsForCard,
+  postGithubIssueCommentForCard,
   syncBoardWithGithub,
   updateBoardStatusMap,
   getGithubProjectMetaForUser,
@@ -428,6 +430,38 @@ export function createUserProductivityRouter(): Router {
         )
         .all(req.params.id);
       res.json({ comments: rows });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/projects/cards/:id/github/comments", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const result = await listGithubIssueCommentsForCard({
+        userId: access.ownerUserId,
+        db: access.db,
+        cardId: String(req.params.id),
+      });
+      res.json(result);
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.post("/projects/cards/:id/github/comments", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "editor");
+      requireWriteAccess(access);
+      const body =
+        typeof req.body?.body === "string" ? req.body.body : "";
+      const comment = await postGithubIssueCommentForCard({
+        userId: access.ownerUserId,
+        db: access.db,
+        cardId: String(req.params.id),
+        body,
+      });
+      res.status(201).json({ comment });
     } catch (err) {
       sendErr(err, res);
     }

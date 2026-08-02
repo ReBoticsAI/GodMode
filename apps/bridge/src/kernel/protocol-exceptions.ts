@@ -563,6 +563,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "user-task-card-github-comment",
+    methods: ["POST"],
+    pathPattern: "/api/user/projects/cards/:/github/comments",
+    rationale:
+      "Post a GitHub Issue comment for a linked TaskCard via the connected GitHub token; GitHub transport, not local ai_card_comments Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "ai-workspace-knowledge-import",
     methods: ["POST"],
     pathPattern: "/api/ai/workspace-knowledge/import",

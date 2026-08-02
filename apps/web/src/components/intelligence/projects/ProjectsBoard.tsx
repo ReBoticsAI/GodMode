@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -23,6 +23,8 @@ import {
   MoreHorizontal,
   Paperclip,
   Archive,
+  ExternalLink,
+  Loader2,
   Pencil,
   Plus,
   Search,
@@ -48,6 +50,8 @@ import {
   fetchUserCardSubtasks,
   fetchCardComments,
   fetchUserCardComments,
+  fetchUserCardGithubComments,
+  postUserCardGithubComment,
   addCardComment,
   addUserCardComment,
   fetchWorkflowRuns,
@@ -57,6 +61,7 @@ import {
   type AiProjectCard,
   type AiProjectColumn,
   type AiCardComment,
+  type GithubIssueComment,
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -615,6 +620,12 @@ function CardEditorDialog({
   const [newSubtask, setNewSubtask] = useState("");
   const [comments, setComments] = useState<AiCardComment[]>([]);
   const [activityComments, setActivityComments] = useState<CardActivityComment[]>([]);
+  const [githubComments, setGithubComments] = useState<GithubIssueComment[]>([]);
+  const [githubCommentsLinked, setGithubCommentsLinked] = useState(false);
+  const [githubCommentsLoading, setGithubCommentsLoading] = useState(false);
+  const [githubCommentsError, setGithubCommentsError] = useState<string | null>(
+    null
+  );
   const [composer, setComposer] = useState("");
   const [awaitingRunId, setAwaitingRunId] = useState<string | null>(null);
   const [agents, setAgents] = useState<AiAgent[]>([]);
@@ -632,6 +643,13 @@ function CardEditorDialog({
     [card?.context_json]
   );
   const showGithubFields = isUserScope(scope);
+  const hasGithubIssue =
+    Boolean(ghMeta.repo?.includes("/")) &&
+    typeof ghMeta.issueNumber === "number" &&
+    ghMeta.issueNumber > 0;
+  const useGithubComments = Boolean(
+    githubSyncEnabled && isUserScope(scope) && hasGithubIssue
+  );
 
   useEffect(() => {
     fetchAiAgents()
@@ -701,6 +719,44 @@ function CardEditorDialog({
     }
   }, [card, scope, userId]);
 
+  const reloadGithubComments = useCallback(async () => {
+    if (!card || !isUserScope(scope)) {
+      setGithubComments([]);
+      setGithubCommentsLinked(false);
+      setGithubCommentsError(null);
+      return;
+    }
+    const meta = parseGithubCardMeta(card.context_json);
+    const linked =
+      Boolean(meta.repo?.includes("/")) &&
+      typeof meta.issueNumber === "number" &&
+      meta.issueNumber > 0;
+    if (!linked || !githubSyncEnabled) {
+      setGithubComments([]);
+      setGithubCommentsLinked(false);
+      setGithubCommentsError(null);
+      setGithubCommentsLoading(false);
+      return;
+    }
+    setGithubCommentsLoading(true);
+    setGithubCommentsError(null);
+    try {
+      const r = await fetchUserCardGithubComments(card.id);
+      setGithubCommentsLinked(r.linked);
+      setGithubComments(r.comments);
+    } catch (err) {
+      setGithubComments([]);
+      setGithubCommentsLinked(true);
+      setGithubCommentsError(
+        err instanceof Error ? err.message : "Could not load Issue comments"
+      );
+    } finally {
+      setGithubCommentsLoading(false);
+    }
+  }, [card, scope, githubSyncEnabled]);
+
+  // Reset editor fields only when the open card id changes so background
+  // board sync can refresh card props without wiping in-progress edits.
   useEffect(() => {
     if (!card) return;
     setTitle(card.title ?? "");
@@ -727,13 +783,15 @@ function CardEditorDialog({
     setNewSubtask("");
     void reloadSubtasks();
     void reloadComments();
+    void reloadGithubComments();
     setAwaitingRunId(null);
     if (card.column_id === "review") {
       fetchWorkflowRuns({ status: "awaiting_input", cardId: card.id })
         .then((r) => setAwaitingRunId(r.runs[0]?.id ?? null))
         .catch(() => setAwaitingRunId(null));
     }
-  }, [card, reloadSubtasks, reloadComments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- preserve edits across soft card refreshes
+  }, [card?.id]);
 
   const subtaskProgress = useMemo(() => {
     const doneId = doneColumnId(columns);
@@ -798,6 +856,12 @@ function CardEditorDialog({
   const postComment = async () => {
     if (!card || !composer.trim()) return;
     try {
+      if (useGithubComments) {
+        await postUserCardGithubComment(card.id, composer.trim());
+        setComposer("");
+        void reloadGithubComments();
+        return;
+      }
       if (isUserScope(scope)) {
         await addUserCardComment(card.id, composer.trim(), "user", userId);
       } else {
@@ -807,6 +871,21 @@ function CardEditorDialog({
       void reloadComments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to post comment");
+    }
+  };
+
+  const formatCommentTime = (iso: string) => {
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return iso;
+    try {
+      return new Date(ms).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
     }
   };
 
@@ -1049,9 +1128,9 @@ function CardEditorDialog({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
+        className="flex w-full flex-col gap-0 border-l bg-background p-0 shadow-2xl sm:max-w-xl md:max-w-2xl"
       >
-        <SheetHeader className="border-b">
+        <SheetHeader className="border-b bg-muted/30">
           {card?.parent_card_id && (
             <button
               type="button"
@@ -1062,10 +1141,41 @@ function CardEditorDialog({
               Back to parent
             </button>
           )}
-          <SheetTitle>{card?.parent_card_id ? "Edit subtask" : "Edit card"}</SheetTitle>
-          <SheetDescription>
-            Fields and GodMode actions for this task. Drag cards on the board to change status.
+          <SheetTitle className="pr-8 text-lg leading-snug">
+            {title.trim() || (card?.parent_card_id ? "Edit subtask" : "Issue")}
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            Task details and comments
           </SheetDescription>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {hasGithubIssue && ghMeta.repo ? (
+              <>
+                <span className="font-medium text-foreground/80">
+                  {ghMeta.repo} #{ghMeta.issueNumber}
+                </span>
+                {ghMeta.url ? (
+                  <a
+                    href={ghMeta.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    Open on GitHub
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : null}
+              </>
+            ) : githubSyncEnabled && ghMeta.projectItemId ? (
+              <span>
+                Draft on GitHub Project (no Issue comments until promoted)
+              </span>
+            ) : (
+              <span>
+                Fields and GodMode actions for this task. Drag cards on the board
+                to change status.
+              </span>
+            )}
+          </div>
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4">
           <div className="grid gap-1.5">
@@ -1439,17 +1549,123 @@ function CardEditorDialog({
             </div>
           </div>
 
+          {useGithubComments ||
+          (githubSyncEnabled && ghMeta.projectItemId && !hasGithubIssue) ? (
+            <div className="grid gap-2 rounded-lg border bg-card p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm">Issue comments</Label>
+                {githubCommentsLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : null}
+              </div>
+              {!hasGithubIssue ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Draft Project items do not have GitHub Issue comments. Promote
+                  the card to an Issue to discuss on GitHub, or use GodMode
+                  activity below.
+                </p>
+              ) : (
+                <>
+                  <div className="flex max-h-72 flex-col gap-2 overflow-auto pr-0.5">
+                    {githubCommentsError ? (
+                      <p className="text-[11px] text-destructive">
+                        {githubCommentsError}
+                      </p>
+                    ) : null}
+                    {!githubCommentsLoading &&
+                      !githubCommentsError &&
+                      githubComments.length === 0 && (
+                        <span className="text-[11px] text-muted-foreground">
+                          No Issue comments yet.
+                        </span>
+                      )}
+                    {githubComments.map((c) => (
+                      <div
+                        key={c.id}
+                        className="rounded-md border bg-background/80 px-2.5 py-2"
+                      >
+                        <div className="mb-1 flex items-center gap-2">
+                          <Avatar className="h-5 w-5">
+                            {c.authorAvatarUrl ? (
+                              <AvatarImage
+                                src={c.authorAvatarUrl}
+                                alt={c.authorLogin}
+                              />
+                            ) : null}
+                            <AvatarFallback className="text-[9px]">
+                              {c.authorLogin.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-[11px] font-medium">
+                            {c.authorLogin}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatCommentTime(c.createdAt)}
+                          </span>
+                          {c.url ? (
+                            <a
+                              href={c.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="ml-auto text-muted-foreground hover:text-foreground"
+                              aria-label="Open comment on GitHub"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : null}
+                        </div>
+                        <p className="whitespace-pre-wrap text-[12px] leading-relaxed">
+                          {c.body}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <Textarea
+                    value={composer}
+                    onChange={(e) => setComposer(e.target.value)}
+                    placeholder="Comment on GitHub…"
+                    className="min-h-[72px] text-xs"
+                    disabled={readOnly || !githubCommentsLinked}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-fit text-xs"
+                    onClick={() => void postComment()}
+                    disabled={
+                      busy ||
+                      readOnly ||
+                      !composer.trim() ||
+                      !githubCommentsLinked
+                    }
+                  >
+                    Comment on GitHub
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : null}
+
           <div
             className={cn(
               "grid gap-1.5 rounded-md border p-2",
               isReview ? "border-amber-500/30 bg-amber-500/5" : "border-border"
             )}
           >
-            <Label>{card?.parent_card_id ? "Comments" : "Activity"}</Label>
+            <Label>
+              {useGithubComments
+                ? "GodMode activity"
+                : card?.parent_card_id
+                  ? "Comments"
+                  : "Activity"}
+            </Label>
             <div className="flex max-h-40 flex-col gap-1 overflow-auto">
               {displayedComments.length === 0 && (
                 <span className="text-[10px] text-muted-foreground">
-                  No activity yet.
+                  {useGithubComments
+                    ? "No local GodMode activity yet."
+                    : "No activity yet."}
                 </span>
               )}
               {displayedComments.map((c) => (
@@ -1479,53 +1695,97 @@ function CardEditorDialog({
                 </div>
               ))}
             </div>
-            <Textarea
-              value={composer}
-              onChange={(e) => setComposer(e.target.value)}
-              placeholder={
-                isReview
-                  ? "Leave a comment or describe requested changes…"
-                  : "Leave a comment…"
-              }
-              className="min-h-[56px] text-[11px]"
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => void postComment()}
-                disabled={busy || !composer.trim()}
-              >
-                Add comment
-              </Button>
-              {isReview && (
-                <>
+            {!useGithubComments ? (
+              <>
+                <Textarea
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  placeholder={
+                    isReview
+                      ? "Leave a comment or describe requested changes…"
+                      : "Leave a comment…"
+                  }
+                  className="min-h-[56px] text-[11px]"
+                />
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    onClick={() => void onRequestChanges()}
-                    disabled={busy || !awaitingRunId}
-                    title={awaitingRunId ? undefined : "No autonomous run is awaiting review"}
+                    onClick={() => void postComment()}
+                    disabled={busy || !composer.trim()}
                   >
-                    Request changes
+                    Add comment
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => void onApprove()}
-                    disabled={busy || !awaitingRunId}
-                    title={awaitingRunId ? undefined : "No autonomous run is awaiting review"}
-                  >
-                    Approve
-                  </Button>
-                </>
-              )}
-            </div>
+                  {isReview && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => void onRequestChanges()}
+                        disabled={busy || !awaitingRunId}
+                        title={
+                          awaitingRunId
+                            ? undefined
+                            : "No autonomous run is awaiting review"
+                        }
+                      >
+                        Request changes
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => void onApprove()}
+                        disabled={busy || !awaitingRunId}
+                        title={
+                          awaitingRunId
+                            ? undefined
+                            : "No autonomous run is awaiting review"
+                        }
+                      >
+                        Approve
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : isReview ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => void onRequestChanges()}
+                  disabled={busy || !awaitingRunId}
+                  title={
+                    awaitingRunId
+                      ? undefined
+                      : "No autonomous run is awaiting review"
+                  }
+                >
+                  Request changes
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => void onApprove()}
+                  disabled={busy || !awaitingRunId}
+                  title={
+                    awaitingRunId
+                      ? undefined
+                      : "No autonomous run is awaiting review"
+                  }
+                >
+                  Approve
+                </Button>
+              </div>
+            ) : null}
             {isReview && !awaitingRunId && (
               <p className="text-[10px] text-muted-foreground">
                 Approve / Request changes resume a parked autonomous run. None is awaiting this card.
@@ -1589,18 +1849,22 @@ export function ProjectsBoard({
   projectId,
   githubSyncEnabled = false,
   defaultGithubRepo = "",
+  syncRevision = null,
 }: {
   scope: ProductivityScope;
   projectId?: string;
   /** Linked user board: adapter defaults new cards to GitHub draft on create. */
   githubSyncEnabled?: boolean;
   defaultGithubRepo?: string;
+  /** When last_synced_at (or similar) changes, soft-reload cards without remount. */
+  syncRevision?: string | null;
 }) {
   const [columns, setColumns] = useState<AiProjectColumn[]>([]);
   const [cards, setCards] = useState<AiProjectCard[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editing, setEditing] = useState<AiProjectCard | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const prevSyncRevisionRef = useRef<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("New task");
   const [createMode, setCreateMode] = useState<GithubCreateMode>("draft");
@@ -1678,6 +1942,10 @@ export function ProjectsBoard({
       .then((r) => {
         setColumns(r.columns);
         setCards(r.cards);
+        setEditing((prev) => {
+          if (!prev) return null;
+          return r.cards.find((c) => c.id === prev.id) ?? prev;
+        });
       })
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Failed to load tasks");
@@ -1688,6 +1956,21 @@ export function ProjectsBoard({
     load();
     clearReviewUnread();
   }, [load, clearReviewUnread]);
+
+  // Parent poll / Sync updates syncRevision; merge cards without remounting.
+  useEffect(() => {
+    if (syncRevision == null) {
+      prevSyncRevisionRef.current = null;
+      return;
+    }
+    if (
+      prevSyncRevisionRef.current != null &&
+      prevSyncRevisionRef.current !== syncRevision
+    ) {
+      load();
+    }
+    prevSyncRevisionRef.current = syncRevision;
+  }, [syncRevision, load]);
 
   // Per-parent subtask progress derived from the full card list.
   const subtaskProgressByParent = useMemo(() => {
