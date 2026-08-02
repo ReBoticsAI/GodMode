@@ -4,7 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertExternalUrlAllowed,
+  assertRecordAllowed,
+  assertToolAllowed,
   buildCapabilityGrants,
+  collectDeclaredCapabilityNames,
   collectDeclaredNetworkHosts,
   hostMatchesAllowlist,
   parseCapabilityGrants,
@@ -29,7 +32,7 @@ function entry(partial: Partial<CatalogEntry> = {}): CatalogEntry {
   };
 }
 
-describe("plugin capability grants (#290)", () => {
+describe("plugin capability grants (#290 / #303)", () => {
   const tmpDirs: string[] = [];
 
   afterEach(() => {
@@ -92,9 +95,13 @@ describe("plugin capability grants (#290)", () => {
   it("leaves Local/operator unrestricted", () => {
     const grants = buildCapabilityGrants({ trustTier: "local" });
     expect(grants.network.mode).toBe("unrestricted");
+    expect(grants.tools.mode).toBe("unrestricted");
+    expect(grants.records.mode).toBe("unrestricted");
     expect(
       assertExternalUrlAllowed(grants, "https://anywhere.example/ok").hostname
     ).toBe("anywhere.example");
+    expect(assertToolAllowed(grants, "any_tool")).toBe("any_tool");
+    expect(assertRecordAllowed(grants, "AnyType")).toBe("AnyType");
   });
 
   it("matches hosts and wildcards", () => {
@@ -119,11 +126,54 @@ describe("plugin capability grants (#290)", () => {
     ).toEqual(["api.example.com", "*.cdn.example.com"]);
   });
 
+  it("deny-by-default for Official tools and records", () => {
+    const grants = buildCapabilityGrants({
+      trustTier: "official",
+      declaredTools: [],
+      declaredRecords: [],
+    });
+    expect(grants.tools).toEqual({ mode: "deny", names: [] });
+    expect(grants.records).toEqual({ mode: "deny", names: [] });
+    expect(() => assertToolAllowed(grants, "evil_tool")).toThrow(/deny-by-default/);
+    expect(() => assertRecordAllowed(grants, "EvilType")).toThrow(/deny-by-default/);
+  });
+
+  it("allowlists only granted tools and records", () => {
+    const grants = buildCapabilityGrants({
+      trustTier: "community",
+      declaredTools: ["search_docs", "search_docs"],
+      declaredRecords: ["Invoice", "StructureNode"],
+    });
+    expect(grants.tools).toEqual({
+      mode: "allowlist",
+      names: ["search_docs"],
+    });
+    expect(assertToolAllowed(grants, "search_docs")).toBe("search_docs");
+    expect(() => assertToolAllowed(grants, "other_tool")).toThrow(
+      /not in the allowlist/
+    );
+    expect(assertRecordAllowed(grants, "Invoice")).toBe("Invoice");
+    expect(() => assertRecordAllowed(grants, "Secret")).toThrow(
+      /not in the allowlist/
+    );
+  });
+
+  it("merges catalog and manifest declared tool/record names", () => {
+    expect(
+      collectDeclaredCapabilityNames({
+        catalogNames: ["Invoice", "Invoice"],
+        manifestNames: ["StructureNode"],
+      })
+    ).toEqual(["Invoice", "StructureNode"]);
+  });
+
   it("persists and reloads grants from plugin root", () => {
     const root = tmp();
     const grants = buildCapabilityGrants({
       trustTier: "official",
       declaredHosts: ["hooks.example.com"],
+      declaredTools: ["ping"],
+      declaredRecords: ["Invoice"],
       sourceEntryId: "demo-plugin",
     });
     writeCapabilityGrants(root, grants);
@@ -132,9 +182,31 @@ describe("plugin capability grants (#290)", () => {
       version: 1,
       trustTier: "official",
       network: { mode: "allowlist", hosts: ["hooks.example.com"] },
+      tools: { mode: "allowlist", names: ["ping"] },
+      records: { mode: "allowlist", names: ["Invoice"] },
       sourceEntryId: "demo-plugin",
     });
     expect(parseCapabilityGrants({ version: 2 })).toBeNull();
+  });
+
+  it("fills missing tools/records on legacy grants files from trust tier", () => {
+    const legacy = parseCapabilityGrants({
+      version: 1,
+      trustTier: "official",
+      network: { mode: "deny", hosts: [] },
+      grantedAt: "2020-01-01T00:00:00.000Z",
+    });
+    expect(legacy?.tools.mode).toBe("deny");
+    expect(legacy?.records.mode).toBe("deny");
+
+    const localLegacy = parseCapabilityGrants({
+      version: 1,
+      trustTier: "local",
+      network: { mode: "unrestricted", hosts: [] },
+      grantedAt: "2020-01-01T00:00:00.000Z",
+    });
+    expect(localLegacy?.tools.mode).toBe("unrestricted");
+    expect(localLegacy?.records.mode).toBe("unrestricted");
   });
 
   it("fail-closes marketplace trees missing a grants file", () => {
@@ -146,6 +218,8 @@ describe("plugin capability grants (#290)", () => {
       marketplacePluginsRoot: market,
     });
     expect(grants.network.mode).toBe("deny");
+    expect(grants.tools.mode).toBe("deny");
+    expect(grants.records.mode).toBe("deny");
   });
 
   it("treats non-marketplace roots without grants as operator unrestricted", () => {
@@ -156,5 +230,7 @@ describe("plugin capability grants (#290)", () => {
     });
     expect(grants.trustTier).toBe("operator");
     expect(grants.network.mode).toBe("unrestricted");
+    expect(grants.tools.mode).toBe("unrestricted");
+    expect(grants.records.mode).toBe("unrestricted");
   });
 });

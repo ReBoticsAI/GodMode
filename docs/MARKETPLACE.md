@@ -49,12 +49,15 @@ registration (self-host / Unofficial) stays operator-trusted and does not use
 this pin gate.
 
 Intake CI smoke does not replace install pins or runtime least privilege.
-Runtime network capability allowlists (#290): Official/Community installs are
-**network deny-by-default**. Catalog `networkHosts` and/or manifest
-`capabilities.network.hosts` are granted at install into
+Runtime capability allowlists (#290 network, #303 tools/records): Official/Community
+installs are **deny-by-default** for network, tools, and records. Catalog fields
+(`networkHosts`, `toolNames`, `recordNames`) and/or manifest
+`capabilities.{network,tools,records}` are granted at install into
 `godmode.capabilities.json`. Plugins must use `host.externalFetch` for outbound
-http(s). Local folder / operator path installs stay unrestricted. Tool and
-record capability allowlists remain a follow-up under #290.
+http(s), and may only register/call tools and ObjectTypes named in the grant.
+Manifest `objectTypes` names are also collected into the records grant. Local
+folder / operator path installs stay unrestricted. Last-tenant uninstall revokes
+the grants file; kill switches (#96) remain the emergency stop.
 
 ## Community (user-to-user)
 
