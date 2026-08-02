@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { LogOutIcon, SettingsIcon, ShieldIcon } from "lucide-react";
 import { SidebarNav } from "@/components/SidebarNav";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { ADMIN_PATH, APP_NAME, HOME_PATH, SETTINGS_PATH } from "@/lib/navigation";
 import { logoutAuth } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
@@ -35,15 +36,18 @@ export function SidebarShellContent({
 
   return (
     <>
-      <div className="flex w-full justify-center px-2 py-1.5">
-        <NavLink
-          to={HOME_PATH}
-          onClick={onNavigate}
-          className="font-heading truncate text-4xl font-extrabold leading-none tracking-tight transition-opacity hover:opacity-80"
-          aria-label="Go to home"
-        >
-          {APP_NAME}
-        </NavLink>
+      <div className="flex w-full flex-col gap-2 px-1">
+        <div className="flex w-full justify-center px-1 py-1.5">
+          <NavLink
+            to={HOME_PATH}
+            onClick={onNavigate}
+            className="font-heading truncate text-4xl font-extrabold leading-none tracking-tight transition-opacity hover:opacity-80"
+            aria-label="Go to home"
+          >
+            {APP_NAME}
+          </NavLink>
+        </div>
+        <WorkspaceSwitcher />
       </div>
 
       <SidebarNav onNavigate={onNavigate} />
