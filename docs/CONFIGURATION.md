@@ -179,6 +179,7 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `GODMODE_FEATURES_DIR` | `{repo}/docs/features` | Directory of feature markdown used to seed platform wiki pages. Production images must ship `/app/docs/features` (see `deploy/Dockerfile`); override only if mounting docs from the host. |
 | `GODMODE_PLUGIN_PATH` | empty | Optional advanced override: semicolon-separated plugin roots (Windows). Prefer **Marketplace → Local** or Intelligence `install_plugin`. |
 | `GITHUB_TOKEN` | empty | Clone private GitHub plugin repos from Marketplace |
 | `GODMODE_PLUGIN_SCAFFOLD_DIR` | `{repo}/plugins` (local) or tenant workspace `plugins/` (hub) | Override target dir for `scaffold_plugin` |
