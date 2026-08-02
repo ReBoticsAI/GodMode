@@ -2011,4 +2011,220 @@ export async function postGithubIssueCommentForCard(opts: {
   return mapped;
 }
 
+export type GithubIssueTimelineEvent = {
+  id: number;
+  event: string;
+  createdAt: string;
+  actorLogin: string;
+  actorAvatarUrl: string | null;
+  summary: string;
+};
+
+/** Events already shown as Issue comments, or too noisy for the card sheet. */
+const TIMELINE_SKIP_EVENTS = new Set([
+  "commented",
+  "committed",
+  "head_ref_force_pushed",
+  "head_ref_deleted",
+  "head_ref_restored",
+  "review_requested",
+  "review_request_removed",
+  "reviewed",
+]);
+
+type TimelineRaw = {
+  id?: number;
+  event?: string;
+  created_at?: string;
+  actor?: { login?: string; avatar_url?: string | null } | null;
+  label?: { name?: string } | null;
+  assignee?: { login?: string } | null;
+  milestone?: { title?: string } | null;
+  rename?: { from?: string; to?: string } | null;
+  project?: { title?: string } | null;
+  /** Present on some project_v2 status change payloads. */
+  project_title?: string;
+};
+
+/**
+ * Turn a GitHub Issue timeline REST event into a short activity line.
+ * Returns null when the event should be omitted from the card sheet.
+ */
+export function summarizeGithubTimelineEvent(
+  raw: TimelineRaw
+): string | null {
+  const event = typeof raw.event === "string" ? raw.event : "";
+  if (!event || TIMELINE_SKIP_EVENTS.has(event)) return null;
+  const actor = raw.actor?.login?.trim() || "Someone";
+  const label = raw.label?.name?.trim();
+  const assignee = raw.assignee?.login?.trim();
+  const milestone = raw.milestone?.title?.trim();
+  const projectTitle =
+    raw.project?.title?.trim() ||
+    (typeof raw.project_title === "string" ? raw.project_title.trim() : "");
+
+  switch (event) {
+    case "labeled":
+      return label ? `${actor} added label ${label}` : `${actor} added a label`;
+    case "unlabeled":
+      return label
+        ? `${actor} removed label ${label}`
+        : `${actor} removed a label`;
+    case "assigned":
+      return assignee
+        ? `${actor} assigned ${assignee}`
+        : `${actor} assigned someone`;
+    case "unassigned":
+      return assignee
+        ? `${actor} unassigned ${assignee}`
+        : `${actor} unassigned someone`;
+    case "milestoned":
+      return milestone
+        ? `${actor} added this to milestone ${milestone}`
+        : `${actor} set a milestone`;
+    case "demilestoned":
+      return milestone
+        ? `${actor} removed this from milestone ${milestone}`
+        : `${actor} removed the milestone`;
+    case "closed":
+      return `${actor} closed this`;
+    case "reopened":
+      return `${actor} reopened this`;
+    case "renamed": {
+      const from = raw.rename?.from?.trim();
+      const to = raw.rename?.to?.trim();
+      if (from && to) return `${actor} renamed from "${from}" to "${to}"`;
+      return `${actor} renamed this`;
+    }
+    case "locked":
+      return `${actor} locked this conversation`;
+    case "unlocked":
+      return `${actor} unlocked this conversation`;
+    case "pinned":
+      return `${actor} pinned this`;
+    case "unpinned":
+      return `${actor} unpinned this`;
+    case "transferred":
+      return `${actor} transferred this`;
+    case "added_to_project_v2":
+      return projectTitle
+        ? `${actor} added this to ${projectTitle}`
+        : `${actor} added this to a Project`;
+    case "removed_from_project_v2":
+      return projectTitle
+        ? `${actor} removed this from ${projectTitle}`
+        : `${actor} removed this from a Project`;
+    case "project_v2_item_status_changed":
+      return projectTitle
+        ? `${actor} moved this on ${projectTitle}`
+        : `${actor} changed the Project status`;
+    case "converted_to_draft":
+      return `${actor} converted this to a draft`;
+    case "ready_for_review":
+      return `${actor} marked this ready for review`;
+    case "convert_to_issue":
+      return `${actor} converted this to an issue`;
+    case "cross-referenced":
+      return `${actor} mentioned this in another issue or PR`;
+    case "referenced":
+      return `${actor} referenced this`;
+    case "connected":
+      return `${actor} connected a tracking reference`;
+    case "disconnected":
+      return `${actor} disconnected a tracking reference`;
+    case "marked_as_duplicate":
+      return `${actor} marked this as a duplicate`;
+    case "unmarked_as_duplicate":
+      return `${actor} unmarked this as a duplicate`;
+    default:
+      return `${actor}: ${event.replace(/_/g, " ")}`;
+  }
+}
+
+function mapRestTimelineEvent(raw: TimelineRaw): GithubIssueTimelineEvent | null {
+  if (typeof raw.id !== "number" || !Number.isFinite(raw.id)) return null;
+  const summary = summarizeGithubTimelineEvent(raw);
+  if (!summary) return null;
+  return {
+    id: raw.id,
+    event: typeof raw.event === "string" ? raw.event : "unknown",
+    createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+    actorLogin: raw.actor?.login?.trim() || "unknown",
+    actorAvatarUrl:
+      typeof raw.actor?.avatar_url === "string" ? raw.actor.avatar_url : null,
+    summary,
+  };
+}
+
+/**
+ * List GitHub Issue timeline/activity events for a linked Issue/PR TaskCard.
+ * Skips comment events (those come from the comments endpoint).
+ */
+export async function listGithubIssueTimelineForCard(opts: {
+  userId: string;
+  db: AppDatabase;
+  cardId: string;
+}): Promise<{
+  linked: boolean;
+  repo: string | null;
+  issueNumber: number | null;
+  url: string | null;
+  events: GithubIssueTimelineEvent[];
+}> {
+  const card = await loadOwnedCardGithubContext(
+    opts.cardId,
+    opts.userId,
+    opts.db
+  );
+  const ref = resolveGithubIssueRef(card.context_json);
+  if (!ref) {
+    return {
+      linked: false,
+      repo: null,
+      issueNumber: null,
+      url: null,
+      events: [],
+    };
+  }
+  const accessToken = await requireToken(opts.db);
+  const events: GithubIssueTimelineEvent[] = [];
+  let page = 1;
+  while (page <= 10) {
+    const url = new URL(
+      `https://api.github.com/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.name)}/issues/${ref.issueNumber}/timeline`
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "GodMode",
+      },
+    });
+    if (!res.ok) {
+      const status = res.status === 401 || res.status === 403 ? 403 : 502;
+      throw Object.assign(
+        new Error(`GitHub timeline list failed (${res.status})`),
+        { status }
+      );
+    }
+    const batch = (await res.json()) as TimelineRaw[];
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const row of batch) {
+      const mapped = mapRestTimelineEvent(row);
+      if (mapped) events.push(mapped);
+    }
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return {
+    linked: true,
+    repo: ref.repo,
+    issueNumber: ref.issueNumber,
+    url: ref.url,
+    events,
+  };
+}
+
 export { userProjectId, defaultStatusMap, loadProjectMeta };
