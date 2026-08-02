@@ -1045,6 +1045,7 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
       bundle_path TEXT,
       plugin_repo TEXT,
       plugin_ref TEXT,
+      plugin_digest TEXT,
       preview_path TEXT,
       price_cents INTEGER NOT NULL DEFAULT 0,
       currency TEXT NOT NULL DEFAULT 'usd',
@@ -1054,6 +1055,7 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  addCol(db, "marketplace_official_catalog", "plugin_digest", "TEXT");
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {
