@@ -39,6 +39,18 @@ Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` /
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
+### Seller intake verify (GodMode-Marketplace#3)
+
+Public Official catalog PRs for `installType: "plugin"` require a public
+`pluginRepo`, an immutable `pluginRef` (tag or commit), and a green reusable
+GitHub Actions verify run (`ciRunUrl`). Sellers copy
+`examples/seller-plugin-verify.yml` from
+[GodMode-Marketplace](https://github.com/ReBoticsAI/GodMode-Marketplace)
+and call
+`.github/workflows/reusable-plugin-verify.yml`. Catalog validate rejects
+floating refs; set `MARKETPLACE_REQUIRE_PLUGIN_CI=1` for fail-closed
+`ciRunUrl` checks. See Marketplace CONTRIBUTING for the seller checklist.
+
 ### Buyer install pins (#177)
 
 Official and Community **plugin** installs fail closed unless the catalog entry
@@ -48,7 +60,7 @@ Floating refs (`main` / `master`) are rejected for those catalogs. Local folder
 registration (self-host / Unofficial) stays operator-trusted and does not use
 this pin gate.
 
-Intake CI smoke does not replace install pins or runtime least privilege.
+Intake CI does not replace install pins or runtime least privilege.
 Runtime capability allowlists (#290 network, #303 tools/records): Official/Community
 installs are **deny-by-default** for network, tools, and records. Catalog fields
 (`networkHosts`, `toolNames`, `recordNames`) and/or manifest
