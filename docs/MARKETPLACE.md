@@ -49,8 +49,12 @@ registration (self-host / Unofficial) stays operator-trusted and does not use
 this pin gate.
 
 Intake CI smoke does not replace install pins or runtime least privilege.
-Runtime capability allowlists (network deny-by-default for plugins) are tracked
-as follow-up #290.
+Runtime network capability allowlists (#290): Official/Community installs are
+**network deny-by-default**. Catalog `networkHosts` and/or manifest
+`capabilities.network.hosts` are granted at install into
+`godmode.capabilities.json`. Plugins must use `host.externalFetch` for outbound
+http(s). Local folder / operator path installs stay unrestricted. Tool and
+record capability allowlists remain a follow-up under #290.
 
 ## Community (user-to-user)
 

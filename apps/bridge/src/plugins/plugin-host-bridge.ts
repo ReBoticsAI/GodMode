@@ -82,6 +82,10 @@ export function initPluginHost(): PluginHostServices {
       const url = `http://127.0.0.1:${config.port}${path.startsWith("/") ? path : `/${path}`}`;
       return fetch(url, init);
     },
+    async externalFetch(url, init) {
+      // Base host is unrestricted; PluginRuntime binds a per-plugin allowlist (#290).
+      return fetch(url, init);
+    },
     emitPlatformEvent(input: {
       type: string;
       actor: { kind: string; id?: string | null };

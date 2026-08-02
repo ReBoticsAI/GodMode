@@ -23,6 +23,13 @@ import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
 import { getPluginHost } from "@godmode/plugin-host";
 import { registerPageKinds } from "../kernel/kind-registry.js";
 import {
+  assertExternalUrlAllowed,
+  resolveCapabilityGrants,
+  type PluginCapabilityGrants,
+} from "../services/plugin-capabilities.js";
+import { config } from "../config.js";
+import path from "node:path";
+import {
   registerRecordAdapter,
   unregisterRecordAdapter,
   type OperationContext,
@@ -354,7 +361,19 @@ export class PluginRuntime {
   private createApi(manifest: GodmodePluginManifest, pluginRoot: string): GodModePluginApi {
     const self = this;
     const pluginId = manifest.id;
-    const host = getPluginHost();
+    const baseHost = getPluginHost();
+    const marketplacePluginsRoot = path.join(config.dataDir, "marketplace-plugins");
+    const grants: PluginCapabilityGrants = resolveCapabilityGrants({
+      pluginRoot,
+      marketplacePluginsRoot,
+    });
+    const host: typeof baseHost = {
+      ...baseHost,
+      async externalFetch(url, init) {
+        const allowed = assertExternalUrlAllowed(grants, url);
+        return fetch(allowed, init);
+      },
+    };
     const kernelContext = (ctx: PluginRecordContext): OperationContext => ({
       tenantId: ctx.tenantId,
       userId: ctx.userId,

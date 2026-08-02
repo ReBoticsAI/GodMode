@@ -58,4 +58,26 @@ describe("plugin ObjectType manifests", () => {
       })
     ).toThrow(/unsupported kernelApiVersion/);
   });
+
+  it("parses optional network capability hosts", () => {
+    const manifest = parseGodmodePluginManifest({
+      id: "net-plugin",
+      name: "Net Plugin",
+      version: "1.0.0",
+      capabilities: { network: { hosts: ["api.example.com", "*.cdn.example.com"] } },
+    });
+    expect(manifest.capabilities?.network?.hosts).toEqual([
+      "api.example.com",
+      "*.cdn.example.com",
+    ]);
+
+    expect(() =>
+      parseGodmodePluginManifest({
+        id: "bad-cap",
+        name: "Bad",
+        version: "1.0.0",
+        capabilities: { network: { hosts: "api.example.com" } },
+      })
+    ).toThrow(/capabilities.network.hosts/);
+  });
 });
