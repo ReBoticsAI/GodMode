@@ -86,7 +86,13 @@ export interface PluginHostServices {
     ): void;
   };
   bootstrapTradingDepartment(db: TenantDb): void;
+  /** Loopback Bridge HTTP (always allowed; not external egress). */
   bridgeFetch(path: string, init?: RequestInit): Promise<Response>;
+  /**
+   * Outbound http(s) for plugins (#290). Enforced against capability grants
+   * when the host is bound per-plugin. Prefer this over raw `fetch`.
+   */
+  externalFetch?(url: string | URL, init?: RequestInit): Promise<Response>;
   emitPlatformEvent?(input: {
     type: string;
     actor: { kind: string; id?: string | null };

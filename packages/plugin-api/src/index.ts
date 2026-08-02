@@ -1,5 +1,6 @@
 export {
   type GodmodePluginManifest,
+  type PluginManifestCapabilities,
   type PluginRecordSeed,
   manifestPath,
   parseGodmodePluginManifest,
