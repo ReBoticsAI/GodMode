@@ -80,4 +80,30 @@ describe("plugin ObjectType manifests", () => {
       })
     ).toThrow(/capabilities.network.hosts/);
   });
+
+  it("parses optional tool and record capability names", () => {
+    const manifest = parseGodmodePluginManifest({
+      id: "cap-plugin",
+      name: "Cap Plugin",
+      version: "1.0.0",
+      capabilities: {
+        tools: { names: ["search_docs"] },
+        records: { names: ["Invoice", "StructureNode"] },
+      },
+    });
+    expect(manifest.capabilities?.tools?.names).toEqual(["search_docs"]);
+    expect(manifest.capabilities?.records?.names).toEqual([
+      "Invoice",
+      "StructureNode",
+    ]);
+
+    expect(() =>
+      parseGodmodePluginManifest({
+        id: "bad-tools",
+        name: "Bad",
+        version: "1.0.0",
+        capabilities: { tools: { names: "search_docs" } },
+      })
+    ).toThrow(/capabilities.tools.names/);
+  });
 });

@@ -58,7 +58,9 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   "kernelApiVersion": 1,
   "departments": ["my-domain"],
   "capabilities": {
-    "network": { "hosts": ["api.example.com"] }
+    "network": { "hosts": ["api.example.com"] },
+    "tools": { "names": ["search_docs"] },
+    "records": { "names": ["Invoice", "StructureNode"] }
   },
   "bridge": { "entry": "dist/bridge.js" },
   "web": { "entry": "dist/web.js" },
@@ -98,6 +100,12 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   grants (#290). Official/Community installs deny external egress unless these
   (and/or catalog `networkHosts`) are present. Call `api.host.externalFetch`
   rather than raw `fetch`. Local/operator installs are unrestricted.
+- `capabilities.tools.names` — optional AI tool names the plugin may register
+  via `api.tools.register` (#303). Catalog may also set `toolNames`.
+- `capabilities.records.names` — optional ObjectType names the plugin may
+  register (`api.objectTypes.register`) or call via `api.kernel` (#303). Catalog
+  may also set `recordNames`. Manifest `objectTypes` names are collected into
+  the records grant at install. Official/Community deny tools/records by default.
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.

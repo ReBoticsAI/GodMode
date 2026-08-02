@@ -30,6 +30,7 @@ import {
 } from "./marketplace-plugin-pin.js";
 import {
   buildCapabilityGrants,
+  collectDeclaredCapabilityNames,
   collectDeclaredNetworkHosts,
   resolvePluginTrustTier,
   writeCapabilityGrants,
@@ -57,6 +58,16 @@ export interface CatalogEntry {
    * Empty / omitted => network deny-by-default for restricted trust tiers.
    */
   networkHosts?: string[];
+  /**
+   * Tool names Official/Community installs may grant for `api.tools.register` (#303).
+   * Empty / omitted => tools deny-by-default for restricted trust tiers.
+   */
+  toolNames?: string[];
+  /**
+   * ObjectType names Official/Community installs may grant for records (#303).
+   * Empty / omitted => records deny-by-default for restricted trust tiers.
+   */
+  recordNames?: string[];
   /** Install from an existing local directory (no git clone). */
   pluginLocalPath?: string;
   previewPath?: string;
@@ -476,6 +487,8 @@ async function installPluginEntry(
   capabilities?: {
     trustTier: string;
     networkHosts: string[];
+    toolNames: string[];
+    recordNames: string[];
   };
 }> {
   const policy = resolvePluginPinPolicy({ entry, sourceCatalog });
@@ -521,21 +534,38 @@ async function installPluginEntry(
 
   const trustTier = resolvePluginTrustTier({ entry, sourceCatalog });
   let manifestHosts: string[] = [];
+  let manifestTools: string[] = [];
+  let manifestRecords: string[] = [];
   try {
     const manifest = readGodmodePluginManifest(target);
     manifestHosts = manifest.capabilities?.network?.hosts ?? [];
+    manifestTools = manifest.capabilities?.tools?.names ?? [];
+    manifestRecords = [
+      ...(manifest.capabilities?.records?.names ?? []),
+      ...(manifest.objectTypes?.map((ot) => ot.name) ?? []),
+    ];
   } catch {
-    /* grant from catalog hosts alone when manifest is not readable yet */
+    /* grant from catalog alone when manifest is not readable yet */
   }
   const declaredHosts = collectDeclaredNetworkHosts({
     catalogHosts: entry.networkHosts,
     manifestHosts,
+  });
+  const declaredTools = collectDeclaredCapabilityNames({
+    catalogNames: entry.toolNames,
+    manifestNames: manifestTools,
+  });
+  const declaredRecords = collectDeclaredCapabilityNames({
+    catalogNames: entry.recordNames,
+    manifestNames: manifestRecords,
   });
   writeCapabilityGrants(
     target,
     buildCapabilityGrants({
       trustTier,
       declaredHosts,
+      declaredTools,
+      declaredRecords,
       sourceEntryId: entry.id,
     })
   );
@@ -554,6 +584,8 @@ async function installPluginEntry(
     capabilities: {
       trustTier,
       networkHosts: declaredHosts,
+      toolNames: declaredTools,
+      recordNames: declaredRecords,
     },
   };
 }
