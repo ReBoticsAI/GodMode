@@ -26,6 +26,7 @@ import {
   listGithubProjectsForUser,
   listGithubReposForUser,
   listGithubIssueCommentsForCard,
+  listGithubIssueTimelineForCard,
   postGithubIssueCommentForCard,
   syncBoardWithGithub,
   updateBoardStatusMap,
@@ -462,6 +463,20 @@ export function createUserProductivityRouter(): Router {
         body,
       });
       res.status(201).json({ comment });
+    } catch (err) {
+      sendErr(err, res);
+    }
+  });
+
+  router.get("/projects/cards/:id/github/timeline", async (req, res) => {
+    try {
+      const access = resolveUserTasksAccess(req, "viewer");
+      const result = await listGithubIssueTimelineForCard({
+        userId: access.ownerUserId,
+        db: access.db,
+        cardId: String(req.params.id),
+      });
+      res.json(result);
     } catch (err) {
       sendErr(err, res);
     }
