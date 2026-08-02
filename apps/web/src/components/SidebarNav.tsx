@@ -51,7 +51,6 @@ import { useTenant } from "@/lib/tenant-context";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { iconByName } from "@/lib/icon-lookup";
 import { cn } from "@/lib/utils";
-import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { AgentGroup } from "@/components/AgentGroup";
 import { AgentPulseIcon } from "@/components/AgentPulseIcon";
 import {
@@ -96,8 +95,8 @@ const NEW_PAGE_PROMPT =
  * Tree navigation. Top: the user's PERSONAL pages (Calendar, Tasks, Vault, etc.).
  * Middle: departments as labeled section headers, each revealing divisions as
  * expandable sub-trees. Bottom: Shared and Marketplace nodes. The active division
- * auto-expands and the active page is highlighted. Users/Settings stay in the
- * footer chrome (see SidebarShellContent.tsx).
+ * auto-expands and the active page is highlighted. Brand header, project
+ * switcher, and Users/Settings live in SidebarShellContent.tsx.
  */
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
@@ -313,7 +312,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent className="flex flex-col gap-0.5">
-          <WorkspaceSwitcher />
           {PERSONAL_ITEMS.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
