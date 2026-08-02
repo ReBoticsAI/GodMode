@@ -15,11 +15,19 @@ export interface PluginRecordSeed {
   data: RecordData;
 }
 
-/** Declared runtime capabilities (#290). Restricted catalogs grant only these. */
+/** Declared runtime capabilities (#290 network, #303 tools/records). Restricted catalogs grant only these. */
 export interface PluginManifestCapabilities {
   network?: {
     /** Hostnames the plugin may reach via `host.externalFetch` (http/https). */
     hosts?: string[];
+  };
+  tools?: {
+    /** AI tool names the plugin may register via `api.tools.register`. */
+    names?: string[];
+  };
+  records?: {
+    /** ObjectType names the plugin may register or call via `api.kernel` / `api.objectTypes`. */
+    names?: string[];
   };
 }
 
@@ -32,7 +40,7 @@ export interface GodmodePluginManifest {
   kernelApiVersion?: KernelClientApiVersion;
   description?: string;
   departments?: string[];
-  /** Optional capability requests for Marketplace buyer grants (#290). */
+  /** Optional capability requests for Marketplace buyer grants (#290 / #303). */
   capabilities?: PluginManifestCapabilities;
   native?: {
     platform?: string;
@@ -205,6 +213,30 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
   };
 }
 
+function parseNamedCapabilityList(
+  raw: unknown,
+  pluginId: string,
+  pathLabel: string
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object") {
+    throw new Error(
+      `Invalid plugin manifest (${pluginId}): ${pathLabel} must be an object`
+    );
+  }
+  const obj = raw as Record<string, unknown>;
+  if (obj.names !== undefined && !Array.isArray(obj.names)) {
+    throw new Error(
+      `Invalid plugin manifest (${pluginId}): ${pathLabel}.names must be an array`
+    );
+  }
+  if (!Array.isArray(obj.names)) return undefined;
+  const names = obj.names.filter(
+    (n): n is string => typeof n === "string" && n.trim().length > 0
+  );
+  return names.length ? names : undefined;
+}
+
 function parseManifestCapabilities(
   raw: unknown,
   pluginId: string
@@ -216,23 +248,43 @@ function parseManifestCapabilities(
     );
   }
   const cap = raw as Record<string, unknown>;
-  const network = cap.network;
-  if (network === undefined) return {};
-  if (!network || typeof network !== "object") {
-    throw new Error(
-      `Invalid plugin manifest (${pluginId}): capabilities.network must be an object`
-    );
+  const out: PluginManifestCapabilities = {};
+
+  if (cap.network !== undefined) {
+    if (!cap.network || typeof cap.network !== "object") {
+      throw new Error(
+        `Invalid plugin manifest (${pluginId}): capabilities.network must be an object`
+      );
+    }
+    const net = cap.network as Record<string, unknown>;
+    if (net.hosts !== undefined && !Array.isArray(net.hosts)) {
+      throw new Error(
+        `Invalid plugin manifest (${pluginId}): capabilities.network.hosts must be an array`
+      );
+    }
+    const hosts = Array.isArray(net.hosts)
+      ? net.hosts.filter(
+          (h): h is string => typeof h === "string" && h.trim().length > 0
+        )
+      : undefined;
+    out.network = hosts ? { hosts } : {};
   }
-  const net = network as Record<string, unknown>;
-  if (net.hosts !== undefined && !Array.isArray(net.hosts)) {
-    throw new Error(
-      `Invalid plugin manifest (${pluginId}): capabilities.network.hosts must be an array`
-    );
-  }
-  const hosts = Array.isArray(net.hosts)
-    ? net.hosts.filter((h): h is string => typeof h === "string" && h.trim().length > 0)
-    : undefined;
-  return { network: hosts ? { hosts } : {} };
+
+  const tools = parseNamedCapabilityList(
+    cap.tools,
+    pluginId,
+    "capabilities.tools"
+  );
+  if (tools) out.tools = { names: tools };
+
+  const records = parseNamedCapabilityList(
+    cap.records,
+    pluginId,
+    "capabilities.records"
+  );
+  if (records) out.records = { names: records };
+
+  return out;
 }
 
 export function readGodmodePluginManifest(pluginRoot: string): GodmodePluginManifest {
