@@ -2845,6 +2845,31 @@ export const addUserCardComment = (
   return addCardComment(id, body, author);
 };
 
+export type GithubIssueComment = {
+  id: number;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  authorLogin: string;
+  authorAvatarUrl: string | null;
+};
+
+export const fetchUserCardGithubComments = (id: string) =>
+  api<{
+    linked: boolean;
+    repo: string | null;
+    issueNumber: number | null;
+    url: string | null;
+    comments: GithubIssueComment[];
+  }>(`/user/projects/cards/${encodeURIComponent(id)}/github/comments`);
+
+export const postUserCardGithubComment = (id: string, body: string) =>
+  api<{ comment: GithubIssueComment }>(
+    `/user/projects/cards/${encodeURIComponent(id)}/github/comments`,
+    { method: "POST", body: JSON.stringify({ body }) }
+  );
+
 export function slugifyStructureId(raw: string): string {
   return raw
     .toLowerCase()
