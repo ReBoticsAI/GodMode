@@ -2,6 +2,11 @@ import { config } from "../config.js";
 import type { CoreDatabase } from "../core-db.js";
 import type { CatalogEntry, CatalogIndex } from "./marketplace-catalog.js";
 import { fetchOfficialCatalog } from "./marketplace-catalog.js";
+import {
+  assertPluginInstallPin,
+  isFloatingPluginRef,
+  normalizePluginRef,
+} from "./marketplace-plugin-pin.js";
 
 export type OfficialCatalogRow = {
   entry_id: string;
@@ -15,6 +20,7 @@ export type OfficialCatalogRow = {
   bundle_path: string | null;
   plugin_repo: string | null;
   plugin_ref: string | null;
+  plugin_digest: string | null;
   preview_path: string | null;
   price_cents: number;
   currency: string;
@@ -22,6 +28,38 @@ export type OfficialCatalogRow = {
   status: string;
   sort_order: number;
   updated_at: string;
+};
+
+export type OfficialCatalogPinIssue = {
+  entryId: string;
+  title: string;
+  status: string;
+  installType: string;
+  pluginRef: string | null;
+  pluginDigest: string | null;
+  issue: "missing_ref" | "floating_ref" | "invalid_digest";
+  message: string;
+};
+
+export type OfficialCatalogUpsertInput = {
+  entryId: string;
+  title: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  kind?: string;
+  installType: string;
+  tags?: string[];
+  bundlePath?: string;
+  pluginRepo?: string;
+  pluginRef?: string;
+  pluginDigest?: string;
+  previewPath?: string;
+  priceCents?: number;
+  currency?: string;
+  listingId?: string | null;
+  status?: string;
+  sortOrder?: number;
 };
 
 export function getOfficialCatalogEntryPrice(
@@ -43,35 +81,88 @@ export function getOfficialCatalogEntryPrice(
   };
 }
 
+/**
+ * Active Official plugin rows must carry an immutable pluginRef (#292 / #177).
+ * Inactive / draft rows may omit a pin while operators prepare the listing.
+ */
+export function assertOfficialCatalogPluginPinForUpsert(
+  entry: OfficialCatalogUpsertInput
+): void {
+  const installType = String(entry.installType || "plugin").toLowerCase();
+  const status = String(entry.status ?? "active").toLowerCase();
+  if (installType !== "plugin" || status !== "active") return;
+
+  assertPluginInstallPin(
+    {
+      id: entry.entryId,
+      kind: entry.kind ?? "plugin",
+      installType: "plugin",
+      title: entry.title,
+      description: entry.description ?? "",
+      version: entry.version ?? "0.0.0",
+      author: entry.author ?? "ReBotics",
+      pluginRepo: entry.pluginRepo,
+      pluginRef: entry.pluginRef,
+      pluginDigest: entry.pluginDigest,
+      sourceName: "Official",
+    },
+    "required"
+  );
+}
+
+export function auditOfficialCatalogPluginPins(
+  rows: OfficialCatalogRow[]
+): OfficialCatalogPinIssue[] {
+  const issues: OfficialCatalogPinIssue[] = [];
+  for (const row of rows) {
+    if (String(row.install_type).toLowerCase() !== "plugin") continue;
+    if (String(row.status).toLowerCase() !== "active") continue;
+
+    const ref = normalizePluginRef(row.plugin_ref);
+    if (isFloatingPluginRef(ref)) {
+      issues.push({
+        entryId: row.entry_id,
+        title: row.title,
+        status: row.status,
+        installType: row.install_type,
+        pluginRef: row.plugin_ref,
+        pluginDigest: row.plugin_digest,
+        issue: ref ? "floating_ref" : "missing_ref",
+        message: ref
+          ? `Floating pluginRef "${ref}" is not allowed for active Official plugins (#177).`
+          : `Active Official plugin "${row.entry_id}" is missing pluginRef (tag or commit).`,
+      });
+    }
+
+    const digest = normalizePluginRef(row.plugin_digest);
+    if (digest && !/^[0-9a-f]{7,40}$/i.test(digest)) {
+      issues.push({
+        entryId: row.entry_id,
+        title: row.title,
+        status: row.status,
+        installType: row.install_type,
+        pluginRef: row.plugin_ref,
+        pluginDigest: row.plugin_digest,
+        issue: "invalid_digest",
+        message: `pluginDigest must be a hex commit sha (got "${digest}").`,
+      });
+    }
+  }
+  return issues;
+}
+
 export function upsertOfficialCatalogEntry(
   core: CoreDatabase,
-  entry: {
-    entryId: string;
-    title: string;
-    description?: string;
-    version?: string;
-    author?: string;
-    kind?: string;
-    installType: string;
-    tags?: string[];
-    bundlePath?: string;
-    pluginRepo?: string;
-    pluginRef?: string;
-    previewPath?: string;
-    priceCents?: number;
-    currency?: string;
-    listingId?: string | null;
-    status?: string;
-    sortOrder?: number;
-  }
+  entry: OfficialCatalogUpsertInput
 ): OfficialCatalogRow {
+  assertOfficialCatalogPluginPinForUpsert(entry);
   core
     .prepare(
       `INSERT INTO marketplace_official_catalog
          (entry_id, title, description, version, author, kind, install_type, tags_json,
-          bundle_path, plugin_repo, plugin_ref, preview_path, price_cents, currency,
+          bundle_path, plugin_repo, plugin_ref, plugin_digest, preview_path, price_cents, currency,
           listing_id, status, sort_order, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(entry_id) DO UPDATE SET
          title=excluded.title,
          description=excluded.description,
@@ -83,6 +174,7 @@ export function upsertOfficialCatalogEntry(
          bundle_path=excluded.bundle_path,
          plugin_repo=excluded.plugin_repo,
          plugin_ref=excluded.plugin_ref,
+         plugin_digest=excluded.plugin_digest,
          preview_path=excluded.preview_path,
          price_cents=excluded.price_cents,
          currency=excluded.currency,
@@ -103,6 +195,7 @@ export function upsertOfficialCatalogEntry(
       entry.bundlePath ?? null,
       entry.pluginRepo ?? null,
       entry.pluginRef ?? null,
+      entry.pluginDigest ?? null,
       entry.previewPath ?? null,
       Math.max(0, Math.floor(Number(entry.priceCents ?? 0))),
       (entry.currency ?? "usd").toLowerCase(),
@@ -136,6 +229,7 @@ function rowToCatalogEntry(row: OfficialCatalogRow, sourceCatalog: string): Cata
     bundlePath: row.bundle_path ?? undefined,
     pluginRepo: row.plugin_repo ?? undefined,
     pluginRef: row.plugin_ref ?? undefined,
+    pluginDigest: row.plugin_digest ?? undefined,
     previewPath: row.preview_path ?? undefined,
     sourceCatalog,
     sourceName: "Official",
@@ -194,4 +288,63 @@ export function listOfficialCatalogRows(core: CoreDatabase): OfficialCatalogRow[
       `SELECT * FROM marketplace_official_catalog ORDER BY sort_order ASC, title ASC`
     )
     .all() as OfficialCatalogRow[];
+}
+
+/**
+ * Import pinned plugin (and pack) rows from the free Official index into the
+ * curated SaaS table. Preserves existing Cloud price_cents / listing_id / sort_order.
+ */
+export async function syncOfficialCatalogFromPublicFeed(core: CoreDatabase): Promise<{
+  upserted: string[];
+  skipped: Array<{ id: string; reason: string }>;
+  pinAudit: OfficialCatalogPinIssue[];
+  sourceUrl: string;
+}> {
+  const { url, entries } = await fetchOfficialCatalog();
+  const upserted: string[] = [];
+  const skipped: Array<{ id: string; reason: string }> = [];
+
+  for (const entry of entries) {
+    const installType = String(entry.installType || "plugin");
+    if (installType === "plugin" && isFloatingPluginRef(entry.pluginRef)) {
+      skipped.push({
+        id: entry.id,
+        reason: "floating or missing pluginRef (fail closed for Official plugins)",
+      });
+      continue;
+    }
+
+    const existing = core
+      .prepare(`SELECT * FROM marketplace_official_catalog WHERE entry_id=?`)
+      .get(entry.id) as OfficialCatalogRow | undefined;
+
+    upsertOfficialCatalogEntry(core, {
+      entryId: entry.id,
+      title: entry.title,
+      description: entry.description,
+      version: entry.version,
+      author: entry.author,
+      kind: entry.kind,
+      installType,
+      tags: entry.tags,
+      bundlePath: entry.bundlePath,
+      pluginRepo: entry.pluginRepo,
+      pluginRef: entry.pluginRef,
+      pluginDigest: entry.pluginDigest,
+      previewPath: entry.previewPath,
+      priceCents: existing ? Number(existing.price_cents ?? 0) : Number(entry.priceCents ?? 0),
+      currency: existing?.currency ?? entry.currency ?? "usd",
+      listingId: existing?.listing_id ?? entry.listingId ?? null,
+      status: existing?.status ?? "active",
+      sortOrder: existing?.sort_order ?? 0,
+    });
+    upserted.push(entry.id);
+  }
+
+  return {
+    upserted,
+    skipped,
+    pinAudit: auditOfficialCatalogPluginPins(listOfficialCatalogRows(core)),
+    sourceUrl: url,
+  };
 }

@@ -60,6 +60,25 @@ Floating refs (`main` / `master`) are rejected for those catalogs. Local folder
 registration (self-host / Unofficial) stays operator-trusted and does not use
 this pin gate.
 
+### Cloud Official pin ops (#292)
+
+On GodMode Cloud, curated Official rows live in `marketplace_official_catalog`
+and are served at the public Official feed. Active `installType: "plugin"` rows
+must have an immutable `pluginRef` (and preferably `pluginDigest`). Admin upsert
+fail-closes on floating refs. Admin checklist:
+
+1. `GET /api/marketplace/commerce/admin/official-catalog` and check `pinAudit`
+   (empty means all active plugins are pinned).
+2. Prefer `POST /api/marketplace/commerce/admin/official-catalog/sync-from-public`
+   to import pinned plugin/pack rows from the free Official index while keeping
+   existing Cloud `price_cents` / `listing_id` / `sort_order`.
+3. Or upsert each plugin with `pluginRef` (tag or commit) and optional
+   `pluginDigest` via `POST .../admin/official-catalog`.
+4. Smoke: install a free Official plugin on Cloud; confirm checkout uses the pin
+   (no floating `main`).
+5. After a new plugin release, bump the catalog pin (tag/sha + digest) before
+   promoting the row to `active`.
+
 Intake CI does not replace install pins or runtime least privilege.
 Runtime capability allowlists (#290 network, #303 tools/records): Official/Community
 installs are **deny-by-default** for network, tools, and records. Catalog fields
