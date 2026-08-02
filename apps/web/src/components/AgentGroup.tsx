@@ -15,6 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useFitText } from "@/hooks/use-fit-text";
 import { useIntelligence, type PanelTab } from "@/lib/intelligence-context";
 import { AGENTS_PATH } from "@/lib/navigation";
 import { NavBadge } from "@/components/NavBadge";
@@ -71,6 +72,9 @@ export function AgentGroup({
     setOpen(isSelectedAgent);
   }, [isSelectedAgent]);
 
+  // Keep the header label on one line; shrink font when the sidebar is tight.
+  const labelRef = useFitText(label, { maxPx: 16, minPx: 10 });
+
   return (
     <Collapsible
       open={open}
@@ -89,14 +93,19 @@ export function AgentGroup({
           aria-label={`Open ${label}`}
           title={`Chat with ${label} and open its Agent Profile`}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-base font-bold leading-snug tracking-tight transition-colors",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 font-bold leading-none tracking-tight transition-colors",
             headerActive
               ? "text-sidebar-accent-foreground"
               : "text-foreground hover:text-sidebar-accent-foreground"
           )}
         >
           <Icon className="size-5 shrink-0 text-sidebar-accent-foreground" />
-          <span className="min-w-0 flex-1 break-words text-left">{label}</span>
+          <span
+            ref={labelRef}
+            className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-left text-base"
+          >
+            {label}
+          </span>
         </button>
         <CollapsibleTrigger
           aria-label={`Collapse ${label}`}
