@@ -28,6 +28,12 @@ import {
   materializePinnedPluginCheckout,
   resolvePluginPinPolicy,
 } from "./marketplace-plugin-pin.js";
+import {
+  buildCapabilityGrants,
+  collectDeclaredNetworkHosts,
+  resolvePluginTrustTier,
+  writeCapabilityGrants,
+} from "./plugin-capabilities.js";
 
 export type CatalogInstallType = "clone" | "plugin";
 
@@ -46,6 +52,11 @@ export interface CatalogEntry {
   pluginRef?: string;
   /** Optional full/prefix commit sha; fail closed if HEAD drifts (#177). */
   pluginDigest?: string;
+  /**
+   * Hostnames Official/Community installs may grant for `host.externalFetch` (#290).
+   * Empty / omitted => network deny-by-default for restricted trust tiers.
+   */
+  networkHosts?: string[];
   /** Install from an existing local directory (no git clone). */
   pluginLocalPath?: string;
   previewPath?: string;
@@ -462,6 +473,10 @@ async function installPluginEntry(
   built: boolean;
   pluginRef: string;
   pluginDigest?: string;
+  capabilities?: {
+    trustTier: string;
+    networkHosts: string[];
+  };
 }> {
   const policy = resolvePluginPinPolicy({ entry, sourceCatalog });
   const pin = assertPluginInstallPin(entry, policy);
@@ -504,6 +519,27 @@ async function installPluginEntry(
     }
   }
 
+  const trustTier = resolvePluginTrustTier({ entry, sourceCatalog });
+  let manifestHosts: string[] = [];
+  try {
+    const manifest = readGodmodePluginManifest(target);
+    manifestHosts = manifest.capabilities?.network?.hosts ?? [];
+  } catch {
+    /* grant from catalog hosts alone when manifest is not readable yet */
+  }
+  const declaredHosts = collectDeclaredNetworkHosts({
+    catalogHosts: entry.networkHosts,
+    manifestHosts,
+  });
+  writeCapabilityGrants(
+    target,
+    buildCapabilityGrants({
+      trustTier,
+      declaredHosts,
+      sourceEntryId: entry.id,
+    })
+  );
+
   const activation = await activatePluginForTenant(core, tenantId, target, {
     buildIfNeeded: false,
     installForTenant: true,
@@ -515,6 +551,10 @@ async function installPluginEntry(
     built,
     pluginRef: pin.ref,
     pluginDigest: pin.digest,
+    capabilities: {
+      trustTier,
+      networkHosts: declaredHosts,
+    },
   };
 }
 
