@@ -1227,8 +1227,9 @@ function CardEditorDialog({
       <SheetContent
         side="right"
         className={cn(
-          "relative flex w-full flex-col gap-0 border-l bg-background p-0 shadow-2xl",
-          // Beat Sheet defaults (data-[side=right]:w-3/4 + sm:max-w-sm) via inline size.
+          // Do not add `relative` here: it overrides Sheet's `fixed` via tailwind-merge
+          // and dumps the panel into document flow.
+          "flex flex-col gap-0 border-l bg-background p-0 shadow-2xl sm:max-w-none",
           sheetResizing && "transition-none"
         )}
         style={
