@@ -114,7 +114,14 @@ function EntryCard({
           <div>
             <CardTitle className="text-base">{entry.title}</CardTitle>
             <CardDescription className="text-xs">
-              {entry.author} · v{entry.version} · {entry.kind}
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <span>
+                  {entry.author} · v{entry.version} · {entry.kind}
+                </span>
+                {entry.verifiedPublisher ? (
+                  <Badge variant="outline">Verified</Badge>
+                ) : null}
+              </span>
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-1">

@@ -79,6 +79,7 @@ function openOfficialCatalogDb(): CoreDatabase {
       listing_id TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       sort_order INTEGER NOT NULL DEFAULT 0,
+      verified_publisher INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);

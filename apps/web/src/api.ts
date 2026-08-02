@@ -4236,6 +4236,8 @@ export interface CatalogEntry {
   priceCents?: number;
   currency?: string;
   listingId?: string;
+  /** Official curated publisher identity signal (#309). */
+  verifiedPublisher?: boolean;
 }
 
 export interface DiscoveredPlugin {
