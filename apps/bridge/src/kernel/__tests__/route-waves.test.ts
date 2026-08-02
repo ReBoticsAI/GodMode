@@ -79,6 +79,7 @@ describe("legacy route wave", () => {
       "github-integration.ts:post:/connect",
       "github-integration.ts:post:/disconnect",
       "marketplace-commerce.ts:post:/admin/official-catalog",
+      "marketplace-commerce.ts:post:/admin/official-catalog/sync-from-public",
       "marketplace-commerce.ts:post:/paypal/capture",
       "saas.ts:post:/checkout",
       "saas.ts:post:/portal",
