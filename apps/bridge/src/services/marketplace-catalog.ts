@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
 import { getCoreDb, type CoreDatabase } from "../core-db.js";
@@ -24,6 +23,11 @@ import {
   hasPaidEntitlementForCatalogEntry,
   MarketplaceCommerceError,
 } from "./marketplace-commerce.js";
+import {
+  assertPluginInstallPin,
+  materializePinnedPluginCheckout,
+  resolvePluginPinPolicy,
+} from "./marketplace-plugin-pin.js";
 
 export type CatalogInstallType = "clone" | "plugin";
 
@@ -38,7 +42,10 @@ export interface CatalogEntry {
   tags?: string[];
   bundlePath?: string;
   pluginRepo?: string;
+  /** Immutable git tag or commit for Official/Community installs (#177). */
   pluginRef?: string;
+  /** Optional full/prefix commit sha; fail closed if HEAD drifts (#177). */
+  pluginDigest?: string;
   /** Install from an existing local directory (no git clone). */
   pluginLocalPath?: string;
   previewPath?: string;
@@ -446,9 +453,18 @@ export async function uninstallDiscoveredPlugin(
 async function installPluginEntry(
   core: CoreDatabase,
   tenantId: string,
-  entry: CatalogEntry
-): Promise<{ pluginId: string; pluginRoot: string; restartRequired: boolean; built: boolean }> {
-  const ref = entry.pluginRef ?? "main";
+  entry: CatalogEntry,
+  sourceCatalog?: string
+): Promise<{
+  pluginId: string;
+  pluginRoot: string;
+  restartRequired: boolean;
+  built: boolean;
+  pluginRef: string;
+  pluginDigest?: string;
+}> {
+  const policy = resolvePluginPinPolicy({ entry, sourceCatalog });
+  const pin = assertPluginInstallPin(entry, policy);
   const dirName = entry.id.replace(/[^a-z0-9-]/gi, "-");
   let target: string;
   let built = false;
@@ -472,20 +488,13 @@ async function installPluginEntry(
     }
     target = path.join(marketplacePluginsDir(), dirName);
     const cloneUrl = authenticatedGitCloneUrl(entry.pluginRepo);
-    if (fs.existsSync(target)) {
-      try {
-        execSync("git pull", { cwd: target, stdio: "pipe" });
-      } catch {
-        fs.rmSync(target, { recursive: true, force: true });
-        execSync(`git clone --depth 1 --branch ${ref} ${cloneUrl} ${target}`, {
-          stdio: "pipe",
-        });
-      }
-    } else {
-      execSync(`git clone --depth 1 --branch ${ref} ${cloneUrl} ${target}`, {
-        stdio: "pipe",
-      });
-    }
+    materializePinnedPluginCheckout({
+      target,
+      cloneUrl,
+      ref: pin.ref,
+      digest: pin.digest,
+      entryId: entry.id,
+    });
     if (!bridgeEntryExists(target)) {
       await ensurePluginBuilt(target, {
         tenantId,
@@ -504,6 +513,8 @@ async function installPluginEntry(
     pluginRoot: target,
     restartRequired: false,
     built,
+    pluginRef: pin.ref,
+    pluginDigest: pin.digest,
   };
 }
 
@@ -567,7 +578,12 @@ export async function installCatalogEntry(
   let result: Record<string, unknown>;
 
   if (entry.installType === "plugin") {
-    result = await installPluginEntry(core, opts.tenantId, entry);
+    result = await installPluginEntry(
+      core,
+      opts.tenantId,
+      entry,
+      opts.sourceCatalog ?? catalogUrl
+    );
   } else {
     const bundle = await fetchBundleJson(entry, index, catalogUrl);
     const imported = importEntity(tenantDb, bundle);

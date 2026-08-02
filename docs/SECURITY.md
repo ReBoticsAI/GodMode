@@ -88,6 +88,8 @@ Layers 1–3 (plus shared PTY #162) and `cursor_cloud` SDK sandbox (#171) are a 
 **Layer 4** (SaaS staging/prod recommended via #178): ephemeral npm builds via a host build supervisor (`deploy/build-supervisor/`). Prefer a **separate supervisor or token per data root** so SaaS builds never bind private_hub tenant paths. Default build network is `none`; staging/prod demos use `allowlist` (Docker `--internal` network + host CONNECT proxy). Residual risks: the supervisor is a privileged Docker client on the host; compose publishes supervisor/egress ports on all host interfaces so Linux Bridge containers can reach them via `host.docker.internal` (loopback-only publish breaks host-gateway); operators must firewall WAN NICs and rotate `CODING_BUILD_SUPERVISOR_TOKEN`; a same-named non-internal Docker network fails closed until removed. Non-HTTP egress (SSH / `git@` / arbitrary TCP) is deferred for SaaS defaults (#173): use HTTPS remotes for private git; trusted single-tenant hosts may set `CODING_TERMINAL_NET=shared` if they truly need SSH. Full `shared` build networks remain out of scope. Shared-host VM-grade isolation is #172.
 
 | Local plugin path registration | Tenant RCE via arbitrary folders | Blocked on SaaS unless `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` |
+| Marketplace Official/Community plugin install | Floating `main` pulls or digest drift after intake verify | **Buyer pin (#177):** install requires immutable `pluginRef` (tag or commit); optional `pluginDigest` must match `HEAD`. No `git pull` to latest. Local folder installs remain operator-trusted. Runtime capability allowlists are a follow-up |
+| Installed plugin code in Bridge process | Malicious plugin APIs against tenant data after install | Distinct from coding jail (#112) and from Marketplace intake CI. Kill switches (#96). True plugin process/container sandbox is optional later |
 | Federation API token | Remote command injection if token leaks | Rotate tokens; restrict network access |
 | First signup admin | Race on internet-exposed fresh installs | Use invite codes, paywall, or pre-seed `INITIAL_ADMINS` |
 | Plugin bundles (`/api/plugins/*/web.js`) | Proprietary JS exposure | Requires authenticated tenant + installed plugin |
@@ -171,6 +173,24 @@ are not Record CRUD.
 Paid Marketplace plugins are still host-privileged code once installed — review
 sources before install. Chargebacks on delivered software ban Marketplace access
 per [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md).
+
+## Marketplace buyer protection (threat boundaries)
+
+Intake verification (Marketplace CI smoke / optional review) raises the floor but
+does **not** guarantee benign runtime behavior after install. Keep these
+boundaries distinct:
+
+| Boundary | What it covers | What it does not |
+|----------|----------------|------------------|
+| **Intake** (Marketplace verify VM / Actions) | Public repo pin, one-shot smoke before listing | Time bombs, env-gated exfil, abuse of allowed APIs on the buyer hub |
+| **Buyer install pin (#177)** | Official/Community installs must use immutable `pluginRef` (tag or commit); optional `pluginDigest` fail-closed on drift; no floating `main` / `git pull` | Capability allowlists, confirmations, CSP (follow-up) |
+| **Coding jail (#112 Layers 1–4)** | Per-tenant coding root + bubblewrap terminal/helpers on a **shared** Bridge host | Isolating *installed plugin* code (plugins load in the Bridge Node process today) |
+| **VM-grade coding jobs (#172)** | Disposable machines for untrusted build/coding jobs | Per-plugin runtime sandbox on the buyer hub |
+| **Kill switches (#96)** | Deploy/spend/send/agent emergency stops | Fine-grained plugin capability grants |
+
+Extending CI smoke or Copilot review on intake is encouraged and still not
+sufficient alone. A true plugin-per-process/container sandbox remains optional
+and expensive.
 
 ## Reporting
 
