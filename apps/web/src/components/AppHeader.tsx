@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { ChevronRightIcon, MenuIcon, PanelRightOpenIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ModeToggle";
 import {
   chromelessHeaderSegments,
   departmentFromPath,
@@ -138,13 +139,15 @@ export function AppHeader({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="-mr-1 shrink-0 lg:hidden"
+          className="shrink-0 lg:hidden"
           onClick={onOpenRightPanel}
           aria-label="Open side panel"
         >
           <PanelRightOpenIcon />
         </Button>
       )}
+
+      <ModeToggle className="-mr-1 shrink-0" />
     </header>
   );
 }
