@@ -77,7 +77,7 @@ export function AgentGroup({
       onOpenChange={setOpen}
       className="flex flex-col gap-0.5 rounded-lg border border-sidebar-border/60 bg-sidebar-accent/10 p-1.5"
     >
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
         <button
           type="button"
           onClick={() => {
@@ -89,14 +89,14 @@ export function AgentGroup({
           aria-label={`Open ${label}`}
           title={`Chat with ${label} and open its Agent Profile`}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-base font-bold leading-none tracking-tight transition-colors",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-base font-bold leading-snug tracking-tight transition-colors",
             headerActive
               ? "text-sidebar-accent-foreground"
               : "text-foreground hover:text-sidebar-accent-foreground"
           )}
         >
           <Icon className="size-5 shrink-0 text-sidebar-accent-foreground" />
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+          <span className="min-w-0 flex-1 break-words text-left">{label}</span>
         </button>
         <CollapsibleTrigger
           aria-label={`Collapse ${label}`}
