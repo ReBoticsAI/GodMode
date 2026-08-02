@@ -59,6 +59,7 @@ import {
   fetchCardComments,
   fetchUserCardComments,
   fetchUserCardGithubComments,
+  fetchUserCardGithubTimeline,
   postUserCardGithubComment,
   addCardComment,
   addUserCardComment,
@@ -70,12 +71,16 @@ import {
   type AiProjectColumn,
   type AiCardComment,
   type GithubIssueComment,
+  type GithubIssueTimelineEvent,
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Markdown } from "@/components/intelligence/Markdown";
 import {
   Dialog,
   DialogContent,
@@ -674,6 +679,16 @@ function CardEditorDialog({
   const [githubCommentsError, setGithubCommentsError] = useState<string | null>(
     null
   );
+  const [githubTimeline, setGithubTimeline] = useState<
+    GithubIssueTimelineEvent[]
+  >([]);
+  const [githubTimelineLoading, setGithubTimelineLoading] = useState(false);
+  const [githubTimelineError, setGithubTimelineError] = useState<string | null>(
+    null
+  );
+  const [descriptionMode, setDescriptionMode] = useState<"edit" | "preview">(
+    "edit"
+  );
   const [sheetWidth, setSheetWidth] = useState(readStoredTaskSheetWidth);
   const [sheetResizing, setSheetResizing] = useState(false);
   const [composer, setComposer] = useState("");
@@ -805,12 +820,46 @@ function CardEditorDialog({
     }
   }, [card, scope, githubSyncEnabled]);
 
+  const reloadGithubTimeline = useCallback(async () => {
+    if (!card || !isUserScope(scope)) {
+      setGithubTimeline([]);
+      setGithubTimelineError(null);
+      setGithubTimelineLoading(false);
+      return;
+    }
+    const meta = parseGithubCardMeta(card.context_json);
+    const linked =
+      Boolean(meta.repo?.includes("/")) &&
+      typeof meta.issueNumber === "number" &&
+      meta.issueNumber > 0;
+    if (!linked || !githubSyncEnabled) {
+      setGithubTimeline([]);
+      setGithubTimelineError(null);
+      setGithubTimelineLoading(false);
+      return;
+    }
+    setGithubTimelineLoading(true);
+    setGithubTimelineError(null);
+    try {
+      const r = await fetchUserCardGithubTimeline(card.id);
+      setGithubTimeline(r.events);
+    } catch (err) {
+      setGithubTimeline([]);
+      setGithubTimelineError(
+        err instanceof Error ? err.message : "Could not load GitHub activity"
+      );
+    } finally {
+      setGithubTimelineLoading(false);
+    }
+  }, [card, scope, githubSyncEnabled]);
+
   // Reset editor fields only when the open card id changes so background
   // board sync can refresh card props without wiping in-progress edits.
   useEffect(() => {
     if (!card) return;
     setTitle(card.title ?? "");
     setDescription(card.description ?? "");
+    setDescriptionMode("edit");
     setPrompt(card.prompt ?? "");
     setTags(parseTags(card.tags_json));
     setTagDraft("");
@@ -834,6 +883,7 @@ function CardEditorDialog({
     void reloadSubtasks();
     void reloadComments();
     void reloadGithubComments();
+    void reloadGithubTimeline();
     setAwaitingRunId(null);
     if (card.column_id === "review") {
       fetchWorkflowRuns({ status: "awaiting_input", cardId: card.id })
@@ -1337,9 +1387,15 @@ function CardEditorDialog({
               className="h-8 text-xs"
             />
           </div>
+
           {showGithubFields ? (
-            <div className="grid gap-2 rounded-md border p-2">
-              <Label className="text-muted-foreground">GitHub</Label>
+            <div className="grid gap-3 rounded-lg border bg-card p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm">GitHub</Label>
+                {(githubCommentsLoading || githubTimelineLoading) && hasGithubIssue ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : null}
+              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="gh-start" className="text-xs">
                   Start date
@@ -1431,492 +1487,687 @@ function CardEditorDialog({
                   iteration, and text sync when those Project fields exist.
                 </p>
               )}
-            </div>
-          ) : null}
-          <div className="grid gap-1.5">
-            <Label>Assigned subagent</Label>
-            <Select
-              value={assignedAgentId}
-              onValueChange={(v) => setAssignedAgentId(v ?? "intelligence")}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Intelligence" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} ({a.backend})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="card-description">Description</Label>
-            <Textarea
-              id="card-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description"
-              className="min-h-[56px]"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="card-prompt">Prompt for the LLM</Label>
-            <Textarea
-              id="card-prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Instruction sent to Intelligence when you run this card"
-              className="min-h-[120px]"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              This is the instruction Intelligence receives when you click “Run with Intelligence”.
-            </p>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Attached context</Label>
-            <div className="flex flex-wrap gap-1">
-              {attachments.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">No context attached.</span>
-              )}
-              {attachments.map((a) => (
-                <Badge key={a.id} variant="secondary" className="gap-1">
-                  {a.label}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${a.label}`}
-                    onClick={() => removeAttachment(a.id)}
-                    className="rounded hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={attachCurrentPage}>
-                <Plus className="mr-1 h-3 w-3" />
-                Attach current page
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      disabled={availableSources.length === 0}
-                    >
-                      <Paperclip className="mr-1 h-3 w-3" />
-                      Add source
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="start" className="max-h-60 overflow-auto">
-                  {availableSources.map((s) => (
-                    <DropdownMenuItem
-                      key={s.id}
-                      onClick={() => addAttachment({ id: s.id, label: s.label })}
-                    >
-                      {s.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="card-tags">Labels</Label>
-            <div className="flex flex-wrap gap-1">
-              {tags.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">No labels yet.</span>
-              )}
-              {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="gap-1">
-                  {t}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${t}`}
-                    onClick={() => toggleTag(t)}
-                    className="rounded hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            {labelSuggestions.filter((s) => !tags.includes(s)).length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {labelSuggestions
-                  .filter((s) => !tags.includes(s))
-                  .slice(0, 12)
-                  .map((s) => (
-                    <Button
-                      key={s}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px]"
-                      onClick={() => toggleTag(s)}
-                    >
-                      <Plus data-icon="inline-start" className="h-3 w-3" />
-                      {s}
-                    </Button>
-                  ))}
-              </div>
-            ) : null}
-            <div className="flex gap-1.5">
-              <Input
-                id="card-tags"
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
-                    e.preventDefault();
-                    addTagDraft();
-                  }
-                }}
-                placeholder="Add label"
-                className="h-7 text-xs"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={addTagDraft}
-              >
-                Add
-              </Button>
-            </div>
-          </div>
 
-          <div className="grid gap-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Subtasks</Label>
-              {subtaskProgress.total > 0 && (
-                <span className="text-[10px] text-muted-foreground">
-                  {subtaskProgress.done}/{subtaskProgress.total} done
-                </span>
-              )}
-            </div>
-            {subtaskProgress.total > 0 && (
-              <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
-                <div
-                  className="h-full bg-emerald-500 transition-all"
-                  style={{
-                    width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`,
-                  }}
-                />
-              </div>
-            )}
-            <div className="flex flex-col gap-1">
-              {subtasks.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">No subtasks yet.</span>
-              )}
-              {subtasks.map((sub) => {
-                const doneId = doneColumnId(columns);
-                const done = sub.column_id === doneId || sub.status === "accepted";
-                return (
-                  <div
-                    key={sub.id}
-                    className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-muted"
-                  >
-                    <button
-                      type="button"
-                      aria-label={done ? "Mark subtask not done" : "Mark subtask done"}
-                      onClick={() => void toggleSubtask(sub)}
-                      className="shrink-0"
-                    >
-                      {done ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(sub.id)}
-                      className={cn(
-                        "flex-1 truncate text-left hover:underline",
-                        done && "text-muted-foreground line-through"
-                      )}
-                    >
-                      {sub.title}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-1.5">
-              <Input
-                value={newSubtask}
-                onChange={(e) => setNewSubtask(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void addSubtask();
-                  }
-                }}
-                placeholder="Add a subtask"
-                className="h-7 text-xs"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => void addSubtask()}
-              >
-                Add
-              </Button>
-            </div>
-          </div>
+              <Separator />
 
-          {useGithubComments ||
-          (githubSyncEnabled && ghMeta.projectItemId && !hasGithubIssue) ? (
-            <div className="grid gap-2 rounded-lg border bg-card p-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm">Issue comments</Label>
-                {githubCommentsLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                ) : null}
-              </div>
-              {!hasGithubIssue ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Draft Project items do not have GitHub Issue comments. Promote
-                  the card to an Issue to discuss on GitHub, or use GodMode
-                  activity below.
-                </p>
-              ) : (
-                <>
-                  <div className="flex max-h-72 flex-col gap-2 overflow-auto pr-0.5">
-                    {githubCommentsError ? (
-                      <p className="text-[11px] text-destructive">
-                        {githubCommentsError}
-                      </p>
-                    ) : null}
-                    {!githubCommentsLoading &&
-                      !githubCommentsError &&
-                      githubComments.length === 0 && (
-                        <span className="text-[11px] text-muted-foreground">
-                          No Issue comments yet.
-                        </span>
-                      )}
-                    {githubComments.map((c) => (
-                      <div
-                        key={c.id}
-                        className="rounded-md border bg-background/80 px-2.5 py-2"
-                      >
-                        <div className="mb-1 flex items-center gap-2">
-                          <Avatar className="h-5 w-5">
-                            {c.authorAvatarUrl ? (
-                              <AvatarImage
-                                src={c.authorAvatarUrl}
-                                alt={c.authorLogin}
-                              />
-                            ) : null}
-                            <AvatarFallback className="text-[9px]">
-                              {c.authorLogin.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-[11px] font-medium">
-                            {c.authorLogin}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatCommentTime(c.createdAt)}
-                          </span>
-                          {c.url ? (
-                            <a
-                              href={c.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-auto text-muted-foreground hover:text-foreground"
-                              aria-label="Open comment on GitHub"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          ) : null}
-                        </div>
-                        <p className="whitespace-pre-wrap text-[12px] leading-relaxed">
-                          {c.body}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+              <div className="grid gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="card-description">Description</Label>
+                  <Tabs
+                    value={descriptionMode}
+                    onValueChange={(v) =>
+                      setDescriptionMode(v === "preview" ? "preview" : "edit")
+                    }
+                  >
+                    <TabsList className="h-7">
+                      <TabsTrigger value="edit" className="px-2 text-[11px]">
+                        Edit
+                      </TabsTrigger>
+                      <TabsTrigger value="preview" className="px-2 text-[11px]">
+                        Preview
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+                {descriptionMode === "edit" ? (
                   <Textarea
-                    value={composer}
-                    onChange={(e) => setComposer(e.target.value)}
-                    placeholder="Comment on GitHub…"
-                    className="min-h-[72px] text-xs"
-                    disabled={readOnly || !githubCommentsLinked}
+                    id="card-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Issue body (Markdown supported)"
+                    className="min-h-[88px] text-xs"
+                  />
+                ) : (
+                  <div className="min-h-[88px] rounded-md border bg-background/80 px-2.5 py-2">
+                    {description.trim() ? (
+                      <Markdown content={description} />
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">
+                        Nothing to preview.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="card-tags">Labels</Label>
+                <div className="flex flex-wrap gap-1">
+                  {tags.length === 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      No labels yet.
+                    </span>
+                  )}
+                  {tags.map((t) => (
+                    <Badge key={t} variant="secondary" className="gap-1">
+                      {t}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${t}`}
+                        onClick={() => toggleTag(t)}
+                        className="rounded hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                {labelSuggestions.filter((s) => !tags.includes(s)).length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {labelSuggestions
+                      .filter((s) => !tags.includes(s))
+                      .slice(0, 12)
+                      .map((s) => (
+                        <Button
+                          key={s}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => toggleTag(s)}
+                        >
+                          <Plus data-icon="inline-start" className="h-3 w-3" />
+                          {s}
+                        </Button>
+                      ))}
+                  </div>
+                ) : null}
+                <div className="flex gap-1.5">
+                  <Input
+                    id="card-tags"
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addTagDraft();
+                      }
+                    }}
+                    placeholder="Add label"
+                    className="h-7 text-xs"
                   />
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-8 w-fit text-xs"
-                    onClick={() => void postComment()}
-                    disabled={
-                      busy ||
-                      readOnly ||
-                      !composer.trim() ||
-                      !githubCommentsLinked
-                    }
+                    className="h-7 text-xs"
+                    onClick={addTagDraft}
                   >
-                    Comment on GitHub
+                    Add
                   </Button>
-                </>
-              )}
-            </div>
-          ) : null}
-
-          <div
-            className={cn(
-              "grid gap-1.5 rounded-md border p-2",
-              isReview ? "border-amber-500/30 bg-amber-500/5" : "border-border"
-            )}
-          >
-            <Label>
-              {useGithubComments
-                ? "GodMode activity"
-                : card?.parent_card_id
-                  ? "Comments"
-                  : "Activity"}
-            </Label>
-            <div className="flex max-h-40 flex-col gap-1 overflow-auto">
-              {displayedComments.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">
-                  {useGithubComments
-                    ? "No local GodMode activity yet."
-                    : "No activity yet."}
-                </span>
-              )}
-              {displayedComments.map((c) => (
-                <div
-                  key={c.id}
-                  className={cn(
-                    "rounded px-1.5 py-1 text-[11px]",
-                    c.author === "user"
-                      ? "bg-primary/10 text-foreground"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  <span className="mr-1 text-[9px] font-semibold uppercase opacity-60">
-                    {c.author}
-                  </span>
-                  {c.kind && (
-                    <span className="mr-1 rounded bg-background/60 px-1 text-[9px] font-medium uppercase opacity-70">
-                      {c.kind}
-                    </span>
-                  )}
-                  {!card?.parent_card_id && c.cardTitle && c.cardTitle !== card?.title && (
-                    <span className="mr-1 rounded bg-background/60 px-1 text-[9px] font-medium opacity-70">
-                      {c.cardTitle}
-                    </span>
-                  )}
-                  {c.body}
                 </div>
-              ))}
+              </div>
+
+              {useGithubComments ||
+              (githubSyncEnabled && ghMeta.projectItemId && !hasGithubIssue) ? (
+                <>
+                  <Separator />
+                  <div className="grid gap-2">
+                    <Label className="text-xs">Activity</Label>
+                    {!hasGithubIssue ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Draft Project items do not have GitHub Issue comments or
+                        timeline activity. Promote the card to an Issue to discuss
+                        on GitHub, or use GodMode activity below.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex max-h-56 flex-col gap-1.5 overflow-auto pr-0.5">
+                          {githubTimelineError ? (
+                            <p className="text-[11px] text-destructive">
+                              {githubTimelineError}
+                            </p>
+                          ) : null}
+                          {!githubTimelineLoading &&
+                            !githubTimelineError &&
+                            githubTimeline.length === 0 && (
+                              <span className="text-[11px] text-muted-foreground">
+                                No GitHub activity yet.
+                              </span>
+                            )}
+                          {githubTimeline.map((ev) => (
+                            <div
+                              key={ev.id}
+                              className="flex items-start gap-2 rounded-md px-1 py-1 text-[11px] text-muted-foreground"
+                            >
+                              <Avatar className="mt-0.5 h-4 w-4 shrink-0">
+                                {ev.actorAvatarUrl ? (
+                                  <AvatarImage
+                                    src={ev.actorAvatarUrl}
+                                    alt={ev.actorLogin}
+                                  />
+                                ) : null}
+                                <AvatarFallback className="text-[8px]">
+                                  {ev.actorLogin.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-foreground/90">
+                                  {ev.summary}
+                                </span>
+                                {ev.createdAt ? (
+                                  <span className="ml-1.5 text-[10px] opacity-70">
+                                    {formatCommentTime(ev.createdAt)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Label className="text-xs">Issue comments</Label>
+                        <div className="flex max-h-72 flex-col gap-2 overflow-auto pr-0.5">
+                          {githubCommentsError ? (
+                            <p className="text-[11px] text-destructive">
+                              {githubCommentsError}
+                            </p>
+                          ) : null}
+                          {!githubCommentsLoading &&
+                            !githubCommentsError &&
+                            githubComments.length === 0 && (
+                              <span className="text-[11px] text-muted-foreground">
+                                No Issue comments yet.
+                              </span>
+                            )}
+                          {githubComments.map((c) => (
+                            <div
+                              key={c.id}
+                              className="rounded-md border bg-background/80 px-2.5 py-2"
+                            >
+                              <div className="mb-1 flex items-center gap-2">
+                                <Avatar className="h-5 w-5">
+                                  {c.authorAvatarUrl ? (
+                                    <AvatarImage
+                                      src={c.authorAvatarUrl}
+                                      alt={c.authorLogin}
+                                    />
+                                  ) : null}
+                                  <AvatarFallback className="text-[9px]">
+                                    {c.authorLogin.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-[11px] font-medium">
+                                  {c.authorLogin}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatCommentTime(c.createdAt)}
+                                </span>
+                                {c.url ? (
+                                  <a
+                                    href={c.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="ml-auto text-muted-foreground hover:text-foreground"
+                                    aria-label="Open comment on GitHub"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : null}
+                              </div>
+                              <div className="text-[12px] leading-relaxed">
+                                {c.body.trim() ? (
+                                  <Markdown content={c.body} />
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    (empty)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <Textarea
+                          value={composer}
+                          onChange={(e) => setComposer(e.target.value)}
+                          placeholder="Comment on GitHub…"
+                          className="min-h-[72px] text-xs"
+                          disabled={readOnly || !githubCommentsLinked}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-fit text-xs"
+                          onClick={() => void postComment()}
+                          disabled={
+                            busy ||
+                            readOnly ||
+                            !composer.trim() ||
+                            !githubCommentsLinked
+                          }
+                        >
+                          Comment on GitHub
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : null}
             </div>
-            {!useGithubComments ? (
-              <>
-                <Textarea
-                  value={composer}
-                  onChange={(e) => setComposer(e.target.value)}
-                  placeholder={
-                    isReview
-                      ? "Leave a comment or describe requested changes…"
-                      : "Leave a comment…"
+          ) : (
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="card-description">Description</Label>
+                <Tabs
+                  value={descriptionMode}
+                  onValueChange={(v) =>
+                    setDescriptionMode(v === "preview" ? "preview" : "edit")
                   }
-                  className="min-h-[56px] text-[11px]"
+                >
+                  <TabsList className="h-7">
+                    <TabsTrigger value="edit" className="px-2 text-[11px]">
+                      Edit
+                    </TabsTrigger>
+                    <TabsTrigger value="preview" className="px-2 text-[11px]">
+                      Preview
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              {descriptionMode === "edit" ? (
+                <Textarea
+                  id="card-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Short description (Markdown supported)"
+                  className="min-h-[56px]"
                 />
+              ) : (
+                <div className="min-h-[56px] rounded-md border bg-background/80 px-2.5 py-2">
+                  {description.trim() ? (
+                    <Markdown content={description} />
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">
+                      Nothing to preview.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-3 rounded-lg border p-3">
+            <Label className="text-sm">GodMode</Label>
+            <div className="grid gap-1.5">
+              <Label>Assigned subagent</Label>
+              <Select
+                value={assignedAgentId}
+                onValueChange={(v) => setAssignedAgentId(v ?? "intelligence")}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Intelligence" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({a.backend})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="card-prompt">Prompt for the LLM</Label>
+              <Textarea
+                id="card-prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Instruction sent to Intelligence when you run this card"
+                className="min-h-[120px]"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                This is the instruction Intelligence receives when you click “Run with Intelligence”.
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Attached context</Label>
+              <div className="flex flex-wrap gap-1">
+                {attachments.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground">No context attached.</span>
+                )}
+                {attachments.map((a) => (
+                  <Badge key={a.id} variant="secondary" className="gap-1">
+                    {a.label}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${a.label}`}
+                      onClick={() => removeAttachment(a.id)}
+                      className="rounded hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={attachCurrentPage}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Attach current page
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={availableSources.length === 0}
+                      >
+                        <Paperclip className="mr-1 h-3 w-3" />
+                        Add source
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="start" className="max-h-60 overflow-auto">
+                    {availableSources.map((s) => (
+                      <DropdownMenuItem
+                        key={s.id}
+                        onClick={() => addAttachment({ id: s.id, label: s.label })}
+                      >
+                        {s.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {!showGithubFields ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="card-tags-local">Labels</Label>
+                <div className="flex flex-wrap gap-1">
+                  {tags.length === 0 && (
+                    <span className="text-[10px] text-muted-foreground">No labels yet.</span>
+                  )}
+                  {tags.map((t) => (
+                    <Badge key={t} variant="secondary" className="gap-1">
+                      {t}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${t}`}
+                        onClick={() => toggleTag(t)}
+                        className="rounded hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                {labelSuggestions.filter((s) => !tags.includes(s)).length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {labelSuggestions
+                      .filter((s) => !tags.includes(s))
+                      .slice(0, 12)
+                      .map((s) => (
+                        <Button
+                          key={s}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => toggleTag(s)}
+                        >
+                          <Plus data-icon="inline-start" className="h-3 w-3" />
+                          {s}
+                        </Button>
+                      ))}
+                  </div>
+                ) : null}
+                <div className="flex gap-1.5">
+                  <Input
+                    id="card-tags-local"
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addTagDraft();
+                      }
+                    }}
+                    placeholder="Add label"
+                    className="h-7 text-xs"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={addTagDraft}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Subtasks</Label>
+                {subtaskProgress.total > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {subtaskProgress.done}/{subtaskProgress.total} done
+                  </span>
+                )}
+              </div>
+              {subtaskProgress.total > 0 && (
+                <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                  <div
+                    className="h-full bg-emerald-500 transition-all"
+                    style={{
+                      width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                {subtasks.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground">No subtasks yet.</span>
+                )}
+                {subtasks.map((sub) => {
+                  const doneId = doneColumnId(columns);
+                  const done = sub.column_id === doneId || sub.status === "accepted";
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-muted"
+                    >
+                      <button
+                        type="button"
+                        aria-label={done ? "Mark subtask not done" : "Mark subtask done"}
+                        onClick={() => void toggleSubtask(sub)}
+                        className="shrink-0"
+                      >
+                        {done ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(sub.id)}
+                        className={cn(
+                          "flex-1 truncate text-left hover:underline",
+                          done && "text-muted-foreground line-through"
+                        )}
+                      >
+                        {sub.title}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addSubtask();
+                    }
+                  }}
+                  placeholder="Add a subtask"
+                  className="h-7 text-xs"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => void addSubtask()}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                "grid gap-1.5 rounded-md border p-2",
+                isReview ? "border-amber-500/30 bg-amber-500/5" : "border-border"
+              )}
+            >
+              <Label>
+                {useGithubComments
+                  ? "Local activity"
+                  : card?.parent_card_id
+                    ? "Comments"
+                    : "Activity"}
+              </Label>
+              <div className="flex max-h-40 flex-col gap-1 overflow-auto">
+                {displayedComments.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {useGithubComments
+                      ? "No local GodMode activity yet."
+                      : "No activity yet."}
+                  </span>
+                )}
+                {displayedComments.map((c) => (
+                  <div
+                    key={c.id}
+                    className={cn(
+                      "rounded px-1.5 py-1 text-[11px]",
+                      c.author === "user"
+                        ? "bg-primary/10 text-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <span className="mr-1 text-[9px] font-semibold uppercase opacity-60">
+                      {c.author}
+                    </span>
+                    {c.kind && (
+                      <span className="mr-1 rounded bg-background/60 px-1 text-[9px] font-medium uppercase opacity-70">
+                        {c.kind}
+                      </span>
+                    )}
+                    {!card?.parent_card_id && c.cardTitle && c.cardTitle !== card?.title && (
+                      <span className="mr-1 rounded bg-background/60 px-1 text-[9px] font-medium opacity-70">
+                        {c.cardTitle}
+                      </span>
+                    )}
+                    {c.body}
+                  </div>
+                ))}
+              </div>
+              {!useGithubComments ? (
+                <>
+                  <Textarea
+                    value={composer}
+                    onChange={(e) => setComposer(e.target.value)}
+                    placeholder={
+                      isReview
+                        ? "Leave a comment or describe requested changes…"
+                        : "Leave a comment…"
+                    }
+                    className="min-h-[56px] text-[11px]"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => void postComment()}
+                      disabled={busy || !composer.trim()}
+                    >
+                      Add comment
+                    </Button>
+                    {isReview && (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => void onRequestChanges()}
+                          disabled={busy || !awaitingRunId}
+                          title={
+                            awaitingRunId
+                              ? undefined
+                              : "No autonomous run is awaiting review"
+                          }
+                        >
+                          Request changes
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => void onApprove()}
+                          disabled={busy || !awaitingRunId}
+                          title={
+                            awaitingRunId
+                              ? undefined
+                              : "No autonomous run is awaiting review"
+                          }
+                        >
+                          Approve
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : isReview ? (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    onClick={() => void postComment()}
-                    disabled={busy || !composer.trim()}
+                    onClick={() => void onRequestChanges()}
+                    disabled={busy || !awaitingRunId}
+                    title={
+                      awaitingRunId
+                        ? undefined
+                        : "No autonomous run is awaiting review"
+                    }
                   >
-                    Add comment
+                    Request changes
                   </Button>
-                  {isReview && (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={() => void onRequestChanges()}
-                        disabled={busy || !awaitingRunId}
-                        title={
-                          awaitingRunId
-                            ? undefined
-                            : "No autonomous run is awaiting review"
-                        }
-                      >
-                        Request changes
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => void onApprove()}
-                        disabled={busy || !awaitingRunId}
-                        title={
-                          awaitingRunId
-                            ? undefined
-                            : "No autonomous run is awaiting review"
-                        }
-                      >
-                        Approve
-                      </Button>
-                    </>
-                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => void onApprove()}
+                    disabled={busy || !awaitingRunId}
+                    title={
+                      awaitingRunId
+                        ? undefined
+                        : "No autonomous run is awaiting review"
+                    }
+                  >
+                    Approve
+                  </Button>
                 </div>
-              </>
-            ) : isReview ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => void onRequestChanges()}
-                  disabled={busy || !awaitingRunId}
-                  title={
-                    awaitingRunId
-                      ? undefined
-                      : "No autonomous run is awaiting review"
-                  }
-                >
-                  Request changes
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => void onApprove()}
-                  disabled={busy || !awaitingRunId}
-                  title={
-                    awaitingRunId
-                      ? undefined
-                      : "No autonomous run is awaiting review"
-                  }
-                >
-                  Approve
-                </Button>
-              </div>
-            ) : null}
-            {isReview && !awaitingRunId && (
-              <p className="text-[10px] text-muted-foreground">
-                Approve / Request changes resume a parked autonomous run. None is awaiting this card.
-              </p>
-            )}
+              ) : null}
+              {isReview && !awaitingRunId && (
+                <p className="text-[10px] text-muted-foreground">
+                  Approve / Request changes resume a parked autonomous run. None is awaiting this card.
+                </p>
+              )}
+            </div>
           </div>
         </div>
         <SheetFooter className="flex-col items-stretch gap-2 border-t sm:flex-col">
