@@ -39,6 +39,19 @@ Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` /
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
+### Buyer install pins (#177)
+
+Official and Community **plugin** installs fail closed unless the catalog entry
+sets an immutable `pluginRef` (release tag or commit sha). Optional
+`pluginDigest` (commit sha) must match `git rev-parse HEAD` after checkout.
+Floating refs (`main` / `master`) are rejected for those catalogs. Local folder
+registration (self-host / Unofficial) stays operator-trusted and does not use
+this pin gate.
+
+Intake CI smoke does not replace install pins or runtime least privilege.
+Runtime capability allowlists (network deny-by-default for plugins) are tracked
+as follow-up #290.
+
 ## Community (user-to-user)
 
 1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish with kind, title, price, delivery (`clone` or `live`), and source resource id.
