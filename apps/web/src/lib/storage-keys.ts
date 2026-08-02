@@ -51,6 +51,9 @@ export const LEGACY_AGENTS_MODE_KEY_OLD = "moneyai.agents.mode";
 export const CALENDAR_VIEW_KEY = "godmode_calendar_view";
 export const LEGACY_CALENDAR_VIEW_KEY = "money_calendar_view";
 
+/** Task / project card detail Sheet width (px). */
+export const TASK_SHEET_WIDTH_KEY = "godmode.tasks.sheetWidth";
+
 export const BUILDER_POSITIONS_KEY = "godmode.builder.positions";
 export const LEGACY_BUILDER_POSITIONS_KEY = "moneyai.builder.positions";
 
