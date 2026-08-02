@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   DndContext,
   DragOverlay,
@@ -129,6 +137,7 @@ import {
   type Swimlane,
   type SwimlaneGroupBy,
 } from "@/lib/tasks-board-swimlanes";
+import { TASK_SHEET_WIDTH_KEY } from "@/lib/storage-keys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -242,6 +251,45 @@ function loadCardFaceVisibility(boardKey: string): CardFaceVisibility {
 function saveCardFaceVisibility(boardKey: string, value: CardFaceVisibility) {
   try {
     localStorage.setItem(cardFaceStorageKey(boardKey), JSON.stringify(value));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Compact width matches prior md:max-w-2xl sheet. Max is half the viewport. */
+const MIN_TASK_SHEET_WIDTH = 672;
+const DEFAULT_TASK_SHEET_WIDTH = 840;
+
+function maxTaskSheetWidth(viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280) {
+  if (viewportWidth < 640) return viewportWidth;
+  return Math.floor(viewportWidth * 0.5);
+}
+
+function clampTaskSheetWidth(
+  width: number,
+  viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280
+) {
+  const max = maxTaskSheetWidth(viewportWidth);
+  const min = viewportWidth < 640 ? viewportWidth : Math.min(MIN_TASK_SHEET_WIDTH, max);
+  return Math.max(min, Math.min(max, Math.round(width)));
+}
+
+function readStoredTaskSheetWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_TASK_SHEET_WIDTH;
+  try {
+    const raw = localStorage.getItem(TASK_SHEET_WIDTH_KEY);
+    if (raw == null) return clampTaskSheetWidth(DEFAULT_TASK_SHEET_WIDTH);
+    const n = Number.parseFloat(raw);
+    if (!Number.isFinite(n)) return clampTaskSheetWidth(DEFAULT_TASK_SHEET_WIDTH);
+    return clampTaskSheetWidth(n);
+  } catch {
+    return clampTaskSheetWidth(DEFAULT_TASK_SHEET_WIDTH);
+  }
+}
+
+function writeStoredTaskSheetWidth(width: number) {
+  try {
+    localStorage.setItem(TASK_SHEET_WIDTH_KEY, String(Math.round(width)));
   } catch {
     /* ignore quota */
   }
@@ -626,6 +674,8 @@ function CardEditorDialog({
   const [githubCommentsError, setGithubCommentsError] = useState<string | null>(
     null
   );
+  const [sheetWidth, setSheetWidth] = useState(readStoredTaskSheetWidth);
+  const [sheetResizing, setSheetResizing] = useState(false);
   const [composer, setComposer] = useState("");
   const [awaitingRunId, setAwaitingRunId] = useState<string | null>(null);
   const [agents, setAgents] = useState<AiAgent[]>([]);
@@ -1124,12 +1174,87 @@ function CardEditorDialog({
     (s) => !attachments.some((a) => a.id === s.id)
   );
 
+  useEffect(() => {
+    if (!open) return;
+    const onViewportResize = () => {
+      setSheetWidth((w) => clampTaskSheetWidth(w));
+    };
+    window.addEventListener("resize", onViewportResize);
+    return () => window.removeEventListener("resize", onViewportResize);
+  }, [open]);
+
+  const handleSheetWidthResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth < 640) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSheetResizing(true);
+    const startX = e.clientX;
+    const startWidth = sheetWidth;
+    const onMove = (ev: PointerEvent) => {
+      setSheetWidth(clampTaskSheetWidth(startWidth + (startX - ev.clientX)));
+    };
+    const onUp = () => {
+      setSheetResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setSheetWidth((w) => {
+        const next = clampTaskSheetWidth(w);
+        writeStoredTaskSheetWidth(next);
+        return next;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const toggleSheetWidth = () => {
+    if (window.innerWidth < 640) return;
+    setSheetWidth((w) => {
+      const max = maxTaskSheetWidth();
+      const min = Math.min(MIN_TASK_SHEET_WIDTH, max);
+      const next = w >= max - 24 ? min : max;
+      writeStoredTaskSheetWidth(next);
+      return next;
+    });
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 border-l bg-background p-0 shadow-2xl sm:max-w-xl md:max-w-2xl"
+        className={cn(
+          "relative flex w-full flex-col gap-0 border-l bg-background p-0 shadow-2xl",
+          // Beat Sheet defaults (data-[side=right]:w-3/4 + sm:max-w-sm) via inline size.
+          sheetResizing && "transition-none"
+        )}
+        style={
+          {
+            width: sheetWidth,
+            maxWidth: maxTaskSheetWidth(),
+            "--task-sheet-width": `${sheetWidth}px`,
+          } as CSSProperties
+        }
       >
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={sheetWidth}
+          aria-valuemin={MIN_TASK_SHEET_WIDTH}
+          aria-valuemax={maxTaskSheetWidth()}
+          aria-label="Resize task panel"
+          title="Drag to resize. Double-click to expand or collapse."
+          onPointerDown={handleSheetWidthResize}
+          onDoubleClick={toggleSheetWidth}
+          className={cn(
+            "absolute inset-y-0 -left-1 z-20 hidden w-3 cursor-ew-resize touch-none sm:block",
+            "before:absolute before:inset-y-0 before:left-1/2 before:w-1 before:-translate-x-1/2",
+            "before:rounded-full before:bg-border/70 before:transition-colors hover:before:bg-foreground/50"
+          )}
+        />
         <SheetHeader className="border-b bg-muted/30">
           {card?.parent_card_id && (
             <button
