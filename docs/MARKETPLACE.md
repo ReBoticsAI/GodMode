@@ -51,6 +51,17 @@ and call
 floating refs; set `MARKETPLACE_REQUIRE_PLUGIN_CI=1` for fail-closed
 `ciRunUrl` checks. See Marketplace CONTRIBUTING for the seller checklist.
 
+### Verified publisher badge (#309)
+
+Official catalog cards may show a **Verified** badge next to the author. Bridge
+defaults `verifiedPublisher: true` for Official entries (Cloud curated rows and
+the free Official index). Explicit `verifiedPublisher: false` suppresses the
+badge. This is an identity/trust UX signal for curated Official publishers. It
+does **not** replace install pins (#177), capability grants (#290 / #303), or
+seller intake CI (GodMode-Marketplace#3).
+
+Community / user-seller verification is out of scope for this slice.
+
 ### Buyer install pins (#177)
 
 Official and Community **plugin** installs fail closed unless the catalog entry

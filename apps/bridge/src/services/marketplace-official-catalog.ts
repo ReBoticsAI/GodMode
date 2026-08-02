@@ -1,7 +1,10 @@
 import { config } from "../config.js";
 import type { CoreDatabase } from "../core-db.js";
 import type { CatalogEntry, CatalogIndex } from "./marketplace-catalog.js";
-import { fetchOfficialCatalog } from "./marketplace-catalog.js";
+import {
+  fetchOfficialCatalog,
+  withOfficialVerifiedPublisher,
+} from "./marketplace-catalog.js";
 import {
   assertPluginInstallPin,
   isFloatingPluginRef,
@@ -28,6 +31,8 @@ export type OfficialCatalogRow = {
   status: string;
   sort_order: number;
   updated_at: string;
+  /** 1 = verified (default), 0 = not verified (#309). */
+  verified_publisher?: number | null;
 };
 
 export type OfficialCatalogPinIssue = {
@@ -60,6 +65,8 @@ export type OfficialCatalogUpsertInput = {
   listingId?: string | null;
   status?: string;
   sortOrder?: number;
+  /** Explicit false clears the Verified badge; omit/true keeps Official default (#309). */
+  verifiedPublisher?: boolean;
 };
 
 export function getOfficialCatalogEntryPrice(
@@ -156,13 +163,27 @@ export function upsertOfficialCatalogEntry(
   entry: OfficialCatalogUpsertInput
 ): OfficialCatalogRow {
   assertOfficialCatalogPluginPinForUpsert(entry);
+  const verifiedPublisher =
+    entry.verifiedPublisher === false
+      ? 0
+      : entry.verifiedPublisher === true
+        ? 1
+        : (() => {
+            const existing = core
+              .prepare(
+                `SELECT verified_publisher FROM marketplace_official_catalog WHERE entry_id=?`
+              )
+              .get(entry.entryId) as { verified_publisher?: number | null } | undefined;
+            if (existing && existing.verified_publisher === 0) return 0;
+            return 1;
+          })();
   core
     .prepare(
       `INSERT INTO marketplace_official_catalog
          (entry_id, title, description, version, author, kind, install_type, tags_json,
           bundle_path, plugin_repo, plugin_ref, plugin_digest, preview_path, price_cents, currency,
-          listing_id, status, sort_order, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          listing_id, status, sort_order, verified_publisher, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(entry_id) DO UPDATE SET
          title=excluded.title,
          description=excluded.description,
@@ -181,6 +202,7 @@ export function upsertOfficialCatalogEntry(
          listing_id=excluded.listing_id,
          status=excluded.status,
          sort_order=excluded.sort_order,
+         verified_publisher=excluded.verified_publisher,
          updated_at=datetime('now')`
     )
     .run(
@@ -201,7 +223,8 @@ export function upsertOfficialCatalogEntry(
       (entry.currency ?? "usd").toLowerCase(),
       entry.listingId ?? null,
       entry.status ?? "active",
-      entry.sortOrder ?? 0
+      entry.sortOrder ?? 0,
+      verifiedPublisher
     );
   return core
     .prepare(`SELECT * FROM marketplace_official_catalog WHERE entry_id=?`)
@@ -217,7 +240,7 @@ function rowToCatalogEntry(row: OfficialCatalogRow, sourceCatalog: string): Cata
       tags = undefined;
     }
   }
-  return {
+  return withOfficialVerifiedPublisher({
     id: row.entry_id,
     kind: row.kind ?? "plugin",
     installType: (row.install_type === "clone" ? "clone" : "plugin") as "clone" | "plugin",
@@ -236,11 +259,8 @@ function rowToCatalogEntry(row: OfficialCatalogRow, sourceCatalog: string): Cata
     priceCents: Number(row.price_cents ?? 0),
     currency: row.currency || "usd",
     listingId: row.listing_id ?? undefined,
-  } as CatalogEntry & {
-    priceCents: number;
-    currency: string;
-    listingId?: string;
-  };
+    verifiedPublisher: row.verified_publisher === 0 ? false : true,
+  });
 }
 
 /**
@@ -274,11 +294,13 @@ export async function buildPublicOfficialCatalog(
     version: 2,
     updatedAt: new Date().toISOString(),
     repoBase: fallback.url,
-    entries: fallback.entries.map((e) => ({
-      ...e,
-      priceCents: 0,
-      currency: "usd",
-    })),
+    entries: fallback.entries.map((e) =>
+      withOfficialVerifiedPublisher({
+        ...e,
+        priceCents: 0,
+        currency: "usd",
+      })
+    ),
   };
 }
 
@@ -337,6 +359,12 @@ export async function syncOfficialCatalogFromPublicFeed(core: CoreDatabase): Pro
       listingId: existing?.listing_id ?? entry.listingId ?? null,
       status: existing?.status ?? "active",
       sortOrder: existing?.sort_order ?? 0,
+      verifiedPublisher:
+        typeof entry.verifiedPublisher === "boolean"
+          ? entry.verifiedPublisher
+          : existing
+            ? existing.verified_publisher !== 0
+            : true,
     });
     upserted.push(entry.id);
   }
