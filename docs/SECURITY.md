@@ -182,7 +182,7 @@ boundaries distinct:
 
 | Boundary | What it covers | What it does not |
 |----------|----------------|------------------|
-| **Intake** (Marketplace verify VM / Actions) | Public repo pin, one-shot smoke before listing | Time bombs, env-gated exfil, abuse of allowed APIs on the buyer hub |
+| **Intake** ([GodMode-Marketplace#3](https://github.com/ReBoticsAI/GodMode-Marketplace/issues/3) Actions) | Public repo, pinned `pluginRef`, reusable `reusable-plugin-verify.yml` (+ optional artifact hash / `ciRunUrl`) before listing | Time bombs, env-gated exfil, abuse of allowed APIs on the buyer hub |
 | **Buyer install pin (#177)** | Official/Community installs must use immutable `pluginRef` (tag or commit); optional `pluginDigest` fail-closed on drift; no floating `main` / `git pull` | Capability allowlists alone |
 | **Plugin capability grants (#290 / #303)** | Network, tools, and records deny-by-default for Official/Community; `host.externalFetch` allowlist from catalog `networkHosts` + manifest `capabilities.network.hosts`; tools/records from catalog `toolNames`/`recordNames` + manifest `capabilities.tools`/`capabilities.records` (plus manifest `objectTypes` names); Local/operator unrestricted; revoke via last-tenant uninstall (and kill switches #96) | Blocking raw in-process `fetch`; true plugin process sandbox |
 | **Coding jail (#112 Layers 1–4)** | Per-tenant coding root + bubblewrap terminal/helpers on a **shared** Bridge host | Isolating *installed plugin* code (plugins load in the Bridge Node process today) |
