@@ -15,6 +15,14 @@ export interface PluginRecordSeed {
   data: RecordData;
 }
 
+/** Declared runtime capabilities (#290). Restricted catalogs grant only these. */
+export interface PluginManifestCapabilities {
+  network?: {
+    /** Hostnames the plugin may reach via `host.externalFetch` (http/https). */
+    hosts?: string[];
+  };
+}
+
 export interface GodmodePluginManifest {
   id: string;
   version: string;
@@ -24,6 +32,8 @@ export interface GodmodePluginManifest {
   kernelApiVersion?: KernelClientApiVersion;
   description?: string;
   departments?: string[];
+  /** Optional capability requests for Marketplace buyer grants (#290). */
+  capabilities?: PluginManifestCapabilities;
   native?: {
     platform?: string;
     studiesDir?: string;
@@ -162,6 +172,7 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
   }
   const native = m.native as Record<string, unknown> | undefined;
   const id = m.id.trim();
+  const capabilities = parseManifestCapabilities(m.capabilities, id);
   return {
     id,
     version: m.version.trim(),
@@ -175,6 +186,7 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     departments: Array.isArray(m.departments)
       ? m.departments.filter((d): d is string => typeof d === "string")
       : undefined,
+    capabilities,
     native: native
       ? {
           platform: typeof native.platform === "string" ? native.platform : undefined,
@@ -191,6 +203,36 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     objectTypes: parseObjectTypes(m.objectTypes, id),
     records: parseRecordSeeds(m.records),
   };
+}
+
+function parseManifestCapabilities(
+  raw: unknown,
+  pluginId: string
+): PluginManifestCapabilities | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!raw || typeof raw !== "object") {
+    throw new Error(
+      `Invalid plugin manifest (${pluginId}): capabilities must be an object`
+    );
+  }
+  const cap = raw as Record<string, unknown>;
+  const network = cap.network;
+  if (network === undefined) return {};
+  if (!network || typeof network !== "object") {
+    throw new Error(
+      `Invalid plugin manifest (${pluginId}): capabilities.network must be an object`
+    );
+  }
+  const net = network as Record<string, unknown>;
+  if (net.hosts !== undefined && !Array.isArray(net.hosts)) {
+    throw new Error(
+      `Invalid plugin manifest (${pluginId}): capabilities.network.hosts must be an array`
+    );
+  }
+  const hosts = Array.isArray(net.hosts)
+    ? net.hosts.filter((h): h is string => typeof h === "string" && h.trim().length > 0)
+    : undefined;
+  return { network: hosts ? { hosts } : {} };
 }
 
 export function readGodmodePluginManifest(pluginRoot: string): GodmodePluginManifest {

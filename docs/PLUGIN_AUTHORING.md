@@ -57,6 +57,9 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   "engine": "^0.1.0",
   "kernelApiVersion": 1,
   "departments": ["my-domain"],
+  "capabilities": {
+    "network": { "hosts": ["api.example.com"] }
+  },
   "bridge": { "entry": "dist/bridge.js" },
   "web": { "entry": "dist/web.js" },
   "objectTypes": [
@@ -91,6 +94,10 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
 - `engine` — semver range checked against host (`@godmode/plugin-api` `GODMODE_ENGINE_VERSION`). Executable plugins (`bridge` / `web` entry) **must** declare `engine` so release preflight can refuse incompatible platform updates.
 - `kernelApiVersion` — executable kernel client contract; current Bridge/web
   clients expose version `1`, and unsupported future versions fail validation
+- `capabilities.network.hosts` — optional hostnames for Marketplace buyer
+  grants (#290). Official/Community installs deny external egress unless these
+  (and/or catalog `networkHosts`) are present. Call `api.host.externalFetch`
+  rather than raw `fetch`. Local/operator installs are unrestricted.
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
