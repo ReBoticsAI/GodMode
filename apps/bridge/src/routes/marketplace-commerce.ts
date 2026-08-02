@@ -7,8 +7,10 @@ import {
   resolveTenant,
 } from "../services/auth/middleware.js";
 import {
+  auditOfficialCatalogPluginPins,
   buildPublicOfficialCatalog,
   listOfficialCatalogRows,
+  syncOfficialCatalogFromPublicFeed,
   upsertOfficialCatalogEntry,
 } from "../services/marketplace-official-catalog.js";
 import {
@@ -82,7 +84,11 @@ export function createMarketplaceCommerceRouter(): Router {
         res.status(403).json({ error: "Admin required" });
         return;
       }
-      res.json({ entries: listOfficialCatalogRows(getCoreDb()) });
+      const entries = listOfficialCatalogRows(getCoreDb());
+      res.json({
+        entries,
+        pinAudit: auditOfficialCatalogPluginPins(entries),
+      });
     }
   );
 
@@ -118,6 +124,7 @@ export function createMarketplaceCommerceRouter(): Router {
           bundlePath: body.bundlePath ?? body.bundle_path,
           pluginRepo: body.pluginRepo ?? body.plugin_repo,
           pluginRef: body.pluginRef ?? body.plugin_ref,
+          pluginDigest: body.pluginDigest ?? body.plugin_digest,
           previewPath: body.previewPath ?? body.preview_path,
           priceCents: body.priceCents ?? body.price_cents,
           currency: body.currency,
@@ -129,6 +136,29 @@ export function createMarketplaceCommerceRouter(): Router {
       } catch (err) {
         res.status(400).json({
           error: err instanceof Error ? err.message : "Failed to upsert Official entry",
+        });
+      }
+    }
+  );
+
+  /** Import pinned rows from the free Official index; preserves Cloud prices. */
+  router.post(
+    "/admin/official-catalog/sync-from-public",
+    attachAuthContext,
+    requireAuth,
+    resolveTenant,
+    async (req, res) => {
+      if (!requireSaasCommerce(req, res)) return;
+      if (!req.user?.isAdmin) {
+        res.status(403).json({ error: "Admin required" });
+        return;
+      }
+      try {
+        const result = await syncOfficialCatalogFromPublicFeed(getCoreDb());
+        res.json(result);
+      } catch (err) {
+        res.status(502).json({
+          error: err instanceof Error ? err.message : "Official catalog sync failed",
         });
       }
     }

@@ -436,6 +436,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-admin-official-catalog-sync",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/commerce/admin/official-catalog/sync-from-public",
+    rationale:
+      "SaaS admin import of pinned Official catalog rows from the free public index (#292); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "analytics-read-query",
     methods: ["POST"],
     pathPattern: "/api/analytics/timeseries/query",
