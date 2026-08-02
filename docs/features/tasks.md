@@ -45,6 +45,7 @@ Hidden columns keep their cards; they are just omitted from the board until unhi
 6. **Archive vs remove:** **Archive** archives the Project item on GitHub and removes the local card (Issue/PR kept). **Remove from Project** deletes the Project item only (Issue/PR kept; Draft items go away with the item). GodMode never deletes the underlying Issue/PR from here. Sync drops local cards when items are archived or removed on GitHub. Cards that never linked (no Project item id) are local-only deletes.
 7. Linked boards **poll** GitHub in the background (default **1 minute**, clamped 1-30 min via `GITHUB_PROJECTS_SYNC_POLL_MS`). That poll is the near-real-time path for **user-owned** Projects. With a GitHub App installed on an **organization** that owns the Project, live `projects_v2_item` webhooks also drive pulls (handler is ready; GitHub only emits those events for org-owned Projects). Manual Sync always works. The toolbar shows last success, in-progress, and last error. Set `GITHUB_PROJECTS_SYNC_POLL_ENABLED=0` on the Bridge to disable background poll.
 8. **Conflict policy:** last-write-wins. Pull overwrites mapped card fields from GitHub; push-on-edit overwrites those fields on GitHub. Matching is by stored Project item id.
+9. **Card sheet:** Linked Issue/PR cards group GitHub Project fields, description, labels, Issue comments, and Issue **timeline activity** (labels, assignees, Project moves, close/reopen, and similar) under a GitHub section. Prompt, attachments, subagent, subtasks, and local comments stay under GodMode. Description supports Edit / Preview for Markdown.
 
 ### Card lifecycle (linked boards)
 
@@ -63,7 +64,7 @@ Field map: title, description, column↔Status, **due/target date** (not start),
 
 Boards created before multi-column sync get a default five-column `columns_json` on next open (schema backfill v19). Linked boards: run **Sync GitHub** once so columns match Status options and cards remap. Hide/WIP set after Sync stick on later pulls.
 
-Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276), lifecycle polish (#278), swimlanes / group-by (#274), and Project field parity leftovers (#277) are shipped.
+Kanban parity epic #259 (Done); GitHub App epic #266 (Done). Board filter / search / sort (#276), lifecycle polish (#278), swimlanes / group-by (#274), and Project field parity leftovers (#277) are shipped. Issue comments + soft sync (#293) and Issue timeline activity in the card sheet are shipped. Full GitHub issue UI parity (review threads, richer Project status from/to labels when the API omits them) is not claimed by those epics.
 
 ## Route
 

@@ -2870,6 +2870,24 @@ export const postUserCardGithubComment = (id: string, body: string) =>
     { method: "POST", body: JSON.stringify({ body }) }
   );
 
+export type GithubIssueTimelineEvent = {
+  id: number;
+  event: string;
+  createdAt: string;
+  actorLogin: string;
+  actorAvatarUrl: string | null;
+  summary: string;
+};
+
+export const fetchUserCardGithubTimeline = (id: string) =>
+  api<{
+    linked: boolean;
+    repo: string | null;
+    issueNumber: number | null;
+    url: string | null;
+    events: GithubIssueTimelineEvent[];
+  }>(`/user/projects/cards/${encodeURIComponent(id)}/github/timeline`);
+
 export function slugifyStructureId(raw: string): string {
   return raw
     .toLowerCase()
