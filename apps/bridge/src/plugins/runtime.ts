@@ -24,6 +24,8 @@ import { getPluginHost } from "@godmode/plugin-host";
 import { registerPageKinds } from "../kernel/kind-registry.js";
 import {
   assertExternalUrlAllowed,
+  assertRecordAllowed,
+  assertToolAllowed,
   resolveCapabilityGrants,
   type PluginCapabilityGrants,
 } from "../services/plugin-capabilities.js";
@@ -397,6 +399,7 @@ export class PluginRuntime {
       kernel: {
         apiVersion: KERNEL_CLIENT_API_VERSION,
         list(objectType, query, ctx) {
+          assertRecordAllowed(grants, objectType);
           return listRecords(
             kernelDb(ctx),
             objectType,
@@ -405,9 +408,11 @@ export class PluginRuntime {
           );
         },
         get(objectType, id, ctx) {
+          assertRecordAllowed(grants, objectType);
           return getRecord(kernelDb(ctx), objectType, id, kernelContext(ctx));
         },
         create(objectType, data, ctx) {
+          assertRecordAllowed(grants, objectType);
           return createRecord(
             kernelDb(ctx),
             objectType,
@@ -416,6 +421,7 @@ export class PluginRuntime {
           );
         },
         update(objectType, id, data, ctx) {
+          assertRecordAllowed(grants, objectType);
           return updateRecord(
             kernelDb(ctx),
             objectType,
@@ -425,9 +431,11 @@ export class PluginRuntime {
           );
         },
         delete(objectType, id, ctx) {
+          assertRecordAllowed(grants, objectType);
           deleteRecord(kernelDb(ctx), objectType, id, kernelContext(ctx));
         },
         async runAction(objectType, action, input, ctx, id) {
+          assertRecordAllowed(grants, objectType);
           return id
             ? executeRecordAction(
                 kernelDb(ctx),
@@ -458,6 +466,7 @@ export class PluginRuntime {
       tools: {
         register(tools: PluginToolDef[]) {
           for (const t of tools) {
+            assertToolAllowed(grants, t.name);
             self.tools.push({
               ...t,
               pluginId,
@@ -473,6 +482,7 @@ export class PluginRuntime {
       },
       objectTypes: {
         register(definition, pluginAdapter: PluginRecordAdapter) {
+          assertRecordAllowed(grants, definition.name);
           const adapterId = `plugin:${pluginId}:${definition.name}`;
           const actions = definition.actions ?? [];
           for (const action of actions) {

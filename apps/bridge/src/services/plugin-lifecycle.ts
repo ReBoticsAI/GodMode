@@ -24,6 +24,7 @@ import {
 } from "../kernel/plugin-object-types.js";
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
+import { revokeCapabilityGrants } from "./plugin-capabilities.js";
 
 const hostRequire = createRequire(import.meta.url);
 const HOST_LINKED_PACKAGES = ["plugin-api", "plugin-host"] as const;
@@ -211,9 +212,15 @@ export async function uninstallPluginForTenant(
     });
   }
   const existing = core
-    .prepare(`SELECT 1 FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`)
-    .get(tenantId, pluginId);
+    .prepare(
+      `SELECT plugin_root FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+    )
+    .get(tenantId, pluginId) as { plugin_root: string | null } | undefined;
   if (!existing) throw Object.assign(new Error("Plugin installation not found"), { status: 404 });
+  const pluginRoot =
+    existing.plugin_root?.trim() ||
+    pluginRuntime.getPlugin(pluginId)?.pluginRoot ||
+    "";
   core
     .prepare(
       `UPDATE tenant_plugins SET state='uninstalling', desired_state='absent', last_error=NULL,
@@ -238,6 +245,13 @@ export async function uninstallPluginForTenant(
   }
   if (!core.prepare(`SELECT 1 FROM tenant_plugins WHERE plugin_id=? LIMIT 1`).get(pluginId)) {
     unregisterObjectTypesByPlugin(pluginId);
+    if (pluginRoot) {
+      try {
+        revokeCapabilityGrants(pluginRoot);
+      } catch {
+        /* grants file may already be gone with the install tree */
+      }
+    }
   }
 }
 

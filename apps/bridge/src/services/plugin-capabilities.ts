@@ -1,6 +1,6 @@
 /**
- * Plugin runtime capability grants (#290).
- * Network deny-by-default for Official/Community installs; Local/operator unrestricted.
+ * Plugin runtime capability grants (#290 network, #303 tools/records).
+ * Deny-by-default for Official/Community installs; Local/operator unrestricted.
  * Distinct from coding jail (#112). Raw in-process fetch remains a residual risk until
  * a true plugin process sandbox exists.
  */
@@ -15,16 +15,27 @@ export type PluginTrustTier = "official" | "community" | "local" | "operator";
 
 export type NetworkCapabilityMode = "deny" | "allowlist" | "unrestricted";
 
+export type NamedCapabilityMode = "deny" | "allowlist" | "unrestricted";
+
 export interface PluginNetworkCapability {
   mode: NetworkCapabilityMode;
   /** Lowercase hostnames. Exact match or `*.example.com` suffix wildcards. */
   hosts: string[];
 }
 
+/** Named allowlist for tools or ObjectType / record access (#303). */
+export interface PluginNamedCapability {
+  mode: NamedCapabilityMode;
+  /** Exact tool names or ObjectType names. */
+  names: string[];
+}
+
 export interface PluginCapabilityGrants {
   version: 1;
   trustTier: PluginTrustTier;
   network: PluginNetworkCapability;
+  tools: PluginNamedCapability;
+  records: PluginNamedCapability;
   grantedAt: string;
   sourceEntryId?: string;
 }
@@ -50,6 +61,26 @@ export function normalizeCapabilityHosts(hosts: unknown): string[] {
     if (host.startsWith("*.") && !/^\*\.[a-z0-9.-]+$/.test(host)) continue;
     seen.add(host);
     out.push(host);
+  }
+  return out;
+}
+
+/** Tool / ObjectType identifiers: trim; keep case; allow letters, digits, `_`, `-`. */
+export function normalizeCapabilityName(name: string): string {
+  return name.trim();
+}
+
+export function normalizeCapabilityNames(names: unknown): string[] {
+  if (!Array.isArray(names)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of names) {
+    if (typeof raw !== "string") continue;
+    const name = normalizeCapabilityName(raw);
+    if (!name || seen.has(name)) continue;
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)) continue;
+    seen.add(name);
+    out.push(name);
   }
   return out;
 }
@@ -99,9 +130,25 @@ export function buildNetworkCapability(
   return { mode: "allowlist", hosts };
 }
 
+export function buildNamedCapability(
+  trustTier: PluginTrustTier,
+  declaredNames: string[] = []
+): PluginNamedCapability {
+  if (trustTier === "local" || trustTier === "operator") {
+    return { mode: "unrestricted", names: [] };
+  }
+  const names = normalizeCapabilityNames(declaredNames);
+  if (names.length === 0) {
+    return { mode: "deny", names: [] };
+  }
+  return { mode: "allowlist", names };
+}
+
 export function buildCapabilityGrants(opts: {
   trustTier: PluginTrustTier;
   declaredHosts?: string[];
+  declaredTools?: string[];
+  declaredRecords?: string[];
   sourceEntryId?: string;
   grantedAt?: string;
 }): PluginCapabilityGrants {
@@ -109,6 +156,8 @@ export function buildCapabilityGrants(opts: {
     version: 1,
     trustTier: opts.trustTier,
     network: buildNetworkCapability(opts.trustTier, opts.declaredHosts ?? []),
+    tools: buildNamedCapability(opts.trustTier, opts.declaredTools ?? []),
+    records: buildNamedCapability(opts.trustTier, opts.declaredRecords ?? []),
     grantedAt: opts.grantedAt ?? new Date().toISOString(),
     sourceEntryId: opts.sourceEntryId,
   };
@@ -125,6 +174,17 @@ export function collectDeclaredNetworkHosts(opts: {
   ]);
 }
 
+/** Tool or record names declared by catalog and/or plugin manifest (#303). */
+export function collectDeclaredCapabilityNames(opts: {
+  catalogNames?: string[] | null;
+  manifestNames?: string[] | null;
+}): string[] {
+  return normalizeCapabilityNames([
+    ...(opts.catalogNames ?? []),
+    ...(opts.manifestNames ?? []),
+  ]);
+}
+
 export function writeCapabilityGrants(
   pluginRoot: string,
   grants: PluginCapabilityGrants
@@ -135,6 +195,24 @@ export function writeCapabilityGrants(
     `${JSON.stringify(grants, null, 2)}\n`,
     "utf8"
   );
+}
+
+function parseNamedCapability(
+  raw: unknown,
+  trustTier: PluginTrustTier
+): PluginNamedCapability {
+  if (!raw || typeof raw !== "object") {
+    return buildNamedCapability(trustTier, []);
+  }
+  const obj = raw as Record<string, unknown>;
+  const mode = obj.mode;
+  if (mode !== "deny" && mode !== "allowlist" && mode !== "unrestricted") {
+    return buildNamedCapability(trustTier, []);
+  }
+  return {
+    mode,
+    names: normalizeCapabilityNames(obj.names),
+  };
 }
 
 export function parseCapabilityGrants(raw: unknown): PluginCapabilityGrants | null {
@@ -164,6 +242,8 @@ export function parseCapabilityGrants(raw: unknown): PluginCapabilityGrants | nu
       mode,
       hosts: normalizeCapabilityHosts(net.hosts),
     },
+    tools: parseNamedCapability(obj.tools, trustTier),
+    records: parseNamedCapability(obj.records, trustTier),
     grantedAt:
       typeof obj.grantedAt === "string" && obj.grantedAt.trim()
         ? obj.grantedAt
@@ -209,6 +289,8 @@ export function resolveCapabilityGrants(opts: {
     return buildCapabilityGrants({
       trustTier: "official",
       declaredHosts: [],
+      declaredTools: [],
+      declaredRecords: [],
       grantedAt: new Date(0).toISOString(),
     });
   }
@@ -266,6 +348,46 @@ export function assertExternalUrlAllowed(
     );
   }
   return parsed;
+}
+
+function assertNamedAllowed(
+  kind: "tool" | "record",
+  grants: PluginCapabilityGrants,
+  name: string
+): string {
+  const normalized = normalizeCapabilityName(name);
+  if (!normalized) {
+    throw new Error(`Plugin ${kind} capability: empty name`);
+  }
+  const cap = kind === "tool" ? grants.tools : grants.records;
+  if (cap.mode === "unrestricted") return normalized;
+  if (cap.mode === "deny") {
+    throw new Error(
+      `Plugin ${kind} "${normalized}" denied: ${kind} capability is deny-by-default ` +
+        `(trust tier ${grants.trustTier}). Grant names via catalog/manifest capabilities (#303).`
+    );
+  }
+  if (!cap.names.includes(normalized)) {
+    throw new Error(
+      `Plugin ${kind} "${normalized}" denied: not in the allowlist ` +
+        `[${cap.names.join(", ") || "(empty)"}] (#303).`
+    );
+  }
+  return normalized;
+}
+
+export function assertToolAllowed(
+  grants: PluginCapabilityGrants,
+  toolName: string
+): string {
+  return assertNamedAllowed("tool", grants, toolName);
+}
+
+export function assertRecordAllowed(
+  grants: PluginCapabilityGrants,
+  objectType: string
+): string {
+  return assertNamedAllowed("record", grants, objectType);
 }
 
 export function revokeCapabilityGrants(pluginRoot: string): void {
