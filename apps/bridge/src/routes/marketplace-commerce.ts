@@ -131,6 +131,16 @@ export function createMarketplaceCommerceRouter(): Router {
           listingId: body.listingId ?? body.listing_id,
           status: body.status,
           sortOrder: body.sortOrder ?? body.sort_order,
+          verifiedPublisher:
+            typeof body.verifiedPublisher === "boolean"
+              ? body.verifiedPublisher
+              : typeof body.verified_publisher === "boolean"
+                ? body.verified_publisher
+                : body.verified_publisher === 0
+                  ? false
+                  : body.verified_publisher === 1
+                    ? true
+                    : undefined,
         });
         res.json({ entry: row });
       } catch (err) {

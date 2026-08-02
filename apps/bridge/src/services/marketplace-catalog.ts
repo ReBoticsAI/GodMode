@@ -77,6 +77,12 @@ export interface CatalogEntry {
   priceCents?: number;
   currency?: string;
   listingId?: string;
+  /**
+   * Curated Official publisher identity signal (#309).
+   * Explicit `false` wins; Official serve paths default to `true`.
+   * Not a security boundary (pins / capability grants remain authoritative).
+   */
+  verifiedPublisher?: boolean;
 }
 
 export interface CatalogIndex {
@@ -167,14 +173,29 @@ function entryBaseUrl(index: CatalogIndex, catalogUrl: string): string {
   return rawUrl;
 }
 
+/**
+ * Official catalog identity signal (#309). Explicit `false` wins; otherwise
+ * Official entries default to verified.
+ */
+export function withOfficialVerifiedPublisher<T extends { verifiedPublisher?: boolean }>(
+  entry: T
+): T & { verifiedPublisher: boolean } {
+  return {
+    ...entry,
+    verifiedPublisher: entry.verifiedPublisher === false ? false : true,
+  };
+}
+
 export async function fetchOfficialCatalog(): Promise<{ url: string; entries: CatalogEntry[] }> {
   const url = resolveCatalogUrl();
   const index = await fetchCatalogIndex(url);
-  const entries = index.entries.map((e) => ({
-    ...e,
-    sourceCatalog: url,
-    sourceName: "Official",
-  }));
+  const entries = index.entries.map((e) =>
+    withOfficialVerifiedPublisher({
+      ...e,
+      sourceCatalog: url,
+      sourceName: "Official",
+    })
+  );
   return { url, entries };
 }
 

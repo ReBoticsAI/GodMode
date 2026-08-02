@@ -1056,6 +1056,8 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
     );
   `);
   addCol(db, "marketplace_official_catalog", "plugin_digest", "TEXT");
+  // Official publisher trust UX (#309); default verified for curated Official rows.
+  addCol(db, "marketplace_official_catalog", "verified_publisher", "INTEGER NOT NULL DEFAULT 1");
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {
