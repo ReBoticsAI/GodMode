@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import {
   CreditCardIcon,
   FolderGit2Icon,
+  KeyRoundIcon,
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
@@ -31,11 +32,19 @@ import {
   logoutAuth,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
-import { USERS_PATH, VAULT_PATH } from "@/lib/navigation";
+import {
+  normalizeVaultInferenceSub,
+  USERS_PATH,
+  VAULT_PATH,
+  type VaultInferenceSub,
+} from "@/lib/navigation";
 import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
+import { InferenceTab } from "@/pages/Vault";
+import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light", Icon: SunIcon },
@@ -360,13 +369,55 @@ function BillingVaultLinkCard() {
 }
 
 export default function Settings() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vaultSection = searchParams.get("vault");
+  const inferenceSub = normalizeVaultInferenceSub(searchParams.get("sub"));
+  const platformTab =
+    vaultSection === "secrets" ? "secrets" : "inference";
+
+  const onPlatformTabChange = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (value === "secrets") {
+          p.set("vault", "secrets");
+          p.delete("sub");
+        } else {
+          p.set("vault", "inference");
+          if (!p.get("sub")) p.set("sub", "subscriptions");
+        }
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
+  const onInferenceSubChange = (value: string) => {
+    const next = normalizeVaultInferenceSub(value);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("vault", "inference");
+        p.set("sub", next);
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
   return (
     <Page>
       <PageHeader
         title="Settings"
-        description="Account, appearance, and session settings."
+        description="Account, appearance, Platform Vault, and session settings."
       />
       <div className="flex flex-col gap-4">
+        <PlatformVaultCard
+          tab={platformTab}
+          inferenceSub={inferenceSub}
+          onTabChange={onPlatformTabChange}
+          onInferenceSubChange={onInferenceSubChange}
+        />
         <AccountCard />
         <OnboardingCard />
         <MfaCard />
@@ -377,5 +428,58 @@ export default function Settings() {
         <SessionCard />
       </div>
     </Page>
+  );
+}
+
+function PlatformVaultCard({
+  tab,
+  inferenceSub,
+  onTabChange,
+  onInferenceSubChange,
+}: {
+  tab: "inference" | "secrets";
+  inferenceSub: VaultInferenceSub;
+  onTabChange: (value: string) => void;
+  onInferenceSubChange: (value: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <KeyRoundIcon className="size-4" />
+          Platform Vault
+        </CardTitle>
+        <CardDescription>
+          Shared inference credentials (subscriptions, API keys, Exa). Agents
+          fall back here when they have no key of their own. Personal connects
+          stay on{" "}
+          <Link
+            to={VAULT_PATH}
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            Vault
+          </Link>
+          .
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <Tabs value={tab} onValueChange={onTabChange} className="w-full">
+          <TabsList variant="line" className="w-full flex-wrap justify-start">
+            <TabsTrigger value="inference">Inference</TabsTrigger>
+            <TabsTrigger value="secrets">All Secrets</TabsTrigger>
+          </TabsList>
+          <TabsContent value="inference" className="mt-4">
+            <InferenceTab
+              sub={inferenceSub}
+              onSubChange={onInferenceSubChange}
+              vaultAgentId={null}
+            />
+          </TabsContent>
+          <TabsContent value="secrets" className="mt-4">
+            <AiSecretsCard vaultScope={{ ownerKind: "platform" }} />
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }

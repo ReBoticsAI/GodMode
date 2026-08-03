@@ -46,7 +46,7 @@ export function cloudRequiresExaByok(): boolean {
 
 /**
  * Resolve tenant/agent Exa key: agent account (provider `exa`) first, then
- * agent Vault `exa_api_key`, then Personal Vault. Never reads a platform env key.
+ * agent Vault `exa_api_key`, then Platform Vault. Never User Vault or env key.
  */
 export function resolveExaApiKey(db: AppDatabase, agentId: string): string | null {
   const fromAgent = resolveAgentCredential(db, agentId, { provider: EXA_PROVIDER });
@@ -60,9 +60,9 @@ export function resolveExaApiKey(db: AppDatabase, agentId: string): string | nul
 export function missingExaKeyMessage(): string {
   return (
     `Exa API key required for web_search / fetch_url on GodMode Cloud. ` +
-    `Sign up at ${EXA_SIGNUP_URL}, create an API key, then paste it into Vault ` +
-    `as secret name "${EXA_API_KEY_SECRET_NAME}" (or add provider "${EXA_PROVIDER}" ` +
-    `under the agent's API keys). There is no shared platform Exa key.`
+    `Sign up at ${EXA_SIGNUP_URL}, create an API key, then paste it into Settings ` +
+    `→ Platform Vault (secret name "${EXA_API_KEY_SECRET_NAME}") or add provider ` +
+    `"${EXA_PROVIDER}" under the agent's API keys. There is no shared platform Exa key.`
   );
 }
 
