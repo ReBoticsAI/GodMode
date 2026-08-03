@@ -76,6 +76,14 @@ import {
   removeOpenAiApiKey,
   upsertOpenAiApiKey,
 } from "../../services/openai-platform.js";
+import {
+  ANTHROPIC_API_KEY_SECRET_ID,
+  getAnthropicAuthStatus,
+  isAnthropicVaultSecretId,
+  isAnthropicVaultSecretName,
+  removeAnthropicApiKey,
+  upsertAnthropicApiKey,
+} from "../../services/anthropic-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -894,7 +902,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         secret.name.toLowerCase() !== "cursor_api_key" &&
         secret.name.toLowerCase() !== "cursor-api-key" &&
         !isOpenAiVaultSecretId(secret.id) &&
-        !isOpenAiVaultSecretName(secret.name)
+        !isOpenAiVaultSecretName(secret.name) &&
+        !isAnthropicVaultSecretId(secret.id) &&
+        !isAnthropicVaultSecretName(secret.name)
     );
     const result = page(rows, query);
     return {
@@ -912,7 +922,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         secret.name.toLowerCase() !== "cursor_api_key" &&
         secret.name.toLowerCase() !== "cursor-api-key" &&
         !isOpenAiVaultSecretId(secret.id) &&
-        !isOpenAiVaultSecretName(secret.name)
+        !isOpenAiVaultSecretName(secret.name) &&
+        !isAnthropicVaultSecretId(secret.id) &&
+        !isAnthropicVaultSecretName(secret.name)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -927,6 +939,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isOpenAiVaultSecretName(name)) {
       throw httpError(400, "OpenAI API keys must use the OpenAI Platform credential flow");
+    }
+    if (isAnthropicVaultSecretName(name)) {
+      throw httpError(400, "Anthropic API keys must use the Anthropic Console credential flow");
     }
     const created = createSecret(db, name, requiredText(data, "value"));
     const row = listSecrets(db).find((secret) => secret.id === created.id);
@@ -1000,6 +1015,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === ANTHROPIC_API_KEY_SECRET_ID) {
+      const status = getAnthropicAuthStatus(db);
+      return status.connected
+        ? record(def, ANTHROPIC_API_KEY_SECRET_ID, {
+            agent_id: "intelligence",
+            kind: "api_key",
+            provider: "anthropic",
+            display_name: "Anthropic Console",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1029,6 +1057,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "anthropic") {
+      upsertAnthropicApiKey(db, requiredText(data, "api_key"));
+      const status = getAnthropicAuthStatus(db);
+      return record(def, ANTHROPIC_API_KEY_SECRET_ID, {
+        agent_id: "intelligence",
+        kind: "api_key",
+        provider: "anthropic",
+        display_name: "Anthropic Console",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1050,6 +1090,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === OPENAI_API_KEY_SECRET_ID) {
       removeOpenAiApiKey(db);
+      return;
+    }
+    if (id === ANTHROPIC_API_KEY_SECRET_ID) {
+      removeAnthropicApiKey(db);
       return;
     }
     const account = getAgentAccount(db, id);

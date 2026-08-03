@@ -966,7 +966,9 @@ export function createAiRouter(
         s.name !== "cursor_api_key" &&
         s.name !== "CURSOR_API_KEY" &&
         s.id !== "openai-api-key" &&
-        s.name !== "openai_api_key"
+        s.name !== "openai_api_key" &&
+        s.id !== "anthropic-api-key" &&
+        s.name !== "anthropic_api_key"
     );
     res.json({ secrets });
   });

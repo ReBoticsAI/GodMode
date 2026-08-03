@@ -212,17 +212,40 @@ export const OPENAI_PROFILE: ModelHarnessProfile = {
   harnessDelta: OPENAI_HARNESS_DELTA,
 };
 
+const ANTHROPIC_HARNESS_DELTA = [
+  "<model_profile id=\"anthropic\">",
+  "You are running via the Anthropic Console API (metered BYOK), with native tool use.",
+  "This is not Claude.ai Pro/Max consumer login and not the Cursor SDK Claude path.",
+  "Rely on tool schemas and descriptions for when/how to call tools; keep this system note lean.",
+  "Greetings and simple conversational questions: answer in plain language with NO tools.",
+  "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+  "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+  "Prefer purposeful tool turns. On tool errors, treat results as data and recover or explain.",
+  "</model_profile>",
+].join("\n");
+
+/**
+ * Anthropic Console API harness. Tuned from Anthropic tool-use guidance:
+ * lean system prompt, native tools, temp 1.0, deferred discovery.
+ * https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview
+ */
 export const ANTHROPIC_PROFILE: ModelHarnessProfile = {
   id: "anthropic",
-  label: "Anthropic",
+  label: "Anthropic Console",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 0.95, topK: 64 },
-  maxChatIterations: 32,
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
   enableThinkingDefault: false,
   stripThinkingFromHistory: true,
   requireJinja: false,
-  deferredDiscoveryTools: [],
-  harnessDelta: "",
+  deferredDiscoveryTools: [
+    "list_subagents",
+    "list_agents",
+    "fetch_ai_agents",
+    "list_ai_agents",
+    "remember",
+  ],
+  harnessDelta: ANTHROPIC_HARNESS_DELTA,
 };
 
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {

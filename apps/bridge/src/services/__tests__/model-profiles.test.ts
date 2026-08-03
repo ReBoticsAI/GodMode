@@ -76,6 +76,20 @@ assert.equal(
   "anthropic"
 );
 assert.equal(
+  resolveHarnessProfile({ source: "provider", provider: "anthropic" }).harnessDelta.length > 0,
+  true
+);
+assert.notEqual(
+  resolveProfileForAgent({
+    backend: "cursor_cloud",
+    config: { model: "claude-sonnet-4-20250514" },
+  }).id,
+  resolveProfileForAgent({
+    backend: "provider",
+    config: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
+  }).id
+);
+assert.equal(
   resolveHarnessProfile({ source: "provider", provider: "openai", model: "gpt-4o" }).id,
   "openai"
 );

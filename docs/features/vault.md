@@ -24,6 +24,7 @@ Metered BYOK with named Connect cards:
 | Provider | Secret id | Harness profile | Docs |
 |----------|-----------|-----------------|------|
 | OpenAI Platform | `openai-api-key` | `openai` | [Function calling](https://platform.openai.com/docs/guides/function-calling) |
+| Anthropic Console | `anthropic-api-key` | `anthropic` | [Tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview) |
 
 Each card Connect / Disconnect / Apply wires catalog models and a transport-specific harness (`profile = f(backend, provider, family)`). See [[harness-profiles]].
 
