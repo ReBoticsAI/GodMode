@@ -37,24 +37,34 @@ export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resourc
   price_period, meter_unit, meter_rate, license, inference_endpoint_id,
   created_at, updated_at`;
 
+/** Listing columns with table alias `ml` plus Community verified seller signal (#311). */
+export const LISTING_COLS_JOINED = `ml.id, ml.seller_user_id, ml.seller_tenant_id, ml.kind, ml.resource_id,
+  ml.title, ml.description, ml.price_credits, ml.price_cents, ml.currency, ml.seller_kind,
+  ml.catalog_entry_id, ml.visibility, ml.status, ml.delivery_mode, ml.pricing_model,
+  ml.price_period, ml.meter_unit, ml.meter_rate, ml.license, ml.inference_endpoint_id,
+  ml.created_at, ml.updated_at,
+  CASE WHEN sa.verified_seller = 1 THEN 1 ELSE 0 END AS verified_publisher`;
+
 /** Build the public Community browse query. Defaults to seller_kind=user. */
 export function buildPublicListingsSql(opts: {
   kind?: string;
   sellerKind?: string;
 }): { sql: string; params: unknown[] } {
-  let sql = `SELECT ${LISTING_COLS}
-             FROM marketplace_listings WHERE status='active' AND visibility='public'`;
+  let sql = `SELECT ${LISTING_COLS_JOINED}
+             FROM marketplace_listings ml
+             LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
+             WHERE ml.status='active' AND ml.visibility='public'`;
   const params: unknown[] = [];
   const sellerKind = opts.sellerKind?.trim() || "user";
   if (sellerKind !== "all") {
-    sql += ` AND seller_kind=?`;
+    sql += ` AND ml.seller_kind=?`;
     params.push(sellerKind);
   }
   if (opts.kind) {
-    sql += ` AND kind=?`;
+    sql += ` AND ml.kind=?`;
     params.push(opts.kind);
   }
-  sql += ` ORDER BY created_at DESC LIMIT 100`;
+  sql += ` ORDER BY ml.created_at DESC LIMIT 100`;
   return { sql, params };
 }
 
@@ -125,10 +135,11 @@ export function createMarketplaceRouter(): Router {
     const core = getCoreDb();
     const rows = core
       .prepare(
-        `SELECT ${LISTING_COLS}
-         FROM marketplace_listings
-         WHERE seller_user_id=? AND status='active'
-         ORDER BY created_at DESC`
+        `SELECT ${LISTING_COLS_JOINED}
+         FROM marketplace_listings ml
+         LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
+         WHERE ml.seller_user_id=? AND ml.status='active'
+         ORDER BY ml.created_at DESC`
       )
       .all(req.user!.id) as Array<Record<string, unknown>>;
     res.json({ listings: rows });

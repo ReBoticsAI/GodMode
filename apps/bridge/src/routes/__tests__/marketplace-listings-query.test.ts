@@ -10,22 +10,29 @@ describe("buildPublicListingsSql", () => {
     expect(LISTING_COLS).toContain("updated_at");
   });
 
+  it("joins seller verified_publisher for Community browse", () => {
+    const { sql } = buildPublicListingsSql({});
+    expect(sql).toContain("verified_publisher");
+    expect(sql).toContain("marketplace_seller_accounts");
+    expect(sql).toMatch(/ml\.seller_kind=\?/);
+  });
+
   it("defaults to seller_kind=user for Community browse", () => {
     const { sql, params } = buildPublicListingsSql({});
-    expect(sql).toContain("seller_kind=?");
+    expect(sql).toMatch(/ml\.seller_kind=\?/);
     expect(params).toEqual(["user"]);
   });
 
   it("excludes official seller_kind when filtering user listings", () => {
     const { sql, params } = buildPublicListingsSql({ sellerKind: "user" });
-    expect(sql).toMatch(/seller_kind=\?/);
+    expect(sql).toMatch(/ml\.seller_kind=\?/);
     expect(params[0]).toBe("user");
     expect(params).not.toContain("official");
   });
 
   it("allows seller_kind=all to skip the seller filter", () => {
     const { sql, params } = buildPublicListingsSql({ sellerKind: "all" });
-    expect(sql).not.toContain("seller_kind=?");
+    expect(sql).not.toMatch(/seller_kind=\?/);
     expect(params).toEqual([]);
   });
 
@@ -34,8 +41,8 @@ describe("buildPublicListingsSql", () => {
       sellerKind: "user",
       kind: "skill",
     });
-    expect(sql).toContain("seller_kind=?");
-    expect(sql).toContain("kind=?");
+    expect(sql).toMatch(/ml\.seller_kind=\?/);
+    expect(sql).toMatch(/ml\.kind=\?/);
     expect(params).toEqual(["user", "skill"]);
   });
 });

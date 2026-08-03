@@ -51,6 +51,7 @@ import { StructureAdminPanel } from "@/pages/StructureAdminPanel";
 import { AdminUsersPanel } from "@/pages/admin/AdminUsersPanel";
 import { AdminSaasCustomersPanel } from "@/pages/admin/AdminSaasCustomersPanel";
 import { AdminMarketplaceFeesPanel } from "@/pages/admin/AdminMarketplaceFeesPanel";
+import { AdminMarketplaceSellersPanel } from "@/pages/admin/AdminMarketplaceSellersPanel";
 import { AdminObservabilityPanel } from "@/pages/admin/AdminObservabilityPanel";
 import { AdminAuthorityPanel } from "@/pages/admin/AdminAuthorityPanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
@@ -129,7 +130,8 @@ export default function Admin() {
             <AdminSaasCustomersPanel />
           </TabsContent>
         ) : null}
-        <TabsContent value="marketplace" className="mt-4">
+        <TabsContent value="marketplace" className="mt-4 flex flex-col gap-4">
+          <AdminMarketplaceSellersPanel />
           <AdminMarketplaceFeesPanel />
         </TabsContent>
         <TabsContent value="authority" className="mt-4">
