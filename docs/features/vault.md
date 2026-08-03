@@ -73,6 +73,15 @@ The **Connect GitHub** card installs and authorizes the GitHub App used for Proj
 2. Install the App on the account that owns your Projects, then authorize.
 3. Open Tasks → Board settings to link a Project.
 
+#### Holdings
+
+Moralis and PayPal **API credentials** for live Bank / Holdings sync live here. Wallet connect and PayPal balance link flows stay on Bank / Holdings. Bank keeps a dual-home link to this tab.
+
+1. Open Vault → Integrations → Holdings.
+2. Save and test a Moralis Web3 API key for crypto portfolios.
+3. Save and test PayPal business app credentials (sandbox or live) for balance sync.
+4. Return to Bank to connect wallets or PayPal balances.
+
 ### Billing
 
 GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts; the card is hidden on self-host / local.
