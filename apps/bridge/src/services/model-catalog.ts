@@ -552,7 +552,7 @@ export async function selectIntelligenceModel(
             (s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
           )?.id ?? secrets[0]?.id;
         if (!preferredId) {
-          throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
+          throw new Error("Add an API key in Vault → Inference before using cloud provider models");
         }
       }
     } else {
@@ -561,7 +561,7 @@ export async function selectIntelligenceModel(
           (s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
         )?.id ?? secrets[0]?.id;
       if (!preferredId) {
-        throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
+        throw new Error("Add an API key in Vault → Inference before using cloud provider models");
       }
     }
 
