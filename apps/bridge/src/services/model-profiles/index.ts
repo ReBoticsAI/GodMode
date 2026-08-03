@@ -176,17 +176,40 @@ export const CURSOR_GROK_PROFILE: ModelHarnessProfile = {
   harnessDelta: CURSOR_GROK_HARNESS_DELTA,
 };
 
+const OPENAI_HARNESS_DELTA = [
+  "<model_profile id=\"openai\">",
+  "You are running via the OpenAI Platform API (metered BYOK), with native function calling.",
+  "Prefer structured tool schemas over describing tools in prose. Do not invent tool names.",
+  "Greetings and simple conversational questions: answer in plain language with NO tools.",
+  "Do not call discovery tools (list_subagents, list agents, etc.) unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+  "Memory and wiki sections in this prompt are already retrieved — do not re-probe them with tools unless the user asks for a full page or deeper search.",
+  "Prefer one purposeful tool turn; cap exploratory loops. Keep coding/plugin tiers for real engineering tasks.",
+  "When tools fail, treat errors as data and recover or explain — do not spin forever.",
+  "</model_profile>",
+].join("\n");
+
+/**
+ * OpenAI Platform API harness. Tuned from OpenAI function-calling guidance:
+ * native tools, keep the active tool surface lean, hard turn cap, no tool spam.
+ * https://platform.openai.com/docs/guides/function-calling
+ */
 export const OPENAI_PROFILE: ModelHarnessProfile = {
   id: "openai",
-  label: "OpenAI",
+  label: "OpenAI Platform",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 0.95, topK: 64 },
-  maxChatIterations: 32,
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
   enableThinkingDefault: false,
   stripThinkingFromHistory: true,
   requireJinja: false,
-  deferredDiscoveryTools: [],
-  harnessDelta: "",
+  deferredDiscoveryTools: [
+    "list_subagents",
+    "list_agents",
+    "fetch_ai_agents",
+    "list_ai_agents",
+    "remember",
+  ],
+  harnessDelta: OPENAI_HARNESS_DELTA,
 };
 
 export const ANTHROPIC_PROFILE: ModelHarnessProfile = {

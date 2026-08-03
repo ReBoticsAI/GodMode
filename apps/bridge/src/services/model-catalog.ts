@@ -1,5 +1,10 @@
 import { getAgent, listSecrets, updateAgent } from "./agents/agents-db.js";
 import { getCursorAuthStatus, listCursorSubscriptionModels, formatCursorModelLabel } from "./cursor-subscription.js";
+import {
+  getOpenAiAuthStatus,
+  OPENAI_API_KEY_SECRET_ID,
+  OPENAI_API_KEY_SECRET_NAME,
+} from "./openai-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -91,15 +96,26 @@ export async function listModelCatalog(
     }
   }
 
-  const secrets = listSecrets(db).filter((s) => s.name !== "cursor_api_key");
-  const hasOpenAi = secrets.some((s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt"));
+  const secrets = listSecrets(db).filter(
+    (s) =>
+      s.name !== "cursor_api_key" &&
+      s.name !== OPENAI_API_KEY_SECRET_NAME &&
+      s.id !== OPENAI_API_KEY_SECRET_ID
+  );
+  const hasOpenAi =
+    getOpenAiAuthStatus(db).connected ||
+    secrets.some((s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt"));
   const hasAnthropic = secrets.some(
     (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
   );
-  const hasAnyProviderSecret = secrets.length > 0;
 
-  if (hasOpenAi || (hasAnyProviderSecret && !hasAnthropic)) {
+  if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
+      const harness = resolveHarnessProfile({
+        source: "provider",
+        model: m.id,
+        provider: "openai",
+      });
       models.push({
         id: `provider:openai:${m.id}`,
         source: "provider",
@@ -110,11 +126,17 @@ export async function listModelCatalog(
           agent?.backend === "provider" &&
           (agent.config?.provider ?? "openai") === "openai" &&
           agent.config?.model === m.id,
+        harnessProfileId: harness.id,
       });
     }
   }
   if (hasAnthropic) {
     for (const m of ANTHROPIC_CATALOG) {
+      const harness = resolveHarnessProfile({
+        source: "provider",
+        model: m.id,
+        provider: "anthropic",
+      });
       models.push({
         id: `provider:anthropic:${m.id}`,
         source: "provider",
@@ -125,6 +147,7 @@ export async function listModelCatalog(
           agent?.backend === "provider" &&
           agent.config?.provider === "anthropic" &&
           agent.config?.model === m.id,
+        harnessProfileId: harness.id,
       });
     }
   }
@@ -278,17 +301,38 @@ export async function selectIntelligenceModel(
     const model = input.model?.trim();
     if (!model) throw new Error("Provider model id required");
     const provider = input.provider ?? "openai";
-    const secrets = listSecrets(db).filter((s) => s.name !== "cursor_api_key");
-    if (secrets.length === 0) {
-      throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
-    }
-    const preferred =
-      secrets.find((s) =>
+    const secrets = listSecrets(db).filter(
+      (s) =>
+        s.name !== "cursor_api_key" &&
+        s.name !== OPENAI_API_KEY_SECRET_NAME &&
+        s.id !== OPENAI_API_KEY_SECRET_ID
+    );
+    const openAiReady = getOpenAiAuthStatus(db).connected;
+
+    let preferredId: string | undefined;
+    if (provider === "openai") {
+      if (openAiReady) {
+        preferredId = OPENAI_API_KEY_SECRET_ID;
+      } else {
+        preferredId = secrets.find(
+          (s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
+        )?.id;
+      }
+      if (!preferredId) {
+        throw new Error("Connect OpenAI Platform in Vault before using OpenAI models");
+      }
+    } else {
+      preferredId = secrets.find((s) =>
         provider === "anthropic"
           ? secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
           : secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
-      ) ?? secrets[0]!;
-    const apiKeyRef = input.apiKeyRef || agent.config?.apiKeyRef || preferred.id;
+      )?.id ?? secrets[0]?.id;
+      if (!preferredId) {
+        throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
+      }
+    }
+
+    const apiKeyRef = input.apiKeyRef || agent.config?.apiKeyRef || preferredId;
     const profile = resolveHarnessProfile({ source: "provider", model, provider });
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
