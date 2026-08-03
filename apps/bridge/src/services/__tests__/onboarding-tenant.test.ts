@@ -11,6 +11,9 @@ import type { LlmManager } from "../llm-manager.js";
 
 const { getOnboardingStatus, markLlmReady, markOnboardingComplete, resetOnboarding } =
   await import("../onboarding.js");
+const { upsertOpenAiApiKey } = await import("../openai-platform.js");
+const { upsertAnthropicApiKey } = await import("../anthropic-platform.js");
+const { upsertCursorApiKey } = await import("../cursor-subscription.js");
 
 function emptyTenantDb(): AppDatabase {
   const db = new Database(":memory:");
@@ -90,6 +93,53 @@ const stubLlm = {
     if (prevKey === undefined) delete process.env.CURSOR_API_KEY;
     else process.env.CURSOR_API_KEY = prevKey;
   }
+}
+
+{
+  // Hub: process-env OpenAI key must not mark every tenant llmReady.
+  const prevKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-platform-openai-key";
+  try {
+    const db = emptyTenantDb();
+    const status = getOnboardingStatus(stubLlm, db);
+    assert.equal(
+      status.llmReady,
+      false,
+      "hub must not treat platform OPENAI_API_KEY as tenant llmReady"
+    );
+  } finally {
+    if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prevKey;
+  }
+}
+
+{
+  // Hub: Vault OpenAI / Anthropic / Cursor keys mark llmReady without the flag.
+  const openaiDb = emptyTenantDb();
+  upsertOpenAiApiKey(openaiDb, "sk-test-openai-vault-key");
+  assert.equal(
+    getOnboardingStatus(stubLlm, openaiDb).llmReady,
+    true,
+    "Vault OpenAI key should set llmReady on hub"
+  );
+
+  const anthropicDb = emptyTenantDb();
+  upsertAnthropicApiKey(anthropicDb, "sk-ant-test-vault-key");
+  assert.equal(
+    getOnboardingStatus(stubLlm, anthropicDb).llmReady,
+    true,
+    "Vault Anthropic key should set llmReady on hub"
+  );
+
+  const cursorDb = emptyTenantDb();
+  upsertCursorApiKey(cursorDb, "cursor-test-vault-key");
+  const cursorStatus = getOnboardingStatus(stubLlm, cursorDb);
+  assert.equal(cursorStatus.cursorConnected, true);
+  assert.equal(
+    cursorStatus.llmReady,
+    true,
+    "Vault Cursor key should set llmReady on hub"
+  );
 }
 
 console.log("onboarding-tenant.test.ts: ok");

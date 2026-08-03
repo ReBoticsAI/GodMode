@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,7 +42,8 @@ import {
   writeOnboardingCompleted,
 } from "@/lib/storage-keys";
 import { useTenant } from "@/lib/tenant-context";
-import { VAULT_PATH } from "@/lib/navigation";
+import { HOME_PATH, VAULT_PATH } from "@/lib/navigation";
+import { useIntelligence } from "@/lib/intelligence-context";
 
 type Props = {
   open: boolean;
@@ -55,8 +57,10 @@ type Props = {
 export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) {
   const { activeTenantId } = useTenant();
   const navigate = useNavigate();
+  const { openPanel } = useIntelligence();
   const [step, setStep] = useState(0);
   const [saas, setSaas] = useState(false);
+  const [llmReady, setLlmReady] = useState(false);
   const [localModels, setLocalModels] = useState<string[]>([]);
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
@@ -68,22 +72,49 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
 
   useEffect(() => {
     if (!open) return;
-    void fetchBridgeHealth()
-      .then((h) => setSaas(Boolean(h.saas)))
-      .catch(() => setSaas(false));
-    void fetchOnboardingDetect()
-      .then((d) => {
+    let cancelled = false;
+    void (async () => {
+      let isSaas = false;
+      try {
+        const h = await fetchBridgeHealth();
+        isSaas = Boolean(h.saas);
+      } catch {
+        isSaas = false;
+      }
+      if (cancelled) return;
+      setSaas(isSaas);
+
+      if (isSaas) {
+        try {
+          const s = await fetchOnboardingStatus();
+          if (!cancelled) setLlmReady(Boolean(s.llmReady));
+        } catch {
+          if (!cancelled) setLlmReady(false);
+        }
+        return;
+      }
+
+      try {
+        const d = await fetchOnboardingDetect();
+        if (cancelled) return;
         setLocalModels(d.localModels);
         setOllamaModels(d.ollama.models);
         if (d.localModels[0]) setSelectedModel(d.localModels[0]);
-      })
-      .catch(() => undefined);
+      } catch {
+        /* local detect is best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open, activeTenantId]);
 
   const finish = async () => {
     await completeOnboarding();
     writeOnboardingCompleted(activeTenantId);
     onFinished();
+    navigate(HOME_PATH);
+    openPanel({ tab: "chat" });
   };
 
   const startLocal = async () => {
@@ -113,6 +144,23 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
     try {
       await markOnboardingCloudReady();
       setStep(2);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const continueSaas = async () => {
+    setLoading(true);
+    try {
+      const s = await fetchOnboardingStatus();
+      setLlmReady(Boolean(s.llmReady));
+      if (!s.llmReady) {
+        toast.error("Connect an API key in Vault before continuing.");
+        return;
+      }
+      setStep(2);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not check LLM status");
     } finally {
       setLoading(false);
     }
@@ -150,13 +198,24 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
                 GodMode Cloud uses your own API keys (BYOK). Open Vault to connect Cursor,
-                OpenAI Platform, Anthropic Console, OpenRouter, Groq, or Together, then come back to finish setup.
+                OpenAI Platform, Anthropic Console, OpenRouter, Groq, or Together, then come
+                back to finish setup.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="text-foreground">Status</span>
+                <Badge variant={llmReady ? "default" : "outline"}>
+                  {llmReady ? "Connected" : "Not connected"}
+                </Badge>
+              </div>
               <p>
                 You can also open{" "}
-                <Link to={VAULT_PATH} className="text-foreground underline underline-offset-4" onClick={onOpenVault}>
+                <Link
+                  to={VAULT_PATH}
+                  className="text-foreground underline underline-offset-4"
+                  onClick={onOpenVault}
+                >
                   Vault
                 </Link>{" "}
                 from the sidebar later. Reopen this wizard anytime from Settings.
@@ -172,8 +231,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => void markCloudAndContinue()}
-                  disabled={loading}
+                  onClick={() => void continueSaas()}
+                  disabled={loading || !llmReady}
                 >
                   Continue
                 </Button>
@@ -361,6 +420,8 @@ export function useOnboardingGate() {
   // After Open Vault, resume the wizard once the user leaves Vault (if still incomplete).
   // Do not clear pause until we have observed /vault: navigate is async and the old
   // pathname would otherwise clear pause immediately and leave the dialog stuck open.
+  // Intentionally do not refresh gate status here: llmReady alone would dismiss the
+  // wizard before Continue / Get started. FirstRunWizard refreshes llmReady for the badge.
   useEffect(() => {
     if (!pausedForVault) {
       visitedVaultWhilePaused.current = false;
