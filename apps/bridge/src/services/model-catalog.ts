@@ -28,6 +28,15 @@ import {
   GROQ_API_KEY_SECRET_NAME,
   GROQ_CHAT_CATALOG,
 } from "./groq-platform.js";
+import {
+  getTogetherAuthStatus,
+  isTogetherAgentConfig,
+  isTogetherPlatformReady,
+  TOGETHER_API_BASE_URL,
+  TOGETHER_API_KEY_SECRET_ID,
+  TOGETHER_API_KEY_SECRET_NAME,
+  TOGETHER_CHAT_CATALOG,
+} from "./together-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -96,6 +105,16 @@ function groqHarnessInput(model: string) {
   };
 }
 
+function togetherHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "together",
+    baseUrl: TOGETHER_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -151,7 +170,9 @@ export async function listModelCatalog(
       s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
       s.id !== OPENROUTER_API_KEY_SECRET_ID &&
       s.name !== GROQ_API_KEY_SECRET_NAME &&
-      s.id !== GROQ_API_KEY_SECRET_ID
+      s.id !== GROQ_API_KEY_SECRET_ID &&
+      s.name !== TOGETHER_API_KEY_SECRET_NAME &&
+      s.id !== TOGETHER_API_KEY_SECRET_ID
   );
   const hasOpenAi =
     getOpenAiAuthStatus(db).connected ||
@@ -163,6 +184,7 @@ export async function listModelCatalog(
     );
   const hasOpenRouter = isOpenRouterPlatformReady(db);
   const hasGroq = isGroqPlatformReady(db);
+  const hasTogether = isTogetherPlatformReady(db);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -240,6 +262,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasTogether) {
+    const agentIsTogether =
+      agent?.backend === "provider" && isTogetherAgentConfig(agent.config);
+    for (const m of TOGETHER_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(togetherHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:together:${m.id}`,
+        source: "provider",
+        label: `Together · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "together",
+        active: Boolean(agentIsTogether && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -252,24 +291,35 @@ export async function listModelCatalog(
     const model = String(agent.config.model);
     const isOr = isOpenRouterAgentConfig(agent.config);
     const isGq = isGroqAgentConfig(agent.config);
+    const isTg = isTogetherAgentConfig(agent.config);
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
         ? resolveHarnessProfile(groqHarnessInput(model))
-        : resolveHarnessProfile({
-            source: "provider",
-            model,
-            provider,
-          });
+        : isTg
+          ? resolveHarnessProfile(togetherHarnessInput(model))
+          : resolveHarnessProfile({
+              source: "provider",
+              model,
+              provider,
+            });
     models.push({
       id: isGq
         ? `provider:openai_compatible:groq:${model}`
-        : `provider:${provider}:${model}`,
+        : isTg
+          ? `provider:openai_compatible:together:${model}`
+          : `provider:${provider}:${model}`,
       source: "provider",
-      label: isOr ? `OpenRouter · ${model}` : isGq ? `Groq · ${model}` : model,
+      label: isOr
+        ? `OpenRouter · ${model}`
+        : isGq
+          ? `Groq · ${model}`
+          : isTg
+            ? `Together · ${model}`
+            : model,
       model,
       provider,
-      transport: isOr ? "openrouter" : isGq ? "groq" : undefined,
+      transport: isOr ? "openrouter" : isGq ? "groq" : isTg ? "together" : undefined,
       active: true,
       harnessProfileId: harness.id,
     });
@@ -303,7 +353,9 @@ export async function listModelCatalog(
         ? { transport: "openrouter", baseUrl: OPENROUTER_API_BASE_URL }
         : active.transport === "groq"
           ? { transport: "groq", baseUrl: GROQ_API_BASE_URL }
-          : {}),
+          : active.transport === "together"
+            ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
+            : {}),
     });
     active.harnessProfileId = profile.id;
   }
@@ -425,15 +477,18 @@ export async function selectIntelligenceModel(
         s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
         s.id !== OPENROUTER_API_KEY_SECRET_ID &&
         s.name !== GROQ_API_KEY_SECRET_NAME &&
-        s.id !== GROQ_API_KEY_SECRET_ID
+        s.id !== GROQ_API_KEY_SECRET_ID &&
+        s.name !== TOGETHER_API_KEY_SECRET_NAME &&
+        s.id !== TOGETHER_API_KEY_SECRET_ID
     );
     const openAiReady = getOpenAiAuthStatus(db).connected;
     const anthropicReady = getAnthropicAuthStatus(db).connected;
     const openRouterReady = getOpenRouterAuthStatus(db).connected;
     const groqReady = getGroqAuthStatus(db).connected;
+    const togetherReady = getTogetherAuthStatus(db).connected;
 
     let preferredId: string | undefined;
-    let compatibleTransport: "openrouter" | "groq" | null = null;
+    let compatibleTransport: "openrouter" | "groq" | "together" | null = null;
     if (provider === "openai") {
       if (openAiReady) {
         preferredId = OPENAI_API_KEY_SECRET_ID;
@@ -468,6 +523,11 @@ export async function selectIntelligenceModel(
         transport === "groq" ||
         base.includes("api.groq.com") ||
         keyHint === GROQ_API_KEY_SECRET_ID;
+      const wantsTogether =
+        transport === "together" ||
+        base.includes("api.together.ai") ||
+        base.includes("api.together.xyz") ||
+        keyHint === TOGETHER_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -480,6 +540,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = GROQ_API_KEY_SECRET_ID;
         compatibleTransport = "groq";
+      } else if (wantsTogether) {
+        if (!togetherReady) {
+          throw new Error("Connect Together in Vault before using Together models");
+        }
+        preferredId = TOGETHER_API_KEY_SECRET_ID;
+        compatibleTransport = "together";
       } else {
         preferredId =
           secrets.find(
@@ -508,7 +574,9 @@ export async function selectIntelligenceModel(
         ? { transport: "openrouter", baseUrl: OPENROUTER_API_BASE_URL }
         : compatibleTransport === "groq"
           ? { transport: "groq", baseUrl: GROQ_API_BASE_URL }
-          : {}),
+          : compatibleTransport === "together"
+            ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
+            : {}),
     });
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -520,6 +588,7 @@ export async function selectIntelligenceModel(
             transport: "openrouter",
             openrouter: true,
             groq: undefined,
+            together: undefined,
           }
         : compatibleTransport === "groq"
           ? {
@@ -527,13 +596,23 @@ export async function selectIntelligenceModel(
               transport: "groq",
               groq: true,
               openrouter: undefined,
+              together: undefined,
             }
-          : {
-              baseUrl: undefined,
-              transport: undefined,
-              openrouter: undefined,
-              groq: undefined,
-            }),
+          : compatibleTransport === "together"
+            ? {
+                baseUrl: TOGETHER_API_BASE_URL,
+                transport: "together",
+                together: true,
+                openrouter: undefined,
+                groq: undefined,
+              }
+            : {
+                baseUrl: undefined,
+                transport: undefined,
+                openrouter: undefined,
+                groq: undefined,
+                together: undefined,
+              }),
     });
     updateAgent(db, "intelligence", {
       backend: "provider",
@@ -547,14 +626,18 @@ export async function selectIntelligenceModel(
         id:
           compatibleTransport === "groq"
             ? `provider:openai_compatible:groq:${model}`
-            : `provider:${provider}:${model}`,
+            : compatibleTransport === "together"
+              ? `provider:openai_compatible:together:${model}`
+              : `provider:${provider}:${model}`,
         source: "provider",
         label:
           compatibleTransport === "openrouter"
             ? `OpenRouter · ${model}`
             : compatibleTransport === "groq"
               ? `Groq · ${model}`
-              : model,
+              : compatibleTransport === "together"
+                ? `Together · ${model}`
+                : model,
         model,
         provider,
         transport: compatibleTransport ?? undefined,

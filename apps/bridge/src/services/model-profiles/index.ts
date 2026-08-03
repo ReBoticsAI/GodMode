@@ -533,6 +533,200 @@ export function resolveGroqHarnessProfile(
   return GROQ_GENERIC_PROFILE;
 }
 
+/** Shared Together transport middleware (BYOK via OpenAI-compatible tools). */
+const TOGETHER_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function togetherFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via Together AI serverless (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not OpenAI Platform, not OpenRouter, and not Groq.",
+    "Use native OpenAI-style function calling as exposed by Together. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const TOGETHER_LLAMA_PROFILE: ModelHarnessProfile = {
+  id: "together-llama",
+  label: "Together Llama",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-llama", [
+    "Llama via Together: lean tool surface; prefer structured schemas over prose tool descriptions.",
+  ]),
+};
+
+export const TOGETHER_GPT_OSS_PROFILE: ModelHarnessProfile = {
+  id: "together-gpt-oss",
+  label: "Together GPT-OSS",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-gpt-oss", [
+    "GPT-OSS via Together (not OpenAI Platform, not Groq). Use Together-hosted OpenAI-compatible tools only.",
+  ]),
+};
+
+export const TOGETHER_DEEPSEEK_PROFILE: ModelHarnessProfile = {
+  id: "together-deepseek",
+  label: "Together DeepSeek",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-deepseek", [
+    "DeepSeek via Together (not OpenRouter). Prefer structured tool schemas; avoid discovery spam.",
+  ]),
+};
+
+export const TOGETHER_QWEN_PROFILE: ModelHarnessProfile = {
+  id: "together-qwen",
+  label: "Together Qwen",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-qwen", [
+    "Qwen via Together: follow tool schemas closely; keep discovery deferred unless asked.",
+  ]),
+};
+
+export const TOGETHER_KIMI_PROFILE: ModelHarnessProfile = {
+  id: "together-kimi",
+  label: "Together Kimi",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-kimi", [
+    "Kimi via Together (not OpenRouter/Groq). Prefer structured tool calls; no memory/wiki re-probe without need.",
+  ]),
+};
+
+export const TOGETHER_MINIMAX_PROFILE: ModelHarnessProfile = {
+  id: "together-minimax",
+  label: "Together MiniMax",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-minimax", [
+    "MiniMax via Together: use native tools; keep exploratory loops short.",
+  ]),
+};
+
+export const TOGETHER_GLM_PROFILE: ModelHarnessProfile = {
+  id: "together-glm",
+  label: "Together GLM",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-glm", [
+    "GLM via Together (not OpenRouter): follow tool schemas; one purposeful tool turn when possible.",
+  ]),
+};
+
+export const TOGETHER_NEMOTRON_PROFILE: ModelHarnessProfile = {
+  id: "together-nemotron",
+  label: "Together Nemotron",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-nemotron", [
+    "Nemotron via Together (not OpenRouter): lean active tools; hard turn cap.",
+  ]),
+};
+
+export const TOGETHER_GEMMA_PROFILE: ModelHarnessProfile = {
+  id: "together-gemma",
+  label: "Together Gemma",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-gemma", [
+    "Gemma via Together serverless (not local GGUF gemma-4). Use Together-hosted OpenAI-compatible tools.",
+  ]),
+};
+
+export const TOGETHER_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "together-generic",
+  label: "Together (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...TOGETHER_TRANSPORT_DEFERRED],
+  harnessDelta: togetherFamilyDelta("together-generic", [
+    "Generic Together route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map Together model id → family harness.
+ * Transport is Together; family from author/path prefix (not one profile per model id).
+ */
+export function resolveTogetherHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.startsWith("meta-llama/")) return TOGETHER_LLAMA_PROFILE;
+  if (slug.startsWith("openai/gpt-oss")) return TOGETHER_GPT_OSS_PROFILE;
+  if (slug.startsWith("deepseek-ai/")) return TOGETHER_DEEPSEEK_PROFILE;
+  if (slug.startsWith("qwen/")) return TOGETHER_QWEN_PROFILE;
+  if (slug.startsWith("moonshotai/")) return TOGETHER_KIMI_PROFILE;
+  if (slug.startsWith("minimaxai/")) return TOGETHER_MINIMAX_PROFILE;
+  if (slug.startsWith("zai-org/")) return TOGETHER_GLM_PROFILE;
+  if (slug.startsWith("nvidia/nemotron")) return TOGETHER_NEMOTRON_PROFILE;
+  if (slug.startsWith("google/gemma")) return TOGETHER_GEMMA_PROFILE;
+  return TOGETHER_GENERIC_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -583,6 +777,16 @@ const REGISTRY: ModelHarnessProfile[] = [
   GROQ_KIMI_PROFILE,
   GROQ_COMPOUND_PROFILE,
   GROQ_GENERIC_PROFILE,
+  TOGETHER_LLAMA_PROFILE,
+  TOGETHER_GPT_OSS_PROFILE,
+  TOGETHER_DEEPSEEK_PROFILE,
+  TOGETHER_QWEN_PROFILE,
+  TOGETHER_KIMI_PROFILE,
+  TOGETHER_MINIMAX_PROFILE,
+  TOGETHER_GLM_PROFILE,
+  TOGETHER_NEMOTRON_PROFILE,
+  TOGETHER_GEMMA_PROFILE,
+  TOGETHER_GENERIC_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -597,6 +801,12 @@ function isGroqTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "groq") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.groq.com");
+}
+
+function isTogetherTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "together") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.together.ai") || base.includes("api.together.xyz");
 }
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
@@ -662,6 +872,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isGroqTransport(input)) {
       return resolveGroqHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isTogetherTransport(input)) {
+      return resolveTogetherHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -695,6 +908,12 @@ export function resolveProfileForAgent(
         transport = "openrouter";
       } else if (cfg.groq === true || (baseUrl ?? "").toLowerCase().includes("api.groq.com")) {
         transport = "groq";
+      } else if (
+        cfg.together === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.together.ai") ||
+        (baseUrl ?? "").toLowerCase().includes("api.together.xyz")
+      ) {
+        transport = "together";
       }
     }
     return resolveHarnessProfile({

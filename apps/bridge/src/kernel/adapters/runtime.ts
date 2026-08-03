@@ -102,6 +102,15 @@ import {
   removeGroqApiKey,
   upsertGroqApiKey,
 } from "../../services/groq-platform.js";
+import {
+  getTogetherAuthStatus,
+  isTogetherPlatformReady,
+  isTogetherVaultSecretId,
+  isTogetherVaultSecretName,
+  TOGETHER_API_KEY_SECRET_ID,
+  removeTogetherApiKey,
+  upsertTogetherApiKey,
+} from "../../services/together-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -926,7 +935,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isOpenRouterVaultSecretId(secret.id) &&
         !isOpenRouterVaultSecretName(secret.name) &&
         !isGroqVaultSecretId(secret.id) &&
-        !isGroqVaultSecretName(secret.name)
+        !isGroqVaultSecretName(secret.name) &&
+        !isTogetherVaultSecretId(secret.id) &&
+        !isTogetherVaultSecretName(secret.name)
     );
     const result = page(rows, query);
     return {
@@ -950,7 +961,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isOpenRouterVaultSecretId(secret.id) &&
         !isOpenRouterVaultSecretName(secret.name) &&
         !isGroqVaultSecretId(secret.id) &&
-        !isGroqVaultSecretName(secret.name)
+        !isGroqVaultSecretName(secret.name) &&
+        !isTogetherVaultSecretId(secret.id) &&
+        !isTogetherVaultSecretName(secret.name)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -974,6 +987,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isGroqVaultSecretName(name)) {
       throw httpError(400, "Groq API keys must use the Groq credential flow");
+    }
+    if (isTogetherVaultSecretName(name)) {
+      throw httpError(400, "Together API keys must use the Together credential flow");
     }
     const created = createSecret(db, name, requiredText(data, "value"));
     const row = listSecrets(db).find((secret) => secret.id === created.id);
@@ -1086,6 +1102,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === TOGETHER_API_KEY_SECRET_ID) {
+      const status = getTogetherAuthStatus(db);
+      return status.connected
+        ? record(def, TOGETHER_API_KEY_SECRET_ID, {
+            agent_id: "intelligence",
+            kind: "api_key",
+            provider: "together",
+            display_name: "Together",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1151,6 +1180,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "together") {
+      upsertTogetherApiKey(db, requiredText(data, "api_key"));
+      const status = getTogetherAuthStatus(db);
+      return record(def, TOGETHER_API_KEY_SECRET_ID, {
+        agent_id: "intelligence",
+        kind: "api_key",
+        provider: "together",
+        display_name: "Together",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1184,6 +1225,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === GROQ_API_KEY_SECRET_ID) {
       removeGroqApiKey(db);
+      return;
+    }
+    if (id === TOGETHER_API_KEY_SECRET_ID) {
+      removeTogetherApiKey(db);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1275,6 +1320,20 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom Together slug when Vault is connected.
+      if (!selected) {
+        const togetherCustom = /^provider:openai_compatible:together:(.+)$/.exec(modelId);
+        if (togetherCustom?.[1] && isTogetherPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Together · ${togetherCustom[1]}`,
+            model: togetherCustom[1],
+            provider: "openai_compatible",
+            transport: "together",
+          };
+        }
+      }
       // Custom Groq slug (outside production catalog) when Vault is connected.
       if (!selected) {
         const groqCustom = /^provider:openai_compatible:groq:(.+)$/.exec(modelId);
@@ -1295,6 +1354,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
         if (
           custom?.[1] &&
           !custom[1].startsWith("groq:") &&
+          !custom[1].startsWith("together:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -1323,7 +1383,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
           ? { transport: "openrouter", apiKeyRef: OPENROUTER_API_KEY_SECRET_ID }
           : transport === "groq"
             ? { transport: "groq", apiKeyRef: GROQ_API_KEY_SECRET_ID }
-            : {}),
+            : transport === "together"
+              ? { transport: "together", apiKeyRef: TOGETHER_API_KEY_SECRET_ID }
+              : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {

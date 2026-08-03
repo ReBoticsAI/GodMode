@@ -2095,6 +2095,57 @@ export const applyGroqToIntelligence = (model = "llama-3.1-8b-instant") =>
     true
   );
 
+export type TogetherAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchTogetherStatus = async (): Promise<TogetherAuthStatus> => {
+  try {
+    const row = await fetchRecord("ProviderCredential", "together-api-key");
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "together") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectTogetherApiKey = (apiKey: string) =>
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "together",
+    label: "Together",
+    api_key: apiKey,
+  })
+    .then(fetchTogetherStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectTogetherApiKey = () =>
+  deleteRecordApi("ProviderCredential", "together-api-key")
+    .then(fetchTogetherStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const applyTogetherToIntelligence = (
+  model = "MiniMaxAI/MiniMax-M3"
+) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:together:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
