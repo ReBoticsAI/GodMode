@@ -37,11 +37,11 @@ export default function Bank() {
         description="Connect wallets and accounts so you and your agents can track balances and transactions."
         actions={
           <Link
-            to={`${VAULT_PATH}?tab=integrations`}
+              to={`${VAULT_PATH}?tab=wallets`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <Settings2Icon data-icon="inline-start" />
-            Manage in Vault → Integrations
+            Manage in Vault → Wallets
           </Link>
         }
       />

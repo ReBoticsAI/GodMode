@@ -373,9 +373,9 @@ function ConnectionCategory({
                   provider.disabled
                     ? provider.hint
                     : needsMoralis
-                      ? "Configure Moralis in Vault → Integrations first"
+                      ? "Configure Moralis in Vault → Wallets first"
                       : needsPayPal
-                        ? "Configure PayPal in Vault → Integrations first"
+                        ? "Configure PayPal in Vault → Wallets first"
                         : provider.hint
                 }
               >
@@ -665,30 +665,30 @@ function ConnectDialog({
         {needsMoralis && (
           <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
             <p>
-              Configure your Moralis API key in Vault → Integrations before
+              Configure your Moralis API key in Vault → Wallets before
               connecting crypto wallets.
             </p>
             <Link
-              to={`${VAULT_PATH}?tab=integrations`}
+              to={`${VAULT_PATH}?tab=wallets`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
               onClick={onClose}
             >
-              Manage in Vault → Integrations
+              Manage in Vault → Wallets
             </Link>
           </div>
         )}
         {needsPayPal && (
           <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
             <p>
-              Configure PayPal client ID and secret in Vault → Integrations
+              Configure PayPal client ID and secret in Vault → Wallets
               first.
             </p>
             <Link
-              to={`${VAULT_PATH}?tab=integrations`}
+              to={`${VAULT_PATH}?tab=wallets`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
               onClick={onClose}
             >
-              Manage in Vault → Integrations
+              Manage in Vault → Wallets
             </Link>
           </div>
         )}

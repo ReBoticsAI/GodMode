@@ -26,11 +26,17 @@ import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
 import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
-import { normalizeVaultTab } from "@/lib/navigation";
+import {
+  normalizeVaultInferenceSub,
+  normalizeVaultTab,
+  type VaultInferenceSub,
+} from "@/lib/navigation";
 
 export default function Vault() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = normalizeVaultTab(searchParams.get("tab"));
+  const tabRaw = searchParams.get("tab");
+  const tab = normalizeVaultTab(tabRaw);
+  const inferenceSub = normalizeVaultInferenceSub(searchParams.get("sub"), tabRaw);
 
   const onTabChange = (value: string) => {
     const next = normalizeVaultTab(value);
@@ -38,6 +44,26 @@ export default function Vault() {
       (prev) => {
         const p = new URLSearchParams(prev);
         p.set("tab", next);
+        if (next === "inference") {
+          if (!p.get("sub") || normalizeVaultTab(prev.get("tab")) !== "inference") {
+            p.set("sub", "subscriptions");
+          }
+        } else {
+          p.delete("sub");
+        }
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
+  const onInferenceSubChange = (value: string) => {
+    const next = normalizeVaultInferenceSub(value);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("tab", "inference");
+        p.set("sub", next);
         return p;
       },
       { replace: true }
@@ -48,54 +74,34 @@ export default function Vault() {
     <Page>
       <PageHeader
         title="Vault"
-        description="Connect hub for inference, search, integrations, billing, and storage. More connect tabs are coming. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
+        description="Connect hub for GodMode Cloud, inference, integrations, wallets, marketplace, secrets, and storage. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
       <Tabs value={tab} onValueChange={onTabChange} className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
+          <TabsTrigger value="cloud">GodMode Cloud</TabsTrigger>
           <TabsTrigger value="inference">Inference</TabsTrigger>
-          <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="wallets">Wallets</TabsTrigger>
+          <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+          <TabsTrigger value="secrets">All Secrets</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="inference" className="mt-4 flex flex-col gap-6">
+        <TabsContent value="cloud" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">Subscriptions</h2>
+              <h2 className="text-sm font-medium">GodMode Cloud</h2>
               <p className="text-sm text-muted-foreground">
-                Use your plan (billed by the provider). Cursor is available today.
+                Seat billing and Stripe Customer Portal for this workspace. Shown
+                only on SaaS hosts.
               </p>
             </div>
-            <CursorSubscriptionCard />
-          </section>
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-sm font-medium">API keys</h2>
-              <p className="text-sm text-muted-foreground">
-                Metered BYOK. Each card stores a fixed credential and applies a provider-tuned
-                harness in Intelligence.
-              </p>
-            </div>
-            <OpenAiPlatformCard />
-            <AnthropicConsoleCard />
-            <OpenRouterCard />
-            <GroqCard />
-            <TogetherCard />
-            <AiSecretsCard />
+            <SubscriptionCard />
           </section>
         </TabsContent>
-        <TabsContent value="search" className="mt-4 flex flex-col gap-6">
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-sm font-medium">Web search</h2>
-              <p className="text-sm text-muted-foreground">
-                Keys for agent web_search and fetch_url. Exa is available today.
-              </p>
-            </div>
-            <ExaConnectCard />
-          </section>
+        <TabsContent value="inference" className="mt-4">
+          <InferenceTab sub={inferenceSub} onSubChange={onInferenceSubChange} />
         </TabsContent>
         <TabsContent value="integrations" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
@@ -108,42 +114,45 @@ export default function Vault() {
             </div>
             <GithubConnectCard />
           </section>
+        </TabsContent>
+        <TabsContent value="wallets" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">Holdings</h2>
+              <h2 className="text-sm font-medium">Wallets</h2>
               <p className="text-sm text-muted-foreground">
-                Moralis and PayPal API credentials for live Bank / Holdings sync.
+                Moralis and PayPal API credentials for live Bank / wallet sync.
                 Connect wallets and PayPal balances on Bank after credentials are
                 saved here.
               </p>
             </div>
             <HoldingsConnectCard />
           </section>
+        </TabsContent>
+        <TabsContent value="marketplace" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">Marketplace</h2>
+              <h2 className="text-sm font-medium">Seller payouts</h2>
               <p className="text-sm text-muted-foreground">
                 Seller Stripe Connect for Community payouts. Marketplace → Sell
-                keeps the same card for publish gating, plus ToS Accept and
-                listing tools.
+                links here to connect; ToS Accept and listing tools stay on Sell.
               </p>
             </div>
             <SellerPayoutsCard
-              returnUrl={`${window.location.origin}/vault?tab=integrations&stripe_connect=return`}
-              refreshUrl={`${window.location.origin}/vault?tab=integrations&stripe_connect=refresh`}
+              returnUrl={`${window.location.origin}/vault?tab=marketplace&stripe_connect=return`}
+              refreshUrl={`${window.location.origin}/vault?tab=marketplace&stripe_connect=refresh`}
             />
           </section>
         </TabsContent>
-        <TabsContent value="billing" className="mt-4 flex flex-col gap-6">
+        <TabsContent value="secrets" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">GodMode Cloud</h2>
+              <h2 className="text-sm font-medium">All secrets</h2>
               <p className="text-sm text-muted-foreground">
-                Seat billing and Stripe Customer Portal for this workspace. Shown
-                only on SaaS hosts.
+                Free-form platform secrets shared across agents. Prefer named Connect
+                cards when one exists.
               </p>
             </div>
-            <SubscriptionCard />
+            <AiSecretsCard />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
@@ -151,6 +160,65 @@ export default function Vault() {
         </TabsContent>
       </Tabs>
     </Page>
+  );
+}
+
+function InferenceTab({
+  sub,
+  onSubChange,
+}: {
+  sub: VaultInferenceSub;
+  onSubChange: (value: string) => void;
+}) {
+  return (
+    <Tabs value={sub} onValueChange={onSubChange} className="w-full">
+      <TabsList variant="line" className="w-full flex-wrap justify-start">
+        <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
+        <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+        <TabsTrigger value="search">Search</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="subscriptions" className="mt-4 flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-medium">Subscriptions</h2>
+            <p className="text-sm text-muted-foreground">
+              Use your plan (billed by the provider). Cursor is available today.
+            </p>
+          </div>
+          <CursorSubscriptionCard />
+        </section>
+      </TabsContent>
+
+      <TabsContent value="api-keys" className="mt-4 flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-medium">API keys</h2>
+            <p className="text-sm text-muted-foreground">
+              Metered BYOK. Each card stores a fixed credential and applies a
+              provider-tuned harness in Intelligence.
+            </p>
+          </div>
+          <OpenAiPlatformCard />
+          <AnthropicConsoleCard />
+          <OpenRouterCard />
+          <GroqCard />
+          <TogetherCard />
+        </section>
+      </TabsContent>
+
+      <TabsContent value="search" className="mt-4 flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-medium">Web search</h2>
+            <p className="text-sm text-muted-foreground">
+              Keys for agent web_search and fetch_url. Exa is available today.
+            </p>
+          </div>
+          <ExaConnectCard />
+        </section>
+      </TabsContent>
+    </Tabs>
   );
 }
 

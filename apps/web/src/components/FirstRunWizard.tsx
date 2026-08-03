@@ -159,14 +159,21 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
     }
   };
 
-  const openVault = (tab: VaultTab = "inference") => {
-    const next = normalizeVaultTab(tab);
+  const openVault = (target: VaultTab | "search" = "inference") => {
     onOpenVault();
-    navigate(`${VAULT_PATH}?tab=${next}`);
+    if (target === "search") {
+      navigate(`${VAULT_PATH}?tab=inference&sub=search`);
+      toast.message(
+        "Add your Exa key in Vault → Inference → Search, then return to finish setup."
+      );
+      return;
+    }
+    const next = normalizeVaultTab(target);
+    const params = new URLSearchParams({ tab: next });
+    if (next === "inference") params.set("sub", "api-keys");
+    navigate(`${VAULT_PATH}?${params.toString()}`);
     toast.message(
-      next === "search"
-        ? "Add your Exa key in Vault → Search, then return to finish setup."
-        : "Add your API key in Vault → Inference, then return to finish setup."
+      "Add your API key in Vault → Inference, then return to finish setup."
     );
   };
 
@@ -385,7 +392,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <p>
                 Create a key at the Exa dashboard, then connect it under{" "}
                 <Link
-                  to={`${VAULT_PATH}?tab=search`}
+                  to={`${VAULT_PATH}?tab=inference&sub=search`}
                   className="text-foreground underline underline-offset-4"
                   onClick={onOpenVault}
                 >
