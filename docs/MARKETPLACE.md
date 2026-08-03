@@ -122,7 +122,20 @@ the grants file; kill switches (#96) remain the emergency stop.
 
 Public browse listings: `GET /api/marketplace/listings?seller_kind=user`. Community catalog: `GET /api/marketplace/catalog/community`.
 
-## Kernel commerce
+## Seller payouts (Stripe Connect)
+
+Community sellers onboard with **Stripe Connect Express Account Links** from
+Marketplace → Sell → **Connect with Stripe** (#316). GodMode Cloud (or the hub
+commerce authority) creates/reuses a Connect account and redirects to Stripe.
+Return/refresh URLs land back on `/marketplace?tab=seller`.
+
+Requires `STRIPE_SECRET_KEY` (same secret used for Marketplace Checkout). Set
+`WEB_PUBLIC_URL` / `WEB_ORIGIN` so return URLs match the UI origin. Local/hub
+Sell UIs still proxy commerce actions to Cloud.
+
+Paste `acct_…` remains an advanced fallback only. PayPal and crypto seller rails
+are deferred (#317).
+
 
 Durable buy/sell uses ObjectTypes (see [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md)):
 

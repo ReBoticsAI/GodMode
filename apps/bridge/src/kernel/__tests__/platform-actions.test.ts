@@ -132,7 +132,13 @@ describe("platform action adapters", () => {
       {
         objectType: "MarketplaceSellerAccount",
         adapterId: "marketplace_seller_account_read",
-        actions: ["accept_tos", "connect_payout", "commerce_config"],
+        actions: [
+          "accept_tos",
+          "connect_payout",
+          "start_stripe_connect",
+          "refresh_stripe_connect",
+          "commerce_config",
+        ],
       },
       {
         objectType: "BridgeConnection",

@@ -105,6 +105,8 @@ import {
   createOrderForListing,
   createOrderForOfficialCatalogEntry,
   startMarketplaceCheckout,
+  startStripeConnectOnboarding,
+  refreshStripeConnectStatus,
 } from "../../services/marketplace-payments.js";
 import { getOfficialCatalogEntryPrice } from "../../services/marketplace-official-catalog.js";
 import { exportEntity, importEntity, type PortableBundle } from "../../services/portability.js";
@@ -1225,6 +1227,25 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
         commerceHttpError(err);
       }
     },
+    async start_stripe_connect(_db, _def, _id, input, ctx) {
+      try {
+        return await startStripeConnectOnboarding(ctx.data!.coreDb, {
+          userId: requireUser(ctx),
+          returnUrl: typeof input.return_url === "string" ? input.return_url : undefined,
+          refreshUrl: typeof input.refresh_url === "string" ? input.refresh_url : undefined,
+        });
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    async refresh_stripe_connect(_db, def, _id, _input, ctx) {
+      try {
+        const updated = await refreshStripeConnectStatus(ctx.data!.coreDb, requireUser(ctx));
+        return record(def, updated);
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
     commerce_config(_db, _def, _id, _input, _ctx) {
       return getPublicCommerceConfig();
     },
@@ -2183,6 +2204,20 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
         metamask_address: { type: ["string", "null"] },
         payout_preference: { enum: ["stripe", "paypal", "crypto"] },
       }),
+    }),
+    action("start_stripe_connect", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
+      inputSchema: objectSchema({
+        return_url: { type: "string" },
+        refresh_url: { type: "string" },
+      }),
+    }),
+    action("refresh_stripe_connect", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
     }),
     action("commerce_config", {
       target: "collection",
