@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../holdings/crypto-box.js";
-import { maskSecret } from "./agents-db.js";
+import { maskSecret, resolveSecretRefForAgent } from "./agents-db.js";
 
 export type AgentAccountKind = "oauth" | "apikey";
 export type AgentAccountStatus = "active" | "revoked";
@@ -215,10 +215,7 @@ export function resolveAgentCredential(
   }
 
   if (opts.secretId) {
-    const row = db
-      .prepare(`SELECT value FROM ai_secrets WHERE id=?`)
-      .get(opts.secretId) as { value: string } | undefined;
-    if (row) return readTokenPlain(row.value);
+    return resolveSecretRefForAgent(db, opts.secretId, agentId);
   }
 
   return null;

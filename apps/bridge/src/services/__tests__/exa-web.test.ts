@@ -35,6 +35,7 @@ function tenantDb(): AppDatabase {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       value TEXT NOT NULL,
+      agent_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

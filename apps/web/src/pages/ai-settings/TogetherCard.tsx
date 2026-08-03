@@ -46,7 +46,11 @@ const TOGETHER_CHAT = [
 const CUSTOM_VALUE = "__custom__";
 
 /** Connect Together AI (metered) API key for Intelligence. */
-export function TogetherCard() {
+export function TogetherCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<TogetherAuthStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [modelChoice, setModelChoice] = useState<string>(TOGETHER_CHAT[0].id);
@@ -55,12 +59,12 @@ export function TogetherCard() {
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchTogetherStatus();
+      const s = await fetchTogetherStatus(vaultAgentId);
       setStatus(s);
     } catch {
       setStatus({ connected: false, source: "none" });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -73,7 +77,7 @@ export function TogetherCard() {
     }
     setBusy(true);
     try {
-      const res = await connectTogetherApiKey(apiKey.trim());
+      const res = await connectTogetherApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("Together connected");
@@ -87,7 +91,7 @@ export function TogetherCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectTogetherApiKey();
+      const res = await disconnectTogetherApiKey(vaultAgentId);
       setStatus(res.status);
       toast.success("Together disconnected");
     } catch (err) {

@@ -1,10 +1,10 @@
 import type { AppDatabase } from "../db.js";
 import {
-  deleteSecret,
-  getSecretValue,
-  listSecrets,
+  getPlatformVaultSecretInScope,
+  resolvePlatformVaultSecret,
+  removePlatformVaultSecret,
+  upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
-import { encryptSecret } from "./holdings/crypto-box.js";
 
 /** Fixed secret id/name for Groq (metered) API key (#231). */
 export const GROQ_API_KEY_SECRET_ID = "groq-api-key";
@@ -39,55 +39,67 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
-export function resolveGroqApiKey(db: AppDatabase): string | null {
+export function resolveGroqApiKey(
+  db: AppDatabase,
+  agentId?: string | null
+): string | null {
   const env = process.env.GROQ_API_KEY?.trim();
   if (env) return env;
-  const byId = getSecretValue(db, GROQ_API_KEY_SECRET_ID);
-  if (byId) return byId;
-  const byName = listSecrets(db).find((s) => s.name === GROQ_API_KEY_SECRET_NAME);
-  if (!byName) return null;
-  return getSecretValue(db, byName.id);
+  return resolvePlatformVaultSecret(db, {
+    baseId: GROQ_API_KEY_SECRET_ID,
+    name: GROQ_API_KEY_SECRET_NAME,
+    agentId,
+  });
 }
 
-export function upsertGroqApiKey(db: AppDatabase, apiKey: string): void {
-  const trimmed = apiKey.trim();
-  if (!trimmed) throw new Error("API key required");
-  db.prepare(`DELETE FROM ai_secrets WHERE id = ? OR name = ?`).run(
-    GROQ_API_KEY_SECRET_ID,
-    GROQ_API_KEY_SECRET_NAME
-  );
-  db.prepare(`INSERT INTO ai_secrets (id, name, value) VALUES (?, ?, ?)`).run(
-    GROQ_API_KEY_SECRET_ID,
-    GROQ_API_KEY_SECRET_NAME,
-    encryptSecret(trimmed)
-  );
+export function upsertGroqApiKey(
+  db: AppDatabase,
+  apiKey: string,
+  agentId?: string | null
+): void {
+  upsertPlatformVaultSecret(db, {
+    baseId: GROQ_API_KEY_SECRET_ID,
+    name: GROQ_API_KEY_SECRET_NAME,
+    value: apiKey,
+    agentId,
+  });
 }
 
-export function removeGroqApiKey(db: AppDatabase): boolean {
-  return deleteSecret(db, GROQ_API_KEY_SECRET_ID);
+export function removeGroqApiKey(
+  db: AppDatabase,
+  agentId?: string | null
+): boolean {
+  return removePlatformVaultSecret(db, {
+    baseId: GROQ_API_KEY_SECRET_ID,
+    name: GROQ_API_KEY_SECRET_NAME,
+    agentId,
+  });
 }
 
-export function getGroqAuthStatus(db: AppDatabase): GroqAuthStatus {
+export function getGroqAuthStatus(
+  db: AppDatabase,
+  agentId?: string | null
+): GroqAuthStatus {
   const env = process.env.GROQ_API_KEY?.trim();
   if (env) {
     return { connected: true, source: "env", masked: maskKey(env) };
   }
-  const byId = getSecretValue(db, GROQ_API_KEY_SECRET_ID);
-  if (byId) {
-    return { connected: true, source: "vault", masked: maskKey(byId) };
-  }
-  const named = listSecrets(db).find((s) => s.name === GROQ_API_KEY_SECRET_NAME);
-  if (named) {
-    const value = getSecretValue(db, named.id);
-    if (value) {
-      return { connected: true, source: "vault", masked: maskKey(value) };
-    }
+  const value = getPlatformVaultSecretInScope(db, {
+    baseId: GROQ_API_KEY_SECRET_ID,
+    name: GROQ_API_KEY_SECRET_NAME,
+    agentId,
+  });
+  if (value) {
+    return { connected: true, source: "vault", masked: maskKey(value) };
   }
   return { connected: false, source: "none" };
 }
 
-export function isGroqPlatformReady(db: AppDatabase): boolean {
-  return getGroqAuthStatus(db).connected;
+export function isGroqPlatformReady(
+  db: AppDatabase,
+  agentId?: string | null
+): boolean {
+  return resolveGroqApiKey(db, agentId) != null;
 }
 
 export function isGroqVaultSecretName(name: string): boolean {
@@ -96,7 +108,10 @@ export function isGroqVaultSecretName(name: string): boolean {
 }
 
 export function isGroqVaultSecretId(id: string): boolean {
-  return id === GROQ_API_KEY_SECRET_ID;
+  return (
+    id === GROQ_API_KEY_SECRET_ID ||
+    id.startsWith(`${GROQ_API_KEY_SECRET_ID}__agent__`)
+  );
 }
 
 /** True when agent config points at Groq transport. */

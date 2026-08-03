@@ -1404,6 +1404,7 @@ export interface AiSecret {
   name: string;
   masked: string;
   createdAt: string;
+  agentId?: string | null;
 }
 
 export interface AiCardComment {
@@ -1855,11 +1856,31 @@ export const resolveAgentForPage = (loc: {
   if (loc.pageId) qs.set("pageId", loc.pageId);
   return api<AiResolvedAgent>(`/ai/agents/resolve?${qs.toString()}`);
 };
-export const fetchAiSecrets = () => api<{ secrets: AiSecret[] }>("/ai/secrets");
-export const createAiSecret = (name: string, value: string) =>
-  createDto<AiSecret>("VaultSecret", { name, value });
-export const deleteAiSecret = (id: string) =>
-  deleteDto("VaultSecret", id);
+export const fetchAiSecrets = (agentId?: string | null) => {
+  const q =
+    agentId != null && agentId !== ""
+      ? `?agentId=${encodeURIComponent(agentId)}`
+      : "";
+  return api<{ secrets: AiSecret[] }>(`/ai/secrets${q}`);
+};
+export const createAiSecret = (
+  name: string,
+  value: string,
+  agentId?: string | null
+) =>
+  createDto<AiSecret>(
+    "VaultSecret",
+    {
+      name,
+      value,
+      ...(agentId != null && agentId !== ""
+        ? { agent_id: agentId }
+        : { agent_id: null }),
+    },
+    agentId ? { agentId } : undefined
+  );
+export const deleteAiSecret = (id: string, agentId?: string | null) =>
+  deleteDto("VaultSecret", id, agentId ? { agentId } : undefined);
 
 export interface CursorAuthStatus {
   connected: boolean;
@@ -1874,22 +1895,50 @@ export interface CursorModelOption {
   label: string;
 }
 
-export const fetchCursorStatus = () => api<CursorAuthStatus>("/ai/cursor/status");
-export const connectCursorApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "cursor",
-    label: "Cursor subscription",
-    api_key: apiKey,
-  })
-    .then(fetchCursorStatus)
+function vaultScopeOpts(agentId?: string | null): { agentId?: string } | undefined {
+  return agentId ? { agentId } : undefined;
+}
+
+function vaultAgentPayload(agentId?: string | null): { agent_id: string | null } {
+  return { agent_id: agentId && agentId !== "" ? agentId : null };
+}
+
+export const fetchCursorStatus = (agentId?: string | null) => {
+  const q =
+    agentId != null && agentId !== ""
+      ? `?agentId=${encodeURIComponent(agentId)}`
+      : "";
+  return api<CursorAuthStatus>(`/ai/cursor/status${q}`);
+};
+export const connectCursorApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "cursor",
+      label: "Cursor subscription",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchCursorStatus(agentId))
     .then((status) => ({ ok: true, status }));
-export const disconnectCursorApiKey = () =>
-  deleteRecordApi("ProviderCredential", "cursor-api-key")
-    .then(fetchCursorStatus)
+export const disconnectCursorApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "cursor-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchCursorStatus(agentId))
     .then((status) => ({ ok: true, status }));
-export const fetchCursorModels = () =>
-  api<{ models: CursorModelOption[] }>("/ai/cursor/models");
+export const fetchCursorModels = (agentId?: string | null) => {
+  const q =
+    agentId != null && agentId !== ""
+      ? `?agentId=${encodeURIComponent(agentId)}`
+      : "";
+  return api<{ models: CursorModelOption[] }>(`/ai/cursor/models${q}`);
+};
 export const applyCursorToIntelligence = (model = "auto") =>
   actionDto<{ ok: boolean }>(
     "ModelRuntime",
@@ -1905,9 +1954,15 @@ export type OpenAiAuthStatus = {
   masked?: string;
 };
 
-export const fetchOpenAiStatus = async (): Promise<OpenAiAuthStatus> => {
+export const fetchOpenAiStatus = async (
+  agentId?: string | null
+): Promise<OpenAiAuthStatus> => {
   try {
-    const row = await fetchRecord("ProviderCredential", "openai-api-key");
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "openai-api-key",
+      vaultScopeOpts(agentId)
+    );
     const data = row?.data as
       | { provider?: string; status?: string; masked_token?: string }
       | undefined;
@@ -1924,17 +1979,28 @@ export const fetchOpenAiStatus = async (): Promise<OpenAiAuthStatus> => {
   return { connected: false, source: "none" };
 };
 
-export const connectOpenAiApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "openai",
-    label: "OpenAI Platform",
-    api_key: apiKey,
-  }).then(fetchOpenAiStatus).then((status) => ({ ok: true, status }));
+export const connectOpenAiApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "openai",
+      label: "OpenAI Platform",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpenAiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
 
-export const disconnectOpenAiApiKey = () =>
-  deleteRecordApi("ProviderCredential", "openai-api-key")
-    .then(fetchOpenAiStatus)
+export const disconnectOpenAiApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "openai-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpenAiStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
 export const applyOpenAiToIntelligence = (model = "gpt-4o") =>
@@ -1952,9 +2018,15 @@ export type AnthropicAuthStatus = {
   masked?: string;
 };
 
-export const fetchAnthropicStatus = async (): Promise<AnthropicAuthStatus> => {
+export const fetchAnthropicStatus = async (
+  agentId?: string | null
+): Promise<AnthropicAuthStatus> => {
   try {
-    const row = await fetchRecord("ProviderCredential", "anthropic-api-key");
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "anthropic-api-key",
+      vaultScopeOpts(agentId)
+    );
     const data = row?.data as
       | { provider?: string; status?: string; masked_token?: string }
       | undefined;
@@ -1971,19 +2043,28 @@ export const fetchAnthropicStatus = async (): Promise<AnthropicAuthStatus> => {
   return { connected: false, source: "none" };
 };
 
-export const connectAnthropicApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "anthropic",
-    label: "Anthropic Console",
-    api_key: apiKey,
-  })
-    .then(fetchAnthropicStatus)
+export const connectAnthropicApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "anthropic",
+      label: "Anthropic Console",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchAnthropicStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
-export const disconnectAnthropicApiKey = () =>
-  deleteRecordApi("ProviderCredential", "anthropic-api-key")
-    .then(fetchAnthropicStatus)
+export const disconnectAnthropicApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "anthropic-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchAnthropicStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
 export const applyAnthropicToIntelligence = (model = "claude-sonnet-4-20250514") =>
@@ -2001,9 +2082,15 @@ export type OpenRouterAuthStatus = {
   masked?: string;
 };
 
-export const fetchOpenRouterStatus = async (): Promise<OpenRouterAuthStatus> => {
+export const fetchOpenRouterStatus = async (
+  agentId?: string | null
+): Promise<OpenRouterAuthStatus> => {
   try {
-    const row = await fetchRecord("ProviderCredential", "openrouter-api-key");
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "openrouter-api-key",
+      vaultScopeOpts(agentId)
+    );
     const data = row?.data as
       | { provider?: string; status?: string; masked_token?: string }
       | undefined;
@@ -2020,19 +2107,28 @@ export const fetchOpenRouterStatus = async (): Promise<OpenRouterAuthStatus> => 
   return { connected: false, source: "none" };
 };
 
-export const connectOpenRouterApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "openrouter",
-    label: "OpenRouter",
-    api_key: apiKey,
-  })
-    .then(fetchOpenRouterStatus)
+export const connectOpenRouterApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "openrouter",
+      label: "OpenRouter",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpenRouterStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
-export const disconnectOpenRouterApiKey = () =>
-  deleteRecordApi("ProviderCredential", "openrouter-api-key")
-    .then(fetchOpenRouterStatus)
+export const disconnectOpenRouterApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "openrouter-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpenRouterStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
 export const applyOpenRouterToIntelligence = (
@@ -2052,9 +2148,15 @@ export type GroqAuthStatus = {
   masked?: string;
 };
 
-export const fetchGroqStatus = async (): Promise<GroqAuthStatus> => {
+export const fetchGroqStatus = async (
+  agentId?: string | null
+): Promise<GroqAuthStatus> => {
   try {
-    const row = await fetchRecord("ProviderCredential", "groq-api-key");
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "groq-api-key",
+      vaultScopeOpts(agentId)
+    );
     const data = row?.data as
       | { provider?: string; status?: string; masked_token?: string }
       | undefined;
@@ -2071,19 +2173,28 @@ export const fetchGroqStatus = async (): Promise<GroqAuthStatus> => {
   return { connected: false, source: "none" };
 };
 
-export const connectGroqApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "groq",
-    label: "Groq",
-    api_key: apiKey,
-  })
-    .then(fetchGroqStatus)
+export const connectGroqApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "groq",
+      label: "Groq",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchGroqStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
-export const disconnectGroqApiKey = () =>
-  deleteRecordApi("ProviderCredential", "groq-api-key")
-    .then(fetchGroqStatus)
+export const disconnectGroqApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "groq-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchGroqStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
 export const applyGroqToIntelligence = (model = "llama-3.1-8b-instant") =>
@@ -2101,9 +2212,15 @@ export type TogetherAuthStatus = {
   masked?: string;
 };
 
-export const fetchTogetherStatus = async (): Promise<TogetherAuthStatus> => {
+export const fetchTogetherStatus = async (
+  agentId?: string | null
+): Promise<TogetherAuthStatus> => {
   try {
-    const row = await fetchRecord("ProviderCredential", "together-api-key");
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "together-api-key",
+      vaultScopeOpts(agentId)
+    );
     const data = row?.data as
       | { provider?: string; status?: string; masked_token?: string }
       | undefined;
@@ -2120,19 +2237,28 @@ export const fetchTogetherStatus = async (): Promise<TogetherAuthStatus> => {
   return { connected: false, source: "none" };
 };
 
-export const connectTogetherApiKey = (apiKey: string) =>
-  createRecordApi("ProviderCredential", {
-    agent_id: "intelligence",
-    provider: "together",
-    label: "Together",
-    api_key: apiKey,
-  })
-    .then(fetchTogetherStatus)
+export const connectTogetherApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "together",
+      label: "Together",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchTogetherStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
-export const disconnectTogetherApiKey = () =>
-  deleteRecordApi("ProviderCredential", "together-api-key")
-    .then(fetchTogetherStatus)
+export const disconnectTogetherApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "together-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchTogetherStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
 export const applyTogetherToIntelligence = (
