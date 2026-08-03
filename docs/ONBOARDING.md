@@ -26,7 +26,7 @@ On multi-tenant hubs, a process-wide `CURSOR_API_KEY` does **not** mark every wo
 
 1. **Welcome**: same overview.
 2. **Connect your LLM**: Vault BYOK (Cursor subscription and/or OpenAI / Anthropic). No GGUF or Ollama steps.
-3. **Ready**: open Chat; manage keys anytime in Vault.
+3. **Ready**: open Chat; manage keys anytime in Vault (Inference for LLM keys; Search for Exa web tools).
 
 Richer guided Vault collection (validate keys in-wizard) is tracked in GitHub issue #224.
 

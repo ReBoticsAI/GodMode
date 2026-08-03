@@ -41,11 +41,10 @@ export function AiSecretsCard() {
           AI platform secrets
         </CardTitle>
         <CardDescription>
-          Shared API keys for provider backends and web tools. Referenced by
+          Free-form shared secrets for provider backends and tools. Referenced by
           agents in Agents → Pipeline → Backend; not scoped to individual
-          subagents. For Cloud web_search / fetch_url, add a secret named{" "}
-          <span className="font-mono text-xs">exa_api_key</span> (or link
-          provider <span className="font-mono text-xs">exa</span> on the agent).
+          subagents. Prefer the dedicated Connect cards (Inference and Search tabs)
+          when one exists for the provider.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

@@ -193,7 +193,7 @@ in [docs/VERIFICATION.md](docs/VERIFICATION.md#z440-revision-and-image-identity)
 
 ## Intelligence on hub
 
-New tenants get Intelligence with `backend=provider` (OpenAI-compatible). Users add API keys in **Vault → Secrets** and configure the provider in **Agents → Pipeline**.
+New tenants get Intelligence with `backend=provider` (OpenAI-compatible). Users add API keys in **Vault → Inference** and configure the provider in **Agents → Pipeline**.
 
 ### Hub + local GGUF on the host GPU
 

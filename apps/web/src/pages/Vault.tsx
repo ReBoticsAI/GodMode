@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
+import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
@@ -26,16 +27,17 @@ export default function Vault() {
     <Page>
       <PageHeader
         title="Vault"
-        description="Inference credentials and storage. Subscriptions and API keys are separate from GodMode Cloud seat billing."
+        description="Connect hub for inference and search credentials, plus storage. More connect tabs are coming. Subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
-      <Tabs defaultValue="secrets" className="w-full">
+      <Tabs defaultValue="inference" className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
-          <TabsTrigger value="secrets">Secrets</TabsTrigger>
+          <TabsTrigger value="inference">Inference</TabsTrigger>
+          <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="secrets" className="mt-4 flex flex-col gap-6">
+        <TabsContent value="inference" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
               <h2 className="text-sm font-medium">Subscriptions</h2>
@@ -59,6 +61,17 @@ export default function Vault() {
             <GroqCard />
             <TogetherCard />
             <AiSecretsCard />
+          </section>
+        </TabsContent>
+        <TabsContent value="search" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Web search</h2>
+              <p className="text-sm text-muted-foreground">
+                Keys for agent web_search and fetch_url. Exa is available today.
+              </p>
+            </div>
+            <ExaConnectCard />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
