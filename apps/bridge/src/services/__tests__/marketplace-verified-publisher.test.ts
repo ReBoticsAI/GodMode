@@ -12,10 +12,10 @@ vi.mock("../marketplace-catalog.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOfficialCatalog: vi.fn(async () => ({
-      url: "https://example.test/catalog/index.json",
+      url: "https://example.test/catalog/official/index.json",
       entries: [
         withOfficialVerifiedPublisher({
-          id: "default-verified",
+          id: "default-unverified",
           kind: "plugin",
           installType: "plugin" as const,
           title: "Default",
@@ -26,16 +26,16 @@ vi.mock("../marketplace-catalog.js", async (importOriginal) => {
           pluginRef: "abc1234",
         }),
         withOfficialVerifiedPublisher({
-          id: "explicit-unverified",
+          id: "explicit-verified",
           kind: "plugin",
           installType: "plugin" as const,
-          title: "Unverified",
+          title: "Verified",
           description: "",
           version: "1.0.0",
-          author: "Other",
+          author: "GodMode",
           pluginRepo: "https://github.com/example/other",
           pluginRef: "def5678",
-          verifiedPublisher: false,
+          verifiedPublisher: true,
         }),
       ],
     })),
@@ -64,16 +64,16 @@ function openOfficialCatalogDb(): CoreDatabase {
       listing_id TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       sort_order INTEGER NOT NULL DEFAULT 0,
-      verified_publisher INTEGER NOT NULL DEFAULT 1,
+      verified_publisher INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
   return db;
 }
 
-describe("verified publisher (#309)", () => {
-  it("defaults Official entries to verifiedPublisher true; explicit false wins", () => {
-    expect(withOfficialVerifiedPublisher({ id: "a" }).verifiedPublisher).toBe(true);
+describe("Official verified publisher (#315)", () => {
+  it("does not default Official entries to verified; explicit true wins", () => {
+    expect(withOfficialVerifiedPublisher({ id: "a" }).verifiedPublisher).toBe(false);
     expect(
       withOfficialVerifiedPublisher({ id: "b", verifiedPublisher: true }).verifiedPublisher
     ).toBe(true);
@@ -85,35 +85,35 @@ describe("verified publisher (#309)", () => {
   it("serves verifiedPublisher from Cloud Official rows and fallback feed", async () => {
     const core = openOfficialCatalogDb();
     upsertOfficialCatalogEntry(core, {
-      entryId: "cloud-verified",
-      title: "Cloud Verified",
+      entryId: "cloud-default",
+      title: "Cloud Default",
       installType: "clone",
       kind: "bundle",
     });
     upsertOfficialCatalogEntry(core, {
-      entryId: "cloud-unverified",
-      title: "Cloud Unverified",
+      entryId: "cloud-verified",
+      title: "Cloud Verified",
       installType: "clone",
       kind: "bundle",
-      verifiedPublisher: false,
+      verifiedPublisher: true,
     });
 
     const curated = await buildPublicOfficialCatalog(core);
     expect(
+      curated.entries.find((e) => e.id === "cloud-default")?.verifiedPublisher
+    ).toBe(false);
+    expect(
       curated.entries.find((e) => e.id === "cloud-verified")?.verifiedPublisher
     ).toBe(true);
-    expect(
-      curated.entries.find((e) => e.id === "cloud-unverified")?.verifiedPublisher
-    ).toBe(false);
 
     const empty = openOfficialCatalogDb();
     const fallback = await buildPublicOfficialCatalog(empty);
     expect(
-      fallback.entries.find((e) => e.id === "default-verified")?.verifiedPublisher
-    ).toBe(true);
-    expect(
-      fallback.entries.find((e) => e.id === "explicit-unverified")?.verifiedPublisher
+      fallback.entries.find((e) => e.id === "default-unverified")?.verifiedPublisher
     ).toBe(false);
+    expect(
+      fallback.entries.find((e) => e.id === "explicit-verified")?.verifiedPublisher
+    ).toBe(true);
   });
 
   it("preserves verified_publisher on upsert when the field is omitted", () => {
@@ -122,13 +122,13 @@ describe("verified publisher (#309)", () => {
       entryId: "keep-flag",
       title: "Keep",
       installType: "clone",
-      verifiedPublisher: false,
+      verifiedPublisher: true,
     });
     const again = upsertOfficialCatalogEntry(core, {
       entryId: "keep-flag",
       title: "Keep Updated",
       installType: "clone",
     });
-    expect(again.verified_publisher).toBe(0);
+    expect(again.verified_publisher).toBe(1);
   });
 });

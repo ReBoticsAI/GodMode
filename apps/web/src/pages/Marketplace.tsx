@@ -14,6 +14,7 @@ import {
   fetchMarketplaceListings,
   fetchMyMarketplaceListings,
   fetchOfficialCatalog,
+  fetchCommunityCatalog,
   fetchUnofficialCatalog,
   fetchBridgeHealth,
   installCatalogEntry,
@@ -318,6 +319,7 @@ export default function MarketplacePage() {
   const [official, setOfficial] = useState<CatalogEntry[]>([]);
   const [localCatalog, setLocalCatalog] = useState<CatalogEntry[]>([]);
   const [communityListings, setCommunityListings] = useState<MarketplaceListing[]>([]);
+  const [communityCatalog, setCommunityCatalog] = useState<CatalogEntry[]>([]);
   const [myListings, setMyListings] = useState<MarketplaceListing[]>([]);
   const [entitlements, setEntitlements] = useState<MarketplaceEntitlement[]>([]);
   const [discovered, setDiscovered] = useState<DiscoveredPlugin[]>([]);
@@ -381,11 +383,12 @@ export default function MarketplacePage() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [off, local, inst, community, mine, ents] = await Promise.all([
+      const [off, local, inst, community, communityCat, mine, ents] = await Promise.all([
         fetchOfficialCatalog(),
         fetchUnofficialCatalog(),
         fetchInstalledCatalog(),
         fetchMarketplaceListings({ sellerKind: "user" }).catch(() => ({ listings: [] })),
+        fetchCommunityCatalog().catch(() => ({ catalogUrl: "", entries: [] as CatalogEntry[] })),
         fetchMyMarketplaceListings().catch(() => ({ listings: [] })),
         fetchMarketplaceEntitlements().catch(() => ({ entitlements: [] })),
       ]);
@@ -397,6 +400,7 @@ export default function MarketplacePage() {
       setCatalogInstalls(inst.catalogInstalls);
       setTenantPlugins(inst.plugins);
       setCommunityListings(community.listings);
+      setCommunityCatalog(communityCat.entries);
       setMyListings(mine.listings);
       setEntitlements(ents.entitlements);
       const ids = new Set(inst.plugins.map((p) => p.plugin_id));
@@ -467,6 +471,10 @@ export default function MarketplacePage() {
 
   const officialFiltered = useMemo(() => filterEntries(official), [official, q]);
   const localFiltered = useMemo(() => filterEntries(localCatalog), [localCatalog, q]);
+  const communityCatalogFiltered = useMemo(
+    () => filterEntries(communityCatalog),
+    [communityCatalog, q]
+  );
   const communityFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return communityListings;
@@ -777,10 +785,10 @@ export default function MarketplacePage() {
     <Page>
       <PageHeader
         title="Marketplace"
-        description="Install Official packs, Local catalogs, and Community listings. Paid Official items go 100% to ReBotics; Community sales take a 10% platform fee. Chargebacks ban Marketplace access."
+        description="Official is ReBotics-curated. Community is the user seller path (Sell tab + gated community catalog). Paid Official goes 100% to ReBotics; Community sales take a 10% platform fee. Chargebacks ban Marketplace access."
         actions={
           <Button variant="outline" size="sm" render={<a href={OFFICIAL_REPO} target="_blank" rel="noreferrer" />}>
-            Submit to Official
+            Community catalog PRs
           </Button>
         }
       />
@@ -1002,6 +1010,31 @@ export default function MarketplacePage() {
         </TabsContent>
 
         <TabsContent value="community" className="mt-4 space-y-6">
+          <p className="text-sm text-muted-foreground">
+            User-to-user marketplace. Gated plugins land in the Community catalog (CI + pins).
+            Portable listings publish from the Sell tab. Official stays ReBotics-only.
+          </p>
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading community catalog…</p>
+          ) : communityCatalogFiltered.length > 0 ? (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium">Community catalog</h3>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {communityCatalogFiltered.map((entry) => (
+                  <EntryCard
+                    key={`community-cat-${entry.id}`}
+                    entry={entry}
+                    installed={installedIds.has(entry.id)}
+                    installing={installingId === entry.id}
+                    buying={buyingId === entry.id}
+                    onInstall={() => void handleInstall(entry)}
+                    onBuy={(provider) => void handleBuy(entry, provider)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {entitlements.filter((e) => e.status === "active").length > 0 ? (
             <Card>
               <CardHeader>

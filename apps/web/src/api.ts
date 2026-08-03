@@ -4297,6 +4297,10 @@ export function fetchOfficialCatalog() {
   return api<{ catalogUrl: string; entries: CatalogEntry[] }>("/marketplace/catalog/official");
 }
 
+export function fetchCommunityCatalog() {
+  return api<{ catalogUrl: string; entries: CatalogEntry[] }>("/marketplace/catalog/community");
+}
+
 export function fetchUnofficialCatalog() {
   return api<{
     sources: Array<{ id: string; name: string; url: string; created_at: string }>;

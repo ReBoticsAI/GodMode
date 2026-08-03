@@ -183,9 +183,11 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 | `GODMODE_PLUGIN_PATH` | empty | Optional advanced override: semicolon-separated plugin roots (Windows). Prefer **Marketplace → Local** or Intelligence `install_plugin`. |
 | `GITHUB_TOKEN` | empty | Clone private GitHub plugin repos from Marketplace |
 | `GODMODE_PLUGIN_SCAFFOLD_DIR` | `{repo}/plugins` (local) or tenant workspace `plugins/` (hub) | Override target dir for `scaffold_plugin` |
-| `MARKETPLACE_OFFICIAL_URL` | GitHub raw index | Official catalog URL (or SaaS public Official JSON) |
+| `MARKETPLACE_OFFICIAL_URL` | GitHub `catalog/official/index.json` | Official (ReBotics-only) catalog URL |
+| `MARKETPLACE_COMMUNITY_URL` | GitHub `catalog/community/index.json` | Community (user seller) gated catalog URL |
+| `MARKETPLACE_LOCAL_CATALOG_PATH` | sibling `catalog/official/index.json` | Local Official index for dev |
+| `MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH` | sibling `catalog/community/index.json` | Local Community index for dev |
 | `MARKETPLACE_SAAS_OFFICIAL_URL` | empty | Remote SaaS Official catalog for local/private-hub price enrichment |
-| `MARKETPLACE_LOCAL_CATALOG_PATH` | auto-detect sibling | Local catalog file path |
 | `MARKETPLACE_CACHE_TTL_MS` | `300000` | Catalog cache TTL |
 | `MARKETPLACE_TOS_VERSION` | `1` | Marketplace ToS version buyers/sellers must accept |
 | `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |
