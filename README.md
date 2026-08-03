@@ -172,7 +172,7 @@ Full walkthrough: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** · Env 
 ### First steps after install
 
 1. **Sign up** with email and password (local auth only  -  no OAuth).
-2. Open **Chat** and select **Intelligence**. Add an LLM API key under **Vault → Secrets**, then configure the provider in **Agents → Pipeline**.
+2. Open **Chat** and select **Intelligence**. Add an LLM API key under **Vault → Inference**, then configure the provider in **Agents → Pipeline**.
 3. Ask Intelligence to create your first department and pages, or use **Structure** once you have content.
 4. Optional: install plugins under **Marketplace → Local** (see [docs/MARKETPLACE.md](docs/MARKETPLACE.md) and [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md)).
 

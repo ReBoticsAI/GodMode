@@ -66,7 +66,7 @@ Complete the wizard, then open **Chat** from the sidebar. Details: [ONBOARDING.m
 2. Ensure an LLM is ready:
    - **Local:** GGUF under your model dirs (see [LOCAL_LLM.md](./LOCAL_LLM.md)), or
    - **Cursor:** Vault → **Cursor subscription** → Connect, then pick Auto / a named model ([CURSOR_SUBSCRIPTION.md](./CURSOR_SUBSCRIPTION.md)), or
-   - **Cloud provider:** Vault → Secrets + Intelligence model picker / Agents → Pipeline
+   - **Cloud provider:** Vault → Inference + Intelligence model picker / Agents → Pipeline
 3. Ask Intelligence to create a department, wiki page, or task — it uses platform tools to mutate your workspace
 
 Try chat modes from the composer:

@@ -13,7 +13,7 @@ export const WELCOME_WIKI_BODY = [
   "",
   "Read more in the wiki: [[godmode-overview]], [[workspace-structure]], [[agents]], [[shared-and-marketplace]], [[personal-tools]].",
   "",
-  "Add API keys in **Vault → Secrets**, then set Intelligence to use a cloud provider in **Agents → Pipeline → Backend**.",
+  "Add API keys in **Vault → Inference**, then set Intelligence to use a cloud provider in **Agents → Pipeline → Backend**.",
 ].join("\n");
 
 /** Idempotent: ensure the onboarding welcome page exists for a tenant (core DB). */
