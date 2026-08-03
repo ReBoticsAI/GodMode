@@ -75,6 +75,28 @@ assert.equal(
   resolveHarnessProfile({ source: "provider", provider: "anthropic" }).id,
   "anthropic"
 );
+assert.equal(
+  resolveHarnessProfile({ source: "provider", provider: "openai", model: "gpt-4o" }).id,
+  "openai"
+);
+assert.equal(
+  resolveHarnessProfile({ source: "provider", provider: "openai" }).harnessDelta.length > 0,
+  true
+);
+assert.equal(
+  resolveHarnessProfile({ source: "provider", provider: "openai" }).maxChatIterations,
+  12
+);
+assert.notEqual(
+  resolveProfileForAgent({
+    backend: "cursor_cloud",
+    config: { model: "gpt-4o" },
+  }).id,
+  resolveProfileForAgent({
+    backend: "provider",
+    config: { provider: "openai", model: "gpt-4o" },
+  }).id
+);
 
 assert.equal(
   resolveProfileForAgent({
