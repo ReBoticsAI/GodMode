@@ -968,7 +968,9 @@ export function createAiRouter(
         s.id !== "openai-api-key" &&
         s.name !== "openai_api_key" &&
         s.id !== "anthropic-api-key" &&
-        s.name !== "anthropic_api_key"
+        s.name !== "anthropic_api_key" &&
+        s.id !== "openrouter-api-key" &&
+        s.name !== "openrouter_api_key"
     );
     res.json({ secrets });
   });

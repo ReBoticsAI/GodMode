@@ -586,6 +586,35 @@ describe("runtime ObjectType actions", () => {
     ).toBeNull();
   });
 
+  it("stores OpenRouter credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: "intelligence",
+        provider: "openrouter",
+        api_key: "sk-or-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("openrouter-api-key");
+    expect(created.data).toMatchObject({
+      provider: "openrouter",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("sk-or-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "openrouter-api-key", owner)
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(db, def, "openrouter-api-key", owner);
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "openrouter-api-key", owner)
+    ).toBeNull();
+  });
+
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
     const active = fakeServices();
     configureRuntimeAdapterServices(active);

@@ -22,6 +22,14 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | cursor / cursor_cloud | — | other | `cursor` |
 | provider | openai | * | `openai` |
 | provider | anthropic | * | `anthropic` |
+| provider | openai_compatible (OpenRouter) | `deepseek/*` | `openrouter-deepseek` |
+| provider | openai_compatible (OpenRouter) | `z-ai/*` | `openrouter-glm` |
+| provider | openai_compatible (OpenRouter) | `nvidia/nemotron*` | `openrouter-nemotron` |
+| provider | openai_compatible (OpenRouter) | `minimax/*` | `openrouter-minimax` |
+| provider | openai_compatible (OpenRouter) | `moonshotai/*` | `openrouter-kimi` |
+| provider | openai_compatible (OpenRouter) | other (MiMo, Hy3, Step, Ling, …) | `openrouter-generic` |
 | remote | — | * | `remote` |
+
+OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

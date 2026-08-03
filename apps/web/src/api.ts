@@ -1995,6 +1995,57 @@ export const applyAnthropicToIntelligence = (model = "claude-sonnet-4-20250514")
     true
   );
 
+export type OpenRouterAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchOpenRouterStatus = async (): Promise<OpenRouterAuthStatus> => {
+  try {
+    const row = await fetchRecord("ProviderCredential", "openrouter-api-key");
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "openrouter") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectOpenRouterApiKey = (apiKey: string) =>
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "openrouter",
+    label: "OpenRouter",
+    api_key: apiKey,
+  })
+    .then(fetchOpenRouterStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectOpenRouterApiKey = () =>
+  deleteRecordApi("ProviderCredential", "openrouter-api-key")
+    .then(fetchOpenRouterStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const applyOpenRouterToIntelligence = (
+  model = "deepseek/deepseek-v4-flash-0731"
+) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
