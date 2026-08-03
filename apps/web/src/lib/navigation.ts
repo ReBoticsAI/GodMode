@@ -77,24 +77,46 @@ export const VAULT_PATH = "/vault";
 
 export const VAULT_TABS = [
   "inference",
-  "search",
+  "secrets",
+  "marketplace",
+  "wallets",
+  "cloud",
   "integrations",
-  "billing",
   "storage",
 ] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
+export const VAULT_INFERENCE_SUBTABS = [
+  "api-keys",
+  "subscriptions",
+  "search",
+] as const;
+export type VaultInferenceSub = (typeof VAULT_INFERENCE_SUBTABS)[number];
+
+/** Map legacy Vault ?tab= values to the current tab IA. */
 export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
+  if (raw === "search") return "inference";
+  if (raw === "billing") return "cloud";
+  if ((VAULT_TABS as readonly string[]).includes(raw ?? "")) {
+    return raw as VaultTab;
+  }
+  return "inference";
+}
+
+export function normalizeVaultInferenceSub(
+  raw: string | null | undefined,
+  tabRaw?: string | null
+): VaultInferenceSub {
+  // Legacy top-level Search tab.
+  if (tabRaw === "search") return "search";
   if (
-    raw === "search" ||
-    raw === "storage" ||
-    raw === "inference" ||
-    raw === "integrations" ||
-    raw === "billing"
+    raw === "api-keys" ||
+    raw === "subscriptions" ||
+    raw === "search"
   ) {
     return raw;
   }
-  return "inference";
+  return "api-keys";
 }
 
 export const STRUCTURE_PATH = "/structure";

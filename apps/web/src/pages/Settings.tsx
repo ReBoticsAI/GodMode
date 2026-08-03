@@ -337,20 +337,22 @@ function BillingVaultLinkCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CreditCardIcon className="size-4" />
-          Billing
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <CreditCardIcon className="size-4" />
+            GodMode Cloud
+          </span>
         </CardTitle>
         <CardDescription>
-          Manage GodMode Cloud seat billing under Vault → Billing.
+          Manage GodMode Cloud seat billing under Vault → GodMode Cloud.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Link
-          to={`${VAULT_PATH}?tab=billing`}
+          to={`${VAULT_PATH}?tab=cloud`}
           className={buttonVariants({ variant: "outline" })}
         >
-          Manage in Vault → Billing
+          Manage in Vault → GodMode Cloud
         </Link>
       </CardContent>
     </Card>
