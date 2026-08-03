@@ -45,12 +45,12 @@ import {
 import { useTenant } from "@/lib/tenant-context";
 import {
   HOME_PATH,
+  SETTINGS_PATH,
   VAULT_PATH,
-  normalizeVaultTab,
-  type VaultTab,
 } from "@/lib/navigation";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { EXA_API_KEY_SECRET_NAME } from "@/pages/ai-settings/ExaConnectCard";
+import { platformVaultSettingsHref } from "@/pages/Vault";
 
 type Props = {
   open: boolean;
@@ -93,7 +93,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
       setSaas(isSaas);
 
       try {
-        const { secrets } = await fetchAiSecrets();
+        const { secrets } = await fetchAiSecrets({ ownerKind: "platform" });
         if (!cancelled) {
           setExaConnected(
             secrets.some((s) => s.name.toLowerCase() === EXA_API_KEY_SECRET_NAME)
@@ -159,21 +159,13 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
     }
   };
 
-  const openVault = (target: VaultTab | "search" = "inference") => {
+  const openPlatformVault = (sub: "subscriptions" | "api-keys" | "search" = "api-keys") => {
     onOpenVault();
-    if (target === "search") {
-      navigate(`${VAULT_PATH}?tab=inference&sub=search`);
-      toast.message(
-        "Add your Exa key in Vault → Inference → Search, then return to finish setup."
-      );
-      return;
-    }
-    const next = normalizeVaultTab(target);
-    const params = new URLSearchParams({ tab: next });
-    if (next === "inference") params.set("sub", "api-keys");
-    navigate(`${VAULT_PATH}?${params.toString()}`);
+    navigate(platformVaultSettingsHref(sub));
     toast.message(
-      "Add your API key in Vault → Inference, then return to finish setup."
+      sub === "search"
+        ? "Add your Exa key in Settings → Platform Vault → Search, then return to finish setup."
+        : "Add your API key in Settings → Platform Vault, then return to finish setup."
     );
   };
 
@@ -193,7 +185,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
       const s = await fetchOnboardingStatus();
       setLlmReady(Boolean(s.llmReady));
       if (!s.llmReady) {
-        toast.error("Connect an API key in Vault before continuing.");
+        toast.error("Connect an API key in Settings → Platform Vault before continuing.");
         return;
       }
       setStep(2);
@@ -207,7 +199,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
   const continueExa = async () => {
     setLoading(true);
     try {
-      const { secrets } = await fetchAiSecrets();
+      const { secrets } = await fetchAiSecrets({ ownerKind: "platform" });
       setExaConnected(
         secrets.some((s) => s.name.toLowerCase() === EXA_API_KEY_SECRET_NAME)
       );
@@ -251,8 +243,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
                 Choose a subscription (use your plan, for example Cursor) or a metered Platform
-                API key (OpenAI, Anthropic, OpenRouter, Groq, Together). Open Vault to connect,
-                then come back to finish setup.
+                API key (OpenAI, Anthropic, OpenRouter, Groq, Together). Open Settings → Platform
+                Vault to connect, then come back to finish setup.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
@@ -266,11 +258,11 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 Subscriptions bill through the provider. Platform API keys are metered BYOK and
                 apply a provider harness in Intelligence. You can also open{" "}
                 <Link
-                  to={`${VAULT_PATH}?tab=inference`}
+                  to={platformVaultSettingsHref("api-keys")}
                   className="text-foreground underline underline-offset-4"
                   onClick={onOpenVault}
                 >
-                  Vault → Inference
+                  Settings → Platform Vault
                 </Link>{" "}
                 from the sidebar later. Reopen this wizard anytime from Settings.
               </p>
@@ -280,8 +272,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 Back
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button onClick={() => openVault("inference")} disabled={loading}>
-                  Open Vault
+                <Button onClick={() => openPlatformVault("api-keys")} disabled={loading}>
+                  Open Platform Vault
                 </Button>
                 <Button
                   variant="outline"
@@ -304,7 +296,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Choose your LLM</DialogTitle>
               <DialogDescription>
                 Local installs use llama.cpp as the primary stack (GGUF models). Ollama and LM
-                Studio are additional options. You can also open Vault to add a cloud API key.
+                Studio are additional options. You can also open Settings → Platform Vault to add a
+                cloud API key.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3">
@@ -330,8 +323,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No .gguf models found in your models directory. Add one, or use cloud keys in
-                  Vault. Ollama and LM Studio connect flows are coming as additional local
-                  backends.
+                  Settings → Platform Vault. Ollama and LM Studio connect flows are coming as
+                  additional local backends.
                 </p>
               )}
               {ollamaModels.length > 0 ? (
@@ -353,10 +346,10 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 ) : null}
                 <Button
                   variant="outline"
-                  onClick={() => openVault("inference")}
+                  onClick={() => openPlatformVault("api-keys")}
                   disabled={loading}
                 >
-                  Open Vault
+                  Open Platform Vault
                 </Button>
                 <Button
                   variant="secondary"
@@ -378,7 +371,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
             <DialogHeader>
               <DialogTitle>Connect Exa (optional)</DialogTitle>
               <DialogDescription>
-                Exa powers web search and URL fetch for agents. Add a key in Vault when you want
+                Exa powers web search and URL fetch for agents. Add a key in Settings → Platform
+                Vault when you want
                 agents to search the live web. You can skip this and continue.
               </DialogDescription>
             </DialogHeader>
@@ -392,11 +386,11 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <p>
                 Create a key at the Exa dashboard, then connect it under{" "}
                 <Link
-                  to={`${VAULT_PATH}?tab=inference&sub=search`}
+                  to={platformVaultSettingsHref("search")}
                   className="text-foreground underline underline-offset-4"
                   onClick={onOpenVault}
                 >
-                  Vault → Search
+                  Settings → Platform Vault → Search
                 </Link>
                 . Self-host may fall back without Exa; Cloud prefers a tenant Exa key for web
                 tools.
@@ -407,8 +401,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 Back
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button onClick={() => openVault("search")} disabled={loading}>
-                  Open Vault
+                <Button onClick={() => openPlatformVault("search")} disabled={loading}>
+                  Open Platform Vault
                 </Button>
                 <Button
                   variant="outline"
@@ -428,7 +422,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Ready</DialogTitle>
               <DialogDescription>
                 {saas
-                  ? "Open Chat and talk to Intelligence. Add or change keys anytime in Vault."
+                  ? "Open Chat and talk to Intelligence. Add or change keys anytime in Settings → Platform Vault."
                   : "Open Chat and talk to Intelligence. Browse Marketplace for starter packs anytime."}
               </DialogDescription>
             </DialogHeader>
@@ -484,7 +478,10 @@ export function useOnboardingGate() {
     authenticated && user?.isAdmin && user.mfaEnabled === false
   );
   const authProductGateOpen = emailGateOpen || mfaGateOpen;
-  const onVaultRoute = location.pathname.startsWith(VAULT_PATH);
+  const onVaultRoute =
+    location.pathname.startsWith(VAULT_PATH) ||
+    (location.pathname.startsWith(SETTINGS_PATH) &&
+      new URLSearchParams(location.search).has("vault"));
 
   const refresh = useCallback(async () => {
     setChecking(true);

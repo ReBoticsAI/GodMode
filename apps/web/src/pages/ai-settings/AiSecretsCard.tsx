@@ -15,107 +15,123 @@ import {
   deleteAiSecret,
   fetchAiSecrets,
   type AiSecret,
+  type VaultScope,
 } from "@/api";
 
-/** Free-form secrets for the selected Vault owner (Personal or one agent). */
+/** Free-form secrets for one Vault owner (platform, user, or agent). */
 export function AiSecretsCard({
-  vaultAgentId = null,
+  vaultScope = { ownerKind: "platform" },
+  /** @deprecated Use vaultScope instead. String agent id → agent Vault. */
+  vaultAgentId,
 }: {
+  vaultScope?: VaultScope;
   vaultAgentId?: string | null;
 }) {
+  const scope: VaultScope =
+    vaultAgentId != null && vaultAgentId !== ""
+      ? { ownerKind: "agent", agentId: vaultAgentId }
+      : vaultScope;
+
   const [secrets, setSecrets] = useState<AiSecret[]>([]);
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
 
   const reload = () => {
-    fetchAiSecrets(vaultAgentId)
+    fetchAiSecrets(scope)
       .then((r) => setSecrets(r.secrets))
       .catch(() => setSecrets([]));
   };
 
   useEffect(() => {
     reload();
-  }, [vaultAgentId]);
+  }, [scope.ownerKind, scope.agentId]);
+
+  const scopeLabel =
+    scope.ownerKind === "agent"
+      ? "this agent Vault"
+      : scope.ownerKind === "user"
+        ? "your User Vault"
+        : "the Platform Vault";
 
   return (
-    <Card className="mt-4">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRoundIcon className="size-4" />
-          AI platform secrets
+          Secrets
         </CardTitle>
         <CardDescription>
-          Free-form secrets for the selected Vault owner. Prefer the dedicated
-          Connect cards (Inference and Search tabs) when one exists for the
-          provider.
+          Free-form secrets for {scopeLabel}. Prefer named Connect cards when one
+          exists.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {secrets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No secrets stored yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {secrets.map((s) => (
+      <CardContent className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-2">
+          {secrets.length === 0 ? (
+            <li className="text-sm text-muted-foreground">No secrets yet.</li>
+          ) : (
+            secrets.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
               >
-                <span>
-                  {s.name}{" "}
-                  <span className="font-mono text-xs text-muted-foreground">{s.masked}</span>
-                </span>
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{s.name}</div>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {s.masked}
+                  </div>
+                </div>
                 <Button
                   type="button"
+                  variant="outline"
                   size="sm"
-                  variant="ghost"
-                  className="text-xs text-destructive"
-                  onClick={() =>
-                    void deleteAiSecret(s.id, vaultAgentId).then(reload)
-                  }
+                  onClick={() => {
+                    void deleteAiSecret(s.id, scope).then(reload);
+                  }}
                 >
                   Delete
                 </Button>
               </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="flex flex-1 flex-col gap-1">
-            <Label className="text-xs">Name</Label>
-            <Input
-              value={secretName}
-              onChange={(e) => setSecretName(e.target.value)}
-              placeholder="exa_api_key"
-            />
-          </div>
-          <div className="flex flex-1 flex-col gap-1">
-            <Label className="text-xs">Secret value</Label>
-            <Input
-              type="password"
-              value={secretValue}
-              onChange={(e) => setSecretValue(e.target.value)}
-              placeholder="sk-…"
-            />
-          </div>
-          <Button
-            type="button"
-            className="shrink-0"
-            disabled={!secretName.trim() || !secretValue.trim()}
-            onClick={() => {
-              void createAiSecret(
-                secretName.trim(),
-                secretValue.trim(),
-                vaultAgentId
-              ).then(() => {
+            ))
+          )}
+        </ul>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!secretName.trim() || !secretValue) return;
+            void createAiSecret(secretName.trim(), secretValue, scope).then(
+              () => {
                 setSecretName("");
                 setSecretValue("");
                 reload();
-              });
-            }}
-          >
+              }
+            );
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="secret-name">Name</Label>
+            <Input
+              id="secret-name"
+              value={secretName}
+              onChange={(e) => setSecretName(e.target.value)}
+              placeholder="my_api_key"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="secret-value">Value</Label>
+            <Input
+              id="secret-value"
+              type="password"
+              value={secretValue}
+              onChange={(e) => setSecretValue(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          <Button type="submit" disabled={!secretName.trim() || !secretValue}>
             Add secret
           </Button>
-        </div>
+        </form>
       </CardContent>
     </Card>
   );
