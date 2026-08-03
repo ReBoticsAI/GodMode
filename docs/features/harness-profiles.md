@@ -34,10 +34,22 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (Groq) | `moonshotai/*` | `groq-kimi` |
 | provider | openai_compatible (Groq) | `groq/compound*` | `groq-compound` |
 | provider | openai_compatible (Groq) | other | `groq-generic` |
+| provider | openai_compatible (Together) | `meta-llama/*` | `together-llama` |
+| provider | openai_compatible (Together) | `openai/gpt-oss*` | `together-gpt-oss` |
+| provider | openai_compatible (Together) | `deepseek-ai/*` | `together-deepseek` |
+| provider | openai_compatible (Together) | `qwen/*` | `together-qwen` |
+| provider | openai_compatible (Together) | `moonshotai/*` | `together-kimi` |
+| provider | openai_compatible (Together) | `minimaxai/*` | `together-minimax` |
+| provider | openai_compatible (Together) | `zai-org/*` | `together-glm` |
+| provider | openai_compatible (Together) | `nvidia/nemotron*` | `together-nemotron` |
+| provider | openai_compatible (Together) | `google/gemma*` | `together-gemma` |
+| provider | openai_compatible (Together) | other | `together-generic` |
 | remote | — | * | `remote` |
 
 OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
 
 Groq is also a **transport**. Profile = `f(groq transport, modelFamily)`. GPT-OSS on Groq uses `groq-gpt-oss`, not the OpenAI Platform `openai` profile. Production chat catalog snapshot 2026-08-03; custom model ids allowed.
+
+Together is also a **transport**. Profile = `f(together transport, modelFamily)`. Distinct from Groq/OpenRouter and from local `gemma-4`. Serverless chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

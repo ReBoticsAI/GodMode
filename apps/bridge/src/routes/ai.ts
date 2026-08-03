@@ -972,7 +972,9 @@ export function createAiRouter(
         s.id !== "openrouter-api-key" &&
         s.name !== "openrouter_api_key" &&
         s.id !== "groq-api-key" &&
-        s.name !== "groq_api_key"
+        s.name !== "groq_api_key" &&
+        s.id !== "together-api-key" &&
+        s.name !== "together_api_key"
     );
     res.json({ secrets });
   });

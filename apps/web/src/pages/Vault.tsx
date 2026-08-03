@@ -19,6 +19,7 @@ import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCa
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
+import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
 
 export default function Vault() {
   return (
@@ -56,6 +57,7 @@ export default function Vault() {
             <AnthropicConsoleCard />
             <OpenRouterCard />
             <GroqCard />
+            <TogetherCard />
             <AiSecretsCard />
           </section>
         </TabsContent>
