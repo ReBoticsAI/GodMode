@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
+import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 
@@ -50,6 +51,7 @@ export default function Vault() {
               </p>
             </div>
             <OpenAiPlatformCard />
+            <AnthropicConsoleCard />
             <AiSecretsCard />
           </section>
         </TabsContent>

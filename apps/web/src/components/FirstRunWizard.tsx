@@ -149,8 +149,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
             <DialogHeader>
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
-                GodMode Cloud uses your own API keys (BYOK). Open Vault to connect a Cursor
-                subscription or an OpenAI Platform API key, then come back to finish setup.
+                GodMode Cloud uses your own API keys (BYOK). Open Vault to connect Cursor,
+                OpenAI Platform, or Anthropic Console, then come back to finish setup.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
