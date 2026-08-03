@@ -10,6 +10,10 @@ import {
   markOrderPaid,
   markOrderProviderRef,
   MarketplaceCommerceError,
+  assertMarketplaceTosAccepted,
+  assertNotMarketplaceBanned,
+  ensureSellerAccount,
+  updateSellerPayout,
   type MarketplacePaymentProvider,
 } from "./marketplace-commerce.js";
 
@@ -470,4 +474,160 @@ export function createOrderForOfficialCatalogEntry(
     currency: opts.currency ?? "usd",
     provider: opts.provider,
   });
+}
+
+async function stripePost(
+  secret: string,
+  path: string,
+  params: Record<string, string>
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: stripeForm(params),
+  });
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    /* keep empty */
+  }
+  if (!res.ok) {
+    const msg =
+      typeof json.error === "object" &&
+      json.error &&
+      typeof (json.error as { message?: string }).message === "string"
+        ? (json.error as { message: string }).message
+        : text.slice(0, 200);
+    throw new MarketplaceCommerceError(`Stripe Connect failed: ${msg}`, 502);
+  }
+  return json;
+}
+
+async function stripeGet(secret: string, path: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    /* keep empty */
+  }
+  if (!res.ok) {
+    throw new MarketplaceCommerceError(`Stripe Connect failed: ${text.slice(0, 200)}`, 502);
+  }
+  return json;
+}
+
+/**
+ * Start Stripe Connect Express onboarding (Account Links).
+ * Primary Community seller path (#316); replaces paste-acct as the default UX.
+ */
+export async function startStripeConnectOnboarding(
+  core: CoreDatabase,
+  opts: {
+    userId: string;
+    returnUrl?: string;
+    refreshUrl?: string;
+  }
+): Promise<{ url: string; accountId: string; onboardingStatus: string }> {
+  assertNotMarketplaceBanned(core, opts.userId);
+  assertMarketplaceTosAccepted(core, opts.userId);
+
+  const secret = resolveStripeSecretKey();
+  if (!secret) throw new MarketplaceCommerceError("Stripe is not configured", 503);
+
+  const webBase = (config.web.publicUrl || "http://127.0.0.1:5173").replace(/\/$/, "");
+  const returnUrl =
+    opts.returnUrl?.trim() ||
+    `${webBase}/marketplace?tab=seller&stripe_connect=return`;
+  const refreshUrl =
+    opts.refreshUrl?.trim() ||
+    `${webBase}/marketplace?tab=seller&stripe_connect=refresh`;
+
+  const row = ensureSellerAccount(core, opts.userId);
+  let accountId =
+    typeof row.stripe_connect_account_id === "string" && row.stripe_connect_account_id.startsWith("acct_")
+      ? row.stripe_connect_account_id
+      : "";
+
+  if (!accountId) {
+    const created = await stripePost(secret, "accounts", {
+      type: "express",
+      "capabilities[card_payments][requested]": "true",
+      "capabilities[transfers][requested]": "true",
+      "metadata[godmode_user_id]": opts.userId,
+    });
+    accountId = String(created.id ?? "");
+    if (!accountId.startsWith("acct_")) {
+      throw new MarketplaceCommerceError("Stripe did not return a Connect account id", 502);
+    }
+    updateSellerPayout(core, {
+      userId: opts.userId,
+      stripeConnectAccountId: accountId,
+      payoutPreference: "stripe",
+    });
+  }
+
+  const link = await stripePost(secret, "account_links", {
+    account: accountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: "account_onboarding",
+  });
+  const url = String(link.url ?? "");
+  if (!url) throw new MarketplaceCommerceError("Stripe Account Link missing url", 502);
+
+  return { url, accountId, onboardingStatus: "pending" };
+}
+
+/** Refresh Connect account capabilities into seller onboarding_status. */
+export async function refreshStripeConnectStatus(
+  core: CoreDatabase,
+  userId: string
+): Promise<Record<string, unknown>> {
+  assertNotMarketplaceBanned(core, userId);
+  assertMarketplaceTosAccepted(core, userId);
+
+  const secret = resolveStripeSecretKey();
+  if (!secret) throw new MarketplaceCommerceError("Stripe is not configured", 503);
+
+  const row = ensureSellerAccount(core, userId);
+  const accountId =
+    typeof row.stripe_connect_account_id === "string" ? row.stripe_connect_account_id : "";
+  if (!accountId.startsWith("acct_")) {
+    throw new MarketplaceCommerceError("No Stripe Connect account linked yet", 400);
+  }
+
+  const account = await stripeGet(secret, `accounts/${accountId}`);
+  const payoutsEnabled = account.payouts_enabled === true;
+  const detailsSubmitted = account.details_submitted === true;
+  const chargesEnabled = account.charges_enabled === true;
+  const ready = payoutsEnabled && detailsSubmitted && chargesEnabled;
+  const status = ready ? "ready" : detailsSubmitted ? "restricted" : "pending";
+
+  core
+    .prepare(
+      `UPDATE marketplace_seller_accounts
+       SET onboarding_status=?, payout_preference=COALESCE(payout_preference, 'stripe'),
+           updated_at=datetime('now')
+       WHERE id=?`
+    )
+    .run(status, row.id);
+
+  const updated = core
+    .prepare(`SELECT * FROM marketplace_seller_accounts WHERE id=?`)
+    .get(row.id) as Record<string, unknown>;
+  return {
+    ...updated,
+    stripe_payouts_enabled: payoutsEnabled,
+    stripe_charges_enabled: chargesEnabled,
+    stripe_details_submitted: detailsSubmitted,
+  };
 }
