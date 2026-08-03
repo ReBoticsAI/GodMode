@@ -75,11 +75,18 @@ export const AGENTS_PATH = "/agents";
 export const BANK_PATH = "/bank";
 export const VAULT_PATH = "/vault";
 
-export const VAULT_TABS = ["inference", "search", "storage"] as const;
+export const VAULT_TABS = ["inference", "search", "integrations", "storage"] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
 export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
-  if (raw === "search" || raw === "storage" || raw === "inference") return raw;
+  if (
+    raw === "search" ||
+    raw === "storage" ||
+    raw === "inference" ||
+    raw === "integrations"
+  ) {
+    return raw;
+  }
   return "inference";
 }
 

@@ -3,13 +3,13 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Connect hub for inference, search, and storage."
+summary: "Connect hub for inference, search, integrations, and storage."
 ---
 # Vault
 
 ![vault in GodMode](/features/vault.png)
 
-Vault is the connect hub for credentials and storage. Chat → Vault tab gives quick access while chatting. Inference and Search are available today; more connect tabs are coming.
+Vault is the connect hub for credentials, integrations, and storage. Chat → Vault tab gives quick access while chatting. Inference, Search, and Integrations are available today; more connect tabs are coming.
 
 ## Tabs
 
@@ -61,10 +61,22 @@ Self-host / local: Exa is optional. When `exa_api_key` (or agent provider `exa`)
 
 See [[cursor-cloud]].
 
+### Integrations
+
+Third-party account connects that are not inference or search keys.
+
+#### GitHub
+
+The **Connect GitHub** card installs and authorizes the GitHub App used for Projects sync (and Cloud sign-in when configured). Settings keeps a short dual-home link to this tab.
+
+1. Open Vault → Integrations → Connect GitHub.
+2. Install the App on the account that owns your Projects, then authorize.
+3. Open Tasks → Board settings to link a Project.
+
 ### Storage
 
 Database and data-store sizes. Monitor growth before trimming or upgrading stores.
 
 ## Route
 
-`/vault` (deep-link tabs: `?tab=inference|search|storage`; default `inference`)
+`/vault` (deep-link tabs: `?tab=inference|search|integrations|storage`; default `inference`)

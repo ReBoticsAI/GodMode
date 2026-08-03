@@ -18,6 +18,7 @@ import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
+import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
@@ -44,13 +45,14 @@ export default function Vault() {
     <Page>
       <PageHeader
         title="Vault"
-        description="Connect hub for inference and search credentials, plus storage. More connect tabs are coming. Subscriptions and API keys are separate from GodMode Cloud seat billing."
+        description="Connect hub for inference, search, integrations, and storage. More connect tabs are coming. Subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
       <Tabs value={tab} onValueChange={onTabChange} className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           <TabsTrigger value="inference">Inference</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
@@ -89,6 +91,18 @@ export default function Vault() {
               </p>
             </div>
             <ExaConnectCard />
+          </section>
+        </TabsContent>
+        <TabsContent value="integrations" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">GitHub</h2>
+              <p className="text-sm text-muted-foreground">
+                GitHub App for Projects sync. The same App powers sign-in on this
+                host when configured.
+              </p>
+            </div>
+            <GithubConnectCard />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
