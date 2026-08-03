@@ -50,7 +50,11 @@ const OPENROUTER_TOP10 = [
 const CUSTOM_VALUE = "__custom__";
 
 /** Connect OpenRouter (metered) API key for Intelligence. */
-export function OpenRouterCard() {
+export function OpenRouterCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<OpenRouterAuthStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [modelChoice, setModelChoice] = useState<string>(OPENROUTER_TOP10[0].id);
@@ -59,12 +63,12 @@ export function OpenRouterCard() {
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchOpenRouterStatus();
+      const s = await fetchOpenRouterStatus(vaultAgentId);
       setStatus(s);
     } catch {
       setStatus({ connected: false, source: "none" });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -77,7 +81,7 @@ export function OpenRouterCard() {
     }
     setBusy(true);
     try {
-      const res = await connectOpenRouterApiKey(apiKey.trim());
+      const res = await connectOpenRouterApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("OpenRouter connected");
@@ -91,7 +95,7 @@ export function OpenRouterCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectOpenRouterApiKey();
+      const res = await disconnectOpenRouterApiKey(vaultAgentId);
       setStatus(res.status);
       toast.success("OpenRouter disconnected");
     } catch (err) {

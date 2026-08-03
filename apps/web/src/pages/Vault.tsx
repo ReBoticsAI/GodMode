@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { HardDriveIcon, RefreshCwIcon } from "lucide-react";
-import { fetchStorageUsage, type StorageUsageReport } from "@/api";
+import {
+  fetchAiAgents,
+  fetchStorageUsage,
+  type AiAgent,
+  type StorageUsageReport,
+} from "@/api";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +18,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
@@ -32,11 +45,26 @@ import {
   type VaultInferenceSub,
 } from "@/lib/navigation";
 
+/** Select value for Personal Vault (maps to `ai_secrets.agent_id IS NULL`). */
+export const VAULT_OWNER_PERSONAL = "__personal__";
+
 export default function Vault() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabRaw = searchParams.get("tab");
   const tab = normalizeVaultTab(tabRaw);
   const inferenceSub = normalizeVaultInferenceSub(searchParams.get("sub"), tabRaw);
+
+  const [agents, setAgents] = useState<AiAgent[]>([]);
+  const [ownerSelect, setOwnerSelect] = useState(VAULT_OWNER_PERSONAL);
+
+  useEffect(() => {
+    fetchAiAgents()
+      .then((r) => setAgents(r.agents.filter((a) => a.enabled && !a.isTemplate)))
+      .catch(() => setAgents([]));
+  }, []);
+
+  const vaultAgentId =
+    ownerSelect === VAULT_OWNER_PERSONAL ? null : ownerSelect;
 
   const onTabChange = (value: string) => {
     const next = normalizeVaultTab(value);
@@ -77,6 +105,35 @@ export default function Vault() {
         description="Connect hub for GodMode Cloud, inference, integrations, wallets, marketplace, secrets, and storage. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex max-w-md flex-1 flex-col gap-1.5">
+          <Label htmlFor="vault-owner">Vault owner</Label>
+          <Select
+            value={ownerSelect}
+            onValueChange={(value) => {
+              if (value) setOwnerSelect(value);
+            }}
+          >
+            <SelectTrigger id="vault-owner" className="w-full">
+              <SelectValue placeholder="Personal" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={VAULT_OWNER_PERSONAL}>Personal</SelectItem>
+              {agents.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {vaultAgentId
+              ? "Inference Connect cards and All Secrets edit this agent's Vault. When the agent runs, its Vault is tried first, then Personal."
+              : "Personal Vault is the shared fallback for agents that do not have their own key. GitHub, Cloud seats, Marketplace, and Wallets stay on Personal."}
+          </p>
+        </div>
+      </div>
+
       <Tabs value={tab} onValueChange={onTabChange} className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           <TabsTrigger value="cloud">GodMode Cloud</TabsTrigger>
@@ -94,14 +151,18 @@ export default function Vault() {
               <h2 className="text-sm font-medium">GodMode Cloud</h2>
               <p className="text-sm text-muted-foreground">
                 Seat billing and Stripe Customer Portal for this workspace. Shown
-                only on SaaS hosts.
+                only on SaaS hosts. Always Personal (not per-agent).
               </p>
             </div>
             <SubscriptionCard />
           </section>
         </TabsContent>
         <TabsContent value="inference" className="mt-4">
-          <InferenceTab sub={inferenceSub} onSubChange={onInferenceSubChange} />
+          <InferenceTab
+            sub={inferenceSub}
+            onSubChange={onInferenceSubChange}
+            vaultAgentId={vaultAgentId}
+          />
         </TabsContent>
         <TabsContent value="integrations" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
@@ -109,7 +170,7 @@ export default function Vault() {
               <h2 className="text-sm font-medium">GitHub</h2>
               <p className="text-sm text-muted-foreground">
                 GitHub App for Projects sync. The same App powers sign-in on this
-                host when configured.
+                host when configured. Always Personal (not per-agent).
               </p>
             </div>
             <GithubConnectCard />
@@ -122,7 +183,7 @@ export default function Vault() {
               <p className="text-sm text-muted-foreground">
                 Moralis and PayPal API credentials for live Bank / wallet sync.
                 Connect wallets and PayPal balances on Bank after credentials are
-                saved here.
+                saved here. Always Personal (not per-agent).
               </p>
             </div>
             <HoldingsConnectCard />
@@ -135,6 +196,7 @@ export default function Vault() {
               <p className="text-sm text-muted-foreground">
                 Seller Stripe Connect for Community payouts. Marketplace → Sell
                 links here to connect; ToS Accept and listing tools stay on Sell.
+                Always Personal (not per-agent).
               </p>
             </div>
             <SellerPayoutsCard
@@ -148,11 +210,11 @@ export default function Vault() {
             <div>
               <h2 className="text-sm font-medium">All secrets</h2>
               <p className="text-sm text-muted-foreground">
-                Free-form platform secrets shared across agents. Prefer named Connect
-                cards when one exists.
+                Free-form secrets for the selected Vault owner. Prefer named
+                Connect cards when one exists.
               </p>
             </div>
-            <AiSecretsCard />
+            <AiSecretsCard vaultAgentId={vaultAgentId} />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
@@ -166,9 +228,11 @@ export default function Vault() {
 function InferenceTab({
   sub,
   onSubChange,
+  vaultAgentId,
 }: {
   sub: VaultInferenceSub;
   onSubChange: (value: string) => void;
+  vaultAgentId: string | null;
 }) {
   return (
     <Tabs value={sub} onValueChange={onSubChange} className="w-full">
@@ -186,7 +250,7 @@ function InferenceTab({
               Use your plan (billed by the provider). Cursor is available today.
             </p>
           </div>
-          <CursorSubscriptionCard />
+          <CursorSubscriptionCard vaultAgentId={vaultAgentId} />
         </section>
       </TabsContent>
 
@@ -195,15 +259,15 @@ function InferenceTab({
           <div>
             <h2 className="text-sm font-medium">API keys</h2>
             <p className="text-sm text-muted-foreground">
-              Metered BYOK. Each card stores a fixed credential and applies a
-              provider-tuned harness in Intelligence.
+              Metered BYOK for the selected Vault owner. Each card stores a fixed
+              credential and can apply a provider-tuned harness in Intelligence.
             </p>
           </div>
-          <OpenAiPlatformCard />
-          <AnthropicConsoleCard />
-          <OpenRouterCard />
-          <GroqCard />
-          <TogetherCard />
+          <OpenAiPlatformCard vaultAgentId={vaultAgentId} />
+          <AnthropicConsoleCard vaultAgentId={vaultAgentId} />
+          <OpenRouterCard vaultAgentId={vaultAgentId} />
+          <GroqCard vaultAgentId={vaultAgentId} />
+          <TogetherCard vaultAgentId={vaultAgentId} />
         </section>
       </TabsContent>
 
@@ -215,7 +279,7 @@ function InferenceTab({
               Keys for agent web_search and fetch_url. Exa is available today.
             </p>
           </div>
-          <ExaConnectCard />
+          <ExaConnectCard vaultAgentId={vaultAgentId} />
         </section>
       </TabsContent>
     </Tabs>

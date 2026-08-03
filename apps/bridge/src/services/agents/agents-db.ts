@@ -675,7 +675,32 @@ export interface AiSecretRow {
   id: string;
   name: string;
   value: string;
+  agent_id: string | null;
   created_at: string;
+}
+
+export type VaultSecretListItem = {
+  id: string;
+  name: string;
+  masked: string;
+  createdAt: string;
+  agentId: string | null;
+};
+
+/** Personal Vault when null/undefined/empty; otherwise Agent Vault for that id. */
+export function normalizeVaultAgentId(agentId?: string | null): string | null {
+  if (agentId == null) return null;
+  const trimmed = String(agentId).trim();
+  return trimmed ? trimmed : null;
+}
+
+/** Stable primary key for fixed Connect-card secrets per owner. */
+export function platformVaultSecretId(
+  baseId: string,
+  agentId?: string | null
+): string {
+  const scope = normalizeVaultAgentId(agentId);
+  return scope ? `${baseId}__agent__${scope}` : baseId;
 }
 
 function readSecretPlain(value: string): string {
@@ -686,34 +711,227 @@ function readSecretPlain(value: string): string {
   }
 }
 
-export function listSecrets(db: AppDatabase): Array<{ id: string; name: string; masked: string; createdAt: string }> {
-  const rows = db.prepare(`SELECT id, name, value, created_at FROM ai_secrets ORDER BY name`).all() as AiSecretRow[];
+function secretOwnerClause(agentId: string | null): {
+  sql: string;
+  params: string[];
+} {
+  if (agentId === null) {
+    return { sql: "agent_id IS NULL", params: [] };
+  }
+  return { sql: "agent_id = ?", params: [agentId] };
+}
+
+/**
+ * List secrets for one Vault owner.
+ * Omitted/null agentId = Personal Vault only (not all agents).
+ */
+export function listSecrets(
+  db: AppDatabase,
+  agentId?: string | null
+): VaultSecretListItem[] {
+  const scope = normalizeVaultAgentId(agentId);
+  const owner = secretOwnerClause(scope);
+  const rows = db
+    .prepare(
+      `SELECT id, name, value, agent_id, created_at FROM ai_secrets
+       WHERE ${owner.sql}
+       ORDER BY name`
+    )
+    .all(...owner.params) as AiSecretRow[];
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     masked: maskSecret(readSecretPlain(r.value)),
     createdAt: r.created_at,
+    agentId: r.agent_id ?? null,
   }));
 }
 
+export function getSecretRow(
+  db: AppDatabase,
+  id: string
+): AiSecretRow | null {
+  const row = db
+    .prepare(`SELECT id, name, value, agent_id, created_at FROM ai_secrets WHERE id = ?`)
+    .get(id) as AiSecretRow | undefined;
+  return row ?? null;
+}
+
 export function getSecretValue(db: AppDatabase, id: string): string | null {
-  const row = db.prepare(`SELECT value FROM ai_secrets WHERE id = ?`).get(id) as
-    | { value: string }
-    | undefined;
+  const row = getSecretRow(db, id);
   if (!row) return null;
   return readSecretPlain(row.value);
 }
 
-export function createSecret(db: AppDatabase, name: string, value: string): { id: string; name: string; masked: string } {
-  const id = uuidv4();
-  db.prepare(`INSERT INTO ai_secrets (id, name, value) VALUES (?, ?, ?)`).run(
-    id,
-    name,
-    encryptSecret(value)
-  );
-  return { id, name, masked: maskSecret(value) };
+/**
+ * Read a secret by id only when it belongs to the agent or is personal.
+ * Blocks cross-agent reads.
+ */
+export function getSecretValueForAgent(
+  db: AppDatabase,
+  id: string,
+  agentId: string
+): string | null {
+  const row = getSecretRow(db, id);
+  if (!row) return null;
+  if (row.agent_id != null && row.agent_id !== agentId) return null;
+  return readSecretPlain(row.value);
 }
 
-export function deleteSecret(db: AppDatabase, id: string): boolean {
-  return db.prepare(`DELETE FROM ai_secrets WHERE id = ?`).run(id).changes > 0;
+export function findSecretByName(
+  db: AppDatabase,
+  name: string,
+  agentId?: string | null
+): AiSecretRow | null {
+  const scope = normalizeVaultAgentId(agentId);
+  const owner = secretOwnerClause(scope);
+  const row = db
+    .prepare(
+      `SELECT id, name, value, agent_id, created_at FROM ai_secrets
+       WHERE LOWER(name) = LOWER(?) AND ${owner.sql}
+       LIMIT 1`
+    )
+    .get(name, ...owner.params) as AiSecretRow | undefined;
+  return row ?? null;
+}
+
+/**
+ * Resolve by name: when agentId is set, agent Vault first then Personal.
+ * No cross-agent reads.
+ */
+export function resolveSecretByName(
+  db: AppDatabase,
+  name: string,
+  agentId?: string | null
+): string | null {
+  const scope = normalizeVaultAgentId(agentId);
+  if (scope) {
+    const agentRow = findSecretByName(db, name, scope);
+    if (agentRow) return readSecretPlain(agentRow.value);
+  }
+  const personal = findSecretByName(db, name, null);
+  return personal ? readSecretPlain(personal.value) : null;
+}
+
+/**
+ * Resolve a fixed Connect-card secret (by stable base id + name).
+ * When agentId is set: agent Vault first, then Personal. Env is handled by callers.
+ */
+export function resolvePlatformVaultSecret(
+  db: AppDatabase,
+  opts: { baseId: string; name: string; agentId?: string | null }
+): string | null {
+  const scope = normalizeVaultAgentId(opts.agentId);
+  if (scope) {
+    const byScopedId = getSecretValue(db, platformVaultSecretId(opts.baseId, scope));
+    if (byScopedId) return byScopedId;
+    const byName = findSecretByName(db, opts.name, scope);
+    if (byName) return readSecretPlain(byName.value);
+  }
+  const personalById = getSecretValue(db, platformVaultSecretId(opts.baseId, null));
+  if (personalById) return personalById;
+  const personalByName = findSecretByName(db, opts.name, null);
+  return personalByName ? readSecretPlain(personalByName.value) : null;
+}
+
+/** Status lookup for one owner only (no personal fallback). */
+export function getPlatformVaultSecretInScope(
+  db: AppDatabase,
+  opts: { baseId: string; name: string; agentId?: string | null }
+): string | null {
+  const scope = normalizeVaultAgentId(opts.agentId);
+  const byId = getSecretValue(db, platformVaultSecretId(opts.baseId, scope));
+  if (byId) return byId;
+  const byName = findSecretByName(db, opts.name, scope);
+  return byName ? readSecretPlain(byName.value) : null;
+}
+
+export function upsertPlatformVaultSecret(
+  db: AppDatabase,
+  opts: { baseId: string; name: string; value: string; agentId?: string | null }
+): void {
+  const trimmed = opts.value.trim();
+  if (!trimmed) throw new Error("API key required");
+  const scope = normalizeVaultAgentId(opts.agentId);
+  const rowId = platformVaultSecretId(opts.baseId, scope);
+  const owner = secretOwnerClause(scope);
+  db.prepare(
+    `DELETE FROM ai_secrets WHERE ${owner.sql} AND (id = ? OR LOWER(name) = LOWER(?))`
+  ).run(...owner.params, rowId, opts.name);
+  db.prepare(
+    `INSERT INTO ai_secrets (id, name, value, agent_id) VALUES (?, ?, ?, ?)`
+  ).run(rowId, opts.name, encryptSecret(trimmed), scope);
+}
+
+export function removePlatformVaultSecret(
+  db: AppDatabase,
+  opts: { baseId: string; name: string; agentId?: string | null }
+): boolean {
+  const scope = normalizeVaultAgentId(opts.agentId);
+  const rowId = platformVaultSecretId(opts.baseId, scope);
+  const owner = secretOwnerClause(scope);
+  return (
+    db
+      .prepare(
+        `DELETE FROM ai_secrets WHERE ${owner.sql} AND (id = ? OR LOWER(name) = LOWER(?))`
+      )
+      .run(...owner.params, rowId, opts.name).changes > 0
+  );
+}
+
+/**
+ * Resolve apiKeyRef for a running agent: exact id (if owned/personal),
+ * agent-scoped platform id, then name in agent → personal.
+ */
+export function resolveSecretRefForAgent(
+  db: AppDatabase,
+  keyRef: string,
+  agentId: string
+): string | null {
+  const scopedId = platformVaultSecretId(keyRef, agentId);
+  const fromScoped = getSecretValueForAgent(db, scopedId, agentId);
+  if (fromScoped) return fromScoped;
+  const direct = getSecretValueForAgent(db, keyRef, agentId);
+  if (direct) return direct;
+  return resolveSecretByName(db, keyRef, agentId);
+}
+
+export function createSecret(
+  db: AppDatabase,
+  name: string,
+  value: string,
+  agentId?: string | null
+): { id: string; name: string; masked: string; agentId: string | null } {
+  const scope = normalizeVaultAgentId(agentId);
+  const existing = findSecretByName(db, name, scope);
+  if (existing) {
+    throw new Error(
+      scope
+        ? `Secret name "${name}" already exists in this agent Vault`
+        : `Secret name "${name}" already exists in the Personal Vault`
+    );
+  }
+  const id = uuidv4();
+  db.prepare(
+    `INSERT INTO ai_secrets (id, name, value, agent_id) VALUES (?, ?, ?, ?)`
+  ).run(id, name, encryptSecret(value), scope);
+  return { id, name, masked: maskSecret(value), agentId: scope };
+}
+
+export function deleteSecret(
+  db: AppDatabase,
+  id: string,
+  agentId?: string | null
+): boolean {
+  if (arguments.length < 3) {
+    // Legacy callers: delete by primary key regardless of owner.
+    return db.prepare(`DELETE FROM ai_secrets WHERE id = ?`).run(id).changes > 0;
+  }
+  const scope = normalizeVaultAgentId(agentId);
+  const owner = secretOwnerClause(scope);
+  return (
+    db
+      .prepare(`DELETE FROM ai_secrets WHERE id = ? AND ${owner.sql}`)
+      .run(id, ...owner.params).changes > 0
+  );
 }

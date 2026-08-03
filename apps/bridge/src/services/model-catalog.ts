@@ -1,37 +1,43 @@
 import { getAgent, listSecrets, updateAgent } from "./agents/agents-db.js";
-import { getCursorAuthStatus, listCursorSubscriptionModels, formatCursorModelLabel } from "./cursor-subscription.js";
 import {
-  getOpenAiAuthStatus,
+  isCursorSubscriptionReady,
+  listCursorSubscriptionModels,
+  formatCursorModelLabel,
+} from "./cursor-subscription.js";
+import {
+  isOpenAiPlatformReady,
+  isOpenAiVaultSecretId,
   OPENAI_API_KEY_SECRET_ID,
   OPENAI_API_KEY_SECRET_NAME,
 } from "./openai-platform.js";
 import {
   ANTHROPIC_API_KEY_SECRET_ID,
   ANTHROPIC_API_KEY_SECRET_NAME,
-  getAnthropicAuthStatus,
+  isAnthropicPlatformReady,
+  isAnthropicVaultSecretId,
 } from "./anthropic-platform.js";
 import {
-  getOpenRouterAuthStatus,
   isOpenRouterAgentConfig,
   isOpenRouterPlatformReady,
+  isOpenRouterVaultSecretId,
   OPENROUTER_API_BASE_URL,
   OPENROUTER_API_KEY_SECRET_ID,
   OPENROUTER_API_KEY_SECRET_NAME,
   OPENROUTER_TOP10_CATALOG,
 } from "./openrouter-platform.js";
 import {
-  getGroqAuthStatus,
   isGroqAgentConfig,
   isGroqPlatformReady,
+  isGroqVaultSecretId,
   GROQ_API_BASE_URL,
   GROQ_API_KEY_SECRET_ID,
   GROQ_API_KEY_SECRET_NAME,
   GROQ_CHAT_CATALOG,
 } from "./groq-platform.js";
 import {
-  getTogetherAuthStatus,
   isTogetherAgentConfig,
   isTogetherPlatformReady,
+  isTogetherVaultSecretId,
   TOGETHER_API_BASE_URL,
   TOGETHER_API_KEY_SECRET_ID,
   TOGETHER_API_KEY_SECRET_NAME,
@@ -141,9 +147,12 @@ export async function listModelCatalog(
     });
   }
 
-  if (getCursorAuthStatus(db).connected) {
+  if (isCursorSubscriptionReady(db, agent?.id ?? "intelligence")) {
     try {
-      const cursorModels = await listCursorSubscriptionModels(db);
+      const cursorModels = await listCursorSubscriptionModels(
+        db,
+        agent?.id ?? "intelligence"
+      );
       for (const m of cursorModels) {
         const harness = resolveHarnessProfile({ source: "cursor", model: m.id });
         models.push({
@@ -160,31 +169,35 @@ export async function listModelCatalog(
     }
   }
 
-  const secrets = listSecrets(db).filter(
+  const catalogAgentId = agent?.id ?? "intelligence";
+  const secrets = [
+    ...listSecrets(db, null),
+    ...listSecrets(db, catalogAgentId),
+  ].filter(
     (s) =>
       s.name !== "cursor_api_key" &&
       s.name !== OPENAI_API_KEY_SECRET_NAME &&
-      s.id !== OPENAI_API_KEY_SECRET_ID &&
+      !isOpenAiVaultSecretId(s.id) &&
       s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
-      s.id !== ANTHROPIC_API_KEY_SECRET_ID &&
+      !isAnthropicVaultSecretId(s.id) &&
       s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
-      s.id !== OPENROUTER_API_KEY_SECRET_ID &&
+      !isOpenRouterVaultSecretId(s.id) &&
       s.name !== GROQ_API_KEY_SECRET_NAME &&
-      s.id !== GROQ_API_KEY_SECRET_ID &&
+      !isGroqVaultSecretId(s.id) &&
       s.name !== TOGETHER_API_KEY_SECRET_NAME &&
-      s.id !== TOGETHER_API_KEY_SECRET_ID
+      !isTogetherVaultSecretId(s.id)
   );
   const hasOpenAi =
-    getOpenAiAuthStatus(db).connected ||
+    isOpenAiPlatformReady(db, catalogAgentId) ||
     secrets.some((s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt"));
   const hasAnthropic =
-    getAnthropicAuthStatus(db).connected ||
+    isAnthropicPlatformReady(db, catalogAgentId) ||
     secrets.some(
       (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
     );
-  const hasOpenRouter = isOpenRouterPlatformReady(db);
-  const hasGroq = isGroqPlatformReady(db);
-  const hasTogether = isTogetherPlatformReady(db);
+  const hasOpenRouter = isOpenRouterPlatformReady(db, catalogAgentId);
+  const hasGroq = isGroqPlatformReady(db, catalogAgentId);
+  const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -439,7 +452,7 @@ export async function selectIntelligenceModel(
   }
 
   if (input.source === "cursor") {
-    if (!getCursorAuthStatus(db).connected) {
+    if (!isCursorSubscriptionReady(db, "intelligence")) {
       throw new Error("Connect Cursor with an API key first");
     }
     const model = input.model?.trim() || "auto";
@@ -467,25 +480,28 @@ export async function selectIntelligenceModel(
     const model = input.model?.trim();
     if (!model) throw new Error("Provider model id required");
     const provider = input.provider ?? "openai";
-    const secrets = listSecrets(db).filter(
+    const secrets = [
+      ...listSecrets(db, null),
+      ...listSecrets(db, "intelligence"),
+    ].filter(
       (s) =>
         s.name !== "cursor_api_key" &&
         s.name !== OPENAI_API_KEY_SECRET_NAME &&
-        s.id !== OPENAI_API_KEY_SECRET_ID &&
+        !isOpenAiVaultSecretId(s.id) &&
         s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
-        s.id !== ANTHROPIC_API_KEY_SECRET_ID &&
+        !isAnthropicVaultSecretId(s.id) &&
         s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
-        s.id !== OPENROUTER_API_KEY_SECRET_ID &&
+        !isOpenRouterVaultSecretId(s.id) &&
         s.name !== GROQ_API_KEY_SECRET_NAME &&
-        s.id !== GROQ_API_KEY_SECRET_ID &&
+        !isGroqVaultSecretId(s.id) &&
         s.name !== TOGETHER_API_KEY_SECRET_NAME &&
-        s.id !== TOGETHER_API_KEY_SECRET_ID
+        !isTogetherVaultSecretId(s.id)
     );
-    const openAiReady = getOpenAiAuthStatus(db).connected;
-    const anthropicReady = getAnthropicAuthStatus(db).connected;
-    const openRouterReady = getOpenRouterAuthStatus(db).connected;
-    const groqReady = getGroqAuthStatus(db).connected;
-    const togetherReady = getTogetherAuthStatus(db).connected;
+    const openAiReady = isOpenAiPlatformReady(db, "intelligence");
+    const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
+    const openRouterReady = isOpenRouterPlatformReady(db, "intelligence");
+    const groqReady = isGroqPlatformReady(db, "intelligence");
+    const togetherReady = isTogetherPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
     let compatibleTransport: "openrouter" | "groq" | "together" | null = null;

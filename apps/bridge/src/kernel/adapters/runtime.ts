@@ -916,28 +916,53 @@ function vaultSecretRecord(
     name: row.name,
     masked: row.masked,
     created_at: row.createdAt,
+    agent_id: row.agentId,
   });
+}
+
+/** Personal when agentId omitted; Agent Vault when set. */
+function vaultOwnerScope(
+  ctx: { agentId?: string },
+  data?: Record<string, unknown>
+): string | null {
+  if (data && Object.prototype.hasOwnProperty.call(data, "agent_id")) {
+    const raw = data.agent_id;
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "string") return raw.trim() || null;
+  }
+  return ctx.agentId ?? null;
+}
+
+function isManagedPlatformSecret(secret: {
+  id: string;
+  name: string;
+}): boolean {
+  const name = secret.name.toLowerCase();
+  return (
+    secret.id === "cursor-api-key" ||
+    secret.id.startsWith("cursor-api-key__agent__") ||
+    name === "cursor_api_key" ||
+    name === "cursor-api-key" ||
+    isOpenAiVaultSecretId(secret.id) ||
+    isOpenAiVaultSecretName(secret.name) ||
+    isAnthropicVaultSecretId(secret.id) ||
+    isAnthropicVaultSecretName(secret.name) ||
+    isOpenRouterVaultSecretId(secret.id) ||
+    isOpenRouterVaultSecretName(secret.name) ||
+    isGroqVaultSecretId(secret.id) ||
+    isGroqVaultSecretName(secret.name) ||
+    isTogetherVaultSecretId(secret.id) ||
+    isTogetherVaultSecretName(secret.name)
+  );
 }
 
 export const vaultSecretRuntimeAdapter: RecordAdapter = {
   id: "vault_secret_runtime",
   list(db, def, query, ctx) {
     ownerOnly(ctx);
-    const rows = listSecrets(db).filter(
-      (secret) =>
-        secret.id !== "cursor-api-key" &&
-        secret.name.toLowerCase() !== "cursor_api_key" &&
-        secret.name.toLowerCase() !== "cursor-api-key" &&
-        !isOpenAiVaultSecretId(secret.id) &&
-        !isOpenAiVaultSecretName(secret.name) &&
-        !isAnthropicVaultSecretId(secret.id) &&
-        !isAnthropicVaultSecretName(secret.name) &&
-        !isOpenRouterVaultSecretId(secret.id) &&
-        !isOpenRouterVaultSecretName(secret.name) &&
-        !isGroqVaultSecretId(secret.id) &&
-        !isGroqVaultSecretName(secret.name) &&
-        !isTogetherVaultSecretId(secret.id) &&
-        !isTogetherVaultSecretName(secret.name)
+    const owner = vaultOwnerScope(ctx);
+    const rows = listSecrets(db, owner).filter(
+      (secret) => !isManagedPlatformSecret(secret)
     );
     const result = page(rows, query);
     return {
@@ -948,22 +973,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
   },
   get(db, def, id, ctx) {
     ownerOnly(ctx);
-    const row = listSecrets(db).find(
-      (secret) =>
-        secret.id === id &&
-        secret.id !== "cursor-api-key" &&
-        secret.name.toLowerCase() !== "cursor_api_key" &&
-        secret.name.toLowerCase() !== "cursor-api-key" &&
-        !isOpenAiVaultSecretId(secret.id) &&
-        !isOpenAiVaultSecretName(secret.name) &&
-        !isAnthropicVaultSecretId(secret.id) &&
-        !isAnthropicVaultSecretName(secret.name) &&
-        !isOpenRouterVaultSecretId(secret.id) &&
-        !isOpenRouterVaultSecretName(secret.name) &&
-        !isGroqVaultSecretId(secret.id) &&
-        !isGroqVaultSecretName(secret.name) &&
-        !isTogetherVaultSecretId(secret.id) &&
-        !isTogetherVaultSecretName(secret.name)
+    const owner = vaultOwnerScope(ctx);
+    const row = listSecrets(db, owner).find(
+      (secret) => secret.id === id && !isManagedPlatformSecret(secret)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -991,14 +1003,16 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     if (isTogetherVaultSecretName(name)) {
       throw httpError(400, "Together API keys must use the Together credential flow");
     }
-    const created = createSecret(db, name, requiredText(data, "value"));
-    const row = listSecrets(db).find((secret) => secret.id === created.id);
+    const owner = vaultOwnerScope(ctx, data);
+    const created = createSecret(db, name, requiredText(data, "value"), owner);
+    const row = listSecrets(db, owner).find((secret) => secret.id === created.id);
     if (!row) throw httpError(500, "Created Vault secret could not be loaded");
     return vaultSecretRecord(def, row);
   },
   delete(db, _def, id, ctx) {
     ownerOnly(ctx);
-    if (!deleteSecret(db, id)) throw httpError(404, "Vault secret not found");
+    const owner = vaultOwnerScope(ctx);
+    if (!deleteSecret(db, id, owner)) throw httpError(404, "Vault secret not found");
   },
 };
 
@@ -1037,11 +1051,12 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
   },
   get(db, def, id, ctx) {
     ownerOnly(ctx);
+    const owner = vaultOwnerScope(ctx);
     if (id === CURSOR_API_KEY_SECRET_ID) {
-      const status = getCursorAuthStatus(db);
+      const status = getCursorAuthStatus(db, owner);
       return status.connected
         ? record(def, CURSOR_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "cursor",
             display_name: "Cursor subscription",
@@ -1051,10 +1066,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         : null;
     }
     if (id === OPENAI_API_KEY_SECRET_ID) {
-      const status = getOpenAiAuthStatus(db);
+      const status = getOpenAiAuthStatus(db, owner);
       return status.connected
         ? record(def, OPENAI_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "openai",
             display_name: "OpenAI Platform",
@@ -1064,10 +1079,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         : null;
     }
     if (id === ANTHROPIC_API_KEY_SECRET_ID) {
-      const status = getAnthropicAuthStatus(db);
+      const status = getAnthropicAuthStatus(db, owner);
       return status.connected
         ? record(def, ANTHROPIC_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "anthropic",
             display_name: "Anthropic Console",
@@ -1077,10 +1092,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         : null;
     }
     if (id === OPENROUTER_API_KEY_SECRET_ID) {
-      const status = getOpenRouterAuthStatus(db);
+      const status = getOpenRouterAuthStatus(db, owner);
       return status.connected
         ? record(def, OPENROUTER_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "openrouter",
             display_name: "OpenRouter",
@@ -1090,10 +1105,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         : null;
     }
     if (id === GROQ_API_KEY_SECRET_ID) {
-      const status = getGroqAuthStatus(db);
+      const status = getGroqAuthStatus(db, owner);
       return status.connected
         ? record(def, GROQ_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "groq",
             display_name: "Groq",
@@ -1103,10 +1118,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         : null;
     }
     if (id === TOGETHER_API_KEY_SECRET_ID) {
-      const status = getTogetherAuthStatus(db);
+      const status = getTogetherAuthStatus(db, owner);
       return status.connected
         ? record(def, TOGETHER_API_KEY_SECRET_ID, {
-            agent_id: "intelligence",
+            agent_id: owner,
             kind: "api_key",
             provider: "together",
             display_name: "Together",
@@ -1120,11 +1135,12 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
   },
   create(db, def, data, ctx) {
     ownerOnly(ctx);
+    const owner = vaultOwnerScope(ctx, data);
     if (requiredText(data, "provider").toLowerCase() === "cursor") {
-      upsertCursorApiKey(db, requiredText(data, "api_key"));
-      const status = getCursorAuthStatus(db);
+      upsertCursorApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getCursorAuthStatus(db, owner);
       return record(def, CURSOR_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "cursor",
         display_name: "Cursor subscription",
@@ -1133,10 +1149,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (requiredText(data, "provider").toLowerCase() === "openai") {
-      upsertOpenAiApiKey(db, requiredText(data, "api_key"));
-      const status = getOpenAiAuthStatus(db);
+      upsertOpenAiApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getOpenAiAuthStatus(db, owner);
       return record(def, OPENAI_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "openai",
         display_name: "OpenAI Platform",
@@ -1145,10 +1161,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (requiredText(data, "provider").toLowerCase() === "anthropic") {
-      upsertAnthropicApiKey(db, requiredText(data, "api_key"));
-      const status = getAnthropicAuthStatus(db);
+      upsertAnthropicApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getAnthropicAuthStatus(db, owner);
       return record(def, ANTHROPIC_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "anthropic",
         display_name: "Anthropic Console",
@@ -1157,10 +1173,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (requiredText(data, "provider").toLowerCase() === "openrouter") {
-      upsertOpenRouterApiKey(db, requiredText(data, "api_key"));
-      const status = getOpenRouterAuthStatus(db);
+      upsertOpenRouterApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getOpenRouterAuthStatus(db, owner);
       return record(def, OPENROUTER_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "openrouter",
         display_name: "OpenRouter",
@@ -1169,10 +1185,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (requiredText(data, "provider").toLowerCase() === "groq") {
-      upsertGroqApiKey(db, requiredText(data, "api_key"));
-      const status = getGroqAuthStatus(db);
+      upsertGroqApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getGroqAuthStatus(db, owner);
       return record(def, GROQ_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "groq",
         display_name: "Groq",
@@ -1181,10 +1197,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (requiredText(data, "provider").toLowerCase() === "together") {
-      upsertTogetherApiKey(db, requiredText(data, "api_key"));
-      const status = getTogetherAuthStatus(db);
+      upsertTogetherApiKey(db, requiredText(data, "api_key"), owner);
+      const status = getTogetherAuthStatus(db, owner);
       return record(def, TOGETHER_API_KEY_SECRET_ID, {
-        agent_id: "intelligence",
+        agent_id: owner,
         kind: "api_key",
         provider: "together",
         display_name: "Together",
@@ -1196,7 +1212,7 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       def,
       createAgentApiKeyAccount(db, {
         agentId:
-          typeof data.agent_id === "string"
+          typeof data.agent_id === "string" && data.agent_id
             ? data.agent_id
             : ctx.agentId ?? "intelligence",
         provider: requiredText(data, "provider"),
@@ -1207,28 +1223,29 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
   },
   delete(db, _def, id, ctx) {
     ownerOnly(ctx);
+    const owner = vaultOwnerScope(ctx);
     if (id === CURSOR_API_KEY_SECRET_ID) {
-      removeCursorApiKey(db);
+      removeCursorApiKey(db, owner);
       return;
     }
     if (id === OPENAI_API_KEY_SECRET_ID) {
-      removeOpenAiApiKey(db);
+      removeOpenAiApiKey(db, owner);
       return;
     }
     if (id === ANTHROPIC_API_KEY_SECRET_ID) {
-      removeAnthropicApiKey(db);
+      removeAnthropicApiKey(db, owner);
       return;
     }
     if (id === OPENROUTER_API_KEY_SECRET_ID) {
-      removeOpenRouterApiKey(db);
+      removeOpenRouterApiKey(db, owner);
       return;
     }
     if (id === GROQ_API_KEY_SECRET_ID) {
-      removeGroqApiKey(db);
+      removeGroqApiKey(db, owner);
       return;
     }
     if (id === TOGETHER_API_KEY_SECRET_ID) {
-      removeTogetherApiKey(db);
+      removeTogetherApiKey(db, owner);
       return;
     }
     const account = getAgentAccount(db, id);

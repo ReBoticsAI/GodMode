@@ -960,20 +960,31 @@ export function createAiRouter(
 
   router.get("/secrets", (req, res) => {
     // Cursor subscription key is managed by the Cursor card — hide from generic list.
-    const secrets = listSecrets(tdb(req)).filter(
+    const agentIdRaw = req.query.agentId;
+    const agentId =
+      typeof agentIdRaw === "string" && agentIdRaw.trim()
+        ? agentIdRaw.trim()
+        : null;
+    const secrets = listSecrets(tdb(req), agentId).filter(
       (s) =>
         s.id !== "cursor-api-key" &&
+        !s.id.startsWith("cursor-api-key__agent__") &&
         s.name !== "cursor_api_key" &&
         s.name !== "CURSOR_API_KEY" &&
         s.id !== "openai-api-key" &&
+        !s.id.startsWith("openai-api-key__agent__") &&
         s.name !== "openai_api_key" &&
         s.id !== "anthropic-api-key" &&
+        !s.id.startsWith("anthropic-api-key__agent__") &&
         s.name !== "anthropic_api_key" &&
         s.id !== "openrouter-api-key" &&
+        !s.id.startsWith("openrouter-api-key__agent__") &&
         s.name !== "openrouter_api_key" &&
         s.id !== "groq-api-key" &&
+        !s.id.startsWith("groq-api-key__agent__") &&
         s.name !== "groq_api_key" &&
         s.id !== "together-api-key" &&
+        !s.id.startsWith("together-api-key__agent__") &&
         s.name !== "together_api_key"
     );
     res.json({ secrets });
@@ -981,8 +992,13 @@ export function createAiRouter(
 
   router.get("/cursor/status", async (req, res) => {
     const db = tdb(req);
+    const agentIdRaw = req.query.agentId;
+    const agentId =
+      typeof agentIdRaw === "string" && agentIdRaw.trim()
+        ? agentIdRaw.trim()
+        : null;
     normalizeCursorVaultSecret(db);
-    const status = getCursorAuthStatus(db);
+    const status = getCursorAuthStatus(db, agentId);
     const cli = await probeCursorCliAuth().catch(() => ({
       ok: false,
       detail: "cursor-agent unavailable",
@@ -996,7 +1012,12 @@ export function createAiRouter(
 
   router.get("/cursor/models", async (req, res) => {
     try {
-      const models = await listCursorSubscriptionModels(tdb(req));
+      const agentIdRaw = req.query.agentId;
+      const agentId =
+        typeof agentIdRaw === "string" && agentIdRaw.trim()
+          ? agentIdRaw.trim()
+          : null;
+      const models = await listCursorSubscriptionModels(tdb(req), agentId);
       res.json({ models });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1236,7 +1257,7 @@ export function createAiRouter(
       return;
     }
 
-    if (!llm.isReady() && !agentCanRunWithoutLocalLlm(agent.backend, scope.db)) {
+    if (!llm.isReady() && !agentCanRunWithoutLocalLlm(agent.backend, scope.db, agent.id)) {
       res.status(503).json({
         error:
           "LLM server not running. Start a local model, or connect Cursor subscription in Vault.",

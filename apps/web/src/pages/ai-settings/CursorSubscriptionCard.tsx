@@ -30,8 +30,12 @@ import {
   type CursorModelOption,
 } from "@/api";
 
-/** Connect Cursor subscription for Intelligence (Composer, Auto, etc.). */
-export function CursorSubscriptionCard() {
+/** Connect Cursor subscription for the selected Vault owner. */
+export function CursorSubscriptionCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<CursorAuthStatus | null>(null);
   const [models, setModels] = useState<CursorModelOption[]>([]);
   const [apiKey, setApiKey] = useState("");
@@ -40,7 +44,7 @@ export function CursorSubscriptionCard() {
 
   const loadModels = useCallback(async () => {
     try {
-      const m = await fetchCursorModels();
+      const m = await fetchCursorModels(vaultAgentId);
       setModels(m.models);
       setModel((prev) =>
         m.models.some((x) => x.id === prev) ? prev : (m.models[0]?.id ?? "auto")
@@ -48,11 +52,11 @@ export function CursorSubscriptionCard() {
     } catch {
       setModels([{ id: "auto", label: "Auto (Cursor picks)" }]);
     }
-  }, []);
+  }, [vaultAgentId]);
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchCursorStatus();
+      const s = await fetchCursorStatus(vaultAgentId);
       setStatus(s);
       if (s.connected) {
         await loadModels();
@@ -63,7 +67,7 @@ export function CursorSubscriptionCard() {
       setStatus({ connected: false, source: "none" });
       setModels([]);
     }
-  }, [loadModels]);
+  }, [loadModels, vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -76,7 +80,7 @@ export function CursorSubscriptionCard() {
     }
     setBusy(true);
     try {
-      const res = await connectCursorApiKey(apiKey.trim());
+      const res = await connectCursorApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("Cursor connected");
@@ -95,7 +99,7 @@ export function CursorSubscriptionCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectCursorApiKey();
+      const res = await disconnectCursorApiKey(vaultAgentId);
       setStatus(res.status);
       setModels([]);
       toast.success("Cursor disconnected");
