@@ -17,6 +17,7 @@ import {
   isGemma4Model,
   resolveCursorHarnessProfile,
   resolveHarnessProfile,
+  resolveGroqHarnessProfile,
   resolveOpenRouterHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -159,6 +160,48 @@ assert.equal(
       baseUrl: "https://openrouter.ai/api/v1",
       transport: "openrouter",
     },
+  }).id,
+  "openrouter-deepseek"
+);
+assert.equal(
+  resolveGroqHarnessProfile("llama-3.1-8b-instant").id,
+  "groq-llama"
+);
+assert.notEqual(resolveGroqHarnessProfile("llama-3.3-70b-versatile").id, "openai");
+assert.equal(
+  resolveGroqHarnessProfile("openai/gpt-oss-120b").id,
+  "groq-gpt-oss"
+);
+assert.notEqual(
+  resolveGroqHarnessProfile("openai/gpt-oss-120b").id,
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai",
+    model: "gpt-4o",
+  }).id
+);
+assert.equal(resolveGroqHarnessProfile("groq/compound").id, "groq-compound");
+assert.equal(resolveGroqHarnessProfile("qwen/qwen3.6-27b").id, "groq-qwen");
+assert.equal(
+  resolveGroqHarnessProfile("moonshotai/kimi-k2-instruct").id,
+  "groq-kimi"
+);
+assert.equal(resolveGroqHarnessProfile("unknown-model").id, "groq-generic");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "llama-3.3-70b-versatile",
+    transport: "groq",
+  }).id,
+  "groq-llama"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "deepseek/deepseek-v4-pro",
+    transport: "openrouter",
   }).id,
   "openrouter-deepseek"
 );
