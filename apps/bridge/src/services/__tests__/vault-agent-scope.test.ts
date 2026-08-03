@@ -1,5 +1,5 @@
 /**
- * Per-agent Vault scope isolation + personal fallback (#330 slice 1).
+ * Platform / User / Agent Vault isolation + Agent → Platform fallback (#330 slice 2).
  */
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
@@ -33,12 +33,20 @@ function tenantDb(): AppDatabase {
       name TEXT NOT NULL,
       value TEXT NOT NULL,
       agent_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      owner_kind TEXT NOT NULL DEFAULT 'platform'
+        CHECK (owner_kind IN ('platform', 'user', 'agent')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK (
+        (owner_kind = 'agent' AND agent_id IS NOT NULL)
+        OR (owner_kind IN ('platform', 'user') AND agent_id IS NULL)
+      )
     );
-    CREATE UNIQUE INDEX ai_secrets_name_personal_uq
-      ON ai_secrets(name) WHERE agent_id IS NULL;
+    CREATE UNIQUE INDEX ai_secrets_name_platform_uq
+      ON ai_secrets(name) WHERE owner_kind = 'platform';
+    CREATE UNIQUE INDEX ai_secrets_name_user_uq
+      ON ai_secrets(name) WHERE owner_kind = 'user';
     CREATE UNIQUE INDEX ai_secrets_name_agent_uq
-      ON ai_secrets(name, agent_id) WHERE agent_id IS NOT NULL;
+      ON ai_secrets(name, agent_id) WHERE owner_kind = 'agent';
     CREATE TABLE ai_agent_accounts (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
@@ -59,30 +67,59 @@ function tenantDb(): AppDatabase {
   return db as unknown as AppDatabase;
 }
 
-describe("per-agent Vault scope", () => {
-  it("isolates secrets by owner and blocks cross-agent reads", () => {
+describe("three-vault owner_kind scope", () => {
+  it("isolates platform, user, and agent secrets", () => {
     const db = tenantDb();
-    createSecret(db, "shared_name", "personal-value", null);
-    createSecret(db, "shared_name", "agent-a-value", "agent-a");
-    createSecret(db, "shared_name", "agent-b-value", "agent-b");
+    createSecret(db, "shared_name", "platform-value", { kind: "platform" });
+    createSecret(db, "shared_name", "user-value", { kind: "user" });
+    createSecret(db, "shared_name", "agent-a-value", {
+      kind: "agent",
+      agentId: "agent-a",
+    });
+    createSecret(db, "shared_name", "agent-b-value", {
+      kind: "agent",
+      agentId: "agent-b",
+    });
 
-    expect(listSecrets(db, null)).toHaveLength(1);
-    expect(listSecrets(db, "agent-a")).toHaveLength(1);
-    expect(listSecrets(db, "agent-b")).toHaveLength(1);
+    expect(listSecrets(db, { kind: "platform" })).toHaveLength(1);
+    expect(listSecrets(db, { kind: "user" })).toHaveLength(1);
+    expect(listSecrets(db, { kind: "agent", agentId: "agent-a" })).toHaveLength(
+      1
+    );
+    expect(listSecrets(db, { kind: "agent", agentId: "agent-b" })).toHaveLength(
+      1
+    );
 
-    expect(resolveSecretByName(db, "shared_name", "agent-a")).toBe("agent-a-value");
-    expect(resolveSecretByName(db, "shared_name", "agent-b")).toBe("agent-b-value");
-    expect(resolveSecretByName(db, "shared_name", null)).toBe("personal-value");
+    expect(resolveSecretByName(db, "shared_name", "agent-a")).toBe(
+      "agent-a-value"
+    );
+    expect(resolveSecretByName(db, "shared_name", "agent-b")).toBe(
+      "agent-b-value"
+    );
+    expect(resolveSecretByName(db, "shared_name", null)).toBe("platform-value");
 
-    const aRow = findSecretByName(db, "shared_name", "agent-a")!;
+    const aRow = findSecretByName(db, "shared_name", {
+      kind: "agent",
+      agentId: "agent-a",
+    })!;
     expect(getSecretValueForAgent(db, aRow.id, "agent-b")).toBeNull();
-    expect(getSecretValueForAgent(db, aRow.id, "agent-a")).toBe("agent-a-value");
+    expect(getSecretValueForAgent(db, aRow.id, "agent-a")).toBe(
+      "agent-a-value"
+    );
+
+    const userRow = findSecretByName(db, "shared_name", { kind: "user" })!;
+    expect(getSecretValueForAgent(db, userRow.id, "agent-a")).toBeNull();
   });
 
-  it("falls back from agent Vault to Personal for resolve", () => {
+  it("falls back from agent Vault to Platform (not User) for resolve", () => {
     const db = tenantDb();
-    upsertOpenAiApiKey(db, "sk-personal", null);
-    expect(resolveOpenAiApiKey(db, "intelligence")).toBe("sk-personal");
+    createSecret(db, OPENAI_API_KEY_SECRET_NAME, "sk-user-only", {
+      kind: "user",
+    });
+    expect(resolveOpenAiApiKey(db, "intelligence")).toBeNull();
+
+    upsertOpenAiApiKey(db, "sk-platform", null);
+    expect(resolveOpenAiApiKey(db, "intelligence")).toBe("sk-platform");
 
     upsertOpenAiApiKey(db, "sk-agent", "intelligence");
     expect(resolveOpenAiApiKey(db, "intelligence")).toBe("sk-agent");
@@ -93,7 +130,7 @@ describe("per-agent Vault scope", () => {
         agentId: "other-agent",
       })
     ).toBeNull();
-    expect(resolveOpenAiApiKey(db, "other-agent")).toBe("sk-personal");
+    expect(resolveOpenAiApiKey(db, "other-agent")).toBe("sk-platform");
   });
 
   it("keeps fixed platform ids unique per owner", () => {
@@ -101,7 +138,7 @@ describe("per-agent Vault scope", () => {
     upsertPlatformVaultSecret(db, {
       baseId: OPENAI_API_KEY_SECRET_ID,
       name: OPENAI_API_KEY_SECRET_NAME,
-      value: "personal",
+      value: "platform",
       agentId: null,
     });
     upsertPlatformVaultSecret(db, {
@@ -130,27 +167,43 @@ describe("per-agent Vault scope", () => {
 
   it("rejects duplicate names within the same owner", () => {
     const db = tenantDb();
-    createSecret(db, "dup", "one", null);
-    expect(() => createSecret(db, "dup", "two", null)).toThrow(/already exists/i);
-    createSecret(db, "dup", "agent-ok", "agent-a");
+    createSecret(db, "dup", "one", { kind: "platform" });
+    expect(() => createSecret(db, "dup", "two", { kind: "platform" })).toThrow(
+      /already exists/i
+    );
+    createSecret(db, "dup", "user-ok", { kind: "user" });
+    createSecret(db, "dup", "agent-ok", { kind: "agent", agentId: "agent-a" });
   });
 
   it("deletes only within the requested owner scope", () => {
     const db = tenantDb();
-    const personal = createSecret(db, "x", "p", null);
-    const agent = createSecret(db, "x", "a", "agent-a");
-    expect(deleteSecret(db, personal.id, null)).toBe(true);
-    expect(listSecrets(db, null)).toHaveLength(0);
-    expect(listSecrets(db, "agent-a")).toHaveLength(1);
-    expect(deleteSecret(db, agent.id, "agent-a")).toBe(true);
+    const platform = createSecret(db, "x", "p", { kind: "platform" });
+    const agent = createSecret(db, "x", "a", {
+      kind: "agent",
+      agentId: "agent-a",
+    });
+    expect(deleteSecret(db, platform.id, { kind: "platform" })).toBe(true);
+    expect(listSecrets(db, { kind: "platform" })).toHaveLength(0);
+    expect(listSecrets(db, { kind: "agent", agentId: "agent-a" })).toHaveLength(
+      1
+    );
+    expect(
+      deleteSecret(db, agent.id, { kind: "agent", agentId: "agent-a" })
+    ).toBe(true);
   });
 
-  it("resolveExaApiKey uses agent Vault then Personal", () => {
+  it("resolveExaApiKey uses agent Vault then Platform (not User)", () => {
     const db = tenantDb();
-    createSecret(db, "exa_api_key", "personal-exa", null);
-    expect(resolveExaApiKey(db, "intelligence")).toBe("personal-exa");
-    createSecret(db, "exa_api_key", "agent-exa", "intelligence");
+    createSecret(db, "exa_api_key", "user-exa", { kind: "user" });
+    expect(resolveExaApiKey(db, "intelligence")).toBeNull();
+
+    createSecret(db, "exa_api_key", "platform-exa", { kind: "platform" });
+    expect(resolveExaApiKey(db, "intelligence")).toBe("platform-exa");
+    createSecret(db, "exa_api_key", "agent-exa", {
+      kind: "agent",
+      agentId: "intelligence",
+    });
     expect(resolveExaApiKey(db, "intelligence")).toBe("agent-exa");
-    expect(resolveExaApiKey(db, "other")).toBe("personal-exa");
+    expect(resolveExaApiKey(db, "other")).toBe("platform-exa");
   });
 });

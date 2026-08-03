@@ -289,6 +289,7 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 18, name: "ai_projects_columns_json_v1", up: migrateAiProjectsColumnsJson },
   { version: 19, name: "ai_projects_columns_json_backfill_v1", up: migrateAiProjectsColumnsJsonBackfill },
   { version: 20, name: "ai_secrets_agent_vault_v1", up: migrateAiSecretsAgentVault },
+  { version: 21, name: "ai_secrets_owner_kind_v1", up: migrateAiSecretsOwnerKind },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
@@ -324,7 +325,7 @@ function migrateAiProjectsColumnsJson(db: Database.Database): void {
   addColumn(db, "ai_projects", "columns_json", "TEXT");
 }
 
-/** Per-agent Vaults: nullable agent_id on ai_secrets; name unique per owner (#330). */
+/** Per-agent Vaults: nullable agent_id on ai_secrets; name unique per owner (#330 slice 1). */
 function migrateAiSecretsAgentVault(db: Database.Database): void {
   addColumn(db, "ai_secrets", "agent_id", "TEXT");
   db.exec(`
@@ -333,6 +334,40 @@ function migrateAiSecretsAgentVault(db: Database.Database): void {
       ON ai_secrets(name) WHERE agent_id IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_agent_uq
       ON ai_secrets(name, agent_id) WHERE agent_id IS NOT NULL;
+  `);
+}
+
+/**
+ * Three-vault model (#330 slice 2): owner_kind platform | user | agent.
+ * NULL agent_id rows become platform; agent rows keep agent; known user secrets
+ * (e.g. GitHub Projects OAuth) are reclassified to user.
+ */
+function migrateAiSecretsOwnerKind(db: Database.Database): void {
+  addColumn(db, "ai_secrets", "owner_kind", "TEXT");
+  db.exec(`
+    UPDATE ai_secrets SET owner_kind = 'agent' WHERE agent_id IS NOT NULL;
+    UPDATE ai_secrets
+       SET owner_kind = 'platform'
+     WHERE agent_id IS NULL
+       AND (owner_kind IS NULL OR owner_kind = '');
+  `);
+  // GitHub Projects token lives in the User Vault, not Platform.
+  db.prepare(
+    `UPDATE ai_secrets
+        SET owner_kind = 'user'
+      WHERE agent_id IS NULL
+        AND (id = ? OR LOWER(name) = LOWER(?))`
+  ).run("github-projects-oauth", "github_projects_oauth");
+  db.exec(`
+    DROP INDEX IF EXISTS ai_secrets_name_personal_uq;
+    DROP INDEX IF EXISTS ai_secrets_name_agent_uq;
+    CREATE INDEX IF NOT EXISTS ai_secrets_owner_kind_idx ON ai_secrets(owner_kind);
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_platform_uq
+      ON ai_secrets(name) WHERE owner_kind = 'platform';
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_user_uq
+      ON ai_secrets(name) WHERE owner_kind = 'user';
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_agent_uq
+      ON ai_secrets(name, agent_id) WHERE owner_kind = 'agent';
   `);
 }
 
@@ -862,13 +897,22 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       name TEXT NOT NULL,
       value TEXT NOT NULL,
       agent_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      owner_kind TEXT NOT NULL DEFAULT 'platform'
+        CHECK (owner_kind IN ('platform', 'user', 'agent')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK (
+        (owner_kind = 'agent' AND agent_id IS NOT NULL)
+        OR (owner_kind IN ('platform', 'user') AND agent_id IS NULL)
+      )
     );
     CREATE INDEX IF NOT EXISTS ai_secrets_agent_idx ON ai_secrets(agent_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_personal_uq
-      ON ai_secrets(name) WHERE agent_id IS NULL;
+    CREATE INDEX IF NOT EXISTS ai_secrets_owner_kind_idx ON ai_secrets(owner_kind);
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_platform_uq
+      ON ai_secrets(name) WHERE owner_kind = 'platform';
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_user_uq
+      ON ai_secrets(name) WHERE owner_kind = 'user';
     CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_agent_uq
-      ON ai_secrets(name, agent_id) WHERE agent_id IS NOT NULL;
+      ON ai_secrets(name, agent_id) WHERE owner_kind = 'agent';
 
     CREATE TABLE IF NOT EXISTS ai_agent_accounts (
       id TEXT PRIMARY KEY,

@@ -51,7 +51,7 @@ export function readGithubProjectsToken(db: AppDatabase): GithubProjectsToken | 
   const raw =
     byId ??
     (() => {
-      const named = listSecrets(db, null).find(
+      const named = listSecrets(db, { kind: "user" }).find(
         (s) => s.name === GITHUB_PROJECTS_SECRET_NAME
       );
       return named ? getSecretValue(db, named.id) : null;
@@ -71,10 +71,12 @@ export function upsertGithubProjectsToken(
   token: GithubProjectsToken
 ): void {
   db.prepare(
-    `DELETE FROM ai_secrets WHERE agent_id IS NULL AND (id = ? OR name = ?)`
+    `DELETE FROM ai_secrets
+      WHERE owner_kind = 'user' AND agent_id IS NULL
+        AND (id = ? OR name = ?)`
   ).run(GITHUB_PROJECTS_SECRET_ID, GITHUB_PROJECTS_SECRET_NAME);
   db.prepare(
-    `INSERT INTO ai_secrets (id, name, value, agent_id) VALUES (?, ?, ?, NULL)`
+    `INSERT INTO ai_secrets (id, name, value, agent_id, owner_kind) VALUES (?, ?, ?, NULL, 'user')`
   ).run(
     GITHUB_PROJECTS_SECRET_ID,
     GITHUB_PROJECTS_SECRET_NAME,
@@ -84,7 +86,9 @@ export function upsertGithubProjectsToken(
 
 export function clearGithubProjectsToken(db: AppDatabase): void {
   db.prepare(
-    `DELETE FROM ai_secrets WHERE agent_id IS NULL AND (id = ? OR name = ?)`
+    `DELETE FROM ai_secrets
+      WHERE owner_kind = 'user' AND agent_id IS NULL
+        AND (id = ? OR name = ?)`
   ).run(GITHUB_PROJECTS_SECRET_ID, GITHUB_PROJECTS_SECRET_NAME);
 }
 

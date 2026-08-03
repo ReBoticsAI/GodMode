@@ -171,8 +171,8 @@ export async function listModelCatalog(
 
   const catalogAgentId = agent?.id ?? "intelligence";
   const secrets = [
-    ...listSecrets(db, null),
-    ...listSecrets(db, catalogAgentId),
+    ...listSecrets(db, { kind: "platform" }),
+    ...listSecrets(db, { kind: "agent", agentId: catalogAgentId }),
   ].filter(
     (s) =>
       s.name !== "cursor_api_key" &&
@@ -481,8 +481,8 @@ export async function selectIntelligenceModel(
     if (!model) throw new Error("Provider model id required");
     const provider = input.provider ?? "openai";
     const secrets = [
-      ...listSecrets(db, null),
-      ...listSecrets(db, "intelligence"),
+      ...listSecrets(db, { kind: "platform" }),
+      ...listSecrets(db, { kind: "agent", agentId: "intelligence" }),
     ].filter(
       (s) =>
         s.name !== "cursor_api_key" &&

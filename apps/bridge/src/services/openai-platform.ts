@@ -22,7 +22,7 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
-/** Runtime resolve: env, then agent Vault, then Personal. */
+/** Runtime resolve: env, then agent Vault, then Platform. */
 export function resolveOpenAiApiKey(
   db: AppDatabase,
   agentId?: string | null
@@ -60,7 +60,7 @@ export function removeOpenAiApiKey(
   });
 }
 
-/** UI status for one owner (no personal fallback when agentId is set). */
+/** UI status for one owner (no Platform fallback when agentId is set). */
 export function getOpenAiAuthStatus(
   db: AppDatabase,
   agentId?: string | null
@@ -80,7 +80,7 @@ export function getOpenAiAuthStatus(
   return { connected: false, source: "none" };
 }
 
-/** True when OpenAI Platform models can be selected (agent → personal). */
+/** True when OpenAI Platform models can be selected (agent → Platform). */
 export function isOpenAiPlatformReady(
   db: AppDatabase,
   agentId?: string | null
