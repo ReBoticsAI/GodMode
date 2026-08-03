@@ -2046,6 +2046,55 @@ export const applyOpenRouterToIntelligence = (
     true
   );
 
+export type GroqAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchGroqStatus = async (): Promise<GroqAuthStatus> => {
+  try {
+    const row = await fetchRecord("ProviderCredential", "groq-api-key");
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "groq") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectGroqApiKey = (apiKey: string) =>
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "groq",
+    label: "Groq",
+    api_key: apiKey,
+  })
+    .then(fetchGroqStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectGroqApiKey = () =>
+  deleteRecordApi("ProviderCredential", "groq-api-key")
+    .then(fetchGroqStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const applyGroqToIntelligence = (model = "llama-3.1-8b-instant") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:groq:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {

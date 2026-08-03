@@ -615,6 +615,35 @@ describe("runtime ObjectType actions", () => {
     ).toBeNull();
   });
 
+  it("stores Groq credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: "intelligence",
+        provider: "groq",
+        api_key: "gsk-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("groq-api-key");
+    expect(created.data).toMatchObject({
+      provider: "groq",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("gsk-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "groq-api-key", owner)
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(db, def, "groq-api-key", owner);
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "groq-api-key", owner)
+    ).toBeNull();
+  });
+
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
     const active = fakeServices();
     configureRuntimeAdapterServices(active);
