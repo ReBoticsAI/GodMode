@@ -76,19 +76,19 @@ export const BANK_PATH = "/bank";
 export const VAULT_PATH = "/vault";
 
 export const VAULT_TABS = [
-  "inference",
-  "secrets",
-  "marketplace",
-  "wallets",
   "cloud",
+  "inference",
   "integrations",
+  "wallets",
+  "marketplace",
+  "secrets",
   "storage",
 ] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
 export const VAULT_INFERENCE_SUBTABS = [
-  "api-keys",
   "subscriptions",
+  "api-keys",
   "search",
 ] as const;
 export type VaultInferenceSub = (typeof VAULT_INFERENCE_SUBTABS)[number];
@@ -116,7 +116,7 @@ export function normalizeVaultInferenceSub(
   ) {
     return raw;
   }
-  return "api-keys";
+  return "subscriptions";
 }
 
 export const STRUCTURE_PATH = "/structure";
