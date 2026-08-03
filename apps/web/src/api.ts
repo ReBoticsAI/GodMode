@@ -4754,6 +4754,29 @@ export function connectMarketplacePayout(body: {
   );
 }
 
+export function startMarketplaceStripeConnect(body?: { returnUrl?: string; refreshUrl?: string }) {
+  return actionDto<{ url: string; accountId: string; onboardingStatus: string }>(
+    "MarketplaceSellerAccount",
+    "start_stripe_connect",
+    {
+      return_url: body?.returnUrl,
+      refresh_url: body?.refreshUrl,
+    },
+    undefined,
+    true
+  );
+}
+
+export function refreshMarketplaceStripeConnect() {
+  return actionDto<Record<string, unknown>>(
+    "MarketplaceSellerAccount",
+    "refresh_stripe_connect",
+    {},
+    undefined,
+    true
+  );
+}
+
 export function fetchMarketplaceCommerceConfig() {
   return actionDto<{
     tosVersion: string;
