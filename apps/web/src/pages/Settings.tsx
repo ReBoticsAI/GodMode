@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
 import {
+  CreditCardIcon,
   FolderGit2Icon,
   LogOutIcon,
   MonitorIcon,
@@ -31,7 +32,6 @@ import {
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH, VAULT_PATH } from "@/lib/navigation";
-import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
@@ -333,6 +333,30 @@ function GithubVaultLinkCard() {
   );
 }
 
+function BillingVaultLinkCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCardIcon className="size-4" />
+          Billing
+        </CardTitle>
+        <CardDescription>
+          Manage GodMode Cloud seat billing under Vault → Billing.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Link
+          to={`${VAULT_PATH}?tab=billing`}
+          className={buttonVariants({ variant: "outline" })}
+        >
+          Manage in Vault → Billing
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   return (
     <Page>
@@ -345,7 +369,7 @@ export default function Settings() {
         <OnboardingCard />
         <MfaCard />
         <GithubVaultLinkCard />
-        <SubscriptionCard />
+        <BillingVaultLinkCard />
         <WorkspaceDataCard />
         <AppearanceCard />
         <SessionCard />

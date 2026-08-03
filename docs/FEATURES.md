@@ -41,7 +41,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
-- [Vault](features/vault.md) - Connect hub: Inference, Search, Integrations, and Storage.
+- [Vault](features/vault.md) - Connect hub: Inference, Search, Integrations, Billing, and Storage.
 - [Bank](features/bank.md) - Connect wallets and accounts for you and your agents.
 - [Support](features/support.md) - Platform bugs via GitHub; shared resource issues to owners; optional Support group.
 
