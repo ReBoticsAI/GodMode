@@ -7,6 +7,7 @@ import {
 } from "../services/auth/middleware.js";
 import {
   fetchOfficialCatalog,
+  fetchCommunityCatalog,
   fetchUnofficialCatalog,
   listCatalogInstalls,
   listCatalogSources,
@@ -64,6 +65,17 @@ export function createMarketplaceCatalogRouter(): Router {
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : "Failed to load official catalog",
+      });
+    }
+  });
+
+  router.get("/community", async (_req, res) => {
+    try {
+      const { url, entries } = await fetchCommunityCatalog();
+      res.json({ catalogUrl: url, entries });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : "Failed to load community catalog",
       });
     }
   });
