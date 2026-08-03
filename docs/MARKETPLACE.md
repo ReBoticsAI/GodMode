@@ -143,7 +143,7 @@ Public browse listings: `GET /api/marketplace/listings?seller_kind=user`. Commun
 ## Seller payouts (Stripe Connect)
 
 Community sellers onboard with **Stripe Connect Express Account Links** from
-Vault → Integrations → Marketplace, or the same card on Marketplace → Sell
+Vault → Marketplace (Marketplace → Sell links there)
 (#316, #329). GodMode Cloud (or the hub commerce authority) creates/reuses a
 Connect account and redirects to Stripe. Return/refresh URLs land back on the
 page you started from: `/vault?tab=integrations` or `/marketplace?tab=seller`.

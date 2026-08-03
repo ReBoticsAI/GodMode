@@ -3,25 +3,25 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Connect hub for inference, search, integrations, billing, and storage."
+summary: "Connect hub for GodMode Cloud, inference, integrations, wallets, marketplace, secrets, and storage."
 ---
 # Vault
 
 ![vault in GodMode](/features/vault.png)
 
-Vault is the connect hub for credentials, integrations, billing, and storage. Chat → Vault tab gives quick access while chatting. Inference, Search, Integrations, and Billing are available today; more connect tabs are coming.
+Vault is the connect hub for credentials and account connects. Chat → Vault tab gives quick access while chatting.
 
 ## Tabs
 
 ### Inference
 
-Subscriptions and metered LLM API keys for Intelligence.
+Subtabs: **Subscriptions**, **API Keys**, and **Search**.
 
 #### Subscriptions
 
 Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` and applies Cursor harness profiles in Intelligence.
 
-#### API keys
+#### API Keys
 
 Metered BYOK with named Connect cards:
 
@@ -41,18 +41,14 @@ Together catalog is a serverless chat snapshot (2026-08-03) plus a custom model 
 
 Each card Connect / Disconnect / Apply wires catalog models and a transport-specific harness (`profile = f(backend, provider, family)`). See [[harness-profiles]].
 
-The free-form **AI platform secrets** card remains on Inference for keys without a dedicated Connect card.
-
-### Search
+#### Search
 
 Web search and URL fetch keys for agents.
 
-#### Exa
-
-The **Exa** Connect card stores Vault secret `exa_api_key` (Connect / Disconnect / Connected badge). No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
+**Exa** Connect stores Vault secret `exa_api_key` (Connect / Disconnect / Connected badge). No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
 
 1. Sign up at [dashboard.exa.ai](https://dashboard.exa.ai) and create an API key.
-2. Connect the key on Vault → Search → Exa (or still paste as secret name `exa_api_key` / agent provider `exa`).
+2. Connect the key on Vault → Inference → Search → Exa (or still paste under All Secrets as `exa_api_key` / agent provider `exa`).
 3. If Exa blocks for exhausted credits, add credits or wait for the monthly free refresh at [Exa billing](https://dashboard.exa.ai/billing). GodMode surfaces the error and does not retry against a dead balance.
 
 GodMode Cloud routes agent `web_search` and `fetch_url` through [Exa](https://exa.ai) so egress uses Exa's network instead of the shared VPS IP. Cloud requires **tenant BYOK** (no platform shared key).
@@ -61,9 +57,41 @@ Self-host / local: Exa is optional. When `exa_api_key` (or agent provider `exa`)
 
 See [[cursor-cloud]].
 
-### Integrations
+### All Secrets
 
-Third-party account connects that are not inference or search keys.
+Free-form platform secrets (the AI Platform Secrets card) shared across agents. Prefer named Connect cards when one exists.
+
+### Marketplace
+
+Seller **Stripe Connect** for Community payouts. Marketplace → Sell links here for connect; ToS Accept and listing tools stay on Sell. PayPal and crypto seller rails stay disabled for v1.
+
+1. Open Vault → Marketplace (or follow Manage in Vault from Marketplace → Sell).
+2. Choose Connect with Stripe. Return/refresh lands on Vault → Marketplace.
+3. Optional: paste an `acct_…` id under advanced fields and save.
+4. On Sell, accept ToS (if needed), then publish. Paid listings require a connected payout.
+
+### Wallets
+
+Moralis and PayPal **API credentials** for live Bank / wallet sync. Wallet connect and PayPal balance link flows stay on Bank. Bank keeps a dual-home link to this tab.
+
+1. Open Vault → Wallets.
+2. Save and test a Moralis Web3 API key for crypto portfolios.
+3. Save and test PayPal business app credentials (sandbox or live) for balance sync.
+4. Return to Bank to connect wallets or PayPal balances.
+
+### GodMode Cloud
+
+GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts; the card is hidden on self-host / local.
+
+The **Subscription** card opens Stripe to manage plan, payment method, and invoices. Settings keeps a short dual-home link to this tab.
+
+1. Open Vault → GodMode Cloud.
+2. Choose Manage subscription to open the Stripe Customer Portal.
+3. After leaving the portal, you return to Vault → GodMode Cloud.
+
+Provider LLM subscriptions (for example Cursor) stay under Inference → Subscriptions. They are not GodMode Cloud seats.
+
+### Integrations
 
 #### GitHub
 
@@ -73,40 +101,10 @@ The **Connect GitHub** card installs and authorizes the GitHub App used for Proj
 2. Install the App on the account that owns your Projects, then authorize.
 3. Open Tasks → Board settings to link a Project.
 
-#### Holdings
-
-Moralis and PayPal **API credentials** for live Bank / Holdings sync live here. Wallet connect and PayPal balance link flows stay on Bank / Holdings. Bank keeps a dual-home link to this tab.
-
-1. Open Vault → Integrations → Holdings.
-2. Save and test a Moralis Web3 API key for crypto portfolios.
-3. Save and test PayPal business app credentials (sandbox or live) for balance sync.
-4. Return to Bank to connect wallets or PayPal balances.
-
-#### Marketplace
-
-Seller **Stripe Connect** for Community payouts lives here (Vault is the connect home). Marketplace → Sell dual-mounts the same Seller payouts card so publish gating still works next to ToS Accept and listing tools. PayPal and crypto seller rails stay disabled for v1.
-
-1. Open Vault → Integrations → Marketplace (or Marketplace → Sell).
-2. Choose Connect with Stripe. Return/refresh lands on the page you started from (`/vault?tab=integrations` or `/marketplace?tab=seller`).
-3. Optional: paste an `acct_…` id under advanced fields and save.
-4. On Sell, accept ToS (if needed), then publish. Paid listings require a connected payout.
-
-### Billing
-
-GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts; the card is hidden on self-host / local.
-
-The **Subscription** card opens Stripe to manage plan, payment method, and invoices. Settings keeps a short dual-home link to this tab.
-
-1. Open Vault → Billing.
-2. Choose Manage subscription to open the Stripe Customer Portal.
-3. After leaving the portal, you return to Vault → Billing.
-
-Provider LLM subscriptions (for example Cursor) stay under Inference. They are not GodMode Cloud seats.
-
 ### Storage
 
 Database and data-store sizes. Monitor growth before trimming or upgrading stores.
 
 ## Route
 
-`/vault` (deep-link tabs: `?tab=inference|search|integrations|billing|storage`; default `inference`)
+`/vault` (deep-link tabs: `?tab=cloud|inference|integrations|wallets|marketplace|secrets|storage`; Inference subtabs: `?tab=inference&sub=subscriptions|api-keys|search`; default `inference` / `subscriptions`). Legacy `?tab=search` maps to Inference → Search; `?tab=billing` maps to GodMode Cloud.

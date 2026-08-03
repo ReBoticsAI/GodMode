@@ -67,7 +67,7 @@ export function SubscriptionCard() {
     setOpening(true);
     try {
       const { url } = await startSaasBillingPortal({
-        returnUrl: `${window.location.origin}${VAULT_PATH}?tab=billing`,
+        returnUrl: `${window.location.origin}${VAULT_PATH}?tab=cloud`,
       });
       window.location.assign(url);
     } catch (err) {

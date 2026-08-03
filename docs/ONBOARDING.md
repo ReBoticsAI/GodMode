@@ -20,7 +20,7 @@ On multi-tenant hubs, a process-wide `CURSOR_API_KEY` does **not** mark every wo
 
 1. **Welcome**: overview of Intelligence and workspace areas.
 2. **Choose your LLM**: llama.cpp is the primary local stack (pick a GGUF model when present). Ollama and LM Studio are additional options. Open Vault → Inference for cloud keys, or continue after starting a local model.
-3. **Connect Exa (optional)**: explain web search / fetch for agents; Open Vault → Search. Continue without requiring Exa.
+3. **Connect Exa (optional)**: explain web search / fetch for agents; Open Vault → Inference → Search. Continue without requiring Exa.
 4. **Ready**: Get started opens Chat (Intelligence panel) and Marketplace starter packs remain available anytime.
 
 ### GodMode Cloud (`INSTALLATION_SURFACE=saas`)

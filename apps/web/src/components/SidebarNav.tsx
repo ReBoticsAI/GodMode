@@ -288,12 +288,10 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => {
-              navigate(`${CONTACTS_PATH}?node=self`);
-              onNavigate?.();
-            }}
-            aria-label={`Open ${personalFullName}'s profile`}
-            title={`Open ${personalFullName}'s profile`}
+            onClick={() => setUserGroupOpen((v) => !v)}
+            aria-expanded={userGroupOpen}
+            aria-label={`${userGroupOpen ? "Collapse" : "Expand"} ${personalFullName}`}
+            title={`${userGroupOpen ? "Collapse" : "Expand"} ${personalFullName}`}
             className={cn(
               "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-3xl font-bold leading-none tracking-tight transition-colors",
               pathname.startsWith(USERS_PATH) || pathname.startsWith(CONTACTS_PATH)
@@ -305,7 +303,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             <span className="min-w-0 flex-1 truncate text-left">{personalLabel}</span>
           </button>
           <CollapsibleTrigger
-            aria-label={`Collapse ${personalFullName}`}
+            aria-label={`${userGroupOpen ? "Collapse" : "Expand"} ${personalFullName}`}
             className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-foreground [&[data-state=open]>svg]:rotate-90"
           >
             <ChevronRightIcon className="size-4 transition-transform duration-200" />
