@@ -2250,7 +2250,7 @@ export const runtimeAdapterRegistrations = [
     adapterId: "vault_secret_runtime",
     database: "tenant",
     operations: ["list", "get", "create", "delete"],
-    fields: ["id", "name", "value", "masked", "created_at"],
+    fields: ["id", "name", "value", "masked", "created_at", "agent_id", "owner_kind"],
     actions: [],
   },
   {
