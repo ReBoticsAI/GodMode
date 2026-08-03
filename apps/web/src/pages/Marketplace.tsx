@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   acceptMarketplaceTos,
   acquireMarketplaceListing,
@@ -18,6 +18,7 @@ import {
   fetchBridgeHealth,
   installCatalogEntry,
   installWorkspacePlugin,
+  refreshMarketplaceStripeConnect,
   registerLocalPlugin,
   removeCatalogSource,
   removeLocalPlugin,
@@ -33,7 +34,7 @@ import {
   communityCheckoutBody,
   formatMarketplaceCents,
 } from "@/lib/marketplace-format";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,8 +48,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Page, PageHeader } from "@/components/PageHeader";
-import { SellerPayoutsCard } from "@/pages/ai-settings/SellerPayoutsCard";
-import { FolderOpenIcon, Trash2Icon } from "lucide-react";
+import { VAULT_PATH } from "@/lib/navigation";
+import { FolderOpenIcon, StoreIcon, Trash2Icon } from "lucide-react";
 
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
@@ -429,6 +430,28 @@ export default function MarketplacePage() {
       })
       .catch(() => undefined);
   }, [reload]);
+
+  // Hydrate seller payout readiness for paid publish gating (Connect lives in Vault).
+  useEffect(() => {
+    if (tab !== "seller") return;
+    let cancelled = false;
+    void refreshMarketplaceStripeConnect()
+      .then((row) => {
+        if (cancelled) return;
+        const acct = String(row.stripe_connect_account_id ?? "");
+        const ready =
+          row.onboarding_status === "ready" ||
+          row.stripe_payouts_enabled === true ||
+          row.stripe_payouts_enabled === 1;
+        setPayoutReady(Boolean(ready) || Boolean(acct));
+      })
+      .catch(() => {
+        if (!cancelled) setPayoutReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   useEffect(() => {
     const paid = searchParams.get("paid");
@@ -1150,14 +1173,28 @@ export default function MarketplacePage() {
               <Button onClick={() => void handleAcceptTos()}>Accept Marketplace ToS</Button>
             </CardContent>
           </Card>
-          <SellerPayoutsCard
-            returnUrl={`${window.location.origin}/marketplace?tab=seller&stripe_connect=return`}
-            refreshUrl={`${window.location.origin}/marketplace?tab=seller&stripe_connect=refresh`}
-            onStatusChange={({ payoutReady: ready, tosAccepted: accepted }) => {
-              setPayoutReady(ready);
-              if (accepted) setTosAccepted(true);
-            }}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <StoreIcon className="size-4" />
+                Seller payouts
+              </CardTitle>
+              <CardDescription>
+                Connect Stripe for Community sales under Vault → Marketplace.
+                {payoutReady
+                  ? " A payout method is connected."
+                  : " Paid listings need a connected payout first."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                to={`${VAULT_PATH}?tab=marketplace`}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Manage in Vault → Marketplace
+              </Link>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

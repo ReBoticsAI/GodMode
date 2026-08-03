@@ -51,7 +51,7 @@ function applyConnectRow(row: Record<string, unknown>): {
 
 /**
  * Marketplace seller Stripe Connect + advanced payout fields.
- * Dual-homed on Vault → Integrations and Marketplace → Sell.
+ * Connect home: Vault → Marketplace. Marketplace → Sell links here.
  */
 export function SellerPayoutsCard({
   returnUrl,

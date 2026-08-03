@@ -133,8 +133,8 @@ export default function Vault() {
             <div>
               <h2 className="text-sm font-medium">Seller payouts</h2>
               <p className="text-sm text-muted-foreground">
-                Seller Stripe Connect for Community payouts. Marketplace → Sell keeps
-                the same card for publish gating, plus ToS Accept and listing tools.
+                Seller Stripe Connect for Community payouts. Marketplace → Sell
+                links here to connect; ToS Accept and listing tools stay on Sell.
               </p>
             </div>
             <SellerPayoutsCard
