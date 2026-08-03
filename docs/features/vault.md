@@ -11,19 +11,34 @@ summary: "Connect hub for GodMode Cloud, inference, integrations, wallets, marke
 
 Vault is the connect hub for credentials and account connects. Chat → Vault tab gives quick access while chatting.
 
+## Vault owners (Personal vs Agent)
+
+Use the **Vault owner** Select at the top of the page (default: **Personal**).
+
+| Owner | Storage | When it is used |
+|-------|---------|-----------------|
+| **Personal** | `ai_secrets.agent_id IS NULL` | Shared fallback. Existing secrets stay here after upgrade. |
+| **Agent** (Intelligence, Digital You, custom, …) | `ai_secrets.agent_id = <agent id>` | Keys private to that agent. No cross-agent reads. |
+
+**Inference** Connect cards (Cursor, OpenAI, Anthropic, OpenRouter, Groq, Together, Exa) and **All Secrets** read and write the selected owner only.
+
+When an agent runs, resolution is: that agent's Vault first, then Personal. Env vars (for example `OPENAI_API_KEY`) still win when set.
+
+**Always Personal** (not per-agent in this slice): GodMode Cloud seats, GitHub, Wallets, Marketplace seller payouts.
+
 ## Tabs
 
 ### Inference
 
-Subtabs: **Subscriptions**, **API Keys**, and **Search**.
+Subtabs: **Subscriptions**, **API Keys**, and **Search**. Scoped by the Vault owner Select.
 
 #### Subscriptions
 
-Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` and applies Cursor harness profiles in Intelligence.
+Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` (per owner) and applies Cursor harness profiles in Intelligence.
 
 #### API Keys
 
-Metered BYOK with named Connect cards:
+Metered BYOK with named Connect cards (per selected owner):
 
 | Provider | Secret id | Harness profile | Docs |
 |----------|-----------|-----------------|------|
@@ -59,7 +74,7 @@ See [[cursor-cloud]].
 
 ### All Secrets
 
-Free-form platform secrets (the AI Platform Secrets card) shared across agents. Prefer named Connect cards when one exists.
+Free-form secrets for the selected Vault owner. Prefer named Connect cards when one exists.
 
 ### Marketplace
 

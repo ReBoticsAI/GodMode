@@ -10,7 +10,7 @@
  */
 import type { AppDatabase } from "../db.js";
 import { config } from "../config.js";
-import { listSecrets, getSecretValue } from "./agents/agents-db.js";
+import { resolveSecretByName } from "./agents/agents-db.js";
 import { resolveAgentCredential } from "./agents/agent-accounts.js";
 
 export const EXA_PROVIDER = "exa";
@@ -46,19 +46,14 @@ export function cloudRequiresExaByok(): boolean {
 
 /**
  * Resolve tenant/agent Exa key: agent account (provider `exa`) first, then
- * Vault secret named `exa_api_key`. Never reads a platform env key.
+ * agent Vault `exa_api_key`, then Personal Vault. Never reads a platform env key.
  */
 export function resolveExaApiKey(db: AppDatabase, agentId: string): string | null {
   const fromAgent = resolveAgentCredential(db, agentId, { provider: EXA_PROVIDER });
   if (fromAgent?.trim()) return fromAgent.trim();
 
-  const named = listSecrets(db).find(
-    (s) => s.name.toLowerCase() === EXA_API_KEY_SECRET_NAME
-  );
-  if (named) {
-    const value = getSecretValue(db, named.id);
-    if (value?.trim()) return value.trim();
-  }
+  const fromVault = resolveSecretByName(db, EXA_API_KEY_SECRET_NAME, agentId);
+  if (fromVault?.trim()) return fromVault.trim();
   return null;
 }
 

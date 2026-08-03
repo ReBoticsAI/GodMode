@@ -34,7 +34,11 @@ const ANTHROPIC_MODELS = [
 ] as const;
 
 /** Connect Anthropic Console (metered) API key for Intelligence. */
-export function AnthropicConsoleCard() {
+export function AnthropicConsoleCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<AnthropicAuthStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState<string>("claude-sonnet-4-20250514");
@@ -42,12 +46,12 @@ export function AnthropicConsoleCard() {
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchAnthropicStatus();
+      const s = await fetchAnthropicStatus(vaultAgentId);
       setStatus(s);
     } catch {
       setStatus({ connected: false, source: "none" });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -60,7 +64,7 @@ export function AnthropicConsoleCard() {
     }
     setBusy(true);
     try {
-      const res = await connectAnthropicApiKey(apiKey.trim());
+      const res = await connectAnthropicApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("Anthropic Console connected");
@@ -74,7 +78,7 @@ export function AnthropicConsoleCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectAnthropicApiKey();
+      const res = await disconnectAnthropicApiKey(vaultAgentId);
       setStatus(res.status);
       toast.success("Anthropic disconnected");
     } catch (err) {

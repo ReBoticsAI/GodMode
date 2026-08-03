@@ -1,10 +1,12 @@
 import type { AppDatabase } from "../db.js";
 import {
-  deleteSecret,
+  findSecretByName,
+  getPlatformVaultSecretInScope,
   getSecretValue,
-  listSecrets,
+  resolvePlatformVaultSecret,
+  removePlatformVaultSecret,
+  upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
-import { encryptSecret } from "./holdings/crypto-box.js";
 import { resolveCursorAgentCommand } from "./agents/cursor-backend.js";
 import { spawn } from "node:child_process";
 
@@ -22,74 +24,91 @@ export interface CursorAuthStatus {
   cliDetail?: string;
 }
 
-export function resolveCursorApiKey(db: AppDatabase): string | null {
+export function resolveCursorApiKey(
+  db: AppDatabase,
+  agentId?: string | null
+): string | null {
   const env = process.env.CURSOR_API_KEY?.trim();
   if (env) return env;
-  const byId = getSecretValue(db, CURSOR_API_KEY_SECRET_ID);
-  if (byId) return byId;
-  const byName = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
-  if (!byName) return null;
-  return getSecretValue(db, byName.id);
+  return resolvePlatformVaultSecret(db, {
+    baseId: CURSOR_API_KEY_SECRET_ID,
+    name: CURSOR_API_KEY_SECRET_NAME,
+    agentId,
+  });
 }
 
-export function upsertCursorApiKey(db: AppDatabase, apiKey: string): void {
-  const trimmed = apiKey.trim();
-  if (!trimmed) throw new Error("API key required");
-  db.prepare(`DELETE FROM ai_secrets WHERE id = ? OR name = ?`).run(
-    CURSOR_API_KEY_SECRET_ID,
-    CURSOR_API_KEY_SECRET_NAME
-  );
-  db.prepare(`INSERT INTO ai_secrets (id, name, value) VALUES (?, ?, ?)`).run(
-    CURSOR_API_KEY_SECRET_ID,
-    CURSOR_API_KEY_SECRET_NAME,
-    encryptSecret(trimmed)
-  );
+export function upsertCursorApiKey(
+  db: AppDatabase,
+  apiKey: string,
+  agentId?: string | null
+): void {
+  upsertPlatformVaultSecret(db, {
+    baseId: CURSOR_API_KEY_SECRET_ID,
+    name: CURSOR_API_KEY_SECRET_NAME,
+    value: apiKey,
+    agentId,
+  });
 }
 
 /**
- * If the key only exists as a manually-added `cursor_api_key` secret (UUID id),
- * rewrite it to the fixed Cursor subscription secret id.
+ * If the key only exists as a manually-added `cursor_api_key` secret (UUID id)
+ * in the Personal Vault, rewrite it to the fixed Cursor subscription secret id.
  */
 export function normalizeCursorVaultSecret(db: AppDatabase): void {
-  if (getSecretValue(db, CURSOR_API_KEY_SECRET_ID)) return;
-  const named = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
+  if (getPlatformVaultSecretInScope(db, {
+    baseId: CURSOR_API_KEY_SECRET_ID,
+    name: CURSOR_API_KEY_SECRET_NAME,
+    agentId: null,
+  })) {
+    return;
+  }
+  const named = findSecretByName(db, CURSOR_API_KEY_SECRET_NAME, null);
   if (!named || named.id === CURSOR_API_KEY_SECRET_ID) return;
   const value = getSecretValue(db, named.id);
   if (!value) return;
-  upsertCursorApiKey(db, value);
+  upsertCursorApiKey(db, value, null);
 }
 
-export function removeCursorApiKey(db: AppDatabase): boolean {
-  return deleteSecret(db, CURSOR_API_KEY_SECRET_ID);
+export function removeCursorApiKey(
+  db: AppDatabase,
+  agentId?: string | null
+): boolean {
+  return removePlatformVaultSecret(db, {
+    baseId: CURSOR_API_KEY_SECRET_ID,
+    name: CURSOR_API_KEY_SECRET_NAME,
+    agentId,
+  });
 }
 
 function maskCursorKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
-export function getCursorAuthStatus(db: AppDatabase): CursorAuthStatus {
+export function getCursorAuthStatus(
+  db: AppDatabase,
+  agentId?: string | null
+): CursorAuthStatus {
   const env = process.env.CURSOR_API_KEY?.trim();
   if (env) {
     return { connected: true, source: "env", masked: maskCursorKey(env) };
   }
-  // Prefer fixed-id secret, then legacy/manual name `cursor_api_key`.
-  const byId = getSecretValue(db, CURSOR_API_KEY_SECRET_ID);
-  if (byId) {
-    return { connected: true, source: "vault", masked: maskCursorKey(byId) };
-  }
-  const named = listSecrets(db).find((s) => s.name === CURSOR_API_KEY_SECRET_NAME);
-  if (named) {
-    const value = getSecretValue(db, named.id);
-    if (value) {
-      return { connected: true, source: "vault", masked: maskCursorKey(value) };
-    }
+  const value = getPlatformVaultSecretInScope(db, {
+    baseId: CURSOR_API_KEY_SECRET_ID,
+    name: CURSOR_API_KEY_SECRET_NAME,
+    agentId,
+  });
+  if (value) {
+    return { connected: true, source: "vault", masked: maskCursorKey(value) };
   }
   return { connected: false, source: "none" };
 }
 
 /** True when Intelligence can run without a local llama-server. */
-export function isCursorSubscriptionReady(db: AppDatabase): boolean {
-  return getCursorAuthStatus(db).connected;
+export function isCursorSubscriptionReady(
+  db: AppDatabase,
+  agentId?: string | null
+): boolean {
+  return resolveCursorApiKey(db, agentId) != null;
 }
 
 export async function probeCursorCliAuth(): Promise<{
@@ -183,9 +202,10 @@ function cursorModelSortRank(id: string): number {
 
 /** List models available on the user's Cursor subscription. */
 export async function listCursorSubscriptionModels(
-  db: AppDatabase
+  db: AppDatabase,
+  agentId?: string | null
 ): Promise<CursorModelOption[]> {
-  const apiKey = resolveCursorApiKey(db);
+  const apiKey = resolveCursorApiKey(db, agentId);
   if (!apiKey) throw new Error("Cursor not connected — add an API key first");
 
   const { Cursor } = await import("@cursor/sdk");

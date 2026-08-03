@@ -516,7 +516,7 @@ export class CursorCloudBackend implements AgentBackend {
   constructor(private db: AppDatabase) {}
 
   async run(req: AgentRunRequest): Promise<string> {
-    const apiKey = resolveCursorApiKey(this.db);
+    const apiKey = resolveCursorApiKey(this.db, req.agent.id);
     if (!apiKey) {
       throw new Error(
         "Cursor not connected. Add your API key in Vault → Cursor subscription."
@@ -642,9 +642,10 @@ export function agentNeedsLocalLlm(backend: string): boolean {
 /** Whether chat can proceed without local llama (cloud / cursor backends). */
 export function agentCanRunWithoutLocalLlm(
   backend: string,
-  db: AppDatabase
+  db: AppDatabase,
+  agentId?: string | null
 ): boolean {
-  if (backend === "cursor_cloud") return resolveCursorApiKey(db) != null;
+  if (backend === "cursor_cloud") return resolveCursorApiKey(db, agentId) != null;
   if (backend === "provider" || backend === "cli" || backend === "acp" || backend === "cursor") {
     return true;
   }

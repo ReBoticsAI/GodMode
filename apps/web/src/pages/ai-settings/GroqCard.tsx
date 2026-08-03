@@ -43,7 +43,11 @@ const GROQ_CHAT = [
 const CUSTOM_VALUE = "__custom__";
 
 /** Connect Groq (metered) API key for Intelligence. */
-export function GroqCard() {
+export function GroqCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<GroqAuthStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [modelChoice, setModelChoice] = useState<string>(GROQ_CHAT[0].id);
@@ -52,12 +56,12 @@ export function GroqCard() {
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchGroqStatus();
+      const s = await fetchGroqStatus(vaultAgentId);
       setStatus(s);
     } catch {
       setStatus({ connected: false, source: "none" });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -70,7 +74,7 @@ export function GroqCard() {
     }
     setBusy(true);
     try {
-      const res = await connectGroqApiKey(apiKey.trim());
+      const res = await connectGroqApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("Groq connected");
@@ -84,7 +88,7 @@ export function GroqCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectGroqApiKey();
+      const res = await disconnectGroqApiKey(vaultAgentId);
       setStatus(res.status);
       toast.success("Groq disconnected");
     } catch (err) {

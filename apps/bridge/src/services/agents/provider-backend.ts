@@ -4,7 +4,7 @@ import { shouldAutoApproveTool } from "../confirm-policy.js";
 import type { AgentMessage } from "../ai-agent.js";
 import { budgetToolResult } from "../ai-agent.js";
 import { PROVIDER_AGENT_ITERATIONS } from "../agent-loop.js";
-import { getSecretValue } from "./agents-db.js";
+import { resolveSecretRefForAgent } from "./agents-db.js";
 import { resolveAgentCredential } from "./agent-accounts.js";
 import type { AppDatabase } from "../../db.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
@@ -185,7 +185,7 @@ export class ProviderBackend implements AgentBackend {
     const provider = cfg.provider ?? "openai";
     let apiKey =
       resolveAgentCredential(this.db, req.agent.id, { provider, secretId: keyRef ?? undefined }) ??
-      (keyRef ? getSecretValue(this.db, keyRef) : null);
+      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null);
     if (!apiKey) throw new Error("API key not found for provider agent");
     const model = cfg.model ?? (provider === "anthropic" ? "claude-sonnet-4-20250514" : "gpt-4o");
     const baseUrl =
