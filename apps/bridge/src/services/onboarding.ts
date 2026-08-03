@@ -8,6 +8,20 @@ import {
   getCursorAuthStatus,
   isCursorSubscriptionReady,
 } from "./cursor-subscription.js";
+import { getOpenAiAuthStatus, isOpenAiPlatformReady } from "./openai-platform.js";
+import {
+  getAnthropicAuthStatus,
+  isAnthropicPlatformReady,
+} from "./anthropic-platform.js";
+import {
+  getOpenRouterAuthStatus,
+  isOpenRouterPlatformReady,
+} from "./openrouter-platform.js";
+import { getGroqAuthStatus, isGroqPlatformReady } from "./groq-platform.js";
+import {
+  getTogetherAuthStatus,
+  isTogetherPlatformReady,
+} from "./together-platform.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
 const META_COMPLETED = "onboarding.completed";
@@ -47,6 +61,27 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
   if (llmReady === "true") writeTenantSetting(db, META_LLM_READY, "true");
 }
 
+/**
+ * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
+ * Together) counts as ready. Process-env keys do not: same multi-tenant rule as
+ * Cursor vault-only readiness.
+ */
+function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
+  if (!config.isHub) return false;
+  const vaultReady = (ready: boolean, source: string) =>
+    ready && source === "vault";
+  return (
+    vaultReady(isOpenAiPlatformReady(db), getOpenAiAuthStatus(db).source) ||
+    vaultReady(isAnthropicPlatformReady(db), getAnthropicAuthStatus(db).source) ||
+    vaultReady(
+      isOpenRouterPlatformReady(db),
+      getOpenRouterAuthStatus(db).source
+    ) ||
+    vaultReady(isGroqPlatformReady(db), getGroqAuthStatus(db).source) ||
+    vaultReady(isTogetherPlatformReady(db), getTogetherAuthStatus(db).source)
+  );
+}
+
 export function getOnboardingStatus(
   llm: LlmManager,
   tenantDb?: AppDatabase | null
@@ -72,12 +107,14 @@ export function getOnboardingStatus(
   const llmReadyFlag = readTenantSetting(tenantDb, META_LLM_READY) === "true";
   const cursorConnected = isCursorSubscriptionReady(tenantDb);
   // Do not treat process-global LLM credentials as ready for every workspace.
-  // Hub/SaaS: only a tenant Vault Cursor key (or explicit llm_ready) skips the wizard.
-  // Local/client may still use CURSOR_API_KEY from the environment.
+  // Hub/SaaS: only a tenant Vault Cursor key, Vault cloud platform key, or
+  // explicit llm_ready skips the wizard. Local/client may still use
+  // CURSOR_API_KEY from the environment.
   const cursorReadyForTenant =
     cursorConnected &&
     (!config.isHub || getCursorAuthStatus(tenantDb).source === "vault");
-  const llmReady = llmReadyFlag || cursorReadyForTenant;
+  const llmReady =
+    llmReadyFlag || cursorReadyForTenant || isHubVaultCloudPlatformReady(tenantDb);
   return { completed, llmReady, llmStatus, cursorConnected };
 }
 
