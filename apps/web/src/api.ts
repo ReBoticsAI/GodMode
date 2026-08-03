@@ -3342,6 +3342,40 @@ export function fetchAdminMarketplaceFees() {
   }>("/admin/marketplace/fees");
 }
 
+export type AdminMarketplaceSellerRow = {
+  id: string;
+  userId: string;
+  email: string | null;
+  onboardingStatus: string;
+  verifiedSeller: boolean;
+  updatedAt: string;
+};
+
+export function fetchAdminMarketplaceSellers(limit = 200) {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  return api<{ sellers: AdminMarketplaceSellerRow[] }>(
+    `/admin/marketplace/sellers?${qs}`
+  );
+}
+
+export function setAdminMarketplaceSellerVerified(body: {
+  userId: string;
+  verifiedSeller: boolean;
+}) {
+  return api<{
+    seller: {
+      id: string;
+      userId: string;
+      verifiedSeller: boolean;
+      onboardingStatus: string;
+      updatedAt: string;
+    };
+  }>("/admin/marketplace/sellers/verified", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export type AdminRequestLogRow = {
   id: string;
   level: string;
@@ -4177,6 +4211,8 @@ export interface MarketplaceListing {
   license?: string | null;
   inference_endpoint_id?: string | null;
   catalog_entry_id?: string | null;
+  /** Community seller verified signal (#311); 1/true when admin-flagged. */
+  verified_publisher?: number | boolean;
   created_at: string;
   updated_at?: string;
 }

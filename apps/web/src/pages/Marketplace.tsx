@@ -205,7 +205,14 @@ function CommunityListingCard({
           <div>
             <CardTitle className="text-base">{listing.title}</CardTitle>
             <CardDescription className="text-xs">
-              {listing.kind} · {listing.delivery_mode ?? "clone"}
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <span>
+                  {listing.kind} · {listing.delivery_mode ?? "clone"}
+                </span>
+                {listing.verified_publisher ? (
+                  <Badge variant="outline">Verified</Badge>
+                ) : null}
+              </span>
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-1">
