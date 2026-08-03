@@ -146,6 +146,83 @@ export function ensureSellerAccount(
     .get(id) as Record<string, unknown>;
 }
 
+/** Whether a Community seller has the admin verified flag (#311). Default false. */
+export function isSellerVerified(core: CoreDatabase, sellerUserId: string): boolean {
+  const row = core
+    .prepare(`SELECT verified_seller FROM marketplace_seller_accounts WHERE user_id=?`)
+    .get(sellerUserId) as { verified_seller?: number | null } | undefined;
+  return row?.verified_seller === 1;
+}
+
+export function setSellerVerified(
+  core: CoreDatabase,
+  opts: { userId: string; verified: boolean }
+): Record<string, unknown> {
+  const userId = opts.userId.trim();
+  if (!userId) {
+    throw new MarketplaceCommerceError("userId required");
+  }
+  const user = core.prepare(`SELECT id FROM users WHERE id=?`).get(userId) as
+    | { id: string }
+    | undefined;
+  if (!user) {
+    throw new MarketplaceCommerceError("User not found");
+  }
+  const row = ensureSellerAccount(core, userId);
+  core
+    .prepare(
+      `UPDATE marketplace_seller_accounts
+       SET verified_seller=?, updated_at=datetime('now')
+       WHERE id=?`
+    )
+    .run(opts.verified ? 1 : 0, row.id);
+  return core
+    .prepare(`SELECT * FROM marketplace_seller_accounts WHERE id=?`)
+    .get(row.id) as Record<string, unknown>;
+}
+
+export type AdminSellerAccountRow = {
+  id: string;
+  userId: string;
+  email: string | null;
+  onboardingStatus: string;
+  verifiedSeller: boolean;
+  updatedAt: string;
+};
+
+/** Platform admin list of Community seller accounts with verified flag. */
+export function listSellerAccountsForAdmin(
+  core: CoreDatabase,
+  limit = 200
+): AdminSellerAccountRow[] {
+  const capped = Math.min(Math.max(limit, 1), 500);
+  const rows = core
+    .prepare(
+      `SELECT sa.id, sa.user_id, sa.onboarding_status, sa.verified_seller, sa.updated_at,
+              u.email
+       FROM marketplace_seller_accounts sa
+       LEFT JOIN users u ON u.id = sa.user_id
+       ORDER BY sa.updated_at DESC
+       LIMIT ?`
+    )
+    .all(capped) as Array<{
+    id: string;
+    user_id: string;
+    onboarding_status: string;
+    verified_seller: number | null;
+    updated_at: string;
+    email: string | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    email: r.email,
+    onboardingStatus: r.onboarding_status,
+    verifiedSeller: r.verified_seller === 1,
+    updatedAt: r.updated_at,
+  }));
+}
+
 export function updateSellerPayout(
   core: CoreDatabase,
   opts: {

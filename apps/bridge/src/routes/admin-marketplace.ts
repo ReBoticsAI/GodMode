@@ -15,6 +15,11 @@ import {
   resolveBackupStampDir,
   streamBackupStampTarGz,
 } from "../services/platform-backup-archive.js";
+import {
+  listSellerAccountsForAdmin,
+  MarketplaceCommerceError,
+  setSellerVerified,
+} from "../services/marketplace-commerce.js";
 
 const backupDownloadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -26,6 +31,50 @@ const backupDownloadLimiter = rateLimit({
 export function createAdminMarketplaceRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
+
+  router.get("/sellers", (req, res) => {
+    const limit = Number(req.query.limit ?? 200);
+    res.json({
+      sellers: listSellerAccountsForAdmin(
+        getCoreDb(),
+        Number.isFinite(limit) ? limit : 200
+      ),
+    });
+  });
+
+  router.post("/sellers/verified", (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const userId = String(body.userId ?? body.user_id ?? "").trim();
+      const verifiedRaw = body.verifiedSeller ?? body.verified_seller ?? body.verified;
+      if (!userId) {
+        res.status(400).json({ error: "userId required" });
+        return;
+      }
+      let verified: boolean | null = null;
+      if (typeof verifiedRaw === "boolean") verified = verifiedRaw;
+      else if (verifiedRaw === 1 || verifiedRaw === "1" || verifiedRaw === "true") verified = true;
+      else if (verifiedRaw === 0 || verifiedRaw === "0" || verifiedRaw === "false") verified = false;
+      if (verified === null) {
+        res.status(400).json({ error: "verifiedSeller boolean required" });
+        return;
+      }
+      const seller = setSellerVerified(getCoreDb(), { userId, verified });
+      res.json({
+        seller: {
+          id: seller.id,
+          userId: seller.user_id,
+          verifiedSeller: seller.verified_seller === 1,
+          onboardingStatus: seller.onboarding_status,
+          updatedAt: seller.updated_at,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update verified seller";
+      const status = err instanceof MarketplaceCommerceError ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
 
   router.get("/fees", (_req, res) => {
     const core = getCoreDb();

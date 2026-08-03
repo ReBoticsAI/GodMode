@@ -60,7 +60,14 @@ badge. This is an identity/trust UX signal for curated Official publishers. It
 does **not** replace install pins (#177), capability grants (#290 / #303), or
 seller intake CI (GodMode-Marketplace#3).
 
-Community / user-seller verification is out of scope for this slice.
+### Community verified seller (#311)
+
+Community (user) sellers start **unverified**. A platform admin can set
+`verified_seller` on `marketplace_seller_accounts` (Admin → Marketplace, or
+`POST /api/admin/marketplace/sellers/verified`). Public Community listings then
+include `verified_publisher: 1`, and Community cards show the same **Verified**
+badge. This is also an identity/trust UX signal. It does **not** replace install
+pins, capability grants, or Official intake CI.
 
 ### Buyer install pins (#177)
 
@@ -107,7 +114,7 @@ the grants file; kill switches (#96) remain the emergency stop.
 2. Buyer: **Community** → browse public `seller_kind=user` listings → free **Acquire**, or paid checkout with `listingId`, then acquire.
 3. After a successful acquire, matching paid orders move to `delivered`.
 
-Public browse: `GET /api/marketplace/listings?seller_kind=user` (default when `seller_kind` is omitted). Response includes `price_cents`, `currency`, `seller_kind`, and `catalog_entry_id`.
+Public browse: `GET /api/marketplace/listings?seller_kind=user` (default when `seller_kind` is omitted). Response includes `price_cents`, `currency`, `seller_kind`, `catalog_entry_id`, and `verified_publisher` (from the seller account admin flag).
 
 ## Kernel commerce
 
