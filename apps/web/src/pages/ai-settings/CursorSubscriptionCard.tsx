@@ -30,7 +30,7 @@ import {
   type CursorModelOption,
 } from "@/api";
 
-/** Connect Cursor subscription for the selected Vault owner. */
+/** Connect Cursor subscription for Platform or the selected Agent Vault. */
 export function CursorSubscriptionCard({
   vaultAgentId = null,
 }: {

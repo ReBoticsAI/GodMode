@@ -114,6 +114,7 @@ import {
   listSecrets,
   createSecret,
   deleteSecret,
+  resolveVaultOwnerInput,
 } from "../services/agents/agents-db.js";
 import {
   listAgentAccounts,
@@ -959,13 +960,25 @@ export function createAiRouter(
   });
 
   router.get("/secrets", (req, res) => {
-    // Cursor subscription key is managed by the Cursor card — hide from generic list.
+    // Managed Connect-card keys are hidden from the generic list.
     const agentIdRaw = req.query.agentId;
-    const agentId =
-      typeof agentIdRaw === "string" && agentIdRaw.trim()
-        ? agentIdRaw.trim()
-        : null;
-    const secrets = listSecrets(tdb(req), agentId).filter(
+    const ownerKindRaw = req.query.ownerKind;
+    let owner;
+    try {
+      owner = resolveVaultOwnerInput({
+        ownerKind: typeof ownerKindRaw === "string" ? ownerKindRaw : undefined,
+        agentId:
+          typeof agentIdRaw === "string" && agentIdRaw.trim()
+            ? agentIdRaw.trim()
+            : null,
+      });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    const secrets = listSecrets(tdb(req), owner).filter(
       (s) =>
         s.id !== "cursor-api-key" &&
         !s.id.startsWith("cursor-api-key__agent__") &&

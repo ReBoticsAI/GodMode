@@ -1405,6 +1405,7 @@ export interface AiSecret {
   masked: string;
   createdAt: string;
   agentId?: string | null;
+  ownerKind?: "platform" | "user" | "agent";
 }
 
 export interface AiCardComment {
@@ -1856,31 +1857,77 @@ export const resolveAgentForPage = (loc: {
   if (loc.pageId) qs.set("pageId", loc.pageId);
   return api<AiResolvedAgent>(`/ai/agents/resolve?${qs.toString()}`);
 };
-export const fetchAiSecrets = (agentId?: string | null) => {
-  const q =
-    agentId != null && agentId !== ""
-      ? `?agentId=${encodeURIComponent(agentId)}`
-      : "";
-  return api<{ secrets: AiSecret[] }>(`/ai/secrets${q}`);
+export type VaultOwnerKind = "platform" | "user" | "agent";
+
+export type VaultScope = {
+  ownerKind: VaultOwnerKind;
+  agentId?: string | null;
 };
+
+function vaultSecretsQuery(scope?: VaultScope | string | null): string {
+  // Legacy: string agentId → agent; null/omit → platform (Connect cards).
+  if (scope == null || scope === "") {
+    return "?ownerKind=platform";
+  }
+  if (typeof scope === "string") {
+    return `?ownerKind=agent&agentId=${encodeURIComponent(scope)}`;
+  }
+  const q = new URLSearchParams();
+  q.set("ownerKind", scope.ownerKind);
+  if (scope.ownerKind === "agent" && scope.agentId) {
+    q.set("agentId", scope.agentId);
+  }
+  return `?${q.toString()}`;
+}
+
+export const fetchAiSecrets = (scope?: VaultScope | string | null) => {
+  return api<{ secrets: AiSecret[] }>(`/ai/secrets${vaultSecretsQuery(scope)}`);
+};
+
 export const createAiSecret = (
   name: string,
   value: string,
-  agentId?: string | null
-) =>
-  createDto<AiSecret>(
+  scope?: VaultScope | string | null
+) => {
+  const resolved: VaultScope =
+    scope == null || scope === ""
+      ? { ownerKind: "platform" }
+      : typeof scope === "string"
+        ? { ownerKind: "agent", agentId: scope }
+        : scope;
+  return createDto<AiSecret>(
     "VaultSecret",
     {
       name,
       value,
-      ...(agentId != null && agentId !== ""
-        ? { agent_id: agentId }
-        : { agent_id: null }),
+      owner_kind: resolved.ownerKind,
+      agent_id:
+        resolved.ownerKind === "agent" && resolved.agentId
+          ? resolved.agentId
+          : null,
     },
+    resolved.ownerKind === "agent" && resolved.agentId
+      ? { agentId: resolved.agentId }
+      : undefined
+  );
+};
+
+export const deleteAiSecret = (
+  id: string,
+  scope?: VaultScope | string | null
+) => {
+  const agentId =
+    typeof scope === "string"
+      ? scope
+      : scope && typeof scope === "object" && scope.ownerKind === "agent"
+        ? scope.agentId
+        : undefined;
+  return deleteDto(
+    "VaultSecret",
+    id,
     agentId ? { agentId } : undefined
   );
-export const deleteAiSecret = (id: string, agentId?: string | null) =>
-  deleteDto("VaultSecret", id, agentId ? { agentId } : undefined);
+};
 
 export interface CursorAuthStatus {
   connected: boolean;

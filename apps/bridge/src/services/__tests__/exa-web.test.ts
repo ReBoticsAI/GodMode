@@ -36,6 +36,8 @@ function tenantDb(): AppDatabase {
       name TEXT NOT NULL,
       value TEXT NOT NULL,
       agent_id TEXT,
+      owner_kind TEXT NOT NULL DEFAULT 'platform'
+        CHECK (owner_kind IN ('platform', 'user', 'agent')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

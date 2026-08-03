@@ -85,7 +85,7 @@ const WRITABLE: Record<string, string[]> = {
     "memory_mode",
   ],
   PromptFlow: ["agent_id", "config"],
-  VaultSecret: ["name", "value"],
+  VaultSecret: ["name", "value", "owner_kind", "agent_id"],
   ProviderCredential: ["agent_id", "provider", "label", "api_key"],
 };
 

@@ -100,7 +100,8 @@ export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
   if ((VAULT_TABS as readonly string[]).includes(raw ?? "")) {
     return raw as VaultTab;
   }
-  return "inference";
+  // User Vault default (Inference moved to Settings → Platform Vault).
+  return "cloud";
 }
 
 export function normalizeVaultInferenceSub(
