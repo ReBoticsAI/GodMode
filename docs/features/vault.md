@@ -67,4 +67,4 @@ Database and data-store sizes. Monitor growth before trimming or upgrading store
 
 ## Route
 
-`/vault`
+`/vault` (deep-link tabs: `?tab=inference|search|storage`; default `inference`)
