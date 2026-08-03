@@ -8,14 +8,15 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 
 | Tab | Role |
 |-----|------|
-| **Official** | Curated ReBotics catalog (free + paid). Paid revenue is **100%** to the platform. |
+| **Official** | ReBotics-curated catalog only (free + paid). Paid revenue is **100%** to the platform. Not a public seller path. |
 | **Local** | Local plugin folders and third-party catalog URLs (typically free). HTTP paths remain `/marketplace/catalog/unofficial`. |
-| **Community** | Browse and buy **user listings** (`seller_kind = user`). Checkout uses `listingId`. |
+| **Community** | **User seller path**: gated Community catalog + in-app user listings (`seller_kind = user`). Checkout uses `listingId` for Sell listings. |
 | **Installed** | Workspace plugins + install history. |
-| **Sell** | Accept ToS, connect payouts, **publish** listings, and manage **my listings**. |
+| **Sell** | Accept ToS, connect payouts, **publish** Community listings, and manage **my listings**. |
 
 ## Product rules
 
+- **One seller path** — public sellers use **Community** (Sell tab and/or `catalog/community/` PRs). Official is ReBotics-only.
 - **No credits** — purchases are USD (or crypto) via Stripe, PayPal, or MetaMask-compatible checkout.
 - **Official items** — merchant of record is ReBotics/GodMode; **100%** of Official revenue to the platform.
 - **Community (user) listings** — sellers connect Stripe Connect, PayPal, and/or MetaMask; platform takes **10%**.
@@ -24,11 +25,18 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 
 ## Official catalog
 
-Default free/OSS index (fallback):
+Default free/OSS Official index:
 
-- `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/index.json`
+- `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/official/index.json`
+- Legacy alias (synced): `.../catalog/index.json`
 - Override with `MARKETPLACE_OFFICIAL_URL`
-- Local sibling `../GodMode-Marketplace/catalog/index.json` auto-detected in dev
+- Local sibling `../GodMode-Marketplace/catalog/official/index.json` auto-detected in dev
+
+Community gated index (user sellers):
+
+- `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/community/index.json`
+- Override with `MARKETPLACE_COMMUNITY_URL`
+- Bridge: `GET /api/marketplace/catalog/community`
 
 On **GodMode Cloud** (`INSTALLATION_SURFACE=saas`), Official entries are curated in `marketplace_official_catalog` (admin API) and served at:
 
@@ -39,35 +47,32 @@ Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` /
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
-### Seller intake verify (GodMode-Marketplace#3)
+### Seller intake verify (Community)
 
-Public Official catalog PRs for `installType: "plugin"` require a public
+Public **Community** catalog PRs for `installType: "plugin"` require a public
 `pluginRepo`, an immutable `pluginRef` (tag or commit), and a green reusable
 GitHub Actions verify run (`ciRunUrl`). Sellers copy
 `examples/seller-plugin-verify.yml` from
 [GodMode-Marketplace](https://github.com/ReBoticsAI/GodMode-Marketplace)
 and call
-`.github/workflows/reusable-plugin-verify.yml`. Catalog validate rejects
+`.github/workflows/reusable-plugin-verify.yml`. Add entries to
+`catalog/community/index.json` (not Official). Catalog validate rejects
 floating refs; set `MARKETPLACE_REQUIRE_PLUGIN_CI=1` for fail-closed
 `ciRunUrl` checks. See Marketplace CONTRIBUTING for the seller checklist.
 
-### Verified publisher badge (#309)
+### Official Verified badge
 
-Official catalog cards may show a **Verified** badge next to the author. Bridge
-defaults `verifiedPublisher: true` for Official entries (Cloud curated rows and
-the free Official index). Explicit `verifiedPublisher: false` suppresses the
-badge. This is an identity/trust UX signal for curated Official publishers. It
-does **not** replace install pins (#177), capability grants (#290 / #303), or
-seller intake CI (GodMode-Marketplace#3).
+Official is ReBotics-curated and does **not** require Verified badges. Cards only
+show Verified when `verifiedPublisher` is explicitly true. Community seller
+trust uses seller-account flags / earned tiers (#311, #313), not Official defaults.
 
 ### Community verified seller (#311)
 
 Community (user) sellers start **unverified**. A platform admin can set
 `verified_seller` on `marketplace_seller_accounts` (Admin → Marketplace, or
 `POST /api/admin/marketplace/sellers/verified`). Public Community listings then
-include `verified_publisher: 1`, and Community cards show the same **Verified**
-badge. This is also an identity/trust UX signal. It does **not** replace install
-pins, capability grants, or Official intake CI.
+include `verified_publisher: 1`, and Community cards show the **Verified**
+badge. Earned tiers after gate-passing plugins: #313.
 
 ### Buyer install pins (#177)
 
@@ -111,10 +116,11 @@ the grants file; kill switches (#96) remain the emergency stop.
 ## Community (user-to-user)
 
 1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish with kind, title, price, delivery (`clone` or `live`), and source resource id.
-2. Buyer: **Community** → browse public `seller_kind=user` listings → free **Acquire**, or paid checkout with `listingId`, then acquire.
-3. After a successful acquire, matching paid orders move to `delivered`.
+2. For **plugins** that need CI + pins: also PR into GodMode-Marketplace `catalog/community/index.json`.
+3. Buyer: **Community** → browse community catalog + public `seller_kind=user` listings → free **Acquire** / install, or paid checkout, then acquire.
+4. After a successful acquire, matching paid orders move to `delivered`.
 
-Public browse: `GET /api/marketplace/listings?seller_kind=user` (default when `seller_kind` is omitted). Response includes `price_cents`, `currency`, `seller_kind`, `catalog_entry_id`, and `verified_publisher` (from the seller account admin flag).
+Public browse listings: `GET /api/marketplace/listings?seller_kind=user`. Community catalog: `GET /api/marketplace/catalog/community`.
 
 ## Kernel commerce
 

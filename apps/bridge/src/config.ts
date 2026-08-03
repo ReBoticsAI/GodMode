@@ -538,14 +538,37 @@ export const config = {
       .filter(Boolean),
   },
   marketplace: {
+    /** Official (ReBotics-only) catalog index. Prefer catalog/official/; legacy catalog/index.json still works. */
     officialUrl:
       process.env.MARKETPLACE_OFFICIAL_URL ??
-      "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/index.json",
-    /** Local dev: path to catalog/index.json (sibling GodMode-Marketplace repo). */
+      "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/official/index.json",
+    /** Community (user seller) gated catalog index. */
+    communityUrl:
+      process.env.MARKETPLACE_COMMUNITY_URL ??
+      "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/community/index.json",
+    /** Local dev: path to Official catalog/official/index.json (sibling GodMode-Marketplace repo). */
     localCatalogPath:
       process.env.MARKETPLACE_LOCAL_CATALOG_PATH ??
-      (fs.existsSync(path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json"))
-        ? path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json")
+      (fs.existsSync(
+        path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "official", "index.json")
+      )
+        ? path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "official", "index.json")
+        : fs.existsSync(path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json"))
+          ? path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json")
+          : ""),
+    /** Local dev: path to Community catalog/community/index.json. */
+    localCommunityCatalogPath:
+      process.env.MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH ??
+      (fs.existsSync(
+        path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "community", "index.json")
+      )
+        ? path.join(
+            path.dirname(repoRoot),
+            "GodMode-Marketplace",
+            "catalog",
+            "community",
+            "index.json"
+          )
         : ""),
     cacheTtlMs: Number(process.env.MARKETPLACE_CACHE_TTL_MS ?? 300_000),
     pluginsDir: path.join(appData, "marketplace-plugins"),

@@ -174,15 +174,15 @@ function entryBaseUrl(index: CatalogIndex, catalogUrl: string): string {
 }
 
 /**
- * Official catalog identity signal (#309). Explicit `false` wins; otherwise
- * Official entries default to verified.
+ * Official shelf is ReBotics-curated (#315). Verified badges are for Community sellers.
+ * Official cards only show Verified when explicitly set true (optional).
  */
 export function withOfficialVerifiedPublisher<T extends { verifiedPublisher?: boolean }>(
   entry: T
 ): T & { verifiedPublisher: boolean } {
   return {
     ...entry,
-    verifiedPublisher: entry.verifiedPublisher === false ? false : true,
+    verifiedPublisher: entry.verifiedPublisher === true,
   };
 }
 
@@ -196,6 +196,31 @@ export async function fetchOfficialCatalog(): Promise<{ url: string; entries: Ca
       sourceName: "Official",
     })
   );
+  return { url, entries };
+}
+
+function resolveCommunityCatalogUrl(customUrl?: string): string {
+  if (customUrl?.trim()) return customUrl.trim();
+  if (
+    config.marketplace.localCommunityCatalogPath &&
+    fs.existsSync(config.marketplace.localCommunityCatalogPath)
+  ) {
+    return `file://${path.resolve(config.marketplace.localCommunityCatalogPath)}`;
+  }
+  return config.marketplace.communityUrl;
+}
+
+/** Community gated catalog (user sellers). Separate from in-app DB listings. */
+export async function fetchCommunityCatalog(): Promise<{ url: string; entries: CatalogEntry[] }> {
+  const url = resolveCommunityCatalogUrl();
+  const index = await fetchCatalogIndex(url);
+  const entries = index.entries.map((e) => ({
+    ...e,
+    sourceCatalog: url,
+    sourceName: "Community",
+    // Community Verified comes from seller account / tiers, not Official default.
+    verifiedPublisher: e.verifiedPublisher === true,
+  }));
   return { url, entries };
 }
 
@@ -264,6 +289,7 @@ export async function findCatalogEntry(
     catalogs.push({ url: opts.sourceCatalog, name: "custom" });
   } else {
     catalogs.push({ url: resolveCatalogUrl(), name: "Official" });
+    catalogs.push({ url: resolveCommunityCatalogUrl(), name: "Community" });
     if (opts?.userId) {
       for (const s of listCatalogSources(getCoreDb(), opts.userId)) {
         catalogs.push({ url: s.url, name: s.name });

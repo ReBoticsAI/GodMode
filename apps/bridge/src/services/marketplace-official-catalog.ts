@@ -174,8 +174,11 @@ export function upsertOfficialCatalogEntry(
                 `SELECT verified_publisher FROM marketplace_official_catalog WHERE entry_id=?`
               )
               .get(entry.entryId) as { verified_publisher?: number | null } | undefined;
-            if (existing && existing.verified_publisher === 0) return 0;
-            return 1;
+            if (existing && typeof existing.verified_publisher === "number") {
+              return existing.verified_publisher ? 1 : 0;
+            }
+            // Official is ReBotics-curated (#315); Verified badges are for Community sellers.
+            return 0;
           })();
   core
     .prepare(
