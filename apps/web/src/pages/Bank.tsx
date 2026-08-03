@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Settings2Icon } from "lucide-react";
 import { Page, PageHeader } from "@/components/PageHeader";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,12 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
 import { api } from "@/api";
+import { VAULT_PATH } from "@/lib/navigation";
 
 const WALLET_CATEGORIES: HoldingCategory[] = ["wallet", "exchange"];
 const ACCOUNT_CATEGORIES: HoldingCategory[] = ["bank", "paypal", "manual"];
 
 export default function Bank() {
-  const [setupOpen, setSetupOpen] = useState(false);
   const [ledger, setLedger] = useState<Array<Record<string, unknown>>>([]);
   const [ledgerLoading, setLedgerLoading] = useState(true);
 
@@ -35,10 +36,13 @@ export default function Bank() {
         title="Bank"
         description="Connect wallets and accounts so you and your agents can track balances and transactions."
         actions={
-          <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)}>
+          <Link
+            to={`${VAULT_PATH}?tab=integrations`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
             <Settings2Icon data-icon="inline-start" />
-            Integration setup
-          </Button>
+            Manage in Vault → Integrations
+          </Link>
         }
       />
 
@@ -50,19 +54,11 @@ export default function Bank() {
         </TabsList>
 
         <TabsContent value="wallets" className="mt-4 flex flex-col gap-4">
-          <HoldingsConnectionsContent
-            categoryFilter={WALLET_CATEGORIES}
-            setupOpen={setupOpen}
-            onSetupOpenChange={setSetupOpen}
-          />
+          <HoldingsConnectionsContent categoryFilter={WALLET_CATEGORIES} />
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-4 flex flex-col gap-4">
-          <HoldingsConnectionsContent
-            categoryFilter={ACCOUNT_CATEGORIES}
-            setupOpen={setupOpen}
-            onSetupOpenChange={setSetupOpen}
-          />
+          <HoldingsConnectionsContent categoryFilter={ACCOUNT_CATEGORIES} />
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-4">
