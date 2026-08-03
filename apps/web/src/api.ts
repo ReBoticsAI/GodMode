@@ -1946,6 +1946,55 @@ export const applyOpenAiToIntelligence = (model = "gpt-4o") =>
     true
   );
 
+export type AnthropicAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchAnthropicStatus = async (): Promise<AnthropicAuthStatus> => {
+  try {
+    const row = await fetchRecord("ProviderCredential", "anthropic-api-key");
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "anthropic") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectAnthropicApiKey = (apiKey: string) =>
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "anthropic",
+    label: "Anthropic Console",
+    api_key: apiKey,
+  })
+    .then(fetchAnthropicStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectAnthropicApiKey = () =>
+  deleteRecordApi("ProviderCredential", "anthropic-api-key")
+    .then(fetchAnthropicStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const applyAnthropicToIntelligence = (model = "claude-sonnet-4-20250514") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:anthropic:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
