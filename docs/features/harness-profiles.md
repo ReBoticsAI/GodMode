@@ -28,8 +28,16 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (OpenRouter) | `minimax/*` | `openrouter-minimax` |
 | provider | openai_compatible (OpenRouter) | `moonshotai/*` | `openrouter-kimi` |
 | provider | openai_compatible (OpenRouter) | other (MiMo, Hy3, Step, Ling, …) | `openrouter-generic` |
+| provider | openai_compatible (Groq) | `llama-*` / `meta-llama/llama-*` | `groq-llama` |
+| provider | openai_compatible (Groq) | `openai/gpt-oss*` | `groq-gpt-oss` |
+| provider | openai_compatible (Groq) | `qwen/*` | `groq-qwen` |
+| provider | openai_compatible (Groq) | `moonshotai/*` | `groq-kimi` |
+| provider | openai_compatible (Groq) | `groq/compound*` | `groq-compound` |
+| provider | openai_compatible (Groq) | other | `groq-generic` |
 | remote | — | * | `remote` |
 
 OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
+
+Groq is also a **transport**. Profile = `f(groq transport, modelFamily)`. GPT-OSS on Groq uses `groq-gpt-oss`, not the OpenAI Platform `openai` profile. Production chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

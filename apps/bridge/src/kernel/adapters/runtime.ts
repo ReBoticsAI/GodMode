@@ -93,6 +93,15 @@ import {
   removeOpenRouterApiKey,
   upsertOpenRouterApiKey,
 } from "../../services/openrouter-platform.js";
+import {
+  getGroqAuthStatus,
+  isGroqPlatformReady,
+  isGroqVaultSecretId,
+  isGroqVaultSecretName,
+  GROQ_API_KEY_SECRET_ID,
+  removeGroqApiKey,
+  upsertGroqApiKey,
+} from "../../services/groq-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -915,7 +924,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isAnthropicVaultSecretId(secret.id) &&
         !isAnthropicVaultSecretName(secret.name) &&
         !isOpenRouterVaultSecretId(secret.id) &&
-        !isOpenRouterVaultSecretName(secret.name)
+        !isOpenRouterVaultSecretName(secret.name) &&
+        !isGroqVaultSecretId(secret.id) &&
+        !isGroqVaultSecretName(secret.name)
     );
     const result = page(rows, query);
     return {
@@ -937,7 +948,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isAnthropicVaultSecretId(secret.id) &&
         !isAnthropicVaultSecretName(secret.name) &&
         !isOpenRouterVaultSecretId(secret.id) &&
-        !isOpenRouterVaultSecretName(secret.name)
+        !isOpenRouterVaultSecretName(secret.name) &&
+        !isGroqVaultSecretId(secret.id) &&
+        !isGroqVaultSecretName(secret.name)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -958,6 +971,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isOpenRouterVaultSecretName(name)) {
       throw httpError(400, "OpenRouter API keys must use the OpenRouter credential flow");
+    }
+    if (isGroqVaultSecretName(name)) {
+      throw httpError(400, "Groq API keys must use the Groq credential flow");
     }
     const created = createSecret(db, name, requiredText(data, "value"));
     const row = listSecrets(db).find((secret) => secret.id === created.id);
@@ -1057,6 +1073,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === GROQ_API_KEY_SECRET_ID) {
+      const status = getGroqAuthStatus(db);
+      return status.connected
+        ? record(def, GROQ_API_KEY_SECRET_ID, {
+            agent_id: "intelligence",
+            kind: "api_key",
+            provider: "groq",
+            display_name: "Groq",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1110,6 +1139,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "groq") {
+      upsertGroqApiKey(db, requiredText(data, "api_key"));
+      const status = getGroqAuthStatus(db);
+      return record(def, GROQ_API_KEY_SECRET_ID, {
+        agent_id: "intelligence",
+        kind: "api_key",
+        provider: "groq",
+        display_name: "Groq",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1139,6 +1180,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === OPENROUTER_API_KEY_SECRET_ID) {
       removeOpenRouterApiKey(db);
+      return;
+    }
+    if (id === GROQ_API_KEY_SECRET_ID) {
+      removeGroqApiKey(db);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1230,31 +1275,55 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom Groq slug (outside production catalog) when Vault is connected.
+      if (!selected) {
+        const groqCustom = /^provider:openai_compatible:groq:(.+)$/.exec(modelId);
+        if (groqCustom?.[1] && isGroqPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Groq · ${groqCustom[1]}`,
+            model: groqCustom[1],
+            provider: "openai_compatible",
+            transport: "groq",
+          };
+        }
+      }
       // Custom OpenRouter slug (outside top-10 snapshot) when Vault is connected.
       if (!selected) {
         const custom = /^provider:openai_compatible:(.+)$/.exec(modelId);
-        if (custom?.[1] && isOpenRouterPlatformReady(db)) {
+        if (
+          custom?.[1] &&
+          !custom[1].startsWith("groq:") &&
+          isOpenRouterPlatformReady(db)
+        ) {
           selected = {
             id: modelId,
             source: "provider",
             label: `OpenRouter · ${custom[1]}`,
             model: custom[1],
             provider: "openai_compatible",
+            transport: "openrouter",
           };
         }
       }
       if (!selected) throw httpError(404, "Model is not in the authorized catalog");
-      const openRouter =
-        selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db);
+      const transport =
+        selected.transport ??
+        (selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db)
+          ? "openrouter"
+          : undefined);
       return selectIntelligenceModel(db, active.llm as LlmManager, {
         source: selected.source,
         path: selected.path,
         model: selected.model,
         provider: selected.provider,
         endpointId: selected.endpointId,
-        ...(openRouter
+        ...(transport === "openrouter"
           ? { transport: "openrouter", apiKeyRef: OPENROUTER_API_KEY_SECRET_ID }
-          : {}),
+          : transport === "groq"
+            ? { transport: "groq", apiKeyRef: GROQ_API_KEY_SECRET_ID }
+            : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {

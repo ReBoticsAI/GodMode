@@ -400,6 +400,139 @@ export function resolveOpenRouterHarnessProfile(
   return OPENROUTER_GENERIC_PROFILE;
 }
 
+/** Shared Groq transport middleware (BYOK via OpenAI-compatible tools). */
+const GROQ_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function groqFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via GroqCloud (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not direct OpenAI Platform, and not OpenRouter.",
+    "Use native OpenAI-style function calling as exposed by Groq. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const GROQ_LLAMA_PROFILE: ModelHarnessProfile = {
+  id: "groq-llama",
+  label: "Groq Llama",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-llama", [
+    "Llama via Groq: lean tool surface; prefer structured schemas over prose tool descriptions.",
+  ]),
+};
+
+export const GROQ_GPT_OSS_PROFILE: ModelHarnessProfile = {
+  id: "groq-gpt-oss",
+  label: "Groq GPT-OSS",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-gpt-oss", [
+    "GPT-OSS via Groq (not OpenAI Platform Console). Use Groq-hosted OpenAI-compatible tools only.",
+  ]),
+};
+
+export const GROQ_QWEN_PROFILE: ModelHarnessProfile = {
+  id: "groq-qwen",
+  label: "Groq Qwen",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-qwen", [
+    "Qwen via Groq: follow tool schemas closely; keep discovery deferred unless asked.",
+  ]),
+};
+
+export const GROQ_KIMI_PROFILE: ModelHarnessProfile = {
+  id: "groq-kimi",
+  label: "Groq Kimi",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-kimi", [
+    "Kimi via Groq (not OpenRouter). Prefer structured tool calls; no memory/wiki re-probe without need.",
+  ]),
+};
+
+export const GROQ_COMPOUND_PROFILE: ModelHarnessProfile = {
+  id: "groq-compound",
+  label: "Groq Compound",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-compound", [
+    "Groq Compound may use built-in host tools; still prefer GodMode tool schemas when offered. Avoid discovery spam.",
+  ]),
+};
+
+export const GROQ_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "groq-generic",
+  label: "Groq (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GROQ_TRANSPORT_DEFERRED],
+  harnessDelta: groqFamilyDelta("groq-generic", [
+    "Generic Groq route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map Groq model id → family harness.
+ * Transport is Groq; family from id prefix (not one profile per model id).
+ */
+export function resolveGroqHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.startsWith("openai/gpt-oss")) return GROQ_GPT_OSS_PROFILE;
+  if (slug.startsWith("qwen/")) return GROQ_QWEN_PROFILE;
+  if (slug.startsWith("moonshotai/")) return GROQ_KIMI_PROFILE;
+  if (slug.startsWith("groq/compound")) return GROQ_COMPOUND_PROFILE;
+  if (slug.includes("prompt-guard")) return GROQ_GENERIC_PROFILE;
+  if (slug.startsWith("llama-") || slug.startsWith("meta-llama/llama-")) {
+    return GROQ_LLAMA_PROFILE;
+  }
+  return GROQ_GENERIC_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -444,6 +577,12 @@ const REGISTRY: ModelHarnessProfile[] = [
   OPENROUTER_MINIMAX_PROFILE,
   OPENROUTER_KIMI_PROFILE,
   OPENROUTER_GENERIC_PROFILE,
+  GROQ_LLAMA_PROFILE,
+  GROQ_GPT_OSS_PROFILE,
+  GROQ_QWEN_PROFILE,
+  GROQ_KIMI_PROFILE,
+  GROQ_COMPOUND_PROFILE,
+  GROQ_GENERIC_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -452,6 +591,12 @@ function isOpenRouterTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "openrouter") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("openrouter.ai");
+}
+
+function isGroqTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "groq") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.groq.com");
 }
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
@@ -514,6 +659,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isOpenRouterTransport(input)) {
       return resolveOpenRouterHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isGroqTransport(input)) {
+      return resolveGroqHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -540,12 +688,15 @@ export function resolveProfileForAgent(
   if (agent.backend === "provider") {
     const cfg = agent.config ?? {};
     const baseUrl = typeof cfg.baseUrl === "string" ? cfg.baseUrl : null;
-    const transport =
-      typeof cfg.transport === "string"
-        ? cfg.transport
-        : cfg.openrouter === true || (baseUrl ?? "").toLowerCase().includes("openrouter.ai")
-          ? "openrouter"
-          : null;
+    let transport: string | null =
+      typeof cfg.transport === "string" ? cfg.transport : null;
+    if (!transport) {
+      if (cfg.openrouter === true || (baseUrl ?? "").toLowerCase().includes("openrouter.ai")) {
+        transport = "openrouter";
+      } else if (cfg.groq === true || (baseUrl ?? "").toLowerCase().includes("api.groq.com")) {
+        transport = "groq";
+      }
+    }
     return resolveHarnessProfile({
       source: "provider",
       model: typeof cfg.model === "string" ? cfg.model : null,
