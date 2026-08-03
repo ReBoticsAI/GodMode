@@ -397,6 +397,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "admin-marketplace-seller-verified",
+    methods: ["POST"],
+    pathPattern: "/api/admin/marketplace/sellers/verified",
+    rationale:
+      "Platform-admin Community verified-seller flag (#311); updates marketplace_seller_accounts.verified_seller, not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "tenant-database-download",
     methods: ["GET"],
     pathPattern: "/api/tenant/database/download",
