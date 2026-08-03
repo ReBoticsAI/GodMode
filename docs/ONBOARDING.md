@@ -19,16 +19,20 @@ On multi-tenant hubs, a process-wide `CURSOR_API_KEY` does **not** mark every wo
 ### Self-host / desktop / private hub
 
 1. **Welcome**: overview of Intelligence and workspace areas.
-2. **LLM**: pick a local GGUF model, detect Ollama, or skip and add cloud keys in Vault later.
-3. **Ready**: open Chat and browse Marketplace starter packs anytime.
+2. **Choose your LLM**: llama.cpp is the primary local stack (pick a GGUF model when present). Ollama and LM Studio are additional options. Open Vault → Inference for cloud keys, or continue after starting a local model.
+3. **Connect Exa (optional)**: explain web search / fetch for agents; Open Vault → Search. Continue without requiring Exa.
+4. **Ready**: Get started opens Chat (Intelligence panel) and Marketplace starter packs remain available anytime.
 
 ### GodMode Cloud (`INSTALLATION_SURFACE=saas`)
 
 1. **Welcome**: same overview.
-2. **Connect your LLM**: Vault BYOK (Cursor subscription and/or OpenAI / Anthropic). No GGUF or Ollama steps.
-3. **Ready**: open Chat; manage keys anytime in Vault (Inference for LLM keys; Search for Exa web tools).
+2. **Connect your LLM**: explain subscription (use your plan, for example Cursor) vs metered Platform API keys. Status badge; Continue gated on `llmReady`. Open Vault → `/vault?tab=inference`. Skip for now remains available.
+3. **Connect Exa (optional)**: explain Exa for agent web_search / fetch_url; Open Vault → `/vault?tab=search`. Continue without requiring Exa; optional Connected badge when `exa_api_key` is present.
+4. **Ready**: Get started runs `completeOnboarding`, navigates Home, and opens the Intelligence chat panel.
 
-Richer guided Vault collection (validate keys in-wizard) is tracked in GitHub issue #224.
+Soft-dismiss (Open Vault) pauses the wizard so Vault is usable. Leaving Vault while onboarding is incomplete brings the wizard back and refreshes LLM / Exa status so badges are not stale.
+
+Full Vault Connect cards stay in Vault (not embedded in the wizard). Vault hub IA and further connect migrations are tracked separately.
 
 ## Backend
 

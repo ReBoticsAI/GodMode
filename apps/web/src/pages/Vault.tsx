@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { HardDriveIcon, RefreshCwIcon } from "lucide-react";
 import { fetchStorageUsage, type StorageUsageReport } from "@/api";
 import { Page, PageHeader } from "@/components/PageHeader";
@@ -21,8 +22,24 @@ import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
 import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
+import { normalizeVaultTab } from "@/lib/navigation";
 
 export default function Vault() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = normalizeVaultTab(searchParams.get("tab"));
+
+  const onTabChange = (value: string) => {
+    const next = normalizeVaultTab(value);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("tab", next);
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
   return (
     <Page>
       <PageHeader
@@ -30,7 +47,7 @@ export default function Vault() {
         description="Connect hub for inference and search credentials, plus storage. More connect tabs are coming. Subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
-      <Tabs defaultValue="inference" className="w-full">
+      <Tabs value={tab} onValueChange={onTabChange} className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           <TabsTrigger value="inference">Inference</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
