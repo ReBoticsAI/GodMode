@@ -84,6 +84,15 @@ import {
   removeAnthropicApiKey,
   upsertAnthropicApiKey,
 } from "../../services/anthropic-platform.js";
+import {
+  getOpenRouterAuthStatus,
+  isOpenRouterPlatformReady,
+  isOpenRouterVaultSecretId,
+  isOpenRouterVaultSecretName,
+  OPENROUTER_API_KEY_SECRET_ID,
+  removeOpenRouterApiKey,
+  upsertOpenRouterApiKey,
+} from "../../services/openrouter-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -904,7 +913,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isOpenAiVaultSecretId(secret.id) &&
         !isOpenAiVaultSecretName(secret.name) &&
         !isAnthropicVaultSecretId(secret.id) &&
-        !isAnthropicVaultSecretName(secret.name)
+        !isAnthropicVaultSecretName(secret.name) &&
+        !isOpenRouterVaultSecretId(secret.id) &&
+        !isOpenRouterVaultSecretName(secret.name)
     );
     const result = page(rows, query);
     return {
@@ -924,7 +935,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         !isOpenAiVaultSecretId(secret.id) &&
         !isOpenAiVaultSecretName(secret.name) &&
         !isAnthropicVaultSecretId(secret.id) &&
-        !isAnthropicVaultSecretName(secret.name)
+        !isAnthropicVaultSecretName(secret.name) &&
+        !isOpenRouterVaultSecretId(secret.id) &&
+        !isOpenRouterVaultSecretName(secret.name)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -942,6 +955,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isAnthropicVaultSecretName(name)) {
       throw httpError(400, "Anthropic API keys must use the Anthropic Console credential flow");
+    }
+    if (isOpenRouterVaultSecretName(name)) {
+      throw httpError(400, "OpenRouter API keys must use the OpenRouter credential flow");
     }
     const created = createSecret(db, name, requiredText(data, "value"));
     const row = listSecrets(db).find((secret) => secret.id === created.id);
@@ -1028,6 +1044,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === OPENROUTER_API_KEY_SECRET_ID) {
+      const status = getOpenRouterAuthStatus(db);
+      return status.connected
+        ? record(def, OPENROUTER_API_KEY_SECRET_ID, {
+            agent_id: "intelligence",
+            kind: "api_key",
+            provider: "openrouter",
+            display_name: "OpenRouter",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1069,6 +1098,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "openrouter") {
+      upsertOpenRouterApiKey(db, requiredText(data, "api_key"));
+      const status = getOpenRouterAuthStatus(db);
+      return record(def, OPENROUTER_API_KEY_SECRET_ID, {
+        agent_id: "intelligence",
+        kind: "api_key",
+        provider: "openrouter",
+        display_name: "OpenRouter",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1094,6 +1135,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === ANTHROPIC_API_KEY_SECRET_ID) {
       removeAnthropicApiKey(db);
+      return;
+    }
+    if (id === OPENROUTER_API_KEY_SECRET_ID) {
+      removeOpenRouterApiKey(db);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1184,14 +1229,32 @@ export const modelRuntimeAdapter: RecordAdapter = {
         getCoreDb(),
         requiredUser(ctx)
       );
-      const selected = catalog.models.find((model) => model.id === modelId);
+      let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom OpenRouter slug (outside top-10 snapshot) when Vault is connected.
+      if (!selected) {
+        const custom = /^provider:openai_compatible:(.+)$/.exec(modelId);
+        if (custom?.[1] && isOpenRouterPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `OpenRouter · ${custom[1]}`,
+            model: custom[1],
+            provider: "openai_compatible",
+          };
+        }
+      }
       if (!selected) throw httpError(404, "Model is not in the authorized catalog");
+      const openRouter =
+        selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db);
       return selectIntelligenceModel(db, active.llm as LlmManager, {
         source: selected.source,
         path: selected.path,
         model: selected.model,
         provider: selected.provider,
         endpointId: selected.endpointId,
+        ...(openRouter
+          ? { transport: "openrouter", apiKeyRef: OPENROUTER_API_KEY_SECRET_ID }
+          : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {

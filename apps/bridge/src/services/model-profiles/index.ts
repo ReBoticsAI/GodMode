@@ -37,6 +37,9 @@ export interface ResolveProfileInput {
   path?: string | null;
   model?: string | null;
   provider?: string | null;
+  /** When provider is openai_compatible, marks OpenRouter transport. */
+  transport?: string | null;
+  baseUrl?: string | null;
 }
 
 /** Minimal agent shape for profile resolution (avoids circular imports). */
@@ -248,6 +251,155 @@ export const ANTHROPIC_PROFILE: ModelHarnessProfile = {
   harnessDelta: ANTHROPIC_HARNESS_DELTA,
 };
 
+/** Shared OpenRouter transport middleware (BYOK via OpenAI-compatible tools). */
+const OPENROUTER_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function openRouterFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via OpenRouter (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path and not a direct OpenAI Platform or Anthropic Console session.",
+    "Use native OpenAI-style function calling as exposed by OpenRouter. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+/**
+ * OpenRouter + DeepSeek family. OpenAI-compatible tools via OpenRouter;
+ * keep the tool surface lean (DeepSeek function-calling docs).
+ */
+export const OPENROUTER_DEEPSEEK_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-deepseek",
+  label: "OpenRouter DeepSeek",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-deepseek", [
+    "DeepSeek via OpenRouter: prefer structured tool schemas; avoid describing tools in prose.",
+  ]),
+};
+
+/**
+ * OpenRouter + GLM / Z.ai family.
+ */
+export const OPENROUTER_GLM_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-glm",
+  label: "OpenRouter GLM",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-glm", [
+    "GLM via OpenRouter: follow tool schemas closely; one purposeful tool turn when possible.",
+  ]),
+};
+
+/**
+ * OpenRouter + NVIDIA Nemotron family (OpenAI-compatible tool calling).
+ */
+export const OPENROUTER_NEMOTRON_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-nemotron",
+  label: "OpenRouter Nemotron",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-nemotron", [
+    "Nemotron via OpenRouter: lean active tools; hard turn cap; no discovery spam.",
+  ]),
+};
+
+/**
+ * OpenRouter + MiniMax family.
+ */
+export const OPENROUTER_MINIMAX_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-minimax",
+  label: "OpenRouter MiniMax",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-minimax", [
+    "MiniMax via OpenRouter: use native tools; keep exploratory loops short.",
+  ]),
+};
+
+/**
+ * OpenRouter + Kimi / Moonshot family.
+ */
+export const OPENROUTER_KIMI_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-kimi",
+  label: "OpenRouter Kimi",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-kimi", [
+    "Kimi via OpenRouter: prefer structured tool calls; do not re-probe memory/wiki without need.",
+  ]),
+};
+
+/**
+ * OpenRouter generic family (MiMo, Hy3, StepFun, Ling, and other slug prefixes).
+ */
+export const OPENROUTER_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "openrouter-generic",
+  label: "OpenRouter (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENROUTER_TRANSPORT_DEFERRED],
+  harnessDelta: openRouterFamilyDelta("openrouter-generic", [
+    "Generic OpenRouter route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map OpenRouter model slug → family harness.
+ * Transport is OpenRouter; family from author/path prefix (not one profile per model id).
+ */
+export function resolveOpenRouterHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.startsWith("deepseek/")) return OPENROUTER_DEEPSEEK_PROFILE;
+  if (slug.startsWith("z-ai/")) return OPENROUTER_GLM_PROFILE;
+  if (slug.startsWith("nvidia/nemotron")) return OPENROUTER_NEMOTRON_PROFILE;
+  if (slug.startsWith("minimax/")) return OPENROUTER_MINIMAX_PROFILE;
+  if (slug.startsWith("moonshotai/")) return OPENROUTER_KIMI_PROFILE;
+  return OPENROUTER_GENERIC_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -286,9 +438,21 @@ const REGISTRY: ModelHarnessProfile[] = [
   CURSOR_PROFILE,
   OPENAI_PROFILE,
   ANTHROPIC_PROFILE,
+  OPENROUTER_DEEPSEEK_PROFILE,
+  OPENROUTER_GLM_PROFILE,
+  OPENROUTER_NEMOTRON_PROFILE,
+  OPENROUTER_MINIMAX_PROFILE,
+  OPENROUTER_KIMI_PROFILE,
+  OPENROUTER_GENERIC_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
+
+function isOpenRouterTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "openrouter") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("openrouter.ai");
+}
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
   return REGISTRY.find((p) => p.id === id) ?? null;
@@ -346,6 +510,11 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
   if (input.source === "provider") {
     const p = (input.provider ?? "").toLowerCase();
     if (p === "anthropic") return ANTHROPIC_PROFILE;
+    if (p === "openai") return OPENAI_PROFILE;
+    if (p === "openai_compatible" && isOpenRouterTransport(input)) {
+      return resolveOpenRouterHarnessProfile(input.model);
+    }
+    if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
   // local
@@ -369,11 +538,20 @@ export function resolveProfileForAgent(
     });
   }
   if (agent.backend === "provider") {
+    const cfg = agent.config ?? {};
+    const baseUrl = typeof cfg.baseUrl === "string" ? cfg.baseUrl : null;
+    const transport =
+      typeof cfg.transport === "string"
+        ? cfg.transport
+        : cfg.openrouter === true || (baseUrl ?? "").toLowerCase().includes("openrouter.ai")
+          ? "openrouter"
+          : null;
     return resolveHarnessProfile({
       source: "provider",
-      model: typeof agent.config?.model === "string" ? agent.config.model : null,
-      provider:
-        typeof agent.config?.provider === "string" ? agent.config.provider : null,
+      model: typeof cfg.model === "string" ? cfg.model : null,
+      provider: typeof cfg.provider === "string" ? cfg.provider : null,
+      transport,
+      baseUrl,
     });
   }
   if (agent.backend === "remote") {
