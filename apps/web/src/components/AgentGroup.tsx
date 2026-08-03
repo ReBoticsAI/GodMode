@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   BellIcon,
   CalendarDaysIcon,
@@ -17,15 +16,14 @@ import {
 } from "@/components/ui/collapsible";
 import { useFitText } from "@/hooks/use-fit-text";
 import { useIntelligence, type PanelTab } from "@/lib/intelligence-context";
-import { AGENTS_PATH } from "@/lib/navigation";
 import { NavBadge } from "@/components/NavBadge";
 import { cn } from "@/lib/utils";
 
 /**
  * An AI agent's sidebar group, mirroring the user's personal group. The header
- * opens the chat panel with this agent selected; the tabs open the panel on the
- * matching tab for the same agent. Used for both the user's "Digital <name>"
- * twin and the built-in Intelligence assistant.
+ * toggles the accordion; child rows open the panel on the matching tab for this
+ * agent. Used for both the user's "Digital <name>" twin and the built-in
+ * Intelligence assistant.
  */
 const AGENT_ITEMS: ReadonlyArray<{
   tab: PanelTab;
@@ -51,19 +49,16 @@ export function AgentGroup({
   Icon: LucideIcon;
   onNavigate?: () => void;
 }) {
-  const navigate = useNavigate();
   const {
     panelOpen,
     panelTab,
     activeAgentId,
     openPanel,
-    setAgentsSection,
     reviewUnread,
     notificationsUnread,
   } = useIntelligence();
 
   const isCurrentAgent = panelOpen && activeAgentId === agentId;
-  const headerActive = isCurrentAgent && panelTab === "chat";
 
   // Collapsed by default; auto-expand only while this agent is the selected one.
   const isSelectedAgent = activeAgentId === agentId;
@@ -84,17 +79,13 @@ export function AgentGroup({
       <div className="flex min-w-0 items-center gap-1">
         <button
           type="button"
-          onClick={() => {
-            openPanel({ tab: "chat", agentId });
-            setAgentsSection("pipeline");
-            navigate(`${AGENTS_PATH}?section=pipeline&node=profile`);
-            onNavigate?.();
-          }}
-          aria-label={`Open ${label}`}
-          title={`Chat with ${label} and open its Agent Profile`}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
+          title={`${open ? "Collapse" : "Expand"} ${label}`}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 font-bold leading-none tracking-tight transition-colors",
-            headerActive
+            isCurrentAgent
               ? "text-sidebar-accent-foreground"
               : "text-foreground hover:text-sidebar-accent-foreground"
           )}
@@ -108,7 +99,7 @@ export function AgentGroup({
           </span>
         </button>
         <CollapsibleTrigger
-          aria-label={`Collapse ${label}`}
+          aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
           className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-foreground [&[data-state=open]>svg]:rotate-90"
         >
           <ChevronRightIcon className="size-4 transition-transform duration-200" />

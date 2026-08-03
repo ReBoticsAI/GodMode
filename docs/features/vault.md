@@ -63,10 +63,10 @@ Free-form platform secrets (the AI Platform Secrets card) shared across agents. 
 
 ### Marketplace
 
-Seller **Stripe Connect** for Community payouts. Marketplace → Sell dual-mounts the same Seller payouts card so publish gating still works next to ToS Accept and listing tools. PayPal and crypto seller rails stay disabled for v1.
+Seller **Stripe Connect** for Community payouts. Marketplace → Sell links here for connect; ToS Accept and listing tools stay on Sell. PayPal and crypto seller rails stay disabled for v1.
 
-1. Open Vault → Marketplace (or Marketplace → Sell).
-2. Choose Connect with Stripe. Return/refresh lands on the page you started from (`/vault?tab=marketplace` or `/marketplace?tab=seller`).
+1. Open Vault → Marketplace (or follow Manage in Vault from Marketplace → Sell).
+2. Choose Connect with Stripe. Return/refresh lands on Vault → Marketplace.
 3. Optional: paste an `acct_…` id under advanced fields and save.
 4. On Sell, accept ToS (if needed), then publish. Paid listings require a connected payout.
 

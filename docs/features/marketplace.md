@@ -31,7 +31,7 @@ Marketplace is how you **connect** specialty packs into GodMode without forking 
 
 ## Seller payouts
 
-Vault → Marketplace is the connect home for seller Stripe Connect. Marketplace → Sell dual-mounts the same card for publish gating (ToS Accept, Publish, and My listings stay on Sell). See [[vault]].
+Vault → Marketplace is the connect home for seller Stripe Connect. Marketplace → Sell links there for Connect; ToS Accept, Publish, and My listings stay on Sell. See [[vault]].
 
 ## Route
 
