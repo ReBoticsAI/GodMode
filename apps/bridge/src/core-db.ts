@@ -1060,6 +1060,8 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
   addCol(db, "marketplace_official_catalog", "verified_publisher", "INTEGER NOT NULL DEFAULT 1");
   // Community verified seller (#311); default unverified until an admin opts in.
   addCol(db, "marketplace_seller_accounts", "verified_seller", "INTEGER NOT NULL DEFAULT 0");
+  // Admin revoke/freeze for earned Community tiers (#313).
+  addCol(db, "marketplace_seller_accounts", "verified_frozen", "INTEGER NOT NULL DEFAULT 0");
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {

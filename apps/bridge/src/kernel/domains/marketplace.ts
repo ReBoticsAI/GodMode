@@ -115,6 +115,7 @@ export const MARKETPLACE_SPECS: BuiltinSpec[] = [
       "tos_accepted_version",
       "tos_accepted_at",
       ["verified_seller", "Int"],
+      ["verified_frozen", "Int"],
       "created_at",
       "updated_at",
     ],

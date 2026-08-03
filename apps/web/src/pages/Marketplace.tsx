@@ -212,9 +212,20 @@ function CommunityListingCard({
                 <span>
                   {listing.kind} · {listing.delivery_mode ?? "clone"}
                 </span>
-                {listing.verified_publisher ? (
-                  <Badge variant="outline">Verified</Badge>
-                ) : null}
+                {(() => {
+                  const tier = Number(listing.verified_tier ?? 0);
+                  const label =
+                    tier >= 3
+                      ? "Verified III"
+                      : tier >= 2
+                        ? "Verified II"
+                        : tier >= 1
+                          ? "Verified I"
+                          : listing.verified_publisher
+                            ? "Verified I"
+                            : null;
+                  return label ? <Badge variant="outline">{label}</Badge> : null;
+                })()}
               </span>
             </CardDescription>
           </div>
