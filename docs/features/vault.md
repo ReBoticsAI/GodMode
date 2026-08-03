@@ -3,13 +3,13 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Connect hub for inference, search, integrations, and storage."
+summary: "Connect hub for inference, search, integrations, billing, and storage."
 ---
 # Vault
 
 ![vault in GodMode](/features/vault.png)
 
-Vault is the connect hub for credentials, integrations, and storage. Chat → Vault tab gives quick access while chatting. Inference, Search, and Integrations are available today; more connect tabs are coming.
+Vault is the connect hub for credentials, integrations, billing, and storage. Chat → Vault tab gives quick access while chatting. Inference, Search, Integrations, and Billing are available today; more connect tabs are coming.
 
 ## Tabs
 
@@ -73,10 +73,22 @@ The **Connect GitHub** card installs and authorizes the GitHub App used for Proj
 2. Install the App on the account that owns your Projects, then authorize.
 3. Open Tasks → Board settings to link a Project.
 
+### Billing
+
+GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts; the card is hidden on self-host / local.
+
+The **Subscription** card opens Stripe to manage plan, payment method, and invoices. Settings keeps a short dual-home link to this tab.
+
+1. Open Vault → Billing.
+2. Choose Manage subscription to open the Stripe Customer Portal.
+3. After leaving the portal, you return to Vault → Billing.
+
+Provider LLM subscriptions (for example Cursor) stay under Inference. They are not GodMode Cloud seats.
+
 ### Storage
 
 Database and data-store sizes. Monitor growth before trimming or upgrading stores.
 
 ## Route
 
-`/vault` (deep-link tabs: `?tab=inference|search|integrations|storage`; default `inference`)
+`/vault` (deep-link tabs: `?tab=inference|search|integrations|billing|storage`; default `inference`)

@@ -75,7 +75,13 @@ export const AGENTS_PATH = "/agents";
 export const BANK_PATH = "/bank";
 export const VAULT_PATH = "/vault";
 
-export const VAULT_TABS = ["inference", "search", "integrations", "storage"] as const;
+export const VAULT_TABS = [
+  "inference",
+  "search",
+  "integrations",
+  "billing",
+  "storage",
+] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
 export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
@@ -83,7 +89,8 @@ export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
     raw === "search" ||
     raw === "storage" ||
     raw === "inference" ||
-    raw === "integrations"
+    raw === "integrations" ||
+    raw === "billing"
   ) {
     return raw;
   }
