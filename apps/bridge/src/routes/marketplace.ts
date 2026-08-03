@@ -30,6 +30,7 @@ import {
   acquireCloneListing,
   publishMarketplaceListing,
 } from "../services/marketplace-listings.js";
+import { COMMUNITY_VERIFIED_TIER_SQL } from "../services/marketplace-commerce.js";
 
 export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
   title, description, price_credits, price_cents, currency, seller_kind,
@@ -37,13 +38,14 @@ export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resourc
   price_period, meter_unit, meter_rate, license, inference_endpoint_id,
   created_at, updated_at`;
 
-/** Listing columns with table alias `ml` plus Community verified seller signal (#311). */
+/** Listing columns with table alias `ml` plus Community verified tier (#313). */
 export const LISTING_COLS_JOINED = `ml.id, ml.seller_user_id, ml.seller_tenant_id, ml.kind, ml.resource_id,
   ml.title, ml.description, ml.price_credits, ml.price_cents, ml.currency, ml.seller_kind,
   ml.catalog_entry_id, ml.visibility, ml.status, ml.delivery_mode, ml.pricing_model,
   ml.price_period, ml.meter_unit, ml.meter_rate, ml.license, ml.inference_endpoint_id,
   ml.created_at, ml.updated_at,
-  CASE WHEN sa.verified_seller = 1 THEN 1 ELSE 0 END AS verified_publisher`;
+  (${COMMUNITY_VERIFIED_TIER_SQL}) AS verified_tier,
+  CASE WHEN (${COMMUNITY_VERIFIED_TIER_SQL}) > 0 THEN 1 ELSE 0 END AS verified_publisher`;
 
 /** Build the public Community browse query. Defaults to seller_kind=user. */
 export function buildPublicListingsSql(opts: {

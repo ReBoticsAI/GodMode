@@ -45,6 +45,7 @@ function openSellerDb(): CoreDatabase {
       payout_preference TEXT,
       onboarding_status TEXT NOT NULL DEFAULT 'pending',
       verified_seller INTEGER NOT NULL DEFAULT 0,
+      verified_frozen INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);

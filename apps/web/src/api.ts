@@ -3348,6 +3348,10 @@ export type AdminMarketplaceSellerRow = {
   email: string | null;
   onboardingStatus: string;
   verifiedSeller: boolean;
+  verifiedFrozen?: boolean;
+  earnedTier?: number;
+  verifiedTier?: number;
+  listingCount?: number;
   updatedAt: string;
 };
 
@@ -3367,10 +3371,36 @@ export function setAdminMarketplaceSellerVerified(body: {
       id: string;
       userId: string;
       verifiedSeller: boolean;
+      verifiedFrozen?: boolean;
+      earnedTier?: number;
+      verifiedTier?: number;
+      listingCount?: number;
       onboardingStatus: string;
       updatedAt: string;
     };
   }>("/admin/marketplace/sellers/verified", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function setAdminMarketplaceSellerFrozen(body: {
+  userId: string;
+  verifiedFrozen: boolean;
+}) {
+  return api<{
+    seller: {
+      id: string;
+      userId: string;
+      verifiedSeller: boolean;
+      verifiedFrozen?: boolean;
+      earnedTier?: number;
+      verifiedTier?: number;
+      listingCount?: number;
+      onboardingStatus: string;
+      updatedAt: string;
+    };
+  }>("/admin/marketplace/sellers/frozen", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -4211,8 +4241,10 @@ export interface MarketplaceListing {
   license?: string | null;
   inference_endpoint_id?: string | null;
   catalog_entry_id?: string | null;
-  /** Community seller verified signal (#311); 1/true when admin-flagged. */
+  /** Community seller verified signal (#311/#313); 1/true when verified_tier > 0. */
   verified_publisher?: number | boolean;
+  /** Community earned/admin-resolved tier 0–3 (#313). */
+  verified_tier?: number;
   created_at: string;
   updated_at?: string;
 }
