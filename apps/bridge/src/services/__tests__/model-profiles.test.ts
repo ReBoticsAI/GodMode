@@ -19,6 +19,7 @@ import {
   resolveHarnessProfile,
   resolveGroqHarnessProfile,
   resolveOpenRouterHarnessProfile,
+  resolveTogetherHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -204,6 +205,41 @@ assert.equal(
     transport: "openrouter",
   }).id,
   "openrouter-deepseek"
+);
+assert.equal(
+  resolveTogetherHarnessProfile("meta-llama/Llama-3.3-70B-Instruct-Turbo").id,
+  "together-llama"
+);
+assert.notEqual(
+  resolveTogetherHarnessProfile("meta-llama/Llama-3.3-70B-Instruct-Turbo").id,
+  "groq-llama"
+);
+assert.notEqual(
+  resolveTogetherHarnessProfile("meta-llama/Llama-3.3-70B-Instruct-Turbo").id,
+  "openai"
+);
+assert.equal(
+  resolveTogetherHarnessProfile("openai/gpt-oss-120b").id,
+  "together-gpt-oss"
+);
+assert.equal(
+  resolveTogetherHarnessProfile("deepseek-ai/DeepSeek-V4-Pro").id,
+  "together-deepseek"
+);
+assert.equal(resolveTogetherHarnessProfile("Qwen/Qwen3.5-9B").id, "together-qwen");
+assert.equal(
+  resolveTogetherHarnessProfile("MiniMaxAI/MiniMax-M3").id,
+  "together-minimax"
+);
+assert.equal(resolveTogetherHarnessProfile("unknown-model").id, "together-generic");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "openai/gpt-oss-120b",
+    transport: "together",
+  }).id,
+  "together-gpt-oss"
 );
 assert.equal(
   resolveProfileForAgent({
