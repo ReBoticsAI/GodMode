@@ -20,7 +20,7 @@ Marketplace is how you **connect** specialty packs into GodMode without forking 
 | Local | Local plugin folders and third-party indexes (typically free). Self-host / desktop; not available as arbitrary folders on Cloud. |
 | Community | User listings. Sellers keep 90%; platform takes 10%. |
 | Installed | Workspace plugins and install history. |
-| Sell | Accept ToS, connect payouts, publish and manage listings. |
+| Sell | Accept ToS, connect payouts (dual-home with Vault), publish and manage listings. |
 
 ## Product rules
 
@@ -28,6 +28,10 @@ Marketplace is how you **connect** specialty packs into GodMode without forking 
 - Pack purchases are separate from a Cloud subscription.
 - SaaS is the commerce authority for paid checkout.
 - Chargebacks lead to a permanent Marketplace ban.
+
+## Seller payouts
+
+Vault → Integrations → Marketplace is the connect home for seller Stripe Connect. Marketplace → Sell dual-mounts the same card for publish gating (ToS Accept, Publish, and My listings stay on Sell). See [[vault]].
 
 ## Route
 
