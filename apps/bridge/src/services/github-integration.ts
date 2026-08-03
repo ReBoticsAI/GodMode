@@ -51,7 +51,7 @@ export function readGithubProjectsToken(db: AppDatabase): GithubProjectsToken | 
   const raw =
     byId ??
     (() => {
-      const named = listSecrets(db).find(
+      const named = listSecrets(db, null).find(
         (s) => s.name === GITHUB_PROJECTS_SECRET_NAME
       );
       return named ? getSecretValue(db, named.id) : null;
@@ -70,11 +70,12 @@ export function upsertGithubProjectsToken(
   db: AppDatabase,
   token: GithubProjectsToken
 ): void {
-  db.prepare(`DELETE FROM ai_secrets WHERE id = ? OR name = ?`).run(
-    GITHUB_PROJECTS_SECRET_ID,
-    GITHUB_PROJECTS_SECRET_NAME
-  );
-  db.prepare(`INSERT INTO ai_secrets (id, name, value) VALUES (?, ?, ?)`).run(
+  db.prepare(
+    `DELETE FROM ai_secrets WHERE agent_id IS NULL AND (id = ? OR name = ?)`
+  ).run(GITHUB_PROJECTS_SECRET_ID, GITHUB_PROJECTS_SECRET_NAME);
+  db.prepare(
+    `INSERT INTO ai_secrets (id, name, value, agent_id) VALUES (?, ?, ?, NULL)`
+  ).run(
     GITHUB_PROJECTS_SECRET_ID,
     GITHUB_PROJECTS_SECRET_NAME,
     encryptSecret(JSON.stringify(token))
@@ -82,10 +83,9 @@ export function upsertGithubProjectsToken(
 }
 
 export function clearGithubProjectsToken(db: AppDatabase): void {
-  db.prepare(`DELETE FROM ai_secrets WHERE id = ? OR name = ?`).run(
-    GITHUB_PROJECTS_SECRET_ID,
-    GITHUB_PROJECTS_SECRET_NAME
-  );
+  db.prepare(
+    `DELETE FROM ai_secrets WHERE agent_id IS NULL AND (id = ? OR name = ?)`
+  ).run(GITHUB_PROJECTS_SECRET_ID, GITHUB_PROJECTS_SECRET_NAME);
 }
 
 export function githubProjectsStatus(db: AppDatabase): {

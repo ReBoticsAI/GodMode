@@ -151,6 +151,7 @@ describe("runtime ObjectType actions", () => {
       );
       CREATE TABLE ai_secrets (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, value TEXT NOT NULL,
+        agent_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE TABLE ai_agent_accounts (
@@ -510,7 +511,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "cursor",
         api_key: "cursor-super-secret",
       },
@@ -538,7 +539,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "openai",
         api_key: "sk-openai-super-secret",
       },
@@ -563,7 +564,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "anthropic",
         api_key: "sk-ant-super-secret",
       },
@@ -592,7 +593,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "openrouter",
         api_key: "sk-or-super-secret",
       },
@@ -621,7 +622,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "groq",
         api_key: "gsk-super-secret",
       },
@@ -650,7 +651,7 @@ describe("runtime ObjectType actions", () => {
       db,
       def,
       {
-        agent_id: "intelligence",
+        agent_id: null,
         provider: "together",
         api_key: "together-super-secret",
       },

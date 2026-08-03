@@ -34,8 +34,12 @@ const OPENAI_MODELS = [
   { id: "o4-mini", label: "o4-mini" },
 ] as const;
 
-/** Connect OpenAI Platform (metered) API key for Intelligence. */
-export function OpenAiPlatformCard() {
+/** Connect OpenAI Platform (metered) API key for the selected Vault owner. */
+export function OpenAiPlatformCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<OpenAiAuthStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState<string>("gpt-4o");
@@ -43,12 +47,12 @@ export function OpenAiPlatformCard() {
 
   const reload = useCallback(async () => {
     try {
-      const s = await fetchOpenAiStatus();
+      const s = await fetchOpenAiStatus(vaultAgentId);
       setStatus(s);
     } catch {
       setStatus({ connected: false, source: "none" });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -61,7 +65,7 @@ export function OpenAiPlatformCard() {
     }
     setBusy(true);
     try {
-      const res = await connectOpenAiApiKey(apiKey.trim());
+      const res = await connectOpenAiApiKey(apiKey.trim(), vaultAgentId);
       setApiKey("");
       setStatus(res.status);
       toast.success("OpenAI Platform connected");
@@ -75,7 +79,7 @@ export function OpenAiPlatformCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const res = await disconnectOpenAiApiKey();
+      const res = await disconnectOpenAiApiKey(vaultAgentId);
       setStatus(res.status);
       toast.success("OpenAI disconnected");
     } catch (err) {

@@ -17,21 +17,25 @@ import {
   type AiSecret,
 } from "@/api";
 
-/** Platform-wide API secrets (shared across all agents). */
-export function AiSecretsCard() {
+/** Free-form secrets for the selected Vault owner (Personal or one agent). */
+export function AiSecretsCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [secrets, setSecrets] = useState<AiSecret[]>([]);
   const [secretName, setSecretName] = useState("");
   const [secretValue, setSecretValue] = useState("");
 
   const reload = () => {
-    fetchAiSecrets()
+    fetchAiSecrets(vaultAgentId)
       .then((r) => setSecrets(r.secrets))
       .catch(() => setSecrets([]));
   };
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [vaultAgentId]);
 
   return (
     <Card className="mt-4">
@@ -41,10 +45,9 @@ export function AiSecretsCard() {
           AI platform secrets
         </CardTitle>
         <CardDescription>
-          Free-form shared secrets for provider backends and tools. Referenced by
-          agents in Agents → Pipeline → Backend; not scoped to individual
-          subagents. Prefer the dedicated Connect cards (Inference and Search tabs)
-          when one exists for the provider.
+          Free-form secrets for the selected Vault owner. Prefer the dedicated
+          Connect cards (Inference and Search tabs) when one exists for the
+          provider.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -66,7 +69,9 @@ export function AiSecretsCard() {
                   size="sm"
                   variant="ghost"
                   className="text-xs text-destructive"
-                  onClick={() => void deleteAiSecret(s.id).then(reload)}
+                  onClick={() =>
+                    void deleteAiSecret(s.id, vaultAgentId).then(reload)
+                  }
                 >
                   Delete
                 </Button>
@@ -97,7 +102,11 @@ export function AiSecretsCard() {
             className="shrink-0"
             disabled={!secretName.trim() || !secretValue.trim()}
             onClick={() => {
-              void createAiSecret(secretName.trim(), secretValue.trim()).then(() => {
+              void createAiSecret(
+                secretName.trim(),
+                secretValue.trim(),
+                vaultAgentId
+              ).then(() => {
                 setSecretName("");
                 setSecretValue("");
                 reload();

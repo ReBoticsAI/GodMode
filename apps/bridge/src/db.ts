@@ -288,6 +288,7 @@ export const TENANT_BOOT_MIGRATIONS = [
   // columns_json was appended to v14 after some SaaS tenants already applied it.
   { version: 18, name: "ai_projects_columns_json_v1", up: migrateAiProjectsColumnsJson },
   { version: 19, name: "ai_projects_columns_json_backfill_v1", up: migrateAiProjectsColumnsJsonBackfill },
+  { version: 20, name: "ai_secrets_agent_vault_v1", up: migrateAiSecretsAgentVault },
 ] as const;
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
@@ -321,6 +322,18 @@ function migrateTasksGithubSyncHealthSchema(db: Database.Database): void {
  */
 function migrateAiProjectsColumnsJson(db: Database.Database): void {
   addColumn(db, "ai_projects", "columns_json", "TEXT");
+}
+
+/** Per-agent Vaults: nullable agent_id on ai_secrets; name unique per owner (#330). */
+function migrateAiSecretsAgentVault(db: Database.Database): void {
+  addColumn(db, "ai_secrets", "agent_id", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS ai_secrets_agent_idx ON ai_secrets(agent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_personal_uq
+      ON ai_secrets(name) WHERE agent_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_agent_uq
+      ON ai_secrets(name, agent_id) WHERE agent_id IS NOT NULL;
+  `);
 }
 
 /** Seed default columns_json for user boards that still lack a column layout. */
@@ -848,8 +861,14 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       value TEXT NOT NULL,
+      agent_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE INDEX IF NOT EXISTS ai_secrets_agent_idx ON ai_secrets(agent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_personal_uq
+      ON ai_secrets(name) WHERE agent_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_secrets_name_agent_uq
+      ON ai_secrets(name, agent_id) WHERE agent_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS ai_agent_accounts (
       id TEXT PRIMARY KEY,

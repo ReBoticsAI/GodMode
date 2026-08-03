@@ -37,21 +37,25 @@ function findExaSecrets(secrets: AiSecret[]): AiSecret[] {
 }
 
 /** Connect Exa for agent web search and URL fetch (BYOK secret, no LLM harness). */
-export function ExaConnectCard() {
+export function ExaConnectCard({
+  vaultAgentId = null,
+}: {
+  vaultAgentId?: string | null;
+}) {
   const [status, setStatus] = useState<ExaStatus>({ connected: false, secret: null });
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
     try {
-      const { secrets } = await fetchAiSecrets();
+      const { secrets } = await fetchAiSecrets(vaultAgentId);
       const matches = findExaSecrets(secrets);
       const secret = matches[0] ?? null;
       setStatus({ connected: Boolean(secret), secret });
     } catch {
       setStatus({ connected: false, secret: null });
     }
-  }, []);
+  }, [vaultAgentId]);
 
   useEffect(() => {
     void reload();
@@ -64,11 +68,11 @@ export function ExaConnectCard() {
     }
     setBusy(true);
     try {
-      const { secrets } = await fetchAiSecrets();
+      const { secrets } = await fetchAiSecrets(vaultAgentId);
       for (const existing of findExaSecrets(secrets)) {
-        await deleteAiSecret(existing.id);
+        await deleteAiSecret(existing.id, vaultAgentId);
       }
-      await createAiSecret(EXA_API_KEY_SECRET_NAME, apiKey.trim());
+      await createAiSecret(EXA_API_KEY_SECRET_NAME, apiKey.trim(), vaultAgentId);
       setApiKey("");
       await reload();
       toast.success("Exa connected");
@@ -82,9 +86,9 @@ export function ExaConnectCard() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const { secrets } = await fetchAiSecrets();
+      const { secrets } = await fetchAiSecrets(vaultAgentId);
       for (const existing of findExaSecrets(secrets)) {
-        await deleteAiSecret(existing.id);
+        await deleteAiSecret(existing.id, vaultAgentId);
       }
       await reload();
       toast.success("Exa disconnected");
