@@ -3,7 +3,7 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Connect hub for inference, secrets, marketplace, wallets, GodMode Cloud, integrations, and storage."
+summary: "Connect hub for GodMode Cloud, inference, integrations, wallets, marketplace, secrets, and storage."
 ---
 # Vault
 
@@ -15,7 +15,11 @@ Vault is the connect hub for credentials and account connects. Chat → Vault ta
 
 ### Inference
 
-Subtabs: **API Keys**, **Subscriptions**, and **Search**.
+Subtabs: **Subscriptions**, **API Keys**, and **Search**.
+
+#### Subscriptions
+
+Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` and applies Cursor harness profiles in Intelligence.
 
 #### API Keys
 
@@ -36,10 +40,6 @@ Groq catalog is a production chat snapshot (2026-08-03) plus a custom model id. 
 Together catalog is a serverless chat snapshot (2026-08-03) plus a custom model id. Runtime uses `openai_compatible` with `https://api.together.ai/v1`. Family examples: `together-llama`, `together-deepseek`, `together-minimax`.
 
 Each card Connect / Disconnect / Apply wires catalog models and a transport-specific harness (`profile = f(backend, provider, family)`). See [[harness-profiles]].
-
-#### Subscriptions
-
-Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` and applies Cursor harness profiles in Intelligence.
 
 #### Search
 
@@ -107,4 +107,4 @@ Database and data-store sizes. Monitor growth before trimming or upgrading store
 
 ## Route
 
-`/vault` (deep-link tabs: `?tab=inference|secrets|marketplace|wallets|cloud|integrations|storage`; Inference subtabs: `?tab=inference&sub=api-keys|subscriptions|search`; default `inference` / `api-keys`). Legacy `?tab=search` maps to Inference → Search; `?tab=billing` maps to GodMode Cloud.
+`/vault` (deep-link tabs: `?tab=cloud|inference|integrations|wallets|marketplace|secrets|storage`; Inference subtabs: `?tab=inference&sub=subscriptions|api-keys|search`; default `inference` / `subscriptions`). Legacy `?tab=search` maps to Inference → Search; `?tab=billing` maps to GodMode Cloud.

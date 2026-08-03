@@ -46,7 +46,7 @@ export default function Vault() {
         p.set("tab", next);
         if (next === "inference") {
           if (!p.get("sub") || normalizeVaultTab(prev.get("tab")) !== "inference") {
-            p.set("sub", "api-keys");
+            p.set("sub", "subscriptions");
           }
         } else {
           p.delete("sub");
@@ -74,33 +74,58 @@ export default function Vault() {
     <Page>
       <PageHeader
         title="Vault"
-        description="Connect hub for inference, secrets, marketplace, wallets, GodMode Cloud, integrations, and storage. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
+        description="Connect hub for GodMode Cloud, inference, integrations, wallets, marketplace, secrets, and storage. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
       <Tabs value={tab} onValueChange={onTabChange} className="w-full">
         <TabsList variant="line" className="w-full flex-wrap justify-start">
-          <TabsTrigger value="inference">Inference</TabsTrigger>
-          <TabsTrigger value="secrets">All Secrets</TabsTrigger>
-          <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
-          <TabsTrigger value="wallets">Wallets</TabsTrigger>
           <TabsTrigger value="cloud">GodMode Cloud</TabsTrigger>
+          <TabsTrigger value="inference">Inference</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="wallets">Wallets</TabsTrigger>
+          <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+          <TabsTrigger value="secrets">All Secrets</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="cloud" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">GodMode Cloud</h2>
+              <p className="text-sm text-muted-foreground">
+                Seat billing and Stripe Customer Portal for this workspace. Shown
+                only on SaaS hosts.
+              </p>
+            </div>
+            <SubscriptionCard />
+          </section>
+        </TabsContent>
         <TabsContent value="inference" className="mt-4">
           <InferenceTab sub={inferenceSub} onSubChange={onInferenceSubChange} />
         </TabsContent>
-        <TabsContent value="secrets" className="mt-4 flex flex-col gap-6">
+        <TabsContent value="integrations" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">All secrets</h2>
+              <h2 className="text-sm font-medium">GitHub</h2>
               <p className="text-sm text-muted-foreground">
-                Free-form platform secrets shared across agents. Prefer named Connect
-                cards when one exists.
+                GitHub App for Projects sync. The same App powers sign-in on this
+                host when configured.
               </p>
             </div>
-            <AiSecretsCard />
+            <GithubConnectCard />
+          </section>
+        </TabsContent>
+        <TabsContent value="wallets" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Wallets</h2>
+              <p className="text-sm text-muted-foreground">
+                Moralis and PayPal API credentials for live Bank / wallet sync.
+                Connect wallets and PayPal balances on Bank after credentials are
+                saved here.
+              </p>
+            </div>
+            <HoldingsConnectCard />
           </section>
         </TabsContent>
         <TabsContent value="marketplace" className="mt-4 flex flex-col gap-6">
@@ -118,41 +143,16 @@ export default function Vault() {
             />
           </section>
         </TabsContent>
-        <TabsContent value="wallets" className="mt-4 flex flex-col gap-6">
+        <TabsContent value="secrets" className="mt-4 flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <div>
-              <h2 className="text-sm font-medium">Wallets</h2>
+              <h2 className="text-sm font-medium">All secrets</h2>
               <p className="text-sm text-muted-foreground">
-                Moralis and PayPal API credentials for live Bank / wallet sync.
-                Connect wallets and PayPal balances on Bank after credentials are
-                saved here.
+                Free-form platform secrets shared across agents. Prefer named Connect
+                cards when one exists.
               </p>
             </div>
-            <HoldingsConnectCard />
-          </section>
-        </TabsContent>
-        <TabsContent value="cloud" className="mt-4 flex flex-col gap-6">
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-sm font-medium">GodMode Cloud</h2>
-              <p className="text-sm text-muted-foreground">
-                Seat billing and Stripe Customer Portal for this workspace. Shown
-                only on SaaS hosts.
-              </p>
-            </div>
-            <SubscriptionCard />
-          </section>
-        </TabsContent>
-        <TabsContent value="integrations" className="mt-4 flex flex-col gap-6">
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-sm font-medium">GitHub</h2>
-              <p className="text-sm text-muted-foreground">
-                GitHub App for Projects sync. The same App powers sign-in on this
-                host when configured.
-              </p>
-            </div>
-            <GithubConnectCard />
+            <AiSecretsCard />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
@@ -173,10 +173,22 @@ function InferenceTab({
   return (
     <Tabs value={sub} onValueChange={onSubChange} className="w-full">
       <TabsList variant="line" className="w-full flex-wrap justify-start">
-        <TabsTrigger value="api-keys">API Keys</TabsTrigger>
         <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
+        <TabsTrigger value="api-keys">API Keys</TabsTrigger>
         <TabsTrigger value="search">Search</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="subscriptions" className="mt-4 flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-medium">Subscriptions</h2>
+            <p className="text-sm text-muted-foreground">
+              Use your plan (billed by the provider). Cursor is available today.
+            </p>
+          </div>
+          <CursorSubscriptionCard />
+        </section>
+      </TabsContent>
 
       <TabsContent value="api-keys" className="mt-4 flex flex-col gap-6">
         <section className="flex flex-col gap-3">
@@ -192,18 +204,6 @@ function InferenceTab({
           <OpenRouterCard />
           <GroqCard />
           <TogetherCard />
-        </section>
-      </TabsContent>
-
-      <TabsContent value="subscriptions" className="mt-4 flex flex-col gap-6">
-        <section className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-sm font-medium">Subscriptions</h2>
-            <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Cursor is available today.
-            </p>
-          </div>
-          <CursorSubscriptionCard />
         </section>
       </TabsContent>
 
