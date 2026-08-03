@@ -64,15 +64,33 @@ floating refs; set `MARKETPLACE_REQUIRE_PLUGIN_CI=1` for fail-closed
 
 Official is ReBotics-curated and does **not** require Verified badges. Cards only
 show Verified when `verifiedPublisher` is explicitly true. Community seller
-trust uses seller-account flags / earned tiers (#311, #313), not Official defaults.
+trust uses seller-account earned tiers and admin freeze/floor (#311, #313), not Official defaults.
 
-### Community verified seller (#311)
+### Community verified seller (#311 / #313)
 
-Community (user) sellers start **unverified**. A platform admin can set
-`verified_seller` on `marketplace_seller_accounts` (Admin → Marketplace, or
-`POST /api/admin/marketplace/sellers/verified`). Public Community listings then
-include `verified_publisher: 1`, and Community cards show the **Verified**
-badge. Earned tiers after gate-passing plugins: #313.
+Community (user) sellers earn **Verified** badges from the count of **gate-passing**
+Community listings: `seller_kind=user`, `status=active`, `visibility=public`. Catalog
+intake CI (GodMode-Marketplace verify workflow + Community index gate) is what gets a
+plugin onto that shelf; Bridge does not re-run Actions. It counts live public listings.
+
+| Tier | Gate-passing listings |
+|------|------------------------|
+| none | 0–2 |
+| Verified I | 3–4 |
+| Verified II | 5–9 |
+| Verified III | 10+ |
+
+Public Community browse returns `verified_tier` (0–3) and keeps `verified_publisher`
+as `1` when tier is greater than 0. Community cards show the matching badge.
+
+Admin escape hatches on `marketplace_seller_accounts`:
+
+- `verified_seller=1` floors the seller at Verified I (and clears freeze). Admin →
+  Marketplace, or `POST /api/admin/marketplace/sellers/verified`.
+- `verified_frozen=1` hides the badge even when the earned count qualifies.
+  `POST /api/admin/marketplace/sellers/frozen` with `verifiedFrozen`.
+
+Official cards do **not** use this seller-tier system.
 
 ### Buyer install pins (#177)
 
