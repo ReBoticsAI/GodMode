@@ -15,13 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
+import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 
 export default function Vault() {
   return (
     <Page>
       <PageHeader
         title="Vault"
-        description="Your secrets and storage usage."
+        description="Inference credentials and storage. Subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
       <Tabs defaultValue="secrets" className="w-full">
@@ -30,9 +31,27 @@ export default function Vault() {
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="secrets" className="mt-4 space-y-4">
-          <CursorSubscriptionCard />
-          <AiSecretsCard />
+        <TabsContent value="secrets" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Subscriptions</h2>
+              <p className="text-sm text-muted-foreground">
+                Use your plan (billed by the provider). Cursor is available today.
+              </p>
+            </div>
+            <CursorSubscriptionCard />
+          </section>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">API keys</h2>
+              <p className="text-sm text-muted-foreground">
+                Metered BYOK. Each card stores a fixed credential and applies a provider-tuned
+                harness in Intelligence.
+              </p>
+            </div>
+            <OpenAiPlatformCard />
+            <AiSecretsCard />
+          </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">
           <StorageTab />

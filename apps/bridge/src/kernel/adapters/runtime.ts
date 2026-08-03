@@ -68,6 +68,14 @@ import {
   removeCursorApiKey,
   upsertCursorApiKey,
 } from "../../services/cursor-subscription.js";
+import {
+  getOpenAiAuthStatus,
+  isOpenAiVaultSecretId,
+  isOpenAiVaultSecretName,
+  OPENAI_API_KEY_SECRET_ID,
+  removeOpenAiApiKey,
+  upsertOpenAiApiKey,
+} from "../../services/openai-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -884,7 +892,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
       (secret) =>
         secret.id !== "cursor-api-key" &&
         secret.name.toLowerCase() !== "cursor_api_key" &&
-        secret.name.toLowerCase() !== "cursor-api-key"
+        secret.name.toLowerCase() !== "cursor-api-key" &&
+        !isOpenAiVaultSecretId(secret.id) &&
+        !isOpenAiVaultSecretName(secret.name)
     );
     const result = page(rows, query);
     return {
@@ -900,7 +910,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
         secret.id === id &&
         secret.id !== "cursor-api-key" &&
         secret.name.toLowerCase() !== "cursor_api_key" &&
-        secret.name.toLowerCase() !== "cursor-api-key"
+        secret.name.toLowerCase() !== "cursor-api-key" &&
+        !isOpenAiVaultSecretId(secret.id) &&
+        !isOpenAiVaultSecretName(secret.name)
     );
     return row ? vaultSecretRecord(def, row) : null;
   },
@@ -912,6 +924,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
       name.toLowerCase() === "cursor-api-key"
     ) {
       throw httpError(400, "Cursor API keys must use the Cursor credential flow");
+    }
+    if (isOpenAiVaultSecretName(name)) {
+      throw httpError(400, "OpenAI API keys must use the OpenAI Platform credential flow");
     }
     const created = createSecret(db, name, requiredText(data, "value"));
     const row = listSecrets(db).find((secret) => secret.id === created.id);
@@ -972,6 +987,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === OPENAI_API_KEY_SECRET_ID) {
+      const status = getOpenAiAuthStatus(db);
+      return status.connected
+        ? record(def, OPENAI_API_KEY_SECRET_ID, {
+            agent_id: "intelligence",
+            kind: "api_key",
+            provider: "openai",
+            display_name: "OpenAI Platform",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -985,6 +1013,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         kind: "api_key",
         provider: "cursor",
         display_name: "Cursor subscription",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (requiredText(data, "provider").toLowerCase() === "openai") {
+      upsertOpenAiApiKey(db, requiredText(data, "api_key"));
+      const status = getOpenAiAuthStatus(db);
+      return record(def, OPENAI_API_KEY_SECRET_ID, {
+        agent_id: "intelligence",
+        kind: "api_key",
+        provider: "openai",
+        display_name: "OpenAI Platform",
         status: "active",
         masked_token: status.masked ?? "****",
       });
@@ -1006,6 +1046,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     ownerOnly(ctx);
     if (id === CURSOR_API_KEY_SECRET_ID) {
       removeCursorApiKey(db);
+      return;
+    }
+    if (id === OPENAI_API_KEY_SECRET_ID) {
+      removeOpenAiApiKey(db);
       return;
     }
     const account = getAgentAccount(db, id);

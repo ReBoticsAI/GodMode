@@ -9,6 +9,7 @@ import {
 import {
   createRecordApi,
   deleteRecordApi,
+  fetchRecord,
   runRecordActionApi,
   updateRecordApi,
   waitForOperationRun,
@@ -1894,6 +1895,53 @@ export const applyCursorToIntelligence = (model = "auto") =>
     "ModelRuntime",
     "select_model",
     { model_id: `cursor:${model}` },
+    "runtime",
+    true
+  );
+
+export type OpenAiAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchOpenAiStatus = async (): Promise<OpenAiAuthStatus> => {
+  try {
+    const row = await fetchRecord("ProviderCredential", "openai-api-key");
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "openai") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectOpenAiApiKey = (apiKey: string) =>
+  createRecordApi("ProviderCredential", {
+    agent_id: "intelligence",
+    provider: "openai",
+    label: "OpenAI Platform",
+    api_key: apiKey,
+  }).then(fetchOpenAiStatus).then((status) => ({ ok: true, status }));
+
+export const disconnectOpenAiApiKey = () =>
+  deleteRecordApi("ProviderCredential", "openai-api-key")
+    .then(fetchOpenAiStatus)
+    .then((status) => ({ ok: true, status }));
+
+export const applyOpenAiToIntelligence = (model = "gpt-4o") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai:${model}` },
     "runtime",
     true
   );
