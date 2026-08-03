@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   BanknoteIcon,
   BitcoinIcon,
@@ -12,7 +13,7 @@ import {
   Trash2Icon,
   WalletIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -43,13 +44,12 @@ import {
   previewCryptoBalance,
   refreshConnection,
   requestMetaMaskAddress,
-  saveMoralisConfig,
-  savePayPalConfig,
   type CryptoPortfolio,
   type HoldingCategory,
   type HoldingConnection,
   type TokenBreakdown,
 } from "@/lib/api-holdings";
+import { VAULT_PATH } from "@/lib/navigation";
 import { toast } from "sonner";
 
 /* -------------------------------------------------------------------------- */
@@ -191,22 +191,15 @@ export default function Holdings() {
 export function HoldingsConnectionsContent({
   categoryFilter,
   showNetWorth = true,
-  setupOpen: controlledSetupOpen,
-  onSetupOpenChange,
 }: {
   categoryFilter?: HoldingCategory[];
   showNetWorth?: boolean;
-  setupOpen?: boolean;
-  onSetupOpenChange?: (open: boolean) => void;
 }) {
   const { data, config, loading, refresh } = useHoldings();
   const [draft, setDraft] = useState<{
     category: HoldingCategory;
     provider: Provider;
   } | null>(null);
-  const [internalSetupOpen, setInternalSetupOpen] = useState(false);
-  const setupOpen = controlledSetupOpen ?? internalSetupOpen;
-  const setSetupOpen = onSetupOpenChange ?? setInternalSetupOpen;
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const connections = data?.connections ?? [];
@@ -279,8 +272,6 @@ export function HoldingsConnectionsContent({
           await refresh();
         }}
       />
-
-      <SetupDialog open={setupOpen} config={config} onClose={() => setSetupOpen(false)} onSaved={refresh} />
     </>
   );
 }
@@ -382,9 +373,9 @@ function ConnectionCategory({
                   provider.disabled
                     ? provider.hint
                     : needsMoralis
-                      ? "Configure Moralis in Integration setup first"
+                      ? "Configure Moralis in Vault → Integrations first"
                       : needsPayPal
-                        ? "Configure PayPal in Integration setup first"
+                        ? "Configure PayPal in Vault → Integrations first"
                         : provider.hint
                 }
               >
@@ -526,153 +517,6 @@ function AccountRow({
         </ul>
       )}
     </li>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Setup dialog                                                                */
-/* -------------------------------------------------------------------------- */
-
-function SetupDialog({
-  open,
-  config,
-  onClose,
-  onSaved,
-}: {
-  open: boolean;
-  config: ReturnType<typeof useHoldings>["config"];
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [moralisKey, setMoralisKey] = useState("");
-  const [paypalId, setPaypalId] = useState("");
-  const [paypalSecret, setPaypalSecret] = useState("");
-  const [paypalEnv, setPaypalEnv] = useState<"sandbox" | "live">("sandbox");
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const saveMoralis = async () => {
-    if (!moralisKey.trim()) return;
-    setBusy("moralis");
-    try {
-      await saveMoralisConfig(moralisKey.trim());
-      toast.success("Moralis API key saved and verified");
-      setMoralisKey("");
-      await onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Moralis setup failed");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const savePayPal = async () => {
-    if (!paypalId.trim() || !paypalSecret.trim()) return;
-    setBusy("paypal");
-    try {
-      await savePayPalConfig({
-        clientId: paypalId.trim(),
-        clientSecret: paypalSecret.trim(),
-        env: paypalEnv,
-      });
-      toast.success("PayPal credentials saved and verified");
-      setPaypalId("");
-      setPaypalSecret("");
-      await onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "PayPal setup failed");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : undefined)}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Integration setup</DialogTitle>
-          <DialogDescription>
-            API credentials are encrypted and stored locally on this machine. Required
-            for live crypto portfolios (Moralis) and PayPal business balances.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-4">
-          <section className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <Label>Moralis API key</Label>
-              {config?.moralis.configured && (
-                <Badge variant="secondary">configured {config.moralis.masked}</Badge>
-              )}
-            </div>
-            <Input
-              type="password"
-              value={moralisKey}
-              onChange={(e) => setMoralisKey(e.target.value)}
-              placeholder="Paste Moralis Web3 API key"
-            />
-            <Button size="sm" disabled={busy === "moralis" || !moralisKey.trim()} onClick={saveMoralis}>
-              {busy === "moralis" ? <Spinner className="size-3.5" /> : null}
-              Save & test Moralis
-            </Button>
-          </section>
-
-          <section className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <Label>PayPal business app</Label>
-              {config?.paypal.configured && (
-                <Badge variant="secondary">
-                  {config.paypal.env} · {config.paypal.clientIdMasked}
-                </Badge>
-              )}
-            </div>
-            <Input
-              value={paypalId}
-              onChange={(e) => setPaypalId(e.target.value)}
-              placeholder="Client ID"
-            />
-            <Input
-              type="password"
-              value={paypalSecret}
-              onChange={(e) => setPaypalSecret(e.target.value)}
-              placeholder="Client secret"
-            />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={paypalEnv === "sandbox" ? "default" : "outline"}
-                onClick={() => setPaypalEnv("sandbox")}
-              >
-                Sandbox
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={paypalEnv === "live" ? "default" : "outline"}
-                onClick={() => setPaypalEnv("live")}
-              >
-                Live
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              App must have Transaction Search / Reporting enabled for balance access.
-            </p>
-            <Button
-              size="sm"
-              disabled={busy === "paypal" || !paypalId.trim() || !paypalSecret.trim()}
-              onClick={savePayPal}
-            >
-              {busy === "paypal" ? <Spinner className="size-3.5" /> : null}
-              Save & test PayPal
-            </Button>
-          </section>
-        </div>
-
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -819,15 +663,34 @@ function ConnectDialog({
         </DialogHeader>
 
         {needsMoralis && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
-            Configure your Moralis API key in Integration setup before connecting
-            crypto wallets.
-          </p>
+          <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <p>
+              Configure your Moralis API key in Vault → Integrations before
+              connecting crypto wallets.
+            </p>
+            <Link
+              to={`${VAULT_PATH}?tab=integrations`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              onClick={onClose}
+            >
+              Manage in Vault → Integrations
+            </Link>
+          </div>
         )}
         {needsPayPal && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
-            Configure PayPal client ID and secret in Integration setup first.
-          </p>
+          <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <p>
+              Configure PayPal client ID and secret in Vault → Integrations
+              first.
+            </p>
+            <Link
+              to={`${VAULT_PATH}?tab=integrations`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              onClick={onClose}
+            >
+              Manage in Vault → Integrations
+            </Link>
+          </div>
         )}
 
         {isCryptoLive && !needsMoralis && (
