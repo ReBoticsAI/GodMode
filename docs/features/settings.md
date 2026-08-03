@@ -12,7 +12,7 @@ summary: "Account, appearance, and session settings."
 
 Settings covers account, appearance, and session preferences.
 
-GitHub and GodMode Cloud billing live in Vault. Settings keeps short dual-home links to **Vault → Integrations** and **Vault → Billing**.
+GitHub and GodMode Cloud billing live in Vault. Settings keeps short dual-home links to **Vault → Integrations** and **Vault → GodMode Cloud**.
 
 ## Route
 

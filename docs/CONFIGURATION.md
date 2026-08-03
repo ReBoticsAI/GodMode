@@ -240,7 +240,7 @@ unless a trusted signature-verification policy is configured.
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 
 On SaaS installs, authenticated users open Stripe Customer Portal via
-`POST /api/saas/portal` (Vault → Billing → Manage subscription). Platform admins list
+`POST /api/saas/portal` (Vault → GodMode Cloud → Manage subscription). Platform admins list
 customers at `GET /api/admin/saas/customers`.
 
 Not used in local OSS installs. Private hubs ignore SaaS paywall env vars.
