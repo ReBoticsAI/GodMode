@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchAdminMarketplaceSellers,
+  setAdminMarketplaceSellerFrozen,
   setAdminMarketplaceSellerVerified,
   type AdminMarketplaceSellerRow,
 } from "@/api";
@@ -26,6 +27,14 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 
+function tierBadgeLabel(tier: number | undefined): string | null {
+  const t = Number(tier ?? 0);
+  if (t >= 3) return "Verified III";
+  if (t >= 2) return "Verified II";
+  if (t >= 1) return "Verified I";
+  return null;
+}
+
 export function AdminMarketplaceSellersPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,11 +59,27 @@ export function AdminMarketplaceSellersPanel() {
     setSaving(true);
     try {
       await setAdminMarketplaceSellerVerified({ userId: targetUserId, verifiedSeller });
-      toast.success(verifiedSeller ? "Seller marked verified" : "Verified flag cleared");
+      toast.success(
+        verifiedSeller ? "Seller floor set to Verified I" : "Verified floor cleared"
+      );
       setUserId("");
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update verified seller");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setFrozen = async (targetUserId: string, verifiedFrozen: boolean) => {
+    setSaving(true);
+    try {
+      await setAdminMarketplaceSellerFrozen({ userId: targetUserId, verifiedFrozen });
+      toast.success(verifiedFrozen ? "Seller trust frozen" : "Seller trust unfrozen");
+      setUserId("");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update seller freeze");
     } finally {
       setSaving(false);
     }
@@ -65,9 +90,10 @@ export function AdminMarketplaceSellersPanel() {
       <CardHeader>
         <CardTitle>Community verified sellers</CardTitle>
         <CardDescription>
-          Flag Community (user) sellers as Verified. Buyers see a Verified badge on their
-          listings. This is an identity signal, not a substitute for install pins or
-          capability grants.
+          Sellers earn Verified I / II / III from 3 / 5 / 10 active public Community
+          listings. Use floor to grant Verified I early, or freeze to hide badges.
+          This is an identity signal, not a substitute for install pins or capability
+          grants.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -88,7 +114,7 @@ export function AdminMarketplaceSellersPanel() {
               disabled={saving || !userId.trim()}
               onClick={() => void setVerified(userId.trim(), true)}
             >
-              {saving ? "Saving…" : "Mark verified"}
+              {saving ? "Saving…" : "Floor Verified I"}
             </Button>
             <Button
               size="sm"
@@ -96,7 +122,23 @@ export function AdminMarketplaceSellersPanel() {
               disabled={saving || !userId.trim()}
               onClick={() => void setVerified(userId.trim(), false)}
             >
-              Clear verified
+              Clear floor
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || !userId.trim()}
+              onClick={() => void setFrozen(userId.trim(), true)}
+            >
+              Freeze
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || !userId.trim()}
+              onClick={() => void setFrozen(userId.trim(), false)}
+            >
+              Unfreeze
             </Button>
           </div>
         </FieldGroup>
@@ -114,35 +156,58 @@ export function AdminMarketplaceSellersPanel() {
                 <TableHead>Email</TableHead>
                 <TableHead>User id</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Verified</TableHead>
+                <TableHead>Listings</TableHead>
+                <TableHead>Tier</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sellers.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="text-sm">{s.email ?? "n/a"}</TableCell>
-                  <TableCell className="font-mono text-xs">{s.userId}</TableCell>
-                  <TableCell className="text-sm">{s.onboardingStatus}</TableCell>
-                  <TableCell>
-                    {s.verifiedSeller ? (
-                      <Badge variant="outline">Verified</Badge>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">No</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={saving}
-                      onClick={() => void setVerified(s.userId, !s.verifiedSeller)}
-                    >
-                      {s.verifiedSeller ? "Clear" : "Verify"}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sellers.map((s) => {
+                const label = tierBadgeLabel(s.verifiedTier);
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell className="text-sm">{s.email ?? "n/a"}</TableCell>
+                    <TableCell className="font-mono text-xs">{s.userId}</TableCell>
+                    <TableCell className="text-sm">{s.onboardingStatus}</TableCell>
+                    <TableCell className="text-sm">{s.listingCount ?? 0}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {label ? (
+                          <Badge variant="outline">{label}</Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">None</span>
+                        )}
+                        {s.verifiedFrozen ? (
+                          <Badge variant="secondary">Frozen</Badge>
+                        ) : null}
+                        {s.verifiedSeller ? (
+                          <Badge variant="secondary">Floor I</Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={saving}
+                          onClick={() => void setVerified(s.userId, !s.verifiedSeller)}
+                        >
+                          {s.verifiedSeller ? "Clear floor" : "Floor I"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={saving}
+                          onClick={() => void setFrozen(s.userId, !s.verifiedFrozen)}
+                        >
+                          {s.verifiedFrozen ? "Unfreeze" : "Freeze"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

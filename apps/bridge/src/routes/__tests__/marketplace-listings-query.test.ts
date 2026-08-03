@@ -10,9 +10,10 @@ describe("buildPublicListingsSql", () => {
     expect(LISTING_COLS).toContain("updated_at");
   });
 
-  it("joins seller verified_publisher for Community browse", () => {
+  it("joins seller verified_tier for Community browse", () => {
     const { sql } = buildPublicListingsSql({});
     expect(sql).toContain("verified_publisher");
+    expect(sql).toContain("verified_tier");
     expect(sql).toContain("marketplace_seller_accounts");
     expect(sql).toMatch(/ml\.seller_kind=\?/);
   });

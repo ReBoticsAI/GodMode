@@ -146,12 +146,122 @@ export function ensureSellerAccount(
     .get(id) as Record<string, unknown>;
 }
 
-/** Whether a Community seller has the admin verified flag (#311). Default false. */
-export function isSellerVerified(core: CoreDatabase, sellerUserId: string): boolean {
+/** Gate-passing Community listing count thresholds (#313). */
+export const COMMUNITY_VERIFIED_TIER_THRESHOLDS = {
+  I: 3,
+  II: 5,
+  III: 10,
+} as const;
+
+export type CommunityVerifiedTier = 0 | 1 | 2 | 3;
+
+/**
+ * SQL expression (aliases `ml` listing + `sa` seller account) for resolved
+ * Community verified_tier 0–3. Frozen forces 0; else max(earned, admin floor I).
+ */
+export const COMMUNITY_VERIFIED_TIER_SQL = `CASE
+  WHEN COALESCE(sa.verified_frozen, 0) = 1 THEN 0
+  ELSE (
+    SELECT max(
+      CASE
+        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.III} THEN 3
+        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.II} THEN 2
+        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.I} THEN 1
+        ELSE 0
+      END,
+      CASE WHEN COALESCE(sa.verified_seller, 0) = 1 THEN 1 ELSE 0 END
+    )
+    FROM (
+      SELECT COUNT(*) AS cnt
+      FROM marketplace_listings g
+      WHERE g.seller_user_id = ml.seller_user_id
+        AND g.seller_kind = 'user'
+        AND g.status = 'active'
+        AND g.visibility = 'public'
+    )
+  )
+END`;
+
+/** Map gate-passing listing count to earned tier (ignores admin freeze/floor). */
+export function earnedVerifiedTier(listingCount: number): CommunityVerifiedTier {
+  const n = Number.isFinite(listingCount) ? Math.max(0, Math.floor(listingCount)) : 0;
+  if (n >= COMMUNITY_VERIFIED_TIER_THRESHOLDS.III) return 3;
+  if (n >= COMMUNITY_VERIFIED_TIER_THRESHOLDS.II) return 2;
+  if (n >= COMMUNITY_VERIFIED_TIER_THRESHOLDS.I) return 1;
+  return 0;
+}
+
+/** Resolve display tier: freeze wins; else max(earned, admin verified floor of I). */
+export function resolveVerifiedTier(opts: {
+  earned: CommunityVerifiedTier | number;
+  frozen?: boolean;
+  verifiedSeller?: boolean;
+}): CommunityVerifiedTier {
+  if (opts.frozen) return 0;
+  const earned = Math.min(
+    3,
+    Math.max(0, Math.floor(Number(opts.earned) || 0))
+  ) as CommunityVerifiedTier;
+  const floor: CommunityVerifiedTier = opts.verifiedSeller ? 1 : 0;
+  return Math.max(earned, floor) as CommunityVerifiedTier;
+}
+
+/** Active public Community listings for a seller (post-intake live rows). */
+export function countGatePassingCommunityListings(
+  core: CoreDatabase,
+  sellerUserId: string
+): number {
   const row = core
-    .prepare(`SELECT verified_seller FROM marketplace_seller_accounts WHERE user_id=?`)
-    .get(sellerUserId) as { verified_seller?: number | null } | undefined;
-  return row?.verified_seller === 1;
+    .prepare(
+      `SELECT COUNT(*) AS cnt
+       FROM marketplace_listings
+       WHERE seller_user_id=?
+         AND seller_kind='user'
+         AND status='active'
+         AND visibility='public'`
+    )
+    .get(sellerUserId) as { cnt: number } | undefined;
+  return Number(row?.cnt ?? 0);
+}
+
+export function getSellerVerifiedSnapshot(
+  core: CoreDatabase,
+  sellerUserId: string
+): {
+  listingCount: number;
+  earnedTier: CommunityVerifiedTier;
+  verifiedSeller: boolean;
+  verifiedFrozen: boolean;
+  verifiedTier: CommunityVerifiedTier;
+} {
+  const row = core
+    .prepare(
+      `SELECT verified_seller, verified_frozen
+       FROM marketplace_seller_accounts WHERE user_id=?`
+    )
+    .get(sellerUserId) as
+    | { verified_seller?: number | null; verified_frozen?: number | null }
+    | undefined;
+  const listingCount = countGatePassingCommunityListings(core, sellerUserId);
+  const earnedTier = earnedVerifiedTier(listingCount);
+  const verifiedSeller = row?.verified_seller === 1;
+  const verifiedFrozen = row?.verified_frozen === 1;
+  return {
+    listingCount,
+    earnedTier,
+    verifiedSeller,
+    verifiedFrozen,
+    verifiedTier: resolveVerifiedTier({
+      earned: earnedTier,
+      frozen: verifiedFrozen,
+      verifiedSeller,
+    }),
+  };
+}
+
+/** True when resolved Community verified_tier > 0 (#311/#313). */
+export function isSellerVerified(core: CoreDatabase, sellerUserId: string): boolean {
+  return getSellerVerifiedSnapshot(core, sellerUserId).verifiedTier > 0;
 }
 
 export function setSellerVerified(
@@ -169,13 +279,50 @@ export function setSellerVerified(
     throw new MarketplaceCommerceError("User not found");
   }
   const row = ensureSellerAccount(core, userId);
+  if (opts.verified) {
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET verified_seller=1, verified_frozen=0, updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(row.id);
+  } else {
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET verified_seller=0, updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(row.id);
+  }
+  return core
+    .prepare(`SELECT * FROM marketplace_seller_accounts WHERE id=?`)
+    .get(row.id) as Record<string, unknown>;
+}
+
+export function setSellerVerifiedFrozen(
+  core: CoreDatabase,
+  opts: { userId: string; frozen: boolean }
+): Record<string, unknown> {
+  const userId = opts.userId.trim();
+  if (!userId) {
+    throw new MarketplaceCommerceError("userId required");
+  }
+  const user = core.prepare(`SELECT id FROM users WHERE id=?`).get(userId) as
+    | { id: string }
+    | undefined;
+  if (!user) {
+    throw new MarketplaceCommerceError("User not found");
+  }
+  const row = ensureSellerAccount(core, userId);
   core
     .prepare(
       `UPDATE marketplace_seller_accounts
-       SET verified_seller=?, updated_at=datetime('now')
+       SET verified_frozen=?, updated_at=datetime('now')
        WHERE id=?`
     )
-    .run(opts.verified ? 1 : 0, row.id);
+    .run(opts.frozen ? 1 : 0, row.id);
   return core
     .prepare(`SELECT * FROM marketplace_seller_accounts WHERE id=?`)
     .get(row.id) as Record<string, unknown>;
@@ -187,10 +334,41 @@ export type AdminSellerAccountRow = {
   email: string | null;
   onboardingStatus: string;
   verifiedSeller: boolean;
+  verifiedFrozen: boolean;
+  earnedTier: CommunityVerifiedTier;
+  verifiedTier: CommunityVerifiedTier;
+  listingCount: number;
   updatedAt: string;
 };
 
-/** Platform admin list of Community seller accounts with verified flag. */
+function adminSellerDto(
+  core: CoreDatabase,
+  r: {
+    id: string;
+    user_id: string;
+    onboarding_status: string;
+    verified_seller: number | null;
+    verified_frozen: number | null;
+    updated_at: string;
+    email: string | null;
+  }
+): AdminSellerAccountRow {
+  const snap = getSellerVerifiedSnapshot(core, r.user_id);
+  return {
+    id: r.id,
+    userId: r.user_id,
+    email: r.email,
+    onboardingStatus: r.onboarding_status,
+    verifiedSeller: snap.verifiedSeller,
+    verifiedFrozen: snap.verifiedFrozen,
+    earnedTier: snap.earnedTier,
+    verifiedTier: snap.verifiedTier,
+    listingCount: snap.listingCount,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** Platform admin list of Community seller accounts with verified tier. */
 export function listSellerAccountsForAdmin(
   core: CoreDatabase,
   limit = 200
@@ -198,7 +376,8 @@ export function listSellerAccountsForAdmin(
   const capped = Math.min(Math.max(limit, 1), 500);
   const rows = core
     .prepare(
-      `SELECT sa.id, sa.user_id, sa.onboarding_status, sa.verified_seller, sa.updated_at,
+      `SELECT sa.id, sa.user_id, sa.onboarding_status, sa.verified_seller,
+              COALESCE(sa.verified_frozen, 0) AS verified_frozen, sa.updated_at,
               u.email
        FROM marketplace_seller_accounts sa
        LEFT JOIN users u ON u.id = sa.user_id
@@ -210,17 +389,11 @@ export function listSellerAccountsForAdmin(
     user_id: string;
     onboarding_status: string;
     verified_seller: number | null;
+    verified_frozen: number | null;
     updated_at: string;
     email: string | null;
   }>;
-  return rows.map((r) => ({
-    id: r.id,
-    userId: r.user_id,
-    email: r.email,
-    onboardingStatus: r.onboarding_status,
-    verifiedSeller: r.verified_seller === 1,
-    updatedAt: r.updated_at,
-  }));
+  return rows.map((r) => adminSellerDto(core, r));
 }
 
 export function updateSellerPayout(

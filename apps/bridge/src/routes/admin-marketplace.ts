@@ -16,9 +16,11 @@ import {
   streamBackupStampTarGz,
 } from "../services/platform-backup-archive.js";
 import {
+  getSellerVerifiedSnapshot,
   listSellerAccountsForAdmin,
   MarketplaceCommerceError,
   setSellerVerified,
+  setSellerVerifiedFrozen,
 } from "../services/marketplace-commerce.js";
 
 const backupDownloadLimiter = rateLimit({
@@ -60,17 +62,61 @@ export function createAdminMarketplaceRouter(): Router {
         return;
       }
       const seller = setSellerVerified(getCoreDb(), { userId, verified });
+      const snap = getSellerVerifiedSnapshot(getCoreDb(), userId);
       res.json({
         seller: {
           id: seller.id,
           userId: seller.user_id,
-          verifiedSeller: seller.verified_seller === 1,
+          verifiedSeller: snap.verifiedSeller,
+          verifiedFrozen: snap.verifiedFrozen,
+          earnedTier: snap.earnedTier,
+          verifiedTier: snap.verifiedTier,
+          listingCount: snap.listingCount,
           onboardingStatus: seller.onboarding_status,
           updatedAt: seller.updated_at,
         },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update verified seller";
+      const status = err instanceof MarketplaceCommerceError ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.post("/sellers/frozen", (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const userId = String(body.userId ?? body.user_id ?? "").trim();
+      const frozenRaw = body.verifiedFrozen ?? body.verified_frozen ?? body.frozen;
+      if (!userId) {
+        res.status(400).json({ error: "userId required" });
+        return;
+      }
+      let frozen: boolean | null = null;
+      if (typeof frozenRaw === "boolean") frozen = frozenRaw;
+      else if (frozenRaw === 1 || frozenRaw === "1" || frozenRaw === "true") frozen = true;
+      else if (frozenRaw === 0 || frozenRaw === "0" || frozenRaw === "false") frozen = false;
+      if (frozen === null) {
+        res.status(400).json({ error: "verifiedFrozen boolean required" });
+        return;
+      }
+      const seller = setSellerVerifiedFrozen(getCoreDb(), { userId, frozen });
+      const snap = getSellerVerifiedSnapshot(getCoreDb(), userId);
+      res.json({
+        seller: {
+          id: seller.id,
+          userId: seller.user_id,
+          verifiedSeller: snap.verifiedSeller,
+          verifiedFrozen: snap.verifiedFrozen,
+          earnedTier: snap.earnedTier,
+          verifiedTier: snap.verifiedTier,
+          listingCount: snap.listingCount,
+          onboardingStatus: seller.onboarding_status,
+          updatedAt: seller.updated_at,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update seller freeze";
       const status = err instanceof MarketplaceCommerceError ? 400 : 500;
       res.status(status).json({ error: message });
     }

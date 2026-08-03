@@ -401,7 +401,15 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/admin/marketplace/sellers/verified",
     rationale:
-      "Platform-admin Community verified-seller flag (#311); updates marketplace_seller_accounts.verified_seller, not Record CRUD.",
+      "Platform-admin Community verified floor (#311/#313); updates marketplace_seller_accounts.verified_seller, not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "admin-marketplace-seller-frozen",
+    methods: ["POST"],
+    pathPattern: "/api/admin/marketplace/sellers/frozen",
+    rationale:
+      "Platform-admin Community verified freeze (#313); updates marketplace_seller_accounts.verified_frozen, not Record CRUD.",
     authenticatedDomainMutations: "none",
   },
   {
