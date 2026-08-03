@@ -143,9 +143,10 @@ Public browse listings: `GET /api/marketplace/listings?seller_kind=user`. Commun
 ## Seller payouts (Stripe Connect)
 
 Community sellers onboard with **Stripe Connect Express Account Links** from
-Marketplace → Sell → **Connect with Stripe** (#316). GodMode Cloud (or the hub
-commerce authority) creates/reuses a Connect account and redirects to Stripe.
-Return/refresh URLs land back on `/marketplace?tab=seller`.
+Vault → Integrations → Marketplace, or the same card on Marketplace → Sell
+(#316, #329). GodMode Cloud (or the hub commerce authority) creates/reuses a
+Connect account and redirects to Stripe. Return/refresh URLs land back on the
+page you started from: `/vault?tab=integrations` or `/marketplace?tab=seller`.
 
 Requires `STRIPE_SECRET_KEY` (same secret used for Marketplace Checkout). Set
 `WEB_PUBLIC_URL` / `WEB_ORIGIN` so return URLs match the UI origin. Local/hub
@@ -168,7 +169,9 @@ Payment provider webhooks and the public Official JSON feed are **protocol excep
 
 ## Sell tab
 
-**Marketplace → Sell**: accept ToS, connect Stripe Connect / PayPal merchant id / MetaMask address, publish via kernel `MarketplaceListing.publish` with `price_cents`, then manage **My listings** (archive).
+**Marketplace → Sell**: accept ToS, dual-home seller Stripe Connect (Vault is the
+connect home), publish via kernel `MarketplaceListing.publish` with `price_cents`,
+then manage **My listings** (archive).
 
 ## Local catalogs
 
