@@ -10,6 +10,15 @@ import {
   ANTHROPIC_API_KEY_SECRET_NAME,
   getAnthropicAuthStatus,
 } from "./anthropic-platform.js";
+import {
+  getOpenRouterAuthStatus,
+  isOpenRouterAgentConfig,
+  isOpenRouterPlatformReady,
+  OPENROUTER_API_BASE_URL,
+  OPENROUTER_API_KEY_SECRET_ID,
+  OPENROUTER_API_KEY_SECRET_NAME,
+  OPENROUTER_TOP10_CATALOG,
+} from "./openrouter-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -54,6 +63,16 @@ const ANTHROPIC_CATALOG = [
 
 function secretLooksLike(name: string, needle: string): boolean {
   return name.toLowerCase().includes(needle);
+}
+
+function openRouterHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "openrouter",
+    baseUrl: OPENROUTER_API_BASE_URL,
+  };
 }
 
 export async function listModelCatalog(
@@ -107,7 +126,9 @@ export async function listModelCatalog(
       s.name !== OPENAI_API_KEY_SECRET_NAME &&
       s.id !== OPENAI_API_KEY_SECRET_ID &&
       s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
-      s.id !== ANTHROPIC_API_KEY_SECRET_ID
+      s.id !== ANTHROPIC_API_KEY_SECRET_ID &&
+      s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
+      s.id !== OPENROUTER_API_KEY_SECRET_ID
   );
   const hasOpenAi =
     getOpenAiAuthStatus(db).connected ||
@@ -117,6 +138,7 @@ export async function listModelCatalog(
     secrets.some(
       (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
     );
+  const hasOpenRouter = isOpenRouterPlatformReady(db);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -160,6 +182,22 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasOpenRouter) {
+    const agentIsOpenRouter =
+      agent?.backend === "provider" && isOpenRouterAgentConfig(agent.config);
+    for (const m of OPENROUTER_TOP10_CATALOG) {
+      const harness = resolveHarnessProfile(openRouterHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:${m.id}`,
+        source: "provider",
+        label: `OpenRouter · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        active: Boolean(agentIsOpenRouter && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -167,13 +205,24 @@ export async function listModelCatalog(
     agent.config?.model &&
     !models.some((m) => m.source === "provider" && m.model === agent.config?.model)
   ) {
+    const provider =
+      (agent.config.provider as "openai" | "anthropic" | "openai_compatible") ?? "openai";
+    const model = String(agent.config.model);
+    const harness = isOpenRouterAgentConfig(agent.config)
+      ? resolveHarnessProfile(openRouterHarnessInput(model))
+      : resolveHarnessProfile({
+          source: "provider",
+          model,
+          provider,
+        });
     models.push({
-      id: `provider:${agent.config.provider ?? "openai"}:${agent.config.model}`,
+      id: `provider:${provider}:${model}`,
       source: "provider",
-      label: String(agent.config.model),
-      model: String(agent.config.model),
-      provider: (agent.config.provider as "openai" | "anthropic" | "openai_compatible") ?? "openai",
+      label: isOpenRouterAgentConfig(agent.config) ? `OpenRouter · ${model}` : model,
+      model,
+      provider,
       active: true,
+      harnessProfileId: harness.id,
     });
   }
 
@@ -201,6 +250,11 @@ export async function listModelCatalog(
       path: active.path,
       model: active.model,
       provider: active.provider,
+      ...(active.provider === "openai_compatible" &&
+      agent &&
+      isOpenRouterAgentConfig(agent.config)
+        ? { transport: "openrouter", baseUrl: OPENROUTER_API_BASE_URL }
+        : {}),
     });
     active.harnessProfileId = profile.id;
   }
@@ -214,6 +268,8 @@ export interface SelectModelInput {
   provider?: "openai" | "anthropic" | "openai_compatible";
   endpointId?: string;
   apiKeyRef?: string;
+  baseUrl?: string;
+  transport?: string;
 }
 
 function applyProfileToAgentPatch(
@@ -316,12 +372,16 @@ export async function selectIntelligenceModel(
         s.name !== OPENAI_API_KEY_SECRET_NAME &&
         s.id !== OPENAI_API_KEY_SECRET_ID &&
         s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
-        s.id !== ANTHROPIC_API_KEY_SECRET_ID
+        s.id !== ANTHROPIC_API_KEY_SECRET_ID &&
+        s.name !== OPENROUTER_API_KEY_SECRET_NAME &&
+        s.id !== OPENROUTER_API_KEY_SECRET_ID
     );
     const openAiReady = getOpenAiAuthStatus(db).connected;
     const anthropicReady = getAnthropicAuthStatus(db).connected;
+    const openRouterReady = getOpenRouterAuthStatus(db).connected;
 
     let preferredId: string | undefined;
+    let openRouter = false;
     if (provider === "openai") {
       if (openAiReady) {
         preferredId = OPENAI_API_KEY_SECRET_ID;
@@ -344,21 +404,60 @@ export async function selectIntelligenceModel(
       if (!preferredId) {
         throw new Error("Connect Anthropic Console in Vault before using Anthropic models");
       }
+    } else if (provider === "openai_compatible") {
+      const wantsOpenRouter =
+        input.transport === "openrouter" ||
+        (input.baseUrl ?? "").toLowerCase().includes("openrouter.ai") ||
+        openRouterReady;
+      if (wantsOpenRouter) {
+        if (!openRouterReady) {
+          throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
+        }
+        preferredId = OPENROUTER_API_KEY_SECRET_ID;
+        openRouter = true;
+      } else {
+        preferredId =
+          secrets.find(
+            (s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
+          )?.id ?? secrets[0]?.id;
+        if (!preferredId) {
+          throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
+        }
+      }
     } else {
-      preferredId = secrets.find((s) =>
-        secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
-      )?.id ?? secrets[0]?.id;
+      preferredId =
+        secrets.find(
+          (s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
+        )?.id ?? secrets[0]?.id;
       if (!preferredId) {
         throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
       }
     }
 
     const apiKeyRef = input.apiKeyRef || agent.config?.apiKeyRef || preferredId;
-    const profile = resolveHarnessProfile({ source: "provider", model, provider });
+    const profile = resolveHarnessProfile({
+      source: "provider",
+      model,
+      provider,
+      ...(openRouter
+        ? { transport: "openrouter", baseUrl: OPENROUTER_API_BASE_URL }
+        : {}),
+    });
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
       model,
       apiKeyRef,
+      ...(openRouter
+        ? {
+            baseUrl: OPENROUTER_API_BASE_URL,
+            transport: "openrouter",
+            openrouter: true,
+          }
+        : {
+            baseUrl: undefined,
+            transport: undefined,
+            openrouter: undefined,
+          }),
     });
     updateAgent(db, "intelligence", {
       backend: "provider",
@@ -371,7 +470,7 @@ export async function selectIntelligenceModel(
       active: {
         id: `provider:${provider}:${model}`,
         source: "provider",
-        label: model,
+        label: openRouter ? `OpenRouter · ${model}` : model,
         model,
         provider,
         active: true,

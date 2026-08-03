@@ -17,6 +17,7 @@ import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
+import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 
 export default function Vault() {
   return (
@@ -52,6 +53,7 @@ export default function Vault() {
             </div>
             <OpenAiPlatformCard />
             <AnthropicConsoleCard />
+            <OpenRouterCard />
             <AiSecretsCard />
           </section>
         </TabsContent>

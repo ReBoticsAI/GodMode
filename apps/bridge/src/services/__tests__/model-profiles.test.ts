@@ -17,6 +17,7 @@ import {
   isGemma4Model,
   resolveCursorHarnessProfile,
   resolveHarnessProfile,
+  resolveOpenRouterHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -113,11 +114,53 @@ assert.notEqual(
 );
 
 assert.equal(
-  resolveProfileForAgent({
-    backend: "local",
-    modelPath: "/x/gemma-4-26B.gguf",
+  resolveOpenRouterHarnessProfile("deepseek/deepseek-v4-flash-0731").id,
+  "openrouter-deepseek"
+);
+assert.notEqual(
+  resolveOpenRouterHarnessProfile("deepseek/deepseek-v4-pro").id,
+  "openai"
+);
+assert.equal(
+  resolveOpenRouterHarnessProfile("nvidia/nemotron-3-ultra-550b-a55b:free").id,
+  "openrouter-nemotron"
+);
+assert.equal(
+  resolveOpenRouterHarnessProfile("z-ai/glm-5.2").id,
+  "openrouter-glm"
+);
+assert.equal(
+  resolveOpenRouterHarnessProfile("minimax/minimax-m3").id,
+  "openrouter-minimax"
+);
+assert.equal(
+  resolveOpenRouterHarnessProfile("moonshotai/kimi-k3").id,
+  "openrouter-kimi"
+);
+assert.equal(
+  resolveOpenRouterHarnessProfile("xiaomi/mimo-v2.5").id,
+  "openrouter-generic"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "deepseek/deepseek-v4-pro",
+    transport: "openrouter",
   }).id,
-  "gemma-4"
+  "openrouter-deepseek"
+);
+assert.equal(
+  resolveProfileForAgent({
+    backend: "provider",
+    config: {
+      provider: "openai_compatible",
+      model: "deepseek/deepseek-v4-flash-0731",
+      baseUrl: "https://openrouter.ai/api/v1",
+      transport: "openrouter",
+    },
+  }).id,
+  "openrouter-deepseek"
 );
 assert.equal(
   resolveProfileForAgent({

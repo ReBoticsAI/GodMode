@@ -48,7 +48,11 @@ async function openAiCompletion(
   model: string,
   body: Record<string, unknown>
 ): Promise<{ content: string; toolCalls: AgentMessage["tool_calls"] }> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  const url = /\/v1$/i.test(trimmed)
+    ? `${trimmed}/chat/completions`
+    : `${trimmed}/v1/chat/completions`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
