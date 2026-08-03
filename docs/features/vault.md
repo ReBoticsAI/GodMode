@@ -82,6 +82,15 @@ Moralis and PayPal **API credentials** for live Bank / Holdings sync live here. 
 3. Save and test PayPal business app credentials (sandbox or live) for balance sync.
 4. Return to Bank to connect wallets or PayPal balances.
 
+#### Marketplace
+
+Seller **Stripe Connect** for Community payouts lives here (Vault is the connect home). Marketplace → Sell dual-mounts the same Seller payouts card so publish gating still works next to ToS Accept and listing tools. PayPal and crypto seller rails stay disabled for v1.
+
+1. Open Vault → Integrations → Marketplace (or Marketplace → Sell).
+2. Choose Connect with Stripe. Return/refresh lands on the page you started from (`/vault?tab=integrations` or `/marketplace?tab=seller`).
+3. Optional: paste an `acct_…` id under advanced fields and save.
+4. On Sell, accept ToS (if needed), then publish. Paid listings require a connected payout.
+
 ### Billing
 
 GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts; the card is hidden on self-host / local.

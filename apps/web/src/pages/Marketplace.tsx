@@ -6,9 +6,6 @@ import {
   addCatalogSource,
   archiveMarketplaceListing,
   confirmMarketplaceCryptoPayment,
-  connectMarketplacePayout,
-  startMarketplaceStripeConnect,
-  refreshMarketplaceStripeConnect,
   createMarketplaceListing,
   fetchInstalledCatalog,
   fetchMarketplaceCommerceConfig,
@@ -50,6 +47,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Page, PageHeader } from "@/components/PageHeader";
+import { SellerPayoutsCard } from "@/pages/ai-settings/SellerPayoutsCard";
 import { FolderOpenIcon, Trash2Icon } from "lucide-react";
 
 const OFFICIAL_REPO =
@@ -364,9 +362,6 @@ export default function MarketplacePage() {
     chainId: number;
   } | null>(null);
   const [cryptoTxHash, setCryptoTxHash] = useState("");
-  const [metamaskAddress, setMetamaskAddress] = useState("");
-  const [paypalMerchantId, setPaypalMerchantId] = useState("");
-  const [stripeConnectId, setStripeConnectId] = useState("");
   const [tosVersion, setTosVersion] = useState("1");
   const [platformFeeBps, setPlatformFeeBps] = useState(1000);
   const [tosAccepted, setTosAccepted] = useState(false);
@@ -438,36 +433,6 @@ export default function MarketplacePage() {
   useEffect(() => {
     const paid = searchParams.get("paid");
     const canceled = searchParams.get("canceled");
-    const stripeConnect = searchParams.get("stripe_connect");
-    if (stripeConnect === "return" || stripeConnect === "refresh") {
-      void (async () => {
-        try {
-          const row = await refreshMarketplaceStripeConnect();
-          const acct = String(row.stripe_connect_account_id ?? "");
-          if (acct) setStripeConnectId(acct);
-          const ready =
-            row.onboarding_status === "ready" ||
-            row.stripe_payouts_enabled === true ||
-            row.stripe_payouts_enabled === 1;
-          setPayoutReady(Boolean(ready) || Boolean(acct));
-          if (ready) {
-            toast.success("Stripe Connect is ready for payouts");
-          } else if (stripeConnect === "refresh") {
-            toast.message("Stripe onboarding incomplete. Click Connect with Stripe to continue.");
-          } else {
-            toast.message(
-              "Stripe onboarding saved. If payouts are not enabled yet, finish verification in Stripe."
-            );
-          }
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Could not refresh Stripe Connect");
-        } finally {
-          const next = new URLSearchParams(searchParams);
-          next.delete("stripe_connect");
-          setSearchParams(next, { replace: true });
-        }
-      })();
-    }
     if (paid === "1") {
       toast.success("Payment complete — install or acquire your purchase.");
       const next = new URLSearchParams(searchParams);
@@ -679,48 +644,6 @@ export default function MarketplacePage() {
       toast.success(`Accepted Marketplace ToS v${result.tosVersion}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "ToS acceptance failed");
-    }
-  };
-
-  const handleConnectPayout = async () => {
-    try {
-      await acceptMarketplaceTos();
-      setTosAccepted(true);
-      await connectMarketplacePayout({
-        stripeConnectAccountId: stripeConnectId.trim() || null,
-        paypalMerchantId: paypalMerchantId.trim() || null,
-        metamaskAddress: metamaskAddress.trim() || null,
-        payoutPreference: metamaskAddress.trim()
-          ? "crypto"
-          : paypalMerchantId.trim()
-            ? "paypal"
-            : stripeConnectId.trim()
-              ? "stripe"
-              : undefined,
-      });
-      const ready = Boolean(
-        stripeConnectId.trim() || paypalMerchantId.trim() || metamaskAddress.trim()
-      );
-      setPayoutReady(ready);
-      toast.success(
-        `Seller payout methods saved (${(platformFeeBps / 100).toFixed(0)}% platform fee on sales)`
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save payout methods");
-    }
-  };
-
-  const handleStripeConnectOnboarding = async () => {
-    try {
-      await acceptMarketplaceTos();
-      setTosAccepted(true);
-      const returnUrl = `${window.location.origin}/marketplace?tab=seller&stripe_connect=return`;
-      const refreshUrl = `${window.location.origin}/marketplace?tab=seller&stripe_connect=refresh`;
-      const result = await startMarketplaceStripeConnect({ returnUrl, refreshUrl });
-      if (result.accountId) setStripeConnectId(result.accountId);
-      window.location.assign(result.url);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Stripe Connect onboarding failed");
     }
   };
 
@@ -1227,58 +1150,14 @@ export default function MarketplacePage() {
               <Button onClick={() => void handleAcceptTos()}>Accept Marketplace ToS</Button>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Seller payouts</CardTitle>
-              <CardDescription>
-                Connect Stripe for Community sales (recommended). Platform fee is {feePercent}%.
-                Official ReBotics catalog sales are separate (100% to platform). PayPal/crypto are
-                deferred for v1.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Button onClick={() => void handleStripeConnectOnboarding()}>
-                  Connect with Stripe
-                </Button>
-                {stripeConnectId ? (
-                  <p className="text-xs text-muted-foreground">
-                    Linked Connect account: {stripeConnectId}
-                    {payoutReady ? " (ready)" : " (finish onboarding if prompted)"}
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-1">
-                <Label>Stripe Connect account id (advanced)</Label>
-                <Input
-                  value={stripeConnectId}
-                  onChange={(e) => setStripeConnectId(e.target.value)}
-                  placeholder="acct_… (optional paste fallback)"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>PayPal merchant id (later)</Label>
-                <Input
-                  value={paypalMerchantId}
-                  onChange={(e) => setPaypalMerchantId(e.target.value)}
-                  placeholder="PayPal merchant id"
-                  disabled
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label>MetaMask address (later)</Label>
-                <Input
-                  value={metamaskAddress}
-                  onChange={(e) => setMetamaskAddress(e.target.value)}
-                  placeholder="0x…"
-                  disabled
-                />
-              </div>
-              <Button className="w-fit" variant="outline" onClick={() => void handleConnectPayout()}>
-                Save advanced payout fields
-              </Button>
-            </CardContent>
-          </Card>
+          <SellerPayoutsCard
+            returnUrl={`${window.location.origin}/marketplace?tab=seller&stripe_connect=return`}
+            refreshUrl={`${window.location.origin}/marketplace?tab=seller&stripe_connect=refresh`}
+            onStatusChange={({ payoutReady: ready, tosAccepted: accepted }) => {
+              setPayoutReady(ready);
+              if (accepted) setTosAccepted(true);
+            }}
+          />
 
           <Card>
             <CardHeader>

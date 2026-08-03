@@ -20,6 +20,7 @@ import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCa
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
+import { SellerPayoutsCard } from "@/pages/ai-settings/SellerPayoutsCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
@@ -117,6 +118,20 @@ export default function Vault() {
               </p>
             </div>
             <HoldingsConnectCard />
+          </section>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Marketplace</h2>
+              <p className="text-sm text-muted-foreground">
+                Seller Stripe Connect for Community payouts. Marketplace → Sell
+                keeps the same card for publish gating, plus ToS Accept and
+                listing tools.
+              </p>
+            </div>
+            <SellerPayoutsCard
+              returnUrl={`${window.location.origin}/vault?tab=integrations&stripe_connect=return`}
+              refreshUrl={`${window.location.origin}/vault?tab=integrations&stripe_connect=refresh`}
+            />
           </section>
         </TabsContent>
         <TabsContent value="billing" className="mt-4 flex flex-col gap-6">
