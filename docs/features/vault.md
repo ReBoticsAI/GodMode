@@ -3,14 +3,31 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Secrets, API keys, and Cursor subscription connect."
+summary: "Subscriptions, metered API keys, and storage."
 ---
 # Vault
 
 ![vault in GodMode](/features/vault.png)
 
+Vault stores inference credentials and storage usage. Chat → Vault tab gives quick access while chatting.
 
-Vault stores secrets, API keys, and Cursor subscription connection. Chat → Vault tab gives quick access while chatting.
+## Sections
+
+### Subscriptions
+
+Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` and applies Cursor harness profiles in Intelligence.
+
+### API keys
+
+Metered BYOK with named Connect cards:
+
+| Provider | Secret id | Harness profile | Docs |
+|----------|-----------|-----------------|------|
+| OpenAI Platform | `openai-api-key` | `openai` | [Function calling](https://platform.openai.com/docs/guides/function-calling) |
+
+Each card Connect / Disconnect / Apply wires catalog models and a transport-specific harness (`profile = f(backend, provider, family)`). See [[harness-profiles]].
+
+Generic secrets (for example Exa `exa_api_key`) remain available under the free-form secrets card.
 
 ## Route
 

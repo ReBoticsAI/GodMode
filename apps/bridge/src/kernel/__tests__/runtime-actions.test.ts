@@ -486,7 +486,7 @@ describe("runtime ObjectType actions", () => {
       def,
       {
         agent_id: "intelligence",
-        provider: "openai",
+        provider: "openai_compatible",
         api_key: "sk-provider-secret",
       },
       owner
@@ -530,6 +530,31 @@ describe("runtime ObjectType actions", () => {
     expect(() =>
       providerCredentialRuntimeAdapter.delete!(db, def, "cursor-api-key", owner)
     ).not.toThrow();
+  });
+
+  it("stores OpenAI Platform credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: "intelligence",
+        provider: "openai",
+        api_key: "sk-openai-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("openai-api-key");
+    expect(created.data).toMatchObject({
+      provider: "openai",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("sk-openai-super-secret");
+    expect(providerCredentialRuntimeAdapter.get!(db, def, "openai-api-key", owner)).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(db, def, "openai-api-key", owner);
+    expect(providerCredentialRuntimeAdapter.get!(db, def, "openai-api-key", owner)).toBeNull();
   });
 
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
