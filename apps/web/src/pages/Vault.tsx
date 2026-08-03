@@ -23,6 +23,7 @@ import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
 import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
+import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 import { normalizeVaultTab } from "@/lib/navigation";
 
 export default function Vault() {
@@ -45,7 +46,7 @@ export default function Vault() {
     <Page>
       <PageHeader
         title="Vault"
-        description="Connect hub for inference, search, integrations, and storage. More connect tabs are coming. Subscriptions and API keys are separate from GodMode Cloud seat billing."
+        description="Connect hub for inference, search, integrations, billing, and storage. More connect tabs are coming. Provider subscriptions and API keys are separate from GodMode Cloud seat billing."
       />
 
       <Tabs value={tab} onValueChange={onTabChange} className="w-full">
@@ -53,6 +54,7 @@ export default function Vault() {
           <TabsTrigger value="inference">Inference</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
@@ -103,6 +105,18 @@ export default function Vault() {
               </p>
             </div>
             <GithubConnectCard />
+          </section>
+        </TabsContent>
+        <TabsContent value="billing" className="mt-4 flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">GodMode Cloud</h2>
+              <p className="text-sm text-muted-foreground">
+                Seat billing and Stripe Customer Portal for this workspace. Shown
+                only on SaaS hosts.
+              </p>
+            </div>
+            <SubscriptionCard />
           </section>
         </TabsContent>
         <TabsContent value="storage" className="mt-4">

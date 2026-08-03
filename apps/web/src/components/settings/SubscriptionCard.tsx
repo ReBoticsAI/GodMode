@@ -7,7 +7,7 @@ import {
   startSaasBillingPortal,
   type SaasSubscriptionPublic,
 } from "@/api";
-import { SETTINGS_PATH } from "@/lib/navigation";
+import { VAULT_PATH } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -67,7 +67,7 @@ export function SubscriptionCard() {
     setOpening(true);
     try {
       const { url } = await startSaasBillingPortal({
-        returnUrl: `${window.location.origin}${SETTINGS_PATH}`,
+        returnUrl: `${window.location.origin}${VAULT_PATH}?tab=billing`,
       });
       window.location.assign(url);
     } catch (err) {

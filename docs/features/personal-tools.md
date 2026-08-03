@@ -15,7 +15,7 @@ Every workspace includes these sidebar pages:
 - **Calendar**: events and schedules ([[calendar]])
 - **Tasks**: Kanban boards; tag tasks `auto` for autonomous work ([[tasks]])
 - **Wiki**: markdown knowledge base ([[wiki]])
-- **Vault**: secrets and API keys ([[vault]])
+- **Vault**: connect hub for inference, search, integrations, billing, and storage ([[vault]])
 - **Bank**: holdings and financial tracking ([[bank]])
 - **Notifications**: platform alerts ([[notifications]])
 - **Support**: submit and track help requests ([[support]])
