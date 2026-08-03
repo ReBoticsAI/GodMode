@@ -124,7 +124,7 @@ export async function resolveGithubProjectsAccessToken(
   const stored = readGithubProjectsToken(db);
   if (!stored) {
     throw Object.assign(
-      new Error("Connect GitHub in Settings before linking a Project"),
+      new Error("Connect GitHub in Vault → Integrations before linking a Project"),
       { status: 400 }
     );
   }
@@ -150,7 +150,7 @@ export async function resolveGithubProjectsAccessToken(
     return token;
   }
   throw Object.assign(
-    new Error("Connect GitHub in Settings before linking a Project"),
+    new Error("Connect GitHub in Vault → Integrations before linking a Project"),
     { status: 400 }
   );
 }

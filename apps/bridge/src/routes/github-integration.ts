@@ -88,7 +88,7 @@ export function createGithubIntegrationRouter(): Router {
     if (pending) pendingStates.delete(state);
     const webBase = config.web.publicUrl.replace(/\/$/, "");
     if (!code || !pending || pending.expiresAt < Date.now()) {
-      res.redirect(`${webBase}/settings?github=error`);
+      res.redirect(`${webBase}/vault?tab=integrations&github=error`);
       return;
     }
     try {
@@ -99,10 +99,10 @@ export function createGithubIntegrationRouter(): Router {
       }
       const db = getUserOwnerTenantDb(pending.userId);
       upsertGithubProjectsToken(db, token);
-      res.redirect(`${webBase}/settings?github=connected`);
+      res.redirect(`${webBase}/vault?tab=integrations&github=connected`);
     } catch (err) {
       console.error("[github-integration] callback", err);
-      res.redirect(`${webBase}/settings?github=error`);
+      res.redirect(`${webBase}/vault?tab=integrations&github=error`);
     }
   });
 
