@@ -452,7 +452,7 @@ export async function selectIntelligenceModel(
   }
 
   if (input.source === "cursor") {
-    if (!getCursorAuthStatus(db).connected) {
+    if (!isCursorSubscriptionReady(db, "intelligence")) {
       throw new Error("Connect Cursor with an API key first");
     }
     const model = input.model?.trim() || "auto";

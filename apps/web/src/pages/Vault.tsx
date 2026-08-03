@@ -108,7 +108,12 @@ export default function Vault() {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex max-w-md flex-1 flex-col gap-1.5">
           <Label htmlFor="vault-owner">Vault owner</Label>
-          <Select value={ownerSelect} onValueChange={setOwnerSelect}>
+          <Select
+            value={ownerSelect}
+            onValueChange={(value) => {
+              if (value) setOwnerSelect(value);
+            }}
+          >
             <SelectTrigger id="vault-owner" className="w-full">
               <SelectValue placeholder="Personal" />
             </SelectTrigger>
