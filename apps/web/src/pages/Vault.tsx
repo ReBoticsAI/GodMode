@@ -19,6 +19,7 @@ import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
+import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
 import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
@@ -105,6 +106,17 @@ export default function Vault() {
               </p>
             </div>
             <GithubConnectCard />
+          </section>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Holdings</h2>
+              <p className="text-sm text-muted-foreground">
+                Moralis and PayPal API credentials for live Bank / Holdings sync.
+                Connect wallets and PayPal balances on Bank after credentials are
+                saved here.
+              </p>
+            </div>
+            <HoldingsConnectCard />
           </section>
         </TabsContent>
         <TabsContent value="billing" className="mt-4 flex flex-col gap-6">
