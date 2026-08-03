@@ -21,7 +21,7 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | cursor / cursor_cloud | — | grok* | `cursor-grok` |
 | cursor / cursor_cloud | — | other | `cursor` |
 | provider | openai | * | `openai` |
-| provider | anthropic | * | `anthropic` (untuned placeholder until Anthropic card ships) |
+| provider | anthropic | * | `anthropic` |
 | remote | — | * | `remote` |
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

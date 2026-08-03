@@ -5,6 +5,11 @@ import {
   OPENAI_API_KEY_SECRET_ID,
   OPENAI_API_KEY_SECRET_NAME,
 } from "./openai-platform.js";
+import {
+  ANTHROPIC_API_KEY_SECRET_ID,
+  ANTHROPIC_API_KEY_SECRET_NAME,
+  getAnthropicAuthStatus,
+} from "./anthropic-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -100,14 +105,18 @@ export async function listModelCatalog(
     (s) =>
       s.name !== "cursor_api_key" &&
       s.name !== OPENAI_API_KEY_SECRET_NAME &&
-      s.id !== OPENAI_API_KEY_SECRET_ID
+      s.id !== OPENAI_API_KEY_SECRET_ID &&
+      s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
+      s.id !== ANTHROPIC_API_KEY_SECRET_ID
   );
   const hasOpenAi =
     getOpenAiAuthStatus(db).connected ||
     secrets.some((s) => secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt"));
-  const hasAnthropic = secrets.some(
-    (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
-  );
+  const hasAnthropic =
+    getAnthropicAuthStatus(db).connected ||
+    secrets.some(
+      (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
+    );
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -305,9 +314,12 @@ export async function selectIntelligenceModel(
       (s) =>
         s.name !== "cursor_api_key" &&
         s.name !== OPENAI_API_KEY_SECRET_NAME &&
-        s.id !== OPENAI_API_KEY_SECRET_ID
+        s.id !== OPENAI_API_KEY_SECRET_ID &&
+        s.name !== ANTHROPIC_API_KEY_SECRET_NAME &&
+        s.id !== ANTHROPIC_API_KEY_SECRET_ID
     );
     const openAiReady = getOpenAiAuthStatus(db).connected;
+    const anthropicReady = getAnthropicAuthStatus(db).connected;
 
     let preferredId: string | undefined;
     if (provider === "openai") {
@@ -321,11 +333,20 @@ export async function selectIntelligenceModel(
       if (!preferredId) {
         throw new Error("Connect OpenAI Platform in Vault before using OpenAI models");
       }
+    } else if (provider === "anthropic") {
+      if (anthropicReady) {
+        preferredId = ANTHROPIC_API_KEY_SECRET_ID;
+      } else {
+        preferredId = secrets.find(
+          (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
+        )?.id;
+      }
+      if (!preferredId) {
+        throw new Error("Connect Anthropic Console in Vault before using Anthropic models");
+      }
     } else {
       preferredId = secrets.find((s) =>
-        provider === "anthropic"
-          ? secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
-          : secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
+        secretLooksLike(s.name, "openai") || secretLooksLike(s.name, "gpt")
       )?.id ?? secrets[0]?.id;
       if (!preferredId) {
         throw new Error("Add an API key in Vault → Secrets before using cloud provider models");
