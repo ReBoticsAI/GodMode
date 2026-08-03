@@ -736,7 +736,7 @@ export default function UserTasksPage() {
 
             {!ghConnected ? (
               <p className="text-muted-foreground">
-                GitHub is not connected. Open Settings → Connect GitHub, then
+                GitHub is not connected. Open Vault → Integrations, then
                 return here.
               </p>
             ) : (

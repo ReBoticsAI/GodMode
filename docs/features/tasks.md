@@ -37,7 +37,7 @@ Hidden columns keep their cards; they are just omitted from the board until unhi
 
 ## GitHub Project sync (optional)
 
-1. **Settings → Connect GitHub** (GitHub App install + authorize; tokens in Vault). Sign-in with GitHub on Cloud uses the same App when configured.
+1. **Vault → Integrations** (GitHub App install + authorize; tokens in Vault). Sign-in with GitHub on Cloud uses the same App when configured.
 2. Open a board’s settings and pick a GitHub Project you can access.
 3. On link / Sync, board **columns follow the Project Status options** (and remap cards). Adjust the Status map in board settings if needed.
 4. **Sync GitHub** pulls items into cards; moving/editing cards pushes Status, title, body, due, priority, labels, **assignees**, and **milestone** when mapped (Issues/PRs for assignees and milestone).

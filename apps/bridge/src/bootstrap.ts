@@ -447,7 +447,7 @@ app.use("/api/bank", createBankRouter());
 if (!config.isHub) {
   app.use("/api/integrations", createIntegrationsRouter());
 }
-// GitHub Projects OAuth (Settings → Connect GitHub) is required on hub/SaaS too.
+// GitHub Projects OAuth (Vault → Integrations) is required on hub/SaaS too.
 app.use("/api/integrations/github", createGithubIntegrationRouter());
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
