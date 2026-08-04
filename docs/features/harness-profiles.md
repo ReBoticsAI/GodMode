@@ -64,6 +64,7 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (xAI) | other | `xai-generic` |
 | provider | openai_compatible (Z.AI payg) | * | `zai-payg` |
 | provider | openai_compatible (MiniMax payg) | * | `minimax-payg` |
+| provider | openai_compatible (custom) | * | `custom-openai` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | remote | — | * | `remote` |
 
@@ -84,6 +85,8 @@ xAI console is also a **transport**. Profile = `f(xai transport, modelFamily)` (
 Z.AI Platform payg is also a **transport**. Profile = `zai-payg`. Uses general `/api/paas/v4` (not Coding Plan). Distinct from `zai-coding` and Fireworks/Together GLM hosting.
 
 MiniMax payg is also a **transport**. Profile = `minimax-payg`. Uses `https://api.minimax.io/v1`. Distinct from Fireworks/Together/OpenRouter MiniMax routes and from Token Plan (#230). Catalog snapshot 2026-08-03; custom model ids allowed.
+
+Custom OpenAI-compatible is also a **transport**. Profile = `custom-openai`. User-supplied base URL + key (escape hatch). Prefer named provider cards when available.
 
 Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
 

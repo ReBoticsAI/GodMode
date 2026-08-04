@@ -35,6 +35,7 @@ import { GoogleAiStudioCard } from "@/pages/ai-settings/GoogleAiStudioCard";
 import { XaiConsoleCard } from "@/pages/ai-settings/XaiConsoleCard";
 import { ZaiPaygCard } from "@/pages/ai-settings/ZaiPaygCard";
 import { MinimaxPaygCard } from "@/pages/ai-settings/MinimaxPaygCard";
+import { CustomOpenAiCard } from "@/pages/ai-settings/CustomOpenAiCard";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
 import {
@@ -372,6 +373,7 @@ export function InferenceTab({
           <XaiConsoleCard vaultAgentId={null} />
           <ZaiPaygCard vaultAgentId={null} />
           <MinimaxPaygCard vaultAgentId={null} />
+          <CustomOpenAiCard vaultAgentId={null} />
         </section>
       </TabsContent>
 

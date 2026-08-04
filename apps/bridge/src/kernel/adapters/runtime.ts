@@ -171,6 +171,15 @@ import {
   upsertMinimaxApiKey,
 } from "../../services/minimax-platform.js";
 import {
+  getCustomOpenAiAuthStatus,
+  isCustomOpenAiPlatformReady,
+  isCustomOpenAiVaultSecretId,
+  isCustomOpenAiVaultSecretName,
+  CUSTOM_OPENAI_API_KEY_SECRET_ID,
+  removeCustomOpenAiCredential,
+  upsertCustomOpenAiCredential,
+} from "../../services/custom-openai-platform.js";
+import {
   getZaiCodingAuthStatus,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -1066,6 +1075,8 @@ function isManagedPlatformSecret(secret: {
     isZaiVaultSecretName(secret.name) ||
     isMinimaxVaultSecretId(secret.id) ||
     isMinimaxVaultSecretName(secret.name) ||
+    isCustomOpenAiVaultSecretId(secret.id) ||
+    isCustomOpenAiVaultSecretName(secret.name) ||
     isZaiCodingVaultSecretId(secret.id) ||
     isZaiCodingVaultSecretName(secret.name)
   );
@@ -1155,6 +1166,12 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isMinimaxVaultSecretName(name)) {
       throw httpError(400, "MiniMax API keys must use the MiniMax credential flow");
+    }
+    if (isCustomOpenAiVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "Custom OpenAI-compatible credentials must use the Custom OpenAI credential flow"
+      );
     }
     if (isZaiCodingVaultSecretName(name)) {
       throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
@@ -1374,6 +1391,20 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === CUSTOM_OPENAI_API_KEY_SECRET_ID) {
+      const status = getCustomOpenAiAuthStatus(db, scope);
+      return status.connected
+        ? record(def, CUSTOM_OPENAI_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "custom_openai",
+            display_name: "Custom OpenAI-compatible",
+            status: "active",
+            masked_token: status.masked ?? "****",
+            base_url: status.baseUrl ?? "",
+          })
+        : null;
+    }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
       const status = getZaiCodingAuthStatus(db, scope);
       return status.connected
@@ -1548,6 +1579,27 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "custom_openai" ||
+      requiredText(data, "provider").toLowerCase() === "custom-openai"
+    ) {
+      upsertCustomOpenAiCredential(
+        db,
+        requiredText(data, "api_key"),
+        requiredText(data, "base_url"),
+        scope
+      );
+      const status = getCustomOpenAiAuthStatus(db, scope);
+      return record(def, CUSTOM_OPENAI_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "custom_openai",
+        display_name: "Custom OpenAI-compatible",
+        status: "active",
+        masked_token: status.masked ?? "****",
+        base_url: status.baseUrl ?? "",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "zai_coding" ||
       requiredText(data, "provider").toLowerCase() === "zai-coding"
     ) {
@@ -1624,6 +1676,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === MINIMAX_API_KEY_SECRET_ID) {
       removeMinimaxApiKey(db, scope);
+      return;
+    }
+    if (id === CUSTOM_OPENAI_API_KEY_SECRET_ID) {
+      removeCustomOpenAiCredential(db, scope);
       return;
     }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
@@ -1807,6 +1863,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom OpenAI-compatible slug when Vault is connected.
+      if (!selected) {
+        const customOpenAi =
+          /^provider:openai_compatible:custom_openai:(.+)$/.exec(modelId);
+        if (customOpenAi?.[1] && isCustomOpenAiPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Custom · ${customOpenAi[1]}`,
+            model: customOpenAi[1],
+            provider: "openai_compatible",
+            transport: "custom_openai",
+          };
+        }
+      }
       // Custom Fireworks slug when Vault is connected.
       if (!selected) {
         const fireworksCustom =
@@ -1863,6 +1934,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("xai:") &&
           !custom[1].startsWith("zai:") &&
           !custom[1].startsWith("minimax:") &&
+          !custom[1].startsWith("custom_openai:") &&
           !custom[1].startsWith("zai_coding:") &&
           isOpenRouterPlatformReady(db)
         ) {
@@ -1906,6 +1978,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "zai", apiKeyRef: ZAI_API_KEY_SECRET_ID }
                     : transport === "minimax"
                       ? { transport: "minimax", apiKeyRef: MINIMAX_API_KEY_SECRET_ID }
+                    : transport === "custom_openai"
+                      ? {
+                          transport: "custom_openai",
+                          apiKeyRef: CUSTOM_OPENAI_API_KEY_SECRET_ID,
+                        }
                     : transport === "zai_coding"
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                       : {}),
