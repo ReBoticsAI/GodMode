@@ -4,7 +4,7 @@ Bridge reads environment variables from `apps/bridge/.env` (copy from `.env.exam
 
 ## Auth and deployment
 
-Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAuth** (Copilot, Codex, GitLab Duo, SuperGrok, and related) is deferred; see [Vault OAuth subscription providers](./features/vault-oauth-subscriptions.md). Do not commit provider OAuth client secrets into the public repo. When a subscription OAuth Connect card ships, register apps on the host and set env client id/secret with redirect `{AUTH_PUBLIC_URL}/api/integrations/<provider>/callback`.
+Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAuth** active residual for #355 is Copilot, GitLab Duo, and SuperGrok (Codex scrapped; Amazon Q / Kiro deferred / later); see [Vault OAuth subscription providers](./features/vault-oauth-subscriptions.md). Do not commit provider OAuth client secrets into the public repo. When a subscription OAuth Connect card ships, register apps on the host and set env client id/secret with redirect `{AUTH_PUBLIC_URL}/api/integrations/<provider>/callback`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
