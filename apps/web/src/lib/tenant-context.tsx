@@ -15,6 +15,13 @@ import {
   type AuthUser,
   type TenantSummary,
 } from "@/api";
+import { clearActiveTenant } from "@/lib/storage-keys";
+
+export interface TenantRefreshResult {
+  authenticated: boolean;
+  user: AuthUser | null;
+  tenants: TenantSummary[];
+}
 
 interface TenantContextValue {
   user: AuthUser | null;
@@ -22,7 +29,7 @@ interface TenantContextValue {
   tenants: TenantSummary[];
   activeTenantId: string | null;
   setTenant: (id: string) => void;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<TenantRefreshResult>;
   loading: boolean;
 }
 
@@ -37,14 +44,16 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<TenantRefreshResult> => {
     try {
       const session = await fetchAuthSession();
       if (!session.authenticated || !session.user) {
         setAuthenticated(false);
         setUser(null);
         setTenants([]);
-        return;
+        setActiveTenantIdState(null);
+        clearActiveTenant();
+        return { authenticated: false, user: null, tenants: [] };
       }
       setAuthenticated(true);
       setUser(session.user);
@@ -58,17 +67,30 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       if (next) {
         setActiveTenantId(next);
         setActiveTenantIdState(next);
+      } else {
+        clearActiveTenant();
+        setActiveTenantIdState(null);
       }
-    } catch {
+      return {
+        authenticated: true,
+        user: session.user,
+        tenants: tenantList.tenants,
+      };
+    } catch (err) {
       setAuthenticated(false);
       setUser(null);
+      setTenants([]);
+      setActiveTenantIdState(null);
+      throw err;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => {
+      /* initial load: unauthenticated */
+    });
   }, [refresh]);
 
   const setTenant = useCallback((id: string) => {

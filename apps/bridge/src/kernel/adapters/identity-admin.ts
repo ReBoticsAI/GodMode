@@ -221,8 +221,10 @@ export const userAdminAdapter: RecordAdapter = {
             ? input.display_name
             : undefined,
         isAdmin: input.is_admin === true,
-        // Workspace lifecycle is exposed separately so its run state is durable.
-        provisionDefaultTenant: false,
+        // Default true when omitted so the Admin UI checkbox (and older clients)
+        // provision a personal workspace. Pass false to skip.
+        provisionDefaultTenant: input.provision_default_tenant !== false,
+        markEmailVerified: true,
       });
       return userRecord(def, user);
     },
@@ -918,6 +920,7 @@ export const IDENTITY_ADMIN_ACTIONS: Record<string, ActionDef[]> = {
           password: { type: "string", minLength: 6 },
           display_name: { type: "string" },
           is_admin: { type: "boolean" },
+          provision_default_tenant: { type: "boolean" },
         },
         ["email", "password"]
       ),
