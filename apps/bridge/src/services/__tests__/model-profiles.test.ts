@@ -25,6 +25,7 @@ import {
   resolveGoogleAiHarnessProfile,
   resolveXaiHarnessProfile,
   resolveZaiPaygHarnessProfile,
+  resolveMinimaxPaygHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -346,6 +347,19 @@ assert.equal(
     baseUrl: "https://api.z.ai/api/paas/v4",
   }).id,
   "zai-payg"
+);
+assert.equal(resolveMinimaxPaygHarnessProfile("MiniMax-M3").id, "minimax-payg");
+assert.notEqual(resolveMinimaxPaygHarnessProfile("MiniMax-M3").id, "together-minimax");
+assert.notEqual(resolveMinimaxPaygHarnessProfile("MiniMax-M3").id, "fireworks-minimax");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "MiniMax-M3",
+    transport: "minimax",
+    baseUrl: "https://api.minimax.io/v1",
+  }).id,
+  "minimax-payg"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");

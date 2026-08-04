@@ -162,6 +162,15 @@ import {
   upsertZaiApiKey,
 } from "../../services/zai-platform.js";
 import {
+  getMinimaxAuthStatus,
+  isMinimaxPlatformReady,
+  isMinimaxVaultSecretId,
+  isMinimaxVaultSecretName,
+  MINIMAX_API_KEY_SECRET_ID,
+  removeMinimaxApiKey,
+  upsertMinimaxApiKey,
+} from "../../services/minimax-platform.js";
+import {
   getZaiCodingAuthStatus,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -1055,6 +1064,8 @@ function isManagedPlatformSecret(secret: {
     isXaiVaultSecretName(secret.name) ||
     isZaiVaultSecretId(secret.id) ||
     isZaiVaultSecretName(secret.name) ||
+    isMinimaxVaultSecretId(secret.id) ||
+    isMinimaxVaultSecretName(secret.name) ||
     isZaiCodingVaultSecretId(secret.id) ||
     isZaiCodingVaultSecretName(secret.name)
   );
@@ -1141,6 +1152,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isZaiVaultSecretName(name)) {
       throw httpError(400, "Z.AI Platform API keys must use the Z.AI Platform credential flow");
+    }
+    if (isMinimaxVaultSecretName(name)) {
+      throw httpError(400, "MiniMax API keys must use the MiniMax credential flow");
     }
     if (isZaiCodingVaultSecretName(name)) {
       throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
@@ -1347,6 +1361,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === MINIMAX_API_KEY_SECRET_ID) {
+      const status = getMinimaxAuthStatus(db, scope);
+      return status.connected
+        ? record(def, MINIMAX_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "minimax",
+            display_name: "MiniMax",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
       const status = getZaiCodingAuthStatus(db, scope);
       return status.connected
@@ -1508,6 +1535,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "minimax") {
+      upsertMinimaxApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getMinimaxAuthStatus(db, scope);
+      return record(def, MINIMAX_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "minimax",
+        display_name: "MiniMax",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     if (
       requiredText(data, "provider").toLowerCase() === "zai_coding" ||
       requiredText(data, "provider").toLowerCase() === "zai-coding"
@@ -1581,6 +1620,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === ZAI_API_KEY_SECRET_ID) {
       removeZaiApiKey(db, scope);
+      return;
+    }
+    if (id === MINIMAX_API_KEY_SECRET_ID) {
+      removeMinimaxApiKey(db, scope);
       return;
     }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
@@ -1749,6 +1792,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom MiniMax payg slug when Vault is connected.
+      if (!selected) {
+        const minimaxCustom =
+          /^provider:openai_compatible:minimax:(.+)$/.exec(modelId);
+        if (minimaxCustom?.[1] && isMinimaxPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `MiniMax · ${minimaxCustom[1]}`,
+            model: minimaxCustom[1],
+            provider: "openai_compatible",
+            transport: "minimax",
+          };
+        }
+      }
       // Custom Fireworks slug when Vault is connected.
       if (!selected) {
         const fireworksCustom =
@@ -1804,6 +1862,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("google_ai:") &&
           !custom[1].startsWith("xai:") &&
           !custom[1].startsWith("zai:") &&
+          !custom[1].startsWith("minimax:") &&
           !custom[1].startsWith("zai_coding:") &&
           isOpenRouterPlatformReady(db)
         ) {
@@ -1845,6 +1904,8 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "xai", apiKeyRef: XAI_API_KEY_SECRET_ID }
                     : transport === "zai"
                       ? { transport: "zai", apiKeyRef: ZAI_API_KEY_SECRET_ID }
+                    : transport === "minimax"
+                      ? { transport: "minimax", apiKeyRef: MINIMAX_API_KEY_SECRET_ID }
                     : transport === "zai_coding"
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                       : {}),

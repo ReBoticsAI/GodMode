@@ -1014,6 +1014,9 @@ export function createAiRouter(
         s.id !== "zai-api-key" &&
         !s.id.startsWith("zai-api-key__agent__") &&
         s.name !== "zai_api_key" &&
+        s.id !== "minimax-api-key" &&
+        !s.id.startsWith("minimax-api-key__agent__") &&
+        s.name !== "minimax_api_key" &&
         s.id !== "zai-coding-api-key" &&
         !s.id.startsWith("zai-coding-api-key__agent__") &&
         s.name !== "zai_coding_api_key"

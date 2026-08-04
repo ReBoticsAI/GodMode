@@ -2641,6 +2641,70 @@ export const applyZaiToIntelligence = (model = "glm-5.2") =>
     true
   );
 
+export type MinimaxAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchMinimaxStatus = async (
+  agentId?: string | null
+): Promise<MinimaxAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "minimax-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "minimax") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectMinimaxApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "minimax",
+      label: "MiniMax",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchMinimaxStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectMinimaxApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "minimax-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchMinimaxStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyMinimaxToIntelligence = (model = "MiniMax-M3") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:minimax:${model}` },
+    "runtime",
+    true
+  );
+
 export type ZaiCodingAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";
