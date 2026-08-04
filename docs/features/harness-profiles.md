@@ -64,9 +64,12 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (xAI) | other | `xai-generic` |
 | provider | openai_compatible (Z.AI payg) | * | `zai-payg` |
 | provider | openai_compatible (MiniMax payg) | * | `minimax-payg` |
+| provider | openai_compatible (MiniMax Token Plan) | * | `minimax-token` |
 | provider | openai_compatible (custom) | * | `custom-openai` |
 | provider | openai_compatible (OpenCode Go) | * | `opencode-go` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
+| provider | openai_compatible (Kimi Code) | * | `kimi-code` |
+| provider | openai_compatible (Poe) | * | `poe` |
 | remote | — | * | `remote` |
 
 OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
@@ -85,12 +88,18 @@ xAI console is also a **transport**. Profile = `f(xai transport, modelFamily)` (
 
 Z.AI Platform payg is also a **transport**. Profile = `zai-payg`. Uses general `/api/paas/v4` (not Coding Plan). Distinct from `zai-coding` and Fireworks/Together GLM hosting.
 
-MiniMax payg is also a **transport**. Profile = `minimax-payg`. Uses `https://api.minimax.io/v1`. Distinct from Fireworks/Together/OpenRouter MiniMax routes and from Token Plan (#230). Catalog snapshot 2026-08-03; custom model ids allowed.
+MiniMax payg is also a **transport**. Profile = `minimax-payg`. Uses `https://api.minimax.io/v1`. Distinct from Fireworks/Together/OpenRouter MiniMax routes and from Token Plan (`minimax-token`). Catalog snapshot 2026-08-03; custom model ids allowed.
+
+MiniMax Token Plan is a **subscription transport**. Profile = `minimax-token`. Same host as payg; distinguish via transport / secret id (`minimax-token-api-key`), not URL alone.
 
 Custom OpenAI-compatible is also a **transport**. Profile = `custom-openai`. User-supplied base URL + key (escape hatch). Prefer named provider cards when available.
 
 OpenCode Go is a **subscription transport**. Profile = `opencode-go`. Uses `https://opencode.ai/zen/go/v1`. Distinct from OpenCode Zen and from Cursor.
 
 Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
+
+Kimi Code is a **subscription transport**. Profile = `kimi-code`. Uses `https://api.kimi.com/coding/v1`. Distinct from Moonshot/Kimi Open Platform payg and from OpenRouter/Groq/Together/Fireworks Kimi hosting.
+
+Poe is a **subscription transport**. Profile = `poe`. Uses `https://api.poe.com/v1` and spends the key owner's Poe subscription compute points.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

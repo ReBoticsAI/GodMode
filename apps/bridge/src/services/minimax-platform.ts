@@ -121,6 +121,14 @@ export function isMinimaxAgentConfig(
   config: Record<string, unknown> | null | undefined
 ): boolean {
   if (!config) return false;
+  // Token Plan uses the same host; exclude via transport / secret / flag.
+  if (
+    config.minimaxToken === true ||
+    config.transport === "minimax_token" ||
+    config.apiKeyRef === "minimax-token-api-key"
+  ) {
+    return false;
+  }
   if (config.minimax === true || config.transport === "minimax") return true;
   if (config.apiKeyRef === MINIMAX_API_KEY_SECRET_ID) return true;
   const base = typeof config.baseUrl === "string" ? config.baseUrl.toLowerCase() : "";

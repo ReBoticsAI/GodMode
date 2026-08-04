@@ -197,6 +197,27 @@ import {
   removeOpencodeGoApiKey,
   upsertOpencodeGoApiKey,
 } from "../../services/opencode-go-platform.js";
+import {
+  getMinimaxTokenAuthStatus,
+  isMinimaxTokenPlatformReady,
+  MINIMAX_TOKEN_API_KEY_SECRET_ID,
+  removeMinimaxTokenApiKey,
+  upsertMinimaxTokenApiKey,
+} from "../../services/minimax-token-platform.js";
+import {
+  getKimiCodeAuthStatus,
+  isKimiCodePlatformReady,
+  KIMI_CODE_API_KEY_SECRET_ID,
+  removeKimiCodeApiKey,
+  upsertKimiCodeApiKey,
+} from "../../services/kimi-code-platform.js";
+import {
+  getPoeAuthStatus,
+  isPoePlatformReady,
+  POE_API_KEY_SECRET_ID,
+  removePoeApiKey,
+  upsertPoeApiKey,
+} from "../../services/poe-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -1445,6 +1466,45 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === MINIMAX_TOKEN_API_KEY_SECRET_ID) {
+      const status = getMinimaxTokenAuthStatus(db, scope);
+      return status.connected
+        ? record(def, MINIMAX_TOKEN_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "minimax_token",
+            display_name: "MiniMax Token Plan",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === KIMI_CODE_API_KEY_SECRET_ID) {
+      const status = getKimiCodeAuthStatus(db, scope);
+      return status.connected
+        ? record(def, KIMI_CODE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "kimi_code",
+            display_name: "Kimi Code",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === POE_API_KEY_SECRET_ID) {
+      const status = getPoeAuthStatus(db, scope);
+      return status.connected
+        ? record(def, POE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "poe",
+            display_name: "Poe",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1656,6 +1716,48 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (
+      requiredText(data, "provider").toLowerCase() === "minimax_token" ||
+      requiredText(data, "provider").toLowerCase() === "minimax-token"
+    ) {
+      upsertMinimaxTokenApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getMinimaxTokenAuthStatus(db, scope);
+      return record(def, MINIMAX_TOKEN_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "minimax_token",
+        display_name: "MiniMax Token Plan",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
+      requiredText(data, "provider").toLowerCase() === "kimi_code" ||
+      requiredText(data, "provider").toLowerCase() === "kimi-code"
+    ) {
+      upsertKimiCodeApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getKimiCodeAuthStatus(db, scope);
+      return record(def, KIMI_CODE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "kimi_code",
+        display_name: "Kimi Code",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (requiredText(data, "provider").toLowerCase() === "poe") {
+      upsertPoeApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getPoeAuthStatus(db, scope);
+      return record(def, POE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "poe",
+        display_name: "Poe",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1730,6 +1832,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === OPENCODE_GO_API_KEY_SECRET_ID) {
       removeOpencodeGoApiKey(db, scope);
+      return;
+    }
+    if (id === MINIMAX_TOKEN_API_KEY_SECRET_ID) {
+      removeMinimaxTokenApiKey(db, scope);
+      return;
+    }
+    if (id === KIMI_CODE_API_KEY_SECRET_ID) {
+      removeKimiCodeApiKey(db, scope);
+      return;
+    }
+    if (id === POE_API_KEY_SECRET_ID) {
+      removePoeApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1848,6 +1962,50 @@ export const modelRuntimeAdapter: RecordAdapter = {
             model: ocCustom[1],
             provider: "openai_compatible",
             transport: "opencode_go",
+          };
+        }
+      }
+      // Custom MiniMax Token Plan slug when Vault is connected.
+      if (!selected) {
+        const mtCustom =
+          /^provider:openai_compatible:minimax_token:(.+)$/.exec(modelId);
+        if (mtCustom?.[1] && isMinimaxTokenPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `MiniMax Token · ${mtCustom[1]}`,
+            model: mtCustom[1],
+            provider: "openai_compatible",
+            transport: "minimax_token",
+          };
+        }
+      }
+      // Custom Kimi Code slug when Vault is connected.
+      if (!selected) {
+        const kcCustom =
+          /^provider:openai_compatible:kimi_code:(.+)$/.exec(modelId);
+        if (kcCustom?.[1] && isKimiCodePlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Kimi Code · ${kcCustom[1]}`,
+            model: kcCustom[1],
+            provider: "openai_compatible",
+            transport: "kimi_code",
+          };
+        }
+      }
+      // Custom Poe slug when Vault is connected.
+      if (!selected) {
+        const poeCustom = /^provider:openai_compatible:poe:(.+)$/.exec(modelId);
+        if (poeCustom?.[1] && isPoePlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Poe · ${poeCustom[1]}`,
+            model: poeCustom[1],
+            provider: "openai_compatible",
+            transport: "poe",
           };
         }
       }
@@ -1998,6 +2156,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("custom_openai:") &&
           !custom[1].startsWith("zai_coding:") &&
           !custom[1].startsWith("opencode_go:") &&
+          !custom[1].startsWith("minimax_token:") &&
+          !custom[1].startsWith("kimi_code:") &&
+          !custom[1].startsWith("poe:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -2049,6 +2210,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                     : transport === "opencode_go"
                       ? { transport: "opencode_go", apiKeyRef: OPENCODE_GO_API_KEY_SECRET_ID }
+                    : transport === "minimax_token"
+                      ? {
+                          transport: "minimax_token",
+                          apiKeyRef: MINIMAX_TOKEN_API_KEY_SECRET_ID,
+                        }
+                    : transport === "kimi_code"
+                      ? { transport: "kimi_code", apiKeyRef: KIMI_CODE_API_KEY_SECRET_ID }
+                    : transport === "poe"
+                      ? { transport: "poe", apiKeyRef: POE_API_KEY_SECRET_ID }
                       : {}),
       });
     },
