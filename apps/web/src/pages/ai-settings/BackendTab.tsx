@@ -17,6 +17,7 @@ import {
   type AiSecret,
   type SharedModel,
 } from "@/api";
+import { platformVaultSettingsHref } from "@/lib/navigation";
 
 export function BackendTab({
   agent,
@@ -245,7 +246,14 @@ export function BackendTab({
             />
             <p className="text-[10px] text-muted-foreground">
               Uses your Cursor subscription via <span className="font-mono">@cursor/sdk</span>.
-              Connect in Vault → Cursor subscription. Common ids:{" "}
+              Connect in{" "}
+              <Link
+                to={platformVaultSettingsHref("subscriptions")}
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                Settings → Vault → Inference → Subscriptions
+              </Link>
+              . Common ids:{" "}
               <span className="font-mono">auto</span>,{" "}
               <span className="font-mono">composer-2.5</span>.
             </p>

@@ -774,7 +774,7 @@ export default function UserTasksPage() {
                     <p className="text-xs text-muted-foreground">
                       No Projects found for the connected GitHub account. If
                       you expected org projects, disconnect and reconnect
-                      GitHub in Settings so the newer permissions are granted.
+                      GitHub in Vault so the newer permissions are granted.
                     </p>
                   ) : null}
                 </div>

@@ -17,8 +17,8 @@ import { useHoldings } from "@/hooks/use-holdings";
 import { saveMoralisConfig, savePayPalConfig } from "@/lib/api-holdings";
 
 /**
- * Moralis + PayPal credential setup for Holdings / Bank live sync.
- * Wallet and PayPal balance connect flows stay on Holdings / Bank.
+ * Moralis + PayPal credential setup for Vault → Wallets & Accounts live sync.
+ * Wallet and account connect flows live on the same Vault tab.
  */
 export function HoldingsConnectCard() {
   const { config, refresh } = useHoldings();
@@ -72,8 +72,8 @@ export function HoldingsConnectCard() {
             Moralis
           </CardTitle>
           <CardDescription>
-            Web3 API key for live crypto wallet portfolios on Bank / Holdings.
-            Credentials are encrypted and stored on this host.
+            Web3 API key for live crypto wallet portfolios under Vault → Wallets
+            & Accounts. Credentials are encrypted and stored on this host.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -117,8 +117,9 @@ export function HoldingsConnectCard() {
             PayPal business
           </CardTitle>
           <CardDescription>
-            Business app client ID and secret for live PayPal balance sync on Bank /
-            Holdings. The app needs Transaction Search / Reporting enabled.
+            Business app client ID and secret for live PayPal balance sync under
+            Vault → Wallets & Accounts. The app needs Transaction Search /
+            Reporting enabled.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

@@ -15,9 +15,9 @@ Every workspace includes these sidebar pages:
 - **Calendar**: events and schedules ([[calendar]])
 - **Tasks**: Kanban boards; tag tasks `auto` for autonomous work ([[tasks]])
 - **Wiki**: markdown knowledge base ([[wiki]])
-- **Vault**: connect hub for inference, search, integrations, billing, and storage ([[vault]])
-- **Bank**: holdings and financial tracking ([[bank]])
+- **Vault**: user connect hub for GitHub, wallets and accounts, marketplace, and secrets ([[vault]]; Platform Vault and Storage live under Settings)
+- **Bank**: ledger across connected wallets and accounts ([[bank]])
 - **Notifications**: platform alerts ([[notifications]])
 - **Support**: submit and track help requests ([[support]])
 
-Add API keys in **Vault → Inference**, then point Intelligence at a cloud provider under **Agents → Pipeline → Backend** if you are not using a local model.
+Add API keys in **Settings → Vault → Inference**, then point Intelligence at a cloud provider under **Agents → Pipeline → Backend** if you are not using a local model.
