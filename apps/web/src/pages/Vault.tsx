@@ -21,6 +21,7 @@ import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ZaiCodingPlanCard } from "@/pages/ai-settings/ZaiCodingPlanCard";
+import { OpencodeGoCard } from "@/pages/ai-settings/OpencodeGoCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
@@ -344,12 +345,13 @@ export function InferenceTab({
           <div>
             <h2 className="text-sm font-medium">Subscriptions</h2>
             <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Cursor and Z.AI GLM Coding Plan
-              are available today. Stored in the Platform Vault.
+              Use your plan (billed by the provider). Cursor, Z.AI GLM Coding Plan,
+              and OpenCode Go are available today. Stored in the Platform Vault.
             </p>
           </div>
           <CursorSubscriptionCard vaultAgentId={null} />
           <ZaiCodingPlanCard vaultAgentId={null} />
+          <OpencodeGoCard vaultAgentId={null} />
         </section>
       </TabsContent>
 
