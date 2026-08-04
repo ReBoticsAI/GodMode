@@ -3,7 +3,7 @@ slug: vault-oauth-subscriptions
 title: "Vault OAuth subscription providers"
 section: "Productivity"
 location: "/settings/vault?vault=inference&sub=subscriptions"
-summary: "Residual OAuth and product-auth subscription providers for Vault. Documents what OSS can ship without registered app credentials, and operator ToS notes."
+summary: "Residual OAuth and product-auth subscription providers for Vault. Documents active #355 scope, deferred later work, and out-of-scope Codex."
 ---
 
 # Vault OAuth subscription providers
@@ -18,17 +18,30 @@ API-key subscription cards (Cursor, Z.AI Coding Plan, OpenCode Go/Zen, MiniMax T
 - Per-tenant credentials only. Never pool consumer subscription tokens on Cloud.
 - When a provider also offers a PAT or model access key, ship that Connect path first (DigitalOcean Inference and Snowflake Cortex PAT are the examples).
 
-## Residual matrix
+## Active residual (#355)
+
+These remain in scope for #355 Connect work (OAuth / device-code / product auth):
 
 | Provider | Auth needed | OSS status | Blocker |
 |----------|-------------|------------|---------|
-| GitHub Copilot | Device code and/or Copilot SDK | Deferred | Needs Copilot product auth distinct from GitHub App Projects Connect; device-code poller not in Bridge yet |
-| ChatGPT Codex | OAuth (consumer / Plus/Pro/Team) | Deferred | Grey ToS for third-party use of consumer ChatGPT auth. See operator notes below before any Connect UX |
-| GitLab Duo | OAuth (Premium/Ultimate + Duo Agent Platform) | Deferred | Operator must register a GitLab OAuth app; redirect `{AUTH_PUBLIC_URL}/api/integrations/gitlab/callback` (planned) |
-| xAI SuperGrok / X Premium | OAuth preferred | Deferred | Metered console key already ships under API Keys (`xai-api-key`). Premium OAuth is separate |
-| Snowflake Cortex | Browser OAuth or PAT | PAT Connect shipped | PAT + account URL ships under Vault Subscriptions. Browser OAuth still deferred |
-| DigitalOcean Inference | Account OAuth / model access key | Model access key shipped | Connect card uses Inference model access key at `https://inference.do-ai.run/v1`. Account OAuth not required |
-| Amazon Q Developer / Kiro | AWS Builder ID / product auth | Deferred (optional) | High auth complexity; optional per #230 |
+| GitHub Copilot | Device code and/or Copilot SDK | Active residual | Needs Copilot product auth distinct from GitHub App Projects Connect; device-code poller not in Bridge yet |
+| GitLab Duo | OAuth (Premium/Ultimate + Duo Agent Platform) | Active residual | Operator must register a GitLab OAuth app; redirect `{AUTH_PUBLIC_URL}/api/integrations/gitlab/callback` (planned) |
+| xAI SuperGrok / X Premium | OAuth preferred | Active residual | Metered console key already ships under API Keys (`xai-api-key`). Premium OAuth is separate |
+
+Snowflake Cortex browser OAuth is optional follow-up only. PAT Connect already ships under Vault Subscriptions. DigitalOcean Inference model access key Connect already ships; account OAuth is not required.
+
+## Deferred / later (not active #355 checklist)
+
+| Provider | Auth needed | Status | Notes |
+|----------|-------------|--------|-------|
+| Amazon Q Developer / Kiro | AWS Builder ID / product auth | Deferred / later | High auth complexity. Not on the active #355 checklist; may return in a later issue |
+| Snowflake Cortex browser OAuth | Browser OAuth | Deferred / later | PAT path already shipped; browser OAuth only if product wants it beyond PAT |
+
+## Out of scope
+
+| Provider | Decision | Reason |
+|----------|----------|--------|
+| ChatGPT Codex (consumer ChatGPT OAuth) | **Scrapped** | Grey ToS for third-party use of consumer ChatGPT / Plus/Pro/Team auth. Do not plan to ship Codex OAuth Connect. Prefer OpenAI Platform API keys (metered BYOK already shipped) |
 
 ## Env-based OAuth setup (when a provider ships)
 
@@ -40,15 +53,6 @@ Reuse the GitHub Connect shape (`apps/bridge/src/routes/github-integration.ts`):
 4. Vault card starts authorize → Bridge stores per-tenant tokens in Platform Vault → Apply routes into Intelligence with a transport harness (#232).
 
 Until those env vars are set, Connect must stay unavailable (clear empty state), not a stub that fails after click.
-
-## ChatGPT Codex operator notes (ToS)
-
-OpenAI’s consumer ChatGPT subscription OAuth is a **grey area** for third-party products:
-
-- Tokens must stay **per-user / per-tenant**. Never pool ChatGPT consumer credentials across Cloud seats.
-- Document the risk for self-host operators before enabling any Codex OAuth Connect surface.
-- Prefer OpenAI Platform API keys (metered BYOK already shipped) when ToS clarity matters more than “use your ChatGPT plan.”
-- Do not ship Codex OAuth Connect in OSS until product explicitly accepts the grey ToS residual.
 
 ## Related
 
