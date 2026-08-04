@@ -1342,6 +1342,117 @@ export function resolveZaiCodingHarnessProfile(
   return ZAI_CODING_PROFILE;
 }
 
+/** MiniMax Token Plan subscription transport (#230 / #353). */
+const MINIMAX_TOKEN_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const MINIMAX_TOKEN_PROFILE: ModelHarnessProfile = {
+  id: "minimax-token",
+  label: "MiniMax Token Plan",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...MINIMAX_TOKEN_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="minimax-token">',
+    "You are running via MiniMax Token Plan (openai_compatible transport, subscription quota).",
+    "This is not the Cursor SDK path, not MiniMax payg, and not Fireworks/Together/OpenRouter MiniMax hosting.",
+    "Use native OpenAI-style function calling as exposed by the MiniMax endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "MiniMax Token Plan: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveMinimaxTokenHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return MINIMAX_TOKEN_PROFILE;
+}
+
+/** Kimi Code membership transport (#230 / #353). */
+const KIMI_CODE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const KIMI_CODE_PROFILE: ModelHarnessProfile = {
+  id: "kimi-code",
+  label: "Kimi Code",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...KIMI_CODE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="kimi-code">',
+    "You are running via Kimi Code (openai_compatible coding transport, membership quota).",
+    "This is not the Cursor SDK path, not Moonshot/Kimi Open Platform payg, and not OpenRouter/Groq/Together/Fireworks Kimi hosting.",
+    "Use native OpenAI-style function calling as exposed by the Kimi Code endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "Kimi Code: lean tool surface; prefer purposeful multi-file edits; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveKimiCodeHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return KIMI_CODE_PROFILE;
+}
+
+/** Poe subscription points transport (#230 / #353). */
+const POE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const POE_PROFILE: ModelHarnessProfile = {
+  id: "poe",
+  label: "Poe",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...POE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="poe">',
+    "You are running via Poe (openai_compatible transport, subscription compute points).",
+    "This is not the Cursor SDK path and not a direct lab Platform API key.",
+    "Use native OpenAI-style function calling as exposed by the Poe endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "Poe: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolvePoeHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return POE_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -1425,6 +1536,9 @@ const REGISTRY: ModelHarnessProfile[] = [
   CUSTOM_OPENAI_PROFILE,
   OPENCODE_GO_PROFILE,
   ZAI_CODING_PROFILE,
+  MINIMAX_TOKEN_PROFILE,
+  KIMI_CODE_PROFILE,
+  POE_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -1477,10 +1591,29 @@ function isZaiPaygTransport(input: ResolveProfileInput): boolean {
   return base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/");
 }
 
+function isMinimaxTokenTransport(input: ResolveProfileInput): boolean {
+  return (input.transport ?? "").toLowerCase() === "minimax_token";
+}
+
 function isMinimaxTransport(input: ResolveProfileInput): boolean {
-  if ((input.transport ?? "").toLowerCase() === "minimax") return true;
+  const t = (input.transport ?? "").toLowerCase();
+  if (t === "minimax_token") return false;
+  if (t === "minimax") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
+  // Same host as Token Plan; URL-only defaults to payg. Token Plan sets transport.
   return base.includes("api.minimax.io");
+}
+
+function isKimiCodeTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "kimi_code") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.kimi.com/coding");
+}
+
+function isPoeTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "poe") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.poe.com");
 }
 
 function isCustomOpenAiTransport(input: ResolveProfileInput): boolean {
@@ -1583,8 +1716,17 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isZaiPaygTransport(input)) {
       return resolveZaiPaygHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isMinimaxTokenTransport(input)) {
+      return resolveMinimaxTokenHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isMinimaxTransport(input)) {
       return resolveMinimaxPaygHarnessProfile(input.model);
+    }
+    if (p === "openai_compatible" && isKimiCodeTransport(input)) {
+      return resolveKimiCodeHarnessProfile(input.model);
+    }
+    if (p === "openai_compatible" && isPoeTransport(input)) {
+      return resolvePoeHarnessProfile(input.model);
     }
     if (p === "openai_compatible" && isCustomOpenAiTransport(input)) {
       return resolveCustomOpenAiHarnessProfile(input.model);
@@ -1663,10 +1805,25 @@ export function resolveProfileForAgent(
       ) {
         transport = "zai";
       } else if (
+        cfg.minimaxToken === true ||
+        cfg.transport === "minimax_token"
+      ) {
+        transport = "minimax_token";
+      } else if (
         cfg.minimax === true ||
         (baseUrl ?? "").toLowerCase().includes("api.minimax.io")
       ) {
         transport = "minimax";
+      } else if (
+        cfg.kimiCode === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.kimi.com/coding")
+      ) {
+        transport = "kimi_code";
+      } else if (
+        cfg.poe === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.poe.com")
+      ) {
+        transport = "poe";
       } else if (cfg.customOpenai === true || cfg.transport === "custom_openai") {
         transport = "custom_openai";
       } else if (

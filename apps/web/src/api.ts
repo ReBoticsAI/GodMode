@@ -2909,6 +2909,198 @@ export const applyOpencodeGoToIntelligence = (model = "kimi-k3") =>
     true
   );
 
+export type MinimaxTokenAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchMinimaxTokenStatus = async (
+  agentId?: string | null
+): Promise<MinimaxTokenAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "minimax-token-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "minimax_token") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectMinimaxTokenApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "minimax_token",
+      label: "MiniMax Token Plan",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchMinimaxTokenStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectMinimaxTokenApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "minimax-token-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchMinimaxTokenStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyMinimaxTokenToIntelligence = (model = "MiniMax-M3") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:minimax_token:${model}` },
+    "runtime",
+    true
+  );
+
+export type KimiCodeAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchKimiCodeStatus = async (
+  agentId?: string | null
+): Promise<KimiCodeAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "kimi-code-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "kimi_code") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectKimiCodeApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "kimi_code",
+      label: "Kimi Code",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchKimiCodeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectKimiCodeApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "kimi-code-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchKimiCodeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyKimiCodeToIntelligence = (model = "k3") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:kimi_code:${model}` },
+    "runtime",
+    true
+  );
+
+export type PoeAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchPoeStatus = async (
+  agentId?: string | null
+): Promise<PoeAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "poe-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "poe") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectPoeApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "poe",
+      label: "Poe",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchPoeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectPoeApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "poe-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchPoeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyPoeToIntelligence = (model = "Claude-Sonnet-4.6") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:poe:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
