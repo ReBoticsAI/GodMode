@@ -1453,6 +1453,43 @@ export function resolvePoeHarnessProfile(
   return POE_PROFILE;
 }
 
+/** OpenCode Zen transport (#230 / #354). Distinct from OpenCode Go. */
+const OPENCODE_ZEN_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const OPENCODE_ZEN_PROFILE: ModelHarnessProfile = {
+  id: "opencode-zen",
+  label: "OpenCode Zen",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENCODE_ZEN_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="opencode-zen">',
+    "You are running via OpenCode Zen (openai_compatible transport).",
+    "This is not the Cursor SDK path and not OpenCode Go.",
+    "Prefer chat/completions-compatible model ids on this endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "OpenCode Zen: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveOpencodeZenHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return OPENCODE_ZEN_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -1539,6 +1576,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   MINIMAX_TOKEN_PROFILE,
   KIMI_CODE_PROFILE,
   POE_PROFILE,
+  OPENCODE_ZEN_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -1624,6 +1662,12 @@ function isOpencodeGoTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "opencode_go") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("opencode.ai/zen/go");
+}
+
+function isOpencodeZenTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "opencode_zen") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("opencode.ai/zen") && !base.includes("opencode.ai/zen/go");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1734,6 +1778,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isOpencodeGoTransport(input)) {
       return resolveOpencodeGoHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isOpencodeZenTransport(input)) {
+      return resolveOpencodeZenHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1831,6 +1878,12 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go")
       ) {
         transport = "opencode_go";
+      } else if (
+        cfg.opencodeZen === true ||
+        ((baseUrl ?? "").toLowerCase().includes("opencode.ai/zen") &&
+          !(baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go"))
+      ) {
+        transport = "opencode_zen";
       }
     }
     return resolveHarnessProfile({
