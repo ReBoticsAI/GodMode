@@ -48,9 +48,9 @@ export function AiSecretsCard({
 
   const scopeLabel =
     scope.ownerKind === "agent"
-      ? "this agent Vault"
+      ? "this Agent Vault"
       : scope.ownerKind === "user"
-        ? "your User Vault"
+        ? "your Personal Vault"
         : "the Platform Vault";
 
   return (

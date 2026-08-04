@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import {
   KeyRoundIcon,
@@ -31,22 +31,18 @@ import {
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import {
-  normalizePlatformVaultSection,
+  isLegacySettingsVaultDeepLink,
   normalizeSettingsTab,
-  normalizeVaultInferenceSub,
+  PLATFORM_VAULT_PATH,
+  platformVaultHref,
   USERS_PATH,
-  VAULT_PATH,
-  type PlatformVaultSection,
   type SettingsTab,
-  type VaultInferenceSub,
 } from "@/lib/navigation";
 import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
-import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
-import { InferenceTab, StorageTab } from "@/pages/Vault";
-import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
+import { StorageTab } from "@/pages/Vault";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const THEME_OPTIONS = [
@@ -108,6 +104,31 @@ function AccountCard() {
         >
           <UserIcon className="size-4" />
           Open profile
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformVaultLinkCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <KeyRoundIcon className="size-4" />
+          Platform Vault
+        </CardTitle>
+        <CardDescription>
+          GodMode Cloud, Inference keys, and platform secrets live on their own
+          page in the sidebar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Link
+          to={platformVaultHref("inference")}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+        >
+          Open Platform Vault
         </Link>
       </CardContent>
     </Card>
@@ -322,14 +343,27 @@ function SessionCard() {
 }
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const vaultSectionRaw = searchParams.get("vault");
-  const settingsTab = normalizeSettingsTab(
-    searchParams.get("tab"),
-    vaultSectionRaw
-  );
-  const platformSection = normalizePlatformVaultSection(vaultSectionRaw);
-  const inferenceSub = normalizeVaultInferenceSub(searchParams.get("sub"));
+  const tabRaw = searchParams.get("tab");
+
+  // Retired Settings → Vault tab: send deep links to Platform Vault.
+  useEffect(() => {
+    if (!isLegacySettingsVaultDeepLink(tabRaw, vaultSectionRaw)) return;
+    const p = new URLSearchParams();
+    const section = vaultSectionRaw?.trim() || "inference";
+    p.set("vault", section);
+    const sub = searchParams.get("sub");
+    if (section === "inference") {
+      p.set("sub", sub?.trim() || "subscriptions");
+    } else if (sub) {
+      p.set("sub", sub);
+    }
+    navigate(`${PLATFORM_VAULT_PATH}?${p.toString()}`, { replace: true });
+  }, [navigate, searchParams, tabRaw, vaultSectionRaw]);
+
+  const settingsTab = normalizeSettingsTab(tabRaw);
 
   const onSettingsTabChange = (value: string) => {
     const next = value as SettingsTab;
@@ -337,61 +371,23 @@ export default function Settings() {
       (prev) => {
         const p = new URLSearchParams(prev);
         p.set("tab", next);
-        if (next === "vault") {
-          if (!p.get("vault")) {
-            p.set("vault", "inference");
-            p.set("sub", "subscriptions");
-          }
-          if (p.get("vault") === "inference" && !p.get("sub")) {
-            p.set("sub", "subscriptions");
-          }
-        } else {
-          p.delete("vault");
-          p.delete("sub");
-        }
+        p.delete("vault");
+        p.delete("sub");
         return p;
       },
       { replace: true }
     );
   };
 
-  const onPlatformSectionChange = (value: string) => {
-    const next = value as PlatformVaultSection;
-    setSearchParams(
-      (prev) => {
-        const p = new URLSearchParams(prev);
-        p.set("tab", "vault");
-        p.set("vault", next);
-        if (next === "inference") {
-          if (!p.get("sub")) p.set("sub", "subscriptions");
-        } else {
-          p.delete("sub");
-        }
-        return p;
-      },
-      { replace: true }
-    );
-  };
-
-  const onInferenceSubChange = (value: string) => {
-    const next = normalizeVaultInferenceSub(value);
-    setSearchParams(
-      (prev) => {
-        const p = new URLSearchParams(prev);
-        p.set("tab", "vault");
-        p.set("vault", "inference");
-        p.set("sub", next);
-        return p;
-      },
-      { replace: true }
-    );
-  };
+  if (isLegacySettingsVaultDeepLink(tabRaw, vaultSectionRaw)) {
+    return null;
+  }
 
   return (
     <Page>
       <PageHeader
         title="Settings"
-        description="Account, appearance, Platform Vault, storage, and session settings."
+        description="Account, appearance, storage, and session settings."
       />
       <Tabs
         value={settingsTab}
@@ -400,27 +396,18 @@ export default function Settings() {
       >
         <TabsList variant="line" className="w-full flex-wrap justify-start">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="vault">Vault</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4">
           <div className="flex flex-col gap-4">
             <AccountCard />
+            <PlatformVaultLinkCard />
             <OnboardingCard />
             <MfaCard />
             <AppearanceCard />
             <SessionCard />
           </div>
-        </TabsContent>
-
-        <TabsContent value="vault" className="mt-4">
-          <PlatformVaultPanel
-            section={platformSection}
-            inferenceSub={inferenceSub}
-            onSectionChange={onPlatformSectionChange}
-            onInferenceSubChange={onInferenceSubChange}
-          />
         </TabsContent>
 
         <TabsContent value="storage" className="mt-4">
@@ -431,70 +418,5 @@ export default function Settings() {
         </TabsContent>
       </Tabs>
     </Page>
-  );
-}
-
-function PlatformVaultPanel({
-  section,
-  inferenceSub,
-  onSectionChange,
-  onInferenceSubChange,
-}: {
-  section: PlatformVaultSection;
-  inferenceSub: VaultInferenceSub;
-  onSectionChange: (value: string) => void;
-  onInferenceSubChange: (value: string) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRoundIcon className="size-4" />
-          Platform Vault
-        </CardTitle>
-        <CardDescription>
-          Shared platform credentials: GodMode Cloud seats, LLM subscriptions,
-          API keys, and Exa. Agents fall back here when they have no key of their
-          own. Personal connects (GitHub, wallets and accounts, marketplace) stay on{" "}
-          <Link
-            to={VAULT_PATH}
-            className="text-primary underline-offset-2 hover:underline"
-          >
-            Vault
-          </Link>
-          .
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <Tabs value={section} onValueChange={onSectionChange} className="w-full">
-          <TabsList variant="line" className="w-full flex-wrap justify-start">
-            <TabsTrigger value="cloud">GodMode Cloud</TabsTrigger>
-            <TabsTrigger value="inference">Inference</TabsTrigger>
-            <TabsTrigger value="secrets">All Secrets</TabsTrigger>
-          </TabsList>
-          <TabsContent value="cloud" className="mt-4 flex flex-col gap-6">
-            <section className="flex flex-col gap-3">
-              <div>
-                <h2 className="text-sm font-medium">GodMode Cloud</h2>
-                <p className="text-sm text-muted-foreground">
-                  Seat billing and Stripe Customer Portal for this workspace.
-                  Shown only on SaaS hosts.
-                </p>
-              </div>
-              <SubscriptionCard />
-            </section>
-          </TabsContent>
-          <TabsContent value="inference" className="mt-4">
-            <InferenceTab
-              sub={inferenceSub}
-              onSubChange={onInferenceSubChange}
-            />
-          </TabsContent>
-          <TabsContent value="secrets" className="mt-4">
-            <AiSecretsCard vaultScope={{ ownerKind: "platform" }} />
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
   );
 }

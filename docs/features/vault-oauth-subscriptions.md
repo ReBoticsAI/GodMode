@@ -2,7 +2,7 @@
 slug: vault-oauth-subscriptions
 title: "Vault OAuth subscription providers"
 section: "Productivity"
-location: "/settings/platform?tab=vault&vault=inference&sub=subscriptions"
+location: "/settings/vault?vault=inference&sub=subscriptions"
 summary: "Residual OAuth and product-auth subscription providers for Vault. Documents what OSS can ship without registered app credentials, and operator ToS notes."
 ---
 

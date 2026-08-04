@@ -736,7 +736,7 @@ export default function UserTasksPage() {
 
             {!ghConnected ? (
               <p className="text-muted-foreground">
-                GitHub is not connected. Open Vault → Integrations, then
+                GitHub is not connected. Open Personal Vault → Integrations, then
                 return here.
               </p>
             ) : (
@@ -774,7 +774,7 @@ export default function UserTasksPage() {
                     <p className="text-xs text-muted-foreground">
                       No Projects found for the connected GitHub account. If
                       you expected org projects, disconnect and reconnect
-                      GitHub in Vault so the newer permissions are granted.
+                      GitHub in Personal Vault so the newer permissions are granted.
                     </p>
                   ) : null}
                 </div>
