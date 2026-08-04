@@ -21,6 +21,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/github-projects-status-map.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-context.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-comments.test.ts",
+      "apps/bridge/src/services/__tests__/github-projects-timeline.test.ts",
       "apps/bridge/src/services/__tests__/github-projects-fields.test.ts",
       "apps/bridge/src/services/__tests__/board-columns-crud.test.ts",
       "apps/bridge/src/services/__tests__/github-app-webhook-sig.test.ts",

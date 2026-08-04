@@ -2044,7 +2044,75 @@ type TimelineRaw = {
   project?: { title?: string } | null;
   /** Present on some project_v2 status change payloads. */
   project_title?: string;
+  /** Project Status option names (REST when present, or GraphQL enrichment). */
+  previous_status?: string;
+  project_status?: string;
 };
+
+export type ProjectTimelineEnrichment = {
+  kind: "status_changed" | "added" | "removed";
+  createdAt: string;
+  projectTitle?: string;
+  previousStatus?: string;
+  status?: string;
+};
+
+/** Normalize ISO timestamps to second precision for REST ↔ GraphQL matching. */
+export function normalizeTimelineInstant(iso: string): string {
+  const trimmed = iso.trim();
+  if (!trimmed) return "";
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) return trimmed;
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+function projectTimelineKind(
+  event: string
+): ProjectTimelineEnrichment["kind"] | null {
+  if (event === "project_v2_item_status_changed") return "status_changed";
+  if (event === "added_to_project_v2") return "added";
+  if (event === "removed_from_project_v2") return "removed";
+  return null;
+}
+
+/**
+ * Merge GraphQL Project V2 timeline details onto REST timeline rows
+ * (matched by event kind + createdAt).
+ */
+export function enrichRestTimelineWithProjectGraphql(
+  restEvents: TimelineRaw[],
+  enrichments: ProjectTimelineEnrichment[]
+): TimelineRaw[] {
+  const pool = [...enrichments];
+  return restEvents.map((raw) => {
+    const event = typeof raw.event === "string" ? raw.event : "";
+    const kind = projectTimelineKind(event);
+    if (!kind) return raw;
+    const createdAt = normalizeTimelineInstant(
+      typeof raw.created_at === "string" ? raw.created_at : ""
+    );
+    if (!createdAt) return raw;
+    const idx = pool.findIndex(
+      (e) => e.kind === kind && e.createdAt === createdAt
+    );
+    if (idx < 0) return raw;
+    const [match] = pool.splice(idx, 1);
+    const projectTitle =
+      match.projectTitle?.trim() ||
+      raw.project?.title?.trim() ||
+      (typeof raw.project_title === "string" ? raw.project_title.trim() : "");
+    return {
+      ...raw,
+      ...(projectTitle
+        ? { project: { title: projectTitle }, project_title: projectTitle }
+        : {}),
+      ...(match.previousStatus != null
+        ? { previous_status: match.previousStatus }
+        : {}),
+      ...(match.status != null ? { project_status: match.status } : {}),
+    };
+  });
+}
 
 /**
  * Turn a GitHub Issue timeline REST event into a short activity line.
@@ -2062,6 +2130,10 @@ export function summarizeGithubTimelineEvent(
   const projectTitle =
     raw.project?.title?.trim() ||
     (typeof raw.project_title === "string" ? raw.project_title.trim() : "");
+  const previousStatus =
+    typeof raw.previous_status === "string" ? raw.previous_status.trim() : "";
+  const projectStatus =
+    typeof raw.project_status === "string" ? raw.project_status.trim() : "";
 
   switch (event) {
     case "labeled":
@@ -2114,10 +2186,22 @@ export function summarizeGithubTimelineEvent(
       return projectTitle
         ? `${actor} removed this from ${projectTitle}`
         : `${actor} removed this from a Project`;
-    case "project_v2_item_status_changed":
-      return projectTitle
-        ? `${actor} moved this on ${projectTitle}`
-        : `${actor} changed the Project status`;
+    case "project_v2_item_status_changed": {
+      let move = "";
+      if (previousStatus && projectStatus) {
+        move = `moved this from ${previousStatus} to ${projectStatus}`;
+      } else if (projectStatus) {
+        move = `moved this to ${projectStatus}`;
+      } else if (projectTitle) {
+        move = `moved this on ${projectTitle}`;
+      } else {
+        move = "changed the Project status";
+      }
+      if (projectTitle && (previousStatus || projectStatus)) {
+        return `${actor} ${move} on ${projectTitle}`;
+      }
+      return `${actor} ${move}`;
+    }
     case "converted_to_draft":
       return `${actor} converted this to a draft`;
     case "ready_for_review":
@@ -2156,9 +2240,135 @@ function mapRestTimelineEvent(raw: TimelineRaw): GithubIssueTimelineEvent | null
   };
 }
 
+type GraphqlProjectTimelineNode = {
+  __typename?: string;
+  createdAt?: string;
+  previousStatus?: string;
+  status?: string;
+  project?: { title?: string | null } | null;
+};
+
+function mapGraphqlProjectTimelineNode(
+  node: GraphqlProjectTimelineNode
+): ProjectTimelineEnrichment | null {
+  const createdAt = normalizeTimelineInstant(
+    typeof node.createdAt === "string" ? node.createdAt : ""
+  );
+  if (!createdAt) return null;
+  const projectTitle = node.project?.title?.trim() || undefined;
+  if (node.__typename === "ProjectV2ItemStatusChangedEvent") {
+    return {
+      kind: "status_changed",
+      createdAt,
+      projectTitle,
+      previousStatus:
+        typeof node.previousStatus === "string" ? node.previousStatus : "",
+      status: typeof node.status === "string" ? node.status : "",
+    };
+  }
+  if (node.__typename === "AddedToProjectV2Event") {
+    return { kind: "added", createdAt, projectTitle };
+  }
+  if (node.__typename === "RemovedFromProjectV2Event") {
+    return { kind: "removed", createdAt, projectTitle };
+  }
+  return null;
+}
+
+const PROJECT_TIMELINE_GQL = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      timelineItems(first: 100, itemTypes: [
+        PROJECT_V2_ITEM_STATUS_CHANGED_EVENT,
+        ADDED_TO_PROJECT_V2_EVENT,
+        REMOVED_FROM_PROJECT_V2_EVENT
+      ]) {
+        nodes {
+          __typename
+          ... on ProjectV2ItemStatusChangedEvent {
+            createdAt
+            previousStatus
+            status
+            project { title }
+          }
+          ... on AddedToProjectV2Event {
+            createdAt
+            project { title }
+          }
+          ... on RemovedFromProjectV2Event {
+            createdAt
+            project { title }
+          }
+        }
+      }
+    }
+    pullRequest(number: $number) {
+      timelineItems(first: 100, itemTypes: [
+        PROJECT_V2_ITEM_STATUS_CHANGED_EVENT,
+        ADDED_TO_PROJECT_V2_EVENT,
+        REMOVED_FROM_PROJECT_V2_EVENT
+      ]) {
+        nodes {
+          __typename
+          ... on ProjectV2ItemStatusChangedEvent {
+            createdAt
+            previousStatus
+            status
+            project { title }
+          }
+          ... on AddedToProjectV2Event {
+            createdAt
+            project { title }
+          }
+          ... on RemovedFromProjectV2Event {
+            createdAt
+            project { title }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+async function fetchGraphqlProjectTimelineEnrichments(
+  accessToken: string,
+  ref: GithubIssueRef
+): Promise<ProjectTimelineEnrichment[]> {
+  type TimelinePage = {
+    timelineItems?: { nodes?: Array<GraphqlProjectTimelineNode | null> | null };
+  };
+  try {
+    const data = await githubGraphql<{
+      repository?: {
+        issue?: TimelinePage | null;
+        pullRequest?: TimelinePage | null;
+      } | null;
+    }>(accessToken, PROJECT_TIMELINE_GQL, {
+      owner: ref.owner,
+      name: ref.name,
+      number: ref.issueNumber,
+    });
+    const nodes =
+      data.repository?.issue?.timelineItems?.nodes ??
+      data.repository?.pullRequest?.timelineItems?.nodes ??
+      [];
+    const out: ProjectTimelineEnrichment[] = [];
+    for (const node of nodes) {
+      if (!node) continue;
+      const mapped = mapGraphqlProjectTimelineNode(node);
+      if (mapped) out.push(mapped);
+    }
+    return out;
+  } catch {
+    // REST timeline still works; from/to enrichment is best-effort.
+    return [];
+  }
+}
+
 /**
  * List GitHub Issue timeline/activity events for a linked Issue/PR TaskCard.
  * Skips comment events (those come from the comments endpoint).
+ * Enriches Project V2 status moves with from → to via GraphQL when available.
  */
 export async function listGithubIssueTimelineForCard(opts: {
   userId: string;
@@ -2187,7 +2397,7 @@ export async function listGithubIssueTimelineForCard(opts: {
     };
   }
   const accessToken = await requireToken(opts.db);
-  const events: GithubIssueTimelineEvent[] = [];
+  const rawEvents: TimelineRaw[] = [];
   let page = 1;
   while (page <= 10) {
     const url = new URL(
@@ -2211,12 +2421,24 @@ export async function listGithubIssueTimelineForCard(opts: {
     }
     const batch = (await res.json()) as TimelineRaw[];
     if (!Array.isArray(batch) || batch.length === 0) break;
-    for (const row of batch) {
-      const mapped = mapRestTimelineEvent(row);
-      if (mapped) events.push(mapped);
-    }
+    rawEvents.push(...batch);
     if (batch.length < 100) break;
     page += 1;
+  }
+
+  const enrichments = await fetchGraphqlProjectTimelineEnrichments(
+    accessToken,
+    ref
+  );
+  const enriched =
+    enrichments.length > 0
+      ? enrichRestTimelineWithProjectGraphql(rawEvents, enrichments)
+      : rawEvents;
+
+  const events: GithubIssueTimelineEvent[] = [];
+  for (const row of enriched) {
+    const mapped = mapRestTimelineEvent(row);
+    if (mapped) events.push(mapped);
   }
   return {
     linked: true,
