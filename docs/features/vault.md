@@ -3,21 +3,21 @@ slug: vault
 title: "Vault"
 section: "Productivity"
 location: "/vault"
-summary: "User connect hub for GodMode Cloud, integrations, wallets, marketplace, secrets, and storage. Inference keys live in Settings → Platform Vault."
+summary: "User connect hub for integrations, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Settings → Vault. Storage lives in Settings → Storage."
 ---
 # Vault
 
 ![vault in GodMode](/features/vault.png)
 
-Vault is the **User** connect hub for personal credentials and account connects. Chat → an agent's **Vault** tab opens that agent's private vault. Platform inference keys live under **Settings → Platform Vault**.
+Vault is the **User** connect hub for personal credentials and account connects. Chat → an agent's **Vault** tab opens that agent's private vault. Platform credentials (GodMode Cloud, LLM keys, Exa) live under **Settings → Vault**. Database usage and workspace export live under **Settings → Storage**.
 
 ## Three vaults
 
 | Vault | Surface | Contents |
 |-------|---------|----------|
-| **Platform** | Settings → Platform Vault | LLM subscriptions, API keys, Exa / search |
-| **User** | `/vault` | GodMode Cloud seats, GitHub, Wallets, Marketplace, Storage, user secrets |
-| **Agent** | Agent sidebar / panel Vault tab, or `/vault?agent=<id>` | Secrets and optional inference keys for that agent only |
+| **Platform** | Settings → Vault | GodMode Cloud seats, LLM subscriptions, API keys, Exa / search, platform secrets |
+| **User** | `/vault` | GitHub, Wallets & Accounts (personal), Marketplace, user secrets |
+| **Agent** | Agent sidebar / panel Vault tab, or `/vault?agent=<id>` | Secrets and Wallets & Accounts for that agent (no Inference) |
 
 There is no owner Select picker. Each surface is scoped to one vault.
 
@@ -25,28 +25,24 @@ There is no owner Select picker. Each surface is scoped to one vault.
 
 When an agent runs:
 
-1. That **Agent** Vault
+1. That **Agent** Vault secrets (if a matching secret exists)
 2. **Platform** Vault
 
-User Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged.
+User Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged. Inference Connect cards (Subscriptions, API Keys, Search) are Platform-only under Settings → Vault.
 
 ## User Vault tabs (`/vault`)
-
-### GodMode Cloud
-
-GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts.
-
-Provider LLM subscriptions (for example Cursor) stay under Settings → Platform Vault → Subscriptions. They are not GodMode Cloud seats.
 
 ### Integrations
 
 #### GitHub
 
-The **Connect GitHub** card installs and authorizes the GitHub App used for Projects sync (and Cloud sign-in when configured). Settings keeps a short dual-home link here.
+The **Connect GitHub** card installs and authorizes the GitHub App used for Projects sync (and Cloud sign-in when configured).
 
-### Wallets
+### Wallets & Accounts
 
-Moralis and PayPal **API credentials** for live Bank / wallet sync. Wallet connect and PayPal balance link flows stay on Bank.
+Moralis and PayPal **API credentials** for live sync, plus wallet and account connect flows (crypto wallets, exchanges, bank, PayPal, manual). Bank keeps the ledger view only.
+
+Deep link: `/vault?tab=wallets`.
 
 ### Marketplace
 
@@ -56,15 +52,17 @@ Seller **Stripe Connect** for Community payouts. Marketplace → Sell links here
 
 Free-form secrets in the User Vault (`owner_kind=user`). Prefer named Connect cards when one exists.
 
-### Storage
+## Platform Vault (Settings → Vault)
 
-Database and data-store sizes. Monitor growth before trimming or upgrading stores.
+Deep link: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference subs: `&sub=subscriptions|api-keys|search`).
 
-## Platform Vault (Settings)
+Legacy `/vault?tab=cloud`, `/vault?tab=billing`, and `/vault?tab=inference` redirect here. Agent Vault `?tab=inference` (or `?tab=search`) also redirects here.
 
-Deep link: `/settings/platform?vault=inference&sub=subscriptions|api-keys|search`.
+### GodMode Cloud
 
-Legacy `/vault?tab=inference` redirects here.
+GodMode Cloud seat billing (Stripe Customer Portal). Shown only on SaaS hosts.
+
+Provider LLM subscriptions (for example Cursor) stay under Inference → Subscriptions. They are not GodMode Cloud seats.
 
 ### Subscriptions
 
@@ -93,15 +91,15 @@ Metered BYOK with named Connect cards:
 
 ### Search
 
-**Exa** Connect stores Platform (or Agent) secret `exa_api_key`. No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
+**Exa** Connect stores Platform secret `exa_api_key`. No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
 
 1. Sign up at [dashboard.exa.ai](https://dashboard.exa.ai) and create an API key.
-2. Connect the key on Settings → Platform Vault → Search → Exa (or the agent's Vault → Inference → Search).
+2. Connect the key on Settings → Vault → Inference → Search → Exa.
 3. If Exa blocks for exhausted credits, add credits or wait for the monthly free refresh at [Exa billing](https://dashboard.exa.ai/billing).
 
 GodMode Cloud routes agent `web_search` and `fetch_url` through [Exa](https://exa.ai) so egress uses Exa's network instead of the shared VPS IP. Cloud requires **tenant BYOK** (no platform shared key).
 
-Self-host / local: Exa is optional. When `exa_api_key` is present on Agent or Platform, web tools use Exa; otherwise they keep the DuckDuckGo / direct-fetch fallback.
+Self-host / local: Exa is optional. When `exa_api_key` is present on Agent secrets or Platform, web tools use Exa; otherwise they keep the DuckDuckGo / direct-fetch fallback.
 
 See [[cursor-cloud]].
 
@@ -109,7 +107,12 @@ See [[cursor-cloud]].
 
 Open from the agent group in the sidebar (Vault child row) or the Intelligence panel Vault tab. Optional deep link: `/vault?agent=<agentId>`.
 
-Shows that agent's secrets and Inference Connect cards only. No Select; no User tabs (Cloud, GitHub, etc.).
+Tabs:
+
+- **Secrets**: free-form agent secrets (`owner_kind=agent`)
+- **Wallets & Accounts**: wallet and account connects for that agent (`?tab=wallets`)
+
+No Inference UI. Platform Inference lives under Settings → Vault. No Select; no User tabs (GitHub, Marketplace, etc.).
 
 ## Schema note
 
@@ -117,8 +120,10 @@ Shows that agent's secrets and Inference Connect cards only. No Select; no User 
 
 ## Route
 
-- User: `/vault` (tabs: `?tab=cloud|integrations|wallets|marketplace|secrets|storage`; default `cloud`)
-- Agent: `/vault?agent=<id>` (tabs: `secrets|inference`)
-- Platform: `/settings/platform?vault=inference&sub=…`
-- Legacy `?tab=search` / `?tab=inference` on `/vault` redirect to Platform Settings
-- Legacy `?tab=billing` maps to GodMode Cloud
+- User: `/vault` (tabs: `?tab=integrations|wallets|marketplace|secrets`; default `integrations`)
+- Agent: `/vault?agent=<id>` (tabs: `secrets|wallets`; default `secrets`)
+- Platform: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference: `&sub=…`)
+- Storage: `/settings/platform?tab=storage` (usage + workspace data; see [[settings]])
+- Legacy `?tab=search` / `?tab=inference` / `?tab=cloud` / `?tab=billing` on `/vault` redirect to Settings → Vault
+- Legacy `?tab=storage` on `/vault` redirects to Settings → Storage
+- Legacy Bank `?tab=wallets|accounts` redirects to `/vault?tab=wallets`

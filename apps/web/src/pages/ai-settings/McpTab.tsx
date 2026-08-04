@@ -11,6 +11,7 @@ import {
   type AiAgent,
   type AiMcpStatus,
 } from "@/api";
+import { platformVaultSettingsHref } from "@/lib/navigation";
 
 export function McpTab({
   agent,
@@ -116,8 +117,11 @@ export function McpTab({
           This backend uses MCP discovery in the prompt only. Switch the agent to{" "}
           <span className="font-medium">Cursor subscription</span> to pass servers to
           the SDK. Connect in{" "}
-          <Link to="/vault" className="text-primary underline-offset-2 hover:underline">
-            Vault → Cursor subscription
+          <Link
+            to={platformVaultSettingsHref("subscriptions")}
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            Settings → Vault → Inference → Subscriptions
           </Link>
           .
         </p>
