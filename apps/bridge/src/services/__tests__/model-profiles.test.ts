@@ -20,6 +20,7 @@ import {
   resolveGroqHarnessProfile,
   resolveOpenRouterHarnessProfile,
   resolveTogetherHarnessProfile,
+  resolveFireworksHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -240,6 +241,47 @@ assert.equal(
     transport: "together",
   }).id,
   "together-gpt-oss"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/deepseek-v4-pro").id,
+  "fireworks-deepseek"
+);
+assert.notEqual(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/deepseek-v4-pro").id,
+  "together-deepseek"
+);
+assert.notEqual(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/deepseek-v4-pro").id,
+  "openrouter-deepseek"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/gpt-oss-120b").id,
+  "fireworks-gpt-oss"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/kimi-k3").id,
+  "fireworks-kimi"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/glm-5p2").id,
+  "fireworks-glm"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/minimax-m2p7").id,
+  "fireworks-minimax"
+);
+assert.equal(
+  resolveFireworksHarnessProfile("accounts/fireworks/models/unknown-model").id,
+  "fireworks-generic"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "accounts/fireworks/models/gpt-oss-120b",
+    transport: "fireworks",
+  }).id,
+  "fireworks-gpt-oss"
 );
 assert.equal(
   resolveProfileForAgent({

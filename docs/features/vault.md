@@ -81,6 +81,7 @@ Metered BYOK with named Connect cards:
 | OpenRouter | `openrouter-api-key` | `openrouter-*` family (from model slug) | [OpenRouter](https://openrouter.ai/docs) |
 | Groq | `groq-api-key` | `groq-*` family (from model id) | [Groq](https://console.groq.com/docs/openai) |
 | Together | `together-api-key` | `together-*` family (from model id) | [Together](https://docs.together.ai/docs/inference/openai-compatibility) |
+| Fireworks | `fireworks-api-key` | `fireworks-*` family (from model id) | [Fireworks](https://docs.fireworks.ai/tools-sdks/openai-compatibility) |
 
 ### Search
 

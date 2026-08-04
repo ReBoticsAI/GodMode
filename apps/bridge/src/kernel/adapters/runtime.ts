@@ -116,6 +116,15 @@ import {
   removeTogetherApiKey,
   upsertTogetherApiKey,
 } from "../../services/together-platform.js";
+import {
+  getFireworksAuthStatus,
+  isFireworksPlatformReady,
+  isFireworksVaultSecretId,
+  isFireworksVaultSecretName,
+  FIREWORKS_API_KEY_SECRET_ID,
+  removeFireworksApiKey,
+  upsertFireworksApiKey,
+} from "../../services/fireworks-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -990,7 +999,9 @@ function isManagedPlatformSecret(secret: {
     isGroqVaultSecretId(secret.id) ||
     isGroqVaultSecretName(secret.name) ||
     isTogetherVaultSecretId(secret.id) ||
-    isTogetherVaultSecretName(secret.name)
+    isTogetherVaultSecretName(secret.name) ||
+    isFireworksVaultSecretId(secret.id) ||
+    isFireworksVaultSecretName(secret.name)
   );
 }
 
@@ -1057,6 +1068,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isTogetherVaultSecretName(name)) {
       throw httpError(400, "Together API keys must use the Together credential flow");
+    }
+    if (isFireworksVaultSecretName(name)) {
+      throw httpError(400, "Fireworks API keys must use the Fireworks credential flow");
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
@@ -1195,6 +1209,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === FIREWORKS_API_KEY_SECRET_ID) {
+      const status = getFireworksAuthStatus(db, scope);
+      return status.connected
+        ? record(def, FIREWORKS_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "fireworks",
+            display_name: "Fireworks",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1273,6 +1300,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "fireworks") {
+      upsertFireworksApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getFireworksAuthStatus(db, scope);
+      return record(def, FIREWORKS_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "fireworks",
+        display_name: "Fireworks",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1311,6 +1350,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === TOGETHER_API_KEY_SECRET_ID) {
       removeTogetherApiKey(db, scope);
+      return;
+    }
+    if (id === FIREWORKS_API_KEY_SECRET_ID) {
+      removeFireworksApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1402,6 +1445,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom Fireworks slug when Vault is connected.
+      if (!selected) {
+        const fireworksCustom =
+          /^provider:openai_compatible:fireworks:(.+)$/.exec(modelId);
+        if (fireworksCustom?.[1] && isFireworksPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Fireworks · ${fireworksCustom[1]}`,
+            model: fireworksCustom[1],
+            provider: "openai_compatible",
+            transport: "fireworks",
+          };
+        }
+      }
       // Custom Together slug when Vault is connected.
       if (!selected) {
         const togetherCustom = /^provider:openai_compatible:together:(.+)$/.exec(modelId);
@@ -1437,6 +1495,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           custom?.[1] &&
           !custom[1].startsWith("groq:") &&
           !custom[1].startsWith("together:") &&
+          !custom[1].startsWith("fireworks:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -1467,7 +1526,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
             ? { transport: "groq", apiKeyRef: GROQ_API_KEY_SECRET_ID }
             : transport === "together"
               ? { transport: "together", apiKeyRef: TOGETHER_API_KEY_SECRET_ID }
-              : {}),
+              : transport === "fireworks"
+                ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
+                : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {
