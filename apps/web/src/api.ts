@@ -2577,6 +2577,70 @@ export const applyXaiToIntelligence = (model = "grok-4.5") =>
     true
   );
 
+export type ZaiAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchZaiStatus = async (
+  agentId?: string | null
+): Promise<ZaiAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "zai-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "zai") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectZaiApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "zai",
+      label: "Z.AI Platform",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchZaiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectZaiApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "zai-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchZaiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyZaiToIntelligence = (model = "glm-5.2") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:zai:${model}` },
+    "runtime",
+    true
+  );
+
 export type ZaiCodingAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";
