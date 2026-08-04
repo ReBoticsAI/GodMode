@@ -3,12 +3,14 @@ slug: vault-oauth-subscriptions
 title: "Vault OAuth subscription providers"
 section: "Productivity"
 location: "/settings/vault?vault=inference&sub=subscriptions"
-summary: "Residual OAuth and product-auth subscription providers for Vault. Documents active #355 scope, deferred later work, and out-of-scope Codex."
+summary: "Residual OAuth and product-auth subscription providers for Vault. Documents #364 foundation, active #355 scope, deferred later work, and out-of-scope Codex."
 ---
 
 # Vault OAuth subscription providers
 
 API-key subscription cards (Cursor, Z.AI Coding Plan, OpenCode Go/Zen, MiniMax Token Plan, Kimi Code, Poe, DigitalOcean Inference, Snowflake Cortex PAT) are documented in [Vault](./vault.md). This page covers **#355** providers that need OAuth, device-code, or product auth that public OSS cannot complete without operator-registered apps.
+
+Shared authorize / callback / token store / Connect UX plumbing is tracked as **[#364](https://github.com/ReBoticsAI/GodMode/issues/364)** (foundation; blocks provider Connect slices on #355).
 
 ## Doctrine
 
@@ -18,9 +20,14 @@ API-key subscription cards (Cursor, Z.AI Coding Plan, OpenCode Go/Zen, MiniMax T
 - Per-tenant credentials only. Never pool consumer subscription tokens on Cloud.
 - When a provider also offers a PAT or model access key, ship that Connect path first (DigitalOcean Inference and Snowflake Cortex PAT are the examples).
 
+### Local vs Cloud config
+
+- **Local / desktop / bare-metal (and local hub):** operators who want Copilot, GitLab Duo, or SuperGrok register their own OAuth apps with those providers and set client id, secret, and redirect in host env. Connect stays unavailable until env is present.
+- **GodMode Cloud (SaaS):** platform operator registers production OAuth apps once; end users only click Connect / Disconnect.
+
 ## Active residual (#355)
 
-These remain in scope for #355 Connect work (OAuth / device-code / product auth):
+These remain in scope for #355 Connect work (OAuth / device-code / product auth), after [#364](https://github.com/ReBoticsAI/GodMode/issues/364) foundation lands:
 
 | Provider | Auth needed | OSS status | Blocker |
 |----------|-------------|------------|---------|
@@ -56,6 +63,7 @@ Until those env vars are set, Connect must stay unavailable (clear empty state),
 
 ## Related
 
+- Foundation (blocks #355 provider slices): [#364](https://github.com/ReBoticsAI/GodMode/issues/364)
 - Parent: [#230](https://github.com/ReBoticsAI/GodMode/issues/230), [#355](https://github.com/ReBoticsAI/GodMode/issues/355), epic [#321](https://github.com/ReBoticsAI/GodMode/issues/321)
 - Harness: [Harness profiles](./harness-profiles.md)
 - Sign-in / GitHub App env: [Configuration](../CONFIGURATION.md)
