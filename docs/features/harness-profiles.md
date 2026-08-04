@@ -57,6 +57,7 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (DeepSeek) | `deepseek-v4-flash` | `deepseek-flash` |
 | provider | openai_compatible (DeepSeek) | `deepseek-v4-pro` | `deepseek-pro` |
 | provider | openai_compatible (DeepSeek) | other | `deepseek-generic` |
+| provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | remote | — | * | `remote` |
 
 OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
@@ -68,5 +69,7 @@ Together is also a **transport**. Profile = `f(together transport, modelFamily)`
 Fireworks is also a **transport**. Profile = `f(fireworks transport, modelFamily)` from the model slug leaf under `accounts/fireworks/models/`. Distinct from Together/Groq/OpenRouter for the same weights. Serverless chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 DeepSeek Platform is also a **transport**. Profile = `f(deepseek transport, modelFamily)`. Distinct from Fireworks/Together/OpenRouter DeepSeek routes. Catalog uses V4 ids (`deepseek-v4-flash`, `deepseek-v4-pro`); custom model ids allowed.
+
+Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).
