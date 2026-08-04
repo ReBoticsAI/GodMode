@@ -151,6 +151,15 @@ import {
   POE_API_KEY_SECRET_NAME,
   POE_CHAT_CATALOG,
 } from "./poe-platform.js";
+import {
+  isOpencodeZenAgentConfig,
+  isOpencodeZenPlatformReady,
+  isOpencodeZenVaultSecretId,
+  OPENCODE_ZEN_API_BASE_URL,
+  OPENCODE_ZEN_API_KEY_SECRET_ID,
+  OPENCODE_ZEN_API_KEY_SECRET_NAME,
+  OPENCODE_ZEN_CHAT_CATALOG,
+} from "./opencode-zen-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -349,6 +358,16 @@ function poeHarnessInput(model: string) {
   };
 }
 
+function opencodeZenHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "opencode_zen",
+    baseUrl: OPENCODE_ZEN_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -438,7 +457,9 @@ export async function listModelCatalog(
       s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
       !isKimiCodeVaultSecretId(s.id) &&
       s.name !== POE_API_KEY_SECRET_NAME &&
-      !isPoeVaultSecretId(s.id)
+      !isPoeVaultSecretId(s.id) &&
+      s.name !== OPENCODE_ZEN_API_KEY_SECRET_NAME &&
+      !isOpencodeZenVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -462,6 +483,7 @@ export async function listModelCatalog(
   const hasMinimaxToken = isMinimaxTokenPlatformReady(db, catalogAgentId);
   const hasKimiCode = isKimiCodePlatformReady(db, catalogAgentId);
   const hasPoe = isPoePlatformReady(db, catalogAgentId);
+  const hasOpencodeZen = isOpencodeZenPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -743,6 +765,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasOpencodeZen) {
+    const agentIsOz =
+      agent?.backend === "provider" && isOpencodeZenAgentConfig(agent.config);
+    for (const m of OPENCODE_ZEN_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(opencodeZenHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:opencode_zen:${m.id}`,
+        source: "provider",
+        label: `OpenCode Zen · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "opencode_zen",
+        active: Boolean(agentIsOz && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -765,6 +804,7 @@ export async function listModelCatalog(
     const isMinimaxToken = isMinimaxTokenAgentConfig(agent.config);
     const isKimiCode = isKimiCodeAgentConfig(agent.config);
     const isPoe = isPoeAgentConfig(agent.config);
+    const isOcZen = isOpencodeZenAgentConfig(agent.config);
     const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
     const isOcGo = isOpencodeGoAgentConfig(agent.config);
@@ -796,6 +836,8 @@ export async function listModelCatalog(
                       ? resolveHarnessProfile(kimiCodeHarnessInput(model))
                     : isPoe
                       ? resolveHarnessProfile(poeHarnessInput(model))
+                    : isOcZen
+                      ? resolveHarnessProfile(opencodeZenHarnessInput(model))
                     : isZaiPayg
                       ? resolveHarnessProfile(zaiHarnessInput(model))
                       : isMinimax
@@ -831,6 +873,8 @@ export async function listModelCatalog(
                     ? "kimi_code"
                   : isPoe
                     ? "poe"
+                  : isOcZen
+                    ? "opencode_zen"
                   : isZaiPayg
                     ? "zai"
                     : isMinimax
@@ -869,6 +913,8 @@ export async function listModelCatalog(
                                 ? "Kimi Code"
                               : namespacedTransport === "poe"
                                 ? "Poe"
+                              : namespacedTransport === "opencode_zen"
+                                ? "OpenCode Zen"
                               : namespacedTransport === "custom_openai"
                                 ? "Custom"
                                 : namespacedTransport === "opencode_go"
@@ -943,6 +989,8 @@ export async function listModelCatalog(
                     ? { transport: "kimi_code", baseUrl: KIMI_CODE_API_BASE_URL }
                   : active.transport === "poe"
                     ? { transport: "poe", baseUrl: POE_API_BASE_URL }
+                  : active.transport === "opencode_zen"
+                    ? { transport: "opencode_zen", baseUrl: OPENCODE_ZEN_API_BASE_URL }
                     : {}),
     });
     active.harnessProfileId = profile.id;
@@ -1095,7 +1143,9 @@ export async function selectIntelligenceModel(
         s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
         !isKimiCodeVaultSecretId(s.id) &&
         s.name !== POE_API_KEY_SECRET_NAME &&
-        !isPoeVaultSecretId(s.id)
+        !isPoeVaultSecretId(s.id) &&
+        s.name !== OPENCODE_ZEN_API_KEY_SECRET_NAME &&
+        !isOpencodeZenVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
@@ -1114,6 +1164,7 @@ export async function selectIntelligenceModel(
     const minimaxTokenReady = isMinimaxTokenPlatformReady(db, "intelligence");
     const kimiCodeReady = isKimiCodePlatformReady(db, "intelligence");
     const poeReady = isPoePlatformReady(db, "intelligence");
+    const opencodeZenReady = isOpencodeZenPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
     let compatibleTransport:
@@ -1132,6 +1183,7 @@ export async function selectIntelligenceModel(
       | "minimax_token"
       | "kimi_code"
       | "poe"
+      | "opencode_zen"
       | null = null;
     if (provider === "openai") {
       if (openAiReady) {
@@ -1207,6 +1259,10 @@ export async function selectIntelligenceModel(
         transport === "poe" ||
         base.includes("api.poe.com") ||
         keyHint === POE_API_KEY_SECRET_ID;
+      const wantsOpencodeZen =
+        transport === "opencode_zen" ||
+        (base.includes("opencode.ai/zen") && !base.includes("opencode.ai/zen/go")) ||
+        keyHint === OPENCODE_ZEN_API_KEY_SECRET_ID;
       const wantsZai =
         transport === "zai" ||
         (base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/")) ||
@@ -1298,6 +1354,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = POE_API_KEY_SECRET_ID;
         compatibleTransport = "poe";
+      } else if (wantsOpencodeZen) {
+        if (!opencodeZenReady) {
+          throw new Error("Connect OpenCode Zen in Vault before using OpenCode Zen models");
+        }
+        preferredId = OPENCODE_ZEN_API_KEY_SECRET_ID;
+        compatibleTransport = "opencode_zen";
       } else if (wantsZai) {
         if (!zaiReady) {
           throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
@@ -1407,6 +1469,11 @@ export async function selectIntelligenceModel(
                         transport: "poe" as const,
                         baseUrl: POE_API_BASE_URL,
                       }
+                  : compatibleTransport === "opencode_zen"
+                    ? {
+                        transport: "opencode_zen" as const,
+                        baseUrl: OPENCODE_ZEN_API_BASE_URL,
+                      }
                     : null;
     const profile = resolveHarnessProfile({
       source: "provider",
@@ -1430,6 +1497,7 @@ export async function selectIntelligenceModel(
       minimaxToken: undefined,
       kimiCode: undefined,
       poe: undefined,
+      opencodeZen: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -1452,6 +1520,8 @@ export async function selectIntelligenceModel(
                   ? { kimiCode: true }
                 : transportBase.transport === "poe"
                   ? { poe: true }
+                : transportBase.transport === "opencode_zen"
+                  ? { opencodeZen: true }
                 : transportBase.transport === "google_ai"
                   ? { googleAi: true, google_ai: true }
                   : transportBase.transport === "custom_openai"
@@ -1501,6 +1571,8 @@ export async function selectIntelligenceModel(
                     ? "Kimi Code"
                   : compatibleTransport === "poe"
                     ? "Poe"
+                  : compatibleTransport === "opencode_zen"
+                    ? "OpenCode Zen"
                     : null;
     return {
       ok: true,

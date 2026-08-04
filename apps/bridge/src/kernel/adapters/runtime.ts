@@ -218,6 +218,13 @@ import {
   removePoeApiKey,
   upsertPoeApiKey,
 } from "../../services/poe-platform.js";
+import {
+  getOpencodeZenAuthStatus,
+  isOpencodeZenPlatformReady,
+  OPENCODE_ZEN_API_KEY_SECRET_ID,
+  removeOpencodeZenApiKey,
+  upsertOpencodeZenApiKey,
+} from "../../services/opencode-zen-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -1505,6 +1512,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === OPENCODE_ZEN_API_KEY_SECRET_ID) {
+      const status = getOpencodeZenAuthStatus(db, scope);
+      return status.connected
+        ? record(def, OPENCODE_ZEN_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "opencode_zen",
+            display_name: "OpenCode Zen",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1758,6 +1778,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (
+      requiredText(data, "provider").toLowerCase() === "opencode_zen" ||
+      requiredText(data, "provider").toLowerCase() === "opencode-zen"
+    ) {
+      upsertOpencodeZenApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getOpencodeZenAuthStatus(db, scope);
+      return record(def, OPENCODE_ZEN_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "opencode_zen",
+        display_name: "OpenCode Zen",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1844,6 +1879,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === POE_API_KEY_SECRET_ID) {
       removePoeApiKey(db, scope);
+      return;
+    }
+    if (id === OPENCODE_ZEN_API_KEY_SECRET_ID) {
+      removeOpencodeZenApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -2009,6 +2048,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom OpenCode Zen slug when Vault is connected.
+      if (!selected) {
+        const ozCustom =
+          /^provider:openai_compatible:opencode_zen:(.+)$/.exec(modelId);
+        if (ozCustom?.[1] && isOpencodeZenPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `OpenCode Zen · ${ozCustom[1]}`,
+            model: ozCustom[1],
+            provider: "openai_compatible",
+            transport: "opencode_zen",
+          };
+        }
+      }
       // Custom DeepSeek slug when Vault is connected.
       if (!selected) {
         const deepseekCustom =
@@ -2159,6 +2213,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("minimax_token:") &&
           !custom[1].startsWith("kimi_code:") &&
           !custom[1].startsWith("poe:") &&
+          !custom[1].startsWith("opencode_zen:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -2219,6 +2274,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "kimi_code", apiKeyRef: KIMI_CODE_API_KEY_SECRET_ID }
                     : transport === "poe"
                       ? { transport: "poe", apiKeyRef: POE_API_KEY_SECRET_ID }
+                    : transport === "opencode_zen"
+                      ? {
+                          transport: "opencode_zen",
+                          apiKeyRef: OPENCODE_ZEN_API_KEY_SECRET_ID,
+                        }
                       : {}),
       });
     },

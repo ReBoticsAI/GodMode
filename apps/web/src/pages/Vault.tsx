@@ -25,6 +25,7 @@ import { OpencodeGoCard } from "@/pages/ai-settings/OpencodeGoCard";
 import { MinimaxTokenPlanCard } from "@/pages/ai-settings/MinimaxTokenPlanCard";
 import { KimiCodeCard } from "@/pages/ai-settings/KimiCodeCard";
 import { PoeCard } from "@/pages/ai-settings/PoeCard";
+import { OpencodeZenCard } from "@/pages/ai-settings/OpencodeZenCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
@@ -358,6 +359,7 @@ export function InferenceTab({
           <MinimaxTokenPlanCard vaultAgentId={null} />
           <KimiCodeCard vaultAgentId={null} />
           <PoeCard vaultAgentId={null} />
+          <OpencodeZenCard vaultAgentId={null} />
         </section>
       </TabsContent>
 
