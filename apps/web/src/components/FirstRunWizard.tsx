@@ -514,6 +514,12 @@ export function useOnboardingGate() {
       setChecking(false);
       return;
     }
+    if (!activeTenantId) {
+      // Authenticated with zero workspaces: NoWorkspaceGate handles recovery.
+      setNeedsWizard(false);
+      setChecking(false);
+      return;
+    }
     void refresh();
   }, [
     authenticated,

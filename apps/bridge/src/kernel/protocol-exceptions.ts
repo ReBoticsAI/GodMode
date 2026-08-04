@@ -101,6 +101,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "authentication-first-workspace",
+    methods: ["POST"],
+    pathPattern: "/api/auth/tenants",
+    rationale:
+      "Authenticated first-workspace create for zero-membership users (#369). Kernel Tenant.create sits behind tenantDbMiddleware/resolveTenant and cannot run without an existing membership.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-checkout-session",
     methods: ["POST"],
     pathPattern: "/api/saas/checkout",

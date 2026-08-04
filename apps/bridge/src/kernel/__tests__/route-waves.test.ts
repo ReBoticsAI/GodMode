@@ -64,6 +64,7 @@ describe("legacy route wave", () => {
       "auth.ts:post:/resend-verification",
       "auth.ts:post:/reset-password",
       "auth.ts:post:/signup",
+      "auth.ts:post:/tenants",
       "auth.ts:post:/verify-email",
       "coding-workspace.ts:delete:/file",
       "coding-workspace.ts:delete:/terminal/sessions/:sessionId",

@@ -5434,6 +5434,7 @@ export function createAdminUser(input: AdminCreateUserInput) {
       password: input.password,
       display_name: input.displayName,
       is_admin: input.isAdmin,
+      provision_default_tenant: input.provisionDefaultTenant !== false,
     },
     undefined,
     true
@@ -5519,7 +5520,12 @@ export function fetchAuthTenants() {
 }
 
 export function createAuthTenant(name: string, slug?: string) {
-  return createDto<{ id: string; slug: string }>("Tenant", { name, slug });
+  // Auth-scoped create works with zero existing workspaces. Kernel Tenant.create
+  // requires tenantDbMiddleware / resolveTenant, which 403s without membership.
+  return api<{ id: string; name: string; slug: string }>("/auth/tenants", {
+    method: "POST",
+    body: JSON.stringify({ name, slug }),
+  });
 }
 
 export function logoutAuth() {

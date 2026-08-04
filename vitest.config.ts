@@ -73,6 +73,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
+      "apps/bridge/src/services/__tests__/admin-users-provision.test.ts",
       "apps/bridge/src/services/auth/__tests__/mfa-and-tokens.test.ts",
       "apps/bridge/src/services/auth/__tests__/mailer-key.test.ts",
       "apps/bridge/src/services/auth/__tests__/auth-security.http.test.ts",
