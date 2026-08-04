@@ -1005,6 +1005,9 @@ export function createAiRouter(
         s.id !== "deepseek-api-key" &&
         !s.id.startsWith("deepseek-api-key__agent__") &&
         s.name !== "deepseek_api_key" &&
+        s.id !== "google-ai-api-key" &&
+        !s.id.startsWith("google-ai-api-key__agent__") &&
+        s.name !== "google_ai_api_key" &&
         s.id !== "zai-coding-api-key" &&
         !s.id.startsWith("zai-coding-api-key__agent__") &&
         s.name !== "zai_coding_api_key"
