@@ -115,6 +115,15 @@ import {
   ZAI_CODING_API_KEY_SECRET_NAME,
   ZAI_CODING_CHAT_CATALOG,
 } from "./zai-coding-platform.js";
+import {
+  isOpencodeGoAgentConfig,
+  isOpencodeGoPlatformReady,
+  isOpencodeGoVaultSecretId,
+  OPENCODE_GO_API_BASE_URL,
+  OPENCODE_GO_API_KEY_SECRET_ID,
+  OPENCODE_GO_API_KEY_SECRET_NAME,
+  OPENCODE_GO_CHAT_CATALOG,
+} from "./opencode-go-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -273,6 +282,16 @@ function zaiCodingHarnessInput(model: string) {
   };
 }
 
+function opencodeGoHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "opencode_go",
+    baseUrl: OPENCODE_GO_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -354,7 +373,9 @@ export async function listModelCatalog(
       s.name !== CUSTOM_OPENAI_BASE_URL_SECRET_NAME &&
       !isCustomOpenAiVaultSecretId(s.id) &&
       s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
-      !isZaiCodingVaultSecretId(s.id)
+      !isZaiCodingVaultSecretId(s.id) &&
+      s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
+      !isOpencodeGoVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -374,6 +395,7 @@ export async function listModelCatalog(
   const hasZai = isZaiPlatformReady(db, catalogAgentId);
   const hasMinimax = isMinimaxPlatformReady(db, catalogAgentId);
   const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
+  const hasOpencodeGo = isOpencodeGoPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -587,6 +609,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasOpencodeGo) {
+    const agentIsOc =
+      agent?.backend === "provider" && isOpencodeGoAgentConfig(agent.config);
+    for (const m of OPENCODE_GO_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(opencodeGoHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:opencode_go:${m.id}`,
+        source: "provider",
+        label: `OpenCode Go · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "opencode_go",
+        active: Boolean(agentIsOc && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -608,6 +647,7 @@ export async function listModelCatalog(
     const isMinimax = isMinimaxAgentConfig(agent.config);
     const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
+    const isOcGo = isOpencodeGoAgentConfig(agent.config);
     const customBase =
       typeof agent.config.baseUrl === "string"
         ? agent.config.baseUrl
@@ -628,6 +668,8 @@ export async function listModelCatalog(
                   ? resolveHarnessProfile(xaiHarnessInput(model))
                   : isZai
                     ? resolveHarnessProfile(zaiCodingHarnessInput(model))
+                    : isOcGo
+                      ? resolveHarnessProfile(opencodeGoHarnessInput(model))
                     : isZaiPayg
                       ? resolveHarnessProfile(zaiHarnessInput(model))
                       : isMinimax
@@ -655,6 +697,8 @@ export async function listModelCatalog(
                 ? "xai"
                 : isZai
                   ? "zai_coding"
+                  : isOcGo
+                    ? "opencode_go"
                   : isZaiPayg
                     ? "zai"
                     : isMinimax
@@ -689,6 +733,8 @@ export async function listModelCatalog(
                               ? "MiniMax"
                               : namespacedTransport === "custom_openai"
                                 ? "Custom"
+                                : namespacedTransport === "opencode_go"
+                                  ? "OpenCode Go"
                                 : "Z.AI Coding"
             } · ${model}`
           : model,
@@ -751,6 +797,8 @@ export async function listModelCatalog(
                       }
                   : active.transport === "zai_coding"
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
+                  : active.transport === "opencode_go"
+                    ? { transport: "opencode_go", baseUrl: OPENCODE_GO_API_BASE_URL }
                     : {}),
     });
     active.harnessProfileId = profile.id;
@@ -895,7 +943,9 @@ export async function selectIntelligenceModel(
         s.name !== CUSTOM_OPENAI_BASE_URL_SECRET_NAME &&
         !isCustomOpenAiVaultSecretId(s.id) &&
         s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
-        !isZaiCodingVaultSecretId(s.id)
+        !isZaiCodingVaultSecretId(s.id) &&
+        s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
+        !isOpencodeGoVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
@@ -910,6 +960,7 @@ export async function selectIntelligenceModel(
     const minimaxReady = isMinimaxPlatformReady(db, "intelligence");
     const customOpenAiReady = isCustomOpenAiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
+    const opencodeGoReady = isOpencodeGoPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
     let compatibleTransport:
@@ -924,6 +975,7 @@ export async function selectIntelligenceModel(
       | "minimax"
       | "custom_openai"
       | "zai_coding"
+      | "opencode_go"
       | null = null;
     if (provider === "openai") {
       if (openAiReady) {
@@ -984,6 +1036,10 @@ export async function selectIntelligenceModel(
         transport === "zai_coding" ||
         base.includes("api.z.ai/api/coding/") ||
         keyHint === ZAI_CODING_API_KEY_SECRET_ID;
+      const wantsOpencodeGo =
+        transport === "opencode_go" ||
+        base.includes("opencode.ai/zen/go") ||
+        keyHint === OPENCODE_GO_API_KEY_SECRET_ID;
       const wantsZai =
         transport === "zai" ||
         (base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/")) ||
@@ -1047,6 +1103,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = ZAI_CODING_API_KEY_SECRET_ID;
         compatibleTransport = "zai_coding";
+      } else if (wantsOpencodeGo) {
+        if (!opencodeGoReady) {
+          throw new Error("Connect OpenCode Go in Vault before using OpenCode Go models");
+        }
+        preferredId = OPENCODE_GO_API_KEY_SECRET_ID;
+        compatibleTransport = "opencode_go";
       } else if (wantsZai) {
         if (!zaiReady) {
           throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
@@ -1136,6 +1198,11 @@ export async function selectIntelligenceModel(
                         transport: "zai_coding" as const,
                         baseUrl: ZAI_CODING_API_BASE_URL,
                       }
+                  : compatibleTransport === "opencode_go"
+                    ? {
+                        transport: "opencode_go" as const,
+                        baseUrl: OPENCODE_GO_API_BASE_URL,
+                      }
                     : null;
     const profile = resolveHarnessProfile({
       source: "provider",
@@ -1155,6 +1222,7 @@ export async function selectIntelligenceModel(
       minimax: undefined,
       customOpenai: undefined,
       zaiCoding: undefined,
+      opencodeGo: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -1169,6 +1237,8 @@ export async function selectIntelligenceModel(
               ? { openrouter: true }
               : transportBase.transport === "zai_coding"
                 ? { zaiCoding: true }
+                : transportBase.transport === "opencode_go"
+                  ? { opencodeGo: true }
                 : transportBase.transport === "google_ai"
                   ? { googleAi: true, google_ai: true }
                   : transportBase.transport === "custom_openai"
@@ -1210,6 +1280,8 @@ export async function selectIntelligenceModel(
                     ? "Custom"
                   : compatibleTransport === "zai_coding"
                     ? "Z.AI Coding"
+                  : compatibleTransport === "opencode_go"
+                    ? "OpenCode Go"
                     : null;
     return {
       ok: true,

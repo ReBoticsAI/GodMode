@@ -27,6 +27,7 @@ import {
   resolveZaiPaygHarnessProfile,
   resolveMinimaxPaygHarnessProfile,
   resolveCustomOpenAiHarnessProfile,
+  resolveOpencodeGoHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -372,6 +373,17 @@ assert.equal(
     baseUrl: "https://example.com/v1",
   }).id,
   "custom-openai"
+);
+assert.equal(resolveOpencodeGoHarnessProfile("kimi-k3").id, "opencode-go");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "kimi-k3",
+    transport: "opencode_go",
+    baseUrl: "https://opencode.ai/zen/go/v1",
+  }).id,
+  "opencode-go"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");

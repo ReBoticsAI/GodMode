@@ -1266,6 +1266,43 @@ export function resolveCustomOpenAiHarnessProfile(
   return CUSTOM_OPENAI_PROFILE;
 }
 
+/** OpenCode Go subscription transport (#230). */
+const OPENCODE_GO_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const OPENCODE_GO_PROFILE: ModelHarnessProfile = {
+  id: "opencode-go",
+  label: "OpenCode Go",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENCODE_GO_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="opencode-go">',
+    "You are running via OpenCode Go (openai_compatible transport, subscription quota).",
+    "This is not the Cursor SDK path and not OpenCode Zen.",
+    "Use native OpenAI-style function calling as exposed by the Go endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "OpenCode Go: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveOpencodeGoHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return OPENCODE_GO_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1386,6 +1423,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   ZAI_PAYG_PROFILE,
   MINIMAX_PAYG_PROFILE,
   CUSTOM_OPENAI_PROFILE,
+  OPENCODE_GO_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1447,6 +1485,12 @@ function isMinimaxTransport(input: ResolveProfileInput): boolean {
 
 function isCustomOpenAiTransport(input: ResolveProfileInput): boolean {
   return (input.transport ?? "").toLowerCase() === "custom_openai";
+}
+
+function isOpencodeGoTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "opencode_go") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("opencode.ai/zen/go");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1545,6 +1589,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isCustomOpenAiTransport(input)) {
       return resolveCustomOpenAiHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isOpencodeGoTransport(input)) {
+      return resolveOpencodeGoHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1622,6 +1669,11 @@ export function resolveProfileForAgent(
         transport = "minimax";
       } else if (cfg.customOpenai === true || cfg.transport === "custom_openai") {
         transport = "custom_openai";
+      } else if (
+        cfg.opencodeGo === true ||
+        (baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go")
+      ) {
+        transport = "opencode_go";
       }
     }
     return resolveHarnessProfile({
