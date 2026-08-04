@@ -125,6 +125,15 @@ import {
   removeFireworksApiKey,
   upsertFireworksApiKey,
 } from "../../services/fireworks-platform.js";
+import {
+  getDeepSeekAuthStatus,
+  isDeepSeekPlatformReady,
+  isDeepSeekVaultSecretId,
+  isDeepSeekVaultSecretName,
+  DEEPSEEK_API_KEY_SECRET_ID,
+  removeDeepSeekApiKey,
+  upsertDeepSeekApiKey,
+} from "../../services/deepseek-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -1001,7 +1010,9 @@ function isManagedPlatformSecret(secret: {
     isTogetherVaultSecretId(secret.id) ||
     isTogetherVaultSecretName(secret.name) ||
     isFireworksVaultSecretId(secret.id) ||
-    isFireworksVaultSecretName(secret.name)
+    isFireworksVaultSecretName(secret.name) ||
+    isDeepSeekVaultSecretId(secret.id) ||
+    isDeepSeekVaultSecretName(secret.name)
   );
 }
 
@@ -1071,6 +1082,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isFireworksVaultSecretName(name)) {
       throw httpError(400, "Fireworks API keys must use the Fireworks credential flow");
+    }
+    if (isDeepSeekVaultSecretName(name)) {
+      throw httpError(400, "DeepSeek API keys must use the DeepSeek credential flow");
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
@@ -1222,6 +1236,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === DEEPSEEK_API_KEY_SECRET_ID) {
+      const status = getDeepSeekAuthStatus(db, scope);
+      return status.connected
+        ? record(def, DEEPSEEK_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "deepseek",
+            display_name: "DeepSeek",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1312,6 +1339,18 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (requiredText(data, "provider").toLowerCase() === "deepseek") {
+      upsertDeepSeekApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getDeepSeekAuthStatus(db, scope);
+      return record(def, DEEPSEEK_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "deepseek",
+        display_name: "DeepSeek",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1354,6 +1393,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === FIREWORKS_API_KEY_SECRET_ID) {
       removeFireworksApiKey(db, scope);
+      return;
+    }
+    if (id === DEEPSEEK_API_KEY_SECRET_ID) {
+      removeDeepSeekApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1445,6 +1488,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom DeepSeek slug when Vault is connected.
+      if (!selected) {
+        const deepseekCustom =
+          /^provider:openai_compatible:deepseek:(.+)$/.exec(modelId);
+        if (deepseekCustom?.[1] && isDeepSeekPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `DeepSeek · ${deepseekCustom[1]}`,
+            model: deepseekCustom[1],
+            provider: "openai_compatible",
+            transport: "deepseek",
+          };
+        }
+      }
       // Custom Fireworks slug when Vault is connected.
       if (!selected) {
         const fireworksCustom =
@@ -1496,6 +1554,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("groq:") &&
           !custom[1].startsWith("together:") &&
           !custom[1].startsWith("fireworks:") &&
+          !custom[1].startsWith("deepseek:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -1528,7 +1587,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
               ? { transport: "together", apiKeyRef: TOGETHER_API_KEY_SECRET_ID }
               : transport === "fireworks"
                 ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
-                : {}),
+                : transport === "deepseek"
+                  ? { transport: "deepseek", apiKeyRef: DEEPSEEK_API_KEY_SECRET_ID }
+                  : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {

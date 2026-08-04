@@ -929,6 +929,90 @@ export function resolveFireworksHarnessProfile(
   return FIREWORKS_GENERIC_PROFILE;
 }
 
+/** Shared DeepSeek platform transport middleware (BYOK via OpenAI-compatible tools). */
+const DEEPSEEK_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function deepseekFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via DeepSeek Platform API (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not Fireworks, not Together, and not OpenRouter.",
+    "Use native OpenAI-style function calling as exposed by DeepSeek. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const DEEPSEEK_FLASH_PROFILE: ModelHarnessProfile = {
+  id: "deepseek-flash",
+  label: "DeepSeek V4 Flash",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DEEPSEEK_TRANSPORT_DEFERRED],
+  harnessDelta: deepseekFamilyDelta("deepseek-flash", [
+    "DeepSeek V4 Flash via Platform API: lean tool surface; prefer structured schemas; keep discovery deferred.",
+  ]),
+};
+
+export const DEEPSEEK_PRO_PROFILE: ModelHarnessProfile = {
+  id: "deepseek-pro",
+  label: "DeepSeek V4 Pro",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 16,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DEEPSEEK_TRANSPORT_DEFERRED],
+  harnessDelta: deepseekFamilyDelta("deepseek-pro", [
+    "DeepSeek V4 Pro via Platform API (not Fireworks/Together/OpenRouter). Prefer structured tool schemas; one purposeful tool turn when possible.",
+  ]),
+};
+
+export const DEEPSEEK_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "deepseek-generic",
+  label: "DeepSeek (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DEEPSEEK_TRANSPORT_DEFERRED],
+  harnessDelta: deepseekFamilyDelta("deepseek-generic", [
+    "Generic DeepSeek Platform route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map DeepSeek Platform model id → family harness.
+ * Transport is DeepSeek Platform; distinct from Fireworks/Together/OpenRouter DeepSeek routes.
+ */
+export function resolveDeepSeekHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.includes("v4-pro") || slug === "deepseek-v4-pro") return DEEPSEEK_PRO_PROFILE;
+  if (slug.includes("v4-flash") || slug === "deepseek-v4-flash") {
+    return DEEPSEEK_FLASH_PROFILE;
+  }
+  return DEEPSEEK_GENERIC_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -999,6 +1083,9 @@ const REGISTRY: ModelHarnessProfile[] = [
   FIREWORKS_NEMOTRON_PROFILE,
   FIREWORKS_GEMMA_PROFILE,
   FIREWORKS_GENERIC_PROFILE,
+  DEEPSEEK_FLASH_PROFILE,
+  DEEPSEEK_PRO_PROFILE,
+  DEEPSEEK_GENERIC_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -1025,6 +1112,12 @@ function isFireworksTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "fireworks") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.fireworks.ai");
+}
+
+function isDeepSeekTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "deepseek") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.deepseek.com");
 }
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
@@ -1096,6 +1189,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isFireworksTransport(input)) {
       return resolveFireworksHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isDeepSeekTransport(input)) {
+      return resolveDeepSeekHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1140,6 +1236,11 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.fireworks.ai")
       ) {
         transport = "fireworks";
+      } else if (
+        cfg.deepseek === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.deepseek.com")
+      ) {
+        transport = "deepseek";
       }
     }
     return resolveHarnessProfile({
