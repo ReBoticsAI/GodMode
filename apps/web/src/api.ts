@@ -2909,6 +2909,160 @@ export const applyOpencodeGoToIntelligence = (model = "kimi-k3") =>
     true
   );
 
+export type DigitalOceanInferenceAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchDigitalOceanInferenceStatus = async (
+  agentId?: string | null
+): Promise<DigitalOceanInferenceAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "digitalocean-inference-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (
+      data?.status === "active" ||
+      data?.provider === "digitalocean_inference"
+    ) {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectDigitalOceanInferenceApiKey = (
+  apiKey: string,
+  agentId?: string | null
+) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "digitalocean_inference",
+      label: "DigitalOcean Inference",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDigitalOceanInferenceStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectDigitalOceanInferenceApiKey = (
+  agentId?: string | null
+) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "digitalocean-inference-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDigitalOceanInferenceStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyDigitalOceanInferenceToIntelligence = (
+  model = "llama3.3-70b-instruct"
+) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    {
+      model_id: `provider:openai_compatible:digitalocean_inference:${model}`,
+    },
+    "runtime",
+    true
+  );
+
+export type SnowflakeCortexAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+  baseUrl?: string;
+};
+
+export const fetchSnowflakeCortexStatus = async (
+  agentId?: string | null
+): Promise<SnowflakeCortexAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "snowflake-cortex-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | {
+          provider?: string;
+          status?: string;
+          masked_token?: string;
+          base_url?: string;
+        }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "snowflake_cortex") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+        baseUrl: data.base_url,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectSnowflakeCortex = (
+  apiKey: string,
+  accountUrl: string,
+  agentId?: string | null
+) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "snowflake_cortex",
+      label: "Snowflake Cortex",
+      api_key: apiKey,
+      base_url: accountUrl,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchSnowflakeCortexStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectSnowflakeCortex = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "snowflake-cortex-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchSnowflakeCortexStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applySnowflakeCortexToIntelligence = (
+  model = "claude-sonnet-4-5"
+) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:snowflake_cortex:${model}` },
+    "runtime",
+    true
+  );
+
 export type MinimaxTokenAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";

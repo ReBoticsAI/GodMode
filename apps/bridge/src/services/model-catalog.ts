@@ -125,6 +125,25 @@ import {
   OPENCODE_GO_CHAT_CATALOG,
 } from "./opencode-go-platform.js";
 import {
+  isDigitalOceanInferenceAgentConfig,
+  isDigitalOceanInferencePlatformReady,
+  isDigitalOceanInferenceVaultSecretId,
+  DIGITALOCEAN_INFERENCE_API_BASE_URL,
+  DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID,
+  DIGITALOCEAN_INFERENCE_API_KEY_SECRET_NAME,
+  DIGITALOCEAN_INFERENCE_CHAT_CATALOG,
+} from "./digitalocean-inference-platform.js";
+import {
+  isSnowflakeCortexAgentConfig,
+  isSnowflakeCortexPlatformReady,
+  isSnowflakeCortexVaultSecretId,
+  resolveSnowflakeCortexBaseUrl,
+  SNOWFLAKE_CORTEX_API_KEY_SECRET_ID,
+  SNOWFLAKE_CORTEX_API_KEY_SECRET_NAME,
+  SNOWFLAKE_CORTEX_BASE_URL_SECRET_NAME,
+  SNOWFLAKE_CORTEX_CHAT_CATALOG,
+} from "./snowflake-cortex-platform.js";
+import {
   isMinimaxTokenAgentConfig,
   isMinimaxTokenPlatformReady,
   isMinimaxTokenVaultSecretId,
@@ -328,6 +347,26 @@ function opencodeGoHarnessInput(model: string) {
   };
 }
 
+function digitalOceanInferenceHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "digitalocean_inference",
+    baseUrl: DIGITALOCEAN_INFERENCE_API_BASE_URL,
+  };
+}
+
+function snowflakeCortexHarnessInput(model: string, baseUrl: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "snowflake_cortex",
+    baseUrl,
+  };
+}
+
 function minimaxTokenHarnessInput(model: string) {
   return {
     source: "provider" as const,
@@ -452,6 +491,11 @@ export async function listModelCatalog(
       !isZaiCodingVaultSecretId(s.id) &&
       s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
       !isOpencodeGoVaultSecretId(s.id) &&
+      s.name !== DIGITALOCEAN_INFERENCE_API_KEY_SECRET_NAME &&
+      !isDigitalOceanInferenceVaultSecretId(s.id) &&
+      s.name !== SNOWFLAKE_CORTEX_API_KEY_SECRET_NAME &&
+      s.name !== SNOWFLAKE_CORTEX_BASE_URL_SECRET_NAME &&
+      !isSnowflakeCortexVaultSecretId(s.id) &&
       s.name !== MINIMAX_TOKEN_API_KEY_SECRET_NAME &&
       !isMinimaxTokenVaultSecretId(s.id) &&
       s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
@@ -480,6 +524,11 @@ export async function listModelCatalog(
   const hasMinimax = isMinimaxPlatformReady(db, catalogAgentId);
   const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
   const hasOpencodeGo = isOpencodeGoPlatformReady(db, catalogAgentId);
+  const hasDigitalOceanInference = isDigitalOceanInferencePlatformReady(
+    db,
+    catalogAgentId
+  );
+  const hasSnowflakeCortex = isSnowflakeCortexPlatformReady(db, catalogAgentId);
   const hasMinimaxToken = isMinimaxTokenPlatformReady(db, catalogAgentId);
   const hasKimiCode = isKimiCodePlatformReady(db, catalogAgentId);
   const hasPoe = isPoePlatformReady(db, catalogAgentId);
@@ -714,6 +763,48 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasDigitalOceanInference) {
+    const agentIsDo =
+      agent?.backend === "provider" &&
+      isDigitalOceanInferenceAgentConfig(agent.config);
+    for (const m of DIGITALOCEAN_INFERENCE_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(
+        digitalOceanInferenceHarnessInput(m.id)
+      );
+      models.push({
+        id: `provider:openai_compatible:digitalocean_inference:${m.id}`,
+        source: "provider",
+        label: `DigitalOcean · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "digitalocean_inference",
+        active: Boolean(agentIsDo && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
+  if (hasSnowflakeCortex) {
+    const cortexBase =
+      resolveSnowflakeCortexBaseUrl(db, catalogAgentId) ??
+      "https://example.snowflakecomputing.com/api/v2/cortex/v1";
+    const agentIsSf =
+      agent?.backend === "provider" && isSnowflakeCortexAgentConfig(agent.config);
+    for (const m of SNOWFLAKE_CORTEX_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(
+        snowflakeCortexHarnessInput(m.id, cortexBase)
+      );
+      models.push({
+        id: `provider:openai_compatible:snowflake_cortex:${m.id}`,
+        source: "provider",
+        label: `Snowflake Cortex · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "snowflake_cortex",
+        active: Boolean(agentIsSf && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
   if (hasMinimaxToken) {
     const agentIsMt =
       agent?.backend === "provider" && isMinimaxTokenAgentConfig(agent.config);
@@ -808,10 +899,16 @@ export async function listModelCatalog(
     const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
     const isOcGo = isOpencodeGoAgentConfig(agent.config);
+    const isDoInf = isDigitalOceanInferenceAgentConfig(agent.config);
+    const isSfCortex = isSnowflakeCortexAgentConfig(agent.config);
     const customBase =
       typeof agent.config.baseUrl === "string"
         ? agent.config.baseUrl
         : resolveCustomOpenAiBaseUrl(db, catalogAgentId) ?? "";
+    const snowflakeBase =
+      typeof agent.config.baseUrl === "string"
+        ? agent.config.baseUrl
+        : resolveSnowflakeCortexBaseUrl(db, catalogAgentId) ?? "";
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
@@ -830,6 +927,14 @@ export async function listModelCatalog(
                     ? resolveHarnessProfile(zaiCodingHarnessInput(model))
                     : isOcGo
                       ? resolveHarnessProfile(opencodeGoHarnessInput(model))
+                    : isDoInf
+                      ? resolveHarnessProfile(
+                          digitalOceanInferenceHarnessInput(model)
+                        )
+                    : isSfCortex && snowflakeBase
+                      ? resolveHarnessProfile(
+                          snowflakeCortexHarnessInput(model, snowflakeBase)
+                        )
                     : isMinimaxToken
                       ? resolveHarnessProfile(minimaxTokenHarnessInput(model))
                     : isKimiCode
@@ -867,6 +972,10 @@ export async function listModelCatalog(
                   ? "zai_coding"
                   : isOcGo
                     ? "opencode_go"
+                  : isDoInf
+                    ? "digitalocean_inference"
+                  : isSfCortex
+                    ? "snowflake_cortex"
                   : isMinimaxToken
                     ? "minimax_token"
                   : isKimiCode
@@ -919,6 +1028,10 @@ export async function listModelCatalog(
                                 ? "Custom"
                                 : namespacedTransport === "opencode_go"
                                   ? "OpenCode Go"
+                                : namespacedTransport === "digitalocean_inference"
+                                  ? "DigitalOcean"
+                                : namespacedTransport === "snowflake_cortex"
+                                  ? "Snowflake Cortex"
                                 : "Z.AI Coding"
             } · ${model}`
           : model,
@@ -983,6 +1096,18 @@ export async function listModelCatalog(
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
                   : active.transport === "opencode_go"
                     ? { transport: "opencode_go", baseUrl: OPENCODE_GO_API_BASE_URL }
+                  : active.transport === "digitalocean_inference"
+                    ? {
+                        transport: "digitalocean_inference",
+                        baseUrl: DIGITALOCEAN_INFERENCE_API_BASE_URL,
+                      }
+                  : active.transport === "snowflake_cortex"
+                    ? {
+                        transport: "snowflake_cortex",
+                        baseUrl:
+                          resolveSnowflakeCortexBaseUrl(db, "intelligence") ??
+                          undefined,
+                      }
                   : active.transport === "minimax_token"
                     ? { transport: "minimax_token", baseUrl: MINIMAX_TOKEN_API_BASE_URL }
                   : active.transport === "kimi_code"
@@ -1138,6 +1263,11 @@ export async function selectIntelligenceModel(
         !isZaiCodingVaultSecretId(s.id) &&
         s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
         !isOpencodeGoVaultSecretId(s.id) &&
+        s.name !== DIGITALOCEAN_INFERENCE_API_KEY_SECRET_NAME &&
+        !isDigitalOceanInferenceVaultSecretId(s.id) &&
+        s.name !== SNOWFLAKE_CORTEX_API_KEY_SECRET_NAME &&
+        s.name !== SNOWFLAKE_CORTEX_BASE_URL_SECRET_NAME &&
+        !isSnowflakeCortexVaultSecretId(s.id) &&
         s.name !== MINIMAX_TOKEN_API_KEY_SECRET_NAME &&
         !isMinimaxTokenVaultSecretId(s.id) &&
         s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
@@ -1161,6 +1291,14 @@ export async function selectIntelligenceModel(
     const customOpenAiReady = isCustomOpenAiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
     const opencodeGoReady = isOpencodeGoPlatformReady(db, "intelligence");
+    const digitalOceanInferenceReady = isDigitalOceanInferencePlatformReady(
+      db,
+      "intelligence"
+    );
+    const snowflakeCortexReady = isSnowflakeCortexPlatformReady(
+      db,
+      "intelligence"
+    );
     const minimaxTokenReady = isMinimaxTokenPlatformReady(db, "intelligence");
     const kimiCodeReady = isKimiCodePlatformReady(db, "intelligence");
     const poeReady = isPoePlatformReady(db, "intelligence");
@@ -1180,6 +1318,8 @@ export async function selectIntelligenceModel(
       | "custom_openai"
       | "zai_coding"
       | "opencode_go"
+      | "digitalocean_inference"
+      | "snowflake_cortex"
       | "minimax_token"
       | "kimi_code"
       | "poe"
@@ -1248,6 +1388,15 @@ export async function selectIntelligenceModel(
         transport === "opencode_go" ||
         base.includes("opencode.ai/zen/go") ||
         keyHint === OPENCODE_GO_API_KEY_SECRET_ID;
+      const wantsDigitalOceanInference =
+        transport === "digitalocean_inference" ||
+        base.includes("inference.do-ai.run") ||
+        keyHint === DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID;
+      const wantsSnowflakeCortex =
+        transport === "snowflake_cortex" ||
+        (base.includes("snowflakecomputing.com") &&
+          base.includes("/api/v2/cortex")) ||
+        keyHint === SNOWFLAKE_CORTEX_API_KEY_SECRET_ID;
       const wantsMinimaxToken =
         transport === "minimax_token" ||
         keyHint === MINIMAX_TOKEN_API_KEY_SECRET_ID;
@@ -1334,6 +1483,22 @@ export async function selectIntelligenceModel(
         }
         preferredId = OPENCODE_GO_API_KEY_SECRET_ID;
         compatibleTransport = "opencode_go";
+      } else if (wantsDigitalOceanInference) {
+        if (!digitalOceanInferenceReady) {
+          throw new Error(
+            "Connect DigitalOcean Inference in Vault before using DigitalOcean models"
+          );
+        }
+        preferredId = DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID;
+        compatibleTransport = "digitalocean_inference";
+      } else if (wantsSnowflakeCortex) {
+        if (!snowflakeCortexReady) {
+          throw new Error(
+            "Connect Snowflake Cortex in Vault before using Cortex models"
+          );
+        }
+        preferredId = SNOWFLAKE_CORTEX_API_KEY_SECRET_ID;
+        compatibleTransport = "snowflake_cortex";
       } else if (wantsMinimaxToken) {
         if (!minimaxTokenReady) {
           throw new Error(
@@ -1454,6 +1619,27 @@ export async function selectIntelligenceModel(
                         transport: "opencode_go" as const,
                         baseUrl: OPENCODE_GO_API_BASE_URL,
                       }
+                  : compatibleTransport === "digitalocean_inference"
+                    ? {
+                        transport: "digitalocean_inference" as const,
+                        baseUrl: DIGITALOCEAN_INFERENCE_API_BASE_URL,
+                      }
+                  : compatibleTransport === "snowflake_cortex"
+                    ? (() => {
+                        const url = resolveSnowflakeCortexBaseUrl(
+                          db,
+                          "intelligence"
+                        );
+                        if (!url) {
+                          throw new Error(
+                            "Snowflake Cortex base URL is missing from Vault"
+                          );
+                        }
+                        return {
+                          transport: "snowflake_cortex" as const,
+                          baseUrl: url,
+                        };
+                      })()
                   : compatibleTransport === "minimax_token"
                     ? {
                         transport: "minimax_token" as const,
@@ -1494,6 +1680,8 @@ export async function selectIntelligenceModel(
       customOpenai: undefined,
       zaiCoding: undefined,
       opencodeGo: undefined,
+      digitaloceanInference: undefined,
+      snowflakeCortex: undefined,
       minimaxToken: undefined,
       kimiCode: undefined,
       poe: undefined,
@@ -1514,6 +1702,10 @@ export async function selectIntelligenceModel(
                 ? { zaiCoding: true }
                 : transportBase.transport === "opencode_go"
                   ? { opencodeGo: true }
+                : transportBase.transport === "digitalocean_inference"
+                  ? { digitaloceanInference: true }
+                : transportBase.transport === "snowflake_cortex"
+                  ? { snowflakeCortex: true }
                 : transportBase.transport === "minimax_token"
                   ? { minimaxToken: true }
                 : transportBase.transport === "kimi_code"
@@ -1565,6 +1757,10 @@ export async function selectIntelligenceModel(
                     ? "Z.AI Coding"
                   : compatibleTransport === "opencode_go"
                     ? "OpenCode Go"
+                  : compatibleTransport === "digitalocean_inference"
+                    ? "DigitalOcean"
+                  : compatibleTransport === "snowflake_cortex"
+                    ? "Snowflake Cortex"
                   : compatibleTransport === "minimax_token"
                     ? "MiniMax Token"
                   : compatibleTransport === "kimi_code"
