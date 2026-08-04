@@ -1004,7 +1004,10 @@ export function createAiRouter(
         s.name !== "fireworks_api_key" &&
         s.id !== "deepseek-api-key" &&
         !s.id.startsWith("deepseek-api-key__agent__") &&
-        s.name !== "deepseek_api_key"
+        s.name !== "deepseek_api_key" &&
+        s.id !== "zai-coding-api-key" &&
+        !s.id.startsWith("zai-coding-api-key__agent__") &&
+        s.name !== "zai_coding_api_key"
     );
     res.json({ secrets });
   });

@@ -61,6 +61,15 @@ import {
   DEEPSEEK_API_KEY_SECRET_NAME,
   DEEPSEEK_CHAT_CATALOG,
 } from "./deepseek-platform.js";
+import {
+  isZaiCodingAgentConfig,
+  isZaiCodingPlatformReady,
+  isZaiCodingVaultSecretId,
+  ZAI_CODING_API_BASE_URL,
+  ZAI_CODING_API_KEY_SECRET_ID,
+  ZAI_CODING_API_KEY_SECRET_NAME,
+  ZAI_CODING_CHAT_CATALOG,
+} from "./zai-coding-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -159,6 +168,16 @@ function deepseekHarnessInput(model: string) {
   };
 }
 
+function zaiCodingHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "zai_coding",
+    baseUrl: ZAI_CODING_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -227,7 +246,9 @@ export async function listModelCatalog(
       s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
       !isFireworksVaultSecretId(s.id) &&
       s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
-      !isDeepSeekVaultSecretId(s.id)
+      !isDeepSeekVaultSecretId(s.id) &&
+      s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
+      !isZaiCodingVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -242,6 +263,7 @@ export async function listModelCatalog(
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
   const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
   const hasDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
+  const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -370,6 +392,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasZaiCoding) {
+    const agentIsZai =
+      agent?.backend === "provider" && isZaiCodingAgentConfig(agent.config);
+    for (const m of ZAI_CODING_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(zaiCodingHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:zai_coding:${m.id}`,
+        source: "provider",
+        label: `Z.AI Coding · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "zai_coding",
+        active: Boolean(agentIsZai && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -385,6 +424,7 @@ export async function listModelCatalog(
     const isTg = isTogetherAgentConfig(agent.config);
     const isFw = isFireworksAgentConfig(agent.config);
     const isDs = isDeepSeekAgentConfig(agent.config);
+    const isZai = isZaiCodingAgentConfig(agent.config);
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
@@ -395,11 +435,13 @@ export async function listModelCatalog(
             ? resolveHarnessProfile(fireworksHarnessInput(model))
             : isDs
               ? resolveHarnessProfile(deepseekHarnessInput(model))
-              : resolveHarnessProfile({
-                  source: "provider",
-                  model,
-                  provider,
-                });
+              : isZai
+                ? resolveHarnessProfile(zaiCodingHarnessInput(model))
+                : resolveHarnessProfile({
+                    source: "provider",
+                    model,
+                    provider,
+                  });
     const namespacedTransport = isGq
       ? "groq"
       : isTg
@@ -408,7 +450,9 @@ export async function listModelCatalog(
           ? "fireworks"
           : isDs
             ? "deepseek"
-            : null;
+            : isZai
+              ? "zai_coding"
+              : null;
     models.push({
       id: namespacedTransport
         ? `provider:openai_compatible:${namespacedTransport}:${model}`
@@ -417,7 +461,17 @@ export async function listModelCatalog(
       label: isOr
         ? `OpenRouter · ${model}`
         : namespacedTransport
-          ? `${namespacedTransport === "groq" ? "Groq" : namespacedTransport === "together" ? "Together" : namespacedTransport === "fireworks" ? "Fireworks" : "DeepSeek"} · ${model}`
+          ? `${
+              namespacedTransport === "groq"
+                ? "Groq"
+                : namespacedTransport === "together"
+                  ? "Together"
+                  : namespacedTransport === "fireworks"
+                    ? "Fireworks"
+                    : namespacedTransport === "deepseek"
+                      ? "DeepSeek"
+                      : "Z.AI Coding"
+            } · ${model}`
           : model,
       model,
       provider,
@@ -461,7 +515,9 @@ export async function listModelCatalog(
               ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
               : active.transport === "deepseek"
                 ? { transport: "deepseek", baseUrl: DEEPSEEK_API_BASE_URL }
-                : {}),
+                : active.transport === "zai_coding"
+                  ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
+                  : {}),
     });
     active.harnessProfileId = profile.id;
   }
@@ -592,7 +648,9 @@ export async function selectIntelligenceModel(
         s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
         !isFireworksVaultSecretId(s.id) &&
         s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
-        !isDeepSeekVaultSecretId(s.id)
+        !isDeepSeekVaultSecretId(s.id) &&
+        s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
+        !isZaiCodingVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
@@ -601,6 +659,7 @@ export async function selectIntelligenceModel(
     const togetherReady = isTogetherPlatformReady(db, "intelligence");
     const fireworksReady = isFireworksPlatformReady(db, "intelligence");
     const deepseekReady = isDeepSeekPlatformReady(db, "intelligence");
+    const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
     let compatibleTransport:
@@ -609,6 +668,7 @@ export async function selectIntelligenceModel(
       | "together"
       | "fireworks"
       | "deepseek"
+      | "zai_coding"
       | null = null;
     if (provider === "openai") {
       if (openAiReady) {
@@ -657,6 +717,10 @@ export async function selectIntelligenceModel(
         transport === "deepseek" ||
         base.includes("api.deepseek.com") ||
         keyHint === DEEPSEEK_API_KEY_SECRET_ID;
+      const wantsZaiCoding =
+        transport === "zai_coding" ||
+        base.includes("api.z.ai/api/coding/") ||
+        keyHint === ZAI_CODING_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -687,6 +751,14 @@ export async function selectIntelligenceModel(
         }
         preferredId = DEEPSEEK_API_KEY_SECRET_ID;
         compatibleTransport = "deepseek";
+      } else if (wantsZaiCoding) {
+        if (!zaiCodingReady) {
+          throw new Error(
+            "Connect Z.AI GLM Coding Plan in Vault before using Coding Plan models"
+          );
+        }
+        preferredId = ZAI_CODING_API_KEY_SECRET_ID;
+        compatibleTransport = "zai_coding";
       } else {
         preferredId =
           secrets.find(
@@ -718,7 +790,12 @@ export async function selectIntelligenceModel(
               ? { transport: "fireworks" as const, baseUrl: FIREWORKS_API_BASE_URL }
               : compatibleTransport === "deepseek"
                 ? { transport: "deepseek" as const, baseUrl: DEEPSEEK_API_BASE_URL }
-                : null;
+                : compatibleTransport === "zai_coding"
+                  ? {
+                      transport: "zai_coding" as const,
+                      baseUrl: ZAI_CODING_API_BASE_URL,
+                    }
+                  : null;
     const profile = resolveHarnessProfile({
       source: "provider",
       model,
@@ -731,6 +808,7 @@ export async function selectIntelligenceModel(
       together: undefined,
       fireworks: undefined,
       deepseek: undefined,
+      zaiCoding: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -741,9 +819,11 @@ export async function selectIntelligenceModel(
             ...clearFlags,
             baseUrl: transportBase.baseUrl,
             transport: transportBase.transport,
-            [transportBase.transport === "openrouter"
-              ? "openrouter"
-              : transportBase.transport]: true,
+            ...(transportBase.transport === "openrouter"
+              ? { openrouter: true }
+              : transportBase.transport === "zai_coding"
+                ? { zaiCoding: true }
+                : { [transportBase.transport]: true }),
           }
         : {
             baseUrl: undefined,
@@ -768,7 +848,9 @@ export async function selectIntelligenceModel(
               ? "Fireworks"
               : compatibleTransport === "deepseek"
                 ? "DeepSeek"
-                : null;
+                : compatibleTransport === "zai_coding"
+                  ? "Z.AI Coding"
+                  : null;
     return {
       ok: true,
       active: {

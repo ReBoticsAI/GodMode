@@ -2449,6 +2449,70 @@ export const applyDeepSeekToIntelligence = (model = "deepseek-v4-flash") =>
     true
   );
 
+export type ZaiCodingAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchZaiCodingStatus = async (
+  agentId?: string | null
+): Promise<ZaiCodingAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "zai-coding-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "zai_coding") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectZaiCodingApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "zai_coding",
+      label: "Z.AI GLM Coding Plan",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchZaiCodingStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectZaiCodingApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "zai-coding-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchZaiCodingStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyZaiCodingToIntelligence = (model = "glm-5.1") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:zai_coding:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
