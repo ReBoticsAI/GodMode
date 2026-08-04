@@ -242,8 +242,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
             <DialogHeader>
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
-                Choose a subscription (use your plan: Cursor, Z.AI GLM Coding Plan, or
-                OpenCode Go) or a metered
+                Choose a subscription (use your plan: Cursor, Z.AI GLM Coding Plan,
+                OpenCode Go, MiniMax Token Plan, Kimi Code, or Poe) or a metered
                 Platform API key (OpenAI, Anthropic, OpenRouter, Groq, Together, Fireworks,
                 DeepSeek, Google AI Studio, xAI, Z.AI, MiniMax, or a custom
                 OpenAI-compatible endpoint). Open Settings → Platform Vault to connect, then come back to finish

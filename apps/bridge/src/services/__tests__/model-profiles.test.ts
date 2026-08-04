@@ -29,6 +29,9 @@ import {
   resolveCustomOpenAiHarnessProfile,
   resolveOpencodeGoHarnessProfile,
   resolveZaiCodingHarnessProfile,
+  resolveMinimaxTokenHarnessProfile,
+  resolveKimiCodeHarnessProfile,
+  resolvePoeHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -397,6 +400,54 @@ assert.equal(
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
   }).id,
   "zai-coding"
+);
+assert.equal(resolveMinimaxTokenHarnessProfile("MiniMax-M3").id, "minimax-token");
+assert.notEqual(resolveMinimaxTokenHarnessProfile("MiniMax-M3").id, "minimax-payg");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "MiniMax-M3",
+    transport: "minimax_token",
+    baseUrl: "https://api.minimax.io/v1",
+  }).id,
+  "minimax-token"
+);
+assert.equal(
+  resolveProfileForAgent({
+    backend: "provider",
+    config: {
+      provider: "openai_compatible",
+      model: "MiniMax-M3",
+      minimaxToken: true,
+      transport: "minimax_token",
+      baseUrl: "https://api.minimax.io/v1",
+    },
+  }).id,
+  "minimax-token"
+);
+assert.equal(resolveKimiCodeHarnessProfile("k3").id, "kimi-code");
+assert.notEqual(resolveKimiCodeHarnessProfile("k3").id, "openrouter-kimi");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "k3",
+    transport: "kimi_code",
+    baseUrl: "https://api.kimi.com/coding/v1",
+  }).id,
+  "kimi-code"
+);
+assert.equal(resolvePoeHarnessProfile("Claude-Sonnet-4.6").id, "poe");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "Claude-Sonnet-4.6",
+    transport: "poe",
+    baseUrl: "https://api.poe.com/v1",
+  }).id,
+  "poe"
 );
 assert.equal(
   resolveProfileForAgent({

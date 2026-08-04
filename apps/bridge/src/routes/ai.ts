@@ -1028,7 +1028,16 @@ export function createAiRouter(
         s.name !== "zai_coding_api_key" &&
         s.id !== "opencode-go-api-key" &&
         !s.id.startsWith("opencode-go-api-key__agent__") &&
-        s.name !== "opencode_go_api_key"
+        s.name !== "opencode_go_api_key" &&
+        s.id !== "minimax-token-api-key" &&
+        !s.id.startsWith("minimax-token-api-key__agent__") &&
+        s.name !== "minimax_token_api_key" &&
+        s.id !== "kimi-code-api-key" &&
+        !s.id.startsWith("kimi-code-api-key__agent__") &&
+        s.name !== "kimi_code_api_key" &&
+        s.id !== "poe-api-key" &&
+        !s.id.startsWith("poe-api-key__agent__") &&
+        s.name !== "poe_api_key"
     );
     res.json({ secrets });
   });

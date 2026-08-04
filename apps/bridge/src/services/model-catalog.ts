@@ -124,6 +124,33 @@ import {
   OPENCODE_GO_API_KEY_SECRET_NAME,
   OPENCODE_GO_CHAT_CATALOG,
 } from "./opencode-go-platform.js";
+import {
+  isMinimaxTokenAgentConfig,
+  isMinimaxTokenPlatformReady,
+  isMinimaxTokenVaultSecretId,
+  MINIMAX_TOKEN_API_BASE_URL,
+  MINIMAX_TOKEN_API_KEY_SECRET_ID,
+  MINIMAX_TOKEN_API_KEY_SECRET_NAME,
+  MINIMAX_TOKEN_CHAT_CATALOG,
+} from "./minimax-token-platform.js";
+import {
+  isKimiCodeAgentConfig,
+  isKimiCodePlatformReady,
+  isKimiCodeVaultSecretId,
+  KIMI_CODE_API_BASE_URL,
+  KIMI_CODE_API_KEY_SECRET_ID,
+  KIMI_CODE_API_KEY_SECRET_NAME,
+  KIMI_CODE_CHAT_CATALOG,
+} from "./kimi-code-platform.js";
+import {
+  isPoeAgentConfig,
+  isPoePlatformReady,
+  isPoeVaultSecretId,
+  POE_API_BASE_URL,
+  POE_API_KEY_SECRET_ID,
+  POE_API_KEY_SECRET_NAME,
+  POE_CHAT_CATALOG,
+} from "./poe-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -292,6 +319,36 @@ function opencodeGoHarnessInput(model: string) {
   };
 }
 
+function minimaxTokenHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "minimax_token",
+    baseUrl: MINIMAX_TOKEN_API_BASE_URL,
+  };
+}
+
+function kimiCodeHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "kimi_code",
+    baseUrl: KIMI_CODE_API_BASE_URL,
+  };
+}
+
+function poeHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "poe",
+    baseUrl: POE_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -375,7 +432,13 @@ export async function listModelCatalog(
       s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
       !isZaiCodingVaultSecretId(s.id) &&
       s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
-      !isOpencodeGoVaultSecretId(s.id)
+      !isOpencodeGoVaultSecretId(s.id) &&
+      s.name !== MINIMAX_TOKEN_API_KEY_SECRET_NAME &&
+      !isMinimaxTokenVaultSecretId(s.id) &&
+      s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
+      !isKimiCodeVaultSecretId(s.id) &&
+      s.name !== POE_API_KEY_SECRET_NAME &&
+      !isPoeVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -396,6 +459,9 @@ export async function listModelCatalog(
   const hasMinimax = isMinimaxPlatformReady(db, catalogAgentId);
   const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
   const hasOpencodeGo = isOpencodeGoPlatformReady(db, catalogAgentId);
+  const hasMinimaxToken = isMinimaxTokenPlatformReady(db, catalogAgentId);
+  const hasKimiCode = isKimiCodePlatformReady(db, catalogAgentId);
+  const hasPoe = isPoePlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -626,6 +692,57 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasMinimaxToken) {
+    const agentIsMt =
+      agent?.backend === "provider" && isMinimaxTokenAgentConfig(agent.config);
+    for (const m of MINIMAX_TOKEN_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(minimaxTokenHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:minimax_token:${m.id}`,
+        source: "provider",
+        label: `MiniMax Token · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "minimax_token",
+        active: Boolean(agentIsMt && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
+  if (hasKimiCode) {
+    const agentIsKc =
+      agent?.backend === "provider" && isKimiCodeAgentConfig(agent.config);
+    for (const m of KIMI_CODE_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(kimiCodeHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:kimi_code:${m.id}`,
+        source: "provider",
+        label: `Kimi Code · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "kimi_code",
+        active: Boolean(agentIsKc && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
+  if (hasPoe) {
+    const agentIsPoe =
+      agent?.backend === "provider" && isPoeAgentConfig(agent.config);
+    for (const m of POE_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(poeHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:poe:${m.id}`,
+        source: "provider",
+        label: `Poe · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "poe",
+        active: Boolean(agentIsPoe && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -645,6 +762,9 @@ export async function listModelCatalog(
     const isXaiCfg = isXaiAgentConfig(agent.config);
     const isZaiPayg = isZaiAgentConfig(agent.config);
     const isMinimax = isMinimaxAgentConfig(agent.config);
+    const isMinimaxToken = isMinimaxTokenAgentConfig(agent.config);
+    const isKimiCode = isKimiCodeAgentConfig(agent.config);
+    const isPoe = isPoeAgentConfig(agent.config);
     const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
     const isOcGo = isOpencodeGoAgentConfig(agent.config);
@@ -670,6 +790,12 @@ export async function listModelCatalog(
                     ? resolveHarnessProfile(zaiCodingHarnessInput(model))
                     : isOcGo
                       ? resolveHarnessProfile(opencodeGoHarnessInput(model))
+                    : isMinimaxToken
+                      ? resolveHarnessProfile(minimaxTokenHarnessInput(model))
+                    : isKimiCode
+                      ? resolveHarnessProfile(kimiCodeHarnessInput(model))
+                    : isPoe
+                      ? resolveHarnessProfile(poeHarnessInput(model))
                     : isZaiPayg
                       ? resolveHarnessProfile(zaiHarnessInput(model))
                       : isMinimax
@@ -699,6 +825,12 @@ export async function listModelCatalog(
                   ? "zai_coding"
                   : isOcGo
                     ? "opencode_go"
+                  : isMinimaxToken
+                    ? "minimax_token"
+                  : isKimiCode
+                    ? "kimi_code"
+                  : isPoe
+                    ? "poe"
                   : isZaiPayg
                     ? "zai"
                     : isMinimax
@@ -731,6 +863,12 @@ export async function listModelCatalog(
                             ? "Z.AI"
                             : namespacedTransport === "minimax"
                               ? "MiniMax"
+                              : namespacedTransport === "minimax_token"
+                                ? "MiniMax Token"
+                              : namespacedTransport === "kimi_code"
+                                ? "Kimi Code"
+                              : namespacedTransport === "poe"
+                                ? "Poe"
                               : namespacedTransport === "custom_openai"
                                 ? "Custom"
                                 : namespacedTransport === "opencode_go"
@@ -799,6 +937,12 @@ export async function listModelCatalog(
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
                   : active.transport === "opencode_go"
                     ? { transport: "opencode_go", baseUrl: OPENCODE_GO_API_BASE_URL }
+                  : active.transport === "minimax_token"
+                    ? { transport: "minimax_token", baseUrl: MINIMAX_TOKEN_API_BASE_URL }
+                  : active.transport === "kimi_code"
+                    ? { transport: "kimi_code", baseUrl: KIMI_CODE_API_BASE_URL }
+                  : active.transport === "poe"
+                    ? { transport: "poe", baseUrl: POE_API_BASE_URL }
                     : {}),
     });
     active.harnessProfileId = profile.id;
@@ -945,7 +1089,13 @@ export async function selectIntelligenceModel(
         s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
         !isZaiCodingVaultSecretId(s.id) &&
         s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
-        !isOpencodeGoVaultSecretId(s.id)
+        !isOpencodeGoVaultSecretId(s.id) &&
+        s.name !== MINIMAX_TOKEN_API_KEY_SECRET_NAME &&
+        !isMinimaxTokenVaultSecretId(s.id) &&
+        s.name !== KIMI_CODE_API_KEY_SECRET_NAME &&
+        !isKimiCodeVaultSecretId(s.id) &&
+        s.name !== POE_API_KEY_SECRET_NAME &&
+        !isPoeVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
@@ -961,6 +1111,9 @@ export async function selectIntelligenceModel(
     const customOpenAiReady = isCustomOpenAiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
     const opencodeGoReady = isOpencodeGoPlatformReady(db, "intelligence");
+    const minimaxTokenReady = isMinimaxTokenPlatformReady(db, "intelligence");
+    const kimiCodeReady = isKimiCodePlatformReady(db, "intelligence");
+    const poeReady = isPoePlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
     let compatibleTransport:
@@ -976,6 +1129,9 @@ export async function selectIntelligenceModel(
       | "custom_openai"
       | "zai_coding"
       | "opencode_go"
+      | "minimax_token"
+      | "kimi_code"
+      | "poe"
       | null = null;
     if (provider === "openai") {
       if (openAiReady) {
@@ -1040,14 +1196,27 @@ export async function selectIntelligenceModel(
         transport === "opencode_go" ||
         base.includes("opencode.ai/zen/go") ||
         keyHint === OPENCODE_GO_API_KEY_SECRET_ID;
+      const wantsMinimaxToken =
+        transport === "minimax_token" ||
+        keyHint === MINIMAX_TOKEN_API_KEY_SECRET_ID;
+      const wantsKimiCode =
+        transport === "kimi_code" ||
+        base.includes("api.kimi.com/coding") ||
+        keyHint === KIMI_CODE_API_KEY_SECRET_ID;
+      const wantsPoe =
+        transport === "poe" ||
+        base.includes("api.poe.com") ||
+        keyHint === POE_API_KEY_SECRET_ID;
       const wantsZai =
         transport === "zai" ||
         (base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/")) ||
         keyHint === ZAI_API_KEY_SECRET_ID;
       const wantsMinimax =
         transport === "minimax" ||
-        base.includes("api.minimax.io") ||
-        keyHint === MINIMAX_API_KEY_SECRET_ID;
+        keyHint === MINIMAX_API_KEY_SECRET_ID ||
+        (base.includes("api.minimax.io") &&
+          transport !== "minimax_token" &&
+          keyHint !== MINIMAX_TOKEN_API_KEY_SECRET_ID);
       const wantsCustomOpenAi =
         transport === "custom_openai" ||
         keyHint === CUSTOM_OPENAI_API_KEY_SECRET_ID;
@@ -1109,6 +1278,26 @@ export async function selectIntelligenceModel(
         }
         preferredId = OPENCODE_GO_API_KEY_SECRET_ID;
         compatibleTransport = "opencode_go";
+      } else if (wantsMinimaxToken) {
+        if (!minimaxTokenReady) {
+          throw new Error(
+            "Connect MiniMax Token Plan in Vault before using Token Plan models"
+          );
+        }
+        preferredId = MINIMAX_TOKEN_API_KEY_SECRET_ID;
+        compatibleTransport = "minimax_token";
+      } else if (wantsKimiCode) {
+        if (!kimiCodeReady) {
+          throw new Error("Connect Kimi Code in Vault before using Kimi Code models");
+        }
+        preferredId = KIMI_CODE_API_KEY_SECRET_ID;
+        compatibleTransport = "kimi_code";
+      } else if (wantsPoe) {
+        if (!poeReady) {
+          throw new Error("Connect Poe in Vault before using Poe models");
+        }
+        preferredId = POE_API_KEY_SECRET_ID;
+        compatibleTransport = "poe";
       } else if (wantsZai) {
         if (!zaiReady) {
           throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
@@ -1203,6 +1392,21 @@ export async function selectIntelligenceModel(
                         transport: "opencode_go" as const,
                         baseUrl: OPENCODE_GO_API_BASE_URL,
                       }
+                  : compatibleTransport === "minimax_token"
+                    ? {
+                        transport: "minimax_token" as const,
+                        baseUrl: MINIMAX_TOKEN_API_BASE_URL,
+                      }
+                  : compatibleTransport === "kimi_code"
+                    ? {
+                        transport: "kimi_code" as const,
+                        baseUrl: KIMI_CODE_API_BASE_URL,
+                      }
+                  : compatibleTransport === "poe"
+                    ? {
+                        transport: "poe" as const,
+                        baseUrl: POE_API_BASE_URL,
+                      }
                     : null;
     const profile = resolveHarnessProfile({
       source: "provider",
@@ -1223,6 +1427,9 @@ export async function selectIntelligenceModel(
       customOpenai: undefined,
       zaiCoding: undefined,
       opencodeGo: undefined,
+      minimaxToken: undefined,
+      kimiCode: undefined,
+      poe: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -1239,6 +1446,12 @@ export async function selectIntelligenceModel(
                 ? { zaiCoding: true }
                 : transportBase.transport === "opencode_go"
                   ? { opencodeGo: true }
+                : transportBase.transport === "minimax_token"
+                  ? { minimaxToken: true }
+                : transportBase.transport === "kimi_code"
+                  ? { kimiCode: true }
+                : transportBase.transport === "poe"
+                  ? { poe: true }
                 : transportBase.transport === "google_ai"
                   ? { googleAi: true, google_ai: true }
                   : transportBase.transport === "custom_openai"
@@ -1282,6 +1495,12 @@ export async function selectIntelligenceModel(
                     ? "Z.AI Coding"
                   : compatibleTransport === "opencode_go"
                     ? "OpenCode Go"
+                  : compatibleTransport === "minimax_token"
+                    ? "MiniMax Token"
+                  : compatibleTransport === "kimi_code"
+                    ? "Kimi Code"
+                  : compatibleTransport === "poe"
+                    ? "Poe"
                     : null;
     return {
       ok: true,
