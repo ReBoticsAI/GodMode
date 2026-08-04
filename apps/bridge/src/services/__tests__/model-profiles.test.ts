@@ -21,6 +21,7 @@ import {
   resolveOpenRouterHarnessProfile,
   resolveTogetherHarnessProfile,
   resolveFireworksHarnessProfile,
+  resolveDeepSeekHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -282,6 +283,26 @@ assert.equal(
     transport: "fireworks",
   }).id,
   "fireworks-gpt-oss"
+);
+assert.equal(resolveDeepSeekHarnessProfile("deepseek-v4-flash").id, "deepseek-flash");
+assert.equal(resolveDeepSeekHarnessProfile("deepseek-v4-pro").id, "deepseek-pro");
+assert.notEqual(
+  resolveDeepSeekHarnessProfile("deepseek-v4-pro").id,
+  "fireworks-deepseek"
+);
+assert.notEqual(
+  resolveDeepSeekHarnessProfile("deepseek-v4-pro").id,
+  "together-deepseek"
+);
+assert.equal(resolveDeepSeekHarnessProfile("unknown-model").id, "deepseek-generic");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "deepseek-v4-pro",
+    transport: "deepseek",
+  }).id,
+  "deepseek-pro"
 );
 assert.equal(
   resolveProfileForAgent({

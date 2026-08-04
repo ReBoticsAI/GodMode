@@ -1001,7 +1001,10 @@ export function createAiRouter(
         s.name !== "together_api_key" &&
         s.id !== "fireworks-api-key" &&
         !s.id.startsWith("fireworks-api-key__agent__") &&
-        s.name !== "fireworks_api_key"
+        s.name !== "fireworks_api_key" &&
+        s.id !== "deepseek-api-key" &&
+        !s.id.startsWith("deepseek-api-key__agent__") &&
+        s.name !== "deepseek_api_key"
     );
     res.json({ secrets });
   });
