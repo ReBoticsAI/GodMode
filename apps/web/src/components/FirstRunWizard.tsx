@@ -242,9 +242,10 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
             <DialogHeader>
               <DialogTitle>Connect your LLM</DialogTitle>
               <DialogDescription>
-                Choose a subscription (use your plan, for example Cursor) or a metered Platform
-                API key (OpenAI, Anthropic, OpenRouter, Groq, Together, Fireworks, DeepSeek). Open Settings → Platform
-                Vault to connect, then come back to finish setup.
+                Choose a subscription (use your plan: Cursor or Z.AI GLM Coding Plan) or a metered
+                Platform API key (OpenAI, Anthropic, OpenRouter, Groq, Together, Fireworks,
+                DeepSeek). Open Settings → Platform Vault to connect, then come back to finish
+                setup.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">

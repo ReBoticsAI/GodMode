@@ -30,6 +30,10 @@ import {
   getDeepSeekAuthStatus,
   isDeepSeekPlatformReady,
 } from "./deepseek-platform.js";
+import {
+  getZaiCodingAuthStatus,
+  isZaiCodingPlatformReady,
+} from "./zai-coding-platform.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
 const META_COMPLETED = "onboarding.completed";
@@ -71,8 +75,8 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
- * Together / Fireworks / DeepSeek) counts as ready. Process-env keys do not: same
- * multi-tenant rule as Cursor vault-only readiness.
+ * Together / Fireworks / DeepSeek / Z.AI Coding Plan) counts as ready. Process-env
+ * keys do not: same multi-tenant rule as Cursor vault-only readiness.
  */
 function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
   if (!config.isHub) return false;
@@ -88,7 +92,8 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
     vaultReady(isGroqPlatformReady(db), getGroqAuthStatus(db).source) ||
     vaultReady(isTogetherPlatformReady(db), getTogetherAuthStatus(db).source) ||
     vaultReady(isFireworksPlatformReady(db), getFireworksAuthStatus(db).source) ||
-    vaultReady(isDeepSeekPlatformReady(db), getDeepSeekAuthStatus(db).source)
+    vaultReady(isDeepSeekPlatformReady(db), getDeepSeekAuthStatus(db).source) ||
+    vaultReady(isZaiCodingPlatformReady(db), getZaiCodingAuthStatus(db).source)
   );
 }
 

@@ -22,6 +22,7 @@ import {
   resolveTogetherHarnessProfile,
   resolveFireworksHarnessProfile,
   resolveDeepSeekHarnessProfile,
+  resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -303,6 +304,19 @@ assert.equal(
     transport: "deepseek",
   }).id,
   "deepseek-pro"
+);
+assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
+assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");
+assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "fireworks-glm");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "glm-5.1",
+    transport: "zai_coding",
+    baseUrl: "https://api.z.ai/api/coding/paas/v4",
+  }).id,
+  "zai-coding"
 );
 assert.equal(
   resolveProfileForAgent({

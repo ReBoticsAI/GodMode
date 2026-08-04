@@ -734,6 +734,35 @@ describe("runtime ObjectType actions", () => {
     ).toBeNull();
   });
 
+  it("stores Z.AI Coding Plan credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: null,
+        provider: "zai_coding",
+        api_key: "zai-coding-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("zai-coding-api-key");
+    expect(created.data).toMatchObject({
+      provider: "zai_coding",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("zai-coding-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "zai-coding-api-key", owner)
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(db, def, "zai-coding-api-key", owner);
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "zai-coding-api-key", owner)
+    ).toBeNull();
+  });
+
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
     const active = fakeServices();
     configureRuntimeAdapterServices(active);

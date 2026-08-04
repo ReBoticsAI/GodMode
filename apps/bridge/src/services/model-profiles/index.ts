@@ -1013,6 +1013,45 @@ export function resolveDeepSeekHarnessProfile(
   return DEEPSEEK_GENERIC_PROFILE;
 }
 
+/** Z.AI GLM Coding Plan subscription transport (#230). */
+const ZAI_CODING_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const ZAI_CODING_PROFILE: ModelHarnessProfile = {
+  id: "zai-coding",
+  label: "Z.AI GLM Coding Plan",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...ZAI_CODING_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="zai-coding">',
+    "You are running via Z.AI GLM Coding Plan (openai_compatible transport, subscription quota).",
+    "This is not the Cursor SDK path, not Fireworks/Together GLM hosting, and not Z.AI general payg.",
+    "Use native OpenAI-style function calling as exposed by the coding endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    "GLM Coding Plan: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveZaiCodingHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return ZAI_CODING_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -1086,6 +1125,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   DEEPSEEK_FLASH_PROFILE,
   DEEPSEEK_PRO_PROFILE,
   DEEPSEEK_GENERIC_PROFILE,
+  ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -1118,6 +1158,12 @@ function isDeepSeekTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "deepseek") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.deepseek.com");
+}
+
+function isZaiCodingTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "zai_coding") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.z.ai/api/coding/");
 }
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
@@ -1192,6 +1238,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isDeepSeekTransport(input)) {
       return resolveDeepSeekHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isZaiCodingTransport(input)) {
+      return resolveZaiCodingHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1241,6 +1290,11 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.deepseek.com")
       ) {
         transport = "deepseek";
+      } else if (
+        cfg.zaiCoding === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.z.ai/api/coding/")
+      ) {
+        transport = "zai_coding";
       }
     }
     return resolveHarnessProfile({
