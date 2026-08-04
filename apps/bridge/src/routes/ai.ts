@@ -1017,6 +1017,12 @@ export function createAiRouter(
         s.id !== "minimax-api-key" &&
         !s.id.startsWith("minimax-api-key__agent__") &&
         s.name !== "minimax_api_key" &&
+        s.id !== "custom-openai-api-key" &&
+        !s.id.startsWith("custom-openai-api-key__agent__") &&
+        s.name !== "custom_openai_api_key" &&
+        s.id !== "custom-openai-base-url" &&
+        !s.id.startsWith("custom-openai-base-url__agent__") &&
+        s.name !== "custom_openai_base_url" &&
         s.id !== "zai-coding-api-key" &&
         !s.id.startsWith("zai-coding-api-key__agent__") &&
         s.name !== "zai_coding_api_key"

@@ -2705,6 +2705,82 @@ export const applyMinimaxToIntelligence = (model = "MiniMax-M3") =>
     true
   );
 
+export type CustomOpenAiAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+  baseUrl?: string;
+};
+
+export const fetchCustomOpenAiStatus = async (
+  agentId?: string | null
+): Promise<CustomOpenAiAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "custom-openai-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | {
+          provider?: string;
+          status?: string;
+          masked_token?: string;
+          base_url?: string;
+        }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "custom_openai") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+        baseUrl: data.base_url,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectCustomOpenAi = (
+  apiKey: string,
+  baseUrl: string,
+  agentId?: string | null
+) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "custom_openai",
+      label: "Custom OpenAI-compatible",
+      api_key: apiKey,
+      base_url: baseUrl,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchCustomOpenAiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectCustomOpenAi = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "custom-openai-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchCustomOpenAiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyCustomOpenAiToIntelligence = (model: string) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:custom_openai:${model}` },
+    "runtime",
+    true
+  );
+
 export type ZaiCodingAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";

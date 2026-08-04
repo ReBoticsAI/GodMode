@@ -92,6 +92,7 @@ Metered BYOK with named Connect cards:
 | xAI Console | `xai-api-key` | `xai-grok` / `xai-generic` | [xAI docs](https://docs.x.ai/docs) |
 | Z.AI Platform (payg) | `zai-api-key` | `zai-payg` | [Z.AI OpenAI compat](https://docs.z.ai/guides/develop/openai/python) |
 | MiniMax (payg) | `minimax-api-key` | `minimax-payg` | [MiniMax OpenAI compat](https://platform.minimax.io/docs/api-reference/text-openai-api) |
+| Custom OpenAI-compatible | `custom-openai-api-key` (+ `custom-openai-base-url`) | `custom-openai` | Any OpenAI-compatible `/v1` root |
 
 ### Search
 
