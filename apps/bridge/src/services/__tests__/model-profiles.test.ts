@@ -28,6 +28,8 @@ import {
   resolveMinimaxPaygHarnessProfile,
   resolveCustomOpenAiHarnessProfile,
   resolveOpencodeGoHarnessProfile,
+  resolveDigitalOceanInferenceHarnessProfile,
+  resolveSnowflakeCortexHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveMinimaxTokenHarnessProfile,
   resolveKimiCodeHarnessProfile,
@@ -388,6 +390,34 @@ assert.equal(
     baseUrl: "https://opencode.ai/zen/go/v1",
   }).id,
   "opencode-go"
+);
+assert.equal(
+  resolveDigitalOceanInferenceHarnessProfile("llama3.3-70b-instruct").id,
+  "digitalocean-inference"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "llama3.3-70b-instruct",
+    transport: "digitalocean_inference",
+    baseUrl: "https://inference.do-ai.run/v1",
+  }).id,
+  "digitalocean-inference"
+);
+assert.equal(
+  resolveSnowflakeCortexHarnessProfile("claude-sonnet-4-5").id,
+  "snowflake-cortex"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "claude-sonnet-4-5",
+    transport: "snowflake_cortex",
+    baseUrl: "https://org-account.snowflakecomputing.com/api/v2/cortex/v1",
+  }).id,
+  "snowflake-cortex"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");

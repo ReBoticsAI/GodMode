@@ -22,6 +22,8 @@ import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ZaiCodingPlanCard } from "@/pages/ai-settings/ZaiCodingPlanCard";
 import { OpencodeGoCard } from "@/pages/ai-settings/OpencodeGoCard";
+import { DigitalOceanInferenceCard } from "@/pages/ai-settings/DigitalOceanInferenceCard";
+import { SnowflakeCortexCard } from "@/pages/ai-settings/SnowflakeCortexCard";
 import { MinimaxTokenPlanCard } from "@/pages/ai-settings/MinimaxTokenPlanCard";
 import { KimiCodeCard } from "@/pages/ai-settings/KimiCodeCard";
 import { PoeCard } from "@/pages/ai-settings/PoeCard";
@@ -350,12 +352,15 @@ export function InferenceTab({
             <h2 className="text-sm font-medium">Subscriptions</h2>
             <p className="text-sm text-muted-foreground">
               Use your plan (billed by the provider). Cursor, Z.AI GLM Coding Plan,
-              and OpenCode Go are available today. Stored in the Platform Vault.
+              OpenCode Go, DigitalOcean Inference, and Snowflake Cortex PAT are
+              available today. Stored in the Platform Vault.
             </p>
           </div>
           <CursorSubscriptionCard vaultAgentId={null} />
           <ZaiCodingPlanCard vaultAgentId={null} />
           <OpencodeGoCard vaultAgentId={null} />
+          <DigitalOceanInferenceCard vaultAgentId={null} />
+          <SnowflakeCortexCard vaultAgentId={null} />
           <MinimaxTokenPlanCard vaultAgentId={null} />
           <KimiCodeCard vaultAgentId={null} />
           <PoeCard vaultAgentId={null} />

@@ -67,6 +67,8 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (MiniMax Token Plan) | * | `minimax-token` |
 | provider | openai_compatible (custom) | * | `custom-openai` |
 | provider | openai_compatible (OpenCode Go) | * | `opencode-go` |
+| provider | openai_compatible (DigitalOcean Inference) | * | `digitalocean-inference` |
+| provider | openai_compatible (Snowflake Cortex) | * | `snowflake-cortex` |
 | provider | openai_compatible (OpenCode Zen) | * | `opencode-zen` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | provider | openai_compatible (Kimi Code) | * | `kimi-code` |
@@ -96,6 +98,10 @@ MiniMax Token Plan is a **subscription transport**. Profile = `minimax-token`. S
 Custom OpenAI-compatible is also a **transport**. Profile = `custom-openai`. User-supplied base URL + key (escape hatch). Prefer named provider cards when available.
 
 OpenCode Go is a **subscription transport**. Profile = `opencode-go`. Uses `https://opencode.ai/zen/go/v1`. Distinct from OpenCode Zen and from Cursor.
+
+DigitalOcean Inference is a **subscription-style transport** (model access key). Profile = `digitalocean-inference`. Uses `https://inference.do-ai.run/v1`. Distinct from DigitalOcean account OAuth.
+
+Snowflake Cortex is a **subscription-style transport** (PAT + account URL). Profile = `snowflake-cortex`. Base normalizes to `https://<account>.snowflakecomputing.com/api/v2/cortex/v1`. Distinct from Snowflake browser OAuth.
 
 OpenCode Zen is also a **subscription-style transport** (API key after signup). Profile = `opencode-zen`. Uses `https://opencode.ai/zen/v1`. Detect Go (`…/zen/go`) before Zen so URL prefixes do not collide. Prefer chat/completions-compatible model ids.
 

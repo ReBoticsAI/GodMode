@@ -198,6 +198,24 @@ import {
   upsertOpencodeGoApiKey,
 } from "../../services/opencode-go-platform.js";
 import {
+  getDigitalOceanInferenceAuthStatus,
+  isDigitalOceanInferencePlatformReady,
+  isDigitalOceanInferenceVaultSecretId,
+  isDigitalOceanInferenceVaultSecretName,
+  DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID,
+  removeDigitalOceanInferenceApiKey,
+  upsertDigitalOceanInferenceApiKey,
+} from "../../services/digitalocean-inference-platform.js";
+import {
+  getSnowflakeCortexAuthStatus,
+  isSnowflakeCortexPlatformReady,
+  isSnowflakeCortexVaultSecretId,
+  isSnowflakeCortexVaultSecretName,
+  SNOWFLAKE_CORTEX_API_KEY_SECRET_ID,
+  removeSnowflakeCortexCredential,
+  upsertSnowflakeCortexCredential,
+} from "../../services/snowflake-cortex-platform.js";
+import {
   getMinimaxTokenAuthStatus,
   isMinimaxTokenPlatformReady,
   MINIMAX_TOKEN_API_KEY_SECRET_ID,
@@ -1117,7 +1135,11 @@ function isManagedPlatformSecret(secret: {
     isZaiCodingVaultSecretId(secret.id) ||
     isZaiCodingVaultSecretName(secret.name) ||
     isOpencodeGoVaultSecretId(secret.id) ||
-    isOpencodeGoVaultSecretName(secret.name)
+    isOpencodeGoVaultSecretName(secret.name) ||
+    isDigitalOceanInferenceVaultSecretId(secret.id) ||
+    isDigitalOceanInferenceVaultSecretName(secret.name) ||
+    isSnowflakeCortexVaultSecretId(secret.id) ||
+    isSnowflakeCortexVaultSecretName(secret.name)
   );
 }
 
@@ -1217,6 +1239,18 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isOpencodeGoVaultSecretName(name)) {
       throw httpError(400, "OpenCode Go API keys must use the OpenCode Go credential flow");
+    }
+    if (isDigitalOceanInferenceVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "DigitalOcean Inference keys must use the DigitalOcean Inference credential flow"
+      );
+    }
+    if (isSnowflakeCortexVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "Snowflake Cortex credentials must use the Snowflake Cortex credential flow"
+      );
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
@@ -1470,6 +1504,33 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
             display_name: "OpenCode Go",
             status: "active",
             masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID) {
+      const status = getDigitalOceanInferenceAuthStatus(db, scope);
+      return status.connected
+        ? record(def, DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "digitalocean_inference",
+            display_name: "DigitalOcean Inference",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === SNOWFLAKE_CORTEX_API_KEY_SECRET_ID) {
+      const status = getSnowflakeCortexAuthStatus(db, scope);
+      return status.connected
+        ? record(def, SNOWFLAKE_CORTEX_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "snowflake_cortex",
+            display_name: "Snowflake Cortex",
+            status: "active",
+            masked_token: status.masked ?? "****",
+            base_url: status.baseUrl ?? "",
           })
         : null;
     }
@@ -1737,6 +1798,42 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "digitalocean_inference" ||
+      requiredText(data, "provider").toLowerCase() === "digitalocean-inference"
+    ) {
+      upsertDigitalOceanInferenceApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getDigitalOceanInferenceAuthStatus(db, scope);
+      return record(def, DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "digitalocean_inference",
+        display_name: "DigitalOcean Inference",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
+      requiredText(data, "provider").toLowerCase() === "snowflake_cortex" ||
+      requiredText(data, "provider").toLowerCase() === "snowflake-cortex"
+    ) {
+      upsertSnowflakeCortexCredential(
+        db,
+        requiredText(data, "api_key"),
+        requiredText(data, "base_url"),
+        scope
+      );
+      const status = getSnowflakeCortexAuthStatus(db, scope);
+      return record(def, SNOWFLAKE_CORTEX_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "snowflake_cortex",
+        display_name: "Snowflake Cortex",
+        status: "active",
+        masked_token: status.masked ?? "****",
+        base_url: status.baseUrl ?? "",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "minimax_token" ||
       requiredText(data, "provider").toLowerCase() === "minimax-token"
     ) {
@@ -1867,6 +1964,14 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === OPENCODE_GO_API_KEY_SECRET_ID) {
       removeOpencodeGoApiKey(db, scope);
+      return;
+    }
+    if (id === DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID) {
+      removeDigitalOceanInferenceApiKey(db, scope);
+      return;
+    }
+    if (id === SNOWFLAKE_CORTEX_API_KEY_SECRET_ID) {
+      removeSnowflakeCortexCredential(db, scope);
       return;
     }
     if (id === MINIMAX_TOKEN_API_KEY_SECRET_ID) {
@@ -2001,6 +2106,36 @@ export const modelRuntimeAdapter: RecordAdapter = {
             model: ocCustom[1],
             provider: "openai_compatible",
             transport: "opencode_go",
+          };
+        }
+      }
+      // Custom DigitalOcean Inference slug when Vault is connected.
+      if (!selected) {
+        const doCustom =
+          /^provider:openai_compatible:digitalocean_inference:(.+)$/.exec(modelId);
+        if (doCustom?.[1] && isDigitalOceanInferencePlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `DigitalOcean · ${doCustom[1]}`,
+            model: doCustom[1],
+            provider: "openai_compatible",
+            transport: "digitalocean_inference",
+          };
+        }
+      }
+      // Custom Snowflake Cortex slug when Vault is connected.
+      if (!selected) {
+        const sfCustom =
+          /^provider:openai_compatible:snowflake_cortex:(.+)$/.exec(modelId);
+        if (sfCustom?.[1] && isSnowflakeCortexPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Snowflake Cortex · ${sfCustom[1]}`,
+            model: sfCustom[1],
+            provider: "openai_compatible",
+            transport: "snowflake_cortex",
           };
         }
       }
@@ -2210,6 +2345,8 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("custom_openai:") &&
           !custom[1].startsWith("zai_coding:") &&
           !custom[1].startsWith("opencode_go:") &&
+          !custom[1].startsWith("digitalocean_inference:") &&
+          !custom[1].startsWith("snowflake_cortex:") &&
           !custom[1].startsWith("minimax_token:") &&
           !custom[1].startsWith("kimi_code:") &&
           !custom[1].startsWith("poe:") &&
@@ -2265,6 +2402,16 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                     : transport === "opencode_go"
                       ? { transport: "opencode_go", apiKeyRef: OPENCODE_GO_API_KEY_SECRET_ID }
+                    : transport === "digitalocean_inference"
+                      ? {
+                          transport: "digitalocean_inference",
+                          apiKeyRef: DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID,
+                        }
+                    : transport === "snowflake_cortex"
+                      ? {
+                          transport: "snowflake_cortex",
+                          apiKeyRef: SNOWFLAKE_CORTEX_API_KEY_SECRET_ID,
+                        }
                     : transport === "minimax_token"
                       ? {
                           transport: "minimax_token",

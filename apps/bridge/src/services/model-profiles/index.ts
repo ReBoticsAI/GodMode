@@ -1303,6 +1303,80 @@ export function resolveOpencodeGoHarnessProfile(
   return OPENCODE_GO_PROFILE;
 }
 
+/** DigitalOcean Gradient Inference transport (#355). */
+const DIGITALOCEAN_INFERENCE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const DIGITALOCEAN_INFERENCE_PROFILE: ModelHarnessProfile = {
+  id: "digitalocean-inference",
+  label: "DigitalOcean Inference",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DIGITALOCEAN_INFERENCE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="digitalocean-inference">',
+    "You are running via DigitalOcean Gradient Inference (openai_compatible transport).",
+    "This is not the Cursor SDK path and not DigitalOcean account OAuth.",
+    "Use native OpenAI-style function calling as exposed by the Inference endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "Keep the tool surface lean; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveDigitalOceanInferenceHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return DIGITALOCEAN_INFERENCE_PROFILE;
+}
+
+/** Snowflake Cortex PAT transport (#355). */
+const SNOWFLAKE_CORTEX_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const SNOWFLAKE_CORTEX_PROFILE: ModelHarnessProfile = {
+  id: "snowflake-cortex",
+  label: "Snowflake Cortex",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...SNOWFLAKE_CORTEX_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="snowflake-cortex">',
+    "You are running via Snowflake Cortex REST API (openai_compatible transport, PAT auth).",
+    "This is not the Cursor SDK path and not Snowflake browser OAuth.",
+    "Use native OpenAI-style function calling as exposed by the Cortex endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "Keep the tool surface lean; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveSnowflakeCortexHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return SNOWFLAKE_CORTEX_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1572,6 +1646,8 @@ const REGISTRY: ModelHarnessProfile[] = [
   MINIMAX_PAYG_PROFILE,
   CUSTOM_OPENAI_PROFILE,
   OPENCODE_GO_PROFILE,
+  DIGITALOCEAN_INFERENCE_PROFILE,
+  SNOWFLAKE_CORTEX_PROFILE,
   ZAI_CODING_PROFILE,
   MINIMAX_TOKEN_PROFILE,
   KIMI_CODE_PROFILE,
@@ -1662,6 +1738,18 @@ function isOpencodeGoTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "opencode_go") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("opencode.ai/zen/go");
+}
+
+function isDigitalOceanInferenceTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "digitalocean_inference") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("inference.do-ai.run");
+}
+
+function isSnowflakeCortexTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "snowflake_cortex") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("snowflakecomputing.com") && base.includes("/api/v2/cortex");
 }
 
 function isOpencodeZenTransport(input: ResolveProfileInput): boolean {
@@ -1778,6 +1866,12 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isOpencodeGoTransport(input)) {
       return resolveOpencodeGoHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isDigitalOceanInferenceTransport(input)) {
+      return resolveDigitalOceanInferenceHarnessProfile(input.model);
+    }
+    if (p === "openai_compatible" && isSnowflakeCortexTransport(input)) {
+      return resolveSnowflakeCortexHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isOpencodeZenTransport(input)) {
       return resolveOpencodeZenHarnessProfile(input.model);
     }
@@ -1878,6 +1972,17 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go")
       ) {
         transport = "opencode_go";
+      } else if (
+        cfg.digitaloceanInference === true ||
+        (baseUrl ?? "").toLowerCase().includes("inference.do-ai.run")
+      ) {
+        transport = "digitalocean_inference";
+      } else if (
+        cfg.snowflakeCortex === true ||
+        ((baseUrl ?? "").toLowerCase().includes("snowflakecomputing.com") &&
+          (baseUrl ?? "").toLowerCase().includes("/api/v2/cortex"))
+      ) {
+        transport = "snowflake_cortex";
       } else if (
         cfg.opencodeZen === true ||
         ((baseUrl ?? "").toLowerCase().includes("opencode.ai/zen") &&
