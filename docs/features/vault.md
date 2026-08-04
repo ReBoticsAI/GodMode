@@ -1,23 +1,23 @@
 ---
 slug: vault
-title: "Vault"
+title: "Personal Vault"
 section: "Productivity"
 location: "/vault"
-summary: "User connect hub for integrations, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Settings → Vault. Storage lives in Settings → Storage."
+summary: "Personal connect hub for integrations, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Platform Vault. Storage lives in Settings → Storage."
 ---
-# Vault
+# Personal Vault
 
 ![vault in GodMode](/features/vault.png)
 
-Vault is the **User** connect hub for personal credentials and account connects. Chat → an agent's **Vault** tab opens that agent's private vault. Platform credentials (GodMode Cloud, LLM keys, Exa) live under **Settings → Vault**. Database usage and workspace export live under **Settings → Storage**.
+**Personal Vault** is the user connect hub for personal credentials and account connects. Chat → an agent's **Agent Vault** tab opens that agent's private vault. Platform credentials (GodMode Cloud, LLM keys, Exa) live under **Platform Vault** in the sidebar. Database usage and workspace export live under **Settings → Storage**.
 
 ## Three vaults
 
 | Vault | Surface | Contents |
 |-------|---------|----------|
-| **Platform** | Settings → Vault | GodMode Cloud seats, LLM subscriptions, API keys, Exa / search, platform secrets |
-| **User** | `/vault` | GitHub, Wallets & Accounts (personal), Marketplace, user secrets |
-| **Agent** | Agent sidebar / panel Vault tab, or `/vault?agent=<id>` | Secrets and Wallets & Accounts for that agent (no Inference) |
+| **Platform** | Sidebar **Platform Vault** (`/settings/vault`) | GodMode Cloud seats, LLM subscriptions, API keys, Exa / search, platform secrets |
+| **Personal** | Sidebar **Personal Vault** (`/vault`) | GitHub, Wallets & Accounts (personal), Marketplace, user secrets |
+| **Agent** | Agent sidebar / panel **Agent Vault** tab, or `/vault?agent=<id>` | Secrets and Wallets & Accounts for that agent (no Inference) |
 
 There is no owner Select picker. Each surface is scoped to one vault.
 
@@ -28,9 +28,9 @@ When an agent runs:
 1. That **Agent** Vault secrets (if a matching secret exists)
 2. **Platform** Vault
 
-User Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged. Inference Connect cards (Subscriptions, API Keys, Search) are Platform-only under Settings → Vault.
+Personal Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged. Inference Connect cards (Subscriptions, API Keys, Search) are Platform-only under Platform Vault.
 
-## User Vault tabs (`/vault`)
+## Personal Vault tabs (`/vault`)
 
 ### Integrations
 
@@ -50,13 +50,13 @@ Seller **Stripe Connect** for Community payouts. Marketplace → Sell links here
 
 ### All Secrets
 
-Free-form secrets in the User Vault (`owner_kind=user`). Prefer named Connect cards when one exists.
+Free-form secrets in the Personal Vault (`owner_kind=user`). Prefer named Connect cards when one exists.
 
-## Platform Vault (Settings → Vault)
+## Platform Vault
 
-Deep link: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference subs: `&sub=subscriptions|api-keys|search`).
+Sidebar label **Platform Vault**. Deep link: `/settings/vault?vault=cloud|inference|secrets` (Inference subs: `&sub=subscriptions|api-keys|search`).
 
-Legacy `/vault?tab=cloud`, `/vault?tab=billing`, and `/vault?tab=inference` redirect here. Agent Vault `?tab=inference` (or `?tab=search`) also redirects here.
+Legacy `/settings/platform?tab=vault&…` redirects here. Legacy `/vault?tab=cloud`, `/vault?tab=billing`, and `/vault?tab=inference` also redirect here. Agent Vault `?tab=inference` (or `?tab=search`) redirects here too.
 
 ### GodMode Cloud
 
@@ -106,7 +106,7 @@ Metered BYOK with named Connect cards:
 **Exa** Connect stores Platform secret `exa_api_key`. No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
 
 1. Sign up at [dashboard.exa.ai](https://dashboard.exa.ai) and create an API key.
-2. Connect the key on Settings → Vault → Inference → Search → Exa.
+2. Connect the key on Platform Vault → Inference → Search → Exa.
 3. If Exa blocks for exhausted credits, add credits or wait for the monthly free refresh at [Exa billing](https://dashboard.exa.ai/billing).
 
 GodMode Cloud routes agent `web_search` and `fetch_url` through [Exa](https://exa.ai) so egress uses Exa's network instead of the shared VPS IP. Cloud requires **tenant BYOK** (no platform shared key).
@@ -117,14 +117,14 @@ See [[cursor-cloud]].
 
 ## Agent Vault
 
-Open from the agent group in the sidebar (Vault child row) or the Intelligence panel Vault tab. Optional deep link: `/vault?agent=<agentId>`.
+Open from the agent group in the sidebar (**Agent Vault** child row) or the Intelligence panel **Agent Vault** tab. Optional deep link: `/vault?agent=<agentId>`.
 
 Tabs:
 
 - **Secrets**: free-form agent secrets (`owner_kind=agent`)
 - **Wallets & Accounts**: wallet and account connects for that agent (`?tab=wallets`)
 
-No Inference UI. Platform Inference lives under Settings → Vault. No Select; no User tabs (GitHub, Marketplace, etc.).
+No Inference UI. Platform Inference lives under Platform Vault. No Select; no Personal Vault tabs (GitHub, Marketplace, etc.).
 
 ## Schema note
 
@@ -132,10 +132,11 @@ No Inference UI. Platform Inference lives under Settings → Vault. No Select; n
 
 ## Route
 
-- User: `/vault` (tabs: `?tab=integrations|wallets|marketplace|secrets`; default `integrations`)
+- Personal: `/vault` (tabs: `?tab=integrations|wallets|marketplace|secrets`; default `integrations`)
 - Agent: `/vault?agent=<id>` (tabs: `secrets|wallets`; default `secrets`)
-- Platform: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference: `&sub=…`)
+- Platform: `/settings/vault?vault=cloud|inference|secrets` (Inference: `&sub=…`)
 - Storage: `/settings/platform?tab=storage` (usage + workspace data; see [[settings]])
-- Legacy `?tab=search` / `?tab=inference` / `?tab=cloud` / `?tab=billing` on `/vault` redirect to Settings → Vault
+- Legacy `/settings/platform?tab=vault&…` redirects to Platform Vault
+- Legacy `?tab=search` / `?tab=inference` / `?tab=cloud` / `?tab=billing` on `/vault` redirect to Platform Vault
 - Legacy `?tab=storage` on `/vault` redirects to Settings → Storage
 - Legacy Bank `?tab=wallets|accounts` redirects to `/vault?tab=wallets`

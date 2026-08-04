@@ -3,24 +3,23 @@ slug: settings
 title: "Settings"
 section: "Social and extension"
 location: "/settings"
-summary: "Account, appearance, Platform Vault, storage, and session settings."
+summary: "Account, appearance, storage, and session settings. Platform Vault is a separate sidebar page."
 ---
 # Settings
 
 ![settings in GodMode](/features/settings.png)
 
 
-Settings covers account, appearance, Platform Vault, storage, and session preferences.
+Settings covers account, appearance, storage, and session preferences. Platform credentials live on **Platform Vault** (sidebar, between Admin and Settings).
 
 ## Tabs
 
-- **General**: account, MFA, appearance, session
-- **Vault**: Platform Vault (GodMode Cloud, Inference, All Secrets)
+- **General**: account, MFA, appearance, session, and a link to Platform Vault
 - **Storage**: database / data-store usage, workspace data export (SaaS owners)
 
-## Platform Vault (Vault tab)
+## Platform Vault
 
-Shared platform credentials for the workspace:
+Shared platform credentials for the workspace live on their own page (`/settings/vault`):
 
 - **GodMode Cloud** (SaaS seat billing / Stripe Customer Portal)
 - **Inference → Subscriptions** (for example Cursor)
@@ -30,7 +29,9 @@ Shared platform credentials for the workspace:
 
 Agents resolve LLM and Exa keys as **Agent secrets → Platform Vault**. Personal connects (GitHub, wallets and accounts, marketplace) stay on [[vault]]. Inference Connect cards are Platform-only.
 
-Deep links: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference: `&sub=subscriptions|api-keys|search`).
+Deep links: `/settings/vault?vault=cloud|inference|secrets` (Inference: `&sub=subscriptions|api-keys|search`).
+
+Legacy `/settings/platform?tab=vault&…` redirects to Platform Vault.
 
 ## Storage tab
 

@@ -22,7 +22,7 @@ export function NewUserOnboardingDialog({ open, onOpenChange, onStartTour }: Pro
         <DialogHeader>
           <DialogTitle>Welcome to GodMode</DialogTitle>
           <DialogDescription>
-            You start with Intelligence (GodMode's AI), Calendar, Tasks, Wiki, and Vault — an empty
+            You start with Intelligence (GodMode's AI), Calendar, Tasks, Wiki, and Personal Vault: an empty
             workspace ready to build or extend from the Marketplace.
           </DialogDescription>
         </DialogHeader>
