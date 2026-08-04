@@ -44,6 +44,16 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (Together) | `nvidia/nemotron*` | `together-nemotron` |
 | provider | openai_compatible (Together) | `google/gemma*` | `together-gemma` |
 | provider | openai_compatible (Together) | other | `together-generic` |
+| provider | openai_compatible (Fireworks) | `*llama*` | `fireworks-llama` |
+| provider | openai_compatible (Fireworks) | `*gpt-oss*` | `fireworks-gpt-oss` |
+| provider | openai_compatible (Fireworks) | `*deepseek*` | `fireworks-deepseek` |
+| provider | openai_compatible (Fireworks) | `*qwen*` | `fireworks-qwen` |
+| provider | openai_compatible (Fireworks) | `*kimi*` | `fireworks-kimi` |
+| provider | openai_compatible (Fireworks) | `*minimax*` | `fireworks-minimax` |
+| provider | openai_compatible (Fireworks) | `*glm*` | `fireworks-glm` |
+| provider | openai_compatible (Fireworks) | `*nemotron*` | `fireworks-nemotron` |
+| provider | openai_compatible (Fireworks) | `*gemma*` | `fireworks-gemma` |
+| provider | openai_compatible (Fireworks) | other | `fireworks-generic` |
 | remote | — | * | `remote` |
 
 OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` from the slug prefix. Direct OpenAI/Anthropic Console profiles stay distinct from OpenRouter-routed models. Catalog top-10 on the Vault card is pinned to a 2026-08-03 usage snapshot; custom slugs are allowed.
@@ -51,5 +61,7 @@ OpenRouter is a **transport**. Profile = `f(openrouter transport, modelFamily)` 
 Groq is also a **transport**. Profile = `f(groq transport, modelFamily)`. GPT-OSS on Groq uses `groq-gpt-oss`, not the OpenAI Platform `openai` profile. Production chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 Together is also a **transport**. Profile = `f(together transport, modelFamily)`. Distinct from Groq/OpenRouter and from local `gemma-4`. Serverless chat catalog snapshot 2026-08-03; custom model ids allowed.
+
+Fireworks is also a **transport**. Profile = `f(fireworks transport, modelFamily)` from the model slug leaf under `accounts/fireworks/models/`. Distinct from Together/Groq/OpenRouter for the same weights. Serverless chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 Source of truth: `apps/bridge/src/services/model-profiles/index.ts`. Vault Connect cards must land or update a row when a provider ships (Part of #232 / epic #321).

@@ -22,6 +22,10 @@ import {
   getTogetherAuthStatus,
   isTogetherPlatformReady,
 } from "./together-platform.js";
+import {
+  getFireworksAuthStatus,
+  isFireworksPlatformReady,
+} from "./fireworks-platform.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
 const META_COMPLETED = "onboarding.completed";
@@ -63,8 +67,8 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
- * Together) counts as ready. Process-env keys do not: same multi-tenant rule as
- * Cursor vault-only readiness.
+ * Together / Fireworks) counts as ready. Process-env keys do not: same multi-tenant
+ * rule as Cursor vault-only readiness.
  */
 function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
   if (!config.isHub) return false;
@@ -78,7 +82,8 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
       getOpenRouterAuthStatus(db).source
     ) ||
     vaultReady(isGroqPlatformReady(db), getGroqAuthStatus(db).source) ||
-    vaultReady(isTogetherPlatformReady(db), getTogetherAuthStatus(db).source)
+    vaultReady(isTogetherPlatformReady(db), getTogetherAuthStatus(db).source) ||
+    vaultReady(isFireworksPlatformReady(db), getFireworksAuthStatus(db).source)
   );
 }
 

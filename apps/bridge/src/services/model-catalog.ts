@@ -43,6 +43,15 @@ import {
   TOGETHER_API_KEY_SECRET_NAME,
   TOGETHER_CHAT_CATALOG,
 } from "./together-platform.js";
+import {
+  isFireworksAgentConfig,
+  isFireworksPlatformReady,
+  isFireworksVaultSecretId,
+  FIREWORKS_API_BASE_URL,
+  FIREWORKS_API_KEY_SECRET_ID,
+  FIREWORKS_API_KEY_SECRET_NAME,
+  FIREWORKS_CHAT_CATALOG,
+} from "./fireworks-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -121,6 +130,16 @@ function togetherHarnessInput(model: string) {
   };
 }
 
+function fireworksHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "fireworks",
+    baseUrl: FIREWORKS_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -185,7 +204,9 @@ export async function listModelCatalog(
       s.name !== GROQ_API_KEY_SECRET_NAME &&
       !isGroqVaultSecretId(s.id) &&
       s.name !== TOGETHER_API_KEY_SECRET_NAME &&
-      !isTogetherVaultSecretId(s.id)
+      !isTogetherVaultSecretId(s.id) &&
+      s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
+      !isFireworksVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -198,6 +219,7 @@ export async function listModelCatalog(
   const hasOpenRouter = isOpenRouterPlatformReady(db, catalogAgentId);
   const hasGroq = isGroqPlatformReady(db, catalogAgentId);
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
+  const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -292,6 +314,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasFireworks) {
+    const agentIsFireworks =
+      agent?.backend === "provider" && isFireworksAgentConfig(agent.config);
+    for (const m of FIREWORKS_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(fireworksHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:fireworks:${m.id}`,
+        source: "provider",
+        label: `Fireworks · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "fireworks",
+        active: Boolean(agentIsFireworks && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -305,23 +344,28 @@ export async function listModelCatalog(
     const isOr = isOpenRouterAgentConfig(agent.config);
     const isGq = isGroqAgentConfig(agent.config);
     const isTg = isTogetherAgentConfig(agent.config);
+    const isFw = isFireworksAgentConfig(agent.config);
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
         ? resolveHarnessProfile(groqHarnessInput(model))
         : isTg
           ? resolveHarnessProfile(togetherHarnessInput(model))
-          : resolveHarnessProfile({
-              source: "provider",
-              model,
-              provider,
-            });
+          : isFw
+            ? resolveHarnessProfile(fireworksHarnessInput(model))
+            : resolveHarnessProfile({
+                source: "provider",
+                model,
+                provider,
+              });
     models.push({
       id: isGq
         ? `provider:openai_compatible:groq:${model}`
         : isTg
           ? `provider:openai_compatible:together:${model}`
-          : `provider:${provider}:${model}`,
+          : isFw
+            ? `provider:openai_compatible:fireworks:${model}`
+            : `provider:${provider}:${model}`,
       source: "provider",
       label: isOr
         ? `OpenRouter · ${model}`
@@ -329,10 +373,20 @@ export async function listModelCatalog(
           ? `Groq · ${model}`
           : isTg
             ? `Together · ${model}`
-            : model,
+            : isFw
+              ? `Fireworks · ${model}`
+              : model,
       model,
       provider,
-      transport: isOr ? "openrouter" : isGq ? "groq" : isTg ? "together" : undefined,
+      transport: isOr
+        ? "openrouter"
+        : isGq
+          ? "groq"
+          : isTg
+            ? "together"
+            : isFw
+              ? "fireworks"
+              : undefined,
       active: true,
       harnessProfileId: harness.id,
     });
@@ -368,7 +422,9 @@ export async function listModelCatalog(
           ? { transport: "groq", baseUrl: GROQ_API_BASE_URL }
           : active.transport === "together"
             ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
-            : {}),
+            : active.transport === "fireworks"
+              ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
+              : {}),
     });
     active.harnessProfileId = profile.id;
   }
@@ -495,16 +551,20 @@ export async function selectIntelligenceModel(
         s.name !== GROQ_API_KEY_SECRET_NAME &&
         !isGroqVaultSecretId(s.id) &&
         s.name !== TOGETHER_API_KEY_SECRET_NAME &&
-        !isTogetherVaultSecretId(s.id)
+        !isTogetherVaultSecretId(s.id) &&
+        s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
+        !isFireworksVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
     const openRouterReady = isOpenRouterPlatformReady(db, "intelligence");
     const groqReady = isGroqPlatformReady(db, "intelligence");
     const togetherReady = isTogetherPlatformReady(db, "intelligence");
+    const fireworksReady = isFireworksPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
-    let compatibleTransport: "openrouter" | "groq" | "together" | null = null;
+    let compatibleTransport: "openrouter" | "groq" | "together" | "fireworks" | null =
+      null;
     if (provider === "openai") {
       if (openAiReady) {
         preferredId = OPENAI_API_KEY_SECRET_ID;
@@ -544,6 +604,10 @@ export async function selectIntelligenceModel(
         base.includes("api.together.ai") ||
         base.includes("api.together.xyz") ||
         keyHint === TOGETHER_API_KEY_SECRET_ID;
+      const wantsFireworks =
+        transport === "fireworks" ||
+        base.includes("api.fireworks.ai") ||
+        keyHint === FIREWORKS_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -562,6 +626,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = TOGETHER_API_KEY_SECRET_ID;
         compatibleTransport = "together";
+      } else if (wantsFireworks) {
+        if (!fireworksReady) {
+          throw new Error("Connect Fireworks in Vault before using Fireworks models");
+        }
+        preferredId = FIREWORKS_API_KEY_SECRET_ID;
+        compatibleTransport = "fireworks";
       } else {
         preferredId =
           secrets.find(
@@ -592,7 +662,9 @@ export async function selectIntelligenceModel(
           ? { transport: "groq", baseUrl: GROQ_API_BASE_URL }
           : compatibleTransport === "together"
             ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
-            : {}),
+            : compatibleTransport === "fireworks"
+              ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
+              : {}),
     });
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
@@ -605,6 +677,7 @@ export async function selectIntelligenceModel(
             openrouter: true,
             groq: undefined,
             together: undefined,
+            fireworks: undefined,
           }
         : compatibleTransport === "groq"
           ? {
@@ -613,6 +686,7 @@ export async function selectIntelligenceModel(
               groq: true,
               openrouter: undefined,
               together: undefined,
+              fireworks: undefined,
             }
           : compatibleTransport === "together"
             ? {
@@ -621,14 +695,25 @@ export async function selectIntelligenceModel(
                 together: true,
                 openrouter: undefined,
                 groq: undefined,
+                fireworks: undefined,
               }
-            : {
-                baseUrl: undefined,
-                transport: undefined,
-                openrouter: undefined,
-                groq: undefined,
-                together: undefined,
-              }),
+            : compatibleTransport === "fireworks"
+              ? {
+                  baseUrl: FIREWORKS_API_BASE_URL,
+                  transport: "fireworks",
+                  fireworks: true,
+                  openrouter: undefined,
+                  groq: undefined,
+                  together: undefined,
+                }
+              : {
+                  baseUrl: undefined,
+                  transport: undefined,
+                  openrouter: undefined,
+                  groq: undefined,
+                  together: undefined,
+                  fireworks: undefined,
+                }),
     });
     updateAgent(db, "intelligence", {
       backend: "provider",
@@ -644,7 +729,9 @@ export async function selectIntelligenceModel(
             ? `provider:openai_compatible:groq:${model}`
             : compatibleTransport === "together"
               ? `provider:openai_compatible:together:${model}`
-              : `provider:${provider}:${model}`,
+              : compatibleTransport === "fireworks"
+                ? `provider:openai_compatible:fireworks:${model}`
+                : `provider:${provider}:${model}`,
         source: "provider",
         label:
           compatibleTransport === "openrouter"
@@ -653,7 +740,9 @@ export async function selectIntelligenceModel(
               ? `Groq · ${model}`
               : compatibleTransport === "together"
                 ? `Together · ${model}`
-                : model,
+                : compatibleTransport === "fireworks"
+                  ? `Fireworks · ${model}`
+                  : model,
         model,
         provider,
         transport: compatibleTransport ?? undefined,

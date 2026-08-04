@@ -727,6 +727,208 @@ export function resolveTogetherHarnessProfile(
   return TOGETHER_GENERIC_PROFILE;
 }
 
+/** Shared Fireworks transport middleware (BYOK via OpenAI-compatible tools). */
+const FIREWORKS_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function fireworksFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via Fireworks AI serverless (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not OpenAI Platform, not OpenRouter, not Groq, and not Together.",
+    "Use native OpenAI-style function calling as exposed by Fireworks. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
+    "Prefer purposeful tool turns; cap exploratory loops. On tool errors, treat results as data and recover or explain.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const FIREWORKS_LLAMA_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-llama",
+  label: "Fireworks Llama",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-llama", [
+    "Llama via Fireworks: lean tool surface; prefer structured schemas over prose tool descriptions.",
+  ]),
+};
+
+export const FIREWORKS_GPT_OSS_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-gpt-oss",
+  label: "Fireworks GPT-OSS",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-gpt-oss", [
+    "GPT-OSS via Fireworks (not OpenAI Platform, not Groq/Together). Use Fireworks-hosted OpenAI-compatible tools only.",
+  ]),
+};
+
+export const FIREWORKS_DEEPSEEK_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-deepseek",
+  label: "Fireworks DeepSeek",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-deepseek", [
+    "DeepSeek via Fireworks (not OpenRouter/Together). Prefer structured tool schemas; avoid discovery spam.",
+  ]),
+};
+
+export const FIREWORKS_QWEN_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-qwen",
+  label: "Fireworks Qwen",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-qwen", [
+    "Qwen via Fireworks: follow tool schemas closely; keep discovery deferred unless asked.",
+  ]),
+};
+
+export const FIREWORKS_KIMI_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-kimi",
+  label: "Fireworks Kimi",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-kimi", [
+    "Kimi via Fireworks (not OpenRouter/Groq/Together). Prefer structured tool calls; no memory/wiki re-probe without need.",
+  ]),
+};
+
+export const FIREWORKS_MINIMAX_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-minimax",
+  label: "Fireworks MiniMax",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-minimax", [
+    "MiniMax via Fireworks: use native tools; keep exploratory loops short.",
+  ]),
+};
+
+export const FIREWORKS_GLM_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-glm",
+  label: "Fireworks GLM",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-glm", [
+    "GLM via Fireworks (not OpenRouter/Together): follow tool schemas; one purposeful tool turn when possible.",
+  ]),
+};
+
+export const FIREWORKS_NEMOTRON_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-nemotron",
+  label: "Fireworks Nemotron",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-nemotron", [
+    "Nemotron via Fireworks (not OpenRouter/Together): lean active tools; hard turn cap.",
+  ]),
+};
+
+export const FIREWORKS_GEMMA_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-gemma",
+  label: "Fireworks Gemma",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-gemma", [
+    "Gemma via Fireworks serverless (not local GGUF gemma-4). Use Fireworks-hosted OpenAI-compatible tools.",
+  ]),
+};
+
+export const FIREWORKS_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "fireworks-generic",
+  label: "Fireworks (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 12,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...FIREWORKS_TRANSPORT_DEFERRED],
+  harnessDelta: fireworksFamilyDelta("fireworks-generic", [
+    "Generic Fireworks route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map Fireworks model id → family harness.
+ * Transport is Fireworks; family from model slug leaf (not one profile per model id).
+ */
+export function resolveFireworksHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  let slug = (modelSlug ?? "").trim().toLowerCase();
+  const prefix = "accounts/fireworks/models/";
+  const routerPrefix = "accounts/fireworks/routers/";
+  if (slug.startsWith(prefix)) slug = slug.slice(prefix.length);
+  else if (slug.startsWith(routerPrefix)) slug = slug.slice(routerPrefix.length);
+  if (slug.startsWith("llama") || slug.includes("/llama")) return FIREWORKS_LLAMA_PROFILE;
+  if (slug.startsWith("gpt-oss") || slug.includes("gpt-oss")) return FIREWORKS_GPT_OSS_PROFILE;
+  if (slug.startsWith("deepseek") || slug.includes("deepseek")) {
+    return FIREWORKS_DEEPSEEK_PROFILE;
+  }
+  if (slug.startsWith("qwen") || slug.includes("qwen")) return FIREWORKS_QWEN_PROFILE;
+  if (slug.startsWith("kimi") || slug.includes("kimi")) return FIREWORKS_KIMI_PROFILE;
+  if (slug.startsWith("minimax") || slug.includes("minimax")) {
+    return FIREWORKS_MINIMAX_PROFILE;
+  }
+  if (slug.startsWith("glm") || slug.includes("glm")) return FIREWORKS_GLM_PROFILE;
+  if (slug.includes("nemotron")) return FIREWORKS_NEMOTRON_PROFILE;
+  if (slug.startsWith("gemma") || slug.includes("gemma")) return FIREWORKS_GEMMA_PROFILE;
+  return FIREWORKS_GENERIC_PROFILE;
+}
+
 export const GENERIC_LOCAL_PROFILE: ModelHarnessProfile = {
   id: "generic-local",
   label: "Local model",
@@ -787,6 +989,16 @@ const REGISTRY: ModelHarnessProfile[] = [
   TOGETHER_NEMOTRON_PROFILE,
   TOGETHER_GEMMA_PROFILE,
   TOGETHER_GENERIC_PROFILE,
+  FIREWORKS_LLAMA_PROFILE,
+  FIREWORKS_GPT_OSS_PROFILE,
+  FIREWORKS_DEEPSEEK_PROFILE,
+  FIREWORKS_QWEN_PROFILE,
+  FIREWORKS_KIMI_PROFILE,
+  FIREWORKS_MINIMAX_PROFILE,
+  FIREWORKS_GLM_PROFILE,
+  FIREWORKS_NEMOTRON_PROFILE,
+  FIREWORKS_GEMMA_PROFILE,
+  FIREWORKS_GENERIC_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
 ];
@@ -807,6 +1019,12 @@ function isTogetherTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "together") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.together.ai") || base.includes("api.together.xyz");
+}
+
+function isFireworksTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "fireworks") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.fireworks.ai");
 }
 
 export function getProfileById(id: string): ModelHarnessProfile | null {
@@ -875,6 +1093,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isTogetherTransport(input)) {
       return resolveTogetherHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isFireworksTransport(input)) {
+      return resolveFireworksHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -914,6 +1135,11 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.together.xyz")
       ) {
         transport = "together";
+      } else if (
+        cfg.fireworks === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.fireworks.ai")
+      ) {
+        transport = "fireworks";
       }
     }
     return resolveHarnessProfile({

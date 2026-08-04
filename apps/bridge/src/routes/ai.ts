@@ -998,7 +998,10 @@ export function createAiRouter(
         s.name !== "groq_api_key" &&
         s.id !== "together-api-key" &&
         !s.id.startsWith("together-api-key__agent__") &&
-        s.name !== "together_api_key"
+        s.name !== "together_api_key" &&
+        s.id !== "fireworks-api-key" &&
+        !s.id.startsWith("fireworks-api-key__agent__") &&
+        s.name !== "fireworks_api_key"
     );
     res.json({ secrets });
   });
