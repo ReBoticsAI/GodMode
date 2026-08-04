@@ -121,7 +121,7 @@ export function McpTab({
             to={platformVaultSettingsHref("subscriptions")}
             className="text-primary underline-offset-2 hover:underline"
           >
-            Settings → Vault → Inference → Subscriptions
+            Platform Vault → Inference → Subscriptions
           </Link>
           .
         </p>

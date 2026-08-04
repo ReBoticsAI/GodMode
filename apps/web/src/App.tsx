@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import AgentsPage from "./pages/Agents";
 import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
+import PlatformVault from "./pages/PlatformVault";
 import Vault from "./pages/Vault";
 import Users from "./pages/Users";
 import Shared from "./pages/Shared";
@@ -52,6 +53,7 @@ import {
   CONTACTS_PATH,
   SHARED_PATH,
   SETTINGS_PATH,
+  PLATFORM_VAULT_PATH,
   USERS_PATH,
   VAULT_PATH,
   STRUCTURE_PATH,
@@ -238,6 +240,7 @@ function AppRoutes({
   return (
     <Routes>
       <Route path={SETTINGS_PATH} element={<Settings />} />
+      <Route path={PLATFORM_VAULT_PATH} element={<PlatformVault />} />
       <Route path={ADMIN_PATH} element={<Admin />} />
       <Route path={USERS_PATH} element={<Users />} />
       <Route path={VAULT_PATH} element={<Vault />} />

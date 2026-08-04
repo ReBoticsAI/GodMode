@@ -1180,7 +1180,7 @@ export default function MarketplacePage() {
                 Seller payouts
               </CardTitle>
               <CardDescription>
-                Connect Stripe for Community sales under Vault → Marketplace.
+                Connect Stripe for Community sales under Personal Vault → Marketplace.
                 {payoutReady
                   ? " A payout method is connected."
                   : " Paid listings need a connected payout first."}
@@ -1191,7 +1191,7 @@ export default function MarketplacePage() {
                 to={`${VAULT_PATH}?tab=marketplace`}
                 className={buttonVariants({ variant: "outline" })}
               >
-                Manage in Vault → Marketplace
+                Manage in Personal Vault → Marketplace
               </Link>
             </CardContent>
           </Card>

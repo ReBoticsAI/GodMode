@@ -53,8 +53,8 @@ const QUICK_LINKS = [
     Icon: BookOpenIcon,
   },
   {
-    label: "Vault",
-    description: "Secrets and API keys",
+    label: "Personal Vault",
+    description: "Integrations, wallets, and secrets",
     to: VAULT_PATH,
     Icon: VaultIcon,
   },
