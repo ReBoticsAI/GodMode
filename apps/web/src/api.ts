@@ -2513,6 +2513,70 @@ export const applyGoogleAiToIntelligence = (model = "gemini-2.5-flash") =>
     true
   );
 
+export type XaiAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchXaiStatus = async (
+  agentId?: string | null
+): Promise<XaiAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "xai-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "xai") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectXaiApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "xai",
+      label: "xAI Console",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchXaiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectXaiApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "xai-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchXaiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyXaiToIntelligence = (model = "grok-4.5") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:xai:${model}` },
+    "runtime",
+    true
+  );
+
 export type ZaiCodingAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";
