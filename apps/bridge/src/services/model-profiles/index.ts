@@ -1093,6 +1093,68 @@ export function resolveGoogleAiHarnessProfile(
   return GOOGLE_AI_GENERIC_PROFILE;
 }
 
+/** Shared xAI console transport middleware (BYOK via OpenAI-compatible tools). */
+const XAI_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function xaiFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via xAI console API (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path and not SuperGrok / X Premium OAuth.",
+    "Use native OpenAI-style function calling as exposed by the xAI endpoint. Do not invent tool names.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const XAI_GROK_PROFILE: ModelHarnessProfile = {
+  id: "xai-grok",
+  label: "xAI Grok",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 16,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...XAI_TRANSPORT_DEFERRED],
+  harnessDelta: xaiFamilyDelta("xai-grok", [
+    "Grok via xAI console: lean tool surface; prefer structured schemas; keep discovery deferred.",
+  ]),
+};
+
+export const XAI_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "xai-generic",
+  label: "xAI (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...XAI_TRANSPORT_DEFERRED],
+  harnessDelta: xaiFamilyDelta("xai-generic", [
+    "Generic xAI console route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map xAI console model id → family harness.
+ * Transport is xAI console; distinct from Cursor Grok and SuperGrok OAuth.
+ */
+export function resolveXaiHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.includes("grok")) return XAI_GROK_PROFILE;
+  return XAI_GENERIC_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1208,6 +1270,8 @@ const REGISTRY: ModelHarnessProfile[] = [
   GOOGLE_AI_FLASH_PROFILE,
   GOOGLE_AI_PRO_PROFILE,
   GOOGLE_AI_GENERIC_PROFILE,
+  XAI_GROK_PROFILE,
+  XAI_GENERIC_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1247,6 +1311,12 @@ function isGoogleAiTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "google_ai") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("generativelanguage.googleapis.com");
+}
+
+function isXaiTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "xai") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.x.ai");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1330,6 +1400,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isGoogleAiTransport(input)) {
       return resolveGoogleAiHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isXaiTransport(input)) {
+      return resolveXaiHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isZaiCodingTransport(input)) {
       return resolveZaiCodingHarnessProfile(input.model);
     }
@@ -1387,6 +1460,11 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("generativelanguage.googleapis.com")
       ) {
         transport = "google_ai";
+      } else if (
+        cfg.xai === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.x.ai")
+      ) {
+        transport = "xai";
       } else if (
         cfg.zaiCoding === true ||
         (baseUrl ?? "").toLowerCase().includes("api.z.ai/api/coding/")

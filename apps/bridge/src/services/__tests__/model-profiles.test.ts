@@ -23,6 +23,7 @@ import {
   resolveFireworksHarnessProfile,
   resolveDeepSeekHarnessProfile,
   resolveGoogleAiHarnessProfile,
+  resolveXaiHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -318,6 +319,19 @@ assert.equal(
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
   }).id,
   "google-ai-pro"
+);
+assert.equal(resolveXaiHarnessProfile("grok-4.5").id, "xai-grok");
+assert.equal(resolveXaiHarnessProfile("custom-model").id, "xai-generic");
+assert.notEqual(resolveXaiHarnessProfile("grok-4.5").id, "cursor-grok");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "grok-4.5",
+    transport: "xai",
+    baseUrl: "https://api.x.ai/v1",
+  }).id,
+  "xai-grok"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");
