@@ -24,6 +24,7 @@ import {
   resolveDeepSeekHarnessProfile,
   resolveGoogleAiHarnessProfile,
   resolveXaiHarnessProfile,
+  resolveZaiPaygHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -332,6 +333,19 @@ assert.equal(
     baseUrl: "https://api.x.ai/v1",
   }).id,
   "xai-grok"
+);
+assert.equal(resolveZaiPaygHarnessProfile("glm-5.2").id, "zai-payg");
+assert.notEqual(resolveZaiPaygHarnessProfile("glm-5.2").id, "zai-coding");
+assert.notEqual(resolveZaiPaygHarnessProfile("glm-5.2").id, "together-glm");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "glm-5.2",
+    transport: "zai",
+    baseUrl: "https://api.z.ai/api/paas/v4",
+  }).id,
+  "zai-payg"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");
