@@ -220,9 +220,25 @@ export default function AuthGate() {
   }, [user, saas]);
 
   const finishLogin = async () => {
-    await refresh();
-    navigate(HOME_PATH, { replace: true });
-    toast.success("Signed in");
+    try {
+      const result = await refresh();
+      if (!result.authenticated) {
+        toast.error(
+          "Credentials were accepted, but your session could not be established. Try again."
+        );
+        return;
+      }
+      if (result.tenants.length === 0) {
+        toast.message("Signed in. Create a workspace to continue.");
+        return;
+      }
+      navigate(HOME_PATH, { replace: true });
+      toast.success("Signed in");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Session could not be established"
+      );
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -579,9 +595,7 @@ export default function AuthGate() {
               {mode === "mfa-setup" && (
                 <MfaEnrollForm
                   onEnrolled={async () => {
-                    await refresh();
-                    navigate(HOME_PATH, { replace: true });
-                    toast.success("Signed in");
+                    await finishLogin();
                   }}
                 />
               )}

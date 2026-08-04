@@ -85,6 +85,37 @@ vi.mock("../mailer.js", () => ({
   }),
 }));
 
+vi.mock("../../admin-users.js", async () => {
+  const actual = await vi.importActual<typeof import("../../admin-users.js")>(
+    "../../admin-users.js"
+  );
+  return {
+    ...actual,
+    createAdminTenantForUser(
+      core: import("better-sqlite3").Database,
+      userId: string,
+      name: string,
+      slug?: string
+    ) {
+      const id = randomUUID();
+      const tenantSlug = (slug?.trim() || `ws-${id.slice(0, 8)}`).toLowerCase();
+      core
+        .prepare(
+          `INSERT INTO tenants (id, name, slug, is_operator, owner_user_id)
+           VALUES (?, ?, ?, 0, ?)`
+        )
+        .run(id, name, tenantSlug, userId);
+      core
+        .prepare(
+          `INSERT INTO tenant_memberships (user_id, tenant_id, role)
+           VALUES (?, ?, 'owner')`
+        )
+        .run(userId, id);
+      return { id, name, slug: tenantSlug };
+    },
+  };
+});
+
 import { hashPassword } from "../password.js";
 import {
   beginMfaEnroll,
@@ -569,6 +600,51 @@ describe("auth security HTTP integration", () => {
       });
       expect(ok.status).toBe(200);
       expect(ok.json.ok).toBe(true);
+    });
+  });
+
+  it("session stays authenticated when the user has zero workspaces", async () => {
+    const userId = insertUser({
+      email: "noworkspace@example.com",
+      password: "secret12",
+      isAdmin: false,
+      verified: true,
+    });
+    getCoreDb()
+      .prepare(
+        `INSERT INTO saas_subscriptions (id, user_id, email, status, access_revoked)
+         VALUES (?, ?, ?, 'active', 0)`
+      )
+      .run(randomUUID(), userId, "noworkspace@example.com");
+    const sessionId = createSession(getCoreDb(), userId, 7);
+    const app = buildApp();
+    await withServer(app, async (base) => {
+      const session = await api(base, "GET", "/api/auth/session", {
+        cookie: `godmode_session=${sessionId}`,
+        origin: ALLOWED_ORIGIN,
+      });
+      expect(session.status).toBe(200);
+      expect(session.json.authenticated).toBe(true);
+      expect(session.json.tenantId).toBeNull();
+      expect((session.json.user as { email?: string })?.email).toBe(
+        "noworkspace@example.com"
+      );
+
+      const created = await api(base, "POST", "/api/auth/tenants", {
+        cookie: `godmode_session=${sessionId}`,
+        origin: ALLOWED_ORIGIN,
+        body: { name: "Recovery Workspace" },
+      });
+      expect(created.status).toBe(201);
+      expect(created.json.name).toBe("Recovery Workspace");
+      expect(typeof created.json.id).toBe("string");
+
+      const membership = getCoreDb()
+        .prepare(
+          `SELECT role FROM tenant_memberships WHERE user_id=? AND tenant_id=?`
+        )
+        .get(userId, created.json.id) as { role: string } | undefined;
+      expect(membership?.role).toBe("owner");
     });
   });
 
