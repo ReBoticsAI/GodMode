@@ -3,31 +3,43 @@ slug: settings
 title: "Settings"
 section: "Social and extension"
 location: "/settings"
-summary: "Account, appearance, Platform Vault, and session settings."
+summary: "Account, appearance, Platform Vault, storage, and session settings."
 ---
 # Settings
 
 ![settings in GodMode](/features/settings.png)
 
 
-Settings covers account, appearance, Platform Vault, and session preferences.
+Settings covers account, appearance, Platform Vault, storage, and session preferences.
 
-## Platform Vault
+## Tabs
 
-Shared inference credentials for the workspace:
+- **General**: account, MFA, appearance, session
+- **Vault**: Platform Vault (GodMode Cloud, Inference, All Secrets)
+- **Storage**: database / data-store usage, workspace data export (SaaS owners)
 
+## Platform Vault (Vault tab)
+
+Shared platform credentials for the workspace:
+
+- **GodMode Cloud** (SaaS seat billing / Stripe Customer Portal)
 - **Inference → Subscriptions** (for example Cursor)
 - **Inference → API Keys** (OpenAI, Anthropic, OpenRouter, Groq, Together)
 - **Inference → Search** (Exa)
 - **All Secrets** (free-form Platform secrets)
 
-Agents resolve LLM and Exa keys as **Agent Vault → Platform Vault**. Personal connects (GitHub, Cloud seats, wallets, marketplace) stay on [[vault]].
+Agents resolve LLM and Exa keys as **Agent secrets → Platform Vault**. Personal connects (GitHub, wallets and accounts, marketplace) stay on [[vault]]. Inference Connect cards are Platform-only.
 
-Deep links: `/settings/platform?vault=inference&sub=subscriptions|api-keys|search` or `?vault=secrets`.
+Deep links: `/settings/platform?tab=vault&vault=cloud|inference|secrets` (Inference: `&sub=subscriptions|api-keys|search`).
 
-## Dual-home links
+## Storage tab
 
-GitHub and GodMode Cloud billing live in the User [[vault]]. Settings keeps short dual-home links to **Vault → Integrations** and **Vault → GodMode Cloud**.
+- **Storage usage**: database and data-store sizes (monitor growth before trimming or upgrading stores)
+- **Workspace data**: owner self-serve SQLite export on SaaS hosts (download a consistent snapshot to run GodMode locally)
+
+Deep link: `/settings/platform?tab=storage`.
+
+Legacy `/vault?tab=storage` redirects here.
 
 ## Route
 

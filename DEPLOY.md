@@ -82,7 +82,7 @@ See [deploy/hostinger.md](deploy/hostinger.md) §8 for Hostinger VPS notes.
 6. Set monthly/yearly Price IDs (`STRIPE_SAAS_PRICE_MONTHLY` /
    `STRIPE_SAAS_PRICE_YEARLY`) for the paywall plan picker.
 
-Paid customers manage billing from **Settings → Subscription** (Stripe Customer
+Paid customers manage billing from **Settings → Vault → GodMode Cloud** (Stripe Customer
 Portal). Platform admins see customers under **Admin → SaaS** (plan, status,
 last seen, Stripe link, disable access). `INITIAL_ADMINS` remain paywall-exempt
 and are not blocked when a subscription lapses.

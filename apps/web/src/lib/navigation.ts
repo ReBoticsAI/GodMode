@@ -86,6 +86,27 @@ export const VAULT_TABS = [
 ] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
+/** User `/vault` tabs (Cloud/Inference → Settings → Vault; Storage → Settings → Storage). */
+export const USER_VAULT_TABS = [
+  "integrations",
+  "wallets",
+  "marketplace",
+  "secrets",
+] as const satisfies readonly VaultTab[];
+
+/** Agent Vault tabs (Inference is platform-only under Settings → Vault). */
+export const AGENT_VAULT_TABS = ["secrets", "wallets"] as const satisfies readonly VaultTab[];
+
+export const SETTINGS_TABS = ["general", "vault", "storage"] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+export const PLATFORM_VAULT_SECTIONS = [
+  "cloud",
+  "inference",
+  "secrets",
+] as const;
+export type PlatformVaultSection = (typeof PLATFORM_VAULT_SECTIONS)[number];
+
 export const VAULT_INFERENCE_SUBTABS = [
   "subscriptions",
   "api-keys",
@@ -97,11 +118,32 @@ export type VaultInferenceSub = (typeof VAULT_INFERENCE_SUBTABS)[number];
 export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
   if (raw === "search") return "inference";
   if (raw === "billing") return "cloud";
+  // Bank dual-home used separate Accounts; Vault uses one Wallets & Accounts tab.
+  if (raw === "accounts") return "wallets";
   if ((VAULT_TABS as readonly string[]).includes(raw ?? "")) {
     return raw as VaultTab;
   }
-  // User Vault default (Inference moved to Settings → Platform Vault).
-  return "cloud";
+  // User Vault default (Cloud + Inference live in Settings → Vault).
+  return "integrations";
+}
+
+export function normalizeSettingsTab(
+  raw: string | null | undefined,
+  vaultSection?: string | null
+): SettingsTab {
+  if ((SETTINGS_TABS as readonly string[]).includes(raw ?? "")) {
+    return raw as SettingsTab;
+  }
+  // Deep links use ?vault=… without ?tab=vault.
+  if (vaultSection) return "vault";
+  return "general";
+}
+
+export function normalizePlatformVaultSection(
+  raw: string | null | undefined
+): PlatformVaultSection {
+  if (raw === "secrets" || raw === "cloud") return raw;
+  return "inference";
 }
 
 export function normalizeVaultInferenceSub(
@@ -118,6 +160,41 @@ export function normalizeVaultInferenceSub(
     return raw;
   }
   return "subscriptions";
+}
+
+/** Deep link into Settings → Vault (Platform Vault). */
+export function platformVaultSettingsHref(
+  target: VaultInferenceSub | PlatformVaultSection | "inference" = "subscriptions"
+): string {
+  if (target === "cloud") {
+    return `${SETTINGS_PATH}?tab=vault&vault=cloud`;
+  }
+  if (target === "secrets") {
+    return `${SETTINGS_PATH}?tab=vault&vault=secrets`;
+  }
+  if (target === "inference") {
+    return `${SETTINGS_PATH}?tab=vault&vault=inference&sub=subscriptions`;
+  }
+  return `${SETTINGS_PATH}?tab=vault&vault=inference&sub=${target}`;
+}
+
+/** Deep link into Settings → Storage (usage + workspace data). */
+export function settingsStorageHref(): string {
+  return `${SETTINGS_PATH}?tab=storage`;
+}
+
+/** Deep link into User Vault → Wallets & Accounts. */
+export function userVaultWalletsHref(): string {
+  return `${VAULT_PATH}?tab=wallets`;
+}
+
+/** Deep link into an Agent Vault tab. */
+export function agentVaultHref(
+  agentId: string,
+  tab: (typeof AGENT_VAULT_TABS)[number] = "secrets"
+): string {
+  const id = agentId.trim();
+  return `${VAULT_PATH}?agent=${encodeURIComponent(id)}&tab=${tab}`;
 }
 
 export const STRUCTURE_PATH = "/structure";

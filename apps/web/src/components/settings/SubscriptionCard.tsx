@@ -7,7 +7,7 @@ import {
   startSaasBillingPortal,
   type SaasSubscriptionPublic,
 } from "@/api";
-import { VAULT_PATH } from "@/lib/navigation";
+import { platformVaultSettingsHref } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -67,7 +67,7 @@ export function SubscriptionCard() {
     setOpening(true);
     try {
       const { url } = await startSaasBillingPortal({
-        returnUrl: `${window.location.origin}${VAULT_PATH}?tab=cloud`,
+        returnUrl: `${window.location.origin}${platformVaultSettingsHref("cloud")}`,
       });
       window.location.assign(url);
     } catch (err) {

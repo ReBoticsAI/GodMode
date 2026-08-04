@@ -373,9 +373,9 @@ function ConnectionCategory({
                   provider.disabled
                     ? provider.hint
                     : needsMoralis
-                      ? "Configure Moralis in Vault → Wallets first"
+                      ? "Configure Moralis in Vault → Wallets & Accounts first"
                       : needsPayPal
-                        ? "Configure PayPal in Vault → Wallets first"
+                        ? "Configure PayPal in Vault → Wallets & Accounts first"
                         : provider.hint
                 }
               >
@@ -665,7 +665,7 @@ function ConnectDialog({
         {needsMoralis && (
           <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
             <p>
-              Configure your Moralis API key in Vault → Wallets before
+              Configure your Moralis API key in Vault → Wallets & Accounts before
               connecting crypto wallets.
             </p>
             <Link
@@ -673,14 +673,14 @@ function ConnectDialog({
               className={buttonVariants({ variant: "outline", size: "sm" })}
               onClick={onClose}
             >
-              Manage in Vault → Wallets
+              Manage in Vault → Wallets & Accounts
             </Link>
           </div>
         )}
         {needsPayPal && (
           <div className="flex flex-col gap-2 rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
             <p>
-              Configure PayPal client ID and secret in Vault → Wallets
+              Configure PayPal client ID and secret in Vault → Wallets & Accounts
               first.
             </p>
             <Link
@@ -688,7 +688,7 @@ function ConnectDialog({
               className={buttonVariants({ variant: "outline", size: "sm" })}
               onClick={onClose}
             >
-              Manage in Vault → Wallets
+              Manage in Vault → Wallets & Accounts
             </Link>
           </div>
         )}

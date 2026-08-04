@@ -17,7 +17,7 @@ The Chat panel is the floating window where you talk to agents. It is not an age
 - Agent chat and history
 - Model picker
 - Tool execution
-- In-panel tabs (Knowledge, Vault, Bank, Support, and more)
+- In-panel tabs (Knowledge, Vault with secrets and wallets, Bank ledger, Support, and more)
 - DMs and channels ([[dms-and-channels]])
 
 ## Modes
