@@ -58,6 +58,18 @@ import {
   getOpencodeGoAuthStatus,
   isOpencodeGoPlatformReady,
 } from "./opencode-go-platform.js";
+import {
+  getMinimaxTokenAuthStatus,
+  isMinimaxTokenPlatformReady,
+} from "./minimax-token-platform.js";
+import {
+  getKimiCodeAuthStatus,
+  isKimiCodePlatformReady,
+} from "./kimi-code-platform.js";
+import {
+  getPoeAuthStatus,
+  isPoePlatformReady,
+} from "./poe-platform.js";
 
 /** Per-tenant keys in `ai_settings` (not platform_meta). */
 const META_COMPLETED = "onboarding.completed";
@@ -100,7 +112,8 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
  * Together / Fireworks / DeepSeek / Google AI Studio / xAI / Z.AI / MiniMax /
- * custom OpenAI-compatible / Z.AI Coding Plan / OpenCode Go) counts as
+ * custom OpenAI-compatible / Z.AI Coding Plan / OpenCode Go / MiniMax Token Plan /
+ * Kimi Code / Poe) counts as
  * ready. Process-env keys do not: same multi-tenant rule as Cursor vault-only readiness.
  */
 function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
@@ -127,7 +140,13 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
       getCustomOpenAiAuthStatus(db).source
     ) ||
     vaultReady(isZaiCodingPlatformReady(db), getZaiCodingAuthStatus(db).source) ||
-    vaultReady(isOpencodeGoPlatformReady(db), getOpencodeGoAuthStatus(db).source)
+    vaultReady(isOpencodeGoPlatformReady(db), getOpencodeGoAuthStatus(db).source) ||
+    vaultReady(
+      isMinimaxTokenPlatformReady(db),
+      getMinimaxTokenAuthStatus(db).source
+    ) ||
+    vaultReady(isKimiCodePlatformReady(db), getKimiCodeAuthStatus(db).source) ||
+    vaultReady(isPoePlatformReady(db), getPoeAuthStatus(db).source)
   );
 }
 

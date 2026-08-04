@@ -22,6 +22,9 @@ import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ZaiCodingPlanCard } from "@/pages/ai-settings/ZaiCodingPlanCard";
 import { OpencodeGoCard } from "@/pages/ai-settings/OpencodeGoCard";
+import { MinimaxTokenPlanCard } from "@/pages/ai-settings/MinimaxTokenPlanCard";
+import { KimiCodeCard } from "@/pages/ai-settings/KimiCodeCard";
+import { PoeCard } from "@/pages/ai-settings/PoeCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
@@ -352,6 +355,9 @@ export function InferenceTab({
           <CursorSubscriptionCard vaultAgentId={null} />
           <ZaiCodingPlanCard vaultAgentId={null} />
           <OpencodeGoCard vaultAgentId={null} />
+          <MinimaxTokenPlanCard vaultAgentId={null} />
+          <KimiCodeCard vaultAgentId={null} />
+          <PoeCard vaultAgentId={null} />
         </section>
       </TabsContent>
 

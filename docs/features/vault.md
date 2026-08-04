@@ -73,8 +73,11 @@ Use your plan (billed by the provider):
 | Cursor | `cursor-api-key` | `cursor-*` family | Cursor subscription |
 | Z.AI GLM Coding Plan | `zai-coding-api-key` | `zai-coding` | [Coding Plan](https://docs.z.ai/devpack/quick-start) |
 | OpenCode Go | `opencode-go-api-key` | `opencode-go` | [OpenCode Go](https://opencode.ai/docs/go/) |
+| MiniMax Token Plan | `minimax-token-api-key` | `minimax-token` | [Token Plan](https://platform.minimax.io/docs/token-plan/other-tools) |
+| Kimi Code | `kimi-code-api-key` | `kimi-code` | [Kimi Code](https://www.kimi.com/code/docs/en/) |
+| Poe | `poe-api-key` | `poe` | [Poe API](https://creator.poe.com/docs/external-applications/openai-compatible-api) |
 
-Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
+Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). MiniMax Token Plan shares `https://api.minimax.io/v1` with payg but uses a distinct subscription secret id (`minimax-token-api-key`). Kimi Code uses `https://api.kimi.com/coding/v1` (not Moonshot payg). Poe uses `https://api.poe.com/v1` and spends the key owner's subscription points. Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
 
 ### API Keys
 
