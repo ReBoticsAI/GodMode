@@ -47,6 +47,10 @@ import {
   isMinimaxPlatformReady,
 } from "./minimax-platform.js";
 import {
+  getCustomOpenAiAuthStatus,
+  isCustomOpenAiPlatformReady,
+} from "./custom-openai-platform.js";
+import {
   getZaiCodingAuthStatus,
   isZaiCodingPlatformReady,
 } from "./zai-coding-platform.js";
@@ -91,7 +95,8 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
- * Together / Fireworks / DeepSeek / Google AI Studio / xAI / Z.AI / MiniMax / Z.AI Coding Plan) counts as
+ * Together / Fireworks / DeepSeek / Google AI Studio / xAI / Z.AI / MiniMax /
+ * custom OpenAI-compatible / Z.AI Coding Plan) counts as
  * ready. Process-env keys do not: same multi-tenant rule as Cursor vault-only readiness.
  */
 function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
@@ -113,6 +118,10 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
     vaultReady(isXaiPlatformReady(db), getXaiAuthStatus(db).source) ||
     vaultReady(isZaiPlatformReady(db), getZaiAuthStatus(db).source) ||
     vaultReady(isMinimaxPlatformReady(db), getMinimaxAuthStatus(db).source) ||
+    vaultReady(
+      isCustomOpenAiPlatformReady(db),
+      getCustomOpenAiAuthStatus(db).source
+    ) ||
     vaultReady(isZaiCodingPlatformReady(db), getZaiCodingAuthStatus(db).source)
   );
 }

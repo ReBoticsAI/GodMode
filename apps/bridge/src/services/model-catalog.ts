@@ -98,6 +98,15 @@ import {
   MINIMAX_CHAT_CATALOG,
 } from "./minimax-platform.js";
 import {
+  isCustomOpenAiAgentConfig,
+  isCustomOpenAiPlatformReady,
+  isCustomOpenAiVaultSecretId,
+  resolveCustomOpenAiBaseUrl,
+  CUSTOM_OPENAI_API_KEY_SECRET_ID,
+  CUSTOM_OPENAI_API_KEY_SECRET_NAME,
+  CUSTOM_OPENAI_BASE_URL_SECRET_NAME,
+} from "./custom-openai-platform.js";
+import {
   isZaiCodingAgentConfig,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -244,6 +253,16 @@ function minimaxHarnessInput(model: string) {
   };
 }
 
+function customOpenAiHarnessInput(model: string, baseUrl: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "custom_openai",
+    baseUrl,
+  };
+}
+
 function zaiCodingHarnessInput(model: string) {
   return {
     source: "provider" as const,
@@ -331,6 +350,9 @@ export async function listModelCatalog(
       !isZaiVaultSecretId(s.id) &&
       s.name !== MINIMAX_API_KEY_SECRET_NAME &&
       !isMinimaxVaultSecretId(s.id) &&
+      s.name !== CUSTOM_OPENAI_API_KEY_SECRET_NAME &&
+      s.name !== CUSTOM_OPENAI_BASE_URL_SECRET_NAME &&
+      !isCustomOpenAiVaultSecretId(s.id) &&
       s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
       !isZaiCodingVaultSecretId(s.id)
   );
@@ -584,7 +606,12 @@ export async function listModelCatalog(
     const isXaiCfg = isXaiAgentConfig(agent.config);
     const isZaiPayg = isZaiAgentConfig(agent.config);
     const isMinimax = isMinimaxAgentConfig(agent.config);
+    const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
+    const customBase =
+      typeof agent.config.baseUrl === "string"
+        ? agent.config.baseUrl
+        : resolveCustomOpenAiBaseUrl(db, catalogAgentId) ?? "";
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
@@ -605,11 +632,15 @@ export async function listModelCatalog(
                       ? resolveHarnessProfile(zaiHarnessInput(model))
                       : isMinimax
                         ? resolveHarnessProfile(minimaxHarnessInput(model))
-                        : resolveHarnessProfile({
-                            source: "provider",
-                            model,
-                            provider,
-                          });
+                        : isCustom && customBase
+                          ? resolveHarnessProfile(
+                              customOpenAiHarnessInput(model, customBase)
+                            )
+                          : resolveHarnessProfile({
+                              source: "provider",
+                              model,
+                              provider,
+                            });
     const namespacedTransport = isGq
       ? "groq"
       : isTg
@@ -628,7 +659,9 @@ export async function listModelCatalog(
                     ? "zai"
                     : isMinimax
                       ? "minimax"
-                      : null;
+                      : isCustom
+                        ? "custom_openai"
+                        : null;
     models.push({
       id: namespacedTransport
         ? `provider:openai_compatible:${namespacedTransport}:${model}`
@@ -654,7 +687,9 @@ export async function listModelCatalog(
                             ? "Z.AI"
                             : namespacedTransport === "minimax"
                               ? "MiniMax"
-                              : "Z.AI Coding"
+                              : namespacedTransport === "custom_openai"
+                                ? "Custom"
+                                : "Z.AI Coding"
             } · ${model}`
           : model,
       model,
@@ -707,6 +742,13 @@ export async function listModelCatalog(
                     ? { transport: "zai", baseUrl: ZAI_API_BASE_URL }
                   : active.transport === "minimax"
                     ? { transport: "minimax", baseUrl: MINIMAX_API_BASE_URL }
+                  : active.transport === "custom_openai"
+                    ? {
+                        transport: "custom_openai",
+                        baseUrl:
+                          resolveCustomOpenAiBaseUrl(db, "intelligence") ??
+                          undefined,
+                      }
                   : active.transport === "zai_coding"
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
                     : {}),
@@ -849,6 +891,9 @@ export async function selectIntelligenceModel(
         !isZaiVaultSecretId(s.id) &&
         s.name !== MINIMAX_API_KEY_SECRET_NAME &&
         !isMinimaxVaultSecretId(s.id) &&
+        s.name !== CUSTOM_OPENAI_API_KEY_SECRET_NAME &&
+        s.name !== CUSTOM_OPENAI_BASE_URL_SECRET_NAME &&
+        !isCustomOpenAiVaultSecretId(s.id) &&
         s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
         !isZaiCodingVaultSecretId(s.id)
     );
@@ -863,6 +908,7 @@ export async function selectIntelligenceModel(
     const xaiReady = isXaiPlatformReady(db, "intelligence");
     const zaiReady = isZaiPlatformReady(db, "intelligence");
     const minimaxReady = isMinimaxPlatformReady(db, "intelligence");
+    const customOpenAiReady = isCustomOpenAiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
@@ -876,6 +922,7 @@ export async function selectIntelligenceModel(
       | "xai"
       | "zai"
       | "minimax"
+      | "custom_openai"
       | "zai_coding"
       | null = null;
     if (provider === "openai") {
@@ -945,6 +992,9 @@ export async function selectIntelligenceModel(
         transport === "minimax" ||
         base.includes("api.minimax.io") ||
         keyHint === MINIMAX_API_KEY_SECRET_ID;
+      const wantsCustomOpenAi =
+        transport === "custom_openai" ||
+        keyHint === CUSTOM_OPENAI_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -1009,6 +1059,14 @@ export async function selectIntelligenceModel(
         }
         preferredId = MINIMAX_API_KEY_SECRET_ID;
         compatibleTransport = "minimax";
+      } else if (wantsCustomOpenAi) {
+        if (!customOpenAiReady) {
+          throw new Error(
+            "Connect a custom OpenAI-compatible endpoint in Vault before using it"
+          );
+        }
+        preferredId = CUSTOM_OPENAI_API_KEY_SECRET_ID;
+        compatibleTransport = "custom_openai";
       } else {
         preferredId =
           secrets.find(
@@ -1060,6 +1118,19 @@ export async function selectIntelligenceModel(
                         transport: "minimax" as const,
                         baseUrl: MINIMAX_API_BASE_URL,
                       }
+                  : compatibleTransport === "custom_openai"
+                    ? (() => {
+                        const url = resolveCustomOpenAiBaseUrl(db, "intelligence");
+                        if (!url) {
+                          throw new Error(
+                            "Custom OpenAI-compatible base URL is missing from Vault"
+                          );
+                        }
+                        return {
+                          transport: "custom_openai" as const,
+                          baseUrl: url,
+                        };
+                      })()
                   : compatibleTransport === "zai_coding"
                     ? {
                         transport: "zai_coding" as const,
@@ -1082,6 +1153,7 @@ export async function selectIntelligenceModel(
       xai: undefined,
       zai: undefined,
       minimax: undefined,
+      customOpenai: undefined,
       zaiCoding: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
@@ -1099,6 +1171,8 @@ export async function selectIntelligenceModel(
                 ? { zaiCoding: true }
                 : transportBase.transport === "google_ai"
                   ? { googleAi: true, google_ai: true }
+                  : transportBase.transport === "custom_openai"
+                    ? { customOpenai: true }
                   : { [transportBase.transport]: true }),
           }
         : {
@@ -1132,6 +1206,8 @@ export async function selectIntelligenceModel(
                     ? "Z.AI"
                   : compatibleTransport === "minimax"
                     ? "MiniMax"
+                  : compatibleTransport === "custom_openai"
+                    ? "Custom"
                   : compatibleTransport === "zai_coding"
                     ? "Z.AI Coding"
                     : null;

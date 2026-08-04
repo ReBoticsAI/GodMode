@@ -26,6 +26,7 @@ import {
   resolveXaiHarnessProfile,
   resolveZaiPaygHarnessProfile,
   resolveMinimaxPaygHarnessProfile,
+  resolveCustomOpenAiHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -360,6 +361,17 @@ assert.equal(
     baseUrl: "https://api.minimax.io/v1",
   }).id,
   "minimax-payg"
+);
+assert.equal(resolveCustomOpenAiHarnessProfile("any-model").id, "custom-openai");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "my-model",
+    transport: "custom_openai",
+    baseUrl: "https://example.com/v1",
+  }).id,
+  "custom-openai"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");
