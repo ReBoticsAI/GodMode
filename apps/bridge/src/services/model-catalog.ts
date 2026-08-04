@@ -52,6 +52,15 @@ import {
   FIREWORKS_API_KEY_SECRET_NAME,
   FIREWORKS_CHAT_CATALOG,
 } from "./fireworks-platform.js";
+import {
+  isDeepSeekAgentConfig,
+  isDeepSeekPlatformReady,
+  isDeepSeekVaultSecretId,
+  DEEPSEEK_API_BASE_URL,
+  DEEPSEEK_API_KEY_SECRET_ID,
+  DEEPSEEK_API_KEY_SECRET_NAME,
+  DEEPSEEK_CHAT_CATALOG,
+} from "./deepseek-platform.js";
 import type { AppDatabase } from "../db.js";
 import type { CoreDatabase } from "../core-db.js";
 import { isEmbeddingGguf, type LlmManager } from "./llm-manager.js";
@@ -140,6 +149,16 @@ function fireworksHarnessInput(model: string) {
   };
 }
 
+function deepseekHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "deepseek",
+    baseUrl: DEEPSEEK_API_BASE_URL,
+  };
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -206,7 +225,9 @@ export async function listModelCatalog(
       s.name !== TOGETHER_API_KEY_SECRET_NAME &&
       !isTogetherVaultSecretId(s.id) &&
       s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
-      !isFireworksVaultSecretId(s.id)
+      !isFireworksVaultSecretId(s.id) &&
+      s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
+      !isDeepSeekVaultSecretId(s.id)
   );
   const hasOpenAi =
     isOpenAiPlatformReady(db, catalogAgentId) ||
@@ -220,6 +241,7 @@ export async function listModelCatalog(
   const hasGroq = isGroqPlatformReady(db, catalogAgentId);
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
   const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
+  const hasDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
     for (const m of OPENAI_CATALOG) {
@@ -331,6 +353,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasDeepSeek) {
+    const agentIsDeepSeek =
+      agent?.backend === "provider" && isDeepSeekAgentConfig(agent.config);
+    for (const m of DEEPSEEK_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(deepseekHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:deepseek:${m.id}`,
+        source: "provider",
+        label: `DeepSeek · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "deepseek",
+        active: Boolean(agentIsDeepSeek && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
 
   // Keep configured provider model visible even if not in the static list.
   if (
@@ -345,6 +384,7 @@ export async function listModelCatalog(
     const isGq = isGroqAgentConfig(agent.config);
     const isTg = isTogetherAgentConfig(agent.config);
     const isFw = isFireworksAgentConfig(agent.config);
+    const isDs = isDeepSeekAgentConfig(agent.config);
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
       : isGq
@@ -353,40 +393,35 @@ export async function listModelCatalog(
           ? resolveHarnessProfile(togetherHarnessInput(model))
           : isFw
             ? resolveHarnessProfile(fireworksHarnessInput(model))
-            : resolveHarnessProfile({
-                source: "provider",
-                model,
-                provider,
-              });
+            : isDs
+              ? resolveHarnessProfile(deepseekHarnessInput(model))
+              : resolveHarnessProfile({
+                  source: "provider",
+                  model,
+                  provider,
+                });
+    const namespacedTransport = isGq
+      ? "groq"
+      : isTg
+        ? "together"
+        : isFw
+          ? "fireworks"
+          : isDs
+            ? "deepseek"
+            : null;
     models.push({
-      id: isGq
-        ? `provider:openai_compatible:groq:${model}`
-        : isTg
-          ? `provider:openai_compatible:together:${model}`
-          : isFw
-            ? `provider:openai_compatible:fireworks:${model}`
-            : `provider:${provider}:${model}`,
+      id: namespacedTransport
+        ? `provider:openai_compatible:${namespacedTransport}:${model}`
+        : `provider:${provider}:${model}`,
       source: "provider",
       label: isOr
         ? `OpenRouter · ${model}`
-        : isGq
-          ? `Groq · ${model}`
-          : isTg
-            ? `Together · ${model}`
-            : isFw
-              ? `Fireworks · ${model}`
-              : model,
+        : namespacedTransport
+          ? `${namespacedTransport === "groq" ? "Groq" : namespacedTransport === "together" ? "Together" : namespacedTransport === "fireworks" ? "Fireworks" : "DeepSeek"} · ${model}`
+          : model,
       model,
       provider,
-      transport: isOr
-        ? "openrouter"
-        : isGq
-          ? "groq"
-          : isTg
-            ? "together"
-            : isFw
-              ? "fireworks"
-              : undefined,
+      transport: isOr ? "openrouter" : namespacedTransport ?? undefined,
       active: true,
       harnessProfileId: harness.id,
     });
@@ -424,7 +459,9 @@ export async function listModelCatalog(
             ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
             : active.transport === "fireworks"
               ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
-              : {}),
+              : active.transport === "deepseek"
+                ? { transport: "deepseek", baseUrl: DEEPSEEK_API_BASE_URL }
+                : {}),
     });
     active.harnessProfileId = profile.id;
   }
@@ -553,7 +590,9 @@ export async function selectIntelligenceModel(
         s.name !== TOGETHER_API_KEY_SECRET_NAME &&
         !isTogetherVaultSecretId(s.id) &&
         s.name !== FIREWORKS_API_KEY_SECRET_NAME &&
-        !isFireworksVaultSecretId(s.id)
+        !isFireworksVaultSecretId(s.id) &&
+        s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
+        !isDeepSeekVaultSecretId(s.id)
     );
     const openAiReady = isOpenAiPlatformReady(db, "intelligence");
     const anthropicReady = isAnthropicPlatformReady(db, "intelligence");
@@ -561,10 +600,16 @@ export async function selectIntelligenceModel(
     const groqReady = isGroqPlatformReady(db, "intelligence");
     const togetherReady = isTogetherPlatformReady(db, "intelligence");
     const fireworksReady = isFireworksPlatformReady(db, "intelligence");
+    const deepseekReady = isDeepSeekPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
-    let compatibleTransport: "openrouter" | "groq" | "together" | "fireworks" | null =
-      null;
+    let compatibleTransport:
+      | "openrouter"
+      | "groq"
+      | "together"
+      | "fireworks"
+      | "deepseek"
+      | null = null;
     if (provider === "openai") {
       if (openAiReady) {
         preferredId = OPENAI_API_KEY_SECRET_ID;
@@ -608,6 +653,10 @@ export async function selectIntelligenceModel(
         transport === "fireworks" ||
         base.includes("api.fireworks.ai") ||
         keyHint === FIREWORKS_API_KEY_SECRET_ID;
+      const wantsDeepSeek =
+        transport === "deepseek" ||
+        base.includes("api.deepseek.com") ||
+        keyHint === DEEPSEEK_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -632,6 +681,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = FIREWORKS_API_KEY_SECRET_ID;
         compatibleTransport = "fireworks";
+      } else if (wantsDeepSeek) {
+        if (!deepseekReady) {
+          throw new Error("Connect DeepSeek in Vault before using DeepSeek models");
+        }
+        preferredId = DEEPSEEK_API_KEY_SECRET_ID;
+        compatibleTransport = "deepseek";
       } else {
         preferredId =
           secrets.find(
@@ -652,68 +707,49 @@ export async function selectIntelligenceModel(
     }
 
     const apiKeyRef = input.apiKeyRef || agent.config?.apiKeyRef || preferredId;
+    const transportBase =
+      compatibleTransport === "openrouter"
+        ? { transport: "openrouter" as const, baseUrl: OPENROUTER_API_BASE_URL }
+        : compatibleTransport === "groq"
+          ? { transport: "groq" as const, baseUrl: GROQ_API_BASE_URL }
+          : compatibleTransport === "together"
+            ? { transport: "together" as const, baseUrl: TOGETHER_API_BASE_URL }
+            : compatibleTransport === "fireworks"
+              ? { transport: "fireworks" as const, baseUrl: FIREWORKS_API_BASE_URL }
+              : compatibleTransport === "deepseek"
+                ? { transport: "deepseek" as const, baseUrl: DEEPSEEK_API_BASE_URL }
+                : null;
     const profile = resolveHarnessProfile({
       source: "provider",
       model,
       provider,
-      ...(compatibleTransport === "openrouter"
-        ? { transport: "openrouter", baseUrl: OPENROUTER_API_BASE_URL }
-        : compatibleTransport === "groq"
-          ? { transport: "groq", baseUrl: GROQ_API_BASE_URL }
-          : compatibleTransport === "together"
-            ? { transport: "together", baseUrl: TOGETHER_API_BASE_URL }
-            : compatibleTransport === "fireworks"
-              ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
-              : {}),
+      ...(transportBase ?? {}),
     });
+    const clearFlags = {
+      openrouter: undefined,
+      groq: undefined,
+      together: undefined,
+      fireworks: undefined,
+      deepseek: undefined,
+    };
     const patch = applyProfileToAgentPatch(agent, profile, {
       provider,
       model,
       apiKeyRef,
-      ...(compatibleTransport === "openrouter"
+      ...(transportBase
         ? {
-            baseUrl: OPENROUTER_API_BASE_URL,
-            transport: "openrouter",
-            openrouter: true,
-            groq: undefined,
-            together: undefined,
-            fireworks: undefined,
+            ...clearFlags,
+            baseUrl: transportBase.baseUrl,
+            transport: transportBase.transport,
+            [transportBase.transport === "openrouter"
+              ? "openrouter"
+              : transportBase.transport]: true,
           }
-        : compatibleTransport === "groq"
-          ? {
-              baseUrl: GROQ_API_BASE_URL,
-              transport: "groq",
-              groq: true,
-              openrouter: undefined,
-              together: undefined,
-              fireworks: undefined,
-            }
-          : compatibleTransport === "together"
-            ? {
-                baseUrl: TOGETHER_API_BASE_URL,
-                transport: "together",
-                together: true,
-                openrouter: undefined,
-                groq: undefined,
-                fireworks: undefined,
-              }
-            : compatibleTransport === "fireworks"
-              ? {
-                  baseUrl: FIREWORKS_API_BASE_URL,
-                  transport: "fireworks",
-                  fireworks: true,
-                  openrouter: undefined,
-                  groq: undefined,
-                  together: undefined,
-                }
-              : {
-                  baseUrl: undefined,
-                  transport: undefined,
-                  openrouter: undefined,
-                  groq: undefined,
-                  together: undefined,
-                  fireworks: undefined,
-                }),
+        : {
+            baseUrl: undefined,
+            transport: undefined,
+            ...clearFlags,
+          }),
     });
     updateAgent(db, "intelligence", {
       backend: "provider",
@@ -721,28 +757,27 @@ export async function selectIntelligenceModel(
       ...patch,
     });
     markLlmReady(db);
+    const transportLabel =
+      compatibleTransport === "openrouter"
+        ? "OpenRouter"
+        : compatibleTransport === "groq"
+          ? "Groq"
+          : compatibleTransport === "together"
+            ? "Together"
+            : compatibleTransport === "fireworks"
+              ? "Fireworks"
+              : compatibleTransport === "deepseek"
+                ? "DeepSeek"
+                : null;
     return {
       ok: true,
       active: {
         id:
-          compatibleTransport === "groq"
-            ? `provider:openai_compatible:groq:${model}`
-            : compatibleTransport === "together"
-              ? `provider:openai_compatible:together:${model}`
-              : compatibleTransport === "fireworks"
-                ? `provider:openai_compatible:fireworks:${model}`
-                : `provider:${provider}:${model}`,
+          compatibleTransport && compatibleTransport !== "openrouter"
+            ? `provider:openai_compatible:${compatibleTransport}:${model}`
+            : `provider:${provider}:${model}`,
         source: "provider",
-        label:
-          compatibleTransport === "openrouter"
-            ? `OpenRouter · ${model}`
-            : compatibleTransport === "groq"
-              ? `Groq · ${model}`
-              : compatibleTransport === "together"
-                ? `Together · ${model}`
-                : compatibleTransport === "fireworks"
-                  ? `Fireworks · ${model}`
-                  : model,
+        label: transportLabel ? `${transportLabel} · ${model}` : model,
         model,
         provider,
         transport: compatibleTransport ?? undefined,
