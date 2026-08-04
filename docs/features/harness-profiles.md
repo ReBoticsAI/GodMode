@@ -57,6 +57,9 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (DeepSeek) | `deepseek-v4-flash` | `deepseek-flash` |
 | provider | openai_compatible (DeepSeek) | `deepseek-v4-pro` | `deepseek-pro` |
 | provider | openai_compatible (DeepSeek) | other | `deepseek-generic` |
+| provider | openai_compatible (Google AI) | `*flash*` | `google-ai-flash` |
+| provider | openai_compatible (Google AI) | `*pro*` | `google-ai-pro` |
+| provider | openai_compatible (Google AI) | other | `google-ai-generic` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | remote | — | * | `remote` |
 
@@ -69,6 +72,8 @@ Together is also a **transport**. Profile = `f(together transport, modelFamily)`
 Fireworks is also a **transport**. Profile = `f(fireworks transport, modelFamily)` from the model slug leaf under `accounts/fireworks/models/`. Distinct from Together/Groq/OpenRouter for the same weights. Serverless chat catalog snapshot 2026-08-03; custom model ids allowed.
 
 DeepSeek Platform is also a **transport**. Profile = `f(deepseek transport, modelFamily)`. Distinct from Fireworks/Together/OpenRouter DeepSeek routes. Catalog uses V4 ids (`deepseek-v4-flash`, `deepseek-v4-pro`); custom model ids allowed.
+
+Google AI Studio is also a **transport**. Profile = `f(google_ai transport, modelFamily)` from Gemini model ids (`*flash*` / `*pro*` / generic). Uses the OpenAI-compatible Gemini endpoint. Not Vertex and not Gemini Advanced consumer login. Catalog snapshot 2026-08-03; custom model ids allowed.
 
 Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
 

@@ -135,6 +135,15 @@ import {
   upsertDeepSeekApiKey,
 } from "../../services/deepseek-platform.js";
 import {
+  getGoogleAiAuthStatus,
+  isGoogleAiPlatformReady,
+  isGoogleAiVaultSecretId,
+  isGoogleAiVaultSecretName,
+  GOOGLE_AI_API_KEY_SECRET_ID,
+  removeGoogleAiApiKey,
+  upsertGoogleAiApiKey,
+} from "../../services/google-ai-platform.js";
+import {
   getZaiCodingAuthStatus,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -1022,6 +1031,8 @@ function isManagedPlatformSecret(secret: {
     isFireworksVaultSecretName(secret.name) ||
     isDeepSeekVaultSecretId(secret.id) ||
     isDeepSeekVaultSecretName(secret.name) ||
+    isGoogleAiVaultSecretId(secret.id) ||
+    isGoogleAiVaultSecretName(secret.name) ||
     isZaiCodingVaultSecretId(secret.id) ||
     isZaiCodingVaultSecretName(secret.name)
   );
@@ -1096,6 +1107,12 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isDeepSeekVaultSecretName(name)) {
       throw httpError(400, "DeepSeek API keys must use the DeepSeek credential flow");
+    }
+    if (isGoogleAiVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "Google AI Studio API keys must use the Google AI Studio credential flow"
+      );
     }
     if (isZaiCodingVaultSecretName(name)) {
       throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
@@ -1263,6 +1280,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === GOOGLE_AI_API_KEY_SECRET_ID) {
+      const status = getGoogleAiAuthStatus(db, scope);
+      return status.connected
+        ? record(def, GOOGLE_AI_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "google_ai",
+            display_name: "Google AI Studio",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
       const status = getZaiCodingAuthStatus(db, scope);
       return status.connected
@@ -1379,6 +1409,22 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "google_ai" ||
+      requiredText(data, "provider").toLowerCase() === "google-ai" ||
+      requiredText(data, "provider").toLowerCase() === "gemini"
+    ) {
+      upsertGoogleAiApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getGoogleAiAuthStatus(db, scope);
+      return record(def, GOOGLE_AI_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "google_ai",
+        display_name: "Google AI Studio",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "zai_coding" ||
       requiredText(data, "provider").toLowerCase() === "zai-coding"
     ) {
@@ -1439,6 +1485,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === DEEPSEEK_API_KEY_SECRET_ID) {
       removeDeepSeekApiKey(db, scope);
+      return;
+    }
+    if (id === GOOGLE_AI_API_KEY_SECRET_ID) {
+      removeGoogleAiApiKey(db, scope);
       return;
     }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
@@ -1564,6 +1614,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom Google AI Studio slug when Vault is connected.
+      if (!selected) {
+        const googleAiCustom =
+          /^provider:openai_compatible:google_ai:(.+)$/.exec(modelId);
+        if (googleAiCustom?.[1] && isGoogleAiPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Google AI · ${googleAiCustom[1]}`,
+            model: googleAiCustom[1],
+            provider: "openai_compatible",
+            transport: "google_ai",
+          };
+        }
+      }
       // Custom Fireworks slug when Vault is connected.
       if (!selected) {
         const fireworksCustom =
@@ -1616,6 +1681,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("together:") &&
           !custom[1].startsWith("fireworks:") &&
           !custom[1].startsWith("deepseek:") &&
+          !custom[1].startsWith("google_ai:") &&
           !custom[1].startsWith("zai_coding:") &&
           isOpenRouterPlatformReady(db)
         ) {
@@ -1651,9 +1717,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                 ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
                 : transport === "deepseek"
                   ? { transport: "deepseek", apiKeyRef: DEEPSEEK_API_KEY_SECRET_ID }
-                  : transport === "zai_coding"
-                    ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
-                    : {}),
+                  : transport === "google_ai"
+                    ? { transport: "google_ai", apiKeyRef: GOOGLE_AI_API_KEY_SECRET_ID }
+                    : transport === "zai_coding"
+                      ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
+                      : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {

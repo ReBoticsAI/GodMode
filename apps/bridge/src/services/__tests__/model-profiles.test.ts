@@ -22,6 +22,7 @@ import {
   resolveTogetherHarnessProfile,
   resolveFireworksHarnessProfile,
   resolveDeepSeekHarnessProfile,
+  resolveGoogleAiHarnessProfile,
   resolveZaiCodingHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
@@ -304,6 +305,19 @@ assert.equal(
     transport: "deepseek",
   }).id,
   "deepseek-pro"
+);
+assert.equal(resolveGoogleAiHarnessProfile("gemini-2.5-flash").id, "google-ai-flash");
+assert.equal(resolveGoogleAiHarnessProfile("gemini-2.5-pro").id, "google-ai-pro");
+assert.equal(resolveGoogleAiHarnessProfile("gemini-exp-1206").id, "google-ai-generic");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "gemini-2.5-pro",
+    transport: "google_ai",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+  }).id,
+  "google-ai-pro"
 );
 assert.equal(resolveZaiCodingHarnessProfile("glm-5.1").id, "zai-coding");
 assert.notEqual(resolveZaiCodingHarnessProfile("glm-5.1").id, "together-glm");

@@ -1013,6 +1013,86 @@ export function resolveDeepSeekHarnessProfile(
   return DEEPSEEK_GENERIC_PROFILE;
 }
 
+/** Shared Google AI Studio transport middleware (BYOK via OpenAI-compatible tools). */
+const GOOGLE_AI_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+function googleAiFamilyDelta(id: string, familyLines: string[]): string {
+  return [
+    `<model_profile id="${id}">`,
+    "You are running via Google AI Studio / Gemini API (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not Vertex, and not Gemini Advanced consumer login.",
+    "Use native OpenAI-style function calling as exposed by the Gemini OpenAI-compat endpoint. Do not invent tool names.",
+    ...familyLines,
+    "</model_profile>",
+  ].join("\n");
+}
+
+export const GOOGLE_AI_FLASH_PROFILE: ModelHarnessProfile = {
+  id: "google-ai-flash",
+  label: "Google AI Flash",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GOOGLE_AI_TRANSPORT_DEFERRED],
+  harnessDelta: googleAiFamilyDelta("google-ai-flash", [
+    "Gemini Flash via Google AI Studio: lean tool surface; prefer structured schemas; keep discovery deferred.",
+  ]),
+};
+
+export const GOOGLE_AI_PRO_PROFILE: ModelHarnessProfile = {
+  id: "google-ai-pro",
+  label: "Google AI Pro",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 16,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GOOGLE_AI_TRANSPORT_DEFERRED],
+  harnessDelta: googleAiFamilyDelta("google-ai-pro", [
+    "Gemini Pro via Google AI Studio: prefer structured tool schemas; one purposeful tool turn when possible.",
+  ]),
+};
+
+export const GOOGLE_AI_GENERIC_PROFILE: ModelHarnessProfile = {
+  id: "google-ai-generic",
+  label: "Google AI (generic)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...GOOGLE_AI_TRANSPORT_DEFERRED],
+  harnessDelta: googleAiFamilyDelta("google-ai-generic", [
+    "Generic Google AI Studio route: OpenAI-compatible tools; keep discovery deferred unless asked.",
+  ]),
+};
+
+/**
+ * Map Google AI Studio / Gemini model id → family harness.
+ * Transport is Google AI Studio; distinct from OpenRouter/Together Gemini routes.
+ */
+export function resolveGoogleAiHarnessProfile(
+  modelSlug: string | null | undefined
+): ModelHarnessProfile {
+  const slug = (modelSlug ?? "").trim().toLowerCase();
+  if (slug.includes("pro")) return GOOGLE_AI_PRO_PROFILE;
+  if (slug.includes("flash") || slug.includes("flash-lite")) {
+    return GOOGLE_AI_FLASH_PROFILE;
+  }
+  return GOOGLE_AI_GENERIC_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1125,6 +1205,9 @@ const REGISTRY: ModelHarnessProfile[] = [
   DEEPSEEK_FLASH_PROFILE,
   DEEPSEEK_PRO_PROFILE,
   DEEPSEEK_GENERIC_PROFILE,
+  GOOGLE_AI_FLASH_PROFILE,
+  GOOGLE_AI_PRO_PROFILE,
+  GOOGLE_AI_GENERIC_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1158,6 +1241,12 @@ function isDeepSeekTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "deepseek") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.deepseek.com");
+}
+
+function isGoogleAiTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "google_ai") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("generativelanguage.googleapis.com");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1238,6 +1327,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isDeepSeekTransport(input)) {
       return resolveDeepSeekHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isGoogleAiTransport(input)) {
+      return resolveGoogleAiHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isZaiCodingTransport(input)) {
       return resolveZaiCodingHarnessProfile(input.model);
     }
@@ -1290,6 +1382,11 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.deepseek.com")
       ) {
         transport = "deepseek";
+      } else if (
+        cfg.googleAi === true ||
+        (baseUrl ?? "").toLowerCase().includes("generativelanguage.googleapis.com")
+      ) {
+        transport = "google_ai";
       } else if (
         cfg.zaiCoding === true ||
         (baseUrl ?? "").toLowerCase().includes("api.z.ai/api/coding/")

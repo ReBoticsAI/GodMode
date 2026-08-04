@@ -2449,6 +2449,70 @@ export const applyDeepSeekToIntelligence = (model = "deepseek-v4-flash") =>
     true
   );
 
+export type GoogleAiAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchGoogleAiStatus = async (
+  agentId?: string | null
+): Promise<GoogleAiAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "google-ai-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "google_ai") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectGoogleAiApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "google_ai",
+      label: "Google AI Studio",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchGoogleAiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectGoogleAiApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "google-ai-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchGoogleAiStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyGoogleAiToIntelligence = (model = "gemini-2.5-flash") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:google_ai:${model}` },
+    "runtime",
+    true
+  );
+
 export type ZaiCodingAuthStatus = {
   connected: boolean;
   source: "env" | "vault" | "none";
