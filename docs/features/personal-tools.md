@@ -20,4 +20,4 @@ Every workspace includes these sidebar pages:
 - **Notifications**: platform alerts ([[notifications]])
 - **Support**: submit and track help requests ([[support]])
 
-Add API keys in **Settings → Vault → Inference**, then point Intelligence at a cloud provider under **Agents → Pipeline → Backend** if you are not using a local model.
+Add API keys in **Platform Vault → Inference**, then point Intelligence at a cloud provider under **Agents → Pipeline → Backend** if you are not using a local model.

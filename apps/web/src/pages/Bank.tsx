@@ -13,7 +13,7 @@ import {
 import { api } from "@/api";
 import { agentVaultHref, userVaultWalletsHref } from "@/lib/navigation";
 
-/** Ledger-only Bank. Wallets & Accounts live under Vault. */
+/** Ledger-only Bank. Wallets & Accounts live under Personal Vault. */
 export default function Bank({
   embedded = false,
   agentId = null,
@@ -51,7 +51,7 @@ export default function Bank({
         <CardTitle>Ledger</CardTitle>
         <CardDescription>
           Transaction history across connected wallets and accounts. Connect
-          wallets and accounts under Vault → Wallets & Accounts.
+          wallets and accounts under Personal Vault → Wallets & Accounts.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -61,7 +61,7 @@ export default function Bank({
           <p className="text-sm text-muted-foreground">
             No ledger entries yet. Manual ledger entries are coming soon;
             balances update when you sync live connections or enter balances
-            under Vault → Wallets & Accounts.
+            under Personal Vault → Wallets & Accounts.
           </p>
         ) : (
           <ul className="flex flex-col gap-2 text-sm">
@@ -87,7 +87,7 @@ export default function Bank({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            Ledger for this workspace. Manage wallets and accounts in the Vault
+            Ledger for this workspace. Manage wallets and accounts in the Personal Vault
             tab.
           </p>
           <Link
@@ -95,7 +95,7 @@ export default function Bank({
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <Settings2Icon data-icon="inline-start" />
-            Vault → Wallets & Accounts
+            Personal Vault → Wallets & Accounts
           </Link>
         </div>
         {body}
@@ -107,14 +107,14 @@ export default function Bank({
     <Page>
       <PageHeader
         title="Bank"
-        description="Ledger across connected wallets and accounts. Connect and manage holdings under Vault → Wallets & Accounts."
+        description="Ledger across connected wallets and accounts. Connect and manage holdings under Personal Vault → Wallets & Accounts."
         actions={
           <Link
             to={userVaultWalletsHref()}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <Settings2Icon data-icon="inline-start" />
-            Vault → Wallets & Accounts
+            Personal Vault → Wallets & Accounts
           </Link>
         }
       />

@@ -1,8 +1,14 @@
 import { NavLink } from "react-router-dom";
-import { LogOutIcon, SettingsIcon, ShieldIcon } from "lucide-react";
+import { KeyRoundIcon, LogOutIcon, SettingsIcon, ShieldIcon } from "lucide-react";
 import { SidebarNav } from "@/components/SidebarNav";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
-import { ADMIN_PATH, APP_NAME, HOME_PATH, SETTINGS_PATH } from "@/lib/navigation";
+import {
+  ADMIN_PATH,
+  APP_NAME,
+  HOME_PATH,
+  PLATFORM_VAULT_PATH,
+  SETTINGS_PATH,
+} from "@/lib/navigation";
 import { logoutAuth } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { cn } from "@/lib/utils";
@@ -59,6 +65,14 @@ export function SidebarShellContent({
             Admin
           </NavLink>
         )}
+        <NavLink
+          to={PLATFORM_VAULT_PATH}
+          onClick={onNavigate}
+          className={footerLinkClass}
+        >
+          <KeyRoundIcon className="size-4 shrink-0" />
+          Platform Vault
+        </NavLink>
         <NavLink to={SETTINGS_PATH} onClick={onNavigate} className={footerLinkClass}>
           <SettingsIcon className="size-4 shrink-0" />
           Settings

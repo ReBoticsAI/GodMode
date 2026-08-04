@@ -77,7 +77,7 @@ const PERSONAL_ITEMS = [
   { to: CALENDAR_PATH, label: "Calendar", Icon: CalendarDaysIcon },
   { to: TASKS_PATH, label: "Tasks", Icon: ListChecksIcon },
   { to: BANK_PATH, label: "Bank", Icon: LandmarkIcon },
-  { to: VAULT_PATH, label: "Vault", Icon: VaultIcon },
+  { to: VAULT_PATH, label: "Personal Vault", Icon: VaultIcon },
   { to: SUPPORT_PATH, label: "Support", Icon: LifeBuoyIcon },
 ] as const;
 
@@ -92,7 +92,7 @@ const NEW_PAGE_PROMPT =
   "Help me create a new page in my workspace. Ask me what the page is for, then create it and place it under the right team and unit.";
 
 /**
- * Tree navigation. Top: the user's PERSONAL pages (Calendar, Tasks, Vault, etc.).
+ * Tree navigation. Top: the user's PERSONAL pages (Calendar, Tasks, Personal Vault, etc.).
  * Middle: departments as labeled section headers, each revealing divisions as
  * expandable sub-trees. Bottom: Shared and Marketplace nodes. The active division
  * auto-expands and the active page is highlighted. Brand header, project

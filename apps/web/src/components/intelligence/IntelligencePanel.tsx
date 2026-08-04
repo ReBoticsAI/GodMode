@@ -1337,7 +1337,7 @@ export function IntelligencePanel() {
         <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
         <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
         <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
-        <TabsTrigger value="vault" className="text-xs">Vault</TabsTrigger>
+        <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
         <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
       </>
     )}

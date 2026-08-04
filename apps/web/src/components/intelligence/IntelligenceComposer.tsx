@@ -969,7 +969,7 @@ export function IntelligenceComposer({
               {catalogBySource.provider.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Cloud API (Vault keys)</DropdownMenuLabel>
+                  <DropdownMenuLabel>Cloud API (Platform Vault keys)</DropdownMenuLabel>
                   {catalogBySource.provider.map((m) => (
                     <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                       <span className="truncate">{m.label}</span>
@@ -992,7 +992,7 @@ export function IntelligenceComposer({
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled className="text-[11px]">
-                Add cloud keys in Vault · manage in Builder
+                Add cloud keys in Platform Vault · manage in Builder
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

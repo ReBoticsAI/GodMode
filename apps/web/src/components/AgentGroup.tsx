@@ -34,7 +34,7 @@ const AGENT_ITEMS: ReadonlyArray<{
   { tab: "calendar", label: "Calendar", Icon: CalendarDaysIcon },
   { tab: "projects", label: "Automations", Icon: ListChecksIcon },
   { tab: "bank", label: "Bank", Icon: LandmarkIcon },
-  { tab: "vault", label: "Vault", Icon: VaultIcon },
+  { tab: "vault", label: "Agent Vault", Icon: VaultIcon },
   { tab: "support", label: "Support", Icon: LifeBuoyIcon },
 ];
 

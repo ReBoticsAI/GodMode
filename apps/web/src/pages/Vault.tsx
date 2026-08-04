@@ -55,7 +55,7 @@ import {
 } from "@/lib/navigation";
 
 /** Re-export for callers that import the deep-link helper from this module. */
-export { platformVaultSettingsHref } from "@/lib/navigation";
+export { platformVaultHref, platformVaultSettingsHref } from "@/lib/navigation";
 
 const WALLET_CATEGORIES: HoldingCategory[] = ["wallet", "exchange"];
 const ACCOUNT_CATEGORIES: HoldingCategory[] = ["bank", "paypal", "manual"];
@@ -165,13 +165,13 @@ export default function Vault({
       ? "Agent Vault"
       : mode === "platform"
         ? "Platform Vault"
-        : "Vault";
+        : "Personal Vault";
   const description =
     mode === "agent"
-      ? "Secrets and wallets private to this agent. LLM subscriptions, API keys, and search credentials live in Settings → Vault (Platform)."
+      ? "Secrets and wallets private to this agent. LLM subscriptions, API keys, and search credentials live in Platform Vault."
       : mode === "platform"
         ? "Shared platform credentials (GodMode Cloud, subscriptions, API keys, Exa). Agents fall back here when they have no matching secret of their own."
-        : "Personal connect hub for GitHub, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Settings → Vault. Storage and workspace data live in Settings → Storage.";
+        : "Personal connect hub for GitHub, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Platform Vault. Storage and workspace data live in Settings → Storage.";
 
   const body = (
     <>
@@ -219,7 +219,7 @@ export default function Vault({
               <div>
                 <h2 className="text-sm font-medium">All secrets</h2>
                 <p className="text-sm text-muted-foreground">
-                  Free-form secrets in your User Vault. Prefer named Connect cards
+                  Free-form secrets in your Personal Vault. Prefer named Connect cards
                   when one exists.
                 </p>
               </div>
@@ -242,7 +242,7 @@ export default function Vault({
                 <p className="text-sm text-muted-foreground">
                   Private to this agent. Platform keys are used only when this
                   agent has no matching secret. LLM subscriptions, API keys, and
-                  search (Exa) are configured under Settings → Vault → Inference.
+                  search (Exa) are configured under Platform Vault → Inference.
                 </p>
               </div>
               <AiSecretsCard
@@ -328,7 +328,7 @@ function WalletsAndAccountsSection({
   );
 }
 
-/** Platform Inference Connect cards (Settings → Vault → Inference). */
+/** Platform Inference Connect cards (Platform Vault → Inference). */
 export function InferenceTab({
   sub,
   onSubChange,
