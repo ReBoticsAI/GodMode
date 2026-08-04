@@ -676,6 +676,35 @@ describe("runtime ObjectType actions", () => {
     ).toBeNull();
   });
 
+  it("stores Fireworks credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: null,
+        provider: "fireworks",
+        api_key: "fireworks-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("fireworks-api-key");
+    expect(created.data).toMatchObject({
+      provider: "fireworks",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("fireworks-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "fireworks-api-key", owner)
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(db, def, "fireworks-api-key", owner);
+    expect(
+      providerCredentialRuntimeAdapter.get!(db, def, "fireworks-api-key", owner)
+    ).toBeNull();
+  });
+
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
     const active = fakeServices();
     configureRuntimeAdapterServices(active);
