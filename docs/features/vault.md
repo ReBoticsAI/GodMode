@@ -82,7 +82,7 @@ Use your plan (billed by the provider):
 
 Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). OpenCode Zen uses `https://opencode.ai/zen/v1` (detect Go `…/zen/go` before Zen). DigitalOcean Inference uses `https://inference.do-ai.run/v1` with a model access key (not account OAuth). Snowflake Cortex uses a PAT plus account URL normalized to `https://<account>.snowflakecomputing.com/api/v2/cortex/v1`. MiniMax Token Plan shares `https://api.minimax.io/v1` with payg but uses a distinct subscription secret id (`minimax-token-api-key`). Kimi Code uses `https://api.kimi.com/coding/v1` (not Moonshot payg). Poe uses `https://api.poe.com/v1` and spends the key owner's subscription points. Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
 
-OAuth / device-code / product-auth providers (Copilot, Codex, GitLab Duo, SuperGrok, Amazon Q) remain deferred. See [Vault OAuth subscription providers](./vault-oauth-subscriptions.md) (#355).
+Active #355 OAuth residual: GitHub Copilot, GitLab Duo, and xAI SuperGrok / X Premium. ChatGPT Codex OAuth is out of scope (grey ToS). Amazon Q / Kiro is deferred / later. See [Vault OAuth subscription providers](./vault-oauth-subscriptions.md).
 
 ### API Keys
 
