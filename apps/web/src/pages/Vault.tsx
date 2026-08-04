@@ -28,6 +28,7 @@ import { OpenAiPlatformCard } from "@/pages/ai-settings/OpenAiPlatformCard";
 import { OpenRouterCard } from "@/pages/ai-settings/OpenRouterCard";
 import { GroqCard } from "@/pages/ai-settings/GroqCard";
 import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
+import { FireworksCard } from "@/pages/ai-settings/FireworksCard";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
 import {
   normalizeVaultInferenceSub,
@@ -336,6 +337,7 @@ export function InferenceTab({
           <OpenRouterCard vaultAgentId={vaultAgentId} />
           <GroqCard vaultAgentId={vaultAgentId} />
           <TogetherCard vaultAgentId={vaultAgentId} />
+          <FireworksCard vaultAgentId={vaultAgentId} />
         </section>
       </TabsContent>
 

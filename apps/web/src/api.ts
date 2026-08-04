@@ -2319,6 +2319,72 @@ export const applyTogetherToIntelligence = (
     true
   );
 
+export type FireworksAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchFireworksStatus = async (
+  agentId?: string | null
+): Promise<FireworksAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "fireworks-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "fireworks") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectFireworksApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "fireworks",
+      label: "Fireworks",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchFireworksStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectFireworksApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "fireworks-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchFireworksStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyFireworksToIntelligence = (
+  model = "accounts/fireworks/models/deepseek-v4-pro"
+) =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:fireworks:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
