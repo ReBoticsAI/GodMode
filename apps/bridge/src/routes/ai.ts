@@ -1008,6 +1008,9 @@ export function createAiRouter(
         s.id !== "google-ai-api-key" &&
         !s.id.startsWith("google-ai-api-key__agent__") &&
         s.name !== "google_ai_api_key" &&
+        s.id !== "xai-api-key" &&
+        !s.id.startsWith("xai-api-key__agent__") &&
+        s.name !== "xai_api_key" &&
         s.id !== "zai-coding-api-key" &&
         !s.id.startsWith("zai-coding-api-key__agent__") &&
         s.name !== "zai_coding_api_key"

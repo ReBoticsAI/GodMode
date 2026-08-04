@@ -32,6 +32,7 @@ import { TogetherCard } from "@/pages/ai-settings/TogetherCard";
 import { FireworksCard } from "@/pages/ai-settings/FireworksCard";
 import { DeepSeekCard } from "@/pages/ai-settings/DeepSeekCard";
 import { GoogleAiStudioCard } from "@/pages/ai-settings/GoogleAiStudioCard";
+import { XaiConsoleCard } from "@/pages/ai-settings/XaiConsoleCard";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
 import {
@@ -366,6 +367,7 @@ export function InferenceTab({
           <FireworksCard vaultAgentId={null} />
           <DeepSeekCard vaultAgentId={null} />
           <GoogleAiStudioCard vaultAgentId={null} />
+          <XaiConsoleCard vaultAgentId={null} />
         </section>
       </TabsContent>
 
