@@ -1229,6 +1229,43 @@ export function resolveMinimaxPaygHarnessProfile(
   return MINIMAX_PAYG_PROFILE;
 }
 
+/** Custom OpenAI-compatible escape hatch (#231). */
+const CUSTOM_OPENAI_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const CUSTOM_OPENAI_PROFILE: ModelHarnessProfile = {
+  id: "custom-openai",
+  label: "Custom OpenAI-compatible",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...CUSTOM_OPENAI_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="custom-openai">',
+    "You are running via a custom OpenAI-compatible endpoint (metered BYOK escape hatch).",
+    "This is not the Cursor SDK path and not a named Vault provider transport.",
+    "Use native OpenAI-style function calling as exposed by the endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "Keep the tool surface lean; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveCustomOpenAiHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return CUSTOM_OPENAI_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1348,6 +1385,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   XAI_GENERIC_PROFILE,
   ZAI_PAYG_PROFILE,
   MINIMAX_PAYG_PROFILE,
+  CUSTOM_OPENAI_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1405,6 +1443,10 @@ function isMinimaxTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "minimax") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.minimax.io");
+}
+
+function isCustomOpenAiTransport(input: ResolveProfileInput): boolean {
+  return (input.transport ?? "").toLowerCase() === "custom_openai";
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1500,6 +1542,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isMinimaxTransport(input)) {
       return resolveMinimaxPaygHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isCustomOpenAiTransport(input)) {
+      return resolveCustomOpenAiHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1575,6 +1620,8 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.minimax.io")
       ) {
         transport = "minimax";
+      } else if (cfg.customOpenai === true || cfg.transport === "custom_openai") {
+        transport = "custom_openai";
       }
     }
     return resolveHarnessProfile({
