@@ -72,6 +72,7 @@ Use your plan (billed by the provider):
 |----------|-----------|-----------------|------|
 | Cursor | `cursor-api-key` | `cursor-*` family | Cursor subscription |
 | Z.AI GLM Coding Plan | `zai-coding-api-key` | `zai-coding` | [Coding Plan](https://docs.z.ai/devpack/quick-start) |
+| OpenCode Go | `opencode-go-api-key` | `opencode-go` | [OpenCode Go](https://opencode.ai/docs/go/) |
 
 Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
 

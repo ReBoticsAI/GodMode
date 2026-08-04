@@ -1025,7 +1025,10 @@ export function createAiRouter(
         s.name !== "custom_openai_base_url" &&
         s.id !== "zai-coding-api-key" &&
         !s.id.startsWith("zai-coding-api-key__agent__") &&
-        s.name !== "zai_coding_api_key"
+        s.name !== "zai_coding_api_key" &&
+        s.id !== "opencode-go-api-key" &&
+        !s.id.startsWith("opencode-go-api-key__agent__") &&
+        s.name !== "opencode_go_api_key"
     );
     res.json({ secrets });
   });

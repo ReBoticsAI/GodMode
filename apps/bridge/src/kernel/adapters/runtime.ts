@@ -188,6 +188,15 @@ import {
   removeZaiCodingApiKey,
   upsertZaiCodingApiKey,
 } from "../../services/zai-coding-platform.js";
+import {
+  getOpencodeGoAuthStatus,
+  isOpencodeGoPlatformReady,
+  isOpencodeGoVaultSecretId,
+  isOpencodeGoVaultSecretName,
+  OPENCODE_GO_API_KEY_SECRET_ID,
+  removeOpencodeGoApiKey,
+  upsertOpencodeGoApiKey,
+} from "../../services/opencode-go-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -1078,7 +1087,9 @@ function isManagedPlatformSecret(secret: {
     isCustomOpenAiVaultSecretId(secret.id) ||
     isCustomOpenAiVaultSecretName(secret.name) ||
     isZaiCodingVaultSecretId(secret.id) ||
-    isZaiCodingVaultSecretName(secret.name)
+    isZaiCodingVaultSecretName(secret.name) ||
+    isOpencodeGoVaultSecretId(secret.id) ||
+    isOpencodeGoVaultSecretName(secret.name)
   );
 }
 
@@ -1175,6 +1186,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isZaiCodingVaultSecretName(name)) {
       throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
+    }
+    if (isOpencodeGoVaultSecretName(name)) {
+      throw httpError(400, "OpenCode Go API keys must use the OpenCode Go credential flow");
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
@@ -1418,6 +1432,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === OPENCODE_GO_API_KEY_SECRET_ID) {
+      const status = getOpencodeGoAuthStatus(db, scope);
+      return status.connected
+        ? record(def, OPENCODE_GO_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "opencode_go",
+            display_name: "OpenCode Go",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1614,6 +1641,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (
+      requiredText(data, "provider").toLowerCase() === "opencode_go" ||
+      requiredText(data, "provider").toLowerCase() === "opencode-go"
+    ) {
+      upsertOpencodeGoApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getOpencodeGoAuthStatus(db, scope);
+      return record(def, OPENCODE_GO_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "opencode_go",
+        display_name: "OpenCode Go",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1684,6 +1726,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
       removeZaiCodingApiKey(db, scope);
+      return;
+    }
+    if (id === OPENCODE_GO_API_KEY_SECRET_ID) {
+      removeOpencodeGoApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1787,6 +1833,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
             model: zaiCustom[1],
             provider: "openai_compatible",
             transport: "zai_coding",
+          };
+        }
+      }
+      // Custom OpenCode Go slug when Vault is connected.
+      if (!selected) {
+        const ocCustom =
+          /^provider:openai_compatible:opencode_go:(.+)$/.exec(modelId);
+        if (ocCustom?.[1] && isOpencodeGoPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `OpenCode Go · ${ocCustom[1]}`,
+            model: ocCustom[1],
+            provider: "openai_compatible",
+            transport: "opencode_go",
           };
         }
       }
@@ -1936,6 +1997,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("minimax:") &&
           !custom[1].startsWith("custom_openai:") &&
           !custom[1].startsWith("zai_coding:") &&
+          !custom[1].startsWith("opencode_go:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -1985,6 +2047,8 @@ export const modelRuntimeAdapter: RecordAdapter = {
                         }
                     : transport === "zai_coding"
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
+                    : transport === "opencode_go"
+                      ? { transport: "opencode_go", apiKeyRef: OPENCODE_GO_API_KEY_SECRET_ID }
                       : {}),
       });
     },
