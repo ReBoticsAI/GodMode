@@ -88,6 +88,7 @@ Metered BYOK with named Connect cards:
 | Together | `together-api-key` | `together-*` family (from model id) | [Together](https://docs.together.ai/docs/inference/openai-compatibility) |
 | Fireworks | `fireworks-api-key` | `fireworks-*` family (from model id) | [Fireworks](https://docs.fireworks.ai/tools-sdks/openai-compatibility) |
 | DeepSeek | `deepseek-api-key` | `deepseek-flash` / `deepseek-pro` / `deepseek-generic` | [DeepSeek](https://api-docs.deepseek.com/) |
+| Google AI Studio | `google-ai-api-key` | `google-ai-flash` / `google-ai-pro` / `google-ai-generic` | [Gemini OpenAI compat](https://ai.google.dev/gemini-api/docs/openai) |
 
 ### Search
 
