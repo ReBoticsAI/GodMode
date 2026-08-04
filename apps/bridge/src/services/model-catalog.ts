@@ -80,6 +80,15 @@ import {
   XAI_CHAT_CATALOG,
 } from "./xai-platform.js";
 import {
+  isZaiAgentConfig,
+  isZaiPlatformReady,
+  isZaiVaultSecretId,
+  ZAI_API_BASE_URL,
+  ZAI_API_KEY_SECRET_ID,
+  ZAI_API_KEY_SECRET_NAME,
+  ZAI_CHAT_CATALOG,
+} from "./zai-platform.js";
+import {
   isZaiCodingAgentConfig,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -206,6 +215,16 @@ function xaiHarnessInput(model: string) {
   };
 }
 
+function zaiHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "zai",
+    baseUrl: ZAI_API_BASE_URL,
+  };
+}
+
 function zaiCodingHarnessInput(model: string) {
   return {
     source: "provider" as const,
@@ -289,6 +308,8 @@ export async function listModelCatalog(
       !isGoogleAiVaultSecretId(s.id) &&
       s.name !== XAI_API_KEY_SECRET_NAME &&
       !isXaiVaultSecretId(s.id) &&
+      s.name !== ZAI_API_KEY_SECRET_NAME &&
+      !isZaiVaultSecretId(s.id) &&
       s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
       !isZaiCodingVaultSecretId(s.id)
   );
@@ -307,6 +328,7 @@ export async function listModelCatalog(
   const hasDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
   const hasGoogleAi = isGoogleAiPlatformReady(db, catalogAgentId);
   const hasXai = isXaiPlatformReady(db, catalogAgentId);
+  const hasZai = isZaiPlatformReady(db, catalogAgentId);
   const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
 
   if (hasOpenAi) {
@@ -470,6 +492,23 @@ export async function listModelCatalog(
       });
     }
   }
+  if (hasZai) {
+    const agentIsZai =
+      agent?.backend === "provider" && isZaiAgentConfig(agent.config);
+    for (const m of ZAI_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(zaiHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:zai:${m.id}`,
+        source: "provider",
+        label: `Z.AI · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "zai",
+        active: Boolean(agentIsZai && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
   if (hasZaiCoding) {
     const agentIsZai =
       agent?.backend === "provider" && isZaiCodingAgentConfig(agent.config);
@@ -503,7 +542,8 @@ export async function listModelCatalog(
     const isFw = isFireworksAgentConfig(agent.config);
     const isDs = isDeepSeekAgentConfig(agent.config);
     const isGa = isGoogleAiAgentConfig(agent.config);
-    const isXai = isXaiAgentConfig(agent.config);
+    const isXaiCfg = isXaiAgentConfig(agent.config);
+    const isZaiPayg = isZaiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
     const harness = isOr
       ? resolveHarnessProfile(openRouterHarnessInput(model))
@@ -517,15 +557,17 @@ export async function listModelCatalog(
               ? resolveHarnessProfile(deepseekHarnessInput(model))
               : isGa
                 ? resolveHarnessProfile(googleAiHarnessInput(model))
-                : isXai
+                : isXaiCfg
                   ? resolveHarnessProfile(xaiHarnessInput(model))
                   : isZai
                     ? resolveHarnessProfile(zaiCodingHarnessInput(model))
-                    : resolveHarnessProfile({
-                        source: "provider",
-                        model,
-                        provider,
-                      });
+                    : isZaiPayg
+                      ? resolveHarnessProfile(zaiHarnessInput(model))
+                      : resolveHarnessProfile({
+                          source: "provider",
+                          model,
+                          provider,
+                        });
     const namespacedTransport = isGq
       ? "groq"
       : isTg
@@ -536,11 +578,13 @@ export async function listModelCatalog(
             ? "deepseek"
             : isGa
               ? "google_ai"
-              : isXai
+              : isXaiCfg
                 ? "xai"
                 : isZai
                   ? "zai_coding"
-                  : null;
+                  : isZaiPayg
+                    ? "zai"
+                    : null;
     models.push({
       id: namespacedTransport
         ? `provider:openai_compatible:${namespacedTransport}:${model}`
@@ -562,7 +606,9 @@ export async function listModelCatalog(
                         ? "Google AI"
                         : namespacedTransport === "xai"
                           ? "xAI"
-                          : "Z.AI Coding"
+                          : namespacedTransport === "zai"
+                            ? "Z.AI"
+                            : "Z.AI Coding"
             } · ${model}`
           : model,
       model,
@@ -611,6 +657,8 @@ export async function listModelCatalog(
                   ? { transport: "google_ai", baseUrl: GOOGLE_AI_API_BASE_URL }
                   : active.transport === "xai"
                     ? { transport: "xai", baseUrl: XAI_API_BASE_URL }
+                  : active.transport === "zai"
+                    ? { transport: "zai", baseUrl: ZAI_API_BASE_URL }
                   : active.transport === "zai_coding"
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
                     : {}),
@@ -749,6 +797,8 @@ export async function selectIntelligenceModel(
         !isGoogleAiVaultSecretId(s.id) &&
         s.name !== XAI_API_KEY_SECRET_NAME &&
         !isXaiVaultSecretId(s.id) &&
+        s.name !== ZAI_API_KEY_SECRET_NAME &&
+        !isZaiVaultSecretId(s.id) &&
         s.name !== ZAI_CODING_API_KEY_SECRET_NAME &&
         !isZaiCodingVaultSecretId(s.id)
     );
@@ -761,6 +811,7 @@ export async function selectIntelligenceModel(
     const deepseekReady = isDeepSeekPlatformReady(db, "intelligence");
     const googleAiReady = isGoogleAiPlatformReady(db, "intelligence");
     const xaiReady = isXaiPlatformReady(db, "intelligence");
+    const zaiReady = isZaiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
 
     let preferredId: string | undefined;
@@ -772,6 +823,7 @@ export async function selectIntelligenceModel(
       | "deepseek"
       | "google_ai"
       | "xai"
+      | "zai"
       | "zai_coding"
       | null = null;
     if (provider === "openai") {
@@ -833,6 +885,10 @@ export async function selectIntelligenceModel(
         transport === "zai_coding" ||
         base.includes("api.z.ai/api/coding/") ||
         keyHint === ZAI_CODING_API_KEY_SECRET_ID;
+      const wantsZai =
+        transport === "zai" ||
+        (base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/")) ||
+        keyHint === ZAI_API_KEY_SECRET_ID;
       if (wantsOpenRouter) {
         if (!openRouterReady) {
           throw new Error("Connect OpenRouter in Vault before using OpenRouter models");
@@ -885,6 +941,12 @@ export async function selectIntelligenceModel(
         }
         preferredId = ZAI_CODING_API_KEY_SECRET_ID;
         compatibleTransport = "zai_coding";
+      } else if (wantsZai) {
+        if (!zaiReady) {
+          throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
+        }
+        preferredId = ZAI_API_KEY_SECRET_ID;
+        compatibleTransport = "zai";
       } else {
         preferredId =
           secrets.find(
@@ -926,6 +988,11 @@ export async function selectIntelligenceModel(
                         transport: "xai" as const,
                         baseUrl: XAI_API_BASE_URL,
                       }
+                  : compatibleTransport === "zai"
+                    ? {
+                        transport: "zai" as const,
+                        baseUrl: ZAI_API_BASE_URL,
+                      }
                   : compatibleTransport === "zai_coding"
                     ? {
                         transport: "zai_coding" as const,
@@ -946,6 +1013,7 @@ export async function selectIntelligenceModel(
       deepseek: undefined,
       googleAi: undefined,
       xai: undefined,
+      zai: undefined,
       zaiCoding: undefined,
     };
     const patch = applyProfileToAgentPatch(agent, profile, {
@@ -992,6 +1060,8 @@ export async function selectIntelligenceModel(
                   ? "Google AI"
                   : compatibleTransport === "xai"
                     ? "xAI"
+                  : compatibleTransport === "zai"
+                    ? "Z.AI"
                   : compatibleTransport === "zai_coding"
                     ? "Z.AI Coding"
                     : null;

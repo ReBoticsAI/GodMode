@@ -62,6 +62,7 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (Google AI) | other | `google-ai-generic` |
 | provider | openai_compatible (xAI) | `*grok*` | `xai-grok` |
 | provider | openai_compatible (xAI) | other | `xai-generic` |
+| provider | openai_compatible (Z.AI payg) | * | `zai-payg` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | remote | — | * | `remote` |
 
@@ -78,6 +79,8 @@ DeepSeek Platform is also a **transport**. Profile = `f(deepseek transport, mode
 Google AI Studio is also a **transport**. Profile = `f(google_ai transport, modelFamily)` from Gemini model ids (`*flash*` / `*pro*` / generic). Uses the OpenAI-compatible Gemini endpoint. Not Vertex and not Gemini Advanced consumer login. Catalog snapshot 2026-08-03; custom model ids allowed.
 
 xAI console is also a **transport**. Profile = `f(xai transport, modelFamily)` (`*grok*` / generic). Distinct from Cursor Grok and from SuperGrok / X Premium OAuth (#230). Catalog snapshot 2026-08-03; custom model ids allowed.
+
+Z.AI Platform payg is also a **transport**. Profile = `zai-payg`. Uses general `/api/paas/v4` (not Coding Plan). Distinct from `zai-coding` and Fireworks/Together GLM hosting.
 
 Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
 
