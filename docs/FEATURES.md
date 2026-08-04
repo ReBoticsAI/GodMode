@@ -41,15 +41,15 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
-- [Vault](features/vault.md) - Connect hub: Inference, Search, Integrations, Billing, and Storage.
-- [Bank](features/bank.md) - Connect wallets and accounts for you and your agents.
+- [Vault](features/vault.md) - User connect hub: Integrations, Wallets & Accounts, Marketplace, and secrets (Platform Vault and Storage live under Settings).
+- [Bank](features/bank.md) - Ledger across connected wallets and accounts (connect holdings under Vault).
 - [Support](features/support.md) - Platform bugs via GitHub; shared resource issues to owners; optional Support group.
 
 ## Social and extension
 
 - [Contacts](features/contacts.md) - Social graph for people, groups, and relationships.
 - [Shared](features/shared.md) - Live resources another user granted you; federation tooling.
-- [Settings](features/settings.md) - Account, appearance, and session settings.
+- [Settings](features/settings.md) - Account, Platform Vault, storage, appearance, and session settings.
 - [Marketplace](features/marketplace.md) - Official, Local, Community, Installed, and Sell tabs with real checkout.
 - [Intelligence plugin pipeline](features/plugin-pipeline.md) - scaffold_plugin → build_plugin → install_plugin for local and hub authoring.
 - [Git and GitHub plugins](features/git-github-plugins.md) - Structured git_* and gh_* tools for commit, PR, and CI when host tools exist.
