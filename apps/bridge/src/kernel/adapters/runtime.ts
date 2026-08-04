@@ -153,6 +153,15 @@ import {
   upsertXaiApiKey,
 } from "../../services/xai-platform.js";
 import {
+  getZaiAuthStatus,
+  isZaiPlatformReady,
+  isZaiVaultSecretId,
+  isZaiVaultSecretName,
+  ZAI_API_KEY_SECRET_ID,
+  removeZaiApiKey,
+  upsertZaiApiKey,
+} from "../../services/zai-platform.js";
+import {
   getZaiCodingAuthStatus,
   isZaiCodingPlatformReady,
   isZaiCodingVaultSecretId,
@@ -1044,6 +1053,8 @@ function isManagedPlatformSecret(secret: {
     isGoogleAiVaultSecretName(secret.name) ||
     isXaiVaultSecretId(secret.id) ||
     isXaiVaultSecretName(secret.name) ||
+    isZaiVaultSecretId(secret.id) ||
+    isZaiVaultSecretName(secret.name) ||
     isZaiCodingVaultSecretId(secret.id) ||
     isZaiCodingVaultSecretName(secret.name)
   );
@@ -1127,6 +1138,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isXaiVaultSecretName(name)) {
       throw httpError(400, "xAI API keys must use the xAI Console credential flow");
+    }
+    if (isZaiVaultSecretName(name)) {
+      throw httpError(400, "Z.AI Platform API keys must use the Z.AI Platform credential flow");
     }
     if (isZaiCodingVaultSecretName(name)) {
       throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
@@ -1320,6 +1334,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === ZAI_API_KEY_SECRET_ID) {
+      const status = getZaiAuthStatus(db, scope);
+      return status.connected
+        ? record(def, ZAI_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "zai",
+            display_name: "Z.AI Platform",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
       const status = getZaiCodingAuthStatus(db, scope);
       return status.connected
@@ -1467,6 +1494,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "zai" ||
+      requiredText(data, "provider").toLowerCase() === "z.ai"
+    ) {
+      upsertZaiApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getZaiAuthStatus(db, scope);
+      return record(def, ZAI_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "zai",
+        display_name: "Z.AI Platform",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "zai_coding" ||
       requiredText(data, "provider").toLowerCase() === "zai-coding"
     ) {
@@ -1535,6 +1577,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === XAI_API_KEY_SECRET_ID) {
       removeXaiApiKey(db, scope);
+      return;
+    }
+    if (id === ZAI_API_KEY_SECRET_ID) {
+      removeZaiApiKey(db, scope);
       return;
     }
     if (id === ZAI_CODING_API_KEY_SECRET_ID) {
@@ -1689,6 +1735,20 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom Z.AI payg slug when Vault is connected.
+      if (!selected) {
+        const zaiCustom = /^provider:openai_compatible:zai:(.+)$/.exec(modelId);
+        if (zaiCustom?.[1] && isZaiPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Z.AI · ${zaiCustom[1]}`,
+            model: zaiCustom[1],
+            provider: "openai_compatible",
+            transport: "zai",
+          };
+        }
+      }
       // Custom Fireworks slug when Vault is connected.
       if (!selected) {
         const fireworksCustom =
@@ -1743,6 +1803,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("deepseek:") &&
           !custom[1].startsWith("google_ai:") &&
           !custom[1].startsWith("xai:") &&
+          !custom[1].startsWith("zai:") &&
           !custom[1].startsWith("zai_coding:") &&
           isOpenRouterPlatformReady(db)
         ) {
@@ -1782,6 +1843,8 @@ export const modelRuntimeAdapter: RecordAdapter = {
                     ? { transport: "google_ai", apiKeyRef: GOOGLE_AI_API_KEY_SECRET_ID }
                     : transport === "xai"
                       ? { transport: "xai", apiKeyRef: XAI_API_KEY_SECRET_ID }
+                    : transport === "zai"
+                      ? { transport: "zai", apiKeyRef: ZAI_API_KEY_SECRET_ID }
                     : transport === "zai_coding"
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                       : {}),

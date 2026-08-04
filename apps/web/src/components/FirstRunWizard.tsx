@@ -244,7 +244,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogDescription>
                 Choose a subscription (use your plan: Cursor or Z.AI GLM Coding Plan) or a metered
                 Platform API key (OpenAI, Anthropic, OpenRouter, Groq, Together, Fireworks,
-                DeepSeek, Google AI Studio, xAI). Open Settings → Platform Vault to connect, then come back to finish
+                DeepSeek, Google AI Studio, xAI, Z.AI). Open Settings → Platform Vault to connect, then come back to finish
                 setup.
               </DialogDescription>
             </DialogHeader>

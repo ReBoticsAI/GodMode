@@ -1155,6 +1155,43 @@ export function resolveXaiHarnessProfile(
   return XAI_GENERIC_PROFILE;
 }
 
+/** Z.AI general payg transport (#231). Distinct from Coding Plan. */
+const ZAI_PAYG_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const ZAI_PAYG_PROFILE: ModelHarnessProfile = {
+  id: "zai-payg",
+  label: "Z.AI Platform (payg)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...ZAI_PAYG_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="zai-payg">',
+    "You are running via Z.AI Platform payg (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not GLM Coding Plan, and not Fireworks/Together GLM hosting.",
+    "Use native OpenAI-style function calling as exposed by the paas endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "GLM payg: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveZaiPaygHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return ZAI_PAYG_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1272,6 +1309,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   GOOGLE_AI_GENERIC_PROFILE,
   XAI_GROK_PROFILE,
   XAI_GENERIC_PROFILE,
+  ZAI_PAYG_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1317,6 +1355,12 @@ function isXaiTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "xai") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.x.ai");
+}
+
+function isZaiPaygTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "zai") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1406,6 +1450,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isZaiCodingTransport(input)) {
       return resolveZaiCodingHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isZaiPaygTransport(input)) {
+      return resolveZaiPaygHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1470,6 +1517,12 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.z.ai/api/coding/")
       ) {
         transport = "zai_coding";
+      } else if (
+        cfg.zai === true ||
+        ((baseUrl ?? "").toLowerCase().includes("api.z.ai/api/paas") &&
+          !(baseUrl ?? "").toLowerCase().includes("/api/coding/"))
+      ) {
+        transport = "zai";
       }
     }
     return resolveHarnessProfile({

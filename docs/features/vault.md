@@ -90,6 +90,7 @@ Metered BYOK with named Connect cards:
 | DeepSeek | `deepseek-api-key` | `deepseek-flash` / `deepseek-pro` / `deepseek-generic` | [DeepSeek](https://api-docs.deepseek.com/) |
 | Google AI Studio | `google-ai-api-key` | `google-ai-flash` / `google-ai-pro` / `google-ai-generic` | [Gemini OpenAI compat](https://ai.google.dev/gemini-api/docs/openai) |
 | xAI Console | `xai-api-key` | `xai-grok` / `xai-generic` | [xAI docs](https://docs.x.ai/docs) |
+| Z.AI Platform (payg) | `zai-api-key` | `zai-payg` | [Z.AI OpenAI compat](https://docs.z.ai/guides/develop/openai/python) |
 
 ### Search
 
