@@ -67,6 +67,7 @@ Resolution: `profile = f(backend, provider?, modelFamily?)`. Model id alone is n
 | provider | openai_compatible (MiniMax Token Plan) | * | `minimax-token` |
 | provider | openai_compatible (custom) | * | `custom-openai` |
 | provider | openai_compatible (OpenCode Go) | * | `opencode-go` |
+| provider | openai_compatible (OpenCode Zen) | * | `opencode-zen` |
 | provider | openai_compatible (Z.AI Coding Plan) | * | `zai-coding` |
 | provider | openai_compatible (Kimi Code) | * | `kimi-code` |
 | provider | openai_compatible (Poe) | * | `poe` |
@@ -95,6 +96,8 @@ MiniMax Token Plan is a **subscription transport**. Profile = `minimax-token`. S
 Custom OpenAI-compatible is also a **transport**. Profile = `custom-openai`. User-supplied base URL + key (escape hatch). Prefer named provider cards when available.
 
 OpenCode Go is a **subscription transport**. Profile = `opencode-go`. Uses `https://opencode.ai/zen/go/v1`. Distinct from OpenCode Zen and from Cursor.
+
+OpenCode Zen is also a **subscription-style transport** (API key after signup). Profile = `opencode-zen`. Uses `https://opencode.ai/zen/v1`. Detect Go (`…/zen/go`) before Zen so URL prefixes do not collide. Prefer chat/completions-compatible model ids.
 
 Z.AI GLM Coding Plan is a **subscription transport**. Profile = `zai-coding`. Uses coding-only base URL (not general Z.AI payg). Distinct from Fireworks/Together GLM hosting.
 

@@ -32,6 +32,7 @@ import {
   resolveMinimaxTokenHarnessProfile,
   resolveKimiCodeHarnessProfile,
   resolvePoeHarnessProfile,
+  resolveOpencodeZenHarnessProfile,
   resolveProfileForAgent,
   stripThinkingChannels,
 } from "../model-profiles/index.js";
@@ -448,6 +449,28 @@ assert.equal(
     baseUrl: "https://api.poe.com/v1",
   }).id,
   "poe"
+);
+assert.equal(resolveOpencodeZenHarnessProfile("kimi-k3").id, "opencode-zen");
+assert.notEqual(resolveOpencodeZenHarnessProfile("kimi-k3").id, "opencode-go");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "kimi-k3",
+    transport: "opencode_zen",
+    baseUrl: "https://opencode.ai/zen/v1",
+  }).id,
+  "opencode-zen"
+);
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "kimi-k3",
+    transport: "opencode_go",
+    baseUrl: "https://opencode.ai/zen/go/v1",
+  }).id,
+  "opencode-go"
 );
 assert.equal(
   resolveProfileForAgent({

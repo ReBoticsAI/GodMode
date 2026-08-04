@@ -3101,6 +3101,70 @@ export const applyPoeToIntelligence = (model = "Claude-Sonnet-4.6") =>
     true
   );
 
+export type OpencodeZenAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchOpencodeZenStatus = async (
+  agentId?: string | null
+): Promise<OpencodeZenAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "opencode-zen-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "opencode_zen") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectOpencodeZenApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "opencode_zen",
+      label: "OpenCode Zen",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpencodeZenStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectOpencodeZenApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "opencode-zen-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpencodeZenStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyOpencodeZenToIntelligence = (model = "kimi-k3") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:opencode_zen:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
