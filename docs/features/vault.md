@@ -91,6 +91,7 @@ Metered BYOK with named Connect cards:
 | Google AI Studio | `google-ai-api-key` | `google-ai-flash` / `google-ai-pro` / `google-ai-generic` | [Gemini OpenAI compat](https://ai.google.dev/gemini-api/docs/openai) |
 | xAI Console | `xai-api-key` | `xai-grok` / `xai-generic` | [xAI docs](https://docs.x.ai/docs) |
 | Z.AI Platform (payg) | `zai-api-key` | `zai-payg` | [Z.AI OpenAI compat](https://docs.z.ai/guides/develop/openai/python) |
+| MiniMax (payg) | `minimax-api-key` | `minimax-payg` | [MiniMax OpenAI compat](https://platform.minimax.io/docs/api-reference/text-openai-api) |
 
 ### Search
 

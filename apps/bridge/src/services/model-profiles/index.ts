@@ -1192,6 +1192,43 @@ export function resolveZaiPaygHarnessProfile(
   return ZAI_PAYG_PROFILE;
 }
 
+/** MiniMax payg transport (#231). Distinct from Token Plan and hosted MiniMax routes. */
+const MINIMAX_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const MINIMAX_PAYG_PROFILE: ModelHarnessProfile = {
+  id: "minimax-payg",
+  label: "MiniMax (payg)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...MINIMAX_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="minimax-payg">',
+    "You are running via MiniMax Platform payg (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not MiniMax Token Plan, and not Fireworks/Together/OpenRouter MiniMax hosting.",
+    "Use native OpenAI-style function calling as exposed by the MiniMax endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "MiniMax payg: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveMinimaxPaygHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return MINIMAX_PAYG_PROFILE;
+}
+
 /** Z.AI GLM Coding Plan subscription transport (#230). */
 const ZAI_CODING_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1310,6 +1347,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   XAI_GROK_PROFILE,
   XAI_GENERIC_PROFILE,
   ZAI_PAYG_PROFILE,
+  MINIMAX_PAYG_PROFILE,
   ZAI_CODING_PROFILE,
   REMOTE_PROFILE,
   GENERIC_LOCAL_PROFILE,
@@ -1361,6 +1399,12 @@ function isZaiPaygTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "zai") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/");
+}
+
+function isMinimaxTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "minimax") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("api.minimax.io");
 }
 
 function isZaiCodingTransport(input: ResolveProfileInput): boolean {
@@ -1453,6 +1497,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isZaiPaygTransport(input)) {
       return resolveZaiPaygHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isMinimaxTransport(input)) {
+      return resolveMinimaxPaygHarnessProfile(input.model);
+    }
     if (p === "openai_compatible") return OPENAI_PROFILE;
     return OPENAI_PROFILE;
   }
@@ -1523,6 +1570,11 @@ export function resolveProfileForAgent(
           !(baseUrl ?? "").toLowerCase().includes("/api/coding/"))
       ) {
         transport = "zai";
+      } else if (
+        cfg.minimax === true ||
+        (baseUrl ?? "").toLowerCase().includes("api.minimax.io")
+      ) {
+        transport = "minimax";
       }
     }
     return resolveHarnessProfile({
