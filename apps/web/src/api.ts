@@ -2385,6 +2385,70 @@ export const applyFireworksToIntelligence = (
     true
   );
 
+export type DeepSeekAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchDeepSeekStatus = async (
+  agentId?: string | null
+): Promise<DeepSeekAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "deepseek-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "deepseek") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectDeepSeekApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "deepseek",
+      label: "DeepSeek",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDeepSeekStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectDeepSeekApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "deepseek-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDeepSeekStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyDeepSeekToIntelligence = (model = "deepseek-v4-flash") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:deepseek:${model}` },
+    "runtime",
+    true
+  );
+
 export type CatalogModelSource = "local" | "cursor" | "provider" | "remote";
 
 export interface CatalogModel {
