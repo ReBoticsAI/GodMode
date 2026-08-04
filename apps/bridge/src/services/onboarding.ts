@@ -59,6 +59,14 @@ import {
   isOpencodeGoPlatformReady,
 } from "./opencode-go-platform.js";
 import {
+  getDigitalOceanInferenceAuthStatus,
+  isDigitalOceanInferencePlatformReady,
+} from "./digitalocean-inference-platform.js";
+import {
+  getSnowflakeCortexAuthStatus,
+  isSnowflakeCortexPlatformReady,
+} from "./snowflake-cortex-platform.js";
+import {
   getMinimaxTokenAuthStatus,
   isMinimaxTokenPlatformReady,
 } from "./minimax-token-platform.js";
@@ -116,7 +124,8 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
  * Together / Fireworks / DeepSeek / Google AI Studio / xAI / Z.AI / MiniMax /
- * custom OpenAI-compatible / Z.AI Coding Plan / OpenCode Go / MiniMax Token Plan /
+ * custom OpenAI-compatible / Z.AI Coding Plan / OpenCode Go / DigitalOcean
+ * Inference / Snowflake Cortex / MiniMax Token Plan /
  * Kimi Code / Poe / OpenCode Zen) counts as
  * ready. Process-env keys do not: same multi-tenant rule as Cursor vault-only readiness.
  */
@@ -145,6 +154,14 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
     ) ||
     vaultReady(isZaiCodingPlatformReady(db), getZaiCodingAuthStatus(db).source) ||
     vaultReady(isOpencodeGoPlatformReady(db), getOpencodeGoAuthStatus(db).source) ||
+    vaultReady(
+      isDigitalOceanInferencePlatformReady(db),
+      getDigitalOceanInferenceAuthStatus(db).source
+    ) ||
+    vaultReady(
+      isSnowflakeCortexPlatformReady(db),
+      getSnowflakeCortexAuthStatus(db).source
+    ) ||
     vaultReady(
       isMinimaxTokenPlatformReady(db),
       getMinimaxTokenAuthStatus(db).source

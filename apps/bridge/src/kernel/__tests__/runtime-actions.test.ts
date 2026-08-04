@@ -763,6 +763,97 @@ describe("runtime ObjectType actions", () => {
     ).toBeNull();
   });
 
+  it("stores DigitalOcean Inference credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: null,
+        provider: "digitalocean_inference",
+        api_key: "do-inference-super-secret",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("digitalocean-inference-api-key");
+    expect(created.data).toMatchObject({
+      provider: "digitalocean_inference",
+      status: "active",
+    });
+    expect(JSON.stringify(created)).not.toContain("do-inference-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(
+        db,
+        def,
+        "digitalocean-inference-api-key",
+        owner
+      )
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(
+      db,
+      def,
+      "digitalocean-inference-api-key",
+      owner
+    );
+    expect(
+      providerCredentialRuntimeAdapter.get!(
+        db,
+        def,
+        "digitalocean-inference-api-key",
+        owner
+      )
+    ).toBeNull();
+  });
+
+  it("stores Snowflake Cortex credentials under the fixed redacted ProviderCredential id", () => {
+    const def = definition("ProviderCredential", "provider_credential_runtime");
+    const created = providerCredentialRuntimeAdapter.create!(
+      db,
+      def,
+      {
+        agent_id: null,
+        provider: "snowflake_cortex",
+        api_key: "snowflake-pat-super-secret",
+        base_url: "https://org-account.snowflakecomputing.com",
+      },
+      owner
+    );
+
+    expect(created.id).toBe("snowflake-cortex-api-key");
+    expect(created.data).toMatchObject({
+      provider: "snowflake_cortex",
+      status: "active",
+      base_url:
+        "https://org-account.snowflakecomputing.com/api/v2/cortex/v1",
+    });
+    expect(JSON.stringify(created)).not.toContain("snowflake-pat-super-secret");
+    expect(
+      providerCredentialRuntimeAdapter.get!(
+        db,
+        def,
+        "snowflake-cortex-api-key",
+        owner
+      )
+    ).not.toBeNull();
+
+    providerCredentialRuntimeAdapter.delete!(
+      db,
+      def,
+      "snowflake-cortex-api-key",
+      owner
+    );
+    expect(
+      providerCredentialRuntimeAdapter.get!(
+        db,
+        def,
+        "snowflake-cortex-api-key",
+        owner
+      )
+    ).toBeNull();
+  });
+
   it("uses the live queue and rejects non-operator enqueue attempts", () => {
     const active = fakeServices();
     configureRuntimeAdapterServices(active);

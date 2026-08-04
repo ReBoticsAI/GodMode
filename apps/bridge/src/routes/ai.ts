@@ -1029,6 +1029,15 @@ export function createAiRouter(
         s.id !== "opencode-go-api-key" &&
         !s.id.startsWith("opencode-go-api-key__agent__") &&
         s.name !== "opencode_go_api_key" &&
+        s.id !== "digitalocean-inference-api-key" &&
+        !s.id.startsWith("digitalocean-inference-api-key__agent__") &&
+        s.name !== "digitalocean_inference_api_key" &&
+        s.id !== "snowflake-cortex-api-key" &&
+        !s.id.startsWith("snowflake-cortex-api-key__agent__") &&
+        s.name !== "snowflake_cortex_api_key" &&
+        s.id !== "snowflake-cortex-base-url" &&
+        !s.id.startsWith("snowflake-cortex-base-url__agent__") &&
+        s.name !== "snowflake_cortex_base_url" &&
         s.id !== "minimax-token-api-key" &&
         !s.id.startsWith("minimax-token-api-key__agent__") &&
         s.name !== "minimax_token_api_key" &&
