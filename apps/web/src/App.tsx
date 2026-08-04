@@ -19,6 +19,7 @@ import {
   marketingAtRoot,
 } from "./pages/marketing/marketingBase";
 import { FirstRunWizard, OnboardingWizardProvider, useOnboardingGate } from "@/components/FirstRunWizard";
+import { NoWorkspaceGate } from "@/components/NoWorkspaceGate";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
 import UserCalendarPage from "./pages/UserCalendar";
@@ -373,7 +374,7 @@ function buildDivisionRoutes(
   ];
 }
 function AuthGatedApp() {
-  const { authenticated, loading, user } = useTenant();
+  const { authenticated, loading, user, tenants } = useTenant();
   const { checking, needsWizard, wizardEpoch, onFinished, onOpenVault, control } = useOnboardingGate();
   const [pluginsReady, setPluginsReady] = useState(false);
   const [saas, setSaas] = useState(false);
@@ -398,17 +399,19 @@ function AuthGatedApp() {
     Boolean(user?.isAdmin) &&
     user?.mfaEnabled === false;
   const needsAuthInterstitial = needsEmailVerify || needsMfaSetup;
+  const needsWorkspace =
+    authenticated && !needsAuthInterstitial && tenants.length === 0;
 
   useEffect(() => {
-    if (!authenticated || needsAuthInterstitial) {
+    if (!authenticated || needsAuthInterstitial || needsWorkspace) {
       setPluginsReady(true);
       return;
     }
     setPluginsReady(false);
     void loadWebPlugins().finally(() => setPluginsReady(true));
-  }, [authenticated, needsAuthInterstitial]);
+  }, [authenticated, needsAuthInterstitial, needsWorkspace]);
 
-  if (loading || (authenticated && !needsAuthInterstitial && (checking || !pluginsReady))) {
+  if (loading) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Loading workspace…
@@ -422,6 +425,23 @@ function AuthGatedApp() {
         <AuthGate />
         <Toaster richColors position="top-right" />
       </>
+    );
+  }
+
+  if (needsWorkspace) {
+    return (
+      <>
+        <NoWorkspaceGate />
+        <Toaster richColors position="top-right" />
+      </>
+    );
+  }
+
+  if (checking || !pluginsReady) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading workspace…
+      </div>
     );
   }
 

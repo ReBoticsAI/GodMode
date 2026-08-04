@@ -21,6 +21,7 @@ import {
   attachAuthContext,
   getOperatorTenantIdCached,
   requireAuth,
+  requireEmailVerified,
   requirePlatformAdmin,
   resolveTenant,
 } from "../services/auth/middleware.js";
@@ -28,6 +29,7 @@ import {
   listUserTenants,
   userHasTenantAccess,
 } from "../services/tenant-bootstrap.js";
+import { createAdminTenantForUser, AdminUsersError } from "../services/admin-users.js";
 import { refreshUserAgentPrompt } from "../services/agents/user-agent.js";
 import { getUserOwnerTenantDb } from "../services/user-scope.js";
 import { rateLimit } from "../services/auth/rate-limit.js";
@@ -86,6 +88,43 @@ export function createAuthRouter(): Router {
     const tenants = listUserTenants(core, req.user!.id);
     res.json({ tenants, operatorTenantId: getOperatorTenantIdCached() });
   });
+
+  /**
+   * Create the caller's first (or additional) personal workspace without
+   * requiring an existing X-Tenant-Id. Kernel Tenant.create sits behind
+   * tenantDbMiddleware and cannot be used when memberships are empty.
+   */
+  router.post(
+    "/tenants",
+    attachAuthContext,
+    requireAuth,
+    requireEmailVerified,
+    (req, res) => {
+      const name =
+        typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const slug =
+        typeof req.body?.slug === "string" ? req.body.slug.trim() : undefined;
+      if (!name) {
+        res.status(400).json({ error: "name required" });
+        return;
+      }
+      try {
+        const created = createAdminTenantForUser(
+          getCoreDb(),
+          req.user!.id,
+          name,
+          slug || undefined
+        );
+        res.status(201).json(created);
+      } catch (err) {
+        if (err instanceof AdminUsersError) {
+          res.status(err.status).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+    }
+  );
 
   router.post("/login", authLimiter, (req, res) => {
     const { email, password } = req.body ?? {};
@@ -454,6 +493,19 @@ export function createAuthRouter(): Router {
   router.get("/session", attachAuthContext, (req, res) => {
     if (!req.user) {
       res.json({ authenticated: false });
+      return;
+    }
+    const core = getCoreDb();
+    const tenants = listUserTenants(core, req.user.id);
+    // Zero-workspace users are still authenticated. resolveTenant would 403
+    // with "No workspace access" and make login look like a false Signed In.
+    if (tenants.length === 0) {
+      res.json({
+        authenticated: true,
+        user: req.user,
+        tenantId: null,
+        tenantRole: null,
+      });
       return;
     }
     resolveTenant(req, res, () => {

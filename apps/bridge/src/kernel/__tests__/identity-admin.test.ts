@@ -63,6 +63,7 @@ function createCore(): Database.Database {
       avatar_url TEXT,
       is_admin INTEGER NOT NULL DEFAULT 0,
       password_hash TEXT,
+      email_verified_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -261,6 +262,36 @@ describe("identity and admin ObjectType adapters", () => {
         context(db, { isAdmin: false, userId: "user-b" })
       )
     ).toThrow(/admin/i);
+  });
+
+  it("honors provision_default_tenant=false on create_account", () => {
+    const def = definition("User", "user_admin_service", [
+      "id",
+      "email",
+      "display_name",
+      "is_admin",
+    ]);
+    const created = userAdminAdapter.actions!.create_account(
+      db,
+      def,
+      "",
+      {
+        email: "provision-off@example.test",
+        password: "secret12",
+        display_name: "No Workspace",
+        provision_default_tenant: false,
+      },
+      context(db, { isAdmin: true, userId: "admin" })
+    );
+    expect(created.data.email).toBe("provision-off@example.test");
+    const memberships = db
+      .prepare(`SELECT COUNT(*) AS n FROM tenant_memberships WHERE user_id=?`)
+      .get(created.id) as { n: number };
+    expect(memberships.n).toBe(0);
+    const verified = db
+      .prepare(`SELECT email_verified_at FROM users WHERE id=?`)
+      .get(created.id) as { email_verified_at: string | null };
+    expect(verified.email_verified_at).toBeTruthy();
   });
 
   it("isolates profiles and memberships between two tenants", () => {

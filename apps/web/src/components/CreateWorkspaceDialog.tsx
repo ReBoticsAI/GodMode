@@ -32,7 +32,7 @@ export function CreateWorkspaceDialog({ trigger }: { trigger?: React.ReactNode }
       const res = await createAuthTenant(trimmed);
       await refresh();
       setTenant(res.id);
-      toast.success("Project created");
+      toast.success("Workspace created");
       setName("");
       setOpen(false);
     } catch (err) {

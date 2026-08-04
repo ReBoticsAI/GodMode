@@ -88,6 +88,8 @@ export function createAdminUser(
     displayName?: string;
     isAdmin?: boolean;
     provisionDefaultTenant?: boolean;
+    /** Admin-created accounts are trusted; public signup leaves this unset. */
+    markEmailVerified?: boolean;
   }
 ): AdminUserDto {
   const normalized = input.email.trim().toLowerCase();
@@ -106,10 +108,17 @@ export function createAdminUser(
   const displayName =
     input.displayName?.trim() || normalized.split("@")[0] || "User";
   const id = uuidv4();
-  core.prepare(
-    `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash)
-     VALUES (?, ?, ?, NULL, ?, ?)`
-  ).run(id, normalized, displayName, input.isAdmin ? 1 : 0, hashPassword(input.password));
+  if (input.markEmailVerified) {
+    core.prepare(
+      `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash, email_verified_at)
+       VALUES (?, ?, ?, NULL, ?, ?, datetime('now'))`
+    ).run(id, normalized, displayName, input.isAdmin ? 1 : 0, hashPassword(input.password));
+  } else {
+    core.prepare(
+      `INSERT INTO users (id, email, display_name, avatar_url, is_admin, password_hash)
+       VALUES (?, ?, ?, NULL, ?, ?)`
+    ).run(id, normalized, displayName, input.isAdmin ? 1 : 0, hashPassword(input.password));
+  }
   core.prepare(
     `INSERT OR IGNORE INTO credit_wallets (user_id, balance) VALUES (?, 100)`
   ).run(id);
