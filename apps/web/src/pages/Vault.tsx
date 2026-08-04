@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
 import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
+import { ZaiCodingPlanCard } from "@/pages/ai-settings/ZaiCodingPlanCard";
 import { ExaConnectCard } from "@/pages/ai-settings/ExaConnectCard";
 import { GithubConnectCard } from "@/pages/ai-settings/GithubConnectCard";
 import { HoldingsConnectCard } from "@/pages/ai-settings/HoldingsConnectCard";
@@ -314,13 +315,15 @@ export function InferenceTab({
           <div>
             <h2 className="text-sm font-medium">Subscriptions</h2>
             <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Cursor is available today.
+              Use your plan (billed by the provider). Cursor and Z.AI GLM Coding Plan
+              are available today.
               {vaultAgentId
                 ? " Stored in this agent Vault."
                 : " Stored in the Platform Vault."}
             </p>
           </div>
           <CursorSubscriptionCard vaultAgentId={vaultAgentId} />
+          <ZaiCodingPlanCard vaultAgentId={vaultAgentId} />
         </section>
       </TabsContent>
 

@@ -68,7 +68,14 @@ Legacy `/vault?tab=inference` redirects here.
 
 ### Subscriptions
 
-Use your plan (billed by the provider). **Cursor** Connect stores a fixed `cursor-api-key` on Platform (or on an Agent Vault when connected from the agent panel).
+Use your plan (billed by the provider):
+
+| Provider | Secret id | Harness profile | Docs |
+|----------|-----------|-----------------|------|
+| Cursor | `cursor-api-key` | `cursor-*` family | Cursor subscription |
+| Z.AI GLM Coding Plan | `zai-coding-api-key` | `zai-coding` | [Coding Plan](https://docs.z.ai/devpack/quick-start) |
+
+Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
 
 ### API Keys
 

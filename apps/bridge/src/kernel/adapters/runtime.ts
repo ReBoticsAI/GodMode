@@ -134,6 +134,15 @@ import {
   removeDeepSeekApiKey,
   upsertDeepSeekApiKey,
 } from "../../services/deepseek-platform.js";
+import {
+  getZaiCodingAuthStatus,
+  isZaiCodingPlatformReady,
+  isZaiCodingVaultSecretId,
+  isZaiCodingVaultSecretName,
+  ZAI_CODING_API_KEY_SECRET_ID,
+  removeZaiCodingApiKey,
+  upsertZaiCodingApiKey,
+} from "../../services/zai-coding-platform.js";
 import type {
   OperationContext,
   RecordAdapter,
@@ -1012,7 +1021,9 @@ function isManagedPlatformSecret(secret: {
     isFireworksVaultSecretId(secret.id) ||
     isFireworksVaultSecretName(secret.name) ||
     isDeepSeekVaultSecretId(secret.id) ||
-    isDeepSeekVaultSecretName(secret.name)
+    isDeepSeekVaultSecretName(secret.name) ||
+    isZaiCodingVaultSecretId(secret.id) ||
+    isZaiCodingVaultSecretName(secret.name)
   );
 }
 
@@ -1085,6 +1096,9 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isDeepSeekVaultSecretName(name)) {
       throw httpError(400, "DeepSeek API keys must use the DeepSeek credential flow");
+    }
+    if (isZaiCodingVaultSecretName(name)) {
+      throw httpError(400, "Z.AI Coding Plan keys must use the Z.AI Coding Plan credential flow");
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
@@ -1249,6 +1263,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
           })
         : null;
     }
+    if (id === ZAI_CODING_API_KEY_SECRET_ID) {
+      const status = getZaiCodingAuthStatus(db, scope);
+      return status.connected
+        ? record(def, ZAI_CODING_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "zai_coding",
+            display_name: "Z.AI GLM Coding Plan",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
     const account = getAgentAccount(db, id);
     return account ? providerCredentialRecord(def, account) : null;
   },
@@ -1351,6 +1378,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
         masked_token: status.masked ?? "****",
       });
     }
+    if (
+      requiredText(data, "provider").toLowerCase() === "zai_coding" ||
+      requiredText(data, "provider").toLowerCase() === "zai-coding"
+    ) {
+      upsertZaiCodingApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getZaiCodingAuthStatus(db, scope);
+      return record(def, ZAI_CODING_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "zai_coding",
+        display_name: "Z.AI GLM Coding Plan",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
     return providerCredentialRecord(
       def,
       createAgentApiKeyAccount(db, {
@@ -1397,6 +1439,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === DEEPSEEK_API_KEY_SECRET_ID) {
       removeDeepSeekApiKey(db, scope);
+      return;
+    }
+    if (id === ZAI_CODING_API_KEY_SECRET_ID) {
+      removeZaiCodingApiKey(db, scope);
       return;
     }
     const account = getAgentAccount(db, id);
@@ -1488,6 +1534,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
+      // Custom Z.AI Coding Plan slug when Vault is connected.
+      if (!selected) {
+        const zaiCustom =
+          /^provider:openai_compatible:zai_coding:(.+)$/.exec(modelId);
+        if (zaiCustom?.[1] && isZaiCodingPlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Z.AI Coding · ${zaiCustom[1]}`,
+            model: zaiCustom[1],
+            provider: "openai_compatible",
+            transport: "zai_coding",
+          };
+        }
+      }
       // Custom DeepSeek slug when Vault is connected.
       if (!selected) {
         const deepseekCustom =
@@ -1555,6 +1616,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("together:") &&
           !custom[1].startsWith("fireworks:") &&
           !custom[1].startsWith("deepseek:") &&
+          !custom[1].startsWith("zai_coding:") &&
           isOpenRouterPlatformReady(db)
         ) {
           selected = {
@@ -1589,7 +1651,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
                 ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
                 : transport === "deepseek"
                   ? { transport: "deepseek", apiKeyRef: DEEPSEEK_API_KEY_SECRET_ID }
-                  : {}),
+                  : transport === "zai_coding"
+                    ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
+                    : {}),
       });
     },
     start(_db, _def, _id, _input, ctx) {
