@@ -18,6 +18,7 @@ import {
   writeFile as writeCodingFile,
 } from "../services/coding/fs-tools.js";
 import { logToolAudit } from "../services/coding/tool-audit.js";
+import { gitDiff, gitStatus } from "../services/coding/git-tools.js";
 import { runTerminal } from "../services/coding/terminal-service.js";
 import {
   closeTerminalSession,
@@ -70,7 +71,7 @@ function denyIfBlocked(res: Response): boolean {
 
 function sendFsError(res: Response, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
-  const status = /escapes|not found|not a |already exists|not empty|required/i.test(
+  const status = /escapes|not found|not a |already exists|not empty|required|not a git/i.test(
     msg
   )
     ? 400
@@ -498,6 +499,30 @@ export function createCodingWorkspaceRouter(
       req.off("close", onClientClose);
       res.off("close", onClientClose);
       if (!res.writableEnded) res.end();
+    }
+  });
+
+  router.get("/git/status", (req, res) => {
+    if (denyIfBlocked(res)) return;
+    try {
+      const db = tdb(req);
+      const opts = fsOpts(req, db);
+      res.json(gitStatus(opts));
+    } catch (err) {
+      sendFsError(res, err);
+    }
+  });
+
+  router.get("/git/diff", (req, res) => {
+    if (denyIfBlocked(res)) return;
+    try {
+      const db = tdb(req);
+      const opts = fsOpts(req, db);
+      const staged = String(req.query.staged ?? "") === "1" || String(req.query.staged ?? "") === "true";
+      const path = String(req.query.path ?? "").trim();
+      res.json(gitDiff({ ...opts, staged, path: path || undefined }));
+    } catch (err) {
+      sendFsError(res, err);
     }
   });
 

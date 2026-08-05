@@ -8,6 +8,8 @@ import {
   PencilIcon,
   SaveIcon,
   Trash2Icon,
+  GitBranchIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +43,12 @@ import {
   deleteCodingPath,
   fetchCodingFile,
   fetchCodingTree,
+  fetchCodingGitDiff,
+  fetchCodingGitStatus,
   renameCodingPath,
   saveCodingFile,
   ApiError,
+  type CodingGitStatus,
   type CodingTreeEntry,
 } from "@/api";
 import { toast } from "sonner";
@@ -157,6 +162,10 @@ export default function CodingWorkspacePage() {
 
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [dialogValue, setDialogValue] = useState("");
+  const [gitStatus, setGitStatus] = useState<CodingGitStatus | null>(null);
+  const [gitDiff, setGitDiff] = useState("");
+  const [gitError, setGitError] = useState<string | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
 
   const dirty = selectedPath !== null && content !== savedContent;
 
@@ -180,6 +189,25 @@ export default function CodingWorkspacePage() {
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
+
+  const refreshGit = useCallback(async () => {
+    setGitLoading(true);
+    try {
+      const [status, diff] = await Promise.all([
+        fetchCodingGitStatus(),
+        fetchCodingGitDiff(),
+      ]);
+      setGitStatus(status);
+      setGitDiff(diff.diff);
+      setGitError(null);
+    } catch (err) {
+      setGitStatus(null);
+      setGitDiff("");
+      setGitError((err as Error).message);
+    } finally {
+      setGitLoading(false);
+    }
+  }, []);
 
   const openFile = useCallback(async (path: string) => {
     if (dirty) {
@@ -285,11 +313,14 @@ export default function CodingWorkspacePage() {
     <Page>
       <PageHeader
         title="Coding"
-        description="Browse files and run sandboxed shell commands in the active coding root."
+        description="Browse files, inspect git, and run sandboxed shell commands in the active coding root."
       />
       <Tabs defaultValue="files" className="flex flex-col gap-4">
         <TabsList variant="line" className="w-full justify-start">
           <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="git" onClick={() => void refreshGit()}>
+            Git
+          </TabsTrigger>
           <TabsTrigger value="terminal">Terminal</TabsTrigger>
         </TabsList>
 
@@ -414,6 +445,63 @@ export default function CodingWorkspacePage() {
               )}
             </section>
           </div>
+        </TabsContent>
+
+        <TabsContent value="git" className="mt-0">
+          <section className="flex flex-col gap-3 rounded-xl border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <GitBranchIcon className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium">
+                {gitStatus?.branch ?? "No branch"}
+              </span>
+              {gitStatus ? (
+                <>
+                  <Badge variant="secondary">{gitStatus.summary}</Badge>
+                  {gitStatus.ahead > 0 ? (
+                    <Badge variant="outline">ahead {gitStatus.ahead}</Badge>
+                  ) : null}
+                  {gitStatus.behind > 0 ? (
+                    <Badge variant="outline">behind {gitStatus.behind}</Badge>
+                  ) : null}
+                </>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto"
+                onClick={() => void refreshGit()}
+                disabled={gitLoading}
+              >
+                <RefreshCwIcon data-icon="inline-start" />
+                Refresh
+              </Button>
+            </div>
+            {gitError ? (
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyTitle>Git unavailable</EmptyTitle>
+                  <EmptyDescription>{gitError}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Inspect diffs here. Approve branch, commit, and push from
+                  Intelligence tool confirms (Authority coding kill still stops
+                  the cycle). Opening a host review request is a separate
+                  connector when installed.
+                </p>
+                <ScrollArea className="h-[28rem] rounded-md border bg-muted/30">
+                  <pre className="whitespace-pre-wrap p-3 font-mono text-xs">
+                    {gitLoading
+                      ? "Loading git diff…"
+                      : gitDiff || "(no diff)"}
+                  </pre>
+                </ScrollArea>
+              </>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="terminal" className="mt-0">

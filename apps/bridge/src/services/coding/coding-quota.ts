@@ -62,6 +62,11 @@ function tenantKey(tenantId?: string | null): string {
   return String(tenantId ?? "").trim() || "local";
 }
 
+/** Coding kill / SaaS code-access gate without consuming a terminal slot. */
+export function assertCodingKillSwitch(tenantId?: string | null): void {
+  assertCodingKill(tenantId ?? undefined, "terminal");
+}
+
 function assertCodingKill(
   tenantId: string | undefined,
   kind: CodingQuotaKind

@@ -1072,6 +1072,110 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "git_status",
+    description:
+      "Show git branch, dirty files, ahead/behind, remotes, and local branches for the coding root. Prefer this over run_terminal git status.",
+    mode: "auto",
+    category: "coding",
+  },
+  {
+    name: "git_diff",
+    description:
+      "Show unstaged or staged git diff for the coding root (optional path).",
+    mode: "auto",
+    category: "coding",
+    parameters: {
+      type: "object",
+      properties: {
+        staged: { type: "boolean", description: "If true, show staged diff" },
+        path: { type: "string", description: "Optional path relative to coding root" },
+      },
+    },
+  },
+  {
+    name: "git_branch",
+    description: "Create a local git branch on the coding root. Requires confirmation.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "New branch name" },
+        checkout: {
+          type: "boolean",
+          description: "Switch to the new branch (default true)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "git_checkout",
+    description: "Switch the coding-root work tree to an existing local branch. Requires confirmation.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: { ref: { type: "string", description: "Branch or ref name" } },
+      required: ["ref"],
+    },
+  },
+  {
+    name: "git_add",
+    description: "Stage paths in the coding-root git index. Requires confirmation.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "Paths relative to the coding root (use \".\" for all)",
+        },
+      },
+      required: ["paths"],
+    },
+  },
+  {
+    name: "git_commit",
+    description:
+      "Commit staged changes on the coding root. Confirm shows the staged diff. Does not push. Requires confirmation.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional paths to stage before commit",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "git_push",
+    description:
+      "Push the current (or named) branch to an existing HTTPS remote. Never force-pushes. Always requires confirmation, including full autonomy. PR create is a separate host connector / Official GitHub plugin tool.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        remote: { type: "string", description: "Remote name (default origin)" },
+        branch: { type: "string", description: "Branch to push (default current)" },
+      },
+    },
+  },
+  {
     name: "explore_codebase",
     description:
       "Spawn parallel read-only codebase explorations (grep/search). Use for wide searches before editing.",
@@ -1784,6 +1888,13 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "edit_file",
   "apply_patch",
   "revert_file",
+  "git_status",
+  "git_diff",
+  "git_branch",
+  "git_checkout",
+  "git_add",
+  "git_commit",
+  "git_push",
   "delete_file",
   "run_terminal",
   "terminal_session_create",
@@ -1812,6 +1923,11 @@ const CODING_WRITE_TOOLS = new Set([
   "terminal_session_write",
   "terminal_session_close",
   "revert_file",
+  "git_branch",
+  "git_checkout",
+  "git_add",
+  "git_commit",
+  "git_push",
   "scaffold_plugin",
   "coding_worktree_create",
   "coding_worktree_discard",
@@ -1950,7 +2066,8 @@ function allRegisteredTools(): AiToolDef[] {
       write: t.write,
     })
   );
-  return [...staticTools, ...autoOt, ...pluginToolsAsAiDefs()];
+  const plugin = pluginToolsAsAiDefs().filter((t) => !coreNames.has(t.name));
+  return [...staticTools, ...autoOt, ...plugin];
 }
 
 /** Default tool allowlist for Intelligence on personal (non-operator) tenants. */

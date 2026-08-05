@@ -3410,6 +3410,33 @@ export const fetchCodingTree = (path = ".", agentId?: string) =>
     `/ai/coding/tree${codingQs(agentId, { path })}`
   );
 
+export type CodingGitStatus = {
+  branch: string;
+  dirtyCount: number;
+  ahead: number;
+  behind: number;
+  porcelain: string;
+  branches: string[];
+  remotes: string[];
+  summary: string;
+};
+
+export const fetchCodingGitStatus = (agentId?: string) =>
+  api<CodingGitStatus>(`/ai/coding/git/status${codingQs(agentId)}`);
+
+export const fetchCodingGitDiff = (opts?: {
+  staged?: boolean;
+  path?: string;
+  agentId?: string;
+}) => {
+  const extra: Record<string, string> = {};
+  if (opts?.staged) extra.staged = "1";
+  if (opts?.path) extra.path = opts.path;
+  return api<{ diff: string; staged: boolean }>(
+    `/ai/coding/git/diff${codingQs(opts?.agentId, extra)}`
+  );
+};
+
 export const fetchCodingFile = (path: string, agentId?: string) =>
   api<{ path: string; content: string }>(
     `/ai/coding/file${codingQs(agentId, { path })}`
