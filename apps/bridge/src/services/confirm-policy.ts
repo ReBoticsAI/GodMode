@@ -10,6 +10,7 @@ const NEVER_AUTO_APPROVE = new Set([
   "flatten_all",
   "flatten_playbook",
   "deploy_playbook",
+  "git_push",
 ]);
 
 export interface ConfirmPayload {
@@ -52,6 +53,12 @@ export async function shouldAutoApproveTool(
   sessionAutonomy?: CodeAutonomyLevel | null
 ): Promise<boolean> {
   const level = effectiveAutonomy(agent, sessionAutonomy);
+  if (NEVER_AUTO_APPROVE.has(toolName)) {
+    if (requiresConfirmation(toolName)) {
+      return payload ? ((await onConfirmRequired?.(payload)) ?? false) : false;
+    }
+    return false;
+  }
   if (autoApprovedByAutonomy(level, toolName)) return true;
 
   const autoApprove = new Set(agent.autoApprove);

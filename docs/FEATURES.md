@@ -39,6 +39,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Wiki](features/wiki.md) - Markdown knowledge base with spaces, visibility, backlinks, and RAG.
 - [Tasks](features/tasks.md) - Multiple personal kanban boards; optional GitHub Project sync; tag a card auto for autonomous agent work.
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
+- [Coding stage](features/coding-stage.md) - Files, git status/diff, terminal, and agent git tools on the coding root.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
 - [Vault](features/vault.md) - User connect hub: Integrations, Wallets & Accounts, Marketplace, and secrets (Platform Vault and Storage live under Settings).
@@ -52,7 +53,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Settings](features/settings.md) - Account, Platform Vault, storage, appearance, and session settings.
 - [Marketplace](features/marketplace.md) - Official, Local, Community, Installed, and Sell tabs with real checkout.
 - [Intelligence plugin pipeline](features/plugin-pipeline.md) - scaffold_plugin → build_plugin → install_plugin for local and hub authoring.
-- [Git and GitHub plugins](features/git-github-plugins.md) - Structured git_* and gh_* tools for commit, PR, and CI when host tools exist.
+- [Git and GitHub plugins](features/git-github-plugins.md) - Core local git cycle plus optional Official host and review-request tools.
 - [Connector](features/connector.md) - Optional local process for hardware-bound marketplace plugins.
 - [Desktop](features/desktop.md) - Electron shell and installers that embed Bridge and web for local use.
 - [ObjectType Records](features/objecttype-records.md) - Metadata-driven list/form pages and declared actions for core and plugins.
