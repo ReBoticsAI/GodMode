@@ -25,6 +25,12 @@ import {
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
+import {
+  PluginLoopError,
+  assertLivePluginRoot,
+  isPluginLoopError,
+  toPluginLoopError,
+} from "./plugin-loop-error.js";
 
 const hostRequire = createRequire(import.meta.url);
 const HOST_LINKED_PACKAGES = ["plugin-api", "plugin-host"] as const;
@@ -265,28 +271,50 @@ export async function activatePluginForTenant(
     tenantId,
     action: "activate_plugin",
   });
-  const resolved = path.resolve(pluginRoot);
-  readGodmodePluginManifest(resolved);
-  const built =
-    opts.buildIfNeeded === false
-      ? false
-      : await ensurePluginBuilt(resolved, {
-          tenantId,
-          action: "activate_plugin",
-        });
-  prepareHostPackageLinks(resolved);
-  const load = await loadPluginFromRoot(resolved, { reload: opts.reload });
-  persistPluginPath(core, resolved);
-  if (opts.installForTenant !== false) {
-    await installPluginForTenant(core, tenantId, load.pluginId, resolved);
+  const resolved = assertLivePluginRoot(pluginRoot);
+  try {
+    readGodmodePluginManifest(resolved);
+  } catch (err) {
+    throw isPluginLoopError(err)
+      ? err
+      : new PluginLoopError(
+          "manifest",
+          err instanceof Error ? err.message : String(err)
+        );
   }
-  return {
-    pluginId: load.pluginId,
-    pluginRoot: resolved,
-    installed: opts.installForTenant !== false,
-    built,
-    reloaded: load.reloaded,
-  };
+  let built = false;
+  try {
+    built =
+      opts.buildIfNeeded === false
+        ? false
+        : await ensurePluginBuilt(resolved, {
+            tenantId,
+            action: "activate_plugin",
+          });
+  } catch (err) {
+    if (isPluginLoopError(err)) throw err;
+    throw new PluginLoopError(
+      "build",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+  try {
+    prepareHostPackageLinks(resolved);
+    const load = await loadPluginFromRoot(resolved, { reload: opts.reload });
+    persistPluginPath(core, resolved);
+    if (opts.installForTenant !== false) {
+      await installPluginForTenant(core, tenantId, load.pluginId, resolved);
+    }
+    return {
+      pluginId: load.pluginId,
+      pluginRoot: resolved,
+      installed: opts.installForTenant !== false,
+      built,
+      reloaded: load.reloaded,
+    };
+  } catch (err) {
+    throw toPluginLoopError(err);
+  }
 }
 
 export async function loadPluginsForBoot(): Promise<LoadPluginsResult> {
