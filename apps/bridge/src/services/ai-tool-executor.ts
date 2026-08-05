@@ -164,6 +164,11 @@ import {
 } from "../plugins/plugin-install.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
+import {
+  assertLivePluginRoot,
+  notifyPluginLoopFailure,
+  toPluginLoopError,
+} from "./plugin-loop-error.js";
 import { indexMemory, removeMemoryFromIndex } from "./embeddings/memory-embeddings.js";
 import { exportEntity } from "./portability.js";
 import { listInferenceEndpoints } from "./inference-service.js";
@@ -2981,50 +2986,87 @@ export async function executeTool(
       if (!ctx.tenantId) throw new Error("tenant required");
       const pluginId = String(args.pluginId ?? "").trim();
       if (!pluginId) throw new Error("pluginId required");
-      const rawRoot =
-        typeof args.pluginRoot === "string" && args.pluginRoot.trim()
-          ? args.pluginRoot.trim()
-          : defaultPluginRoot(pluginId, codingFsOpts(ctx));
-      const pluginRoot = assertWithinCodingRoot(rawRoot, {
-        tenantId: ctx.tenantId,
-      });
-      const result = await dispatchKernelTool(ctx, "run_record_action", {
-        objectType: "CatalogInstall",
-        id: "",
-        action: "activate_plugin_path",
-        input: {
-          path: pluginRoot,
-          build_if_needed: true,
-          install_for_tenant: true,
-        },
-      });
-      return { ok: true, result };
+      try {
+        const rawRoot =
+          typeof args.pluginRoot === "string" && args.pluginRoot.trim()
+            ? args.pluginRoot.trim()
+            : defaultPluginRoot(pluginId, codingFsOpts(ctx));
+        const pluginRoot = assertLivePluginRoot(
+          assertWithinCodingRoot(rawRoot, {
+            tenantId: ctx.tenantId,
+          })
+        );
+        const result = await dispatchKernelTool(ctx, "run_record_action", {
+          objectType: "CatalogInstall",
+          id: "",
+          action: "activate_plugin_path",
+          input: {
+            path: pluginRoot,
+            build_if_needed: true,
+            install_for_tenant: true,
+          },
+        });
+        return { ok: true, result };
+      } catch (err) {
+        const loop = toPluginLoopError(err);
+        notifyPluginLoopFailure({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          agentId: ctx.activeAgentId,
+          pluginId,
+          failureClass: loop.failureClass,
+          message: loop.message,
+        });
+        return {
+          ok: false,
+          failureClass: loop.failureClass,
+          error: loop.message,
+        };
+      }
     }
 
     case "build_plugin": {
-      const rawRoot =
-        typeof args.pluginRoot === "string" && args.pluginRoot.trim()
-          ? args.pluginRoot.trim()
-          : args.pluginId
-            ? defaultPluginRoot(String(args.pluginId), codingFsOpts(ctx))
-            : "";
-      if (!rawRoot) throw new Error("pluginRoot or pluginId required");
-      if (!ctx.tenantId && (config.isHub || config.isClient)) {
-        throw new Error("tenant required for build_plugin on hub/client");
+      try {
+        const rawRoot =
+          typeof args.pluginRoot === "string" && args.pluginRoot.trim()
+            ? args.pluginRoot.trim()
+            : args.pluginId
+              ? defaultPluginRoot(String(args.pluginId), codingFsOpts(ctx))
+              : "";
+        if (!rawRoot) throw new Error("pluginRoot or pluginId required");
+        if (!ctx.tenantId && (config.isHub || config.isClient)) {
+          throw new Error("tenant required for build_plugin on hub/client");
+        }
+        const pluginRoot = assertWithinCodingRoot(rawRoot, {
+          tenantId: ctx.tenantId,
+        });
+        const built = await buildPluginWithEsbuild(pluginRoot, {
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          agentId: ctx.activeAgentId,
+          action: "build_plugin",
+        });
+        return {
+          ...built,
+          next: "Call install_plugin to load at runtime and enable for this tenant (no Bridge restart).",
+        };
+      } catch (err) {
+        const loop = toPluginLoopError(err);
+        notifyPluginLoopFailure({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          agentId: ctx.activeAgentId,
+          pluginId:
+            typeof args.pluginId === "string" ? args.pluginId : undefined,
+          failureClass: loop.failureClass,
+          message: loop.message,
+        });
+        return {
+          ok: false,
+          failureClass: loop.failureClass,
+          error: loop.message,
+        };
       }
-      const pluginRoot = assertWithinCodingRoot(rawRoot, {
-        tenantId: ctx.tenantId,
-      });
-      const built = await buildPluginWithEsbuild(pluginRoot, {
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        agentId: ctx.activeAgentId,
-        action: "build_plugin",
-      });
-      return {
-        ...built,
-        next: "Call install_plugin to load at runtime and enable for this tenant (no Bridge restart).",
-      };
     }
 
     case "run_ephemeral_build": {
