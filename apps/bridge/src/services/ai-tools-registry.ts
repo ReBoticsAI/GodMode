@@ -1451,8 +1451,8 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         },
         actionKind: {
           type: "string",
-          enum: ["notify", "run_agent", "run_workflow", "send_message", "webhook"],
-          description: "Use 'run_agent' for a self-loop (set actionConfigJson with agentId+prompt).",
+          enum: ["notify", "run_agent", "run_workflow", "send_message", "webhook", "gate"],
+          description: "Use 'run_agent' for a self-loop (set actionConfigJson with agentId+prompt). Use 'gate' to fail-closed block coding.file.before / coding.shell.before.",
         },
         actionConfigJson: {
           type: "string",
