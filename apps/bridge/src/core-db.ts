@@ -676,7 +676,7 @@ export function initCoreDb(): CoreDatabase {
       event_type TEXT,
       schedule_cron TEXT,
       condition_json TEXT,
-      action_kind TEXT NOT NULL CHECK (action_kind IN ('notify', 'run_agent', 'run_workflow', 'send_message', 'webhook')),
+      action_kind TEXT NOT NULL CHECK (action_kind IN ('notify', 'run_agent', 'run_workflow', 'send_message', 'webhook', 'gate')),
       action_config_json TEXT,
       rate_limit_per_hour INTEGER,
       require_approval INTEGER NOT NULL DEFAULT 0,
@@ -811,6 +811,12 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
   { version: 11, name: "core_marketplace_commerce_v1", up: ensureMarketplaceCommerceSchema },
   { version: 12, name: "core_auth_security_v1", up: ensureAuthSecurityMigration },
   { version: 13, name: "core_embed_queue_v1", up: ensureEmbedQueueSchema },
+  {
+    version: 14,
+    name: "core_hooks_gate_action_v1",
+    up: ensureHooksGateAction,
+    foreignKeysOff: true,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -891,6 +897,46 @@ function ensureCoreMarketplaceColumns(db: CoreDatabase): void {
  * rows and the hook_runs FK reference by name). No-op once the constraint allows
  * `run_workflow`.
  */
+function ensureHooksGateAction(db: CoreDatabase): void {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='hooks'")
+    .get() as { sql?: string } | undefined;
+  if (!row?.sql || row.sql.includes("'gate'")) return;
+  ensureHooksRunWorkflowAction(db);
+  const next = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='hooks'")
+    .get() as { sql?: string } | undefined;
+  if (!next?.sql || next.sql.includes("'gate'")) return;
+  db.exec(`
+      DROP TABLE IF EXISTS hooks_new;
+      CREATE TABLE hooks_new (
+        id TEXT PRIMARY KEY,
+        owner_kind TEXT NOT NULL CHECK (owner_kind IN ('user', 'agent')),
+        owner_id TEXT NOT NULL,
+        owner_tenant_id TEXT,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        trigger_kind TEXT NOT NULL CHECK (trigger_kind IN ('event', 'schedule')),
+        event_type TEXT,
+        schedule_cron TEXT,
+        condition_json TEXT,
+        action_kind TEXT NOT NULL CHECK (action_kind IN ('notify', 'run_agent', 'run_workflow', 'send_message', 'webhook', 'gate')),
+        action_config_json TEXT,
+        rate_limit_per_hour INTEGER,
+        require_approval INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_fired_at TEXT
+      );
+      INSERT INTO hooks_new SELECT * FROM hooks;
+      DROP TABLE hooks;
+      ALTER TABLE hooks_new RENAME TO hooks;
+      CREATE INDEX IF NOT EXISTS hooks_owner_idx ON hooks(owner_kind, owner_id);
+      CREATE INDEX IF NOT EXISTS hooks_event_idx
+        ON hooks(trigger_kind, enabled, event_type);
+  `);
+}
+
 function ensureHooksRunWorkflowAction(db: CoreDatabase): void {
   const row = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='hooks'")
@@ -910,7 +956,7 @@ function ensureHooksRunWorkflowAction(db: CoreDatabase): void {
         event_type TEXT,
         schedule_cron TEXT,
         condition_json TEXT,
-        action_kind TEXT NOT NULL CHECK (action_kind IN ('notify', 'run_agent', 'run_workflow', 'send_message', 'webhook')),
+        action_kind TEXT NOT NULL CHECK (action_kind IN ('notify', 'run_agent', 'run_workflow', 'send_message', 'webhook', 'gate')),
         action_config_json TEXT,
         rate_limit_per_hour INTEGER,
         require_approval INTEGER NOT NULL DEFAULT 0,
@@ -1562,7 +1608,8 @@ export type HookActionKind =
   | "run_agent"
   | "run_workflow"
   | "send_message"
-  | "webhook";
+  | "webhook"
+  | "gate";
 
 export interface CoreHook {
   id: string;
