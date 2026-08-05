@@ -1,74 +1,211 @@
-/**
- * Smoke: scaffold → esbuild → register/reload.
- * Run: npx tsx apps/bridge/src/services/__tests__/plugin-pipeline.test.ts
- */
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import Database from "better-sqlite3";
+import { Router } from "express";
+import { afterEach, describe, expect, it } from "vitest";
 import { setPluginHost } from "@godmode/plugin-host";
-import { scaffoldPlugin, defaultPluginRoot } from "../plugin-scaffold.js";
-import { buildPluginWithEsbuild, bridgeEntryExists } from "../plugin-build.js";
+import { config } from "../../config.js";
 import { pluginRuntime } from "../../plugins/runtime.js";
+import { unregisterObjectTypesByPlugin } from "../../kernel/registry.js";
+import { evictTenantDb, getTenantDb } from "../../tenant-registry.js";
+import { listInstalledPlugins } from "../../plugins/plugin-install.js";
+import { scaffoldPlugin } from "../plugin-scaffold.js";
+import { buildPluginWithEsbuild } from "../plugin-build.js";
+import {
+  activatePluginForTenant,
+  ensureTenantPluginsStorage,
+} from "../plugin-lifecycle.js";
+import {
+  assertLivePluginRoot,
+  isLocalPluginFolderRegistrationBlocked,
+  isPluginLoopError,
+  notifyPluginLoopFailure,
+} from "../plugin-loop-error.js";
 
-const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), "gm-plugin-"));
-process.env.GODMODE_PLUGIN_SCAFFOLD_DIR = tmpBase;
+const temps: string[] = [];
+const previousTenantsDir = config.tenantsDir;
 
-setPluginHost({
-  getTenantDb: () => {
-    throw new Error("not used in smoke");
-  },
-  getReqTenantDb: () => {
-    throw new Error("not used in smoke");
-  },
-  createPluginRouter: () => {
-    throw new Error("not used in smoke");
-  },
-  getTimeseriesStore: () => null,
-  bootstrapTradingDepartment: () => undefined,
-  bridgeFetch: async () => new Response(),
-} as never);
+afterEach(() => {
+  pluginRuntime.unregister("pipeline-bar");
+  unregisterObjectTypesByPlugin("pipeline-bar");
+  evictTenantDb("tenant-a");
+  config.tenantsDir = previousTenantsDir;
+  while (temps.length) {
+    fs.rmSync(temps.pop()!, { recursive: true, force: true });
+  }
+});
 
-const id = "pipeline-smoke";
-const scaffold = scaffoldPlugin({ id, name: "Pipeline Smoke" });
-assert.equal(scaffold.created, true);
-assert.ok(fs.existsSync(path.join(scaffold.pluginRoot, "src", "bridge.ts")));
-assert.equal(defaultPluginRoot(id), path.join(tmpBase, id));
-assert.equal(scaffold.codingPath, `plugins/${id}`);
+function tempDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
 
-const pkg = JSON.parse(
-  fs.readFileSync(path.join(scaffold.pluginRoot, "package.json"), "utf8")
-);
-assert.equal(pkg.dependencies?.["@godmode/plugin-api"], undefined);
+function memoryCore() {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  db.exec(`
+    CREATE TABLE tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE platform_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    INSERT INTO tenants (id, name) VALUES ('tenant-a', 'Tenant A');
+  `);
+  ensureTenantPluginsStorage(db);
+  return db;
+}
 
-const built = await buildPluginWithEsbuild(scaffold.pluginRoot);
-assert.equal(built.ok, true);
-assert.ok(bridgeEntryExists(scaffold.pluginRoot));
-assert.ok(fs.existsSync(path.join(scaffold.pluginRoot, "dist", "bridge.js")));
+describe("plugin loop reliability (#433)", () => {
+  it("refuses install roots under .worktrees", () => {
+    expect(() =>
+      assertLivePluginRoot("/data/tenant-a/.worktrees/wip/plugins/demo")
+    ).toThrow(/worktrees/);
+    try {
+      assertLivePluginRoot("C:\\data\\tenant-a\\.worktrees\\wip\\plugins\\demo");
+      throw new Error("expected isolation failure");
+    } catch (err) {
+      expect(isPluginLoopError(err)).toBe(true);
+      if (isPluginLoopError(err)) expect(err.failureClass).toBe("isolation");
+    }
+  });
 
-pluginRuntime.configure({ operatorTenantId: "test", bus: new EventEmitter() });
+  it("blocks arbitrary local folder registration on SaaS unless explicitly allowed", () => {
+    expect(
+      isLocalPluginFolderRegistrationBlocked({
+        isSaas: true,
+        saasAllowLocalPlugins: false,
+      })
+    ).toBe(true);
+    expect(
+      isLocalPluginFolderRegistrationBlocked({
+        isSaas: true,
+        saasAllowLocalPlugins: true,
+      })
+    ).toBe(false);
+    expect(
+      isLocalPluginFolderRegistrationBlocked({
+        isSaas: false,
+        saasAllowLocalPlugins: false,
+      })
+    ).toBe(false);
+  });
 
-const { pathToFileURL } = await import("node:url");
-const entryUrl = pathToFileURL(
-  path.join(scaffold.pluginRoot, "dist", "bridge.js")
-).href;
-const mod = (await import(entryUrl)) as {
-  register?: (api: unknown) => void;
-  default?: (api: unknown) => void;
-};
-const registerFn = mod.register ?? mod.default;
-assert.equal(typeof registerFn, "function");
+  it("scaffolds, builds, and activates inside a tenant workspace", async () => {
+    const root = tempDir("gm-loop-");
+    const workspaces = path.join(root, "tenant-workspaces");
+    config.tenantsDir = path.join(root, "tenants");
+    fs.mkdirSync(config.tenantsDir, { recursive: true });
 
-const { readGodmodePluginManifest } = await import("@godmode/plugin-api");
-const manifest = readGodmodePluginManifest(scaffold.pluginRoot);
-pluginRuntime.register(manifest, scaffold.pluginRoot, registerFn!);
-assert.equal(pluginRuntime.hasPlugin(id), true);
-assert.ok(pluginRuntime.getToolHandler(`${id}_hello`));
+    setPluginHost({
+      getTenantDb: (tenantId: string) => getTenantDb(tenantId),
+      getReqTenantDb: () => {
+        throw new Error("not used");
+      },
+      createPluginRouter: () => Router(),
+      getTimeseriesStore: () => null,
+      bootstrapTradingDepartment: () => undefined,
+      bridgeFetch: async () => new Response(),
+    } as never);
 
-pluginRuntime.unregister(id);
-assert.equal(pluginRuntime.hasPlugin(id), false);
-assert.equal(pluginRuntime.getToolHandler(`${id}_hello`), undefined);
+    pluginRuntime.configure({
+      operatorTenantId: "tenant-a",
+      bus: new EventEmitter(),
+    });
 
-fs.rmSync(tmpBase, { recursive: true, force: true });
-console.log("plugin-pipeline.test.ts: ok");
+    const scaffold = scaffoldPlugin({
+      id: "pipeline-bar",
+      name: "Pipeline Bar",
+      tenantId: "tenant-a",
+      isolatedDeployment: true,
+      tenantWorkspacesDir: workspaces,
+    });
+    expect(scaffold.created).toBe(true);
+    expect(scaffold.pluginRoot.replace(/\\/g, "/")).toContain(
+      "tenant-workspaces/tenant-a/plugins/pipeline-bar"
+    );
+
+    const built = await buildPluginWithEsbuild(scaffold.pluginRoot);
+    expect(built.ok).toBe(true);
+
+    const core = memoryCore();
+    const activated = await activatePluginForTenant(
+      core,
+      "tenant-a",
+      scaffold.pluginRoot
+    );
+    expect(activated.pluginId).toBe("pipeline-bar");
+    expect(activated.installed).toBe(true);
+    expect(pluginRuntime.hasPlugin("pipeline-bar")).toBe(true);
+    expect(pluginRuntime.getToolHandler("pipeline-bar_hello")).toBeTruthy();
+
+    const installed = listInstalledPlugins(core, "tenant-a");
+    expect(installed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          plugin_id: "pipeline-bar",
+          state: "active",
+        }),
+      ])
+    );
+
+    const worktreeRoot = path.join(
+      workspaces,
+      "tenant-a",
+      ".worktrees",
+      "wip",
+      "plugins",
+      "pipeline-bar"
+    );
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    fs.copyFileSync(
+      path.join(scaffold.pluginRoot, "godmode.plugin.json"),
+      path.join(worktreeRoot, "godmode.plugin.json")
+    );
+    await expect(
+      activatePluginForTenant(core, "tenant-a", worktreeRoot)
+    ).rejects.toMatchObject({ failureClass: "isolation" });
+  });
+
+  it("records plugin loop failures as Attention notifications", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE notifications (
+        id TEXT PRIMARY KEY,
+        recipient_kind TEXT NOT NULL,
+        recipient_id TEXT NOT NULL,
+        recipient_tenant_id TEXT,
+        category TEXT NOT NULL DEFAULT 'system',
+        title TEXT NOT NULL,
+        body TEXT,
+        link TEXT,
+        resource_kind TEXT,
+        resource_id TEXT,
+        read_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    notifyPluginLoopFailure({
+      db,
+      tenantId: "tenant-a",
+      userId: "user-1",
+      agentId: "agent-1",
+      pluginId: "pipeline-bar",
+      failureClass: "build",
+      message: "esbuild failed",
+    });
+    const rows = db
+      .prepare(`SELECT recipient_kind, title, category FROM notifications ORDER BY recipient_kind`)
+      .all() as Array<{ recipient_kind: string; title: string; category: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.recipient_kind).sort()).toEqual(["agent", "user"]);
+    expect(rows[0]?.category).toBe("plugin_loop");
+    expect(rows[0]?.title).toMatch(/build/i);
+  });
+});

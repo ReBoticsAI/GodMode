@@ -60,6 +60,10 @@ import {
   uninstallPluginForTenant,
 } from "../../services/plugin-lifecycle.js";
 import {
+  isLocalPluginFolderRegistrationBlocked,
+  isPluginLoopError,
+} from "../../services/plugin-loop-error.js";
+import {
   acquireLiveListing,
   cancelEntitlement,
   listEntitlementsForBuyer,
@@ -818,16 +822,21 @@ export const catalogInstallAdapter: RecordAdapter = {
   },
   actions: {
     async activate_plugin_path(_db, _def, _id, input, ctx) {
-      return activatePluginForTenant(
-        ctx.data!.coreDb,
-        requireTenant(ctx),
-        requiredText(input, "path"),
-        {
-          buildIfNeeded: input.build_if_needed !== false,
-          installForTenant: input.install_for_tenant !== false,
-          reload: input.reload !== false,
-        }
-      );
+      try {
+        return await activatePluginForTenant(
+          ctx.data!.coreDb,
+          requireTenant(ctx),
+          requiredText(input, "path"),
+          {
+            buildIfNeeded: input.build_if_needed !== false,
+            installForTenant: input.install_for_tenant !== false,
+            reload: input.reload !== false,
+          }
+        );
+      } catch (err) {
+        if (isPluginLoopError(err)) throw httpError(err.status, err.message);
+        throw err;
+      }
     },
     install_entry(_db, _def, _id, input, ctx) {
       try {
@@ -854,10 +863,15 @@ export const catalogInstallAdapter: RecordAdapter = {
       return { ok: true, pluginId: input.plugin_id };
     },
     register_local_plugin(_db, _def, _id, input, ctx) {
-      if (config.isSaas && !config.saasAllowLocalPlugins) {
+      if (
+        isLocalPluginFolderRegistrationBlocked({
+          isSaas: config.isSaas,
+          saasAllowLocalPlugins: config.saasAllowLocalPlugins,
+        })
+      ) {
         throw httpError(
           403,
-          "Local plugin path registration is disabled on SaaS. Install from Official or allowlisted catalogs."
+          "Local plugin path registration is disabled on SaaS. Scaffold and install inside the workspace coding root via Intelligence, or install from Official or Community catalogs."
         );
       }
       return registerLocalPluginFolder(
