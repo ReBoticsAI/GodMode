@@ -54,7 +54,7 @@ export function eventTypeMatches(pattern: string | null, type: string): boolean 
  * the event is global (no tenant), or shares the owner's tenant, or the owner
  * is the actor that produced it.
  */
-function ownerCanSeeEvent(hook: CoreHook, event: CoreEvent): boolean {
+export function ownerCanSeeEvent(hook: CoreHook, event: CoreEvent): boolean {
   if (!event.tenant_id) return true;
   if (hook.owner_tenant_id && hook.owner_tenant_id === event.tenant_id) return true;
   if (event.actor_kind === hook.owner_kind && event.actor_id === hook.owner_id) {
@@ -429,6 +429,14 @@ async function dispatchAction(
       return runActionSendMessage(hook, cfg, payload);
     case "webhook":
       return runActionWebhook(cfg, payload);
+    case "gate":
+      return {
+        status: "success",
+        detail:
+          typeof cfg.message === "string" && cfg.message.trim()
+            ? cfg.message.trim()
+            : `Blocked by automation "${hook.name}"`,
+      };
     default:
       return { status: "error", detail: `unknown action ${hook.action_kind}` };
   }
@@ -443,7 +451,7 @@ export async function executeHook(
   hook: CoreHook,
   event: CoreEvent | null,
   db: CoreDatabase = getCoreDb()
-): Promise<void> {
+): Promise<HookRunStatus> {
   const payload: Record<string, unknown> = {
     eventType: event?.type ?? "schedule.tick",
     actorKind: event?.actor_kind ?? "system",
@@ -460,12 +468,12 @@ export async function executeHook(
 
   if (!evaluateCondition(hook.condition_json, payload)) {
     recordRun(db, hook.id, event?.id ?? null, "skipped", "condition not met");
-    return;
+    return "skipped";
   }
 
   if (isRateLimited(db, hook)) {
     recordRun(db, hook.id, event?.id ?? null, "skipped", "rate limit reached");
-    return;
+    return "skipped";
   }
 
   if (hook.require_approval) {
@@ -490,7 +498,7 @@ export async function executeHook(
     db.prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`).run(
       hook.id
     );
-    return;
+    return "pending_approval";
   }
 
   let result: ActionResult;
@@ -503,6 +511,7 @@ export async function executeHook(
   db.prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`).run(
     hook.id
   );
+  return result.status;
 }
 
 /** Approve a pending_approval run: execute its action now and log the outcome. */

@@ -6815,7 +6815,8 @@ export type HookActionKind =
   | "run_agent"
   | "run_workflow"
   | "send_message"
-  | "webhook";
+  | "webhook"
+  | "gate";
 
 export interface Hook {
   id: string;
