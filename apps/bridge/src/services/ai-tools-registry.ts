@@ -372,6 +372,12 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
           description:
             "Optional wall-clock timeout in milliseconds (default 120000, max 300000)",
         },
+        mode: {
+          type: "string",
+          enum: ["explore", "implement"],
+          description:
+            "explore = read-only coding search handoff. implement = full subagent (default).",
+        },
       },
       required: ["agent", "prompt"],
     },
@@ -1193,6 +1199,22 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       },
     },
   },
+  {
+    name: "explore_coding",
+    description:
+      "Launch a bounded read-only coding explore sub-run. Returns { paths, findings, openQuestions, status, implementOnParent: true }. Parent must implement edits. Prefer this over mutating tools when you only need to locate code.",
+    mode: "auto",
+    category: "coding",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "What to find or explain in the coding root" },
+        query: { type: "string", description: "Alias for prompt" },
+        agent: { type: "string", description: "Optional explorer agent id (default current)" },
+        timeoutMs: { type: "number" },
+      },
+    },
+  },
   // --- Notifications ---
   {
     name: supersededStaticName("list_notifications"),
@@ -1883,6 +1905,7 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "grep",
   "codebase_search",
   "explore_codebase",
+  "explore_coding",
   "read_diagnostics",
   "write_file",
   "edit_file",
