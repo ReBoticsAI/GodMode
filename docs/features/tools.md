@@ -11,3 +11,5 @@ summary: "Platform tools allowlisted for the active agent."
 
 
 The Tools tab shows platform tools allowlisted for the active agent. Pipeline and policy decide what each agent may call.
+
+Coding agents also get filesystem, terminal, and structured git tools (`git_status` through `git_push`) when code access is on. Those run against the coding root, not only this tab. See [[coding-stage]].

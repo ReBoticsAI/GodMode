@@ -96,6 +96,15 @@ import {
 } from "./coding/fs-tools.js";
 import { runTerminal } from "./coding/terminal-service.js";
 import {
+  gitAdd,
+  gitCheckout,
+  gitCommit,
+  gitCreateBranch,
+  gitDiff,
+  gitPush,
+  gitStatus,
+} from "./coding/git-tools.js";
+import {
   closeTerminalSession,
   createTerminalSession,
   listTerminalSessions,
@@ -1200,7 +1209,10 @@ export async function executeTool(
   args: Record<string, unknown>,
   ctx: ToolExecContext
 ): Promise<unknown> {
-  if (isPluginToolName(name)) {
+  if (
+    isPluginToolName(name) &&
+    !AI_TOOL_REGISTRY.some((t) => t.name === name)
+  ) {
     const pluginResult = await executePluginTool(name, args, pluginExecCtx(ctx));
     if (pluginResult !== undefined) return pluginResult;
   }
@@ -2370,6 +2382,102 @@ export async function executeTool(
       return res;
     }
 
+    case "git_status": {
+      const res = gitStatus(codingFsOpts(ctx));
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_status",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_diff": {
+      const res = gitDiff({
+        ...codingFsOpts(ctx),
+        staged: Boolean(args.staged),
+        path: args.path ? String(args.path) : undefined,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_diff",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_branch": {
+      const res = gitCreateBranch({
+        ...codingFsOpts(ctx),
+        name: String(args.name ?? ""),
+        checkout: args.checkout === undefined ? true : Boolean(args.checkout),
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_branch",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_checkout": {
+      const res = gitCheckout({
+        ...codingFsOpts(ctx),
+        ref: String(args.ref ?? ""),
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_checkout",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_add": {
+      const paths = Array.isArray(args.paths)
+        ? args.paths.map(String)
+        : args.path
+          ? [String(args.path)]
+          : [];
+      const res = gitAdd({ ...codingFsOpts(ctx), paths });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_add",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_commit": {
+      const paths = Array.isArray(args.paths) ? args.paths.map(String) : undefined;
+      const res = gitCommit({
+        ...codingFsOpts(ctx),
+        message: String(args.message ?? ""),
+        paths,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_commit",
+        result: "ok",
+      });
+      return res;
+    }
+
+    case "git_push": {
+      const res = await gitPush({
+        ...codingFsOpts(ctx),
+        remote: args.remote ? String(args.remote) : undefined,
+        branch: args.branch ? String(args.branch) : undefined,
+        force: args.force,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "git_push",
+        result: res.ok ? "ok" : "error",
+      });
+      return res;
+    }
+
     case "explore_codebase": {
       const queries = Array.isArray(args.queries)
         ? args.queries.map(String).filter(Boolean)
@@ -3200,7 +3308,10 @@ export async function executeTool(
           throw err;
         }
       }
-      if (isPluginToolName(name)) {
+      if (
+        isPluginToolName(name) &&
+        !AI_TOOL_REGISTRY.some((t) => t.name === name)
+      ) {
         const result = await executePluginTool(name, args, pluginExecCtx(ctx));
         if (result !== undefined) return result;
       }

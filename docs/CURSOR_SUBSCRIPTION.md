@@ -110,7 +110,7 @@ After a successful TypeScript/TSX write, the tool result also includes `verifica
 
 ## Coding workspace UI
 
-Sidebar **Coding** (`/coding`) is a human file tree and editor over the same sandboxed coding root agents use (`resolveCodingRoot`: local repo, or hub/SaaS `tenant-workspaces/<tenantId>/`, or the agent's **Coding workspace** path). Creates, saves, renames, and deletes go through `/api/ai/coding/*` and are audited. Paths cannot escape the root.
+Sidebar **Coding** (`/coding`) is a human file tree, Git status/diff panel, and editor over the same sandboxed coding root agents use (`resolveCodingRoot`: local repo, or hub/SaaS `tenant-workspaces/<tenantId>/`, or the agent's **Coding workspace** path). Creates, saves, renames, and deletes go through `/api/ai/coding/*` and are audited. Paths cannot escape the root. Agents ship with structured `git_*` tools (confirm on commit/push; no force-push).
 
 On SaaS, Coding UI and agent `codeAccess` are **on by default** (#178). Set `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` to disable. Interactive shared PTY and Layer 3/4 sandboxes apply when coding is enabled (see [SECURITY.md](./SECURITY.md)).
 

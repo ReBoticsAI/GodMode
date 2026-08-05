@@ -51,5 +51,7 @@ describe("coding terminal route wiring", () => {
     expect(src).toContain("runTerminal");
     expect(src).toContain('"/terminal/sessions"');
     expect(src).toContain("createTerminalSession");
+    expect(src).toContain('"/git/status"');
+    expect(src).toContain('"/git/diff"');
   });
 });
