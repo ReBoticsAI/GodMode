@@ -17,6 +17,8 @@ The Coding page (`/coding`) is the human surface for the same sandboxed coding r
 
 Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, `git_branch`, `git_checkout`, `git_add`, `git_commit`, `git_push`. Commit and push show a confirm preview. Push never auto-approves, including full autonomy, and never force-pushes.
 
+For wide questions, `explore_coding` (or `delegate_to_subagent` with `mode=explore`) returns a read-only handoff. The parent implements edits under Authority. Explore timeouts land in Attention.
+
 Deny a confirm or use the Authority coding kill switch to stop the cycle.
 
 Automations can gate coding with event types `coding.file.before` / `coding.shell.before` (action **Gate**) and react after `coding.file.written` / `coding.shell.ran`. Set `CODING_HOOK_EXECUTION=off` to keep Automations discovery-only. Disk IDE `hooks.json` is not executed.
