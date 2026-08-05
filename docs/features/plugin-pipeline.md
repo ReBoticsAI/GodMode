@@ -10,6 +10,6 @@ summary: "Self-expansion: scaffold_plugin → build_plugin → install_plugin fr
 ![plugin-pipeline in GodMode](/features/plugin-pipeline.png)
 
 
-Self-expansion path: Intelligence authors plugins through `scaffold_plugin` → `build_plugin` → `install_plugin` for local or hub authoring. Domain packs register ObjectTypes, actions, bridge routes, web pages, and install hooks without forking core.
+Self-expansion path: Intelligence authors plugins through `scaffold_plugin` → optional worktree → promote → `build_plugin` → `install_plugin` for local, hub, or Cloud workspace authoring. Never install from `.worktrees/`. Domain packs register ObjectTypes, actions, bridge routes, web pages, and install hooks without forking core.
 
 See PLUGIN_AUTHORING docs in the repository and [[objecttype-records]].

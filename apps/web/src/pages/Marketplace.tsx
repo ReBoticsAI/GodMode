@@ -872,7 +872,9 @@ export default function MarketplacePage() {
                 <CardTitle className="text-base">Local plugins on Cloud</CardTitle>
                 <CardDescription>
                   Arbitrary local folder registration is disabled on GodMode Cloud for
-                  security. Install from Official or Community catalogs instead.
+                  security. Intelligence can still scaffold, build, and install a plugin
+                  inside this workspace coding root. Official and Community catalogs remain
+                  the other Cloud install path.
                 </CardDescription>
               </CardHeader>
             </Card>

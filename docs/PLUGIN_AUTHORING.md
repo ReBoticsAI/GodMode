@@ -22,9 +22,9 @@ Fresh clones run as Control Center only until you install plugins from **Marketp
 Same tools work in the monorepo and on Docker hub/client:
 
 1. `scaffold_plugin` — creates `plugins/<id>/` under the **active coding root** (local: `{repo}/plugins/<id>`; hub/client: `{tenant-workspace}/plugins/<id>`, or under `{tenant}/.worktrees/<slug>/plugins/<id>` when `agent.config.workspace` points at a Layer 2 worktree). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
-2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` to isolate iterative edits, then `coding_worktree_promote` to merge into the live tenant tree (and optionally discard). Prefer promote before `install_plugin` so the persisted plugin path is never under `.worktrees/`.
+2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` to isolate iterative edits, then `coding_worktree_promote` to merge into the live tenant tree (and optionally discard). `install_plugin` **refuses** paths under `.worktrees/`. Promote first, then install from live `plugins/<id>`.
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`). For native/`npm ci` deps when Layer 4 is enabled, use `run_ephemeral_build` (host build supervisor; Docker socket never on Bridge).
-4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes.
+4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes. Failures return a class (`manifest`, `build`, `isolation`, `install`) and surface in Attention.
 
 ### SaaS coding isolation (#112 / #178)
 
@@ -32,7 +32,8 @@ On SaaS (`INSTALLATION_SURFACE=saas`), coding UI and agent coding tools are **on
 default** (#178). Opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`. Arbitrary
 **Local** plugin folder registration stays **off** unless
 `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS=true`. Tenants still author via Intelligence
-`scaffold_plugin` under the tenant workspace and install Official / Community packs.
+`scaffold_plugin` under the tenant workspace coding root (`install_plugin` there is
+not local-folder registration) and can also install Official / Community packs.
 
 Coding tools are confined so tenants cannot reach core or each other:
 

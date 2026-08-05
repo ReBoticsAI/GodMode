@@ -8,8 +8,10 @@ import * as esbuild from "esbuild";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 import {
   assertDeployAllowed,
+  isDeployAuthorityError,
   type DeployAssertOpts,
 } from "./authority/deploy-authority.js";
+import { PluginLoopError } from "./plugin-loop-error.js";
 
 const EXTERNAL = ["@godmode/plugin-api", "@godmode/plugin-host"];
 
@@ -45,19 +47,41 @@ export async function buildPluginWithEsbuild(
     agentId: authority?.agentId,
     action: authority?.action ?? "build_plugin",
   });
+  try {
+    return await buildPluginWithEsbuildUnchecked(pluginRoot);
+  } catch (err) {
+    if (isDeployAuthorityError(err) || err instanceof PluginLoopError) throw err;
+    throw new PluginLoopError(
+      "build",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+async function buildPluginWithEsbuildUnchecked(
+  pluginRoot: string
+): Promise<{ ok: true; pluginRoot: string; outputs: string[] }> {
   const resolved = path.resolve(pluginRoot);
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    throw new Error(`Plugin root not found: ${resolved}`);
+    throw new PluginLoopError("build", `Plugin root not found: ${resolved}`);
   }
 
-  const manifest = readGodmodePluginManifest(resolved);
+  let manifest;
+  try {
+    manifest = readGodmodePluginManifest(resolved);
+  } catch (err) {
+    throw new PluginLoopError(
+      "manifest",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
   const bridgeOut = path.join(resolved, manifest.bridge?.entry ?? "dist/bridge.js");
   const webOut = path.join(resolved, manifest.web?.entry ?? "dist/web.js");
   const outputs: string[] = [];
 
   const bridgeSrc = resolveSource(resolved, "bridge");
   if (!bridgeSrc) {
-    throw new Error(`No src/bridge.ts found under ${resolved}`);
+    throw new PluginLoopError("build", `No src/bridge.ts found under ${resolved}`);
   }
 
   fs.mkdirSync(path.dirname(bridgeOut), { recursive: true });
@@ -90,7 +114,10 @@ export async function buildPluginWithEsbuild(
   }
 
   if (!bridgeEntryExists(resolved)) {
-    throw new Error("Plugin build finished but bridge entry is still missing.");
+    throw new PluginLoopError(
+      "build",
+      "Plugin build finished but bridge entry is still missing."
+    );
   }
 
   return { ok: true, pluginRoot: resolved, outputs };
