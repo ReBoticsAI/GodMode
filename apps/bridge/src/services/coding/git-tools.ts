@@ -315,6 +315,6 @@ export async function gitPush(
     }
     return { remote, branch, output, ok: true };
   } finally {
-    await proxy?.stop().catch(() => undefined);
+    await proxy?.close().catch(() => undefined);
   }
 }
