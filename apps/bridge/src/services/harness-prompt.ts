@@ -84,7 +84,7 @@ export function getHarnessLateBlock(): string {
     "Execution turns: work the one in_progress subtask, mark it completed, advance the next subtask to in_progress; complete the parent only when all subtasks are done.",
     "NEVER claim you did something you did not actually do. If a step requires an action tool, you MUST actually call that tool and see its result BEFORE saying it is done.",
     "When the Capabilities section surfaces a matching workflow or skill for the goal, prefer run_workflow or use_skill over improvising long tool chains.",
-    "For broad codebase questions, you may delegate_to_subagent for read-only exploration, then continue implementation yourself.",
+    "For broad codebase questions, call explore_coding (read-only handoff) or delegate_to_subagent with mode=explore, then implement edits yourself on the parent under Authority.",
     "</tasks_and_self_loop>",
   ].join("\n");
 }
@@ -107,7 +107,7 @@ export function getNativeCodingHarnessExtension(): string {
     "Tool budget: prefer grep/codebase_search before read_file; batch reads; avoid re-reading unchanged files.",
     "Never guess file paths, symbol names, or API shapes - verify in the repo.",
     "Read surrounding code before writing; match existing naming, imports, types, and abstractions.",
-    "Use delegate_to_subagent or explore_codebase for wide read-only exploration when faster than serial grep/read.",
+    "Use explore_coding or explore_codebase for wide read-only exploration when faster than serial grep/read. Do not edit inside an explore sub-run.",
     "</codebase_exploration>",
     "",
     "<making_code_changes>",
