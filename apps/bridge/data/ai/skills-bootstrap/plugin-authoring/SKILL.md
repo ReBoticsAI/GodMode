@@ -26,4 +26,4 @@ tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_
    Native storage is tenant-local and additive-only; uninstall retains native
    tables and Records.
 8. Optional: add catalog entry via Official PR or Unofficial catalog URL.
-9. When **Git** / **GitHub** Official plugins are installed, ship code changes with `git_status` → `git_add` → `git_commit` → `git_push` → `gh_pr_create`.
+9. Ship coding-root changes with core `git_status` → `git_branch` / `git_checkout` → `git_diff` → `git_add` → `git_commit` → `git_push`. Opening a review request on an external host uses an Official GitHub plugin tool when installed (`gh_pr_create`).

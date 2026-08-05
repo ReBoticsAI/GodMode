@@ -114,14 +114,15 @@ When `EMBEDDINGS_ENABLED=true` (and optionally `EMBEDDINGS_EXTERNAL`):
 
 See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [CONFIGURATION.md](./CONFIGURATION.md).
 
-### Optional: Devtools plugins (git / GitHub)
+### Core agent git cycle
 
-1. **Marketplace → Official** → install **Git** and **GitHub**
-2. Confirm `git` and `gh` work on the Bridge host
-3. Ask Intelligence to show `git_status` for the coding root
-4. For a full loop (do not force-push): small doc edit → commit → push → `gh_pr_create` on a throwaway branch
+1. Open `/coding` → **Git** and confirm branch / dirty summary loads (or a clear not-a-repo error)
+2. Ask Intelligence to `git_status` on the coding root
+3. Small edit → `git_branch` (throwaway) → `git_diff` → `git_add` → `git_commit` (confirm shows diff) → `git_push` if an HTTPS remote already exists (confirm; deny force-push)
+4. Deny a push confirm once and confirm the push does not run
+5. Optional: Official GitHub plugin `gh_pr_create` for a host review request (not required for core)
 
-See [MARKETPLACE.md](./MARKETPLACE.md#official-devtools-plugins-git--github).
+See [coding-stage](./features/coding-stage.md) and [git-github-plugins](./features/git-github-plugins.md).
 
 ---
 

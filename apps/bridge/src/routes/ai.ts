@@ -1771,9 +1771,17 @@ export function createAiRouter(
             const { previewWriteToolDiff } = await import(
               "../services/coding/fs-tools.js"
             );
-            const preview = previewWriteToolDiff(name, args, {
-              tenantId: work.tenantId,
-            });
+            const { previewGitToolDiff } = await import(
+              "../services/coding/git-tools.js"
+            );
+            const preview = {
+              ...previewWriteToolDiff(name, args, {
+                tenantId: work.tenantId,
+              }),
+              ...previewGitToolDiff(name, args, {
+                tenantId: work.tenantId,
+              }),
+            };
             send("tool_confirm_required", {
               toolCallId,
               name,
