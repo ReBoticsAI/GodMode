@@ -109,6 +109,12 @@ import {
   codingHookExecutionEnabled,
 } from "./coding/coding-hooks.js";
 import {
+  EXPLORE_SYSTEM_EXTRA,
+  exploreToolBlocked,
+  notifyExploreFailure,
+  parseExploreHandoff,
+} from "./coding/explore-coding.js";
+import {
   closeTerminalSession,
   createTerminalSession,
   listTerminalSessions,
@@ -221,6 +227,8 @@ export interface ToolExecContext {
   tenantId?: string;
   /** Session tool autonomy from composer (off | writes | full). */
   sessionAutonomy?: import("./agents/agents-db.js").CodeAutonomyLevel;
+  /** Read-only coding explore sub-run (#450). Mutating coding tools are rejected. */
+  codingExploreOnly?: boolean;
   /** Active tool call id for streaming terminal output. */
   activeToolCallId?: string;
   /** Abort signal for long tools (terminal_monitor). */
@@ -1243,6 +1251,11 @@ export async function executeTool(
   args: Record<string, unknown>,
   ctx: ToolExecContext
 ): Promise<unknown> {
+  if (ctx.codingExploreOnly && exploreToolBlocked(name)) {
+    throw new Error(
+      `Explore sub-run cannot call ${name}. Return findings to the parent for implementation.`
+    );
+  }
   if (
     isPluginToolName(name) &&
     !AI_TOOL_REGISTRY.some((t) => t.name === name)
@@ -1658,6 +1671,7 @@ export async function executeTool(
         args.timeoutMs != null && Number.isFinite(Number(args.timeoutMs))
           ? Number(args.timeoutMs)
           : undefined;
+      const explore = args.mode === "explore";
       return runBoundedSubagentDelegation({
         agentId,
         timeoutMs,
@@ -1667,11 +1681,64 @@ export async function executeTool(
             llm: ctx.llm!,
             agentId,
             prompt,
-            systemExtra: context || undefined,
-            toolCtx: ctx,
+            systemExtra: explore
+              ? [EXPLORE_SYSTEM_EXTRA, context].filter(Boolean).join("\n")
+              : context || undefined,
+            toolCtx: explore ? { ...ctx, codingExploreOnly: true } : ctx,
             delegationDepth: ctx.delegationDepth ?? 0,
           }),
       });
+    }
+    case "explore_coding": {
+      if (!ctx.llm) throw new Error("explore_coding requires LLM context");
+      const prompt = String(args.prompt ?? args.query ?? "").trim();
+      if (!prompt) throw new Error("prompt required");
+      const agentId = String(args.agent ?? ctx.activeAgentId ?? "intelligence");
+      if (!getAgent(ctx.db, agentId)) {
+        throw new Error(`Unknown explore agent: ${agentId}`);
+      }
+      const timeoutMs =
+        args.timeoutMs != null && Number.isFinite(Number(args.timeoutMs))
+          ? Number(args.timeoutMs)
+          : undefined;
+      const bounded = await runBoundedSubagentDelegation({
+        agentId,
+        timeoutMs,
+        run: () =>
+          runSubagent({
+            db: ctx.db,
+            llm: ctx.llm!,
+            agentId,
+            prompt,
+            systemExtra: EXPLORE_SYSTEM_EXTRA,
+            toolCtx: { ...ctx, codingExploreOnly: true },
+            delegationDepth: ctx.delegationDepth ?? 0,
+          }),
+      });
+      if (bounded.status !== "ok") {
+        notifyExploreFailure({
+          userId: ctx.userId,
+          tenantId: ctx.tenantId ?? null,
+          agentId: ctx.activeAgentId ?? "intelligence",
+          status: bounded.status === "timeout" ? "timeout" : "error",
+          detail: bounded.error || bounded.status,
+        });
+        return {
+          ...bounded,
+          role: "explore",
+          paths: [],
+          findings: [],
+          openQuestions: [],
+          implementOnParent: true,
+        };
+      }
+      const handoff = parseExploreHandoff(bounded.answer ?? "");
+      return {
+        ...bounded,
+        role: "explore",
+        ...handoff,
+        implementOnParent: true,
+      };
     }
     case "ask_cursor_agent": {
       const prompt = String(args.prompt ?? "").trim();
