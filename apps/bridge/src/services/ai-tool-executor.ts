@@ -105,6 +105,10 @@ import {
   gitStatus,
 } from "./coding/git-tools.js";
 import {
+  assertCodingHooksAllow,
+  codingHookExecutionEnabled,
+} from "./coding/coding-hooks.js";
+import {
   closeTerminalSession,
   createTerminalSession,
   listTerminalSessions,
@@ -961,6 +965,36 @@ function codingFsOpts(ctx: ToolExecContext): {
     if (typeof ws === "string" && ws.trim()) root = ws.trim();
   }
   return { tenantId, root };
+}
+
+async function beforeCodingMutation(
+  ctx: ToolExecContext,
+  eventType: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  await assertCodingHooksAllow({
+    eventType,
+    tenantId: ctx.tenantId ?? null,
+    actorKind: ctx.userId ? "user" : "agent",
+    actorId: ctx.userId ?? ctx.activeAgentId ?? "intelligence",
+    payload,
+  });
+}
+
+function afterCodingMutation(
+  ctx: ToolExecContext,
+  eventType: string,
+  payload: Record<string, unknown>
+): void {
+  if (!codingHookExecutionEnabled()) return;
+  emitEvent({
+    type: eventType,
+    actor: ctx.userId
+      ? { kind: "user", id: ctx.userId }
+      : { kind: "agent", id: ctx.activeAgentId ?? "intelligence" },
+    tenantId: ctx.tenantId ?? null,
+    payload,
+  });
 }
 
 function hookScope(ctx: ToolExecContext): HookOwnerScope {
@@ -2131,6 +2165,10 @@ export async function executeTool(
     case "write_file": {
       const filePath = String(args.path ?? "");
       const content = String(args.content ?? "");
+      await beforeCodingMutation(ctx, "coding.file.before", {
+        path: filePath,
+        tool: "write_file",
+      });
       const prior = readFileRaw({ path: filePath, ...codingFsOpts(ctx) });
       const res = fsWriteFile({
         path: filePath,
@@ -2149,6 +2187,10 @@ export async function executeTool(
         path: res.path,
         ...codingFsOpts(ctx),
       });
+      afterCodingMutation(ctx, "coding.file.written", {
+        path: res.path,
+        tool: "write_file",
+      });
       return { ...res, diff, verification };
     }
 
@@ -2156,6 +2198,10 @@ export async function executeTool(
       const filePath = String(args.path ?? "");
       const oldStr = String(args.old_string ?? "");
       const newStr = String(args.new_string ?? "");
+      await beforeCodingMutation(ctx, "coding.file.before", {
+        path: filePath,
+        tool: "edit_file",
+      });
       const before = readFileRaw({ path: filePath, ...codingFsOpts(ctx) });
       const res = fsEditFile({
         path: filePath,
@@ -2176,10 +2222,18 @@ export async function executeTool(
         path: res.path,
         ...codingFsOpts(ctx),
       });
+      afterCodingMutation(ctx, "coding.file.written", {
+        path: res.path,
+        tool: "edit_file",
+      });
       return { ...res, diff, verification };
     }
 
     case "delete_file": {
+      await beforeCodingMutation(ctx, "coding.file.before", {
+        path: String(args.path ?? ""),
+        tool: "delete_file",
+      });
       const res = fsDeleteFile({ path: String(args.path ?? ""), ...codingFsOpts(ctx) });
       logToolAudit(ctx.db, {
         ...auditCtx(ctx),
@@ -2187,10 +2241,18 @@ export async function executeTool(
         path: res.path,
         result: res.deleted ? "deleted" : "missing",
       });
+      afterCodingMutation(ctx, "coding.file.written", {
+        path: res.path,
+        tool: "delete_file",
+      });
       return res;
     }
 
     case "run_terminal": {
+      await beforeCodingMutation(ctx, "coding.shell.before", {
+        command: String(args.command ?? ""),
+        tool: "run_terminal",
+      });
       try {
         const res = await runTerminal({
           command: String(args.command ?? ""),
@@ -2214,6 +2276,11 @@ export async function executeTool(
           exitCode: res.exitCode,
           bytesOut,
           result: res.timedOut ? "timeout" : res.exitCode === 0 ? "ok" : "error",
+        });
+        afterCodingMutation(ctx, "coding.shell.ran", {
+          command: res.command,
+          exitCode: res.exitCode,
+          tool: "run_terminal",
         });
         return res;
       } catch (err) {
@@ -2343,6 +2410,10 @@ export async function executeTool(
       });
 
     case "apply_patch": {
+      await beforeCodingMutation(ctx, "coding.file.before", {
+        path: String(args.path ?? ""),
+        tool: "apply_patch",
+      });
       const res = applyPatch({
         path: String(args.path ?? ""),
         patch: String(args.patch ?? ""),
@@ -2358,6 +2429,10 @@ export async function executeTool(
       const verification = await verifyTypeScriptAfterWrite({
         path: res.path,
         ...codingFsOpts(ctx),
+      });
+      afterCodingMutation(ctx, "coding.file.written", {
+        path: res.path,
+        tool: "apply_patch",
       });
       return { ...res, verification };
     }

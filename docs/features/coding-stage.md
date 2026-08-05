@@ -19,6 +19,8 @@ Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, 
 
 Deny a confirm or use the Authority coding kill switch to stop the cycle.
 
+Automations can gate coding with event types `coding.file.before` / `coding.shell.before` (action **Gate**) and react after `coding.file.written` / `coding.shell.ran`. Set `CODING_HOOK_EXECUTION=off` to keep Automations discovery-only. Disk IDE `hooks.json` is not executed.
+
 ## What is not here
 
 - GodMode is not a git forge. Host clone/auth and review-request tools stay on Official git-host connectors or plugins.

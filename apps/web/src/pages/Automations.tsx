@@ -66,6 +66,7 @@ const ACTION_KINDS: HookActionKind[] = [
   "run_workflow",
   "send_message",
   "webhook",
+  "gate",
 ];
 
 const ACTION_LABELS: Record<HookActionKind, string> = {
@@ -74,6 +75,7 @@ const ACTION_LABELS: Record<HookActionKind, string> = {
   run_workflow: "Run workflow",
   send_message: "Send message",
   webhook: "Webhook",
+  gate: "Gate (block coding)",
 };
 
 interface ConditionRow {
@@ -103,7 +105,8 @@ const DEFAULT_ACTION_CONFIG: Record<HookActionKind, string> = {
   run_agent: JSON.stringify({ agentId: "", prompt: "" }, null, 2),
   run_workflow: JSON.stringify({ workflowId: "", inputs: "" }, null, 2),
   send_message: JSON.stringify({ conversationId: "", text: "" }, null, 2),
-  webhook: JSON.stringify({ url: "", method: "POST" }, null, 2),
+  webhook: JSON.stringify({ url: "", method: "POST", failClosed: false }, null, 2),
+  gate: JSON.stringify({ message: "Blocked by workspace automation" }, null, 2),
 };
 
 function emptyDraft(scheduleOnly: boolean, agentId?: string): DraftState {
@@ -300,7 +303,7 @@ function HooksManager({
         <p className="text-sm text-muted-foreground">
           {scheduleOnly
             ? "Cron-triggered GodMode automations. Run a workflow, agent, or notification on a schedule."
-            : "GodMode event- and schedule-driven automations (notify, run agents/workflows, messages, webhooks). Separate from Cursor IDE hooks.json."}
+            : "GodMode event- and schedule-driven automations (notify, run agents/workflows, messages, webhooks, coding gates). Coding tools emit coding.file.before / coding.file.written and coding.shell.before / coding.shell.ran. Disk IDE hooks.json is discovery/compat only."}
         </p>
         <Button size="sm" onClick={openCreate}>
           {scheduleOnly ? "New schedule" : "New automation"}
