@@ -131,6 +131,21 @@ async function githubAppApi<T>(
   return (await res.json()) as T;
 }
 
+function mapGithubInstallations(
+  rows: Array<{
+    id: number;
+    target_type?: string;
+    account?: { login?: string; type?: string };
+  }> | null | undefined
+): GithubAppInstallation[] {
+  return (rows ?? []).map((r) => ({
+    id: r.id,
+    accountLogin: r.account?.login ?? "",
+    accountType: r.account?.type ?? "",
+    targetType: r.target_type ?? "",
+  }));
+}
+
 export async function listGithubAppInstallations(): Promise<GithubAppInstallation[]> {
   const rows = await githubAppApi<
     Array<{
@@ -139,12 +154,44 @@ export async function listGithubAppInstallations(): Promise<GithubAppInstallatio
       account?: { login?: string; type?: string };
     }>
   >("/app/installations");
-  return (rows ?? []).map((r) => ({
-    id: r.id,
-    accountLogin: r.account?.login ?? "",
-    accountType: r.account?.type ?? "",
-    targetType: r.target_type ?? "",
-  }));
+  return mapGithubInstallations(rows);
+}
+
+/**
+ * Installations visible to a user-to-server token (not the full App install list).
+ * Prefer this after Connect OAuth so we never default to a platform org install.
+ */
+export async function listGithubUserInstallations(
+  userAccessToken: string
+): Promise<GithubAppInstallation[]> {
+  const data = await githubAppApi<{
+    installations?: Array<{
+      id: number;
+      target_type?: string;
+      account?: { login?: string; type?: string };
+    }>;
+  }>("/user/installations", { token: userAccessToken });
+  return mapGithubInstallations(data?.installations);
+}
+
+/**
+ * Pick an App installation for Connect storage.
+ * Never falls back to "first install on the App" (that was the platform org on Cloud).
+ */
+export function pickGithubInstallationId(
+  installs: Array<{ id: number; accountLogin: string }>,
+  login: string | undefined | null
+): number | null {
+  if (!installs.length) return null;
+  const needle = login?.trim().toLowerCase();
+  if (needle) {
+    const match = installs.find(
+      (i) => i.accountLogin.trim().toLowerCase() === needle
+    );
+    if (match) return match.id;
+  }
+  if (installs.length === 1) return installs[0]!.id;
+  return null;
 }
 
 export async function createInstallationAccessToken(

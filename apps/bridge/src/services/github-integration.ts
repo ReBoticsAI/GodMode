@@ -14,7 +14,8 @@ import {
   buildGithubAppInstallUrl,
   createInstallationAccessToken,
   githubAppConfigured,
-  listGithubAppInstallations,
+  listGithubUserInstallations,
+  pickGithubInstallationId,
   resolveGithubOauthClient,
 } from "./github-app.js";
 
@@ -272,18 +273,13 @@ export async function exchangeGithubIntegrationCode(
   let installationId: number | null = null;
   if (source === "github_app" && githubAppConfigured()) {
     try {
-      const installs = await listGithubAppInstallations();
-      if (login) {
-        const match = installs.find(
-          (i) => i.accountLogin.toLowerCase() === login!.toLowerCase()
-        );
-        installationId = match?.id ?? installs[0]?.id ?? null;
-      } else {
-        installationId = installs[0]?.id ?? null;
-      }
+      // User-visible installs only. Never list the App-wide catalog and take [0]
+      // (that bound Cloud Connect to the platform org install).
+      const installs = await listGithubUserInstallations(tokenJson.access_token);
+      installationId = pickGithubInstallationId(installs, login);
     } catch (err) {
       console.warn(
-        "[github-integration] list installations failed:",
+        "[github-integration] list user installations failed:",
         err instanceof Error ? err.message : err
       );
     }
@@ -317,6 +313,9 @@ export function buildGithubIntegrationAuthorizeUrl(state: string): string {
   const url = new URL("https://github.com/login/oauth/authorize");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
+  // Force the account chooser so a cached GitHub session (e.g. platform org
+  // owner) does not silently bind Connect to the wrong identity.
+  url.searchParams.set("prompt", "select_account");
   if (source !== "github_app") {
     url.searchParams.set("scope", GITHUB_PROJECTS_OAUTH_SCOPES);
   }
