@@ -6,10 +6,10 @@ import { pickGithubInstallationId } from "../github-app.js";
 
 describe("pickGithubInstallationId", () => {
   const platform = { id: 150588979, accountLogin: "ReBoticsAI" };
-  const personal = { id: 99, accountLogin: "dane" };
+  const personal = { id: 99, accountLogin: "alice" };
 
   it("matches the OAuth login account", () => {
-    expect(pickGithubInstallationId([platform, personal], "dane")).toBe(99);
+    expect(pickGithubInstallationId([platform, personal], "alice")).toBe(99);
     expect(pickGithubInstallationId([platform, personal], "ReBoticsAI")).toBe(
       150588979
     );
@@ -26,6 +26,6 @@ describe("pickGithubInstallationId", () => {
   });
 
   it("returns null when there are no installs", () => {
-    expect(pickGithubInstallationId([], "dane")).toBeNull();
+    expect(pickGithubInstallationId([], "alice")).toBeNull();
   });
 });
