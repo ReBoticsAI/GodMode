@@ -40,6 +40,7 @@ const FIELD_TYPES: Record<string, FieldSpec> = {
   enabled_override: ["enabled_override", "Check"],
   index_rows: ["index_rows", "Int"],
   default_scale: ["default_scale", "Float"],
+  content: ["content", "JSON"],
   config: ["config", "JSON"],
   assembled: ["assembled", "JSON"],
   scopes: ["scopes", "JSON"],
