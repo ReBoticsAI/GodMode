@@ -1581,6 +1581,13 @@ export function createAiRouter(
     };
 
     send("chat_id", { chatId: activeChatId });
+    send("status", {
+      phase: "starting",
+      message:
+        agent.backend === "cursor_cloud" || agent.backend === "cursor"
+          ? "Starting Cursor…"
+          : "Starting model…",
+    });
 
     const abortController = new AbortController();
     const onClientClose = () => abortController.abort();
@@ -1590,6 +1597,23 @@ export function createAiRouter(
     let fullContent = "";
     let reasoningRaw = "";
     let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    let sawStreamActivity = false;
+    const markStreamActivity = () => {
+      sawStreamActivity = true;
+    };
+    const statusHeartbeat = setInterval(() => {
+      if (abortController.signal.aborted || sawStreamActivity) return;
+      send("status", {
+        phase: "waiting",
+        message:
+          agent.backend === "cursor_cloud" || agent.backend === "cursor"
+            ? "Waiting on Cursor…"
+            : "Waiting on model…",
+      });
+    }, 4000);
+    abortController.signal.addEventListener("abort", () => {
+      clearInterval(statusHeartbeat);
+    });
 
     // Server-side accumulation of Cursor-style parts (thinking / tool / todos /
     // text) so a reloaded chat replays tool cards and reasoning faithfully.
@@ -1726,15 +1750,21 @@ export function createAiRouter(
           abortSignal: abortController.signal,
           maxIterations: harnessProfile.maxChatIterations,
           onToken: (chunk) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             streamed += chunk;
             segRaw += chunk;
             send("token", { content: chunk });
           },
           onReasoning: (chunk) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             partReasoning(chunk);
             send("reasoning", { content: chunk });
           },
           onToolCall: (name, args, toolCallId) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             partToolCall(name, args, toolCallId);
             send("tool_call", { toolCallId, name, args });
           },
@@ -1935,6 +1965,7 @@ export function createAiRouter(
         });
       }
     } finally {
+      clearInterval(statusHeartbeat);
       req.off("close", onClientClose);
       res.off("close", onClientClose);
     }
