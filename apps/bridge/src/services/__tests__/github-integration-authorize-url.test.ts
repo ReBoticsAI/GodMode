@@ -52,6 +52,7 @@ describe("buildGithubIntegrationAuthorizeUrl", () => {
       "https://app.example.test/api/integrations/github/callback"
     );
     expect(url.searchParams.get("state")).toBe("state-abc");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
     expect(url.searchParams.get("scope")).toBeNull();
     expect(url.pathname).not.toContain("/apps/");
     expect(url.pathname).not.toContain("installations");
