@@ -101,6 +101,8 @@ interface UiMessage {
   /** Structured Cursor-style parts for assistant turns (tools/thinking/todos/text). */
   parts?: MsgPart[];
   streaming?: boolean;
+  /** Live status while waiting for the first token (e.g. Starting Cursor…). */
+  statusText?: string;
   dmSenderKind?: "user" | "agent";
   dmSenderName?: string;
   isOwn?: boolean;
@@ -881,9 +883,17 @@ export function IntelligencePanel() {
     setMessages((prev) => [
       ...prev,
       userMsg,
-      { id: assistantId, role: "assistant", text: "", parts: [], streaming: true },
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        parts: [],
+        streaming: true,
+        statusText: "Working…",
+      },
     ]);
     setBusy(true);
+    busyRef.current = true;
 
     const history = messages.map((m) => ({
       role: m.role,
@@ -967,6 +977,15 @@ export function IntelligencePanel() {
         onChatId: (chatId) => {
           if (!activeChatId) setActiveChatId(chatId);
         },
+        onStatus: ({ message }) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && m.streaming
+                ? { ...m, statusText: message }
+                : m
+            )
+          );
+        },
         onToken: (content) => {
           builder.onToken(content);
           sync();
@@ -1027,11 +1046,13 @@ export function IntelligencePanel() {
                       data.content,
                     thinking: data.thinking,
                     streaming: false,
+                    statusText: undefined,
                   }
                 : m
             )
           );
           setBusy(false);
+          busyRef.current = false;
           abortRef.current = null;
           refreshChats();
         },
@@ -1047,12 +1068,14 @@ export function IntelligencePanel() {
                     ],
                     text: `⚠️ ${error}`,
                     streaming: false,
+                    statusText: undefined,
                   }
                 : m
             )
           );
           setErrorMsg(error);
           setBusy(false);
+          busyRef.current = false;
           abortRef.current = null;
         },
         onToolConfirmRequired: (payload) => {
@@ -1529,7 +1552,7 @@ export function IntelligencePanel() {
                           <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
                           <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
                         </span>
-                        Working…
+                        {m.statusText?.trim() || "Working…"}
                       </div>
                     );
                   }
