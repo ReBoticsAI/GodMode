@@ -119,7 +119,14 @@ export function RulesTab() {
   const load = useCallback(() => {
     fetchAiRules(activeAgentId)
       .then((r) => setRules(r.rules))
-      .catch(() => setRules([]));
+      .catch((err) => {
+        setRules([]);
+        toast.error(
+          err instanceof Error
+            ? `Failed to load rules: ${err.message}`
+            : "Failed to load rules"
+        );
+      });
   }, [activeAgentId]);
 
   useEffect(() => {

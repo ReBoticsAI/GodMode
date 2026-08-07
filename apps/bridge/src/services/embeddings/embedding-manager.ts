@@ -213,12 +213,21 @@ export class EmbeddingManager {
     }
   }
 
-  /** Non-blocking code-index warm for coding roots (does not block chat). */
+  /** Soft code-index warm. Deferred so post-listen traffic (health, Intelligence) stays responsive. */
   private async softBackfillCodeIndexes(): Promise<void> {
+    // Let the HTTP server settle; avoid sync monorepo walks on the first seconds of uptime.
+    await new Promise((r) => setTimeout(r, 15_000));
     const { syncCodeIndex } = await import("../coding/code-index.js");
+    const { resolveCodingRoot } = await import("../coding/fs-tools.js");
     const embedder = this.codeClient;
+    // Local tenants often share one coding root; INDEX_LOCK only dedupes concurrent runs.
+    const warmedRoots = new Set<string>();
     for (const { tenantId, db } of this.listTenantDbs()) {
       try {
+        await new Promise((r) => setImmediate(r));
+        const rootPath = resolveCodingRoot({ tenantId: tenantId || null });
+        if (warmedRoots.has(rootPath)) continue;
+        warmedRoots.add(rootPath);
         await syncCodeIndex(db, {
           tenantId: tenantId || null,
           embedder,
