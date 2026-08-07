@@ -4,6 +4,26 @@ GodMode public SaaS runs on a **Hostinger VPS** (Docker Compose) as the origin.
 **Cloudflare** is the public edge (TLS, WAF, DDoS). Z440 LAN hubs are staging only
 and are **not** the public DNS cutover target.
 
+## Production gate (merge to main)
+
+**Normal Cloud cutover is automated.** A green merge to `main` that triggers
+**Publish SaaS image** builds/signs a GHCR digest, then the VPS self-hosted runner
+(`self-hosted,linux,godmode-saas`) runs [`scripts/update/godmode-saas-pin.sh`](../scripts/update/godmode-saas-pin.sh):
+rewrite only `GODMODE_IMAGE=…@sha256:…` in `deploy/.env.production`, compose
+pull/up, health check. Secrets stay on the VPS; the job must never dump the env
+file. After health OK, Waiting Deploy project items contained in that commit move
+to Done (soft-fail via `scripts/update/move-waiting-deploy-to-done.mjs`).
+
+**Ops precondition:** register a Hostinger Actions runner with labels
+`self-hosted`, `linux`, `godmode-saas` that can reach `/opt/godmode`. Without it,
+`deploy-hostinger` queues until a runner appears.
+
+**Escape hatches:** `workflow_dispatch` on Publish SaaS image does **not** deploy
+unless `deploy_hostinger=true`. Stable-tag promote remains
+[`.github/workflows/promote-saas.yml`](../.github/workflows/promote-saas.yml).
+Manual/emergency pin: Cursor skill `/deploygodmodecloud` or run
+`godmode-saas-pin.sh` on the box.
+
 Prefer serving marketing from **Cloudflare Pages** at `/` on `godmode.software`,
 or from **`apps/web` `/www`** on the same VPS app origin, so the VPS primarily
 runs the authenticated app. See [`sites/www/README.md`](../sites/www/README.md)

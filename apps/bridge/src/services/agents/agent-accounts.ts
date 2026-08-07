@@ -44,7 +44,7 @@ function readTokenPlain(value: string | null): string | null {
   try {
     return decryptSecret(value);
   } catch {
-    return value;
+    return null;
   }
 }
 
