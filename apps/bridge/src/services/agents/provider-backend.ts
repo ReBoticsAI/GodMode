@@ -2,14 +2,18 @@ import { getToolSchemasForLlm } from "../ai-tools-registry.js";
 import { executeTool, type ToolExecContext } from "../ai-tool-executor.js";
 import { shouldAutoApproveTool } from "../confirm-policy.js";
 import type { AgentMessage } from "../ai-agent.js";
-import { budgetToolResult } from "../ai-agent.js";
+import { budgetToolResult, TOOL_OUTPUT_MAX_CHARS } from "../ai-agent.js";
 import { PROVIDER_AGENT_ITERATIONS } from "../agent-loop.js";
-import { resolveSecretRefForAgent } from "./agents-db.js";
+import { resolveSecretRefForAgent, withSecretValue } from "./agents-db.js";
 import { resolveAgentCredential } from "./agent-accounts.js";
 import type { AppDatabase } from "../../db.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
 import type { AgentProviderConfig } from "./types.js";
 import type { IntelligenceChatMode } from "../chat-mode.js";
+import {
+  budgetAndScrubToolResult,
+  scrubSensitiveToolArgs,
+} from "../secret-scrub.js";
 
 function parseToolArgs(raw: string): Record<string, unknown> {
   try {
@@ -134,13 +138,14 @@ async function executeOneTool(
 ): Promise<AgentMessage> {
   const fnName = tc.function.name;
   const args = parseToolArgs(tc.function.arguments);
-  req.onToolCall?.(fnName, args, tc.id);
+  const safeArgs = scrubSensitiveToolArgs(args);
+  req.onToolCall?.(fnName, safeArgs, tc.id);
 
   const approved = await shouldAutoApproveTool(
     req.agent,
     fnName,
     req.onConfirmRequired,
-    { toolCallId: tc.id, name: fnName, args },
+    { toolCallId: tc.id, name: fnName, args: safeArgs },
     toolCtx.sessionAutonomy
   );
 
@@ -149,16 +154,32 @@ async function executeOneTool(
     result = { error: "User declined tool execution" };
   } else {
     try {
-        result = await executeTool(fnName, args, {
+      result = await executeTool(fnName, args, {
         ...toolCtx,
         confirmationApproved: true,
         activeToolCallId: tc.id,
         abortSignal: req.abortSignal ?? toolCtx.abortSignal,
         onTerminalOutput: req.onTerminalOutput
-          ? (chunk) => req.onTerminalOutput!(tc.id, chunk)
+          ? (chunk) =>
+              req.onTerminalOutput!(tc.id, {
+                ...chunk,
+                text: budgetAndScrubToolResult(chunk.text, {
+                  db: toolCtx.db,
+                  agentId: toolCtx.activeAgentId ?? req.agent.id,
+                  maxChars: 50_000,
+                }),
+              })
           : toolCtx.onTerminalOutput,
         onTerminalMonitor: req.onTerminalMonitor
-          ? (chunk) => req.onTerminalMonitor!(tc.id, chunk)
+          ? (chunk) =>
+              req.onTerminalMonitor!(tc.id, {
+                ...chunk,
+                text: budgetAndScrubToolResult(chunk.text, {
+                  db: toolCtx.db,
+                  agentId: toolCtx.activeAgentId ?? req.agent.id,
+                  maxChars: 50_000,
+                }),
+              })
           : toolCtx.onTerminalMonitor,
       });
     } catch (err) {
@@ -167,12 +188,22 @@ async function executeOneTool(
   }
   const isError =
     !!result && typeof result === "object" && "error" in (result as object);
-  req.onToolResult?.(fnName, result, tc.id, isError);
+  const scrubbedContent = budgetToolResult(result, TOOL_OUTPUT_MAX_CHARS, {
+    db: toolCtx.db,
+    agentId: toolCtx.activeAgentId ?? req.agent.id,
+  });
+  let scrubbedResult: unknown = result;
+  try {
+    scrubbedResult = JSON.parse(scrubbedContent);
+  } catch {
+    scrubbedResult = scrubbedContent;
+  }
+  req.onToolResult?.(fnName, scrubbedResult, tc.id, isError);
   return {
     role: "tool",
     tool_call_id: tc.id,
     name: fnName,
-    content: budgetToolResult(result),
+    content: scrubbedContent,
   };
 }
 
@@ -183,90 +214,98 @@ export class ProviderBackend implements AgentBackend {
     const cfg = req.agent.config as AgentProviderConfig;
     const keyRef = cfg.apiKeyRef;
     const provider = cfg.provider ?? "openai";
-    let apiKey =
-      resolveAgentCredential(this.db, req.agent.id, { provider, secretId: keyRef ?? undefined }) ??
+    const resolvedKey =
+      resolveAgentCredential(this.db, req.agent.id, {
+        provider,
+        secretId: keyRef ?? undefined,
+      }) ??
       (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null);
-    if (!apiKey) throw new Error("API key not found for provider agent");
-    const model = cfg.model ?? (provider === "anthropic" ? "claude-sonnet-4-20250514" : "gpt-4o");
-    const baseUrl =
-      cfg.baseUrl ??
-      (provider === "anthropic"
-        ? "https://api.anthropic.com"
-        : provider === "openai_compatible"
-          ? "http://127.0.0.1:11434"
-          : "https://api.openai.com");
+    if (!resolvedKey) throw new Error("API key not found for provider agent");
 
-    let messages = [...req.messages];
-    const chatMode = req.chatMode ?? "agent";
-    const maxIter = req.maxIterations ?? PROVIDER_AGENT_ITERATIONS;
-    const tools =
-      req.toolSchemas ??
-      filterSchemas(req.agent.toolAllow, req.agent.id, this.db, chatMode);
-    const toolCtx: ToolExecContext = {
-      ...req.toolCtx,
-      delegationDepth: req.delegationDepth ?? 0,
-    };
+    return withSecretValue(resolvedKey, async (apiKey) => {
+      const model =
+        cfg.model ?? (provider === "anthropic" ? "claude-sonnet-4-20250514" : "gpt-4o");
+      const baseUrl =
+        cfg.baseUrl ??
+        (provider === "anthropic"
+          ? "https://api.anthropic.com"
+          : provider === "openai_compatible"
+            ? "http://127.0.0.1:11434"
+            : "https://api.openai.com");
 
-    for (let i = 0; i < maxIter; i++) {
-      if (req.abortSignal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const isLast = i === maxIter - 1;
-      let content: string;
-      let toolCalls: AgentMessage["tool_calls"] = [];
+      let messages = [...req.messages];
+      const chatMode = req.chatMode ?? "agent";
+      const maxIter = req.maxIterations ?? PROVIDER_AGENT_ITERATIONS;
+      const tools =
+        req.toolSchemas ??
+        filterSchemas(req.agent.toolAllow, req.agent.id, this.db, chatMode);
+      const toolCtx: ToolExecContext = {
+        ...req.toolCtx,
+        delegationDepth: req.delegationDepth ?? 0,
+      };
 
-      if (provider === "anthropic") {
-        const out = await anthropicCompletion(
-          apiKey,
-          model,
-          messages,
-          isLast || chatMode === "ask" ? [] : tools,
-          req.agent.sampling.maxTokens
-        );
-        content = out.content;
-        toolCalls = out.toolCalls;
-      } else {
-        const body: Record<string, unknown> = {
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-            ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
-          })),
-          temperature: req.agent.sampling.temperature,
-          max_tokens: req.agent.sampling.maxTokens > 0 ? req.agent.sampling.maxTokens : undefined,
-        };
-        if (
-          !isLast &&
-          req.agent.thinking.nativeTools &&
-          tools.length &&
-          chatMode !== "ask"
-        ) {
-          body.tools = tools;
-          body.tool_choice = "auto";
+      for (let i = 0; i < maxIter; i++) {
+        if (req.abortSignal?.aborted) throw new DOMException("Aborted", "AbortError");
+        const isLast = i === maxIter - 1;
+        let content: string;
+        let toolCalls: AgentMessage["tool_calls"] = [];
+
+        if (provider === "anthropic") {
+          const out = await anthropicCompletion(
+            apiKey,
+            model,
+            messages,
+            isLast || chatMode === "ask" ? [] : tools,
+            req.agent.sampling.maxTokens
+          );
+          content = out.content;
+          toolCalls = out.toolCalls;
+        } else {
+          const body: Record<string, unknown> = {
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+              ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
+            })),
+            temperature: req.agent.sampling.temperature,
+            max_tokens:
+              req.agent.sampling.maxTokens > 0 ? req.agent.sampling.maxTokens : undefined,
+          };
+          if (
+            !isLast &&
+            req.agent.thinking.nativeTools &&
+            tools.length &&
+            chatMode !== "ask"
+          ) {
+            body.tools = tools;
+            body.tool_choice = "auto";
+          }
+          const out = await openAiCompletion(baseUrl, apiKey, model, body);
+          content = out.content;
+          toolCalls = out.toolCalls;
         }
-        const out = await openAiCompletion(baseUrl, apiKey, model, body);
-        content = out.content;
-        toolCalls = out.toolCalls;
+
+        if (content && req.onToken) req.onToken(content);
+
+        if (!toolCalls?.length) {
+          return content;
+        }
+
+        const sanitizedToolCalls = toolCalls.map(sanitizeToolCall);
+        messages.push({
+          role: "assistant",
+          content: content || "",
+          tool_calls: sanitizedToolCalls,
+        });
+
+        const toolMessages = await Promise.all(
+          sanitizedToolCalls.map((tc) => executeOneTool(tc, req, toolCtx))
+        );
+        messages.push(...toolMessages);
       }
 
-      if (content && req.onToken) req.onToken(content);
-
-      if (!toolCalls?.length) {
-        return content;
-      }
-
-      const sanitizedToolCalls = toolCalls.map(sanitizeToolCall);
-      messages.push({
-        role: "assistant",
-        content: content || "",
-        tool_calls: sanitizedToolCalls,
-      });
-
-      const toolMessages = await Promise.all(
-        sanitizedToolCalls.map((tc) => executeOneTool(tc, req, toolCtx))
-      );
-      messages.push(...toolMessages);
-    }
-
-    return messages.filter((m) => m.role === "assistant").pop()?.content ?? "";
+      return messages.filter((m) => m.role === "assistant").pop()?.content ?? "";
+    });
   }
 }
