@@ -815,6 +815,18 @@ export const importWorkspaceKnowledge = (agentId?: string) =>
     }
   );
 
+export const importCursorUserKnowledge = (agentId?: string) =>
+  api<{
+    rules: number;
+    skills: number;
+    synced: boolean;
+    sourceDir: string;
+    message?: string;
+  }>("/ai/cursor-user-knowledge/import", {
+    method: "POST",
+    body: JSON.stringify(agentId ? { agentId } : {}),
+  });
+
 export interface AiMcpServerStatus {
   name: string;
   transport: "stdio" | "http" | "sse" | "unknown";

@@ -279,6 +279,16 @@ With a local (non-`cursor_cloud`) Intelligence agent and a coding root that cont
 4. Use **Import from coding root** for an explicit force refresh of unchanged imports.
 5. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions). Prefer editing Rules in Knowledge for local backends.
 
+## Cursor user Rules/Skills import (#202)
+
+On a **local** Bridge (not SaaS), with files under `~/.cursor/rules/*.mdc` and/or `~/.cursor/skills/*/SKILL.md`:
+
+1. Knowledge → Rules / Skills → **Import Cursor user** (or `POST /api/ai/cursor-user-knowledge/import`).
+2. Rows appear with a **Cursor user** source badge (ids like `cursor-user-no-em-dashes`, `cursor-user-skill-godmode-workflow`).
+3. `GET /api/ai/prompt-flow?agentId=intelligence`: assembled rules section includes distinctive imported text; skills index lists imported skill names.
+4. Works for `cursor_cloud` via `<!-- godmode-system -->` (does **not** enable SDK `settingSources: ["user"]`).
+5. SaaS must return 403 for the import endpoint.
+
 ## MCP settings (#71 / #135)
 
 With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):

@@ -152,7 +152,10 @@ import {
   resolveMcpFromWorkspace,
 } from "../services/coding/cursor-mcp-config.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
-import { syncCursorWorkspaceKnowledge } from "../services/knowledge-store.js";
+import {
+  syncCursorUserKnowledge,
+  syncCursorWorkspaceKnowledge,
+} from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
 import type { IntelligenceChatMode } from "../services/chat-mode.js";
 import type { CodeAutonomyLevel } from "../services/agents/agents-db.js";
@@ -734,6 +737,21 @@ export function createAiRouter(
       root: agentWorkspace?.trim() || undefined,
     });
     const result = syncCursorWorkspaceKnowledge(agentDb, root, { force: true });
+    res.json(result);
+  });
+
+  router.post("/cursor-user-knowledge/import", (req, res) => {
+    if (config.isSaas) {
+      res.status(403).json({
+        error:
+          "Cursor user Rules/Skills import is only available on local installations (not SaaS).",
+      });
+      return;
+    }
+    const agentId = agentIdFromRequest(req);
+    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
+    if (!agentDb) return;
+    const result = syncCursorUserKnowledge(agentDb, { force: true });
     res.json(result);
   });
 
