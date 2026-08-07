@@ -7,6 +7,9 @@
 # Job summary prints the multi-arch digest when arm64 is included; amd64-only by default.
 #
 # Trigger: push to main (relevant paths) or Actions → Publish SaaS image → Run workflow
+# After a successful image build on push to main, deploy-hostinger pins the digest on the
+# godmode-saas self-hosted runner (Hostinger). workflow_dispatch does not deploy unless
+# deploy_hostinger=true.
 
 name: Publish SaaS image
 
@@ -18,6 +21,11 @@ on:
         required: false
         type: string
         default: ""
+      deploy_hostinger:
+        description: Also pin/roll Hostinger production after image publish
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main, master]
     paths:
@@ -28,6 +36,9 @@ on:
       - "deploy/nginx.conf"
       - "deploy/docker-entrypoint.sh"
       - "deploy/docker-compose.saas-staging.yml"
+      - "deploy/docker-compose.prod.yml"
+      - "scripts/update/godmode-saas-pin.sh"
+      - "scripts/update/move-waiting-deploy-to-done.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/publish-saas-image.yml"
@@ -142,3 +153,48 @@ jobs:
             echo "GODMODE_IMAGE=${IMAGE}@${DIGEST}"
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-hostinger:
+    needs: [image, metadata]
+    if: >
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+      || (github.event_name == 'workflow_dispatch' && inputs.deploy_hostinger == true)
+    environment: production
+    runs-on: [self-hosted, linux, godmode-saas]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - name: Pin digest and roll compose
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/update/godmode-saas-pin.sh
+          # Refresh tracked tree under /opt/godmode when present (gitignored env survives).
+          if [[ -d /opt/godmode/.git ]]; then
+            git -C /opt/godmode fetch origin main || true
+            git -C /opt/godmode reset --hard "origin/main" || true
+          fi
+          scripts/update/godmode-saas-pin.sh "${IMAGE}@${DIGEST}"
+          {
+            echo "## Hostinger auto-deploy"
+            echo ""
+            echo "- Pinned: \`${IMAGE}@${DIGEST}\`"
+            echo "- Commit: \`${COMMIT}\`"
+            echo "- Health: OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Waiting Deploy to Done (soft-fail)
+        env:
+          DEPLOYED_SHA: ${{ needs.metadata.outputs.commit }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GODMODE_REPO_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          node scripts/update/move-waiting-deploy-to-done.mjs || true

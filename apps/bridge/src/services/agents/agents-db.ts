@@ -752,12 +752,27 @@ export function platformVaultSecretId(
   return scope ? `${baseId}__agent__${scope}` : baseId;
 }
 
-function readSecretPlain(value: string): string {
+/** Decrypt ciphertext. Fail closed via tryReadSecretPlain for resolve paths. */
+function tryReadSecretPlain(value: string): string | null {
   try {
     return decryptSecret(value);
   } catch {
-    return value;
+    return null;
   }
+}
+
+/**
+ * Run `fn` with a resolved plaintext secret without exposing it on a casual
+ * return path. Callers must not log, serialize, or put `value` into model context.
+ */
+export function withSecretValue<T>(
+  plain: string | null | undefined,
+  fn: (value: string) => T
+): T {
+  if (plain == null || plain === "") {
+    throw new Error("Secret value is missing");
+  }
+  return fn(plain);
 }
 
 function assertVaultOwner(owner: VaultOwner): VaultOwner {
@@ -799,10 +814,11 @@ function ownerLabel(owner: VaultOwner): string {
 }
 
 function toListItem(r: AiSecretRow): VaultSecretListItem {
+  const plain = tryReadSecretPlain(r.value);
   return {
     id: r.id,
     name: r.name,
-    masked: maskSecret(readSecretPlain(r.value)),
+    masked: plain ? maskSecret(plain) : "••••••••",
     createdAt: r.created_at,
     agentId: r.agent_id ?? null,
     ownerKind: r.owner_kind,
@@ -844,7 +860,7 @@ export function getSecretRow(
 export function getSecretValue(db: AppDatabase, id: string): string | null {
   const row = getSecretRow(db, id);
   if (!row) return null;
-  return readSecretPlain(row.value);
+  return tryReadSecretPlain(row.value);
 }
 
 /**
@@ -860,7 +876,7 @@ export function getSecretValueForAgent(
   if (!row) return null;
   if (row.owner_kind === "agent" && row.agent_id !== agentId) return null;
   if (row.owner_kind === "user") return null;
-  return readSecretPlain(row.value);
+  return tryReadSecretPlain(row.value);
 }
 
 export function findSecretByName(
@@ -898,10 +914,10 @@ export function resolveSecretByName(
       kind: "agent",
       agentId: scope,
     });
-    if (agentRow) return readSecretPlain(agentRow.value);
+    if (agentRow) return tryReadSecretPlain(agentRow.value);
   }
   const platform = findSecretByName(db, name, { kind: "platform" });
-  return platform ? readSecretPlain(platform.value) : null;
+  return platform ? tryReadSecretPlain(platform.value) : null;
 }
 
 /**
@@ -923,7 +939,7 @@ export function resolvePlatformVaultSecret(
       kind: "agent",
       agentId: scope,
     });
-    if (byName) return readSecretPlain(byName.value);
+    if (byName) return tryReadSecretPlain(byName.value);
   }
   const platformById = getSecretValue(
     db,
@@ -931,7 +947,7 @@ export function resolvePlatformVaultSecret(
   );
   if (platformById) return platformById;
   const platformByName = findSecretByName(db, opts.name, { kind: "platform" });
-  return platformByName ? readSecretPlain(platformByName.value) : null;
+  return platformByName ? tryReadSecretPlain(platformByName.value) : null;
 }
 
 /** Status lookup for one owner only (no Platform fallback when agent scoped). */
@@ -944,7 +960,7 @@ export function getPlatformVaultSecretInScope(
   const byId = getSecretValue(db, platformVaultSecretId(opts.baseId, scope));
   if (byId) return byId;
   const byName = findSecretByName(db, opts.name, owner);
-  return byName ? readSecretPlain(byName.value) : null;
+  return byName ? tryReadSecretPlain(byName.value) : null;
 }
 
 export function upsertPlatformVaultSecret(
