@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import type { AppDatabase } from "../db.js";
 import {
   findSecretByName,
@@ -8,11 +10,17 @@ import {
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
 import { resolveCursorAgentCommand } from "./agents/cursor-backend.js";
-import { spawn } from "node:child_process";
 
 /** Fixed secret id/name for the user's Cursor subscription API key. */
 export const CURSOR_API_KEY_SECRET_ID = "cursor-api-key";
 export const CURSOR_API_KEY_SECRET_NAME = "cursor_api_key";
+
+/** Warm TTL for successful / in-progress CLI status results. */
+export const CURSOR_CLI_PROBE_TTL_MS = 60_000;
+/** Shorter TTL for negatives / timeouts so we do not respawn on every status hit. */
+export const CURSOR_CLI_PROBE_NEGATIVE_TTL_MS = 30_000;
+/** Warm TTL for Cursor.models.list catalog rows. */
+export const CURSOR_MODELS_TTL_MS = 5 * 60_000;
 
 export type CursorAuthSource = "env" | "vault" | "none";
 
@@ -22,6 +30,40 @@ export interface CursorAuthStatus {
   masked?: string;
   cliAuthenticated?: boolean;
   cliDetail?: string;
+}
+
+export type CursorCliProbeResult = {
+  ok: boolean;
+  detail: string;
+};
+
+type CliProbeCache = {
+  at: number;
+  ttlMs: number;
+  result: CursorCliProbeResult;
+};
+
+type ModelsCache = {
+  at: number;
+  models: CursorModelOption[];
+};
+
+let cliProbeCache: CliProbeCache | null = null;
+let cliProbeInFlight: Promise<CursorCliProbeResult> | null = null;
+
+const modelsCacheByKeyFp = new Map<string, ModelsCache>();
+const modelsInFlightByKeyFp = new Map<string, Promise<CursorModelOption[]>>();
+
+/** @internal test helper */
+export function clearCursorSubscriptionCachesForTests(): void {
+  cliProbeCache = null;
+  cliProbeInFlight = null;
+  modelsCacheByKeyFp.clear();
+  modelsInFlightByKeyFp.clear();
+}
+
+export function apiKeyFingerprint(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex").slice(0, 16);
 }
 
 export function resolveCursorApiKey(
@@ -37,6 +79,16 @@ export function resolveCursorApiKey(
   });
 }
 
+export function invalidateCursorModelsCache(apiKey?: string | null): void {
+  if (apiKey?.trim()) {
+    modelsCacheByKeyFp.delete(apiKeyFingerprint(apiKey.trim()));
+    modelsInFlightByKeyFp.delete(apiKeyFingerprint(apiKey.trim()));
+    return;
+  }
+  modelsCacheByKeyFp.clear();
+  modelsInFlightByKeyFp.clear();
+}
+
 export function upsertCursorApiKey(
   db: AppDatabase,
   apiKey: string,
@@ -48,6 +100,7 @@ export function upsertCursorApiKey(
     value: apiKey,
     agentId,
   });
+  invalidateCursorModelsCache();
 }
 
 /**
@@ -73,11 +126,13 @@ export function removeCursorApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): boolean {
-  return removePlatformVaultSecret(db, {
+  const removed = removePlatformVaultSecret(db, {
     baseId: CURSOR_API_KEY_SECRET_ID,
     name: CURSOR_API_KEY_SECRET_NAME,
     agentId,
   });
+  if (removed) invalidateCursorModelsCache();
+  return removed;
 }
 
 function maskCursorKey(value: string): string {
@@ -111,21 +166,46 @@ export function isCursorSubscriptionReady(
   return resolveCursorApiKey(db, agentId) != null;
 }
 
-export async function probeCursorCliAuth(): Promise<{
-  ok: boolean;
-  detail: string;
-}> {
+function readWarmCliProbe(now = Date.now()): CursorCliProbeResult | null {
+  if (!cliProbeCache) return null;
+  if (now - cliProbeCache.at >= cliProbeCache.ttlMs) return null;
+  return cliProbeCache.result;
+}
+
+/** Cached CLI probe if still within TTL; does not spawn. */
+export function peekCachedCursorCliAuth(): CursorCliProbeResult | null {
+  return readWarmCliProbe();
+}
+
+function cacheCliProbe(result: CursorCliProbeResult): CursorCliProbeResult {
+  cliProbeCache = {
+    at: Date.now(),
+    ttlMs: result.ok ? CURSOR_CLI_PROBE_TTL_MS : CURSOR_CLI_PROBE_NEGATIVE_TTL_MS,
+    result,
+  };
+  return result;
+}
+
+/** Uncached spawn of `cursor-agent status` (15s kill timeout). */
+export function runCursorCliAuthProbeOnce(): Promise<CursorCliProbeResult> {
   const command = resolveCursorAgentCommand();
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (result: CursorCliProbeResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
     const proc = spawn(command, ["status"], {
-      shell: process.platform === "win32",
+      shell: false,
+      windowsHide: true,
       env: { ...process.env },
     });
     const timer = setTimeout(() => {
       proc.kill("SIGTERM");
-      resolve({ ok: false, detail: "cursor-agent status timed out" });
+      finish({ ok: false, detail: "cursor-agent status timed out" });
     }, 15_000);
     proc.stdout?.on("data", (c: Buffer) => {
       stdout += c.toString();
@@ -135,20 +215,53 @@ export async function probeCursorCliAuth(): Promise<{
     });
     proc.on("error", () => {
       clearTimeout(timer);
-      resolve({ ok: false, detail: "cursor-agent not installed" });
+      finish({ ok: false, detail: "cursor-agent not installed" });
     });
     proc.on("close", (code) => {
       clearTimeout(timer);
       const text = (stdout || stderr).trim();
       if (code === 0 && /authenticated|logged in/i.test(text)) {
-        resolve({ ok: true, detail: text.slice(0, 500) });
+        finish({ ok: true, detail: text.slice(0, 500) });
         return;
       }
-      resolve({
+      finish({
         ok: false,
         detail: text || `cursor-agent status exited ${code}`,
       });
     });
+  });
+}
+
+/**
+ * CLI auth probe with TTL cache + single-flight coalescing.
+ * Prefer {@link peekCachedCursorCliAuth} + {@link refreshCursorCliAuthInBackground}
+ * on hot request paths so Intelligence boot never awaits a 15s spawn.
+ */
+export async function probeCursorCliAuth(): Promise<CursorCliProbeResult> {
+  const warm = readWarmCliProbe();
+  if (warm) return warm;
+  if (cliProbeInFlight) return cliProbeInFlight;
+
+  cliProbeInFlight = runCursorCliAuthProbeOnce()
+    .then((result) => cacheCliProbe(result))
+    .catch((err) =>
+      cacheCliProbe({
+        ok: false,
+        detail: err instanceof Error ? err.message : "cursor-agent unavailable",
+      })
+    )
+    .finally(() => {
+      cliProbeInFlight = null;
+    });
+
+  return cliProbeInFlight;
+}
+
+/** Fire-and-forget warm of the CLI probe cache (no await on request path). */
+export function refreshCursorCliAuthInBackground(): void {
+  if (readWarmCliProbe() || cliProbeInFlight) return;
+  void probeCursorCliAuth().catch(() => {
+    /* cached inside probeCursorCliAuth */
   });
 }
 
@@ -200,16 +313,20 @@ function cursorModelSortRank(id: string): number {
   return 3;
 }
 
-/** List models available on the user's Cursor subscription. */
-export async function listCursorSubscriptionModels(
-  db: AppDatabase,
-  agentId?: string | null
+async function fetchCursorSubscriptionModels(
+  apiKey: string
 ): Promise<CursorModelOption[]> {
-  const apiKey = resolveCursorApiKey(db, agentId);
-  if (!apiKey) throw new Error("Cursor not connected — add an API key first");
-
   const { Cursor } = await import("@cursor/sdk");
-  const models = await Cursor.models.list({ apiKey });
+  const listed = await Promise.race([
+    Cursor.models.list({ apiKey }),
+    new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Cursor.models.list timed out")),
+        12_000
+      );
+    }),
+  ]);
+  const models = listed;
   const out: CursorModelOption[] = [
     { id: "auto", label: "Auto (Cursor picks)" },
   ];
@@ -235,6 +352,87 @@ export async function listCursorSubscriptionModels(
   });
   out.push(...named);
   return out;
+}
+
+const AUTO_ONLY_MODELS: CursorModelOption[] = [
+  { id: "auto", label: "Auto (Cursor picks)" },
+];
+
+/** Warm models cache for this key, if any. Does not network. */
+export function peekCachedCursorSubscriptionModels(
+  db: AppDatabase,
+  agentId?: string | null
+): CursorModelOption[] | null {
+  const apiKey = resolveCursorApiKey(db, agentId);
+  if (!apiKey) return null;
+  const fp = apiKeyFingerprint(apiKey);
+  const warm = modelsCacheByKeyFp.get(fp);
+  if (!warm) return null;
+  if (Date.now() - warm.at >= CURSOR_MODELS_TTL_MS) return null;
+  return warm.models;
+}
+
+/**
+ * Fire-and-forget warm of models cache. Safe on Intelligence boot:
+ * does not block the request that kicked it.
+ */
+export function refreshCursorSubscriptionModelsInBackground(
+  db: AppDatabase,
+  agentId?: string | null
+): void {
+  const apiKey = resolveCursorApiKey(db, agentId);
+  if (!apiKey) return;
+  const fp = apiKeyFingerprint(apiKey);
+  if (modelsInFlightByKeyFp.has(fp)) return;
+  const warm = modelsCacheByKeyFp.get(fp);
+  if (warm && Date.now() - warm.at < CURSOR_MODELS_TTL_MS) return;
+  void listCursorSubscriptionModels(db, agentId).catch(() => {
+    /* leave cache empty; next open retries */
+  });
+}
+
+/**
+ * Catalog-friendly: return warm models immediately, or Auto-only while a
+ * background refresh fills the cache. Never awaits a cold Cursor.models.list.
+ */
+export function listCursorSubscriptionModelsForCatalog(
+  db: AppDatabase,
+  agentId?: string | null
+): CursorModelOption[] {
+  const warm = peekCachedCursorSubscriptionModels(db, agentId);
+  if (warm) return warm;
+  refreshCursorSubscriptionModelsInBackground(db, agentId);
+  return AUTO_ONLY_MODELS;
+}
+
+/** List models available on the user's Cursor subscription (TTL + single-flight). */
+export async function listCursorSubscriptionModels(
+  db: AppDatabase,
+  agentId?: string | null
+): Promise<CursorModelOption[]> {
+  const apiKey = resolveCursorApiKey(db, agentId);
+  if (!apiKey) throw new Error("Cursor not connected. Add an API key first.");
+
+  const fp = apiKeyFingerprint(apiKey);
+  const now = Date.now();
+  const warm = modelsCacheByKeyFp.get(fp);
+  if (warm && now - warm.at < CURSOR_MODELS_TTL_MS) {
+    return warm.models;
+  }
+
+  const inflight = modelsInFlightByKeyFp.get(fp);
+  if (inflight) return inflight;
+
+  const pending = fetchCursorSubscriptionModels(apiKey)
+    .then((models) => {
+      modelsCacheByKeyFp.set(fp, { at: Date.now(), models });
+      return models;
+    })
+    .finally(() => {
+      modelsInFlightByKeyFp.delete(fp);
+    });
+  modelsInFlightByKeyFp.set(fp, pending);
+  return pending;
 }
 
 /**

@@ -4,9 +4,29 @@
 import { describe, expect, it } from "vitest";
 import {
   cursorCloudCacheFingerprint,
+  sanitizeSdkJsonValue,
   toSdkAgentMode,
   toSdkModelParams,
 } from "../agents/cursor-cloud-backend.js";
+
+describe("sanitizeSdkJsonValue", () => {
+  it("strips undefined leaves for protobuf-safe JSON", () => {
+    expect(
+      sanitizeSdkJsonValue({
+        type: "object",
+        properties: { a: { type: "string", description: undefined } },
+        required: undefined,
+      })
+    ).toEqual({
+      type: "object",
+      properties: { a: { type: "string" } },
+    });
+  });
+
+  it("maps top-level undefined to null", () => {
+    expect(sanitizeSdkJsonValue(undefined)).toBeNull();
+  });
+});
 
 describe("toSdkModelParams", () => {
   it("serializes record values to sorted id/value pairs", () => {
