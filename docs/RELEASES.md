@@ -8,9 +8,11 @@ GodMode publishes one tested revision through two channels:
 - **stable** — an annotated, verified `vX.Y.Z` tag whose package versions and
   changelog entry agree.
 
-Merges to `main` run the normal CI checks only; they do **not** publish
-installers or GHCR images. That keeps day-to-day PR volume from queuing
-hour-long multi-OS builds.
+Merges to `main` run the normal CI checks. Path-filtered pushes also run
+**Publish SaaS image**, which builds/signs a GHCR digest and (on Hostinger)
+auto-pins production via the `godmode-saas` self-hosted runner. Day-to-day PR
+volume still avoids the full multi-OS **Unified release** installer pipeline;
+that remains nightly/stable-tag only.
 
 Each release lists a small set of downloadable assets:
 
