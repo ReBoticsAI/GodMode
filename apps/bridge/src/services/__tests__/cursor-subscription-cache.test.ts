@@ -67,7 +67,7 @@ afterEach(() => {
 
 describe("probeCursorCliAuth cache", () => {
   it("second call within TTL does not spawn again", async () => {
-    fakeSpawnOk("✓ Logged in as dane@example.com");
+    fakeSpawnOk("✓ Logged in as user@example.com");
     const a = await probeCursorCliAuth();
     const b = await probeCursorCliAuth();
     expect(a.ok).toBe(true);
