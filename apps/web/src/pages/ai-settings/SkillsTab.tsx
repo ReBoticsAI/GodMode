@@ -110,7 +110,14 @@ export function SkillsTab() {
   const load = useCallback(() => {
     fetchAiSkills(true, activeAgentId)
       .then((r) => setSkills(r.skills))
-      .catch(() => setSkills([]));
+      .catch((err) => {
+        setSkills([]);
+        toast.error(
+          err instanceof Error
+            ? `Failed to load skills: ${err.message}`
+            : "Failed to load skills"
+        );
+      });
   }, [activeAgentId]);
 
   useEffect(() => {
