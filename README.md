@@ -6,7 +6,7 @@
 
 **Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Built to be the last platform stack you need.
 
-Open source (Apache 2.0). Local-first. Self-host or use Cloud for convenience. **Self-expanding:** Intelligence builds and extends GodMode from inside GodMode. **Digital You** is your twin (thinking partner and stand-in). **Connect anything** via Marketplace packs, plugins, and connectors. Share live resources with your team.
+Open source (Apache 2.0). Local-first by design: self-host on your own machine, or use Cloud for convenience. **Self-expanding:** Intelligence builds and extends GodMode from inside GodMode. **Digital You** is your twin (thinking partner and stand-in). **Connect anything** via Marketplace packs, plugins, and connectors. Share live resources with your team.
 
 ![GodMode home hub](docs/assets/readme/hero-home.png)
 
