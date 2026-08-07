@@ -60,10 +60,12 @@ import {
   fetchAiArtifact,
   fetchDmContacts,
   fetchDmMessages,
+  fetchModelCatalog,
   getActiveTenantId,
   markDmConversationRead,
   sendDmMessage,
   type AiChat,
+  type CatalogModel,
   type DmContact,
   type DmMessage,
 } from "@/api";
@@ -99,6 +101,8 @@ interface UiMessage {
   /** Structured Cursor-style parts for assistant turns (tools/thinking/todos/text). */
   parts?: MsgPart[];
   streaming?: boolean;
+  /** Live status while waiting for the first token (e.g. Starting Cursor…). */
+  statusText?: string;
   dmSenderKind?: "user" | "agent";
   dmSenderName?: string;
   isOwn?: boolean;
@@ -230,6 +234,7 @@ export function IntelligencePanel() {
   } = useIntelligence();
   const { user } = useTenant();
   const { status } = useAiStatus();
+  const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const isMobile = useIsMobile();
   const isDmMode = chatTarget.kind === "conversation";
   const allowedTabs: PanelTab[] = isDmMode
@@ -878,9 +883,17 @@ export function IntelligencePanel() {
     setMessages((prev) => [
       ...prev,
       userMsg,
-      { id: assistantId, role: "assistant", text: "", parts: [], streaming: true },
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        parts: [],
+        streaming: true,
+        statusText: "Working…",
+      },
     ]);
     setBusy(true);
+    busyRef.current = true;
 
     const history = messages.map((m) => ({
       role: m.role,
@@ -964,6 +977,15 @@ export function IntelligencePanel() {
         onChatId: (chatId) => {
           if (!activeChatId) setActiveChatId(chatId);
         },
+        onStatus: ({ message }) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && m.streaming
+                ? { ...m, statusText: message }
+                : m
+            )
+          );
+        },
         onToken: (content) => {
           builder.onToken(content);
           sync();
@@ -1024,11 +1046,13 @@ export function IntelligencePanel() {
                       data.content,
                     thinking: data.thinking,
                     streaming: false,
+                    statusText: undefined,
                   }
                 : m
             )
           );
           setBusy(false);
+          busyRef.current = false;
           abortRef.current = null;
           refreshChats();
         },
@@ -1044,12 +1068,14 @@ export function IntelligencePanel() {
                     ],
                     text: `⚠️ ${error}`,
                     streaming: false,
+                    statusText: undefined,
                   }
                 : m
             )
           );
           setErrorMsg(error);
           setBusy(false);
+          busyRef.current = false;
           abortRef.current = null;
         },
         onToolConfirmRequired: (payload) => {
@@ -1111,6 +1137,28 @@ export function IntelligencePanel() {
   };
 
   const running = status?.state === "running";
+  // Local llama.cpp "running" is only one way to have a model. Cursor / provider /
+  // remote selections are ready without a local process.
+  const hasUsableModel =
+    activeModel != null && activeModel.source !== "local"
+      ? true
+      : running || status?.state === "starting";
+
+  useEffect(() => {
+    if (!panelOpen || isDmMode) return;
+    let cancelled = false;
+    fetchModelCatalog()
+      .then((r) => {
+        if (!cancelled) setActiveModel(r.active);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveModel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelOpen, isDmMode, activeAgentId]);
+
   const currentWidth = clampComposerWidth(composerWidth, bounds.width);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
   const defaultX = bounds.x + 12;
@@ -1431,10 +1479,10 @@ export function IntelligencePanel() {
                       `${agentName} is your AI agent. Start a conversation to put it to work.`}
                 </p>
               )}
-              {!isDmMode && !running && (
+              {!isDmMode && !hasUsableModel && (
                 <p className="mt-2 max-w-[260px] rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600">
-                  No model running. Start one from the Agents page or the model
-                  picker below.
+                  No model ready. Start a local model from the Agents page, or
+                  pick Cursor / a provider in the model menu below.
                 </p>
               )}
             </div>
@@ -1504,7 +1552,7 @@ export function IntelligencePanel() {
                           <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
                           <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
                         </span>
-                        Working…
+                        {m.statusText?.trim() || "Working…"}
                       </div>
                     );
                   }
