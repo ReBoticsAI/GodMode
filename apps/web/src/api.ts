@@ -1113,6 +1113,7 @@ export interface AiStreamHandlers {
     contextWindow?: number;
     messageId: string;
   }) => void;
+  onStatus?: (payload: { phase: string; message: string }) => void;
   onError?: (error: string) => void;
 }
 
@@ -1148,6 +1149,7 @@ export function streamAiChat(
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let settled = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1174,6 +1176,12 @@ export function streamAiChat(
           switch (event) {
             case "chat_id":
               handlers.onChatId?.(parsed.chatId as string);
+              break;
+            case "status":
+              handlers.onStatus?.({
+                phase: String(parsed.phase ?? "working"),
+                message: String(parsed.message ?? "Working…"),
+              });
               break;
             case "token":
               handlers.onToken?.(parsed.content as string);
@@ -1233,13 +1241,20 @@ export function streamAiChat(
               });
               break;
             case "done":
+              settled = true;
               handlers.onDone?.(parsed as never);
               break;
             case "error":
+              settled = true;
               handlers.onError?.(parsed.error as string);
               break;
           }
         }
+      }
+      if (!settled && !controller.signal.aborted) {
+        handlers.onError?.(
+          "Chat stream ended before the assistant finished. Try sending again."
+        );
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
