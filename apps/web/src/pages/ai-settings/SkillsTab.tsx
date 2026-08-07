@@ -242,7 +242,16 @@ export function SkillsTab() {
       }
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Import failed");
+      const aborted =
+        (err instanceof DOMException && err.name === "TimeoutError") ||
+        (err instanceof Error && /aborted|timeout/i.test(err.message));
+      toast.error(
+        aborted
+          ? "Import timed out. Bridge may be busy; retry in a moment."
+          : err instanceof Error
+            ? err.message
+            : "Import failed"
+      );
     } finally {
       setImporting(false);
     }
@@ -263,7 +272,16 @@ export function SkillsTab() {
       }
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Import failed");
+      const aborted =
+        (err instanceof DOMException && err.name === "TimeoutError") ||
+        (err instanceof Error && /aborted|timeout/i.test(err.message));
+      toast.error(
+        aborted
+          ? "Import timed out. Bridge may be busy; retry in a moment."
+          : err instanceof Error
+            ? err.message
+            : "Import failed"
+      );
     } finally {
       setImportingUser(false);
     }
