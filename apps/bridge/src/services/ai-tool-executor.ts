@@ -21,6 +21,11 @@ import {
   resolveExaApiKey,
 } from "./exa-web.js";
 import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
+import {
+  GH_PR_CHECKS_JSON_FIELDS_CSV,
+  corePrDoneAllowed,
+  summarizePrChecks,
+} from "./github-pr-ci.js";
 import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
 import type { LlmManager } from "./llm-manager.js";
 import { runSubagent } from "./agents/runner.js";
@@ -3399,6 +3404,72 @@ export async function executeTool(
     case "list_inference_endpoints": {
       if (!ctx.userId) throw new Error("userId required");
       return { endpoints: listInferenceEndpoints(getCoreDb(), ctx.userId) };
+    }
+
+    case "watch_pr_checks": {
+      const rawPr = String(args.pr ?? args.pullRequest ?? args.number ?? "").trim();
+      if (!rawPr) throw new Error("pr required (number or URL)");
+      const repo =
+        String(args.repo ?? "ReBoticsAI/GodMode").trim() || "ReBoticsAI/GodMode";
+      const prMatch = rawPr.match(/\/pull\/(\d+)/i);
+      const prNum = prMatch?.[1] ?? rawPr.replace(/^#/, "");
+      if (!/^\d+$/.test(prNum)) {
+        throw new Error(`Could not parse PR number from: ${rawPr}`);
+      }
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execFileAsync = promisify(execFile);
+      let rows: unknown[] = [];
+      try {
+        // Use GH_PR_CHECKS_JSON_FIELDS_CSV only (no `conclusion`; gh rejects it).
+        const { stdout } = await execFileAsync(
+          "gh",
+          [
+            "pr",
+            "checks",
+            prNum,
+            "--repo",
+            repo,
+            "--json",
+            GH_PR_CHECKS_JSON_FIELDS_CSV,
+          ],
+          {
+            timeout: 60_000,
+            windowsHide: true,
+            maxBuffer: 2 * 1024 * 1024,
+          }
+        );
+        rows = JSON.parse(stdout) as unknown[];
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          error: message,
+          doneAllowed: false,
+          hint: "Install/auth gh CLI, or ensure the PR exists. Keep Core cards in Waiting Deploy until checks are green.",
+        };
+      }
+      const summary = summarizePrChecks(
+        rows as Array<{
+          name?: string;
+          state?: string;
+          bucket?: string;
+          link?: string;
+        }>
+      );
+      const doneAllowed = corePrDoneAllowed(summary);
+      return {
+        ok: true,
+        repo,
+        pr: Number(prNum),
+        ...summary,
+        doneAllowed,
+        guidance: doneAllowed
+          ? "CI green. Safe to merge / move cards to Done / close the related issue."
+          : summary.state === "failure"
+            ? "CI failed. Move the run card to In Progress, add a Fix CI subtask, apply production-grade fixes (no workarounds), push, and call watch_pr_checks again."
+            : "CI still pending. Keep cards in Waiting Deploy. Do not close the issue or mark Done yet.",
+      };
     }
 
     default: {
