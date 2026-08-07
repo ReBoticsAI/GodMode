@@ -66,6 +66,14 @@ describe("production core ObjectType bootstrap", () => {
     }
   });
 
+  it("declares ChatMessage.content as JSON so Intelligence chat can store structured payloads", () => {
+    registerCoreObjectTypes();
+    const chatMessage = listObjectTypes().find((def) => def.name === "ChatMessage");
+    expect(chatMessage).toBeTruthy();
+    const content = chatMessage?.fields.find((field) => field.name === "content");
+    expect(content?.fieldType).toBe("JSON");
+  });
+
   it("uses the database handle selected by declared ownership", () => {
     const selectedCore = new Database(":memory:");
     selectedCore.exec(`
