@@ -41,6 +41,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/confirm-policy-git.test.ts",
       "apps/bridge/src/services/__tests__/coding-hooks.test.ts",
       "apps/bridge/src/services/__tests__/explore-coding.test.ts",
+      "apps/bridge/src/services/__tests__/run-card-title.test.ts",
       "apps/bridge/src/services/__tests__/fs-tools-preview.test.ts",
       "apps/bridge/src/services/__tests__/fs-tools-workspace.test.ts",
       "apps/bridge/src/services/__tests__/coding-tenant-isolation.test.ts",

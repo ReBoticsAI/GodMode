@@ -579,6 +579,16 @@ async function executeStaticKernelAlias(
       const scope = ctx.chatId ?? `agent-${agentId}`;
       const cards: Array<{ id: string; status: string; parentId?: string }> = [];
       const keepIds = new Set<string>();
+      const explicitParent =
+        typeof args.parentCardId === "string" && args.parentCardId.trim()
+          ? args.parentCardId.trim()
+          : typeof args.parent_card_id === "string" && args.parent_card_id.trim()
+            ? args.parent_card_id.trim()
+            : null;
+      // Host Active-work run card is the default parent so todos become subtasks.
+      const defaultParent =
+        explicitParent ??
+        (ctx.activeTaskCardId?.trim() ? ctx.activeTaskCardId.trim() : null);
       const keyOf = (todo: NormalizedTodo): string =>
         todo.id?.trim() ||
         todo.content
@@ -657,7 +667,7 @@ async function executeStaticKernelAlias(
         }
       };
       for (const [index, todo] of todos.entries()) {
-        await writeTodo(todo, index, null);
+        await writeTodo(todo, index, defaultParent);
       }
       if (args.merge !== true) {
         const listed = (await dispatchKernelTool(ctx, "list_records", {
