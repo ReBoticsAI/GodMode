@@ -128,7 +128,8 @@ import {
   upsertCursorApiKey,
   removeCursorApiKey,
   listCursorSubscriptionModels,
-  probeCursorCliAuth,
+  peekCachedCursorCliAuth,
+  refreshCursorCliAuthInBackground,
   startCursorCliLoginUrl,
   normalizeCursorVaultSecret,
 } from "../services/cursor-subscription.js";
@@ -1065,14 +1066,14 @@ export function createAiRouter(
         : null;
     normalizeCursorVaultSecret(db);
     const status = getCursorAuthStatus(db, agentId);
-    const cli = await probeCursorCliAuth().catch(() => ({
-      ok: false,
-      detail: "cursor-agent unavailable",
-    }));
+    const cachedCli = peekCachedCursorCliAuth();
+    if (!cachedCli) {
+      refreshCursorCliAuthInBackground();
+    }
     res.json({
       ...status,
-      cliAuthenticated: cli.ok,
-      cliDetail: cli.detail,
+      cliAuthenticated: cachedCli?.ok ?? false,
+      cliDetail: cachedCli?.detail ?? "checking…",
     });
   });
 
