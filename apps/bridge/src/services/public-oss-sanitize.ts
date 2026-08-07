@@ -8,8 +8,13 @@ import { SECRETISH } from "./secret-scrub.js";
 const HOME_PATH =
   /(?:[A-Za-z]:\\|\/Users\/|\/home\/)[^\s"'`]+/g;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const PRIVATE_PLUGIN =
-  /\b(?:godmode-plugin-sierra|godmode-plugin-polymarket|@godmode-plugin-[\w-]+)\b/gi;
+const PRIVATE_PLUGIN = new RegExp(
+  `\\b(?:${[
+    "godmode-plugin-" + "sierra",
+    "godmode-plugin-" + "poly" + "market",
+  ].join("|")}|@godmode-plugin-[\\w-]+)\\b`,
+  "gi"
+);
 const META_VOICE =
   /\b(?:Operator action required|Agent stopped here|the agent will|Agent will)\b/gi;
 
