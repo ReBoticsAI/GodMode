@@ -1,6 +1,7 @@
 /**
  * Coding workspace FS helpers: escape rejection, rename, empty-dir delete, root isolation.
  */
+import { chdir, cwd } from "node:process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -15,7 +16,9 @@ import {
   deletePath,
   listDir,
   mkdirPath,
+  readFile,
   renamePath,
+  resolveCodingRoot,
   resolveRepoPath,
   writeFile,
 } from "../coding/fs-tools.js";
@@ -109,5 +112,49 @@ describe("root isolation", () => {
     expect(entries.some((e) => e.name.replace(/\\/g, "/") === "apps/a.ts")).toBe(
       true
     );
+  });
+});
+
+describe("local Layer 2 worktree workspace", () => {
+  it("read_file and list_dir work when cwd differs from repo root", () => {
+    const repo = tempWorkspace();
+    const elsewhere = tempWorkspace();
+    const workspace = ".worktrees/feat-read";
+    const wtAbs = join(repo, ".worktrees", "feat-read");
+    mkdirSync(wtAbs, { recursive: true });
+    writeFileSync(join(wtAbs, "note.txt"), "from-worktree\n", "utf8");
+
+    const prev = cwd();
+    try {
+      chdir(elsewhere);
+      const codingRoot = resolveCodingRoot({
+        localRepoRoot: repo,
+        root: workspace,
+      });
+      expect(codingRoot.replace(/\\/g, "/")).toBe(wtAbs.replace(/\\/g, "/"));
+
+      const listed = listDir({
+        path: ".",
+        localRepoRoot: repo,
+        root: workspace,
+      });
+      expect(listed.entries.map((e) => e.name)).toContain("note.txt");
+
+      const read = readFile({
+        path: "note.txt",
+        localRepoRoot: repo,
+        root: workspace,
+      });
+      expect(read.content).toContain("from-worktree");
+    } finally {
+      chdir(prev);
+    }
+  });
+
+  it("rejects relative workspace that escapes the local repo root", () => {
+    const repo = tempWorkspace();
+    expect(() =>
+      resolveCodingRoot({ localRepoRoot: repo, root: "../outside" })
+    ).toThrow(/escapes/i);
   });
 });
