@@ -11,13 +11,13 @@
     "test:awaiting": "tsx src/services/__tests__/card-awaiting.test.ts"
   },
   "dependencies": {
-    "@cursor/sdk": "^1.0.23",
+    "@cursor/sdk": "^1.0.27",
     "@godmode/flow-core": "*",
     "@godmode/kernel": "*",
     "@godmode/plugin-api": "*",
     "@godmode/plugin-host": "*",
     "ajv": "^8.20.0",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "duckdb": "^1.4.4",

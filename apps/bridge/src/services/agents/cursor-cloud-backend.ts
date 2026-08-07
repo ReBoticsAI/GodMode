@@ -448,6 +448,17 @@ export function clearCursorCloudAgentCacheForTests(): void {
   chatAgents.clear();
 }
 
+/**
+ * Strip `undefined` leaves so SDK protobuf `google.protobuf.Value` encoding
+ * does not fail with "cannot decode … from JSON undefined".
+ */
+export function sanitizeSdkJsonValue(
+  value: unknown
+): import("@cursor/sdk").SDKJsonValue {
+  if (value === undefined) return null;
+  return JSON.parse(JSON.stringify(value)) as import("@cursor/sdk").SDKJsonValue;
+}
+
 function buildCustomTools(
   req: AgentRunRequest,
   db: AppDatabase,
@@ -459,12 +470,17 @@ function buildCustomTools(
   const tools: Record<string, import("@cursor/sdk").SDKCustomTool> = {};
   for (const schema of schemas) {
     const name = schema.function.name;
+    const rawSchema = schema.function.parameters ?? {
+      type: "object",
+      properties: {},
+    };
+    const inputSchema = sanitizeSdkJsonValue(rawSchema);
     tools[name] = {
-      description: schema.function.description,
-      inputSchema: (schema.function.parameters ?? {
-        type: "object",
-        properties: {},
-      }) as Record<string, import("@cursor/sdk").SDKJsonValue>,
+      description: schema.function.description?.trim() || name,
+      inputSchema:
+        inputSchema && typeof inputSchema === "object" && !Array.isArray(inputSchema)
+          ? (inputSchema as Record<string, import("@cursor/sdk").SDKJsonValue>)
+          : { type: "object", properties: {} },
       execute: async (args, context) => {
         const toolArgs =
           args && typeof args === "object" && !Array.isArray(args)
