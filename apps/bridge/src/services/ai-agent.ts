@@ -455,25 +455,25 @@ async function executeToolCalls(
           abortSignal: opts.abortSignal ?? opts.toolCtx.abortSignal,
           onTerminalOutput: opts.onTerminalOutput
             ? (chunk) =>
-                opts.onTerminalOutput!(
-                  tc.id,
-                  budgetAndScrubToolResult(chunk, {
+                opts.onTerminalOutput!(tc.id, {
+                  ...chunk,
+                  text: budgetAndScrubToolResult(chunk.text, {
                     db: opts.toolCtx.db,
                     agentId: opts.toolCtx.activeAgentId,
                     maxChars: 50_000,
-                  })
-                )
+                  }),
+                })
             : opts.toolCtx.onTerminalOutput,
           onTerminalMonitor: opts.onTerminalMonitor
             ? (chunk) =>
-                opts.onTerminalMonitor!(
-                  tc.id,
-                  budgetAndScrubToolResult(chunk, {
+                opts.onTerminalMonitor!(tc.id, {
+                  ...chunk,
+                  text: budgetAndScrubToolResult(chunk.text, {
                     db: opts.toolCtx.db,
                     agentId: opts.toolCtx.activeAgentId,
                     maxChars: 50_000,
-                  })
-                )
+                  }),
+                })
             : opts.toolCtx.onTerminalMonitor,
         });
       } catch (err) {
