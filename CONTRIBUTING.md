@@ -45,6 +45,7 @@ offsite object storage for backups.
 ## Pull requests
 
 - Keep changes focused; match existing code style.
+- Open pull requests against `main`. Docs-only clarifications (README, CONTRIBUTING, and similar markdown) are welcome without running the full kernel gate; still say in the PR that CI impact is none.
 - Run `npm run test:gate` before submitting kernel or route changes.
   `npm run audit:kernel:strict` and `npm run test:objecttypes` are available as
   focused checks; build affected production workspaces.
