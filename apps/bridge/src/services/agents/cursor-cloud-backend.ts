@@ -19,6 +19,11 @@ import {
 } from "../coding/cursor-mcp-config.js";
 import { ensureTenantCursorSandboxJson } from "../coding/cursor-sandbox-policy.js";
 import { resolveCodingRoot } from "../coding/fs-tools.js";
+import {
+  budgetAndScrubToolResult,
+  scrubSensitiveToolArgs,
+} from "../secret-scrub.js";
+import { withSecretValue } from "./agents-db.js";
 
 /** Only project rules; never user/team/mdm/all (Bridge/SaaS isolation). */
 export type CursorProjectSettingSource = "project";
@@ -461,7 +466,12 @@ function buildCustomTools(
         properties: {},
       }) as Record<string, import("@cursor/sdk").SDKJsonValue>,
       execute: async (args, context) => {
-        req.onToolCall?.(name, args as Record<string, unknown>, context.toolCallId);
+        const toolArgs =
+          args && typeof args === "object" && !Array.isArray(args)
+            ? (args as Record<string, unknown>)
+            : {};
+        const safeArgs = scrubSensitiveToolArgs(toolArgs);
+        req.onToolCall?.(name, safeArgs, context.toolCallId);
         const approved = await shouldAutoApproveTool(
           req.agent,
           name,
@@ -469,7 +479,7 @@ function buildCustomTools(
           {
             toolCallId: context.toolCallId ?? name,
             name,
-            args: args as Record<string, unknown>,
+            args: safeArgs,
           },
           toolCtx.sessionAutonomy
         );
@@ -479,28 +489,57 @@ function buildCustomTools(
           return { content: [{ type: "text", text: JSON.stringify(declined) }], isError: true };
         }
         try {
-          const result = await executeTool(name, args as Record<string, unknown>, {
+          const result = await executeTool(name, toolArgs, {
             ...toolCtx,
             confirmationApproved: true,
             activeToolCallId: context.toolCallId,
             abortSignal: req.abortSignal ?? toolCtx.abortSignal,
             onTerminalOutput: req.onTerminalOutput
               ? (chunk) =>
-                  req.onTerminalOutput!(context.toolCallId ?? name, chunk)
+                  req.onTerminalOutput!(context.toolCallId ?? name, {
+                    ...chunk,
+                    text: budgetAndScrubToolResult(chunk.text, {
+                      db: toolCtx.db,
+                      agentId: toolCtx.activeAgentId ?? req.agent.id,
+                      maxChars: 50_000,
+                    }),
+                  })
               : toolCtx.onTerminalOutput,
             onTerminalMonitor: req.onTerminalMonitor
               ? (chunk) =>
-                  req.onTerminalMonitor!(context.toolCallId ?? name, chunk)
+                  req.onTerminalMonitor!(context.toolCallId ?? name, {
+                    ...chunk,
+                    text: budgetAndScrubToolResult(chunk.text, {
+                      db: toolCtx.db,
+                      agentId: toolCtx.activeAgentId ?? req.agent.id,
+                      maxChars: 50_000,
+                    }),
+                  })
               : toolCtx.onTerminalMonitor,
           });
-          req.onToolResult?.(name, result, context.toolCallId, false);
-          if (typeof result === "string") return result;
-          return JSON.stringify(result);
+          const scrubbed = budgetAndScrubToolResult(result, {
+            db: toolCtx.db,
+            agentId: toolCtx.activeAgentId ?? req.agent.id,
+            maxChars: 50_000,
+          });
+          let scrubbedResult: unknown = scrubbed;
+          try {
+            scrubbedResult = JSON.parse(scrubbed);
+          } catch {
+            scrubbedResult = scrubbed;
+          }
+          req.onToolResult?.(name, scrubbedResult, context.toolCallId, false);
+          return scrubbed;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          const payload = { error: message };
+          const scrubbedMsg = budgetAndScrubToolResult(message, {
+            db: toolCtx.db,
+            agentId: toolCtx.activeAgentId ?? req.agent.id,
+            maxChars: 50_000,
+          });
+          const payload = { error: scrubbedMsg };
           req.onToolResult?.(name, payload, context.toolCallId, true);
-          return { content: [{ type: "text", text: message }], isError: true };
+          return { content: [{ type: "text", text: scrubbedMsg }], isError: true };
         }
       },
     };
@@ -516,13 +555,14 @@ export class CursorCloudBackend implements AgentBackend {
   constructor(private db: AppDatabase) {}
 
   async run(req: AgentRunRequest): Promise<string> {
-    const apiKey = resolveCursorApiKey(this.db, req.agent.id);
-    if (!apiKey) {
+    const resolvedKey = resolveCursorApiKey(this.db, req.agent.id);
+    if (!resolvedKey) {
       throw new Error(
         "Cursor not connected. Add your API key in Vault → Cursor subscription."
       );
     }
 
+    return withSecretValue(resolvedKey, async (apiKey) => {
     const cfg = (req.agent.config ?? {}) as AgentCursorCloudConfig;
     const workspaceCfg = cfg.workspace?.trim() || undefined;
     const cwd = resolveCodingRoot({
@@ -631,6 +671,7 @@ export class CursorCloudBackend implements AgentBackend {
     }
 
     return result.result?.trim() || streamed.trim();
+    });
   }
 }
 

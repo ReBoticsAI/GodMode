@@ -33,7 +33,7 @@ export {
 } from "./agents/subagent-bounds.js";
 import { runCursorAgent } from "./agents/cursor-backend.js";
 import { buildContractorContextBundle } from "./contractor-context.js";
-import { createAgent, getAgent, listAgents, updateAgent } from "./agents/agents-db.js";
+import { createAgent, getAgent, listAgents, updateAgent, withSecretValue } from "./agents/agents-db.js";
 import { objectTypeAutoToolDefs } from "../kernel/auto-tools.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
 import {
@@ -1314,7 +1314,9 @@ export async function executeTool(
       const exaKey = resolveExaApiKey(ctx.db, agentId);
       if (exaKey) {
         try {
-          return await exaWebSearch(exaKey, { query, limit });
+          return await withSecretValue(exaKey, (key) =>
+            exaWebSearch(key, { query, limit })
+          );
         } catch (err) {
           return exaErrorPayload("web_search", err, { query, results: [] });
         }
@@ -1378,7 +1380,9 @@ export async function executeTool(
       const exaKey = resolveExaApiKey(ctx.db, agentId);
       if (exaKey) {
         try {
-          return await exaFetchUrl(exaKey, { url, maxChars });
+          return await withSecretValue(exaKey, (key) =>
+            exaFetchUrl(key, { url, maxChars })
+          );
         } catch (err) {
           return exaErrorPayload("fetch_url", err, { url });
         }
