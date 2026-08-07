@@ -177,6 +177,8 @@ import { getShareBroker, broadcastCardActivity } from "../ws-broker.js";
 import { createRecord, KernelError } from "../kernel/record-api.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
 import { ensureAgentProject } from "../services/user-productivity.js";
+import { summarizeRunCardTitle } from "../services/run-card-title.js";
+import { beginActiveWorkRunCard } from "../services/active-work-run-card.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
@@ -1359,7 +1361,10 @@ export function createAiRouter(
     let userMsgId: string;
     try {
       if (!activeChatId) {
-        const title = message.trim().slice(0, 80) || "New chat";
+        const title =
+          summarizeRunCardTitle(message.trim()) ||
+          message.trim().slice(0, 72) ||
+          "New chat";
         activeChatId = createRecord(
           workDb,
           "ChatSession",
@@ -1594,6 +1599,19 @@ export function createAiRouter(
     req.on("close", onClientClose);
     res.on("close", onClientClose);
 
+    let activeWorkCardId: string | null = null;
+    try {
+      const runCard = beginActiveWorkRunCard({
+        db: workDb,
+        agentId: agent.id,
+        chatId: activeChatId!,
+        userMessage: message?.trim() ?? "",
+      });
+      activeWorkCardId = runCard.cardId;
+    } catch (err) {
+      console.error("[active-work] begin run card failed", err);
+    }
+
     let fullContent = "";
     let reasoningRaw = "";
     let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -1728,6 +1746,7 @@ export function createAiRouter(
                 ? embeddings.getEmbeddingClient("memory")
                 : undefined,
             activeAgentId: agent.id,
+            activeTaskCardId: activeWorkCardId ?? undefined,
             userId: req.user?.id,
             tenantId: work.tenantId,
             sessionAutonomy,
