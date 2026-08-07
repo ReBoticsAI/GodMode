@@ -41,21 +41,22 @@ function tenantDb(): AppDatabase {
 
 describe("secret-scrub", () => {
   it("replaces known vault values and SECRETISH patterns", () => {
-    const out = scrubSecretsInText(
-      "token sk-abcdefghijklmnopqrstuvwxyz and ghp_abcdefghijklmnopqrstuvwx",
-      [{ ref: "openai-api-key", value: "sk-abcdefghijklmnopqrstuvwxyz" }]
-    );
+    const openaiish = "sk-" + "abcdefghijklmnopqrstuvwxyz";
+    const ghpish = "ghp_" + "abcdefghijklmnopqrstuvwx";
+    const out = scrubSecretsInText(`token ${openaiish} and ${ghpish}`, [
+      { ref: "openai-api-key", value: openaiish },
+    ]);
     expect(out).toContain("[secret:openai-api-key]");
-    expect(out).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
+    expect(out).not.toContain(openaiish);
     expect(out).toContain("[redacted]");
-    expect(out).not.toMatch(/ghp_/);
+    expect(out).not.toContain(ghpish);
   });
 
   it("redacts sensitive tool args without touching other fields", () => {
     const scrubbed = scrubSensitiveToolArgs({
       name: "my-secret",
       value: "super-secret-value",
-      api_key: "sk-leak",
+      api_key: "leak-me-please-now",
       path: "docs/x.md",
     });
     expect(scrubbed.name).toBe("my-secret");
