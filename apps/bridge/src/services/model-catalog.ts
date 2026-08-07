@@ -1,7 +1,7 @@
 import { getAgent, listSecrets, updateAgent } from "./agents/agents-db.js";
 import {
   isCursorSubscriptionReady,
-  listCursorSubscriptionModels,
+  listCursorSubscriptionModelsForCatalog,
   formatCursorModelLabel,
 } from "./cursor-subscription.js";
 import {
@@ -435,7 +435,7 @@ export async function listModelCatalog(
 
   if (isCursorSubscriptionReady(db, agent?.id ?? "intelligence")) {
     try {
-      const cursorModels = await listCursorSubscriptionModels(
+      const cursorModels = listCursorSubscriptionModelsForCatalog(
         db,
         agent?.id ?? "intelligence"
       );
@@ -451,7 +451,7 @@ export async function listModelCatalog(
         });
       }
     } catch {
-      /* key missing / SDK error — omit Cursor section */
+      /* key missing / SDK error - omit Cursor section */
     }
   }
 
