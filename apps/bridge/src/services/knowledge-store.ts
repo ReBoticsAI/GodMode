@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
@@ -310,8 +311,12 @@ export function listRulesFromDb(
     globs: JSON.parse(String(r.globs_json ?? "[]")) as string[],
     departments: JSON.parse(String(r.departments_json ?? "[]")) as string[],
     priority: Number(r.priority_override ?? r.priority ?? 50),
-    enabled: r.st_enabled !== undefined ? Number(r.st_enabled) !== 0 : Boolean(r.enabled),
-    status: (r.st_status === "pending" ? "pending" : "active") as "active" | "pending",
+    // LEFT JOIN yields null (not undefined) when no agent state row exists.
+    enabled:
+      r.st_enabled != null ? Number(r.st_enabled) !== 0 : Boolean(r.enabled),
+    status: (r.st_status === "pending" || r.status === "pending"
+      ? "pending"
+      : "active") as "active" | "pending",
     agentId: String(r.agent_id ?? "intelligence"),
     version: r.version != null ? Number(r.version) : undefined,
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
@@ -343,8 +348,11 @@ export function listSkillsFromDb(
     description: String(r.description),
     tools: JSON.parse(String(r.tools_json ?? "[]")) as string[],
     departments: JSON.parse(String(r.departments_json ?? "[]")) as string[],
-    enabled: r.st_enabled !== undefined ? Number(r.st_enabled) !== 0 : Boolean(r.enabled),
-    status: (r.st_status === "pending" ? "pending" : "active") as "active" | "pending",
+    enabled:
+      r.st_enabled != null ? Number(r.st_enabled) !== 0 : Boolean(r.enabled),
+    status: (r.st_status === "pending" || r.status === "pending"
+      ? "pending"
+      : "active") as "active" | "pending",
     body: includeBody ? String(r.body) : undefined,
     agentId: String(r.agent_id ?? "intelligence"),
     version: r.version != null ? Number(r.version) : undefined,
@@ -555,7 +563,14 @@ export function removePluginKnowledge(db: AppDatabase, pluginId: string): void {
  */
 export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
 
+/**
+ * Sentinel for host Cursor user Rules/Skills (`~/.cursor/rules`, `~/.cursor/skills`).
+ * Injected via Knowledge / assemblePrompt for all backends including cursor_cloud.
+ */
+export const CURSOR_USER_SOURCE = "__cursor_user__";
+
 const cursorWorkspaceSyncFp = new Map<string, string>();
+const cursorUserSyncFp = new Map<string, string>();
 
 /** Stable Knowledge ids for AGENTS.md surfaces (Cursor workspace instructions). */
 export const CURSOR_WS_AGENTS_MD_ID = "cursor-ws-agents-md";
@@ -575,7 +590,11 @@ function walkMdcFiles(dir: string, base = dir): string[] {
   return out;
 }
 
-function cursorRuleIdFromPath(rulesRoot: string, filePath: string): string {
+function cursorRuleIdFromPath(
+  rulesRoot: string,
+  filePath: string,
+  idPrefix: string
+): string {
   const rel = path
     .relative(rulesRoot, filePath)
     .replace(/\\/g, "/")
@@ -585,7 +604,14 @@ function cursorRuleIdFromPath(rulesRoot: string, filePath: string): string {
     .map((p) => p.replace(/[^a-zA-Z0-9._-]+/g, "-"))
     .filter(Boolean)
     .join("--");
-  return `cursor-ws-${slug || "rule"}`;
+  return `${idPrefix}${slug || "rule"}`;
+}
+
+/** Host Cursor user dir: `CURSOR_USER_HOME` or `~/.cursor`. */
+export function resolveCursorUserHome(): string {
+  const override = process.env.CURSOR_USER_HOME?.trim();
+  if (override) return path.resolve(override);
+  return path.join(os.homedir(), ".cursor");
 }
 
 function pushMtimePart(parts: string[], filePath: string): void {
@@ -634,8 +660,9 @@ function contentHash(body: string): string {
   return createHash("sha256").update(body).digest("hex").slice(0, 16);
 }
 
-function upsertWorkspaceRule(
+function upsertImportedRule(
   db: AppDatabase,
+  sourcePluginId: string,
   id: string,
   description: string,
   body: string,
@@ -649,7 +676,7 @@ function upsertWorkspaceRule(
     .prepare(
       `SELECT user_edited FROM ai_rules WHERE id = ? AND source_plugin_id = ?`
     )
-    .get(id, CURSOR_WORKSPACE_SOURCE) as { user_edited: number } | undefined;
+    .get(id, sourcePluginId) as { user_edited: number } | undefined;
   if (existing && Number(existing.user_edited) !== 0) {
     return false;
   }
@@ -672,14 +699,15 @@ function upsertWorkspaceRule(
     JSON.stringify(globs),
     JSON.stringify(departments),
     priority,
-    CURSOR_WORKSPACE_SOURCE,
+    sourcePluginId,
     hash
   );
   return true;
 }
 
-function upsertWorkspaceSkill(
+function upsertImportedSkill(
   db: AppDatabase,
+  sourcePluginId: string,
   id: string,
   name: string,
   description: string,
@@ -692,7 +720,7 @@ function upsertWorkspaceSkill(
     .prepare(
       `SELECT user_edited FROM ai_skills WHERE id = ? AND source_plugin_id = ?`
     )
-    .get(id, CURSOR_WORKSPACE_SOURCE) as { user_edited: number } | undefined;
+    .get(id, sourcePluginId) as { user_edited: number } | undefined;
   if (existing && Number(existing.user_edited) !== 0) {
     return false;
   }
@@ -713,7 +741,7 @@ function upsertWorkspaceSkill(
     body,
     JSON.stringify(tools),
     JSON.stringify(departments),
-    CURSOR_WORKSPACE_SOURCE,
+    sourcePluginId,
     hash
   );
   return true;
@@ -728,7 +756,17 @@ function importAgentsMdFile(
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
   const body = fs.readFileSync(filePath, "utf8").trim();
   if (!body) return false;
-  return upsertWorkspaceRule(db, id, description, body, true, [], [], 45);
+  return upsertImportedRule(
+    db,
+    CURSOR_WORKSPACE_SOURCE,
+    id,
+    description,
+    body,
+    true,
+    [],
+    [],
+    45
+  );
 }
 
 /**
@@ -779,11 +817,12 @@ export function importCursorWorkspaceKnowledge(
   const rulesDir = path.join(cursorDir, "rules");
   for (const file of walkMdcFiles(rulesDir)) {
     const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
-    const id = cursorRuleIdFromPath(rulesDir, file);
+    const id = cursorRuleIdFromPath(rulesDir, file, "cursor-ws-");
     ruleIds.push(id);
     if (
-      upsertWorkspaceRule(
+      upsertImportedRule(
         db,
+        CURSOR_WORKSPACE_SOURCE,
         id,
         parsed.description,
         parsed.body,
@@ -807,8 +846,9 @@ export function importCursorWorkspaceKnowledge(
       const id = `cursor-ws-skill-${ent.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
       skillIds.push(id);
       if (
-        upsertWorkspaceSkill(
+        upsertImportedSkill(
           db,
+          CURSOR_WORKSPACE_SOURCE,
           id,
           parsed.name,
           parsed.description,
@@ -843,13 +883,18 @@ export function syncCursorWorkspaceKnowledge(
 
   if (!fp) {
     // Remove only non-edited workspace imports when disk artifacts disappear.
-    pruneMissingWorkspaceKnowledge(db, [], []);
+    pruneMissingImportedKnowledge(db, CURSOR_WORKSPACE_SOURCE, [], []);
     cursorWorkspaceSyncFp.set(key, "");
     return { rules: 0, skills: 0, synced: true };
   }
 
   const result = importCursorWorkspaceKnowledge(db, root);
-  pruneMissingWorkspaceKnowledge(db, result.ruleIds, result.skillIds);
+  pruneMissingImportedKnowledge(
+    db,
+    CURSOR_WORKSPACE_SOURCE,
+    result.ruleIds,
+    result.skillIds
+  );
   cursorWorkspaceSyncFp.set(key, fp);
   return {
     rules: result.rules,
@@ -858,9 +903,151 @@ export function syncCursorWorkspaceKnowledge(
   };
 }
 
-/** Drop workspace imports that vanished from disk, keeping user-edited rows. */
-function pruneMissingWorkspaceKnowledge(
+function fingerprintCursorUserHome(cursorHome: string): string {
+  const parts: string[] = [];
+  const rulesDir = path.join(cursorHome, "rules");
+  for (const file of walkMdcFiles(rulesDir)) {
+    try {
+      parts.push(`${file}:${fs.statSync(file).mtimeMs}`);
+    } catch {
+      /* ignore */
+    }
+  }
+  const skillsDir = path.join(cursorHome, "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) continue;
+      try {
+        parts.push(`${skillPath}:${fs.statSync(skillPath).mtimeMs}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  parts.sort();
+  return parts.join("|");
+}
+
+/**
+ * Import host Cursor user Rules (`.cursor/rules` mdc files, recursive) and Skills
+ * (`.cursor/skills/<name>/SKILL.md`) into Knowledge. Used for all backends including
+ * cursor_cloud (via assemblePrompt / godmode-system). Does not read
+ * `skills-cursor` or plugin-cache skills. Does not overwrite user_edited rows.
+ */
+export function importCursorUserKnowledge(
   db: AppDatabase,
+  cursorHome?: string
+): {
+  rules: number;
+  skills: number;
+  ruleIds: string[];
+  skillIds: string[];
+  sourceDir: string;
+} {
+  const home = path.resolve(cursorHome ?? resolveCursorUserHome());
+  let rules = 0;
+  let skills = 0;
+  const ruleIds: string[] = [];
+  const skillIds: string[] = [];
+
+  const rulesDir = path.join(home, "rules");
+  for (const file of walkMdcFiles(rulesDir)) {
+    const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
+    const id = cursorRuleIdFromPath(rulesDir, file, "cursor-user-");
+    ruleIds.push(id);
+    if (
+      upsertImportedRule(
+        db,
+        CURSOR_USER_SOURCE,
+        id,
+        parsed.description,
+        parsed.body,
+        parsed.alwaysApply,
+        parsed.globs,
+        parsed.departments,
+        parsed.priority
+      )
+    ) {
+      rules++;
+    }
+  }
+
+  const skillsDir = path.join(home, "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) continue;
+      const parsed = parseSkillMd(fs.readFileSync(skillPath, "utf8"), ent.name);
+      const id = `cursor-user-skill-${ent.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
+      skillIds.push(id);
+      if (
+        upsertImportedSkill(
+          db,
+          CURSOR_USER_SOURCE,
+          id,
+          parsed.name,
+          parsed.description,
+          parsed.body,
+          parsed.tools,
+          parsed.departments
+        )
+      ) {
+        skills++;
+      }
+    }
+  }
+
+  return { rules, skills, ruleIds, skillIds, sourceDir: home };
+}
+
+/**
+ * Refresh Cursor user Knowledge when `~/.cursor/rules` / `skills` mtimes change.
+ */
+export function syncCursorUserKnowledge(
+  db: AppDatabase,
+  opts?: { force?: boolean; cursorHome?: string }
+): {
+  rules: number;
+  skills: number;
+  synced: boolean;
+  sourceDir: string;
+} {
+  const home = path.resolve(opts?.cursorHome ?? resolveCursorUserHome());
+  const key = home;
+  const fp = fingerprintCursorUserHome(home);
+  if (!opts?.force && cursorUserSyncFp.get(key) === fp) {
+    return { rules: 0, skills: 0, synced: false, sourceDir: home };
+  }
+
+  if (!fp) {
+    pruneMissingImportedKnowledge(db, CURSOR_USER_SOURCE, [], []);
+    cursorUserSyncFp.set(key, "");
+    return { rules: 0, skills: 0, synced: true, sourceDir: home };
+  }
+
+  const result = importCursorUserKnowledge(db, home);
+  pruneMissingImportedKnowledge(
+    db,
+    CURSOR_USER_SOURCE,
+    result.ruleIds,
+    result.skillIds
+  );
+  cursorUserSyncFp.set(key, fp);
+  return {
+    rules: result.rules,
+    skills: result.skills,
+    synced: true,
+    sourceDir: result.sourceDir,
+  };
+}
+
+/** Drop imported rows that vanished from disk, keeping user-edited rows. */
+function pruneMissingImportedKnowledge(
+  db: AppDatabase,
+  sourcePluginId: string,
   keepRuleIds: string[],
   keepSkillIds: string[]
 ): void {
@@ -870,7 +1057,7 @@ function pruneMissingWorkspaceKnowledge(
     .prepare(
       `SELECT id, user_edited FROM ai_rules WHERE source_plugin_id = ?`
     )
-    .all(CURSOR_WORKSPACE_SOURCE) as Array<{ id: string; user_edited: number }>;
+    .all(sourcePluginId) as Array<{ id: string; user_edited: number }>;
   for (const row of ruleRows) {
     if (keepRules.has(row.id)) continue;
     if (Number(row.user_edited) !== 0) continue;
@@ -881,7 +1068,7 @@ function pruneMissingWorkspaceKnowledge(
     .prepare(
       `SELECT id, user_edited FROM ai_skills WHERE source_plugin_id = ?`
     )
-    .all(CURSOR_WORKSPACE_SOURCE) as Array<{ id: string; user_edited: number }>;
+    .all(sourcePluginId) as Array<{ id: string; user_edited: number }>;
   for (const row of skillRows) {
     if (keepSkills.has(row.id)) continue;
     if (Number(row.user_edited) !== 0) continue;
@@ -893,4 +1080,9 @@ function pruneMissingWorkspaceKnowledge(
 /** @internal test helper */
 export function clearCursorWorkspaceSyncCacheForTests(): void {
   cursorWorkspaceSyncFp.clear();
+}
+
+/** @internal test helper */
+export function clearCursorUserSyncCacheForTests(): void {
+  cursorUserSyncFp.clear();
 }

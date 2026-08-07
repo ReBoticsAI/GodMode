@@ -33,6 +33,8 @@ const SKIP_DIRS = new Set([
   "out",
   ".turbo",
   ".cache",
+  ".worktrees",
+  "worktrees",
 ]);
 
 const INDEX_LOCK = new Map<string, Promise<CodeIndexResult>>();
@@ -62,9 +64,14 @@ function rootIdFor(rootPath: string): string {
   return createHash("sha256").update(rootPath).digest("hex").slice(0, 16);
 }
 
-function walkFiles(absRoot: string): string[] {
+/**
+ * Collect indexable relative paths under absRoot.
+ * Stops once `maxFiles` indexable files are found (does not walk the whole tree first).
+ */
+export function walkFiles(absRoot: string, maxFiles = Infinity): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
+    if (out.length >= maxFiles) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -72,6 +79,7 @@ function walkFiles(absRoot: string): string[] {
       return;
     }
     for (const ent of entries) {
+      if (out.length >= maxFiles) return;
       if (ent.name.startsWith(".") && ent.name !== ".cursor") continue;
       if (ent.isDirectory()) {
         if (SKIP_DIRS.has(ent.name)) continue;
@@ -144,7 +152,8 @@ export async function syncCodeIndex(
 
   const run = (async (): Promise<CodeIndexResult> => {
     const rootId = ensureRoot(db, rootPath);
-    const files = walkFiles(rootPath).slice(0, opts.maxFiles ?? 4_000);
+    const maxFiles = opts.maxFiles ?? 4_000;
+    const files = walkFiles(rootPath, maxFiles);
     const fingerprint = fileFingerprint(rootPath, files);
     const prev = db
       .prepare(`SELECT fingerprint FROM code_index_roots WHERE id = ?`)
@@ -174,7 +183,12 @@ export async function syncCodeIndex(
     const profile = resolveEmbedProfile("code");
     const modelId = embedProfileModelId(profile);
 
+    let fileIndex = 0;
     for (const rel of files) {
+      // Yield periodically so HTTP stays responsive during large syncs.
+      if (fileIndex++ % 25 === 0) {
+        await new Promise((r) => setImmediate(r));
+      }
       const abs = path.join(rootPath, rel);
       let source = "";
       try {
