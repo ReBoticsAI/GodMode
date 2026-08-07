@@ -24,6 +24,7 @@ import {
   deleteAiSkill,
   fetchAiSkills,
   importWorkspaceKnowledge,
+  importCursorUserKnowledge,
   rejectAiSkill,
   updateAiSkillContent,
   updateAiSkillState,
@@ -104,6 +105,7 @@ export function SkillsTab() {
   const [form, setForm] = useState<SkillFormState>(emptySkillForm);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingUser, setImportingUser] = useState(false);
 
   const load = useCallback(() => {
     fetchAiSkills(true, activeAgentId)
@@ -246,6 +248,27 @@ export function SkillsTab() {
     }
   };
 
+  const runUserImport = async () => {
+    setImportingUser(true);
+    try {
+      const result = await importCursorUserKnowledge(activeAgentId);
+      if (result.message) {
+        toast.message(result.message);
+      } else if (result.synced) {
+        toast.success(
+          `Imported ${result.rules} rules and ${result.skills} skills from Cursor user`
+        );
+      } else {
+        toast.message("Cursor user Rules/Skills unchanged since last import");
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportingUser(false);
+    }
+  };
+
   const skillFormFields = (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
@@ -287,13 +310,23 @@ export function SkillsTab() {
               <CardDescription className="text-[11px]">
                 DB-backed instruction bundles for this agent. Prefer editing skills here in
                 Knowledge; AGENTS.md and <code className="text-[10px]">.cursor/skills</code> are
-                bootstrap imports from the coding root.
+                bootstrap imports from the coding root or your Cursor user profile.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1">
-              <Button type="button" size="sm" variant="outline" onClick={() => void runImport()} disabled={importing}>
+              <Button type="button" size="sm" variant="outline" onClick={() => void runImport()} disabled={importing || importingUser}>
                 {importing ? <Spinner className="size-3.5" /> : <DownloadIcon className="size-3.5" />}
                 Import from coding root
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runUserImport()}
+                disabled={importing || importingUser}
+              >
+                {importingUser ? <Spinner className="size-3.5" /> : <DownloadIcon className="size-3.5" />}
+                Import Cursor user
               </Button>
               <Button type="button" size="sm" onClick={openCreate}>
                 <PlusIcon className="size-3.5" />

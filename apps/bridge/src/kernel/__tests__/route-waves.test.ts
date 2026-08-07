@@ -50,6 +50,7 @@ describe("legacy route wave", () => {
       "admin-saas.ts:post:/customers/:userId/access",
       "admin-saas.ts:post:/customers/:userId/complimentary",
       "ai.ts:post:/chat",
+      "ai.ts:post:/cursor-user-knowledge/import",
       "ai.ts:post:/workspace-knowledge/import",
       "api-core.ts:post:/analytics/timeseries/query",
       "auth.ts:post:/change-password",

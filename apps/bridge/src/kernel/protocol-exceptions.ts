@@ -611,6 +611,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "ai-cursor-user-knowledge-import",
+    methods: ["POST"],
+    pathPattern: "/api/ai/cursor-user-knowledge/import",
+    rationale:
+      "One-shot bootstrap of host Cursor user ~/.cursor/rules and ~/.cursor/skills into Knowledge for assemblePrompt (including cursor_cloud); not SaaS; not SDK settingSources user.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "ai-coding-workspace-file",
     methods: ["PUT", "POST", "DELETE"],
     pathPattern: "/api/ai/coding/file",
