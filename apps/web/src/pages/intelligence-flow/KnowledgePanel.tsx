@@ -41,8 +41,13 @@ export function KnowledgePanel() {
       </Tabs>
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-3">
-          {knowledgeSubTab === "rules" && <RulesTab />}
-          {knowledgeSubTab === "skills" && <SkillsTab />}
+          {/* Keep Rules/Skills mounted so in-flight imports can finish and refresh. */}
+          <div className={knowledgeSubTab === "rules" ? undefined : "hidden"}>
+            <RulesTab />
+          </div>
+          <div className={knowledgeSubTab === "skills" ? undefined : "hidden"}>
+            <SkillsTab />
+          </div>
           {knowledgeSubTab === "memory" && <MemoryTab />}
           {knowledgeSubTab === "artifacts" && <ArtifactsTab />}
           {knowledgeSubTab === "reflection" && <ReflectionPanel />}

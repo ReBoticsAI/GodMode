@@ -812,6 +812,7 @@ export const importWorkspaceKnowledge = (agentId?: string) =>
     {
       method: "POST",
       body: JSON.stringify(agentId ? { agentId } : {}),
+      signal: AbortSignal.timeout(30_000),
     }
   );
 
@@ -825,6 +826,7 @@ export const importCursorUserKnowledge = (agentId?: string) =>
   }>("/ai/cursor-user-knowledge/import", {
     method: "POST",
     body: JSON.stringify(agentId ? { agentId } : {}),
+    signal: AbortSignal.timeout(30_000),
   });
 
 export interface AiMcpServerStatus {
