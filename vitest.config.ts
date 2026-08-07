@@ -62,6 +62,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/ephemeral-build.test.ts",
       "apps/bridge/src/services/__tests__/exa-web.test.ts",
       "apps/bridge/src/services/__tests__/vault-agent-scope.test.ts",
+      "apps/bridge/src/services/__tests__/secret-scrub.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-lib.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-egress-network.test.ts",
       "apps/bridge/src/services/__tests__/write-tool-verify.test.ts",

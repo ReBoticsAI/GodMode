@@ -39,7 +39,23 @@ revenue product.
 2. **P1** - Dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust
 3. Core Control Center depth and plugin-backlog stay in **Backlog** until live + dogfood clear
 
+### Ready doctrine (project board)
+
+[GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1) **Ready** prioritizes:
+
+1. **P0** - Hostinger SaaS live (public DNS gate below)
+2. **P1** - Dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust
+3. Core Control Center depth and plugin-backlog stay in **Backlog** until live + dogfood clear
+
 Do not treat Core epic checklist items as jump-the-queue ahead of launch.
+
+### Cloud production gate
+
+**Merge to `main` is the production gate** for `app.godmode.software`. After CI
+validate + **Publish SaaS image**, the Hostinger `godmode-saas` runner pins the
+immutable digest and rolls compose (see [deploy/hostinger.md](deploy/hostinger.md)).
+Agents and chat sessions must not SSH or read `.env.production`. Manual
+`/deploygodmodecloud` is emergency/rollback only.
 
 Self-hosted family/team hubs use `private_hub` and skip the paywall.
 
