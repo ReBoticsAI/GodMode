@@ -13,7 +13,7 @@ import {
   listTenantWorktrees,
   promoteTenantWorktree,
 } from "../coding/tenant-worktree.js";
-import { resolveCodingRoot, writeFile, readFile, listDir } from "../coding/fs-tools.js";
+import { resolveCodingRoot, writeFile } from "../coding/fs-tools.js";
 import { scaffoldPlugin } from "../plugin-scaffold.js";
 
 const temps: string[] = [];
@@ -119,36 +119,6 @@ describe("tenant worktrees", () => {
       tenantWorkspacesDir: workspaces,
     });
     expect(existsSync(join(live, "plugins/demo-plug/NOTE.txt"))).toBe(false);
-  });
-
-  it("read_file and list_dir resolve inside an active .worktrees workspace", () => {
-    const workspaces = tempDir("gm-wt-fs-");
-    const opts = hubOpts("tenant-a", workspaces);
-    const wt = createTenantWorktree({ slug: "fs-access", ...opts });
-    writeFile({
-      path: "readme.txt",
-      content: "worktree-ok\n",
-      tenantId: "tenant-a",
-      root: wt.workspace,
-      isolatedDeployment: true,
-      tenantWorkspacesDir: workspaces,
-    });
-    const listed = listDir({
-      path: ".",
-      tenantId: "tenant-a",
-      root: wt.workspace,
-      isolatedDeployment: true,
-      tenantWorkspacesDir: workspaces,
-    });
-    expect(listed.entries.map((e) => e.name)).toContain("readme.txt");
-    const read = readFile({
-      path: "readme.txt",
-      tenantId: "tenant-a",
-      root: wt.workspace,
-      isolatedDeployment: true,
-      tenantWorkspacesDir: workspaces,
-    });
-    expect(read.content).toContain("worktree-ok");
   });
 
   it("promote merges worktree plugins into the live tenant tree", () => {

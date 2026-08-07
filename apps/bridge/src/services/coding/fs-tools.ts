@@ -20,8 +20,6 @@ export type FsRootOpts = {
   isolatedDeployment?: boolean;
   /** Override tenant-workspaces parent directory (tests). */
   tenantWorkspacesDir?: string;
-  /** Override local coding base / repo root (tests). */
-  localRepoRoot?: string;
 };
 
 function isIsolatedDeployment(opts?: FsRootOpts): boolean {
@@ -58,10 +56,7 @@ function tenantWorkspaceRoot(tenantId: string, opts?: FsRootOpts): string {
 /**
  * Coding root for FS/terminal tools.
  * Hub/client: always `{tenantWorkspaces}/<tenantId>/` (optional workspace subpath).
- * Local: `config.repoRoot` (or `localRepoRoot` in tests) with optional workspace
- * subpath. Relative `root` values (e.g. `.worktrees/<slug>`) resolve under the
- * local coding base, never `process.cwd()`, so Bridge cwd cannot break Layer 2.
- * Absolute `root` remains an explicit override (tests / operator).
+ * Local: `config.repoRoot` or explicit `root` (tests / operator override).
  */
 export function resolveCodingRoot(opts?: FsRootOpts): string {
   if (isIsolatedDeployment(opts)) {
@@ -77,17 +72,10 @@ export function resolveCodingRoot(opts?: FsRootOpts): string {
     }
     return tenantRoot;
   }
-  const localBase = path.resolve(
-    opts?.localRepoRoot?.trim() || config.repoRoot
-  );
   if (opts?.root?.trim()) {
-    const trimmed = opts.root.trim();
-    if (path.isAbsolute(trimmed)) {
-      return path.resolve(trimmed);
-    }
-    return resolveUnderBase(localBase, trimmed);
+    return path.resolve(opts.root.trim());
   }
-  return localBase;
+  return path.resolve(config.repoRoot);
 }
 
 /**
