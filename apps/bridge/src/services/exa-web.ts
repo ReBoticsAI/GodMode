@@ -10,7 +10,7 @@
  */
 import type { AppDatabase } from "../db.js";
 import { config } from "../config.js";
-import { resolveSecretByName } from "./agents/agents-db.js";
+import { resolveSecretByName, withSecretValue } from "./agents/agents-db.js";
 import { resolveAgentCredential } from "./agents/agent-accounts.js";
 
 export const EXA_PROVIDER = "exa";
