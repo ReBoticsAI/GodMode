@@ -338,6 +338,26 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "watch_pr_checks",
+    description:
+      "Babysit GitHub PR CI for Core work. Returns pending/success/failure for required checks. Do not close issues or mark Done while state is pending or failure; fix failures with production-grade changes (no workarounds) and re-check.",
+    mode: "auto",
+    parameters: {
+      type: "object",
+      properties: {
+        pr: {
+          type: "string",
+          description: "PR number or URL (e.g. 461 or https://github.com/org/repo/pull/461)",
+        },
+        repo: {
+          type: "string",
+          description: "owner/name when pr is a bare number (default ReBoticsAI/GodMode)",
+        },
+      },
+      required: ["pr"],
+    },
+  },
+  {
     name: "update_card",
     description:
       "Partial update of a card: columnId (lane), status, title, description, priority, assignedAgentId. Use for lane transitions and lifecycle status.",
@@ -1981,6 +2001,7 @@ const TASK_TOOLS = new Set<string>([
   "comment_card",
   "list_card_comments",
   "update_card",
+  "watch_pr_checks",
 ]);
 
 // Platform Builder — Phase A structure tools every department agent may hold
