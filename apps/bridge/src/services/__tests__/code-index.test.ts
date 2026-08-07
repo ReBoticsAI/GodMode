@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AppDatabase } from "../../db.js";
 import { chunkSourceFile } from "../coding/code-chunker.js";
-import { syncCodeIndex, searchCodeChunks } from "../coding/code-index.js";
+import { syncCodeIndex, searchCodeChunks, walkFiles } from "../coding/code-index.js";
 import { codebaseSearch } from "../coding/codebase-search.js";
 import { cosineSimilarity, l2normalize } from "../embeddings/embedding-client.js";
 
@@ -86,6 +86,25 @@ export class BetaService {
     );
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[0].kind).toBe("module");
+  });
+});
+
+describe("walkFiles", () => {
+  it("stops after maxFiles without requiring a full tree walk", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "src"), { recursive: true });
+    for (let i = 0; i < 30; i++) {
+      writeFileSync(join(root, "src", `f${i}.ts`), `export const n${i} = ${i};\n`, "utf8");
+    }
+    mkdirSync(join(root, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(
+      join(root, "node_modules", "pkg", "index.ts"),
+      "export const skip = 1;\n",
+      "utf8"
+    );
+    const files = walkFiles(root, 5);
+    expect(files).toHaveLength(5);
+    expect(files.every((p) => p.startsWith("src/"))).toBe(true);
   });
 });
 
