@@ -496,25 +496,25 @@ function buildCustomTools(
             abortSignal: req.abortSignal ?? toolCtx.abortSignal,
             onTerminalOutput: req.onTerminalOutput
               ? (chunk) =>
-                  req.onTerminalOutput!(
-                    context.toolCallId ?? name,
-                    budgetAndScrubToolResult(chunk, {
+                  req.onTerminalOutput!(context.toolCallId ?? name, {
+                    ...chunk,
+                    text: budgetAndScrubToolResult(chunk.text, {
                       db: toolCtx.db,
                       agentId: toolCtx.activeAgentId ?? req.agent.id,
                       maxChars: 50_000,
-                    })
-                  )
+                    }),
+                  })
               : toolCtx.onTerminalOutput,
             onTerminalMonitor: req.onTerminalMonitor
               ? (chunk) =>
-                  req.onTerminalMonitor!(
-                    context.toolCallId ?? name,
-                    budgetAndScrubToolResult(chunk, {
+                  req.onTerminalMonitor!(context.toolCallId ?? name, {
+                    ...chunk,
+                    text: budgetAndScrubToolResult(chunk.text, {
                       db: toolCtx.db,
                       agentId: toolCtx.activeAgentId ?? req.agent.id,
                       maxChars: 50_000,
-                    })
-                  )
+                    }),
+                  })
               : toolCtx.onTerminalMonitor,
           });
           const scrubbed = budgetAndScrubToolResult(result, {

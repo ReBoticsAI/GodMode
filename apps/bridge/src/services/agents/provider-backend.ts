@@ -161,25 +161,25 @@ async function executeOneTool(
         abortSignal: req.abortSignal ?? toolCtx.abortSignal,
         onTerminalOutput: req.onTerminalOutput
           ? (chunk) =>
-              req.onTerminalOutput!(
-                tc.id,
-                budgetAndScrubToolResult(chunk, {
+              req.onTerminalOutput!(tc.id, {
+                ...chunk,
+                text: budgetAndScrubToolResult(chunk.text, {
                   db: toolCtx.db,
                   agentId: toolCtx.activeAgentId ?? req.agent.id,
                   maxChars: 50_000,
-                })
-              )
+                }),
+              })
           : toolCtx.onTerminalOutput,
         onTerminalMonitor: req.onTerminalMonitor
           ? (chunk) =>
-              req.onTerminalMonitor!(
-                tc.id,
-                budgetAndScrubToolResult(chunk, {
+              req.onTerminalMonitor!(tc.id, {
+                ...chunk,
+                text: budgetAndScrubToolResult(chunk.text, {
                   db: toolCtx.db,
                   agentId: toolCtx.activeAgentId ?? req.agent.id,
                   maxChars: 50_000,
-                })
-              )
+                }),
+              })
           : toolCtx.onTerminalMonitor,
       });
     } catch (err) {
