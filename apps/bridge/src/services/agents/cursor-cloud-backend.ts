@@ -652,7 +652,28 @@ export class CursorCloudBackend implements AgentBackend {
 
     const result = await run.wait();
     if (result.status === "error") {
-      throw new Error(result.result || "Cursor agent run failed");
+      const detailParts: string[] = [];
+      const runErr = result.error;
+      if (runErr?.message?.trim()) detailParts.push(runErr.message.trim());
+      if (runErr?.code?.trim()) detailParts.push(`code=${runErr.code.trim()}`);
+      if (typeof result.result === "string" && result.result.trim()) {
+        detailParts.push(result.result.trim());
+      }
+      try {
+        console.error(
+          "[cursor_cloud] agent run error",
+          JSON.stringify(result, (_k, v) =>
+            typeof v === "string" && v.length > 2000 ? `${v.slice(0, 2000)}…` : v
+          )
+        );
+      } catch {
+        console.error("[cursor_cloud] agent run error (unserializable)", result);
+      }
+      throw new Error(
+        detailParts.length
+          ? `Cursor agent run failed: ${detailParts.join(" | ")}`
+          : "Cursor agent run failed"
+      );
     }
 
     const usageRaw = (result as { usage?: Record<string, number> }).usage;
