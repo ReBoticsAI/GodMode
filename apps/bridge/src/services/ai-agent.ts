@@ -10,6 +10,11 @@ import {
   parseGrammarResponse,
   type ToolMode,
 } from "./tool-grammar.js";
+import {
+  budgetAndScrubToolResult,
+  scrubSensitiveToolArgs,
+  scrubToolCallArgumentsJson,
+} from "./secret-scrub.js";
 
 export const DEFAULT_MAX_ITERATIONS = 32;
 export const TOOL_OUTPUT_MAX_CHARS = 7000;
@@ -156,18 +161,14 @@ function dedupeToolCalls(
 
 export function budgetToolResult(
   result: unknown,
-  maxChars = TOOL_OUTPUT_MAX_CHARS
+  maxChars = TOOL_OUTPUT_MAX_CHARS,
+  scrub?: { db: ToolExecContext["db"]; agentId?: string | null }
 ): string {
-  const content = typeof result === "string" ? result : JSON.stringify(result);
-  if (content.length <= maxChars) return content;
-  const head = Math.floor(maxChars * 0.6);
-  const tail = Math.floor(maxChars * 0.3);
-  const omitted = content.length - head - tail;
-  return (
-    content.slice(0, head) +
-    `\n\n[... ${omitted} chars omitted ...]\n\n` +
-    content.slice(-tail)
-  );
+  return budgetAndScrubToolResult(result, {
+    maxChars,
+    db: scrub?.db,
+    agentId: scrub?.agentId,
+  });
 }
 
 function newToolCallId(): string {
@@ -424,14 +425,15 @@ async function executeToolCalls(
     sanitizedToolCalls.map(async (tc) => {
       const fnName = tc.function.name;
       const args = parseToolArgs(tc.function.arguments);
-      opts.onToolCall?.(fnName, args, tc.id);
+      const safeArgs = scrubSensitiveToolArgs(args);
+      opts.onToolCall?.(fnName, safeArgs, tc.id);
 
       if (confirmFn(fnName)) {
         const approved =
           (await opts.onConfirmRequired?.({
             toolCallId: tc.id,
             name: fnName,
-            args,
+            args: safeArgs,
           })) ?? false;
         if (!approved) {
           const content = JSON.stringify({ error: "User declined tool execution" });
@@ -452,10 +454,26 @@ async function executeToolCalls(
           activeToolCallId: tc.id,
           abortSignal: opts.abortSignal ?? opts.toolCtx.abortSignal,
           onTerminalOutput: opts.onTerminalOutput
-            ? (chunk) => opts.onTerminalOutput!(tc.id, chunk)
+            ? (chunk) =>
+                opts.onTerminalOutput!(tc.id, {
+                  ...chunk,
+                  text: budgetAndScrubToolResult(chunk.text, {
+                    db: opts.toolCtx.db,
+                    agentId: opts.toolCtx.activeAgentId,
+                    maxChars: 50_000,
+                  }),
+                })
             : opts.toolCtx.onTerminalOutput,
           onTerminalMonitor: opts.onTerminalMonitor
-            ? (chunk) => opts.onTerminalMonitor!(tc.id, chunk)
+            ? (chunk) =>
+                opts.onTerminalMonitor!(tc.id, {
+                  ...chunk,
+                  text: budgetAndScrubToolResult(chunk.text, {
+                    db: opts.toolCtx.db,
+                    agentId: opts.toolCtx.activeAgentId,
+                    maxChars: 50_000,
+                  }),
+                })
             : opts.toolCtx.onTerminalMonitor,
         });
       } catch (err) {
@@ -463,12 +481,22 @@ async function executeToolCalls(
       }
       const isError =
         !!result && typeof result === "object" && "error" in (result as object);
-      opts.onToolResult?.(fnName, result, tc.id, isError);
+      const scrubbedContent = budgetToolResult(result, TOOL_OUTPUT_MAX_CHARS, {
+        db: opts.toolCtx.db,
+        agentId: opts.toolCtx.activeAgentId,
+      });
+      let scrubbedResult: unknown = result;
+      try {
+        scrubbedResult = JSON.parse(scrubbedContent);
+      } catch {
+        scrubbedResult = scrubbedContent;
+      }
+      opts.onToolResult?.(fnName, scrubbedResult, tc.id, isError);
       return {
         role: "tool" as const,
         tool_call_id: tc.id,
         name: fnName,
-        content: budgetToolResult(result),
+        content: scrubbedContent,
       };
     })
   );
@@ -628,7 +656,13 @@ export async function runAgentChat(opts: RunAgentOptions): Promise<string> {
     messages.push({
       role: "assistant",
       content: step.content || "",
-      tool_calls: sanitizedToolCalls,
+      tool_calls: sanitizedToolCalls.map((tc) => ({
+        ...tc,
+        function: {
+          ...tc.function,
+          arguments: scrubToolCallArgumentsJson(tc.function.arguments),
+        },
+      })),
     });
 
     const toolMessages = await executeToolCalls(sanitizedToolCalls, {
