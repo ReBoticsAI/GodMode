@@ -174,7 +174,7 @@ import { resolveShareAccess } from "../services/share-service.js";
 import { refreshScheduler } from "../services/scheduler.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getShareBroker, broadcastCardActivity } from "../ws-broker.js";
-import { createRecord } from "../kernel/record-api.js";
+import { createRecord, KernelError } from "../kernel/record-api.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
 import { ensureAgentProject } from "../services/user-productivity.js";
 
@@ -1356,14 +1356,34 @@ export function createAiRouter(
       contributeMemory && !scope.owned ? engineDb : undefined;
 
     let activeChatId = chatId;
-    if (!activeChatId) {
-      const title = message.trim().slice(0, 80) || "New chat";
-      activeChatId = createRecord(
+    let userMsgId: string;
+    try {
+      if (!activeChatId) {
+        const title = message.trim().slice(0, 80) || "New chat";
+        activeChatId = createRecord(
+          workDb,
+          "ChatSession",
+          { title },
+          chatKernelContext
+        ).id;
+      }
+
+      userMsgId = createRecord(
         workDb,
-        "ChatSession",
-        { title },
+        "ChatMessage",
+        {
+          chat_id: activeChatId,
+          role: "user",
+          content: { text: message, images },
+        },
         chatKernelContext
       ).id;
+    } catch (err) {
+      if (err instanceof KernelError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
 
     const userParts: ChatMessagePart[] = [];
@@ -1377,17 +1397,6 @@ export function createAiRouter(
       userParts.length === 1 && userParts[0].type === "text"
         ? userParts[0].text!
         : userParts;
-
-    const userMsgId = createRecord(
-      workDb,
-      "ChatMessage",
-      {
-        chat_id: activeChatId,
-        role: "user",
-        content: { text: message, images },
-      },
-      chatKernelContext
-    ).id;
 
     broadcastAgentEvent(
       resolvedAgentId,
@@ -1572,6 +1581,13 @@ export function createAiRouter(
     };
 
     send("chat_id", { chatId: activeChatId });
+    send("status", {
+      phase: "starting",
+      message:
+        agent.backend === "cursor_cloud" || agent.backend === "cursor"
+          ? "Starting Cursor…"
+          : "Starting model…",
+    });
 
     const abortController = new AbortController();
     const onClientClose = () => abortController.abort();
@@ -1581,6 +1597,23 @@ export function createAiRouter(
     let fullContent = "";
     let reasoningRaw = "";
     let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    let sawStreamActivity = false;
+    const markStreamActivity = () => {
+      sawStreamActivity = true;
+    };
+    const statusHeartbeat = setInterval(() => {
+      if (abortController.signal.aborted || sawStreamActivity) return;
+      send("status", {
+        phase: "waiting",
+        message:
+          agent.backend === "cursor_cloud" || agent.backend === "cursor"
+            ? "Waiting on Cursor…"
+            : "Waiting on model…",
+      });
+    }, 4000);
+    abortController.signal.addEventListener("abort", () => {
+      clearInterval(statusHeartbeat);
+    });
 
     // Server-side accumulation of Cursor-style parts (thinking / tool / todos /
     // text) so a reloaded chat replays tool cards and reasoning faithfully.
@@ -1717,15 +1750,21 @@ export function createAiRouter(
           abortSignal: abortController.signal,
           maxIterations: harnessProfile.maxChatIterations,
           onToken: (chunk) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             streamed += chunk;
             segRaw += chunk;
             send("token", { content: chunk });
           },
           onReasoning: (chunk) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             partReasoning(chunk);
             send("reasoning", { content: chunk });
           },
           onToolCall: (name, args, toolCallId) => {
+            markStreamActivity();
+            clearInterval(statusHeartbeat);
             partToolCall(name, args, toolCallId);
             send("tool_call", { toolCallId, name, args });
           },
@@ -1926,6 +1965,7 @@ export function createAiRouter(
         });
       }
     } finally {
+      clearInterval(statusHeartbeat);
       req.off("close", onClientClose);
       res.off("close", onClientClose);
     }
