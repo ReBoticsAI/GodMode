@@ -9,26 +9,14 @@ export const ROOT_AGENT_ID = "intelligence";
 /** Matches bridge `CURSOR_WORKSPACE_SOURCE` for AGENTS.md / `.cursor/` imports. */
 export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
 
-/** Matches bridge `CURSOR_USER_SOURCE` for host `~/.cursor/rules` + `skills`. */
-export const CURSOR_USER_SOURCE = "__cursor_user__";
-
 export type KnowledgeStatusFilter = "all" | "active" | "disabled" | "pending";
 
 export function sourceBadgeLabel(
   sourcePluginId?: string | null,
   userEdited?: boolean
-):
-  | "Native"
-  | "Plugin"
-  | "Workspace"
-  | "Workspace (edited)"
-  | "Cursor user"
-  | "Cursor user (edited)" {
+): "Native" | "Plugin" | "Workspace" | "Workspace (edited)" {
   if (sourcePluginId === CURSOR_WORKSPACE_SOURCE) {
     return userEdited ? "Workspace (edited)" : "Workspace";
-  }
-  if (sourcePluginId === CURSOR_USER_SOURCE) {
-    return userEdited ? "Cursor user (edited)" : "Cursor user";
   }
   if (sourcePluginId) return "Plugin";
   return "Native";
@@ -47,11 +35,9 @@ export function SourceBadge({
       ? "border-slate-500/40 text-slate-600"
       : label === "Plugin"
         ? "border-orange-500/40 text-orange-600"
-        : label === "Workspace (edited)" || label === "Cursor user (edited)"
+        : label === "Workspace (edited)"
           ? "border-teal-500/40 text-teal-600"
-          : label === "Cursor user"
-            ? "border-violet-500/40 text-violet-600"
-            : "border-cyan-500/40 text-cyan-600";
+          : "border-cyan-500/40 text-cyan-600";
   return (
     <Badge variant="outline" className={cn("text-[10px]", tone)}>
       {label}

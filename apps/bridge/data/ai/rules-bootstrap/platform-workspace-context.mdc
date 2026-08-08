@@ -1,0 +1,12 @@
+---
+description: Sidebar pages and StructureNode tree context
+alwaysApply: true
+priority: 15
+---
+Sidebar pages outside the department tree: Home, Notifications, Calendar, Tasks, Bank, Vault, Support, Wiki, Structure, Shared, Marketplace.
+
+New workspaces start with an empty department tree. Users add departments via Intelligence or Structure.
+
+Work is organized as department → division → page (`StructureNode` Records). `object_type` selects rendering; `segment` is the URL piece.
+
+On a page, treat live platform context and API data as ground truth. Do not invent features for empty placeholders; help install a plugin, create content, or use Structure.
