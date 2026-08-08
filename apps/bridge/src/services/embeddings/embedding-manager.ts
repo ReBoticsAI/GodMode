@@ -213,14 +213,26 @@ export class EmbeddingManager {
     }
   }
 
-  /** Soft code-index warm. Deferred so post-listen traffic (health, Intelligence) stays responsive. */
+  /**
+   * Soft code-index warm after boot.
+   * Local developer_source installs usually point the coding root at a full monorepo.
+   * Even a capped sync walk + AST chunk still blocks the HTTP event loop for seconds
+   * to minutes (health timeouts, empty Knowledge UI, stuck CDP). Warm lazily on
+   * codebase search instead; keep automatic soft backfill for SaaS tenant workspaces.
+   */
   private async softBackfillCodeIndexes(): Promise<void> {
-    // Let the HTTP server settle; avoid sync monorepo walks on the first seconds of uptime.
+    if (config.installationSurface === "developer_source") {
+      console.log(
+        "[embeddings] skip code-index soft backfill on developer_source (lazy warm on search)"
+      );
+      return;
+    }
+    // Let the HTTP server settle before touching tenant workspace trees.
     await new Promise((r) => setTimeout(r, 15_000));
     const { syncCodeIndex } = await import("../coding/code-index.js");
     const { resolveCodingRoot } = await import("../coding/fs-tools.js");
     const embedder = this.codeClient;
-    // Local tenants often share one coding root; INDEX_LOCK only dedupes concurrent runs.
+    // Tenants may share one coding root; INDEX_LOCK only dedupes concurrent runs.
     const warmedRoots = new Set<string>();
     for (const { tenantId, db } of this.listTenantDbs()) {
       try {
