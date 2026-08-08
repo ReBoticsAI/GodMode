@@ -29,6 +29,15 @@ describe("summarizeRunCardTitle", () => {
     expect(summarizeRunCardTitle("   ")).toBe("Run");
   });
 
+  it("strips a leading undefined concat artifact from titles", () => {
+    expect(
+      summarizeRunCardTitle("undefinedFor dogfood #201: scaffold a hello page")
+    ).not.toMatch(/^undefined/i);
+    expect(
+      summarizeRunCardTitle("undefined Build me a small plugin")
+    ).not.toMatch(/^undefined/i);
+  });
+
   it("shortens Active work title complaints instead of pasting the message", () => {
     expect(
       summarizeRunCardTitle(

@@ -439,6 +439,9 @@ export async function listModelCatalog(
         db,
         agent?.id ?? "intelligence"
       );
+      const configuredCursorModel = String(
+        agent?.config?.model ?? "auto"
+      ).toLowerCase();
       for (const m of cursorModels) {
         const harness = resolveHarnessProfile({ source: "cursor", model: m.id });
         models.push({
@@ -446,13 +449,50 @@ export async function listModelCatalog(
           source: "cursor",
           label: m.label || m.id,
           model: m.id,
-          active: agent?.backend === "cursor_cloud" && agent.config?.model === m.id,
+          active:
+            agent?.backend === "cursor_cloud" &&
+            String(m.id).toLowerCase() === configuredCursorModel,
+          harnessProfileId: harness.id,
+        });
+      }
+      // Keep the configured Cursor model visible/active even if the catalog
+      // list omitted it (SDK hiccup) so the empty-chat banner does not claim
+      // "No model ready" while Cursor Auto is already selected.
+      if (
+        agent?.backend === "cursor_cloud" &&
+        !models.some((m) => m.source === "cursor" && m.active)
+      ) {
+        const model = String(agent.config?.model ?? "auto");
+        const harness = resolveHarnessProfile({ source: "cursor", model });
+        models.push({
+          id: `cursor:${model}`,
+          source: "cursor",
+          label: formatCursorModelLabel(model),
+          model,
+          active: true,
           harnessProfileId: harness.id,
         });
       }
     } catch {
       /* key missing / SDK error - omit Cursor section */
     }
+  }
+
+  if (
+    agent?.backend === "cursor_cloud" &&
+    isCursorSubscriptionReady(db, agent?.id ?? "intelligence") &&
+    !models.some((m) => m.source === "cursor" && m.active)
+  ) {
+    const model = String(agent.config?.model ?? "auto");
+    const harness = resolveHarnessProfile({ source: "cursor", model });
+    models.push({
+      id: `cursor:${model}`,
+      source: "cursor",
+      label: formatCursorModelLabel(model),
+      model,
+      active: true,
+      harnessProfileId: harness.id,
+    });
   }
 
   const catalogAgentId = agent?.id ?? "intelligence";

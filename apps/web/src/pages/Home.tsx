@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useTenant } from "@/lib/tenant-context";
 import { useIntelligence } from "@/lib/intelligence-context";
+import { useStructure } from "@/lib/structure-context";
 import { AI_NAME } from "@/lib/navigation";
 import {
   CALENDAR_PATH,
@@ -78,6 +79,7 @@ const CREATE_DEPARTMENT_PROMPT =
 export default function Home() {
   const { user } = useTenant();
   const { openPanel } = useIntelligence();
+  const { departments, loading: structureLoading } = useStructure();
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function Home() {
   }, []);
 
   const name = user?.displayName?.split(" ")[0] ?? "there";
+  const hasDepartments = !structureLoading && departments.length > 0;
 
   return (
     <Page>
@@ -124,9 +127,20 @@ export default function Home() {
             </p>
             <p>
               <strong className="text-foreground">Departments and pages</strong> organize
-              domain-specific work (projects, life areas, hobbies). You start with an empty
-              tree; ask {AI_NAME} to create your first department, or use Structure once you
-              have pages to arrange.
+              domain-specific work (projects, life areas, hobbies).{" "}
+              {hasDepartments ? (
+                <>
+                  Your sidebar already has {departments.length === 1
+                    ? "a department"
+                    : `${departments.length} departments`}
+                  . Open Structure to rearrange pages, or ask {AI_NAME} to add more.
+                </>
+              ) : (
+                <>
+                  You start with an empty tree; ask {AI_NAME} to create your first
+                  department, or use Structure once you have pages to arrange.
+                </>
+              )}
             </p>
             <p>
               <strong className="text-foreground">Shared</strong> and{" "}
@@ -138,18 +152,20 @@ export default function Home() {
                 <BotIcon data-icon="inline-start" />
                 Open {AI_NAME}
               </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  openPanel({
-                    tab: "chat",
-                    prompt: CREATE_DEPARTMENT_PROMPT,
-                    autoSend: true,
-                  })
-                }
-              >
-                Create my first department
-              </Button>
+              {!hasDepartments ? (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    openPanel({
+                      tab: "chat",
+                      prompt: CREATE_DEPARTMENT_PROMPT,
+                      autoSend: true,
+                    })
+                  }
+                >
+                  Create my first department
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>

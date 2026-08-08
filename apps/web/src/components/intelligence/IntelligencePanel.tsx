@@ -283,6 +283,7 @@ export function IntelligencePanel() {
   const [agentShared, setAgentShared] = useState(false);
   const [agentName, setAgentName] = useState<string>(AI_NAME);
   const [agentDescription, setAgentDescription] = useState<string | null>(null);
+  const [agentBackend, setAgentBackend] = useState<string | null>(null);
   const [contributeMemory, setContributeMemory] = useState(false);
   const [sharedSession, setSharedSession] = useState(false);
   const [sharingSession, setSharingSession] = useState(false);
@@ -520,6 +521,7 @@ export function IntelligencePanel() {
       setAgentShared(false);
       setAgentName(AI_NAME);
       setAgentDescription(null);
+      setAgentBackend(null);
       return;
     }
     fetchAiAgent(activeAgentId)
@@ -530,12 +532,14 @@ export function IntelligencePanel() {
           a.id === "intelligence" ? AI_NAME : a.name?.trim() || AI_NAME
         );
         setAgentDescription(a.description?.trim() || null);
+        setAgentBackend(a.backend ?? null);
       })
       .catch(() => {
         if (!cancelled) {
           setAgentShared(false);
           setAgentName(AI_NAME);
           setAgentDescription(null);
+          setAgentBackend(null);
         }
       });
     return () => {
@@ -1138,24 +1142,47 @@ export function IntelligencePanel() {
 
   const running = status?.state === "running";
   // Local llama.cpp "running" is only one way to have a model. Cursor / provider /
-  // remote selections are ready without a local process.
+  // remote selections are ready without a local process. Also trust the agent's
+  // configured backend so a stale catalog `active: null` does not flash
+  // "No model ready" after the user already picked Cursor Auto.
+  const nonLocalBackend =
+    agentBackend != null &&
+    agentBackend !== "local" &&
+    agentBackend !== "";
   const hasUsableModel =
-    activeModel != null && activeModel.source !== "local"
+    busy ||
+    nonLocalBackend ||
+    (activeModel != null && activeModel.source !== "local")
       ? true
       : running || status?.state === "starting";
 
   useEffect(() => {
     if (!panelOpen || isDmMode) return;
     let cancelled = false;
-    fetchModelCatalog()
-      .then((r) => {
-        if (!cancelled) setActiveModel(r.active);
-      })
-      .catch(() => {
-        if (!cancelled) setActiveModel(null);
-      });
+    const refreshModel = () => {
+      fetchModelCatalog()
+        .then((r) => {
+          if (!cancelled) setActiveModel(r.active);
+        })
+        .catch(() => {
+          if (!cancelled) setActiveModel(null);
+        });
+      if (activeAgentId) {
+        fetchAiAgent(activeAgentId)
+          .then((a) => {
+            if (!cancelled) setAgentBackend(a.backend ?? null);
+          })
+          .catch(() => {
+            /* keep prior backend */
+          });
+      }
+    };
+    refreshModel();
+    const onModelSelected = () => refreshModel();
+    window.addEventListener("godmode:model-selected", onModelSelected);
     return () => {
       cancelled = true;
+      window.removeEventListener("godmode:model-selected", onModelSelected);
     };
   }, [panelOpen, isDmMode, activeAgentId]);
 
