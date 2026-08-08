@@ -117,6 +117,7 @@ function detectTypeahead(value: string, cursor: number): TypeaheadState | null {
 function groupMentionSources(sources: MentionSource[]): Map<string, MentionSource[]> {
   const map = new Map<string, MentionSource[]>();
   for (const src of sources) {
+    if (!src || typeof src.id !== "string") continue;
     const cat = src.category ?? "Other";
     const list = map.get(cat) ?? [];
     list.push(src);
@@ -129,8 +130,9 @@ function groupMentionSources(sources: MentionSource[]): Map<string, MentionSourc
 }
 
 function filterMentionSources(sources: MentionSource[], query: string): MentionSource[] {
-  if (!query) return sources;
-  return sources.filter(
+  const defined = sources.filter((s) => s && typeof s.id === "string");
+  if (!query) return defined;
+  return defined.filter(
     (s) =>
       s.label.toLowerCase().includes(query) ||
       (s.category ?? "").toLowerCase().includes(query) ||
@@ -260,6 +262,7 @@ export function IntelligenceComposer({
     const skills = new Map<string, string>();
     const agents = new Map<string, string>();
     for (const src of mentionSources) {
+      if (!src || typeof src.id !== "string") continue;
       if (src.id.startsWith("skill:")) {
         const id = src.id.slice("skill:".length);
         skills.set(id, id);
@@ -536,9 +539,14 @@ export function IntelligenceComposer({
         provider: model.provider,
         endpointId: model.endpointId,
       });
+      if (!res.active || typeof res.active.id !== "string") {
+        throw new Error("Model catalog returned no active model");
+      }
       setActiveModel(res.active);
       setCatalog((prev) =>
-        prev.map((m) => ({ ...m, active: m.id === res.active.id }))
+        prev
+          .filter((m) => m && typeof m.id === "string")
+          .map((m) => ({ ...m, active: m.id === res.active.id }))
       );
       refresh();
       toast.success(`Using ${res.active.label}`);
@@ -944,7 +952,9 @@ export function IntelligenceComposer({
               {catalogBySource.local.length === 0 && (
                 <DropdownMenuItem disabled>No local GGUF models found</DropdownMenuItem>
               )}
-              {catalogBySource.local.map((m) => (
+              {catalogBySource.local
+                .filter((m) => m && typeof m.id === "string")
+                .map((m) => (
                 <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                   <span className="truncate">{m.label}</span>
                   {m.multimodal && (
@@ -957,7 +967,9 @@ export function IntelligenceComposer({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>Cursor</DropdownMenuLabel>
-                  {catalogBySource.cursor.map((m) => (
+                  {catalogBySource.cursor
+                    .filter((m) => m && typeof m.id === "string")
+                    .map((m) => (
                     <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                       <FileCodeIcon className="size-3 shrink-0 text-sky-500" />
                       <span className="truncate">{m.label}</span>
@@ -970,7 +982,9 @@ export function IntelligenceComposer({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>Cloud API (Platform Vault keys)</DropdownMenuLabel>
-                  {catalogBySource.provider.map((m) => (
+                  {catalogBySource.provider
+                    .filter((m) => m && typeof m.id === "string")
+                    .map((m) => (
                     <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                       <span className="truncate">{m.label}</span>
                       {m.active && <span className="ml-1 text-xs text-sky-500">●</span>}
@@ -982,7 +996,9 @@ export function IntelligenceComposer({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>Shared with me</DropdownMenuLabel>
-                  {catalogBySource.remote.map((m) => (
+                  {catalogBySource.remote
+                    .filter((m) => m && typeof m.id === "string")
+                    .map((m) => (
                     <DropdownMenuItem key={m.id} onClick={() => void handleCatalogSelect(m)}>
                       <span className="truncate">{m.label}</span>
                       {m.active && <span className="ml-1 text-xs text-sky-500">●</span>}

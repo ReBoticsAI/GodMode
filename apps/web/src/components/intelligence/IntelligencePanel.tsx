@@ -1462,7 +1462,7 @@ export function IntelligencePanel() {
                 <div className="max-w-[340px] space-y-3 text-left text-xs leading-relaxed">
                   <p className="text-muted-foreground">
                     {agentDescription ||
-                      "Intelligence is GodMode's built-in AI — your guide to the platform itself."}
+                      "Intelligence is GodMode's built-in AI: your guide to the platform itself."}
                   </p>
                   <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
                     <li>Explain how GodMode works and help you get oriented</li>

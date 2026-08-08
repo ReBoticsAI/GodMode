@@ -196,7 +196,7 @@ export function AgentSearch() {
             }}
             className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
-            {responsible && responsible.agent.id !== activeAgentId && (
+            {responsible?.agent && responsible.agent.id !== activeAgentId && (
               <button
                 type="button"
                 onClick={() => select(responsible.agent.id)}
