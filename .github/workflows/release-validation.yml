@@ -28,7 +28,10 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: NPM_CONFIG_IGNORE_SCRIPTS=false npm ci
+      - name: Install dependencies
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "false"
+        run: npm ci
       - name: Build workspace packages
         run: npm run build:packages
       - name: Validate release contract
