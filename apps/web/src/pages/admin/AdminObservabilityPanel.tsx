@@ -230,7 +230,7 @@ export function AdminObservabilityPanel() {
             <p className="text-muted-foreground text-sm">
               No backup recorded yet. Run{" "}
               <code>scripts/backup/snapshot-platform.mjs</code> or wait for the
-              Hostinger cron.
+              scheduled host cron.
             </p>
           )}
           {hasStamps ? (

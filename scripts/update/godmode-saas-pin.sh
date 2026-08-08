@@ -1,6 +1,6 @@
 #!/bin/sh
-# Pin GODMODE_IMAGE to an immutable digest and roll Hostinger / SaaS compose.
-# Never dumps .env.production. Intended for the godmode-saas self-hosted runner.
+# Pin GODMODE_IMAGE to an immutable digest and roll SaaS compose.
+# Never dumps .env.production. Intended for a pin-only self-hosted runner (or manual ops).
 #
 # Usage:
 #   godmode-saas-pin.sh <image@digest|image> [deploy-dir] [health-url]
