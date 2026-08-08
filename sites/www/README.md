@@ -27,18 +27,16 @@ app.
 | `/www/contact` | Contact |
 | `/www/refund` | Refund policy |
 
-**Open Cloud** links to `https://app.godmode.software` (override with
-`VITE_CLOUD_APP_ORIGIN`).
+**Open Cloud** links to your app origin (override with `VITE_CLOUD_APP_ORIGIN`;
+defaults to `https://app.godmode.software` in this monorepo's web build).
 
 ## Production (Cloudflare Pages)
 
-Connect `ReBoticsAI/GodMode` to Cloudflare Pages and auto-deploy from `main`.
-On `godmode.software` (and Pages previews) marketing is at `/` (`/pricing`,
-`/terms`, …). Legacy `/www/*` URLs 301 to the root paths. Local and the app
-origin keep `/www`.
+Connect this repository to Cloudflare Pages and auto-deploy from `main`.
+On marketing hosts, the site is at `/` (`/pricing`, `/terms`, …). Legacy `/www/*`
+URLs 301 to the root paths. Local and the app origin keep `/www`.
 
 Runbook: [`deploy/cloudflare-pages-www.md`](../../deploy/cloudflare-pages-www.md).
 
-Custom domains `godmode.software` / `www` attach after DNS cutover (#200). Until
-then, use the Pages `*.pages.dev` hostname for Stripe business website and
-`BUSINESS_WEBSITE_URL`.
+Custom domains for apex / `www` attach after DNS cutover. Until then, use the
+Pages preview hostname for Stripe business website and `BUSINESS_WEBSITE_URL`.

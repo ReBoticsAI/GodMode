@@ -1,14 +1,13 @@
-# Cloudflare Pages: marketing (`godmode.software`)
+# Cloudflare Pages: marketing site
 
-Connect the public monorepo to Cloudflare Pages so marketing ships at `/` on
-`godmode.software` / `www`, then attach apex/`www` custom domains after Cloudflare
-is authoritative (#200).
+Connect this monorepo to Cloudflare Pages (or any static host) so marketing ships
+at `/` on your apex / `www` host. Attach custom domains after your DNS zone is
+authoritative at that provider.
 
-## GitHub project settings
+## Pages project settings
 
 | Field | Value |
 |-------|--------|
-| Repository | `ReBoticsAI/GodMode` |
 | Production branch | `main` |
 | Framework preset | None (or Vite) |
 | Build command | `npm ci --ignore-scripts && npm run build:packages && npm run build -w @godmode/web` |
@@ -38,8 +37,7 @@ natives with `npm rebuild node-pty` if the coding terminal is needed.
 (`kernel`, `flow-core`, `plugin-api`, `plugin-host`) emit `dist/` before `@godmode/web`
 runs `tsc -b && vite build`.
 
-Marketing mounts at `/` automatically on `godmode.software`, `www.godmode.software`,
-and `godmode-www*.pages.dev` hosts. Optional force:
+On marketing hosts, the site mounts at `/`. Optional force:
 
 ```text
 VITE_MARKETING_AT_ROOT=true
@@ -47,13 +45,11 @@ VITE_MARKETING_AT_ROOT=true
 
 Without a marketing host (local / app origin), marketing stays under `/www`.
 
-Optional Pages env:
+Optional Pages env (Cloud app CTA target):
 
 ```text
-VITE_CLOUD_APP_ORIGIN=https://app.godmode.software
+VITE_CLOUD_APP_ORIGIN=https://app.example.com
 ```
-
-(`apps/web` defaults to that origin when unset.)
 
 ## Routing
 
@@ -62,16 +58,16 @@ VITE_CLOUD_APP_ORIGIN=https://app.godmode.software
 - `/www` and `/www/*` → `/` and `/*` (301) for old bookmarks
 - `/*` → `/index.html` (200) SPA fallback for client routes
 
-Marketing CTAs use `https://app.godmode.software` (not same-origin `/`). The
-authenticated Cloud app stays on that host; this Pages project is marketing only.
+Marketing CTAs should open the **authenticated app origin** (not same-origin
+`/`). Keep this Pages project marketing-only.
 
 ## Custom domains
 
-After nameservers are Cloudflare (`benedict` / `maleah`) and mail DKIM helpers are
-DNS-only grey-cloud (#200 / #198):
+After nameservers point at your DNS/CDN provider and mail records are correct:
 
-1. Pages project → Custom domains → `godmode.software` and `www.godmode.software`
-2. Confirm DNS records Pages creates (CNAME/ALIAS as prompted)
-3. Set Stripe business website + `BUSINESS_WEBSITE_URL` to `https://godmode.software`
+1. Attach apex and `www` as custom domains on the Pages project
+2. Confirm the DNS records Pages (or your static host) creates
+3. Set Stripe business website + `BUSINESS_WEBSITE_URL` to the public marketing URL
 
-Until NS cutover, use the project `*.pages.dev` URL for Stripe.
+Until DNS cutover, use the provider preview hostname (for example `*.pages.dev`)
+for Stripe business website checks.

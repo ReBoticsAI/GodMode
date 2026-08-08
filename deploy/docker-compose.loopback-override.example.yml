@@ -1,8 +1,8 @@
-# Hostinger host nginx terminates TLS on :80/:443 and proxies to loopback :8080.
-# Copy to docker-compose.override.yml on the VPS (gitignored). Do not fork
+# Host nginx/Caddy terminates TLS on :80/:443 and proxies to loopback :8080.
+# Copy to docker-compose.override.yml on the origin host (gitignored). Do not fork
 # docker-compose.prod.yml for port binds.
 #
-#   cp deploy/docker-compose.hostinger-override.example.yml \
+#   cp deploy/docker-compose.loopback-override.example.yml \
 #      deploy/docker-compose.override.yml
 #
 # Then always include the override (or rely on deploy/scripts which auto-load it):

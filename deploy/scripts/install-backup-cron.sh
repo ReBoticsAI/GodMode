@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install root crontab entry for nightly platform backups on Hostinger Docker prod.
+# Install root crontab entry for nightly platform backups on Docker prod.
 #
 # Usage:
 #   sudo /opt/godmode/deploy/scripts/install-backup-cron.sh

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run platform SQLite + DuckDB timeseries snapshot (local + optional BACKUP_S3_*
 # upload) against the live Docker Compose prod data volume. Intended for
-# Hostinger cron.
+# Production Docker backups via digest-pinned image (host cron).
 #
 # DuckDB holds an exclusive process lock while Bridge is up, so this runner
 # briefly stops the godmode service around the one-shot snapshot container,

@@ -1,154 +1,107 @@
-# Cloudflare edge for `app.godmode.software` (#195)
+# Cloudflare (or similar CDN) in front of a SaaS origin
 
-Operator runbook for putting the **SaaS app** hostname behind Cloudflare Free
-(proxy, Full strict, Origin CA, WAF/DDoS) and locking the Hostinger origin firewall.
+Generic guidance for putting the **authenticated app** hostname behind a CDN
+proxy (Cloudflare Free is enough for many launches): Full (strict) TLS to origin,
+WAF/DDoS at the edge, and a locked origin firewall.
 
-Marketing (`godmode.software` / `www`) is Cloudflare Pages (#196). Public DNS
-cutover and gate sign-off are #200. This doc does **not** complete those issues.
+Marketing on a separate apex/`www` host (for example Cloudflare Pages) is covered
+in [`cloudflare-pages-www.md`](cloudflare-pages-www.md). Keep app routes
+(`/login`, `/home`, APIs) on the app hostname only. Do not put them on the apex.
 
-## Locked topology
+## Topology (example)
 
 | Hostname | Edge | Origin |
 |----------|------|--------|
-| `app.godmode.software` | Cloudflare orange-cloud (proxied A/AAAA) | Hostinger VPS (#194) |
-| `godmode.software` / `www` | Cloudflare Pages | Pages project (#196) |
-| `login.godmode.software` | **Do not create** | n/a |
+| `app.example.com` | CDN proxied A/AAAA | Your VPS (Docker Compose) |
+| `example.com` / `www` | Static host / Pages | Marketing build |
+| `login.example.com` | Prefer **not** creating | Use `/login` on the app host |
 
-App routes (`/login`, `/home`) live only on `app.godmode.software`. Do not put
-them on the apex.
-
-Public URL envs on the VPS:
+Public URL envs on the origin:
 
 ```text
-WEB_PUBLIC_URL=https://app.godmode.software
-AUTH_PUBLIC_URL=https://app.godmode.software
-WEB_ORIGIN=https://app.godmode.software
+WEB_PUBLIC_URL=https://app.example.com
+AUTH_PUBLIC_URL=https://app.example.com
+WEB_ORIGIN=https://app.example.com
 ```
 
 ## Prerequisites
 
-1. **#194**: Hostinger Ubuntu VPS with Docker Compose up, public IP known,
-   Bridge `:3847` not published, `/api/health` OK on origin (port 80 or 443).
-2. Zone `godmode.software` added in Cloudflare (Free plan is enough for launch).
-3. Operator ready to update registrar nameservers when executing #200 (do not
-   flip NS until MX/email and marketing records are mirrored in Cloudflare DNS).
+1. Origin up: Docker Compose healthy, Bridge `:3847` **not** published publicly,
+   `/api/health` OK on the origin HTTP(S) port the proxy will hit.
+2. DNS zone for your domain at the CDN (or ready to cut nameservers over).
+3. Do not flip registrar nameservers until mail and marketing DNS records are
+   mirrored and verified.
 
-### Assigned Cloudflare nameservers (zone Free, pending activation)
+## Checklist
 
-Replace Hostinger parking NS (`hermes.dns-parking.com`, `artemis.dns-parking.com`)
-**only during #200**, after #194 origin IP and #196 Pages records are ready:
+### 1. Proxied DNS for the app hostname
 
-```text
-benedict.ns.cloudflare.com
-maleah.ns.cloudflare.com
-```
-
-Do not flip NS as part of #195 alone (breaks email/DNS until records are verified).
-
-## Checklist (maps to #195 acceptance)
-
-### 1. Orange-cloud A/AAAA for `app.godmode.software`
-
-1. Cloudflare Dashboard → zone `godmode.software` → **DNS**.
-2. Add **A** (and **AAAA** if the VPS has IPv6) for name `app`, content =
-   Hostinger public IP, **Proxy status: Proxied** (orange cloud).
-3. Do **not** create `login` or apex app routes.
-
-Until #194 provides an IP, leave this record undrafted or DNS-only with a
-placeholder; never point Proxied at a random IP.
+1. Add **A** (and **AAAA** if you have IPv6) for `app` → origin public IP.
+2. Enable CDN proxy (orange-cloud on Cloudflare).
+3. Do not create a separate `login` hostname unless you have a strong reason.
 
 ### 2. SSL/TLS Full (strict) + origin certificate
 
-1. SSL/TLS → Overview → encryption mode **Full (strict)**.
-2. SSL/TLS → Origin Server → **Create certificate** (Cloudflare Origin CA),
-   hostnames: `app.godmode.software` (and `*.godmode.software` only if needed).
-   Origin CA creation requires an **active** zone (nameservers verified). On a
-   pending zone, Cloudflare rejects hostname validation; finish after #200 NS
-   cutover (or use Let's Encrypt on the origin once `app` resolves publicly).
-3. Install the Origin CA cert + key on the VPS so origin serves HTTPS on **443**.
-   Options:
-   - Host nginx/Caddy terminates TLS and proxies to the GodMode container `:80`
-   - Or mount certs into the container and listen on 443 (compose must publish
-     `443:443`; default `deploy/docker-compose.prod.yml` publishes `80:80` only)
-4. Confirm Cloudflare can reach `https://<VPS-IP>/api/health` with the Origin
-   CA (expect browser distrust if you hit the IP directly; that is normal for
-   Origin CA).
+1. Set encryption mode to **Full (strict)** (or equivalent: CDN verifies a valid
+   origin cert).
+2. Issue an origin certificate (Cloudflare Origin CA, Let's Encrypt, etc.) for
+   `app.example.com`.
+3. Terminate TLS on the host (nginx/Caddy → container `:80`) or inside the
+   container if you publish `443:443`. Default
+   `deploy/docker-compose.prod.yml` publishes `80:80` only.
+4. Do not enable Full (strict) against an HTTP-only origin (525-class errors).
 
-Do not enable Full (strict) against an HTTP-only origin (525 errors).
+If edge certificates stick on pending DNS validation, ensure ACME/TXT challenge
+records exist in the **same** DNS zone the CDN uses, then recheck issuance.
 
-#### Universal SSL stuck on Pending Validation (TXT)
+### 3. WAF / bot controls
 
-Pages custom-domain certs cover apex/`www` only. Proxied hostnames like
-`app` need zone **Universal SSL** (`*.godmode.software`). If Edge Certificates
-shows **Pending Validation (TXT)** and `https://app...` fails TLS handshake
-(no peer certificate), check SSL verification tokens and ensure matching
-`_acme-challenge.godmode.software` **TXT** records exist in the Cloudflare DNS
-zone (not only as opaque auto-DCV). After adding/updating TXT values from
-SSL/TLS → Edge Certificates / verification API, PATCH recheck or wait until
-the pack status is **Active**. Grey-cloud then re-proxy of `app` can also
-nudge issuance.
+1. Keep managed WAF rules enabled when available.
+2. Aggressive bot modes are optional when signup is already paywalled. If you
+   enable them, verify Stripe webhooks and uptime checks still succeed.
+3. Optional: edge rate limits on `/api/auth/*` and checkout paths.
 
-### 3. WAF / Bot Fight
-
-1. Security → WAF: keep managed rules enabled (Free plan defaults).
-2. **Bot Fight Mode is optional for v1** (pay-first signup already gates
-   tenants). Prefer enable-and-test Stripe webhooks + uptime, or leave off until
-   needed. Orange-cloud still provides DDoS protection either way.
-3. Optional: rate-limit rules on `/api/auth/*` and checkout paths.
-
-### 4. Origin firewall (`ufw`)
-
-On the VPS (after #194):
+### 4. Origin firewall
 
 ```bash
-# From the repo on the VPS:
 sudo ADMIN_SSH_IP=YOUR.ADMIN.IP ./deploy/ufw-origin.sh
-# Prefer Cloudflare-only 80/443 when practical:
+# Prefer CDN-only 80/443 when practical:
 sudo CLOUDFLARE_ONLY=1 ADMIN_SSH_IP=YOUR.ADMIN.IP ./deploy/ufw-origin.sh
 ```
 
 Requirements:
 
 - SSH IP-restricted
-- 80/443 only (or Cloudflare ranges only)
+- 80/443 only (or CDN IP ranges only)
 - **Never** publish Bridge `:3847`
 
-### 5. `real_ip` / `CF-Connecting-IP`
+For loopback publish behind host TLS, copy
+[`docker-compose.loopback-override.example.yml`](docker-compose.loopback-override.example.yml)
+to `docker-compose.override.yml` on the host (gitignored).
 
-The production image includes `deploy/cloudflare-realip.conf` and nginx includes
-it so `$remote_addr` becomes the visitor IP from `CF-Connecting-IP`. Bridge
-already trusts that header for rate limits.
+### 5. Client IP for rate limits
 
-Refresh the shipped IP list when Cloudflare publishes new ranges:
+The production image includes `deploy/cloudflare-realip.conf` so nginx sets
+`$remote_addr` from `CF-Connecting-IP`. Bridge trusts that header for rate limits.
+
+Refresh the shipped Cloudflare IP list when ranges change:
 
 ```bash
 node deploy/scripts/refresh-cloudflare-realip.mjs
 ```
 
-Rebuild/redeploy the image after refresh.
+Rebuild/redeploy the image after refresh. Other CDNs need an equivalent real-ip
+module and trusted header configuration.
 
-## Sequencing vs other launch issues
+## Verify
 
-| Step | Issue | Notes |
-|------|-------|--------|
-| Provision VPS + compose | #194 | Blocks live A record + ufw + Origin CA install |
-| This edge/firewall runbook + nginx real_ip | #195 | Repo work can land before #194 |
-| Marketing Pages + Stripe business URL | #196 | Apex/www on Pages; needs CF zone |
-| Public DNS cutover + gate sign-off | #200 | NS flip, health on `https://app.../api/health` |
+1. `https://app.example.com/api/health` returns OK via the CDN.
+2. Response headers show the CDN (for example `cf-ray` on Cloudflare).
+3. Auth rate-limit logs show real client IPs (not a single edge IP).
+4. Firewall shows no public `:3847`.
+5. Stripe webhook and uptime checks succeed if bot mode was enabled.
 
-Do **not** treat #200 as done when only drafting CF settings.
+## Rollback
 
-## Verify (after #194 + NS active)
-
-1. `https://app.godmode.software/api/health` returns OK via Cloudflare.
-2. Response headers show Cloudflare (e.g. `cf-ray`); origin IP not needed by clients.
-3. Auth rate-limit logs show real client IPs (not a single CF edge IP).
-4. `ufw status` shows no public `:3847`.
-5. Stripe webhook and uptime checks succeed if Bot Fight was enabled.
-
-## Rollback notes (for #200)
-
-- Grey-cloud (DNS only) the `app` record, or point A to the previous host.
-- Pause Cloudflare on the zone only as last resort (exposes origin; Origin CA
-  will fail in browsers).
-- Keep Hostinger NS change reversible until MX and Pages records are confirmed.
+- Disable proxy (DNS-only) on the app record, or point A/AAAA at a previous host.
+- Pausing the CDN zone entirely exposes the origin; treat as last resort.
