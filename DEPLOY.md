@@ -4,14 +4,14 @@ GodMode ships in three deployment modes:
 
 | Mode | `DEPLOYMENT_MODE` | Use case |
 |------|-------------------|----------|
-| **local** | `local` (default) | Personal workstation — single-user install |
+| **local** | `local` (default) | Personal workstation: single-user install |
 | **hub** | `hub` | Multi-tenant SaaS (your VPS only) |
 | **client** | `client` | Personal Docker; marketplace proxies to hub |
 
 ## Local (recommended for personal use)
 
 **Desktop download (non-technical):** install the signed Electron app from
-[GitHub Releases](https://github.com/ReBoticsAI/GodMode/releases) — Windows NSIS,
+[GitHub Releases](https://github.com/ReBoticsAI/GodMode/releases): Windows NSIS,
 macOS DMG, or Linux AppImage/`.deb`. See [docs/RELEASES.md](docs/RELEASES.md).
 
 **Developer clone** (no Docker required):
@@ -31,33 +31,25 @@ paywall: **choose plan → Checkout → create account** (no invite codes). Loca
 desktop installs stay first-class; Cloud is the easier browser onboarding path and
 revenue product.
 
-### Ready doctrine (project board)
-
-[GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1) **Ready** prioritizes:
-
-1. **P0** - Hostinger SaaS live (public DNS gate below)
-2. **P1** - Dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust
-3. Core Control Center depth and plugin-backlog stay in **Backlog** until live + dogfood clear
-
-### Ready doctrine (project board)
-
-[GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1) **Ready** prioritizes:
-
-1. **P0** - Hostinger SaaS live (public DNS gate below)
-2. **P1** - Dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust
-3. Core Control Center depth and plugin-backlog stay in **Backlog** until live + dogfood clear
-
-Do not treat Core epic checklist items as jump-the-queue ahead of launch.
-
-### Cloud production gate
-
-**Merge to `main` is the production gate** for `app.godmode.software`. After CI
-validate + **Publish SaaS image**, the Hostinger `godmode-saas` runner pins the
-immutable digest and rolls compose (see [deploy/hostinger.md](deploy/hostinger.md)).
-Agents and chat sessions must not SSH or read `.env.production`. Manual
-`/deploygodmodecloud` is emergency/rollback only.
-
 Self-hosted family/team hubs use `private_hub` and skip the paywall.
+
+### Two deploy surfaces
+
+| Surface | Typical host | Who builds | Who serves |
+|---------|--------------|------------|------------|
+| Marketing site | Cloudflare Pages (or static host) | Pages / CI | Edge CDN |
+| Authenticated SaaS app | Your VPS (Docker Compose) | CI → container registry | VPS origin (+ optional CDN proxy) |
+
+Marketing does not need a VPS Actions runner. Prefer Pages (or equivalent) for the
+public site so the VPS primarily runs the app. See
+[`deploy/cloudflare-pages-www.md`](deploy/cloudflare-pages-www.md) and
+[`sites/www/README.md`](sites/www/README.md).
+
+### Production cutover (digest pin)
+
+**Recommended shape:** CI builds and pushes an immutable image digest; production
+only rewrites `GODMODE_IMAGE` and runs Compose pull/up. Secrets stay on the
+origin host (never commit `.env.production`).
 
 1. Copy `deploy/.env.production.example` → `deploy/.env.production` and set:
    - `WEB_PUBLIC_URL`, `AUTH_PUBLIC_URL`, `WEB_ORIGIN` to your public domain
@@ -65,8 +57,8 @@ Self-hosted family/team hubs use `private_hub` and skip the paywall.
    - `INITIAL_ADMINS` for your operator account (not paywalled)
    - `STRIPE_SECRET_KEY`, `STRIPE_SAAS_PRICE_MONTHLY`, `STRIPE_SAAS_PRICE_YEARLY`,
      `STRIPE_WEBHOOK_SECRET` (optional legacy `STRIPE_SAAS_PRICE_ID` fallback)
-   - Keep `AUTH_ALLOW_SIGNUP=false` — SaaS signup is unlocked only after Checkout
-2. Resolve the desired stable release to its signed immutable GHCR digest, put it
+   - Keep `AUTH_ALLOW_SIGNUP=false`. SaaS signup is unlocked only after Checkout
+2. Resolve the desired release to its signed immutable registry digest, put it
    in `deploy/.env.production` as `GODMODE_IMAGE`, then pull and run. Compose
    interpolates `GODMODE_IMAGE` from `--env-file` (or a `deploy/.env` symlink);
    `env_file:` alone only injects vars into the container:
@@ -81,12 +73,18 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ./scripts/prune-old-images.sh --previous "$PRIOR"
 ```
 
-See [deploy/hostinger.md](deploy/hostinger.md) §8 for Hostinger VPS notes.
+Helper: [`scripts/update/godmode-saas-pin.sh`](scripts/update/godmode-saas-pin.sh)
+rewrites only the `GODMODE_IMAGE=` line, pulls, ups, and health-checks. Use it
+from the host (or a **pin-only** self-hosted Actions runner that can reach Docker
+and the env file). Image build/validate should stay on ordinary CI runners so
+the origin host stays idle except when you ship.
 
 3. Point DNS at the VPS. Terminate TLS at your reverse proxy or extend `nginx.conf` with certbot.
    Behind Cloudflare-only `ufw`, bind the container to loopback (for example
    `127.0.0.1:8080:80`) and put host nginx on `:80`/`:443` so Docker does not
-   bypass the firewall.
+   bypass the firewall. Example override:
+   [`deploy/docker-compose.hostinger-override.example.yml`](deploy/docker-compose.hostinger-override.example.yml)
+   (copy to `docker-compose.override.yml` on the host; gitignored).
 4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` with:
    - `checkout.session.completed`
    - `customer.subscription.updated`
@@ -106,9 +104,27 @@ and are not blocked when a subscription lapses.
 **Security gate:** Do not expose a hub publicly until `AUTH_ALLOW_ANONYMOUS=false`,
 SaaS paywall or invite-only signup, and CORS locked to `WEB_ORIGIN`.
 
-### Test SaaS beside a private hub (e.g. Z440)
+### Clean host layout
 
-Run a second compose project so family data stays on `private_hub`:
+Mental model:
+
+- **App**: digest-pinned image via Compose (`GODMODE_IMAGE` in `.env.production`)
+- **Data**: durable Docker volume for `PLATFORM_DATA_DIR` (never delete for upgrades)
+- **Host**: thin git checkout of this repo for compose/scripts, plus local-only secrets
+
+Keep on the host only (gitignored; never commit):
+
+| Path | Purpose |
+|------|---------|
+| `deploy/.env.production` | Secrets + `GODMODE_IMAGE` pin |
+| `deploy/.env` | Optional symlink to `.env.production` |
+| `deploy/docker-compose.override.yml` | Machine port bind (loopback for host TLS proxy) |
+
+Never publish Bridge port `3847` on the public internet.
+
+### Test SaaS beside a private hub
+
+Run a second compose project so family/private data stays on `private_hub`:
 
 ```bash
 cp deploy/.env.saas-staging.example deploy/.env.saas-staging
@@ -125,7 +141,7 @@ Sign up → Continue to payment → return → create account.
 Prefer a CI image over a local build: after merge to `main`, **Publish SaaS image**
 pushes `ghcr.io/<org>/godmode:saas-staging` (and `sha-<commit>`). Set
 `GODMODE_IMAGE` to that digest in `.env.saas-staging` and `up -d` without `--build`.
-You can also run the workflow manually from Actions without waiting for nightly.
+You can also run the workflow manually from Actions.
 
 ### Hub smoke test
 
@@ -202,10 +218,9 @@ strict zero-debt audit after deployment; see
 
 Startup reconciles installed-plugin ObjectTypes and seeds before serving tenant
 traffic, recovers replay-safe leased operations, and starts tenant durable-event
-relays. Include `/api/kernel/capabilities` in the post-deploy smoke check. On the
-Z440, also record the exact 40-character source revision and prove the running
-container's immutable image ID equals the image built from it using the commands
-in [docs/VERIFICATION.md](docs/VERIFICATION.md#z440-revision-and-image-identity).
+relays. Include `/api/kernel/capabilities` in the post-deploy smoke check. For
+revision identity checks, see
+[docs/VERIFICATION.md](docs/VERIFICATION.md#z440-revision-and-image-identity).
 
 ## Intelligence on hub
 
@@ -239,28 +254,25 @@ readiness, rollback, bare-metal bundles, and offline updates.
 
 Some domain packs require a **local connector** on the user's machine. See `apps/connector/README.md`. The hub/client Docker image runs the platform core only.
 
-## Hostinger VPS checklist
+## Production VPS checklist
 
-Full topology: [deploy/hostinger.md](deploy/hostinger.md).
+Generic origin hardening (any Ubuntu-class VPS + Docker):
 
-- Ubuntu 22.04+, Docker + Compose plugin (not shared PHP hosting)
-- Cloudflare orange-cloud for `app.godmode.software` → VPS IP; SSL **Full (strict)**; WAF enabled ([deploy/cloudflare-app-edge.md](deploy/cloudflare-app-edge.md))
+- Ubuntu 22.04+ (or similar), Docker Engine + Compose plugin (not shared PHP hosting)
+- Optional CDN/proxy in front of the app hostname (Full/strict TLS to origin when using Cloudflare)
 - Firewall: SSH IP-restricted; 80/443 only; **never** publish Bridge `3847` (`deploy/ufw-origin.sh`)
 - `deploy/.env.production` with real secrets (never commit)
 - Digest-pinned `GODMODE_IMAGE`; durable `PLATFORM_DATA_DIR` volume
 - Cron backups via `deploy/scripts/run-platform-backup.sh` (Docker volume +
-  `scripts/backup/snapshot-platform.mjs`, SQLite + DuckDB timeseries; brief
-  Bridge stop/start so DuckDB is not locked; Admin in-process snapshot for
-  zero downtime); offsite via operator PC download of the nightly stamp
-  (`deploy/scripts/pull-platform-backup.sh`), optional `BACKUP_S3_*` later
-  ([deploy/hostinger.md](deploy/hostinger.md) §7)
+  `scripts/backup/snapshot-platform.mjs`); offsite via operator download of a
+  nightly stamp (`deploy/scripts/pull-platform-backup.sh`), optional `BACKUP_S3_*`
 - Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
 
 ## Public marketing site (Stripe business website)
 
 Deploy the public marketing site from **`apps/web`** (shadcn) before enabling
 **live** Stripe keys. Prefer **Cloudflare Pages** connected to GitHub (`main`) so
-marketing is at `/` on `godmode.software`
+marketing is at `/` on your apex domain
 (see [`deploy/cloudflare-pages-www.md`](deploy/cloudflare-pages-www.md)). On the
 app origin, marketing remains under `/www`. Operator notes:
 [`sites/www/README.md`](sites/www/README.md) (documentation only; not a separate
@@ -277,12 +289,10 @@ Privacy, security summary, contact, refund).
 1. Marketing site live and Stripe business URL accepted
 2. Email verify + password reset working with production mail (`EMAIL_PROVIDER`)
 3. Platform admin MFA enrolled and enforced on SaaS
-4. Cloudflare → Hostinger Full (strict), origin security headers, HTTPS cookies, firewall locked
-5. Durable rate limits + Hostinger cron backups + tested offsite restore
-   (operator PC download of a nightly stamp + integrity verify; S3/R2 optional)
+4. CDN/proxy Full (strict) if used, origin security headers, HTTPS cookies, firewall locked
+5. Durable rate limits + cron backups + tested offsite restore
 6. SaaS coding on by default (#178; opt out with `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false`); Local plugin path registration blocked by default
-7. Live Stripe webhooks + Customer Portal verified on the Cloudflare hostname
-8. [docs/SECURITY.md](docs/SECURITY.md) / this file / [deploy/hostinger.md](deploy/hostinger.md) checklist signed off
+7. Live Stripe webhooks + Customer Portal verified on the public hostname
+8. [docs/SECURITY.md](docs/SECURITY.md) and this file checklist signed off
 
-Environments during hardening: Z440 family `:8080` + LAN SaaS `:9080` for iteration;
-**Hostinger** is the public production target once the gate passes.
+Use a private LAN or staging compose project for iteration before public DNS.

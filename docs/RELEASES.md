@@ -9,10 +9,12 @@ GodMode publishes one tested revision through two channels:
   changelog entry agree.
 
 Merges to `main` run the normal CI checks. Path-filtered pushes also run
-**Publish SaaS image**, which builds/signs a GHCR digest and (on Hostinger)
-auto-pins production via the `godmode-saas` self-hosted runner. Day-to-day PR
-volume still avoids the full multi-OS **Unified release** installer pipeline;
-that remains nightly/stable-tag only.
+**Publish SaaS image**, which builds/signs a GHCR digest. Operators who run a
+production origin can pin that digest with
+[`scripts/update/godmode-saas-pin.sh`](../scripts/update/godmode-saas-pin.sh)
+(manually or from a pin-only self-hosted runner). Day-to-day PR volume still
+avoids the full multi-OS **Unified release** installer pipeline; that remains
+nightly/stable-tag only.
 
 Each release lists a small set of downloadable assets:
 

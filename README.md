@@ -36,7 +36,7 @@ Full accounting, owned email/domains, robot/IoT actor plane, and GodMode Inferen
 
 Usable now. Core still grows toward the full Control Center (owned email and domains, accounting depth, robot/IoT actors, owned inference and training, and more). Track it on the [GodMode Roadmap](https://github.com/users/ReBoticsAI/projects/1).
 
-**Ready column doctrine:** P0 is Hostinger SaaS live (easier browser onboarding + revenue; local/desktop stay first-class). P1 is dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust. Core epic depth stays in Backlog until live and dogfood clear.
+**Ready column doctrine:** P0 is public SaaS live (easier browser onboarding + revenue; local/desktop stay first-class). P1 is dogfood GodMode-from-GodMode (plugins + Core), then marketplace trust. Core epic depth stays in Backlog until live and dogfood clear.
 
 ## Features (overview)
 

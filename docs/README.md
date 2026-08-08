@@ -24,7 +24,6 @@ Documentation for installing, using, and extending GodMode.
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
 | [RELEASES.md](RELEASES.md) | Signed channels, updates, snapshots, and rollback |
 | [SECURITY.md](SECURITY.md) | Threat model, SaaS launch gate, hardening |
-| [../deploy/hostinger.md](../deploy/hostinger.md) | Hostinger VPS + Cloudflare production topology |
 | [VERIFICATION.md](VERIFICATION.md) | Post-install checklist |
 
 ## Deploy and extend
