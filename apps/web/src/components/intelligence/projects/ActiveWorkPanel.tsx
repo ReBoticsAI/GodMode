@@ -236,7 +236,7 @@ function TaskCard({
             />
           </div>
           <div className="mt-1.5 flex flex-col gap-0.5">
-            {subtasks.map((s) => {
+            {subtasks.filter((s) => s && typeof s.id === "string").map((s) => {
               const sdone = isSubtaskDone(s);
               const sactive = isActiveSubtask(s);
               return (
@@ -285,7 +285,7 @@ function TaskCard({
           {timeline.length === 0 && (
             <span className="text-[10px] text-muted-foreground">No activity yet.</span>
           )}
-          {timeline.map((c) => (
+          {timeline.filter((c) => c && typeof c.id === "string").map((c) => (
             <div key={c.id} className="flex flex-col rounded bg-muted/40 px-1.5 py-1 text-[11px]">
               <div className="flex items-center gap-1 text-[8px] uppercase opacity-70">
                 <span className="font-semibold">{c.author}</span>
@@ -369,18 +369,24 @@ export function ActiveWorkPanel({
       const detail = await Promise.all(
         active.map(async (parent) => {
           const subtasks = await fetchCardSubtasks(parent.id)
-            .then((r) => r.subtasks)
+            .then((r) => (r.subtasks ?? []).filter((s) => s && typeof s.id === "string"))
             .catch(() => [] as AiProjectCard[]);
           const parentComments = await fetchCardComments(parent.id)
             .then((r) =>
-              r.comments.map((c) => ({ ...c, cardTitle: parent.title }))
+              (r.comments ?? [])
+                .filter((c) => c && typeof c.id === "string")
+                .map((c) => ({ ...c, cardTitle: parent.title }))
             )
             .catch(() => [] as ActivityComment[]);
           const subComments = (
             await Promise.all(
               subtasks.map((s) =>
                 fetchCardComments(s.id)
-                  .then((r) => r.comments.map((c) => ({ ...c, cardTitle: s.title })))
+                  .then((r) =>
+                    (r.comments ?? [])
+                      .filter((c) => c && typeof c.id === "string")
+                      .map((c) => ({ ...c, cardTitle: s.title }))
+                  )
                   .catch(() => [] as ActivityComment[])
               )
             )
@@ -497,14 +503,16 @@ export function ActiveWorkPanel({
           {tasks.length}
         </span>
         {collapsed && summary && (
-          <span className="truncate font-normal text-foreground/70">— {summary}</span>
+          <span className="truncate font-normal text-foreground/70">- {summary}</span>
         )}
       </button>
       {!collapsed && (
         <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-2 pb-2 text-xs">
-          {tasks.map((t) => (
-            <TaskCard key={t.parent.id} task={t} onOpenBoard={onOpenBoard} />
-          ))}
+          {tasks
+            .filter((t) => t?.parent && typeof t.parent.id === "string")
+            .map((t) => (
+              <TaskCard key={t.parent.id} task={t} onOpenBoard={onOpenBoard} />
+            ))}
         </div>
       )}
     </div>

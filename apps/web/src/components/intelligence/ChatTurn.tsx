@@ -644,6 +644,7 @@ export function ChatTurn({
   return (
     <div className="flex flex-col">
       {parts.map((p, i) => {
+        if (!p || typeof p !== "object") return null;
         if (p.kind === "thinking")
           return (
             <ThinkingPart
@@ -658,15 +659,22 @@ export function ChatTurn({
             <ToolPart
               key={p.id ?? i}
               {...p}
+              args={p.args ?? {}}
               onApprove={onApproveTool}
               onDeny={onDenyTool}
             />
           );
         if (p.kind === "todos")
           return (
-            <TodosPart key={i} items={p.items} kanbanCards={kanbanTodoCards} />
+            <TodosPart
+              key={i}
+              items={Array.isArray(p.items) ? p.items : []}
+              kanbanCards={kanbanTodoCards}
+            />
           );
-        return <Markdown key={i} content={p.text} artifactLinks />;
+        if (p.kind === "text")
+          return <Markdown key={i} content={p.text ?? ""} artifactLinks />;
+        return null;
       })}
     </div>
   );

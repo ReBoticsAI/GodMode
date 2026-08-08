@@ -22,19 +22,28 @@ export type KanbanTodoCard = {
 };
 
 /** Parent + nested subtasks for display. */
-export function flattenTodosForDisplay(items: TodoItem[]): TodoItem[] {
+export function flattenTodosForDisplay(items: TodoItem[] | null | undefined): TodoItem[] {
   const out: TodoItem[] = [];
+  if (!Array.isArray(items)) return out;
   for (const item of items) {
+    // Persisted / streamed todo parts can include sparse holes; skip them so
+    // maximize (and any context re-render) cannot throw on `item.id`.
+    if (!item || typeof item !== "object") continue;
+    const content = typeof item.content === "string" ? item.content : "";
+    if (!content.trim()) continue;
     out.push({
       id: item.id,
-      content: item.content,
-      status: item.status,
+      content,
+      status: item.status ?? "pending",
     });
     for (const sub of item.subtasks ?? []) {
+      if (!sub || typeof sub !== "object") continue;
+      const subContent = typeof sub.content === "string" ? sub.content : "";
+      if (!subContent.trim()) continue;
       out.push({
         id: sub.id,
-        content: sub.content,
-        status: sub.status,
+        content: subContent,
+        status: sub.status ?? "pending",
       });
     }
   }
@@ -54,30 +63,38 @@ function kanbanRowToTodoStatus(
 
 /** Overlay live Kanban column/status onto frozen chat todo parts. */
 export function mergeTodoItemsWithKanban(
-  items: TodoItem[],
+  items: TodoItem[] | null | undefined,
   cards: KanbanTodoCard[]
 ): TodoItem[] {
   const byTitle = new Map<string, KanbanTodoCard>();
   for (const c of cards) {
+    if (!c || typeof c.title !== "string") continue;
     byTitle.set(c.title.trim().toLowerCase(), c);
   }
-  const mergeOne = (item: TodoItem): TodoItem => {
-    const card = byTitle.get(item.content.trim().toLowerCase());
-    const mergedSubs = item.subtasks?.map(mergeOne);
+  const mergeOne = (item: TodoItem): TodoItem | null => {
+    if (!item || typeof item !== "object") return null;
+    const content = typeof item.content === "string" ? item.content : "";
+    if (!content.trim()) return null;
+    const card = byTitle.get(content.trim().toLowerCase());
+    const mergedSubs = (item.subtasks ?? [])
+      .map(mergeOne)
+      .filter((t): t is TodoItem => t != null);
     if (!card) {
-      return mergedSubs ? { ...item, subtasks: mergedSubs } : item;
+      return mergedSubs.length ? { ...item, content, subtasks: mergedSubs } : { ...item, content };
     }
     return {
       ...item,
+      content,
       status: kanbanRowToTodoStatus(card.column_id, card.status),
-      ...(mergedSubs ? { subtasks: mergedSubs } : {}),
+      ...(mergedSubs.length ? { subtasks: mergedSubs } : {}),
     };
   };
-  return items.map(mergeOne);
+  if (!Array.isArray(items)) return [];
+  return items.map(mergeOne).filter((t): t is TodoItem => t != null);
 }
 
 export function displayTodoItems(
-  items: TodoItem[],
+  items: TodoItem[] | null | undefined,
   kanbanCards?: KanbanTodoCard[]
 ): TodoItem[] {
   const merged = kanbanCards?.length
@@ -175,34 +192,38 @@ export function isTodoTool(name: string): boolean {
   return name === "todo_write" || name === "update_todos" || name === "write_todos";
 }
 
-/** Coerce arbitrary tool args into a todo list. */
+/** Coerce arbitrary tool args into a todo list (incl. one level of nested subtasks). */
 export function todosFromArgs(args: Record<string, unknown>): TodoItem[] {
   const raw = (args.todos ?? args.items ?? args.tasks) as unknown;
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((t): TodoItem | null => {
-      if (typeof t === "string") return { content: t, status: "pending" };
-      if (t && typeof t === "object") {
-        const o = t as Record<string, unknown>;
-        const content = String(o.content ?? o.title ?? o.task ?? "").trim();
-        if (!content) return null;
-        const status = String(o.status ?? "pending") as TodoStatus;
-        return {
-          id: o.id != null ? String(o.id) : undefined,
-          content,
-          status: [
-            "pending",
-            "in_progress",
-            "completed",
-            "cancelled",
-          ].includes(status)
-            ? status
-            : "pending",
-        };
-      }
-      return null;
-    })
-    .filter((t): t is TodoItem => t != null);
+  const parseOne = (t: unknown): TodoItem | null => {
+    if (typeof t === "string") {
+      const content = t.trim();
+      return content ? { content, status: "pending" } : null;
+    }
+    if (!t || typeof t !== "object") return null;
+    const o = t as Record<string, unknown>;
+    const content = String(o.content ?? o.title ?? o.task ?? "").trim();
+    if (!content) return null;
+    const status = String(o.status ?? "pending") as TodoStatus;
+    const childRaw =
+      (Array.isArray(o.subtasks) && o.subtasks) ||
+      (Array.isArray(o.children) && o.children) ||
+      (Array.isArray(o.steps) && o.steps) ||
+      null;
+    const subtasks = childRaw
+      ? childRaw.map(parseOne).filter((x): x is TodoItem => x != null)
+      : undefined;
+    return {
+      id: o.id != null ? String(o.id) : undefined,
+      content,
+      status: ["pending", "in_progress", "completed", "cancelled"].includes(status)
+        ? status
+        : "pending",
+      ...(subtasks && subtasks.length ? { subtasks } : {}),
+    };
+  };
+  return raw.map(parseOne).filter((t): t is TodoItem => t != null);
 }
 
 /** Flatten parts into plain text (for token estimation and history). */
@@ -210,12 +231,16 @@ export function partsToPlainText(parts: MsgPart[] | undefined): string {
   if (!parts) return "";
   return parts
     .map((p) => {
+      if (!p || typeof p !== "object") return "";
       if (p.kind === "text") return p.text;
       if (p.kind === "thinking") return p.text;
       if (p.kind === "todos")
-        return p.items.map((t) => `- [${t.status}] ${t.content}`).join("\n");
+        return (p.items ?? [])
+          .filter((t): t is TodoItem => !!t && typeof t.content === "string")
+          .map((t) => `- [${t.status}] ${t.content}`)
+          .join("\n");
       if (p.kind === "tool")
-        return `${p.name}(${JSON.stringify(p.args)})`;
+        return `${p.name}(${JSON.stringify(p.args ?? {})})`;
       return "";
     })
     .join("\n");
