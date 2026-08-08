@@ -470,7 +470,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <div className="flex flex-col gap-3">
-          {departments.length === 0 ? (
+          {!loading && departments.length === 0 ? (
             <div className="flex flex-col gap-2 rounded-lg border border-dashed border-sidebar-border/80 bg-sidebar-accent/10 p-3">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Your workspace is empty. Create your first agent or page by

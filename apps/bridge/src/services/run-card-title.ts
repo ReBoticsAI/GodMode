@@ -6,7 +6,12 @@
 const TITLE_MAX = 72;
 
 export function summarizeRunCardTitle(userMessage: string): string {
-  const raw = userMessage.trim().replace(/\s+/g, " ");
+  // Guard against accidental `undefined` prefixes from bad string concat upstream.
+  const raw = userMessage
+    .replace(/^\s*undefined(?=[A-Za-z0-9"'(])/i, "")
+    .replace(/^\s*undefined\s+/i, "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!raw) return "Run";
 
   // Prefer explicit double-quoted / backtick errors. Do not use '…' — English

@@ -548,6 +548,7 @@ export function IntelligenceComposer({
           .filter((m) => m && typeof m.id === "string")
           .map((m) => ({ ...m, active: m.id === res.active.id }))
       );
+      window.dispatchEvent(new Event("godmode:model-selected"));
       refresh();
       toast.success(`Using ${res.active.label}`);
     } catch (err) {
