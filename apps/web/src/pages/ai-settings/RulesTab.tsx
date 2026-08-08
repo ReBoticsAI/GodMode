@@ -104,7 +104,7 @@ const emptyRuleForm = (): RuleFormState => ({
   alwaysApply: true,
 });
 
-export function RulesTab() {
+export function RulesTab({ visible = true }: { visible?: boolean }) {
   const { activeAgentId } = useIntelligence();
   const [rules, setRules] = useState<AiRule[]>([]);
   const [search, setSearch] = useState("");
@@ -129,9 +129,12 @@ export function RulesTab() {
       });
   }, [activeAgentId]);
 
+  // Reload when the tab becomes visible so a failed load while Bridge was hung
+  // does not stick as "No rules yet" after Bridge recovers.
   useEffect(() => {
+    if (!visible) return;
     load();
-  }, [load]);
+  }, [visible, load]);
 
   const summary = useMemo(() => {
     const pending = rules.filter((r) => r.status === "pending").length;

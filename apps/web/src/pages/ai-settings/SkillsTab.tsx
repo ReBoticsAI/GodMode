@@ -95,7 +95,7 @@ const emptySkillForm = (): SkillFormState => ({
   body: "",
 });
 
-export function SkillsTab() {
+export function SkillsTab({ visible = true }: { visible?: boolean }) {
   const { activeAgentId } = useIntelligence();
   const [skills, setSkills] = useState<AiSkill[]>([]);
   const [search, setSearch] = useState("");
@@ -120,9 +120,11 @@ export function SkillsTab() {
       });
   }, [activeAgentId]);
 
+  // Reload when visible so a hung-Bridge empty state does not stick after recovery.
   useEffect(() => {
+    if (!visible) return;
     load();
-  }, [load]);
+  }, [visible, load]);
 
   const summary = useMemo(() => {
     const pending = skills.filter((s) => s.status === "pending").length;

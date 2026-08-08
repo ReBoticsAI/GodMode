@@ -43,10 +43,10 @@ export function KnowledgePanel() {
         <div className="p-3">
           {/* Keep Rules/Skills mounted so in-flight imports can finish and refresh. */}
           <div className={knowledgeSubTab === "rules" ? undefined : "hidden"}>
-            <RulesTab />
+            <RulesTab visible={knowledgeSubTab === "rules"} />
           </div>
           <div className={knowledgeSubTab === "skills" ? undefined : "hidden"}>
-            <SkillsTab />
+            <SkillsTab visible={knowledgeSubTab === "skills"} />
           </div>
           {knowledgeSubTab === "memory" && <MemoryTab />}
           {knowledgeSubTab === "artifacts" && <ArtifactsTab />}
