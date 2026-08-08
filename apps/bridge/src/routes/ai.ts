@@ -181,7 +181,10 @@ import { createRecord, KernelError } from "../kernel/record-api.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
 import { ensureAgentProject } from "../services/user-productivity.js";
 import { summarizeRunCardTitle } from "../services/run-card-title.js";
-import { beginActiveWorkRunCard } from "../services/active-work-run-card.js";
+import {
+  beginActiveWorkRunCard,
+  completeActiveWorkRunCard,
+} from "../services/active-work-run-card.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
@@ -1892,16 +1895,12 @@ export function createAiRouter(
 
         if (!upstream.ok) {
           const errText = await upstream.text();
-          send("error", { error: errText });
-          res.end();
-          return;
+          throw new Error(errText || `Upstream chat failed (${upstream.status})`);
         }
 
         const reader = upstream.body?.getReader();
         if (!reader) {
-          send("error", { error: "No response body" });
-          res.end();
-          return;
+          throw new Error("No response body");
         }
 
         const decoder = new TextDecoder();
@@ -1981,11 +1980,42 @@ export function createAiRouter(
         contextWindow: llm.getStatus().ctxSize,
         messageId: assistantMsgId,
       });
+
+      if (activeWorkCardId) {
+        try {
+          completeActiveWorkRunCard({
+            db: workDb,
+            cardId: activeWorkCardId,
+            tenantId: work.tenantId,
+            outcome: "success",
+          });
+        } catch (err) {
+          console.error("[active-work] complete run card failed", err);
+        }
+      }
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
+      const aborted = (err as Error).name === "AbortError";
+      if (!aborted) {
         send("error", {
           error: err instanceof Error ? err.message : String(err),
         });
+      }
+      if (activeWorkCardId) {
+        try {
+          completeActiveWorkRunCard({
+            db: workDb,
+            cardId: activeWorkCardId,
+            tenantId: work.tenantId,
+            outcome: aborted ? "aborted" : "error",
+            summary: aborted
+              ? undefined
+              : err instanceof Error
+                ? err.message
+                : String(err),
+          });
+        } catch (completeErr) {
+          console.error("[active-work] complete run card failed", completeErr);
+        }
       }
     } finally {
       clearInterval(statusHeartbeat);
