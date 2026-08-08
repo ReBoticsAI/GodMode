@@ -159,8 +159,19 @@ export function loadSkillBody(
   if (row?.body) return row.body;
 
   const skillPath = path.join(skillsDir(), skillId, "SKILL.md");
-  if (!fs.existsSync(skillPath)) return null;
-  return fs.readFileSync(skillPath, "utf8");
+  if (fs.existsSync(skillPath)) return fs.readFileSync(skillPath, "utf8");
+  const bootstrapPath = path.join(
+    config.repoRoot,
+    "apps",
+    "bridge",
+    "data",
+    "ai",
+    "skills-bootstrap",
+    skillId,
+    "SKILL.md"
+  );
+  if (!fs.existsSync(bootstrapPath)) return null;
+  return fs.readFileSync(bootstrapPath, "utf8");
 }
 
 export function updateAiSkillState(

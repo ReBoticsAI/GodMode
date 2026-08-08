@@ -10,10 +10,10 @@ import { isOperatorTenantDb } from "./tenant-kind.js";
 /** Skills forwarded to contractor CLI agents (same bootstrap set as Intelligence). */
 export const CONTRACTOR_SKILL_IDS = [
   "platform-workspace",
-  "platform-extension",
   "plugin-authoring",
-  "platform-self-loop",
+  "object-types",
   "shadcn-ui",
+  "platform-self-loop",
 ] as const;
 
 const PLUGIN_DOC_MAX = 12_000;
