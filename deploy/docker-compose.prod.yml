@@ -6,7 +6,7 @@
 #
 # Layer 4 (#164 / #167 / #178): do NOT mount /var/run/docker.sock here. Run the optional
 # build supervisor separately (deploy/build-supervisor/) against this SaaS data dir and set
-# CODING_BUILD_* in .env.production (loaded via env_file). Hostinger: see hostinger.md §11.
+# CODING_BUILD_* in .env.production (loaded via env_file). Layer 4 supervisor: see DEPLOY.md / build-supervisor README.
 #   CODING_BUILD_MODE=ephemeral
 #   CODING_BUILD_SUPERVISOR_URL=http://host.docker.internal:8792
 #   CODING_BUILD_SUPERVISOR_TOKEN=<shared bearer>
