@@ -189,10 +189,17 @@ function syncBootstrapRules(db: AppDatabase): void {
     upsertBootstrapRuleFromFile(db, filePath, `${ruleId}.mdc`);
   }
   for (const ruleId of RETIRED_PERSONAL_BOOTSTRAP_RULE_IDS) {
-    const edited = db
-      .prepare(`SELECT user_edited FROM ai_rules WHERE id = ?`)
-      .get(ruleId) as { user_edited: number } | undefined;
-    if (edited && Number(edited.user_edited) !== 0) continue;
+    const row = db
+      .prepare(`SELECT user_edited, source_plugin_id FROM ai_rules WHERE id = ?`)
+      .get(ruleId) as
+      | { user_edited: number; source_plugin_id: string | null }
+      | undefined;
+    if (!row) continue;
+    // Keep user edits and pack-owned rows (e.g. coding-conventions ui-shadcn).
+    if (Number(row.user_edited) !== 0) continue;
+    if (row.source_plugin_id != null && String(row.source_plugin_id).trim() !== "") {
+      continue;
+    }
     db.prepare(`DELETE FROM ai_agent_rule_state WHERE rule_id = ?`).run(ruleId);
     db.prepare(`DELETE FROM ai_rules WHERE id = ?`).run(ruleId);
   }
