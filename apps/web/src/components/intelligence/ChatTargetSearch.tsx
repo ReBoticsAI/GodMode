@@ -355,7 +355,7 @@ export function ChatTargetSearch({
             }}
             className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
-            {responsible &&
+            {responsible?.agent &&
               chatTarget.kind === "agent" &&
               responsible.agent.id !== activeAgentId && (
                 <button
