@@ -29,10 +29,10 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | **Deprecated** classic GitHub OAuth for sign-in. Unused when `GITHUB_APP_*` is set; keep only as local/dev fallback |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | **Deprecated** classic Tasks ↔ Projects OAuth. Unused when `GITHUB_APP_*` is set |
 | `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **Preferred** GitHub App for sign-in + Connect + webhooks + Core Support issues |
-| `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on Hostinger) |
+| `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on production hosts) |
 | `GITHUB_APP_WEBHOOK_SECRET` | empty | App webhook HMAC secret |
 | `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
-| `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see `deploy/hostinger.md`) |
+| `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see [DEPLOY.md](../DEPLOY.md)) |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix when using S3/R2 |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
 | `PLATFORM_SPEND_DISABLED` | unset | When `true`/`1`, force deny all spend (credits debit, chat, autonomous/queue) before `platform_meta` (#96 Slice 3) |
@@ -153,7 +153,7 @@ Only when `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` are not configured
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | Classic OAuth for **sign-in** |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | Classic OAuth for Tasks ↔ Projects |
 
-On GodMode Cloud (Hostinger), classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` are already blanked once `GITHUB_APP_*` is set. They are not required for sign-in or Connect. After you confirm App-only Connect and GitHub sign-in work in production, you can delete the unused classic OAuth Apps at [github.com/settings/developers](https://github.com/settings/developers) (OAuth Apps). No need to keep them archived.
+On GodMode Cloud, classic `OAUTH_GITHUB_*` / `OAUTH_GITHUB_INTEGRATION_*` are already blanked once `GITHUB_APP_*` is set. They are not required for sign-in or Connect. After you confirm App-only Connect and GitHub sign-in work in production, you can delete the unused classic OAuth Apps at [github.com/settings/developers](https://github.com/settings/developers) (OAuth Apps). No need to keep them archived.
 
 Register callback URLs on a classic OAuth App only for local/dev without a GitHub App:
 
