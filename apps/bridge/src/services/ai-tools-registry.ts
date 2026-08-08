@@ -48,7 +48,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "use_skill",
     description:
-      "Load the full step-by-step instructions for a named skill. Pass the skill id in `skillId` (e.g. 'optimize-playbook' to backtest+tune a playbook, 'platform-self-loop' to set up a recurring self-monitoring loop). Call this BEFORE starting a workflow the skill covers.",
+      "Load the full step-by-step instructions for a named skill. Pass the skill id in `skillId` (e.g. 'plugin-authoring' for Bridge plugins, 'platform-workspace' for Tier 1 setup, 'shadcn-ui' before apps/web edits). Call this BEFORE starting a workflow the skill covers.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -56,7 +56,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         skillId: {
           type: "string",
           description:
-            "Skill id from the 'Available skills' list (e.g. optimize-playbook, platform-self-loop).",
+            "Skill id from the 'Available skills' list (e.g. plugin-authoring, platform-workspace, shadcn-ui).",
         },
       },
       required: ["skillId"],

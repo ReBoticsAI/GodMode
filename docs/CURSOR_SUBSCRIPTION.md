@@ -54,7 +54,6 @@ Changing the picker model updates `send({ model, mode })` on an existing in-memo
 
 GodMode identity stays in `<!-- godmode-system -->` injection: `@cursor/sdk` `AgentOptions` has no system/instructions field for the main agent, so injection remains the highest-fidelity channel (decision: keep injection; do not wait for a native system API). Project rules continue via `settingSources: ["project"]` when `.cursor/` exists (not a Knowledge mirror). Never enables `user` / `team` / `all` setting sources on Bridge/SaaS.
 
-Host Cursor **user** Rules/Skills (`~/.cursor/rules`, `~/.cursor/skills`) enter Intelligence via Knowledge (**Import Cursor user**, source `__cursor_user__`), not SDK user settingSources. That import is local-only (`!isSaas`) and applies to all backends, including `cursor_cloud`, through the assembled system prompt. It does not read `skills-cursor` or plugin-cache skills.
 
 For **local / provider** backends (not `cursor_cloud`), Bridge imports the coding root's `AGENTS.md`, optional `.cursor/AGENTS.md`, `.cursor/rules/**/*.mdc`, and `.cursor/skills/*/SKILL.md` into the tenant Knowledge DB (ids prefixed `cursor-ws-…`, source `__cursor_workspace__`) so Gemma and other local chats see the same repo instructions. Import is **non-destructive**: rows you edit in Knowledge keep your body (`user_edited`). Prefer Knowledge CRUD for ongoing edits; use **Import from coding root** when you want a fresh bootstrap from disk. `cursor_cloud` skips that import to avoid double-injecting rules already loaded by the SDK.
 
