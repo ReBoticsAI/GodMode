@@ -32,6 +32,11 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/bridge/package.json apps/bridge/
 COPY --from=build /app/packages packages/
 COPY --from=build /app/apps/bridge/dist apps/bridge/dist
+# Lean personal Knowledge bootstrap (syncPersonalBootstrapKnowledge on tenant open).
+# Runtime only copies dist by default; without these dirs SaaS tenants never get
+# platform rules/skills from apps/bridge/data/ai/*-bootstrap.
+COPY --from=build /app/apps/bridge/data/ai/rules-bootstrap apps/bridge/data/ai/rules-bootstrap
+COPY --from=build /app/apps/bridge/data/ai/skills-bootstrap apps/bridge/data/ai/skills-bootstrap
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 # Feature markdown for platform wiki seed (welcome-wiki / ensurePlatformWikiPages).
 # Without this, SaaS images seed welcome only and skip godmode-overview etc.
