@@ -72,7 +72,7 @@ function persistRow(row: {
 
 /**
  * First-party structured request logging for Bridge.
- * Always emits JSON to process stdout/stderr (Docker / Hostinger).
+ * Always emits JSON to process stdout/stderr (Docker / production hosts).
  * Warn/error responses are also persisted to core.sqlite for Admin review.
  */
 export function structuredRequestLog(

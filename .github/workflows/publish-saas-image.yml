@@ -7,8 +7,8 @@
 # Job summary prints the multi-arch digest when arm64 is included; amd64-only by default.
 #
 # Trigger: push to main (relevant paths) or Actions → Publish SaaS image → Run workflow
-# After a successful image build on push to main, deploy-hostinger pins the digest on the
-# godmode-saas self-hosted runner (Hostinger). workflow_dispatch does not deploy unless
+# After a successful image build on push to main, deploy-hostinger pins the digest on a
+# self-hosted runner labeled godmode-saas (origin host). workflow_dispatch does not deploy unless
 # deploy_hostinger=true.
 
 name: Publish SaaS image
@@ -22,7 +22,7 @@ on:
         type: string
         default: ""
       deploy_hostinger:
-        description: Also pin/roll Hostinger production after image publish
+        description: Also pin/roll production origin after image publish
         required: false
         type: boolean
         default: false
@@ -183,7 +183,7 @@ jobs:
           fi
           scripts/update/godmode-saas-pin.sh "${IMAGE}@${DIGEST}"
           {
-            echo "## Hostinger auto-deploy"
+            echo "## Origin auto-deploy"
             echo ""
             echo "- Pinned: \`${IMAGE}@${DIGEST}\`"
             echo "- Commit: \`${COMMIT}\`"

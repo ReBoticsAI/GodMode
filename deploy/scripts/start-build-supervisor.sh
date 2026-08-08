@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start (or recreate) the Layer 4 build supervisor against the SaaS data volume.
-# Hostinger: run from /opt/godmode after .env.production has CODING_BUILD_* set.
+# Run from the host deploy tree after .env.production has CODING_BUILD_* set.
 #
 #   sudo /opt/godmode/deploy/scripts/start-build-supervisor.sh
 #

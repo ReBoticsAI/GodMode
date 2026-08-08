@@ -83,7 +83,7 @@ the origin host stays idle except when you ship.
    Behind Cloudflare-only `ufw`, bind the container to loopback (for example
    `127.0.0.1:8080:80`) and put host nginx on `:80`/`:443` so Docker does not
    bypass the firewall. Example override:
-   [`deploy/docker-compose.hostinger-override.example.yml`](deploy/docker-compose.hostinger-override.example.yml)
+   [`deploy/docker-compose.loopback-override.example.yml`](deploy/docker-compose.loopback-override.example.yml)
    (copy to `docker-compose.override.yml` on the host; gitignored).
 4. Stripe Dashboard → Webhooks → `https://<domain>/api/saas/stripe/webhook` with:
    - `checkout.session.completed`

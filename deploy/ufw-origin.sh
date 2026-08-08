@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Origin firewall for Hostinger VPS behind Cloudflare (issue #195).
-# Run as root on the VPS after #194 is provisioned.
+# Origin firewall for a VPS behind Cloudflare (or similar CDN).
+# Run as root on the origin host after Compose is up.
 #
 # Usage:
 #   ADMIN_SSH_IP=203.0.113.10 ./deploy/ufw-origin.sh
 # Optional Cloudflare-only HTTP(S):
 #   CLOUDFLARE_ONLY=1 ADMIN_SSH_IP=203.0.113.10 ./deploy/ufw-origin.sh
 #
-# Never opens Bridge :3847. Prefer Cloudflare IP allowlist for 80/443 when practical.
+# Never opens Bridge :3847. Prefer CDN IP allowlist for 80/443 when practical.
 
 set -euo pipefail
 
