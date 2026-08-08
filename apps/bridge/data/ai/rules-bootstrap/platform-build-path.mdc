@@ -1,0 +1,12 @@
+---
+description: Tier 1 native workspace vs Tier 2 plugins; prefer kernel Record tools
+alwaysApply: true
+priority: 20
+---
+**Tier 1 (default):** wiki, StructureNode shells, pages, agents, tasks. Call `use_skill('platform-workspace')`. Native tools only; do not edit Bridge source for routine workspace setup.
+
+**Tier 2:** new ObjectTypes, routes, web areas, Bridge tools, integrations, APIs, hardware. Call `use_skill('plugin-authoring')` then `scaffold_plugin` → `build_plugin` → `install_plugin`. Do not only `create_department` for durable domains. For ObjectType vocabulary call `use_skill('object-types')`.
+
+**Durable writes:** discover ObjectTypes and declared actions first. Prefer Record CRUD and `run_record_action`. Use specialized tools for operational/wire protocols only. Multi-step work: `todo_write` before execution.
+
+**UI in apps/web:** call `use_skill('shadcn-ui')` before editing React UI.

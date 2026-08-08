@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
@@ -15,7 +14,10 @@ import {
   isPersonalExcludedTool,
 } from "./ai-tools-registry.js";
 import {
+  PERSONAL_BOOTSTRAP_RULE_IDS,
   PERSONAL_BOOTSTRAP_SKILL_IDS,
+  RETIRED_PERSONAL_BOOTSTRAP_RULE_IDS,
+  RETIRED_PERSONAL_BOOTSTRAP_SKILL_IDS,
 } from "./personal-os-structure-manifest.js";
 
 export { isOperatorTenantDb, isPersonalTenantDb } from "./tenant-kind.js";
@@ -89,7 +91,26 @@ export function ensureKnowledgeImported(db: AppDatabase): void {
   repairPersonalTenantDefaults(db);
   importRulesFromFiles(db);
   importSkillsFromFiles(db);
+  purgeLegacyCursorUserImport(db);
   syncPersonalBootstrapKnowledge(db);
+}
+
+/** Remove obsolete host Cursor-user import rows (feature removed). */
+function purgeLegacyCursorUserImport(db: AppDatabase): void {
+  const ruleRows = db
+    .prepare(`SELECT id FROM ai_rules WHERE source_plugin_id = '__cursor_user__'`)
+    .all() as Array<{ id: string }>;
+  for (const row of ruleRows) {
+    db.prepare(`DELETE FROM ai_agent_rule_state WHERE rule_id = ?`).run(row.id);
+  }
+  db.prepare(`DELETE FROM ai_rules WHERE source_plugin_id = '__cursor_user__'`).run();
+  const skillRows = db
+    .prepare(`SELECT id FROM ai_skills WHERE source_plugin_id = '__cursor_user__'`)
+    .all() as Array<{ id: string }>;
+  for (const row of skillRows) {
+    db.prepare(`DELETE FROM ai_agent_skill_state WHERE skill_id = ?`).run(row.id);
+  }
+  db.prepare(`DELETE FROM ai_skills WHERE source_plugin_id = '__cursor_user__'`).run();
 }
 
 function personalTenantHasLeakedRules(db: AppDatabase): boolean {
@@ -162,8 +183,18 @@ export function syncPersonalBootstrapKnowledge(db: AppDatabase): void {
 function syncBootstrapRules(db: AppDatabase): void {
   const dir = bootstrapRulesDir();
   if (!fs.existsSync(dir)) return;
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".mdc"))) {
-    insertRuleFromFile(db, path.join(dir, file), file);
+  for (const ruleId of PERSONAL_BOOTSTRAP_RULE_IDS) {
+    const filePath = path.join(dir, `${ruleId}.mdc`);
+    if (!fs.existsSync(filePath)) continue;
+    upsertBootstrapRuleFromFile(db, filePath, `${ruleId}.mdc`);
+  }
+  for (const ruleId of RETIRED_PERSONAL_BOOTSTRAP_RULE_IDS) {
+    const edited = db
+      .prepare(`SELECT user_edited FROM ai_rules WHERE id = ?`)
+      .get(ruleId) as { user_edited: number } | undefined;
+    if (edited && Number(edited.user_edited) !== 0) continue;
+    db.prepare(`DELETE FROM ai_agent_rule_state WHERE rule_id = ?`).run(ruleId);
+    db.prepare(`DELETE FROM ai_rules WHERE id = ?`).run(ruleId);
   }
 }
 
@@ -175,6 +206,10 @@ function syncBootstrapSkills(db: AppDatabase): void {
     if (!fs.existsSync(skillPath)) continue;
     const raw = fs.readFileSync(skillPath, "utf8");
     const parsed = parseSkillMd(raw, skillId);
+    const edited = db
+      .prepare(`SELECT user_edited FROM ai_skills WHERE id = ?`)
+      .get(skillId) as { user_edited: number } | undefined;
+    if (edited && Number(edited.user_edited) !== 0) continue;
     upsertSkillInDb(db, "intelligence", {
       id: parsed.id,
       name: parsed.name,
@@ -186,15 +221,16 @@ function syncBootstrapSkills(db: AppDatabase): void {
       status: "active",
     });
   }
-  // Remove skills outside the personal bootstrap set (except user-created).
-  const keep = new Set<string>(PERSONAL_BOOTSTRAP_SKILL_IDS);
-  const rows = db.prepare(`SELECT id FROM ai_skills`).all() as Array<{ id: string }>;
-  for (const row of rows) {
-    if (keep.has(row.id)) continue;
-    if ((OPERATOR_ONLY_SKILL_IDS as readonly string[]).includes(row.id)) {
-      db.prepare(`DELETE FROM ai_agent_skill_state WHERE skill_id = ?`).run(row.id);
-      db.prepare(`DELETE FROM ai_skills WHERE id = ?`).run(row.id);
-    }
+  for (const skillId of [
+    ...RETIRED_PERSONAL_BOOTSTRAP_SKILL_IDS,
+    ...OPERATOR_ONLY_SKILL_IDS,
+  ]) {
+    const edited = db
+      .prepare(`SELECT user_edited FROM ai_skills WHERE id = ?`)
+      .get(skillId) as { user_edited: number } | undefined;
+    if (edited && Number(edited.user_edited) !== 0) continue;
+    db.prepare(`DELETE FROM ai_agent_skill_state WHERE skill_id = ?`).run(skillId);
+    db.prepare(`DELETE FROM ai_skills WHERE id = ?`).run(skillId);
   }
 }
 
@@ -227,6 +263,52 @@ function insertRuleFromFile(
   );
 }
 
+/** Upsert bootstrap rules for personal tenants; skip rows the user edited. */
+function upsertBootstrapRuleFromFile(
+  db: AppDatabase,
+  filePath: string,
+  filename: string
+): void {
+  const parsed = parseMdc(fs.readFileSync(filePath, "utf8"), filename);
+  const existing = db
+    .prepare(`SELECT user_edited FROM ai_rules WHERE id = ?`)
+    .get(parsed.id) as { user_edited: number } | undefined;
+  if (existing && Number(existing.user_edited) !== 0) return;
+  const st = db
+    .prepare(
+      `SELECT enabled, priority_override, status FROM ai_agent_rule_state
+       WHERE agent_id = 'intelligence' AND rule_id = ?`
+    )
+    .get(parsed.id) as
+    | { enabled: number; priority_override: number | null; status: string | null }
+    | undefined;
+  db.prepare(
+    `INSERT INTO ai_rules
+     (id, agent_id, description, body, always_apply, globs_json, departments_json, priority, enabled, status, updated_at)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, ?, 1, 'active', datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       description=excluded.description,
+       body=excluded.body,
+       always_apply=excluded.always_apply,
+       globs_json=excluded.globs_json,
+       departments_json=excluded.departments_json,
+       priority=excluded.priority,
+       enabled=1,
+       status='active',
+       version=ai_rules.version+1,
+       updated_at=datetime('now')
+     WHERE COALESCE(ai_rules.user_edited, 0) = 0`
+  ).run(
+    parsed.id,
+    parsed.description,
+    parsed.body,
+    parsed.alwaysApply ? 1 : 0,
+    JSON.stringify(parsed.globs),
+    JSON.stringify(parsed.departments),
+    st?.priority_override ?? parsed.priority
+  );
+}
+
 function importRulesFromDir(db: AppDatabase, dir: string): void {
   if (!fs.existsSync(dir)) return;
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".mdc"))) {
@@ -241,7 +323,12 @@ function importRulesFromFiles(db: AppDatabase): void {
   if (isOperatorTenantDb(db)) {
     importRulesFromDir(db, rulesDir());
   }
-  importRulesFromDir(db, bootstrapRulesDir());
+  // Personal (and first-touch operator empty DB): only the lean bootstrap set.
+  for (const ruleId of PERSONAL_BOOTSTRAP_RULE_IDS) {
+    const filePath = path.join(bootstrapRulesDir(), `${ruleId}.mdc`);
+    if (!fs.existsSync(filePath)) continue;
+    insertRuleFromFile(db, filePath, `${ruleId}.mdc`);
+  }
 }
 
 function importSkillsFromFiles(db: AppDatabase): void {
@@ -251,7 +338,27 @@ function importSkillsFromFiles(db: AppDatabase): void {
   if (isOperatorTenantDb(db)) {
     importSkillsFromDir(db, skillsDir());
   }
-  importSkillsFromDir(db, bootstrapSkillsDir());
+  // Bootstrap skills: only the personal allowlist (extra folders on disk are ignored).
+  const dir = bootstrapSkillsDir();
+  if (!fs.existsSync(dir)) return;
+  const ins = db.prepare(
+    `INSERT OR IGNORE INTO ai_skills
+     (id, agent_id, name, description, body, tools_json, departments_json, enabled, status)
+     VALUES (?, 'intelligence', ?, ?, ?, ?, ?, 1, 'active')`
+  );
+  for (const skillId of PERSONAL_BOOTSTRAP_SKILL_IDS) {
+    const skillPath = path.join(dir, skillId, "SKILL.md");
+    if (!fs.existsSync(skillPath)) continue;
+    const parsed = parseSkillMd(fs.readFileSync(skillPath, "utf8"), skillId);
+    ins.run(
+      parsed.id,
+      parsed.name,
+      parsed.description,
+      parsed.body,
+      JSON.stringify(parsed.tools),
+      JSON.stringify(parsed.departments)
+    );
+  }
 }
 
 function importSkillsFromDir(db: AppDatabase, dir: string): void {
@@ -563,14 +670,7 @@ export function removePluginKnowledge(db: AppDatabase, pluginId: string): void {
  */
 export const CURSOR_WORKSPACE_SOURCE = "__cursor_workspace__";
 
-/**
- * Sentinel for host Cursor user Rules/Skills (`~/.cursor/rules`, `~/.cursor/skills`).
- * Injected via Knowledge / assemblePrompt for all backends including cursor_cloud.
- */
-export const CURSOR_USER_SOURCE = "__cursor_user__";
-
 const cursorWorkspaceSyncFp = new Map<string, string>();
-const cursorUserSyncFp = new Map<string, string>();
 
 /** Stable Knowledge ids for AGENTS.md surfaces (Cursor workspace instructions). */
 export const CURSOR_WS_AGENTS_MD_ID = "cursor-ws-agents-md";
@@ -605,13 +705,6 @@ function cursorRuleIdFromPath(
     .filter(Boolean)
     .join("--");
   return `${idPrefix}${slug || "rule"}`;
-}
-
-/** Host Cursor user dir: `CURSOR_USER_HOME` or `~/.cursor`. */
-export function resolveCursorUserHome(): string {
-  const override = process.env.CURSOR_USER_HOME?.trim();
-  if (override) return path.resolve(override);
-  return path.join(os.homedir(), ".cursor");
 }
 
 function pushMtimePart(parts: string[], filePath: string): void {
@@ -903,147 +996,6 @@ export function syncCursorWorkspaceKnowledge(
   };
 }
 
-function fingerprintCursorUserHome(cursorHome: string): string {
-  const parts: string[] = [];
-  const rulesDir = path.join(cursorHome, "rules");
-  for (const file of walkMdcFiles(rulesDir)) {
-    try {
-      parts.push(`${file}:${fs.statSync(file).mtimeMs}`);
-    } catch {
-      /* ignore */
-    }
-  }
-  const skillsDir = path.join(cursorHome, "skills");
-  if (fs.existsSync(skillsDir)) {
-    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue;
-      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) continue;
-      try {
-        parts.push(`${skillPath}:${fs.statSync(skillPath).mtimeMs}`);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  parts.sort();
-  return parts.join("|");
-}
-
-/**
- * Import host Cursor user Rules (`.cursor/rules` mdc files, recursive) and Skills
- * (`.cursor/skills/<name>/SKILL.md`) into Knowledge. Used for all backends including
- * cursor_cloud (via assemblePrompt / godmode-system). Does not read
- * `skills-cursor` or plugin-cache skills. Does not overwrite user_edited rows.
- */
-export function importCursorUserKnowledge(
-  db: AppDatabase,
-  cursorHome?: string
-): {
-  rules: number;
-  skills: number;
-  ruleIds: string[];
-  skillIds: string[];
-  sourceDir: string;
-} {
-  const home = path.resolve(cursorHome ?? resolveCursorUserHome());
-  let rules = 0;
-  let skills = 0;
-  const ruleIds: string[] = [];
-  const skillIds: string[] = [];
-
-  const rulesDir = path.join(home, "rules");
-  for (const file of walkMdcFiles(rulesDir)) {
-    const parsed = parseMdc(fs.readFileSync(file, "utf8"), path.basename(file));
-    const id = cursorRuleIdFromPath(rulesDir, file, "cursor-user-");
-    ruleIds.push(id);
-    if (
-      upsertImportedRule(
-        db,
-        CURSOR_USER_SOURCE,
-        id,
-        parsed.description,
-        parsed.body,
-        parsed.alwaysApply,
-        parsed.globs,
-        parsed.departments,
-        parsed.priority
-      )
-    ) {
-      rules++;
-    }
-  }
-
-  const skillsDir = path.join(home, "skills");
-  if (fs.existsSync(skillsDir)) {
-    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue;
-      const skillPath = path.join(skillsDir, ent.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) continue;
-      const parsed = parseSkillMd(fs.readFileSync(skillPath, "utf8"), ent.name);
-      const id = `cursor-user-skill-${ent.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
-      skillIds.push(id);
-      if (
-        upsertImportedSkill(
-          db,
-          CURSOR_USER_SOURCE,
-          id,
-          parsed.name,
-          parsed.description,
-          parsed.body,
-          parsed.tools,
-          parsed.departments
-        )
-      ) {
-        skills++;
-      }
-    }
-  }
-
-  return { rules, skills, ruleIds, skillIds, sourceDir: home };
-}
-
-/**
- * Refresh Cursor user Knowledge when `~/.cursor/rules` / `skills` mtimes change.
- */
-export function syncCursorUserKnowledge(
-  db: AppDatabase,
-  opts?: { force?: boolean; cursorHome?: string }
-): {
-  rules: number;
-  skills: number;
-  synced: boolean;
-  sourceDir: string;
-} {
-  const home = path.resolve(opts?.cursorHome ?? resolveCursorUserHome());
-  const key = home;
-  const fp = fingerprintCursorUserHome(home);
-  if (!opts?.force && cursorUserSyncFp.get(key) === fp) {
-    return { rules: 0, skills: 0, synced: false, sourceDir: home };
-  }
-
-  if (!fp) {
-    pruneMissingImportedKnowledge(db, CURSOR_USER_SOURCE, [], []);
-    cursorUserSyncFp.set(key, "");
-    return { rules: 0, skills: 0, synced: true, sourceDir: home };
-  }
-
-  const result = importCursorUserKnowledge(db, home);
-  pruneMissingImportedKnowledge(
-    db,
-    CURSOR_USER_SOURCE,
-    result.ruleIds,
-    result.skillIds
-  );
-  cursorUserSyncFp.set(key, fp);
-  return {
-    rules: result.rules,
-    skills: result.skills,
-    synced: true,
-    sourceDir: result.sourceDir,
-  };
-}
-
 /** Drop imported rows that vanished from disk, keeping user-edited rows. */
 function pruneMissingImportedKnowledge(
   db: AppDatabase,
@@ -1080,9 +1032,4 @@ function pruneMissingImportedKnowledge(
 /** @internal test helper */
 export function clearCursorWorkspaceSyncCacheForTests(): void {
   cursorWorkspaceSyncFp.clear();
-}
-
-/** @internal test helper */
-export function clearCursorUserSyncCacheForTests(): void {
-  cursorUserSyncFp.clear();
 }

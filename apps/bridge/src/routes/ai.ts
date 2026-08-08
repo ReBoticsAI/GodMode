@@ -153,7 +153,6 @@ import {
 } from "../services/coding/cursor-mcp-config.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import {
-  syncCursorUserKnowledge,
   syncCursorWorkspaceKnowledge,
 } from "../services/knowledge-store.js";
 import type { AiAgent } from "../services/agents/types.js";
@@ -740,20 +739,6 @@ export function createAiRouter(
     res.json(result);
   });
 
-  router.post("/cursor-user-knowledge/import", (req, res) => {
-    if (config.isSaas) {
-      res.status(403).json({
-        error:
-          "Cursor user Rules/Skills import is only available on local installations (not SaaS).",
-      });
-      return;
-    }
-    const agentId = agentIdFromRequest(req);
-    const agentDb = agentDbFromRequest(req, res, agentId, "editor");
-    if (!agentDb) return;
-    const result = syncCursorUserKnowledge(agentDb, { force: true });
-    res.json(result);
-  });
 
   router.get("/mcp", (req, res) => {
     const agentId = agentIdFromRequest(req);

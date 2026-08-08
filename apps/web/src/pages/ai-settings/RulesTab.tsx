@@ -24,7 +24,6 @@ import {
   deleteAiRule,
   fetchAiRules,
   importWorkspaceKnowledge,
-  importCursorUserKnowledge,
   rejectAiRule,
   updateAiRuleContent,
   updateAiRuleState,
@@ -114,7 +113,6 @@ export function RulesTab({ visible = true }: { visible?: boolean }) {
   const [form, setForm] = useState<RuleFormState>(emptyRuleForm);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importingUser, setImportingUser] = useState(false);
 
   const load = useCallback(() => {
     fetchAiRules(activeAgentId)
@@ -273,35 +271,6 @@ export function RulesTab({ visible = true }: { visible?: boolean }) {
     }
   };
 
-  const runUserImport = async () => {
-    setImportingUser(true);
-    try {
-      const result = await importCursorUserKnowledge(activeAgentId);
-      if (result.message) {
-        toast.message(result.message);
-      } else if (result.synced) {
-        toast.success(
-          `Imported ${result.rules} rules and ${result.skills} skills from Cursor user`
-        );
-      } else {
-        toast.message("Cursor user Rules/Skills unchanged since last import");
-      }
-      load();
-    } catch (err) {
-      const aborted =
-        (err instanceof DOMException && err.name === "TimeoutError") ||
-        (err instanceof Error && /aborted|timeout/i.test(err.message));
-      toast.error(
-        aborted
-          ? "Import timed out. Bridge may be busy; retry in a moment."
-          : err instanceof Error
-            ? err.message
-            : "Import failed"
-      );
-    } finally {
-      setImportingUser(false);
-    }
-  };
 
   const ruleFormFields = (
     <div className="flex flex-col gap-3">
@@ -348,23 +317,13 @@ export function RulesTab({ visible = true }: { visible?: boolean }) {
               <CardDescription className="text-[11px]">
                 DB-backed guardrails injected into prompts when applicable. Prefer editing rules
                 here in Knowledge; AGENTS.md and <code className="text-[10px]">.cursor/</code>{" "}
-                files are bootstrap imports from the coding root or your Cursor user profile.
+                files are bootstrap imports from the coding root.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1">
-              <Button type="button" size="sm" variant="outline" onClick={() => void runImport()} disabled={importing || importingUser}>
+              <Button type="button" size="sm" variant="outline" onClick={() => void runImport()} disabled={importing}>
                 {importing ? <Spinner className="size-3.5" /> : <DownloadIcon className="size-3.5" />}
                 Import from coding root
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void runUserImport()}
-                disabled={importing || importingUser}
-              >
-                {importingUser ? <Spinner className="size-3.5" /> : <DownloadIcon className="size-3.5" />}
-                Import Cursor user
               </Button>
               <Button type="button" size="sm" onClick={openCreate}>
                 <PlusIcon className="size-3.5" />

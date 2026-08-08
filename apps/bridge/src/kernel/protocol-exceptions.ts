@@ -609,15 +609,7 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     rationale:
       "One-shot bootstrap of coding-root AGENTS.md / .cursor rules and skills into Knowledge; orchestration over Rule/Skill Records, not generic Record CRUD.",
     authenticatedDomainMutations: "none",
-  },
-  {
-    id: "ai-cursor-user-knowledge-import",
-    methods: ["POST"],
-    pathPattern: "/api/ai/cursor-user-knowledge/import",
-    rationale:
-      "One-shot bootstrap of host Cursor user ~/.cursor/rules and ~/.cursor/skills into Knowledge for assemblePrompt (including cursor_cloud); not SaaS; not SDK settingSources user.",
-    authenticatedDomainMutations: "none",
-  },
+  }, 
   {
     id: "ai-coding-workspace-file",
     methods: ["PUT", "POST", "DELETE"],

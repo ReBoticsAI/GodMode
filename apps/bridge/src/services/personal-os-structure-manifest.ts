@@ -47,6 +47,15 @@ export const PERSONAL_OS_BOOTSTRAP_NOTE =
 /** Bootstrap rule ids imported from apps/bridge/data/ai/rules-bootstrap/ */
 export const PERSONAL_BOOTSTRAP_RULE_IDS = [
   "godmode-personal",
+  "platform-workspace-context",
+  "platform-build-path",
+] as const;
+
+/**
+ * Former bootstrap rule ids removed from the lean personal set.
+ * Personal sync deletes these when still present and not user-edited.
+ */
+export const RETIRED_PERSONAL_BOOTSTRAP_RULE_IDS = [
   "platform-navigation",
   "platform-actions",
   "platform-builder-tiers",
@@ -58,11 +67,18 @@ export const PERSONAL_BOOTSTRAP_RULE_IDS = [
 /** Bootstrap skill ids for personal Intelligence */
 export const PERSONAL_BOOTSTRAP_SKILL_IDS = [
   "platform-workspace",
-  "platform-extension",
   "plugin-authoring",
   "object-types",
-  "platform-self-loop",
   "shadcn-ui",
+] as const;
+
+/**
+ * Former bootstrap skill ids (kept on disk for optional/contractor use where noted).
+ * Personal sync deletes these when still present and not user-edited.
+ */
+export const RETIRED_PERSONAL_BOOTSTRAP_SKILL_IDS = [
+  "platform-extension",
+  "platform-self-loop",
 ] as const;
 
 /** Lazy defaults — tool lists come from ai-tools-registry at call time (avoids circular import). */
