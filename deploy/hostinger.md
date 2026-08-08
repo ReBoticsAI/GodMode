@@ -6,28 +6,126 @@ and are **not** the public DNS cutover target.
 
 ## Production gate (merge to main)
 
-**Normal Cloud cutover is automated.** A green merge to `main` that triggers
-**Publish SaaS image** builds/signs a GHCR digest, then the VPS self-hosted runner
-(`self-hosted,linux,godmode-saas`) runs [`scripts/update/godmode-saas-pin.sh`](../scripts/update/godmode-saas-pin.sh):
+Two different deploy shapes (do not conflate them):
+
+| Surface | Host | Who builds | Who serves |
+|---------|------|------------|------------|
+| Marketing `godmode.software` / `www` | Cloudflare Pages | Cloudflare builders | Cloudflare edge |
+| Authenticated SaaS `app.godmode.software` | Hostinger Docker | Free GitHub-hosted runners → GHCR | Hostinger + CF edge proxy |
+
+Marketing never needs a VPS Actions runner. See
+[`cloudflare-pages-www.md`](cloudflare-pages-www.md) and
+[`cloudflare-app-edge.md`](cloudflare-app-edge.md).
+
+**Normal SaaS cutover is automated.** A green merge to `main` that triggers
+**Publish SaaS image** builds/signs a GHCR digest on **ubuntu-latest** (free OSS
+minutes). Then the VPS self-hosted runner (`self-hosted,linux,godmode-saas`) runs
+[`scripts/update/godmode-saas-pin.sh`](../scripts/update/godmode-saas-pin.sh):
 rewrite only `GODMODE_IMAGE=…@sha256:…` in `deploy/.env.production`, compose
 pull/up, health check. Secrets stay on the VPS; the job must never dump the env
 file. After health OK, Waiting Deploy project items contained in that commit move
 to Done (soft-fail via `scripts/update/move-waiting-deploy-to-done.mjs`).
 
-**Ops precondition:** register a Hostinger Actions runner with labels
-`self-hosted`, `linux`, `godmode-saas` that can reach `/opt/godmode`. Without it,
-`deploy-hostinger` queues until a runner appears.
+The on-box runner is **pin-only**: idle most of the time. It does not continuously
+pull images. Image build stays on GitHub-hosted runners. Bandwidth spikes only when
+you actually ship a new digest (expected).
 
-**Escape hatches:** `workflow_dispatch` on Publish SaaS image does **not** deploy
-unless `deploy_hostinger=true`. Stable-tag promote remains
+**Anti-loop safeguards** (already in
+[`.github/workflows/publish-saas-image.yml`](../.github/workflows/publish-saas-image.yml)):
+
+- Concurrency group `publish-saas-image-${{ github.ref }}` with
+  `cancel-in-progress: true` (one in-flight publish per branch)
+- Path filters so docs-only merges do not always rebuild/deploy
+- `workflow_dispatch` does **not** deploy unless `deploy_hostinger=true`
+- Exactly **one** runner with labels `self-hosted`, `linux`, `godmode-saas`
+  (do not register extra runners for other workflows)
+
+**Ops precondition:** register that Hostinger Actions runner so it can reach
+`/opt/godmode` and Docker. Without it, `deploy-hostinger` queues until a runner
+appears. Install steps: [§ Self-hosted `godmode-saas` runner](#self-hosted-godmode-saas-runner).
+
+**Escape hatches:** Stable-tag promote remains
 [`.github/workflows/promote-saas.yml`](../.github/workflows/promote-saas.yml).
 Manual/emergency pin: Cursor skill `/deploygodmodecloud` or run
 `godmode-saas-pin.sh` on the box.
 
 Prefer serving marketing from **Cloudflare Pages** at `/` on `godmode.software`,
-or from **`apps/web` `/www`** on the same VPS app origin, so the VPS primarily
-runs the authenticated app. See [`sites/www/README.md`](../sites/www/README.md)
-for notes (not a separate deploy tree).
+so the VPS primarily runs the authenticated app. See
+[`sites/www/README.md`](../sites/www/README.md).
+
+## Self-hosted `godmode-saas` runner
+
+Install **one** GitHub Actions runner on the Hostinger VPS. It only picks up
+`deploy-hostinger` from **Publish SaaS image** (labels must match exactly).
+
+### Install (Ubuntu x86_64)
+
+Run as root on the VPS (replace `REGISTRATION_TOKEN` with a short-lived token from
+GitHub → Settings → Actions → Runners → New self-hosted runner, or
+`gh api -X POST repos/ReBoticsAI/GodMode/actions/runners/registration-token`).
+
+```bash
+set -euo pipefail
+useradd --system --create-home --home-dir /opt/actions-runner --shell /bin/bash \
+  github-runner || true
+usermod -aG docker github-runner
+mkdir -p /opt/actions-runner
+cd /opt/actions-runner
+# Pin a release from https://github.com/actions/runner/releases
+RUNNER_VERSION=2.336.0
+curl -fsSL -o actions-runner-linux-x64.tar.gz \
+  "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+tar xzf actions-runner-linux-x64.tar.gz
+rm -f actions-runner-linux-x64.tar.gz
+chown -R github-runner:github-runner /opt/actions-runner
+sudo -u github-runner ./config.sh --unattended \
+  --url https://github.com/ReBoticsAI/GodMode \
+  --token REGISTRATION_TOKEN \
+  --name godmode-saas \
+  --labels self-hosted,linux,godmode-saas \
+  --work _work \
+  --replace
+./svc.sh install github-runner
+./svc.sh start
+./svc.sh status
+```
+
+Verify from an operator machine:
+
+```bash
+gh api repos/ReBoticsAI/GodMode/actions/runners \
+  --jq '.runners[]|{name,status,labels:[.labels[].name]}'
+```
+
+Expect one runner `godmode-saas` with `status: online` and labels including
+`godmode-saas`.
+
+Grant the service user write access to the pin targets without making secrets
+world-readable (on the VPS, after install):
+
+```bash
+setfacl -m u:github-runner:rwx /opt/godmode /opt/godmode/deploy
+setfacl -R -m u:github-runner:rwX /opt/godmode/.git
+setfacl -m u:github-runner:rw /opt/godmode/deploy/.env.production
+sudo -u github-runner git config --global --add safe.directory /opt/godmode
+```
+
+`github-runner` must also be in the `docker` group (included in the install steps
+above).
+
+### Re-register
+
+If the runner vanishes from GitHub or stays offline:
+
+```bash
+cd /opt/actions-runner
+./svc.sh stop || true
+sudo -u github-runner ./config.sh remove --token REGISTRATION_TOKEN || true
+# then re-run config.sh + svc.sh install/start as above with a fresh token
+```
+
+Do **not** register additional self-hosted runners on this host for unrelated
+workflows. Image build/validate stay on `ubuntu-latest`.
 
 ## 1. Provision Hostinger VPS
 
