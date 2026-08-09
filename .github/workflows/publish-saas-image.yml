@@ -8,8 +8,9 @@
 #
 # Trigger: push to main (relevant paths) or Actions → Publish SaaS image → Run workflow
 # After a successful image build on push to main, deploy-hostinger pins the digest on a
-# self-hosted runner labeled godmode-saas (origin host). workflow_dispatch does not deploy unless
-# deploy_hostinger=true.
+# self-hosted runner labeled godmode-saas (origin host). A follow-up ubuntu-latest job then
+# moves Waiting Deploy → Done (needs PROJECT_TOKEN for user project write). workflow_dispatch
+# does not deploy unless deploy_hostinger=true.
 
 name: Publish SaaS image
 
@@ -189,12 +190,27 @@ jobs:
             echo "- Commit: \`${COMMIT}\`"
             echo "- Health: OK"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Waiting Deploy to Done (soft-fail)
+
+  # Board flip on GitHub-hosted runners (Node + gh). Hostinger only pins/rolls.
+  mark-waiting-deploy-done:
+    needs: [deploy-hostinger, metadata]
+    if: ${{ needs.deploy-hostinger.result == 'success' }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Waiting Deploy to Done
         env:
           DEPLOYED_SHA: ${{ needs.metadata.outputs.commit }}
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GODMODE_REPO_DIR: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          node scripts/update/move-waiting-deploy-to-done.mjs || true
+        run: node scripts/update/move-waiting-deploy-to-done.mjs
