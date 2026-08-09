@@ -128,12 +128,24 @@ export function createPluginsManifestHandler(coreDb: CoreDatabase) {
         if (!installed) return true;
         return installed.has(p.manifest.id);
       })
-      .map((p) => ({
-        id: p.manifest.id,
-        version: p.manifest.version,
-        name: p.manifest.name,
-        webBundle: `/api/plugins/${p.manifest.id}/web.js`,
-      }));
+      .map((p) => {
+        const bundlePath = resolveWebBundlePath(p.manifest.id);
+        let webRevision: string | undefined;
+        if (bundlePath) {
+          try {
+            webRevision = String(fs.statSync(bundlePath).mtimeMs);
+          } catch {
+            webRevision = undefined;
+          }
+        }
+        return {
+          id: p.manifest.id,
+          version: p.manifest.version,
+          name: p.manifest.name,
+          webBundle: `/api/plugins/${p.manifest.id}/web.js`,
+          webRevision,
+        };
+      });
 
     res.json({
       plugins: listPluginManifestsForWeb(),
@@ -206,6 +218,8 @@ export function createPluginsRouter(coreDb: CoreDatabase): Router {
       return;
     }
     res.type("application/javascript");
+    // SPA may re-import after install/rebuild; never let intermediaries keep a stale module.
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(bundlePath);
   });
 

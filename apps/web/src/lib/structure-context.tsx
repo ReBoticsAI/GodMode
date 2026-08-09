@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, connectWebSocket } from "../api";
+import { loadWebPlugins } from "@/plugins/loader";
 import type { GroupTabDef } from "./group-tab-definitions";
 import type { DepartmentNode, DivisionNode, PageNode, StructureNode } from "./navigation";
 import { nodesToLegacyDepartments } from "./structure-adapters";
@@ -104,7 +105,12 @@ export function StructureProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return connectWebSocket((raw) => {
       const msg = raw as { type?: string };
-      if (msg?.type === "structure_changed") void reload();
+      if (msg?.type === "structure_changed") {
+        void reload();
+        // Install/rebuild often seeds Structure; refresh web bundles so page
+        // kinds match without requiring a full browser reload.
+        void loadWebPlugins();
+      }
     });
   }, [reload]);
 
