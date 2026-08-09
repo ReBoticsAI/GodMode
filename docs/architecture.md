@@ -59,33 +59,43 @@ security, tenancy, storage, and compatibility contract.
 flowchart LR
   Bridge[Bridge]
   Core[(core.sqlite)]
-  T1[(tenant A.sqlite)]
-  T2[(tenant B.sqlite)]
+  U1[(users/userA.sqlite)]
+  T1[(tenants/workspaceA.sqlite)]
+  T2[(tenants/workspaceB.sqlite)]
   Bridge --> Core
+  Bridge --> U1
   Bridge --> T1
   Bridge --> T2
 ```
 
-### Core database (`core.sqlite`)
+### Host control plane (`core.sqlite`)
 
-Global platform state:
+Global platform state (still one file; later epic may split into Cloud + Users):
 
 - **Users and sessions** — email/password auth, session cookies
 - **Tenants and memberships** — workspaces and roles
 - **Marketplace** — Official/Local catalogs, Community user listings, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
 - **Share grants** — cross-tenant resource sharing
 - **Bridge connections** — federation between Bridge instances
+- **DMs / Support / Notifications** — account-hub surfaces (not Workspace sand)
 
-### Per-tenant database (`tenants/<id>.sqlite`)
+### User database (`users/<userId>.sqlite`)
+
+Per signed-up account:
+
+- **User Vault** — Connect secrets (Cursor, LLM keys, Exa) shared across that account’s workspaces
+
+### Workspace database (`tenants/<id>.sqlite`)
 
 One SQLite file per workspace:
 
 - **Structure** — departments, divisions, pages
-- **Intelligence** — agents, chats, messages, memories, artifacts, rules, skills
-- **Productivity** — wiki, kanban cards, calendar, vault secrets
+- **Intelligence** — agents, chats, messages, memories, artifacts, rules, skills (personal-layer move to User DB is follow-up)
+- **Productivity** — wiki, kanban cards, calendar, Personal/Agent vault
+- **Optional workspace Connect override** — project-specific keys
 - **Automations** — workflows, hooks, schedules
 
-Physical file separation provides tenant isolation; most tenant tables omit a redundant `tenant_id` column.
+Physical file separation provides workspace isolation; most workspace tables omit a redundant `tenant_id` column.
 
 ## Request flow
 

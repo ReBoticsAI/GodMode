@@ -1087,7 +1087,7 @@ function vaultOwnerScope(
   }
 }
 
-/** Platform helpers take agentId | null (null = Platform Vault). */
+/** Platform helpers take agentId | null (null = User Vault). */
 function platformAgentScope(owner: VaultOwner): string | null {
   if (owner.kind === "user") {
     throw httpError(

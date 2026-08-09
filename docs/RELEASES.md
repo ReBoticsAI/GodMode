@@ -131,7 +131,7 @@ per-file Sigstore bundles inside the verification archive).
 
 An update snapshot is one consistency unit containing:
 
-- `core.sqlite` and every tenant SQLite database;
+- `core.sqlite`, every `users/*.sqlite` User DB, and every workspace (`tenants/*.sqlite`) database;
 - tenant workspaces and installed plugin state;
 - installation/release metadata and the plugin lock snapshot.
 

@@ -73,12 +73,14 @@ flowchart TB
     Bridge[Bridge API Node.js]
     Kernel[ObjectType kernel]
     Services[Authoritative services and adapters]
-    CoreDb[(core.sqlite users and tenants)]
-    TenantDb[(tenant.sqlite per workspace)]
+    CoreDb[(core.sqlite control plane)]
+    UserDb[(users/*.sqlite User Vault)]
+    TenantDb[(tenants/*.sqlite per workspace)]
     Web -->|REST and WebSocket| Bridge
     Bridge --> Kernel
     Kernel --> Services
     Services --> CoreDb
+    Services --> UserDb
     Services --> TenantDb
   end
   subgraph intelligence [Intelligence loop]

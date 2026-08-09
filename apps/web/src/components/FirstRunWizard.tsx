@@ -164,8 +164,8 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
     navigate(platformVaultSettingsHref(sub));
     toast.message(
       sub === "search"
-        ? "Add your Exa key in Platform Vault → Search, then return to finish setup."
-        : "Add your API key in Platform Vault, then return to finish setup."
+        ? "Add your Exa key in User Vault → Search, then return to finish setup."
+        : "Add your API key in User Vault, then return to finish setup."
     );
   };
 
@@ -185,7 +185,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
       const s = await fetchOnboardingStatus();
       setLlmReady(Boolean(s.llmReady));
       if (!s.llmReady) {
-        toast.error("Connect an API key in Platform Vault before continuing.");
+        toast.error("Connect an API key in User Vault before continuing.");
         return;
       }
       setStep(2);
@@ -246,7 +246,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                 OpenCode Go, OpenCode Zen, MiniMax Token Plan, Kimi Code, or Poe) or a metered
                 Platform API key (OpenAI, Anthropic, OpenRouter, Groq, Together, Fireworks,
                 DeepSeek, Google AI Studio, xAI, Z.AI, MiniMax, or a custom
-                OpenAI-compatible endpoint). Open Platform Vault to connect, then come back to finish
+                OpenAI-compatible endpoint). Open User Vault to connect, then come back to finish
                 setup.
               </DialogDescription>
             </DialogHeader>
@@ -265,7 +265,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                   className="text-foreground underline underline-offset-4"
                   onClick={onOpenVault}
                 >
-                  Platform Vault
+                  User Vault
                 </Link>{" "}
                 from the sidebar later. Reopen this wizard anytime from Settings.
               </p>
@@ -276,7 +276,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button onClick={() => openPlatformVault("api-keys")} disabled={loading}>
-                  Open Platform Vault
+                  Open User Vault
                 </Button>
                 <Button
                   variant="outline"
@@ -299,7 +299,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Choose your LLM</DialogTitle>
               <DialogDescription>
                 Local installs use llama.cpp as the primary stack (GGUF models). Ollama and LM
-                Studio are additional options. You can also open Platform Vault to add a
+                Studio are additional options. You can also open User Vault to add a
                 cloud API key.
               </DialogDescription>
             </DialogHeader>
@@ -326,7 +326,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No .gguf models found in your models directory. Add one, or use cloud keys in
-                  Platform Vault. Ollama and LM Studio connect flows are coming as
+                  User Vault. Ollama and LM Studio connect flows are coming as
                   additional local backends.
                 </p>
               )}
@@ -352,7 +352,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                   onClick={() => openPlatformVault("api-keys")}
                   disabled={loading}
                 >
-                  Open Platform Vault
+                  Open User Vault
                 </Button>
                 <Button
                   variant="secondary"
@@ -393,7 +393,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                   className="text-foreground underline underline-offset-4"
                   onClick={onOpenVault}
                 >
-                  Platform Vault → Search
+                  User Vault → Search
                 </Link>
                 . Self-host may fall back without Exa; Cloud prefers a tenant Exa key for web
                 tools.
@@ -405,7 +405,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button onClick={() => openPlatformVault("search")} disabled={loading}>
-                  Open Platform Vault
+                  Open User Vault
                 </Button>
                 <Button
                   variant="outline"
@@ -425,7 +425,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
               <DialogTitle>Ready</DialogTitle>
               <DialogDescription>
                 {saas
-                  ? "Open Chat and talk to Intelligence. Add or change keys anytime in Platform Vault."
+                  ? "Open Chat and talk to Intelligence. Add or change keys anytime in User Vault."
                   : "Open Chat and talk to Intelligence. Browse Marketplace for starter packs anytime."}
               </DialogDescription>
             </DialogHeader>

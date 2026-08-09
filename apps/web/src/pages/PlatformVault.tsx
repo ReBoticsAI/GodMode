@@ -60,8 +60,8 @@ export default function PlatformVault() {
   return (
     <Page>
       <PageHeader
-        title="Platform Vault"
-        description="Shared platform credentials: GodMode Cloud seats, LLM subscriptions, API keys, and Exa. Agents fall back here when they have no key of their own."
+        title="User Vault"
+        description="Your account Connect credentials: GodMode Cloud seats, LLM subscriptions, API keys, and Exa. Shared across your workspaces. Agents fall back here when they have no key of their own. Optional per-workspace overrides stay on that workspace."
       />
       <PlatformVaultPanel
         section={platformSection}
@@ -89,7 +89,7 @@ function PlatformVaultPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRoundIcon className="size-4" />
-          Platform Vault
+          User Vault
         </CardTitle>
         <CardDescription>
           Shared platform credentials for this workspace. Personal connects

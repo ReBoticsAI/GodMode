@@ -3,19 +3,19 @@ slug: vault
 title: "Personal Vault"
 section: "Productivity"
 location: "/vault"
-summary: "Personal connect hub for integrations, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Platform Vault. Storage lives in Settings → Storage."
+summary: "Personal connect hub for integrations, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in User Vault. Storage lives in Settings → Storage."
 ---
 # Personal Vault
 
 ![vault in GodMode](/features/vault.png)
 
-**Personal Vault** is the user connect hub for personal credentials and account connects. Chat → an agent's **Agent Vault** tab opens that agent's private vault. Platform credentials (GodMode Cloud, LLM keys, Exa) live under **Platform Vault** in the sidebar. Database usage and workspace export live under **Settings → Storage**.
+**Personal Vault** is the user connect hub for personal credentials and account connects. Chat → an agent's **Agent Vault** tab opens that agent's private vault. Account Connect credentials (GodMode Cloud seats, LLM keys, Exa) live under **User Vault** in the sidebar and are stored on that account’s **User** database (shared across workspaces). Database usage and workspace export live under **Settings → Storage**.
 
 ## Three vaults
 
 | Vault | Surface | Contents |
 |-------|---------|----------|
-| **Platform** | Sidebar **Platform Vault** (`/settings/vault`) | GodMode Cloud seats, LLM subscriptions, API keys, Exa / search, platform secrets |
+| **User** | Sidebar **User Vault** (`/settings/vault`) | GodMode Cloud seats, LLM subscriptions, API keys, Exa / search, account Connect secrets |
 | **Personal** | Sidebar **Personal Vault** (`/vault`) | GitHub, Wallets & Accounts (personal), Marketplace, user secrets |
 | **Agent** | Agent sidebar / panel **Agent Vault** tab, or `/vault?agent=<id>` | Secrets and Wallets & Accounts for that agent (no Inference) |
 
@@ -26,9 +26,12 @@ There is no owner Select picker. Each surface is scoped to one vault.
 When an agent runs:
 
 1. That **Agent** Vault secrets (if a matching secret exists)
-2. **Platform** Vault
+2. **Workspace** platform override (optional project-specific key on the active workspace DB)
+3. **User Vault** (account User DB; shared across that user’s workspaces)
 
-Personal Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged. Inference Connect cards (Subscriptions, API Keys, Search) are Platform-only under Platform Vault.
+Personal Vault credentials are never used as LLM or Exa fallback. Env vars (for example `OPENAI_API_KEY`) still win when set. Chat model picker behavior is unchanged. Inference Connect cards (Subscriptions, API Keys, Search) are User Vault-only under User Vault.
+
+Doctrine: do **not** pool consumer subscription tokens across different Cloud users. Same-user multi-workspace sharing via User Vault is intentional. Keys are not stored in the host control-plane `core.sqlite`.
 
 ## Personal Vault tabs (`/vault`)
 
@@ -52,11 +55,13 @@ Seller **Stripe Connect** for Community payouts. Marketplace → Sell links here
 
 Free-form secrets in the Personal Vault (`owner_kind=user`). Prefer named Connect cards when one exists.
 
-## Platform Vault
+## User Vault
 
-Sidebar label **Platform Vault**. Deep link: `/settings/vault?vault=cloud|inference|secrets` (Inference subs: `&sub=subscriptions|api-keys|search`).
+Sidebar label **User Vault** (formerly Platform Vault). Deep link: `/settings/vault?vault=cloud|inference|secrets` (Inference subs: `&sub=subscriptions|api-keys|search`).
 
 Legacy `/settings/platform?tab=vault&…` redirects here. Legacy `/vault?tab=cloud`, `/vault?tab=billing`, and `/vault?tab=inference` also redirect here. Agent Vault `?tab=inference` (or `?tab=search`) redirects here too.
+
+Storage: per-account `users/<userId>.sqlite`. Optional workspace-only overrides use the active `tenants/<workspaceId>.sqlite`. See [multi-tenant model](../multi-tenant-model.md).
 
 ### GodMode Cloud
 
@@ -80,7 +85,7 @@ Use your plan (billed by the provider):
 | Kimi Code | `kimi-code-api-key` | `kimi-code` | [Kimi Code](https://www.kimi.com/code/docs/en/) |
 | Poe | `poe-api-key` | `poe` | [Poe API](https://creator.poe.com/docs/external-applications/openai-compatible-api) |
 
-Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). OpenCode Zen uses `https://opencode.ai/zen/v1` (detect Go `…/zen/go` before Zen). DigitalOcean Inference uses `https://inference.do-ai.run/v1` with a model access key (not account OAuth). Snowflake Cortex uses a PAT plus account URL normalized to `https://<account>.snowflakecomputing.com/api/v2/cortex/v1`. MiniMax Token Plan shares `https://api.minimax.io/v1` with payg but uses a distinct subscription secret id (`minimax-token-api-key`). Kimi Code uses `https://api.kimi.com/coding/v1` (not Moonshot payg). Poe uses `https://api.poe.com/v1` and spends the key owner's subscription points. Per-tenant keys only. Do not pool consumer subscription tokens on Cloud.
+Z.AI Coding Plan uses the coding-only base URL (`https://api.z.ai/api/coding/paas/v4`), not general payg (`/api/paas/v4`). OpenCode Zen uses `https://opencode.ai/zen/v1` (detect Go `…/zen/go` before Zen). DigitalOcean Inference uses `https://inference.do-ai.run/v1` with a model access key (not account OAuth). Snowflake Cortex uses a PAT plus account URL normalized to `https://<account>.snowflakecomputing.com/api/v2/cortex/v1`. MiniMax Token Plan shares `https://api.minimax.io/v1` with payg but uses a distinct subscription secret id (`minimax-token-api-key`). Kimi Code uses `https://api.kimi.com/coding/v1` (not Moonshot payg). Poe uses `https://api.poe.com/v1` and spends the key owner's subscription points. Per-account User Vault keys only. Do not pool consumer subscription tokens across different Cloud users.
 
 Active #355 OAuth residual: GitHub Copilot, GitLab Duo, and xAI SuperGrok / X Premium. ChatGPT Codex OAuth is out of scope (grey ToS). Amazon Q / Kiro is deferred / later. See [Vault OAuth subscription providers](./vault-oauth-subscriptions.md).
 
@@ -105,15 +110,15 @@ Metered BYOK with named Connect cards:
 
 ### Search
 
-**Exa** Connect stores Platform secret `exa_api_key`. No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
+**Exa** Connect stores User Vault secret `exa_api_key`. No Intelligence harness Apply; Exa is for `web_search` and `fetch_url` only.
 
 1. Sign up at [dashboard.exa.ai](https://dashboard.exa.ai) and create an API key.
-2. Connect the key on Platform Vault → Inference → Search → Exa.
+2. Connect the key on User Vault → Inference → Search → Exa.
 3. If Exa blocks for exhausted credits, add credits or wait for the monthly free refresh at [Exa billing](https://dashboard.exa.ai/billing).
 
-GodMode Cloud routes agent `web_search` and `fetch_url` through [Exa](https://exa.ai) so egress uses Exa's network instead of the shared VPS IP. Cloud requires **tenant BYOK** (no platform shared key).
+GodMode Cloud routes agent `web_search` and `fetch_url` through [Exa](https://exa.ai) so egress uses Exa's network instead of the shared VPS IP. Cloud requires **account BYOK** via User Vault (no platform shared key).
 
-Self-host / local: Exa is optional. When `exa_api_key` is present on Agent secrets or Platform, web tools use Exa; otherwise they keep the DuckDuckGo / direct-fetch fallback.
+Self-host / local: Exa is optional. When `exa_api_key` is present on Agent secrets or User Vault, web tools use Exa; otherwise they keep the DuckDuckGo / direct-fetch fallback.
 
 See [[cursor-cloud]].
 
@@ -126,19 +131,19 @@ Tabs:
 - **Secrets**: free-form agent secrets (`owner_kind=agent`)
 - **Wallets & Accounts**: wallet and account connects for that agent (`?tab=wallets`)
 
-No Inference UI. Platform Inference lives under Platform Vault. No Select; no Personal Vault tabs (GitHub, Marketplace, etc.).
+No Inference UI. Inference Connect lives under User Vault. No Select; no Personal Vault tabs (GitHub, Marketplace, etc.).
 
 ## Schema note
 
-`ai_secrets.owner_kind` is `platform` | `user` | `agent`. `agent_id` is set only for agent rows. Name uniqueness is per `(owner_kind, agent_id)`.
+`ai_secrets.owner_kind` is `platform` | `user` | `agent`. On the **User** DB, Connect cards use `owner_kind=platform` for User Vault. On a **Workspace** DB, the same kind is an optional override (or Agent when `agent_id` is set). Name uniqueness is per `(owner_kind, agent_id)` within each file.
 
 ## Route
 
 - Personal: `/vault` (tabs: `?tab=integrations|wallets|marketplace|secrets`; default `integrations`)
 - Agent: `/vault?agent=<id>` (tabs: `secrets|wallets`; default `secrets`)
-- Platform: `/settings/vault?vault=cloud|inference|secrets` (Inference: `&sub=…`)
+- User Vault: `/settings/vault?vault=cloud|inference|secrets` (Inference: `&sub=…`)
 - Storage: `/settings/platform?tab=storage` (usage + workspace data; see [[settings]])
-- Legacy `/settings/platform?tab=vault&…` redirects to Platform Vault
-- Legacy `?tab=search` / `?tab=inference` / `?tab=cloud` / `?tab=billing` on `/vault` redirect to Platform Vault
+- Legacy `/settings/platform?tab=vault&…` redirects to User Vault
+- Legacy `?tab=search` / `?tab=inference` / `?tab=cloud` / `?tab=billing` on `/vault` redirect to User Vault
 - Legacy `?tab=storage` on `/vault` redirects to Settings → Storage
 - Legacy Bank `?tab=wallets|accounts` redirects to `/vault?tab=wallets`

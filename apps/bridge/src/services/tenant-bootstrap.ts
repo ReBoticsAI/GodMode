@@ -18,6 +18,7 @@ import { ensureBuiltInStructure } from "./structure.js";
 import { slugFromEmail } from "./auth/session-store.js";
 import { hashPassword } from "./auth/password.js";
 import { getTenantDb, evictTenantDb } from "../tenant-registry.js";
+import { ensureUserDb } from "../user-registry.js";
 import { seedIntelligenceAgent, ensureAgentReflectionDefaults } from "./agents/agents-db.js";
 import { seedPersonalOsForNewTenant } from "./personal-os-seed.js";
 import { ensureWelcomeWikiPage } from "./welcome-wiki.js";
@@ -86,6 +87,8 @@ function upsertSystemUser(core: CoreDatabase): CoreUser {
      VALUES (?, ?, ?, NULL, 0)`
   ).run(SYSTEM_USER_ID, "local@godmode.platform", "Local User");
 
+  ensureUserDb(SYSTEM_USER_ID);
+
   return core
     .prepare("SELECT * FROM users WHERE id=?")
     .get(SYSTEM_USER_ID) as CoreUser;
@@ -97,6 +100,9 @@ export function createTenantForUser(
   name: string,
   slug: string
 ): string {
+  // User-level data plane: each account gets a User DB alongside Workspace DBs.
+  ensureUserDb(userId);
+
   const tenantId = uuidv4();
   const tenantPath = path.join(config.tenantsDir, `${tenantId}.sqlite`);
   const db = new Database(tenantPath);
@@ -198,6 +204,7 @@ function upsertAdminUser(
     user = core.prepare("SELECT * FROM users WHERE id=?").get(id) as CoreUser;
   }
 
+  ensureUserDb(user!.id);
   return core.prepare("SELECT * FROM users WHERE id=?").get(user!.id) as CoreUser;
 }
 

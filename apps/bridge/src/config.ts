@@ -145,6 +145,12 @@ export const config = {
   dbPath: path.join(appData, "platform.db"),
   /** Shared core DB: users, tenants, marketplace, credits, share grants. */
   coreDbPath: path.join(appData, "core.sqlite"),
+  /**
+   * Per-account User DB files ({usersDir}/<userId>.sqlite).
+   * Holds User Vault (Connect keys) and future personal-layer continuity.
+   * Distinct from Workspace tenant DBs and from the host control-plane core file.
+   */
+  usersDir: path.join(appData, "users"),
   /** Per-tenant workspace SQLite files ({tenantsDir}/<tenantId>.sqlite). */
   tenantsDir: path.join(appData, "tenants"),
   /** Per-tenant Intelligence sandbox workspaces ({tenantWorkspacesDir}/<tenantId>/). */

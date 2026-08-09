@@ -12,7 +12,7 @@ On SaaS, unverified users cannot call product APIs (`403 EMAIL_NOT_VERIFIED`). T
 
 Flags live in the tenant SQLite `ai_settings` table (`onboarding.completed`, `onboarding.llm_ready`). Browser `localStorage` is updated when the wizard finishes but is **not** the source of truth for showing it.
 
-On multi-tenant hubs, a process-wide `CURSOR_API_KEY` does **not** mark every workspace `llmReady`. Only a tenant Vault Cursor key (or an explicit `onboarding.llm_ready` flag) does.
+On multi-tenant hubs, a process-wide `CURSOR_API_KEY` does **not** mark every workspace `llmReady`. Only a User Vault Cursor key (or an explicit `onboarding.llm_ready` flag) does.
 
 ## Steps
 

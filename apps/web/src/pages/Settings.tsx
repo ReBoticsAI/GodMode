@@ -116,7 +116,7 @@ function PlatformVaultLinkCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRoundIcon className="size-4" />
-          Platform Vault
+          User Vault
         </CardTitle>
         <CardDescription>
           GodMode Cloud, Inference keys, and platform secrets live on their own
@@ -128,7 +128,7 @@ function PlatformVaultLinkCard() {
           to={platformVaultHref("inference")}
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
         >
-          Open Platform Vault
+          Open User Vault
         </Link>
       </CardContent>
     </Card>
@@ -348,7 +348,7 @@ export default function Settings() {
   const vaultSectionRaw = searchParams.get("vault");
   const tabRaw = searchParams.get("tab");
 
-  // Retired Settings → Vault tab: send deep links to Platform Vault.
+  // Retired Settings → Vault tab: send deep links to User Vault.
   useEffect(() => {
     if (!isLegacySettingsVaultDeepLink(tabRaw, vaultSectionRaw)) return;
     const p = new URLSearchParams();

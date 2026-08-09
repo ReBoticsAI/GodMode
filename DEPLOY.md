@@ -96,7 +96,7 @@ the origin host stays idle except when you ship.
 6. Set monthly/yearly Price IDs (`STRIPE_SAAS_PRICE_MONTHLY` /
    `STRIPE_SAAS_PRICE_YEARLY`) for the paywall plan picker.
 
-Paid customers manage billing from **Platform Vault → GodMode Cloud** (Stripe Customer
+Paid customers manage billing from **User Vault → GodMode Cloud** (Stripe Customer
 Portal). Platform admins see customers under **Admin → SaaS** (plan, status,
 last seen, Stripe link, disable access). `INITIAL_ADMINS` remain paywall-exempt
 and are not blocked when a subscription lapses.
@@ -204,7 +204,7 @@ state (including leases, retries, cancellation, idempotency, and recovery),
 event-consumer receipts, cross-database acquisition saga/outbox rows, and
 Intelligence-authored plugins. Back up the entire platform data directory before
 image upgrades, plugin lifecycle changes, or ObjectType schema changes. The
-release updater coordinates SQLite backups for `core.sqlite` and every tenant
+release updater coordinates SQLite backups for `core.sqlite`, every User DB, and every workspace tenant
 database, captures tenant workspaces and plugin locks, verifies integrity and
 hashes, and stores the snapshot outside the active data volume before
 replacement.

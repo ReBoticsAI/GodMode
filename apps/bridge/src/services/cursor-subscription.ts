@@ -105,7 +105,7 @@ export function upsertCursorApiKey(
 
 /**
  * If the key only exists as a manually-added `cursor_api_key` secret (UUID id)
- * in the Platform Vault, rewrite it to the fixed Cursor subscription secret id.
+ * in the User Vault, rewrite it to the fixed Cursor subscription secret id.
  */
 export function normalizeCursorVaultSecret(db: AppDatabase): void {
   if (getPlatformVaultSecretInScope(db, {

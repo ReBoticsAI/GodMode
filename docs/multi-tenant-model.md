@@ -2,9 +2,17 @@
 
 This document defines how the GodMode platform partitions data, routes requests, and handles collaboration and marketplace features.
 
-## Two-tier storage
+## Storage planes (User-level split)
 
-### Core database (`core.sqlite`)
+| Plane | Path | Scope |
+|-------|------|--------|
+| Host control plane | `core.sqlite` | Installation-wide identity, workspace registry, billing, marketplace registry, DMs/Support/Notifications (still one file; a later epic splits this into Cloud + Users) |
+| **User** | `users/<userId>.sqlite` | Per signed-up account: **User Vault** (Connect keys) and future personal-layer continuity |
+| **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, optional workspace key override |
+
+Mental model: one account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the User DB, not in `core.sqlite`.
+
+## Host control plane (`core.sqlite`)
 
 Global platform state shared across all workspaces:
 
@@ -26,7 +34,17 @@ Global platform state shared across all workspaces:
 
 Legacy `oauth_accounts` rows may exist from older installs; OSS core no longer writes to this table.
 
-### Per-tenant database (`tenants/<uuid>.sqlite`)
+### User database (`users/<userId>.sqlite`)
+
+One SQLite file per signed-up account (created on signup / first workspace).
+
+| Table group | Purpose |
+|-------------|---------|
+| `ai_secrets` (`owner_kind=platform`) | **User Vault** Connect secrets (Cursor, LLM keys, Exa, etc.), shared across that account’s workspaces |
+
+Personal Vault (`owner_kind=user`) and Agent Vault remain workspace-scoped today; moving personal chrome / Intelligence / Digital You onto the User DB is a follow-up.
+
+### Workspace database (`tenants/<uuid>.sqlite`)
 
 One SQLite file per workspace. Physical file selection provides isolation; most tables have no `tenant_id` column.
 
@@ -35,13 +53,18 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 | `structure_nodes` | Navigation structure and generic Record page metadata |
 | `ai_agents`, `ai_chats`, `ai_messages`, `ai_memories`, … | AI workspace |
 | `holdings_*` | Financial connections |
-| Wiki, kanban, calendar, vault tables | Productivity |
+| Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (User Vault Connect keys live on the User DB) |
+| `ai_secrets` workspace override | Optional project-specific Connect keys (`owner_kind=platform`) |
 | `gm_ot_*` | Native plugin ObjectType Records |
 | `kernel_action_idempotency`, `kernel_operation_runs`, action logs | Kernel action execution and audit state |
 | `events`, `event_consumer_receipts` | Durable declared-action events and consumer receipts |
 | `marketplace_acquisition_imports`, acquisition audit/outbox | Tenant half of clone acquisition saga |
 
 Domain-specific tables (trading, external integrations) are added by **plugins** when installed.
+
+### User Vault resolve order
+
+For LLM / Exa Connect secrets: process env (when checked) → Agent Vault (workspace) → workspace platform override → **User Vault** (account User DB). Personal Vault never feeds LLM/Exa. Different accounts never share User Vault rows.
 
 ## Tenant export (Cloud to local)
 
@@ -51,9 +74,9 @@ from Cloud Settings (**Download my database**), via `GET /api/tenant/database/do
 - Authz: session + membership; **owner** role only. Tenant id comes from membership
   resolution (`X-Tenant-Id` / session), never from a client-supplied filesystem path.
 - Snapshot: better-sqlite3 `backup()` API (not a raw copy of a live WAL-open file).
-- Scope: one `tenants/<tenantId>.sqlite` only. No `core.sqlite`, no other tenants,
-  no DuckDB analytics. Platform-admin DR of full stamps is a separate path (#243 /
-  Admin Observability).
+- Scope: one `tenants/<tenantId>.sqlite` only. No `core.sqlite`, no `users/*.sqlite`,
+  no other tenants, no DuckDB analytics. Platform-admin DR of full stamps is a
+  separate path (#243 / Admin Observability).
 - Rate-limited; success/failure audited in core `platform_action_log`
   (`tenant.database.download`). Response is `Cache-Control: no-store`.
 - Local import: place the file under `PLATFORM_DATA_DIR/tenants/` (or the desktop
