@@ -23,6 +23,7 @@ import { cn } from "../../../../packages/web-host/src/index";
 import { StructureTabGroupPage } from "@/components/StructureTabGroupPage";
 import { pageElementFor } from "@/lib/page-registry";
 import { webPluginRuntime } from "@/plugins/runtime";
+import * as HostUi from "@/plugins/host-ui";
 
 export type GodModePluginHost = {
   react: typeof React;
@@ -37,7 +38,7 @@ export type GodModePluginHost = {
     StructureTabGroupPage: typeof StructureTabGroupPage;
     pageElementFor: typeof pageElementFor;
     webPluginRuntime: typeof webPluginRuntime;
-  };
+  } & typeof HostUi;
   "@godmode/flow-core": typeof FlowCore;
   recharts: typeof Recharts;
   "use-sync-external-store/shim": { useSyncExternalStore: typeof useSyncExternalStore };
@@ -69,6 +70,7 @@ export function installPluginHostBridge(): void {
       StructureTabGroupPage,
       pageElementFor,
       webPluginRuntime,
+      ...HostUi,
     },
     "@godmode/flow-core": FlowCore,
     recharts: Recharts,

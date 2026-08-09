@@ -7,10 +7,10 @@ Use when the change adds ObjectTypes, routes, web pages, AI tools, department ty
 
 1. Read `docs/PLUGIN_AUTHORING.md` for manifest and register API shape.
 2. Prefer declaring **ObjectTypes**, operations/actions, and optional `records` seeds in `godmode.plugin.json`. Vocabulary: ObjectType / Field / Record (not DocType). Call `use_skill('object-types')` for metadata detail.
-3. `scaffold_plugin` with a kebab-case id creates `godmode.plugin.json`, `src/bridge.ts`, `src/web.ts`, and package.json under `plugins/<id>/`.
+3. `scaffold_plugin` with a kebab-case id creates `godmode.plugin.json`, `src/bridge.ts`, `src/web.tsx`, and package.json under `plugins/<id>/`.
 4. Bridge exports `register(api)`; web exports `registerWeb(api)`. Executable manifests declare `kernelApiVersion: 1`. Service-backed ObjectTypes use `api.objectTypes.register(definition, adapter)` and implement every declared capability.
 5. Seed StructureNode / domain Records in manifest `records` or `tenant:install`, then `build_plugin` → `install_plugin` (no Bridge restart for tools, ObjectTypes, `api.routes.mount`, or tenant:install).
-6. Web UI: call `use_skill('shadcn-ui')` for tokens/composition. On Intelligence/SaaS builds use `cn` from `@godmode/web-host` plus semantic classes (`bg-card`, `text-muted-foreground`, …). Do not import `@/components/ui` when `apps/web` is absent. Do not invent parallel UI kits or hand-rolled “shadcn-equivalent” Card/Button/Empty trees.
+6. Web UI: call `use_skill('shadcn-ui')` for tokens/composition. Import host shadcn from `@godmode/web-host` (`Button`, `Card`, `Empty`, `Badge`, `Alert`, `Tabs`, `Separator`, `Skeleton`, `cn`, …). Do not import `@/components/ui` on Intelligence/SaaS (no `apps/web`). Do not invent parallel UI kits or hand-rolled Card/Button/Empty trees.
 7. Custom Express routes must enforce authentication, tenant membership, and installed-plugin visibility. Prefer tools + ObjectTypes + tenant hooks when HTTP is unnecessary.
 8. Declare strict action schemas/policies (roles, confirmation, idempotency, concurrency, retry, timeout, cancellation). Verify `OperationRun` terminal state and tenant isolation.
 9. For public packs: `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
