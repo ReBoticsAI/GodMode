@@ -143,7 +143,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_project_card",
     description:
-      "Create a card on the Projects Kanban board. Set priority (1=high,2=med,3=low) and tags (e.g. [\"auto\"] to make it an autonomous Task the runner will execute). prompt holds the detailed goal for the runner.",
+      "Create a standing card on the user's Projects Kanban (work they asked to track outside the current chat run). Set priority (1=high,2=med,3=low) and tags (e.g. [\"auto\"] for the autonomous runner). prompt holds the detailed goal for the runner. Do NOT use this to plan your own Intelligence Active Work turn: use todo_write (it nests under the host-run card).",
     mode: "auto",
     parameters: {
       type: "object",
@@ -207,7 +207,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_subtask",
     description:
-      "Create a subtask under a parent card. Inherits the parent's project and priority; defaults to the In Progress column.",
+      "Create a subtask under an existing parent card (standing user Kanban work). Inherits the parent's project and priority; defaults to the In Progress column. Do NOT use this to build the chat Active Work plan hierarchy: use todo_write with nested subtasks under the host-run card instead.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -323,7 +323,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_user_task",
     description:
-      "Add a to-do item to the human USER's personal task board. This is NOT a notification/alert/message — when asked to 'create a notification', 'notify', or 'send a message', use create_notification instead. For your OWN work plan use todo_write / create_subtask.",
+      "Add a to-do item to the human USER's personal task board. This is NOT a notification/alert/message — when asked to 'create a notification', 'notify', or 'send a message', use create_notification instead. For your OWN Active Work chat plan use todo_write only (not create_subtask / create_project_card).",
     mode: "confirm",
     parameters: {
       type: "object",
@@ -411,7 +411,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "todo_write",
     description:
-      "Create or update your task list. Each item is persisted as a card on your Kanban board (pending→Backlog, in_progress→In Progress, completed/cancelled→Done) and also renders as a live in-chat checklist. Use for multi-step work: pass the FULL list each time with updated statuses; re-running updates the same cards (keyed by item id) instead of duplicating. Keep exactly one item 'in_progress'. Parent items with nested subtasks are auto-tagged for the autonomous executor (resume after backtests). Optional maxTaskTicks (default 200) on the parent or at the top level for long optimization runs.",
+      "Create or update your Active Work plan for this chat. Items nest under the host-run card by default (do not create_project_card a parallel parent). Persist as Kanban cards (pending→Backlog, in_progress→In Progress, completed/cancelled→Done) and as a live in-chat checklist. For multi-step work: ONE parent with nested subtasks (exactly one in_progress); pass the FULL nested list each time with updated statuses so cards update in place. Parent items with nested subtasks are auto-tagged for the autonomous executor. Optional maxTaskTicks (default 200) on the parent or top level for long runs.",
     mode: "auto",
     parameters: {
       type: "object",
