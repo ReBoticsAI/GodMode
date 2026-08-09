@@ -134,11 +134,50 @@ export const register: GodModePluginRegister = (api) => {
     "utf8"
   );
   fs.writeFileSync(
-    path.join(pluginRoot, "src", "web.ts"),
+    path.join(pluginRoot, "src", "web.tsx"),
     `import type { GodModeWebPluginRegister } from "@godmode/plugin-api";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+  cn,
+} from "@godmode/web-host";
 
-export const registerWeb: GodModeWebPluginRegister = () => {
-  /* Register web routes or sidebar entries */
+function WelcomePage() {
+  return (
+    <div className={cn("mx-auto flex max-w-lg flex-col gap-6 p-6")}>
+      <Card>
+        <CardHeader>
+          <CardTitle>${displayName.replace(/`/g, "\\`")}</CardTitle>
+          <CardDescription>
+            Host shadcn components via @godmode/web-host.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button type="button">Get started</Button>
+        </CardContent>
+      </Card>
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>Nothing here yet</EmptyTitle>
+          <EmptyDescription>
+            Add pages and ObjectTypes as the plugin grows.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    </div>
+  );
+}
+
+export const registerWeb: GodModeWebPluginRegister = (api) => {
+  api.pageKinds.register([{ kind: "${id}-welcome", component: WelcomePage }]);
 };
 `,
     "utf8"
