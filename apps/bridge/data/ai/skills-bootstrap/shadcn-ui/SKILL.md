@@ -67,11 +67,17 @@ import { cn } from "@/lib/utils";
 
 ## Plugins
 
-Plugin pages follow the same tokens and composition rules, but the import path depends on the coding root:
+Plugin pages use the same shadcn components and tokens as the host. Prefer importing the curated set from `@godmode/web-host` so SaaS `build_plugin` and Marketplace packs share host instances:
 
-- **`apps/web` present (full monorepo / some Marketplace packs):** prefer `@/components/ui/*` and `cn` from `@/lib/utils` when aliases are configured. Never bundle host singletons.
-- **Intelligence / SaaS tenant coding root (usually no `apps/web`):** do **not** import `@/components/ui`. Use semantic tokens and `cn` from `@godmode/web-host`. Do not reimplement Card/Button/Empty and claim they are shadcn. Keep markup simple until host UI primitives are exported on `@godmode/web-host`.
+```typescript
+import { Button, Card, CardContent, Empty, cn } from "@godmode/web-host";
+```
+
+Curated exports: `cn`, `Button` / `buttonVariants`, `Card` family, `Empty` family, `Badge` / `badgeVariants`, `Alert` family, `Separator`, `Skeleton`, `Tabs` family, plus host singletons (`StructureTabGroupPage`, `pageElementFor`, `webPluginRuntime`).
+
+- **Intelligence / SaaS:** always use `@godmode/web-host` for UI. Do **not** import `@/components/ui` (aliases are absent). Do not hand-roll Card/Button/Empty shells.
+- **Full monorepo:** `@/components/ui/*` may work when aliases exist; still prefer `@godmode/web-host` for plugin bundles so externals stay consistent. Never bundle host singletons via `@/`.
 
 ## Scope
 
-GodMode web UI is shared across all workspaces. Prefer edits under `apps/web/src/pages/**` and `@/components/ui` when that tree exists. For plugin-only SaaS work, follow the Plugins section above.
+GodMode web UI is shared across all workspaces. Prefer edits under `apps/web/src/pages/**` and `@/components/ui` when changing host chrome. For plugin pages, follow the Plugins section above.

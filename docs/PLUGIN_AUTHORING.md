@@ -242,25 +242,33 @@ The host serves a browser import map so plugin bundles share one copy of React, 
 
 Do not bundle these into `dist/web.js` — the host resolves them at runtime.
 
-### Host singletons (`@godmode/web-host`)
+### Host UI and singletons (`@godmode/web-host`)
 
-Some host modules must be the **same instance** as the main app (plugin page registry, structure tabs, React context). If you bundle them via a `@/` alias, you get a second copy and tab pages fall back to placeholders.
-
-Import host singletons from `@godmode/web-host` instead of `@/…`:
+Plugins must share the **same** React and UI instances as the main app. Import host presentational shadcn components and singletons from `@godmode/web-host` (not `@/components/ui` on SaaS, and never bundle a second copy via a `@/` alias):
 
 ```typescript
-import { StructureTabGroupPage } from "@godmode/web-host";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+  cn,
+  StructureTabGroupPage,
+} from "@godmode/web-host";
 ```
 
-Add `"@godmode/web-host"` to your web `external` list in `tsup.config.ts`.
+Curated v1 exports: `cn`, `Button` / `buttonVariants`, `Card` (+ header/title/description/content/footer/action), `Empty` (+ header/title/description/content/media), `Badge` / `badgeVariants`, `Alert` (+ title/description/action), `Separator`, `Skeleton`, `Tabs` (+ list/trigger/content), plus `StructureTabGroupPage`, `pageElementFor`, `webPluginRuntime`.
 
-### Plugin UI (two paths)
+Intelligence `build_plugin` externalizes `@godmode/web-host`, `react`, `react/jsx-runtime`, `react-dom`, `react-router-dom`, `lucide-react`, and `sonner` so the host import map resolves them. For Marketplace `tsup`, add the same modules to your web `external` list.
 
-Call `use_skill('shadcn-ui')` for semantic tokens and composition rules before building plugin pages.
+Call `use_skill('shadcn-ui')` for tokens and composition rules. Do **not** hand-roll Card/Button/Empty shells and call them shadcn. Do **not** adopt third-party UI kits.
 
-**Intelligence / SaaS `build_plugin`:** Tenant coding roots usually have no `apps/web`. Do **not** import `@/components/ui/*` (aliases and shadcn source are not available). Use semantic tokens (`bg-card`, `text-muted-foreground`, `border-border`, …) and `cn` from `@godmode/web-host`. Do **not** hand-roll Card/Button/Empty shells and call them shadcn. Prefer simple markup that matches host tokens until host UI primitives ship on `@godmode/web-host`.
-
-**Full monorepo / Marketplace tsup:** Presentational `@/` imports (buttons, cards, `PageHeader`) may work when aliases and externals are configured. Never bundle host singletons via `@/`.
+**Full monorepo / Marketplace tsup:** Presentational `@/` imports may still work when aliases are configured. Prefer `@godmode/web-host` for anything that must match host chrome. Never bundle host singletons via `@/`.
 
 Define `import.meta.env.*` in the web build if you bundle host `@/api` code — the host inlines those at compile time; plugin bundles do not.
 

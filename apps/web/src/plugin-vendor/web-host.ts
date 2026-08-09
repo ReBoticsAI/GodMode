@@ -6,3 +6,4 @@ export { cn } from "../../../../packages/web-host/src/index";
 export { StructureTabGroupPage } from "@/components/StructureTabGroupPage";
 export { pageElementFor } from "@/lib/page-registry";
 export { webPluginRuntime } from "@/plugins/runtime";
+export * from "@/plugins/host-ui";

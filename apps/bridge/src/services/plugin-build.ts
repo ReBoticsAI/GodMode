@@ -13,7 +13,19 @@ import {
 } from "./authority/deploy-authority.js";
 import { PluginLoopError } from "./plugin-loop-error.js";
 
-const EXTERNAL = ["@godmode/plugin-api", "@godmode/plugin-host"];
+const BRIDGE_EXTERNAL = ["@godmode/plugin-api", "@godmode/plugin-host"];
+
+/** Host import-map modules: must not be bundled into plugin dist/web.js. */
+const WEB_EXTERNAL = [
+  ...BRIDGE_EXTERNAL,
+  "react",
+  "react/jsx-runtime",
+  "react-dom",
+  "react-router-dom",
+  "lucide-react",
+  "sonner",
+  "@godmode/web-host",
+];
 
 export type PluginBuildAuthorityOpts = DeployAssertOpts;
 
@@ -92,7 +104,7 @@ async function buildPluginWithEsbuildUnchecked(
     platform: "node",
     format: "esm",
     target: "node22",
-    external: EXTERNAL,
+    external: BRIDGE_EXTERNAL,
     logLevel: "silent",
   });
   outputs.push(bridgeOut);
@@ -107,7 +119,8 @@ async function buildPluginWithEsbuildUnchecked(
       platform: "browser",
       format: "esm",
       target: "es2022",
-      external: EXTERNAL,
+      jsx: "automatic",
+      external: WEB_EXTERNAL,
       logLevel: "silent",
     });
     outputs.push(webOut);

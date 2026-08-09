@@ -131,8 +131,21 @@ describe("plugin loop reliability (#433)", () => {
       "tenant-workspaces/tenant-a/plugins/pipeline-bar"
     );
 
+    expect(
+      fs.existsSync(path.join(scaffold.pluginRoot, "src", "web.tsx"))
+    ).toBe(true);
+
     const built = await buildPluginWithEsbuild(scaffold.pluginRoot);
     expect(built.ok).toBe(true);
+
+    const webJs = fs.readFileSync(
+      path.join(scaffold.pluginRoot, "dist", "web.js"),
+      "utf8"
+    );
+    expect(webJs).toMatch(/from\s*["']@godmode\/web-host["']/);
+    expect(webJs).toMatch(/from\s*["']react\/jsx-runtime["']/);
+    expect(webJs).not.toMatch(/function Button\b/);
+    expect(webJs).not.toMatch(/function Card\b/);
 
     const core = memoryCore();
     const activated = await activatePluginForTenant(
