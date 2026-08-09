@@ -10,7 +10,9 @@ Use when the change adds ObjectTypes, routes, web pages, AI tools, department ty
 3. `scaffold_plugin` with a kebab-case id creates `godmode.plugin.json`, `src/bridge.ts`, `src/web.ts`, and package.json under `plugins/<id>/`.
 4. Bridge exports `register(api)`; web exports `registerWeb(api)`. Executable manifests declare `kernelApiVersion: 1`. Service-backed ObjectTypes use `api.objectTypes.register(definition, adapter)` and implement every declared capability.
 5. Seed StructureNode / domain Records in manifest `records` or `tenant:install`, then `build_plugin` → `install_plugin` (no Bridge restart for tools, ObjectTypes, `api.routes.mount`, or tenant:install).
-6. Custom Express routes must enforce authentication, tenant membership, and installed-plugin visibility. Prefer tools + ObjectTypes + tenant hooks when HTTP is unnecessary.
-7. Declare strict action schemas/policies (roles, confirmation, idempotency, concurrency, retry, timeout, cancellation). Verify `OperationRun` terminal state and tenant isolation.
-8. For public packs: `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
-9. Ship coding-root changes with `git_*` tools; use Official GitHub plugin tools for PRs when installed.
+6. Web UI: call `use_skill('shadcn-ui')` for tokens/composition. On Intelligence/SaaS builds use `cn` from `@godmode/web-host` plus semantic classes (`bg-card`, `text-muted-foreground`, …). Do not import `@/components/ui` when `apps/web` is absent. Do not invent parallel UI kits or hand-rolled “shadcn-equivalent” Card/Button/Empty trees.
+7. Custom Express routes must enforce authentication, tenant membership, and installed-plugin visibility. Prefer tools + ObjectTypes + tenant hooks when HTTP is unnecessary.
+8. Declare strict action schemas/policies (roles, confirmation, idempotency, concurrency, retry, timeout, cancellation). Verify `OperationRun` terminal state and tenant isolation.
+9. For public packs: `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
+10. Ship coding-root changes with `git_*` tools; use Official GitHub plugin tools for PRs when installed.
+11. After `use_skill('plugin-authoring')`, prefer `scaffold_plugin` (or edit under `plugins/<id>/`) over long host-repo archaeology. Few explore tools before the first write on Tier-2 asks.
