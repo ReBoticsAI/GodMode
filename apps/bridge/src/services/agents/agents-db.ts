@@ -1203,7 +1203,7 @@ export function removePlatformVaultSecret(
 ): boolean {
   if (opts.agentId) {
     const owner = vaultOwnerFromAgentScope(opts.agentId);
-    const scope = owner.agentId;
+    const scope = owner.kind === "agent" ? owner.agentId : null;
     const rowId = platformVaultSecretId(opts.baseId, scope);
     const clause = secretOwnerClause(owner);
     return (
