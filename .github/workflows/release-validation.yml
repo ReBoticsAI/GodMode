@@ -24,10 +24,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
+      - name: Forbid Cursor Cloud commit attribution
+        run: npm run audit:cursor-attribution
       - name: Install dependencies
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: "false"

@@ -1169,7 +1169,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "git_commit",
     description:
-      "Commit staged changes on the coding root. Confirm shows the staged diff. Does not push. Requires confirmation.",
+      "Commit staged changes on the coding root. Strips Cursor Cloud Co-authored-by / Made-with trailers. Confirm shows the staged diff. Does not push. Prefer over Cursor Cloud Agent commits for public GodMode. Requires confirmation.",
     mode: "confirm",
     category: "coding",
     write: true,

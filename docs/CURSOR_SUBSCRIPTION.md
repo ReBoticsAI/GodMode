@@ -63,7 +63,7 @@ On hub/client Linux, `CURSOR_SDK_SANDBOX=required` (default) enables SDK `sandbo
 
 ## System prompt shape (Cursor parity)
 
-GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v4`, prompt-flow v4):
+GodMode assembles the Intelligence system prompt in a Cursor-like heading order (`HARNESS_VERSION` `cursor-parity-v5`, prompt-flow v4):
 
 1. Identity: agent profile, user context, base prompt
 2. Early harness: communication, tool-calling policy, search/reading, citations
