@@ -136,6 +136,7 @@ export const register: GodModePluginRegister = (api) => {
   fs.writeFileSync(
     path.join(pluginRoot, "src", "web.tsx"),
     `import type { GodModeWebPluginRegister } from "@godmode/plugin-api";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -151,24 +152,27 @@ import {
 } from "@godmode/web-host";
 
 function WelcomePage() {
+  const navigate = useNavigate();
   return (
     <div className={cn("mx-auto flex max-w-lg flex-col gap-6 p-6")}>
       <Card>
         <CardHeader>
           <CardTitle>${displayName.replace(/`/g, "\\`")}</CardTitle>
           <CardDescription>
-            Host shadcn components via @godmode/web-host.
+            Host shadcn components via @godmode/web-host. Wire primary Buttons to navigate or mutate.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button type="button">Get started</Button>
+          <Button type="button" onClick={() => navigate("/${id}")}>
+            Open ${displayName.replace(/`/g, "\\`")}
+          </Button>
         </CardContent>
       </Card>
       <Empty>
         <EmptyHeader>
           <EmptyTitle>Nothing here yet</EmptyTitle>
           <EmptyDescription>
-            Add pages and ObjectTypes as the plugin grows.
+            Seed Structure pages in tenant:install and prefer host record-list for CRUD. Do not ship decorative Buttons.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>

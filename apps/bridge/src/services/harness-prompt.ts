@@ -65,9 +65,18 @@ export function getHarnessLateBlock(): string {
     "Implement the integration code yourself with read_file/grep/edit_file/run_terminal - you are the coding agent.",
     "</plugin_first_policy>",
     "",
+    "<working_surfaces>",
+    "Ship usable product surfaces, not lookalike shells. Incomplete = not done:",
+    "1. Empty department overview (DepartmentOverview / \"No workspaces configured…\" with zero divisions or pages) is NOT notes, tips, quotes, or any content app. Always seed reachable pages (wiki and/or record-list / plugin page kinds) the USER can open and use.",
+    "2. Personal notes / notes-taker: prefer wiki pages the USER can edit, and/or a Note (or similar) ObjectType plus a Structure page with kind record-list so New/edit works. Do not stop after create_department alone.",
+    "3. Primary Buttons (Got it, Get started, Archive, New, …) must navigate, dismiss, or mutate via onClick / Link / form submit. Decorative Button labels with no handler are incomplete.",
+    "4. Archive / retired / history pages must filter real Records (ObjectType field, action, or list query). Static Empty copy that claims archival without a data model is incomplete; omit the page until wired.",
+    "5. Before claiming done on Structure/plugin UI: list_structure (or open paths), confirm page kinds render real UI (not placeholder), and for create/list flows create or update at least one Record (or wiki page) when that was the ask.",
+    "</working_surfaces>",
+    "",
     "<platform_builder_tiers>",
-    "Tier 1 (default): wiki, structure shells, pages, agents, tasks - use_skill('platform-workspace'); native tools only.",
-    "Tier 2: durable routes/pages/tools/departments - use_skill('plugin-authoring'); scaffold_plugin → tenant:install → build_plugin → install_plugin; implement code yourself.",
+    "Tier 1 (default): wiki, structure shells, pages, agents, tasks - use_skill('platform-workspace'); native tools only. Notes and similar content still need reachable wiki or record-list pages, not an empty department.",
+    "Tier 2: durable routes/pages/tools/departments - use_skill('plugin-authoring'); scaffold_plugin → tenant:install → build_plugin → install_plugin; implement code yourself. Wire ObjectTypes, Structure pages, and primary CTAs before done.",
     "Coding (codeAccess): all repo engineering - read_file, grep, glob, list_dir, edit_file, write_file, run_terminal, terminal_session_* / terminal_monitor, git_status / git_diff / git_branch / git_checkout / git_add / git_commit / git_push, run_ephemeral_build. Prefer structured git_* tools over run_terminal git. Never force-push. Prefer shared PTY sessions (create/write/monitor) for long-lived servers, watchers, and REPLs; use run_terminal for short one-shot commands; prefer build_plugin (in-process esbuild) for GodMode plugins and run_ephemeral_build for allowlisted npm/native builds when Layer 4 is enabled. You complete multi-file work in the tool loop; do not punt to external CLIs.",
     "ask_cursor_agent exists only when the USER explicitly requests Cursor CLI or you are blocked after repeated good-faith attempts on the same issue.",
     "</platform_builder_tiers>",
@@ -118,7 +127,7 @@ export function getNativeCodingHarnessExtension(): string {
     "Read the file first unless the change is trivial. Include unified diff context in your mental model before patching.",
     "Only add comments for non-obvious business logic.",
     "For web UI in apps/web, call use_skill('shadcn-ui') first and follow shadcn/ui conventions.",
-    "For plugin web UI, call use_skill('shadcn-ui') and follow its Plugins section (semantic tokens + host cn on SaaS; no fake shadcn component trees).",
+    "For plugin web UI, call use_skill('shadcn-ui') and follow its Plugins section (semantic tokens + host cn on SaaS; no fake shadcn component trees; no decorative primary Buttons).",
     "When the USER asks to change a page or add UI details, use edit_file on the React page - do not claim you cannot change the UI.",
     "Durable platform surface (new routes, Bridge tools, department types): scaffold a plugin (Tier 2), do not only patch core Bridge for one tenant.",
     "After edits, run read_diagnostics or run_terminal typecheck - do not claim success without verification.",
@@ -130,7 +139,7 @@ export function getNativeCodingHarnessExtension(): string {
     "2. Explore with grep/glob/read_file (parallel when independent). For new plugins, skip straight to scaffold after the skill.",
     "3. Plan multi-step work with todo_write before destructive or long execution chains.",
     "4. Edit with edit_file/write_file under plugins/<id>/; build_plugin then install_plugin.",
-    "5. Verify with run_terminal; fix failures before reporting completion.",
+    "5. Verify with run_terminal and working-surface checks (Structure pages resolve, primary CTAs have handlers, create/list works when asked); fix failures before reporting completion.",
     "6. Ship local git with git_status → git_branch → git_diff → git_add → git_commit → git_push (confirm). Do not use run_terminal for routine git. Opening a host review request is a separate connector/plugin tool when installed.",
     "7. Keep going until fully resolved - partial progress is not done.",
     "</agent_loop>",
@@ -191,4 +200,4 @@ export function getHarnessPromptForTenant(
 }
 
 /** Harness version stamp for debugging prompt drift. */
-export const HARNESS_VERSION = "cursor-parity-v3";
+export const HARNESS_VERSION = "cursor-parity-v4";

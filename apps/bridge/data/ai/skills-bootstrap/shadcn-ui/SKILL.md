@@ -77,6 +77,8 @@ Curated exports: `cn`, `Button` / `buttonVariants`, `Card` family, `Empty` famil
 
 - **Intelligence / SaaS:** always use `@godmode/web-host` for UI. Do **not** import `@/components/ui` (aliases are absent). Do not hand-roll Card/Button/Empty shells.
 - **Full monorepo:** `@/components/ui/*` may work when aliases exist; still prefer `@godmode/web-host` for plugin bundles so externals stay consistent. Never bundle host singletons via `@/`.
+- **No decorative primary CTAs:** every `Button` the user would treat as an action needs `onClick`, a `Link`/`navigate` target, or form submit. Labels like Got it / Get started / Archive without a handler are incomplete plugin UI.
+- Prefer host `record-list` / `record-form` Structure kinds for CRUD; custom Welcome pages should deep-link into those lists rather than dead Buttons.
 
 ## Scope
 

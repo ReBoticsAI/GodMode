@@ -95,7 +95,7 @@ const CURSOR_AUTO_HARNESS_DELTA = [
   "Memory and wiki sections in this prompt are already retrieved — do not re-probe them with tools unless the user asks for a full page or deeper search.",
   "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
   "Prefer one purposeful tool turn. Use GodMode coding/plugin tools for real engineering tasks.",
-  "Plugin asks: use_skill('plugin-authoring') → scaffold_plugin or edit plugins/<id> → build_plugin → install_plugin. Do not web_search or deep-grep the host for shadcn primitives missing from the coding root.",
+  "Plugin asks: use_skill('plugin-authoring') → scaffold_plugin or edit plugins/<id> → build_plugin → install_plugin. Wire ObjectTypes, Structure pages, and primary Button handlers; no decorative CTAs or empty department-only shells. Do not web_search or deep-grep the host for shadcn primitives missing from the coding root.",
   "</model_profile>",
 ].join("\n");
 
@@ -105,7 +105,7 @@ const CURSOR_COMPOSER_HARNESS_DELTA = [
   "Greetings: answer briefly with no tools. For engineering work, use GodMode coding tools deliberately.",
   "Memory and wiki sections are already retrieved — deep-read wiki only when docs are clearly needed.",
   "Prefer structured edits and verification over exploratory tool spam.",
-  "Plugin asks: use_skill('plugin-authoring') → scaffold/edit under plugins/<id> → build_plugin → install_plugin. Avoid host archaeology and web_search for UI kits not in the coding root.",
+  "Plugin asks: use_skill('plugin-authoring') → scaffold/edit under plugins/<id> → build_plugin → install_plugin. Working UX: wired CTAs, seeded pages, real archive/list data. Avoid host archaeology and web_search for UI kits not in the coding root.",
   "</model_profile>",
 ].join("\n");
 
@@ -116,7 +116,7 @@ const CURSOR_GROK_HARNESS_DELTA = [
   "Memory and wiki sections are already retrieved — do not re-probe unless the user needs a full page.",
   "Use discovery tools only when the USER asks about agents or tool inventory.",
   "For coding tasks prefer purposeful GodMode tools; for analysis prefer clear reasoning then tools when needed.",
-  "Plugin asks: skill → scaffold/edit → build → install; do not thrash on host searches for missing shadcn imports.",
+  "Plugin asks: skill → scaffold/edit → build → install; wire CTAs and Structure pages (no empty dept shells / decorative Buttons); do not thrash on host searches for missing shadcn imports.",
   "</model_profile>",
 ].join("\n");
 
