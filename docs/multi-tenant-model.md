@@ -2,19 +2,20 @@
 
 This document defines how the GodMode platform partitions data, routes requests, and handles collaboration and marketplace features.
 
-## Storage planes (User-level split)
+## Storage planes (Cloud + Users + User + Workspace)
 
 | Plane | Path | Scope |
 |-------|------|--------|
-| Host control plane | `core.sqlite` | Installation-wide identity, workspace registry, billing, marketplace registry, DMs/Support/Notifications (still one file; a later epic splits this into Cloud + Users) |
-| **User** | `users/<userId>.sqlite` | Per signed-up account: **User Vault** (Connect keys) and future personal-layer continuity |
+| **Cloud** (host) | `core.sqlite` (Cloud plane; also archived as `Cloud.sqlite` in backups) | Identity, workspace registry, billing, marketplace registry, shares, releases |
+| **Users** (host hub) | `Users.sqlite` | Cross-account hub: DMs, Support, Notifications, platform groups |
+| **User** (per account) | `users/<userId>.sqlite` | **User Vault** (Connect keys) and future personal-layer continuity |
 | **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, optional workspace key override |
 
-Mental model: one account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the User DB, not in `core.sqlite`.
+Mental model: host Cloud + host Users, then each account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the per-account User DB, not on Cloud or host Users.
 
-## Host control plane (`core.sqlite`)
+## Host Cloud (`core.sqlite`)
 
-Global platform state shared across all workspaces:
+Installation-wide identity and commerce (not hub chat surfaces):
 
 | Table group | Purpose |
 |-------------|---------|
@@ -27,10 +28,21 @@ Global platform state shared across all workspaces:
 | `shared_chat_sessions` | Collaborative chat registry |
 | `inference_endpoints`, `inference_usage` | Metered inference products |
 | `bridge_connections` | Local/remote Bridge federation registry |
-| `platform_meta` | Bootstrap flags |
+| `platform_meta` | Bootstrap flags (includes hub migrate marker) |
 | `legacy_endpoint_usage` | Historical upgrade telemetry; strict audit has no legacy callers |
 | `marketplace_acquisition_operations`, steps/audit/outbox | Durable cross-DB acquisition saga |
 | `releases`, `installation_update_state`, history/attempts/snapshots/receipts | Signed release discovery, deduplicated notification, update and rollback evidence |
+
+### Host Users (`Users.sqlite`)
+
+Cross-account hub surfaces (soft `user_id` refs into Cloud `users`; no cross-file FKs):
+
+| Table group | Purpose |
+|-------------|---------|
+| `dm_*` | Direct messages, members, blobs, attachments |
+| `support_*` | Support tickets and messages |
+| `notifications` | User and agent notifications |
+| `platform_groups`, `platform_group_members` | Support staff groups and similar |
 
 Legacy `oauth_accounts` rows may exist from older installs; OSS core no longer writes to this table.
 

@@ -142,7 +142,8 @@ export interface ObjectTypeDef {
   /** Metadata/schema revision used by native additive migrations. */
   schemaVersion?: number;
   /** Database containing adapter records. Native ObjectTypes are tenant-local. */
-  database?: "tenant" | "core";
+  /** core = host Cloud; users = host Users hub (DMs/Support/Notifications). */
+  database?: "tenant" | "core" | "users";
   /** Field used as the stable resource version for conditional mutations. */
   versionField?: string;
   /** Contract-level deprecation metadata. */

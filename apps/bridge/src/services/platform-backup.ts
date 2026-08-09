@@ -9,6 +9,7 @@ import { config } from "../config.js";
 import { listAllTenantIds, type CoreDatabase } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getUserDb } from "../user-registry.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { getTimeseriesStore } from "./timeseries-store.js";
 
 export type PlatformBackupResult = {
@@ -87,6 +88,12 @@ export async function runLocalPlatformBackup(
     fs.mkdirSync(path.join(dest, "users"), { recursive: true });
 
     await backupSqlite(core, path.join(dest, "databases", "core.sqlite"));
+    // Also archive as Cloud.sqlite for the host Cloud plane name.
+    await backupSqlite(core, path.join(dest, "databases", "Cloud.sqlite"));
+    await backupSqlite(
+      getHostUsersDb(),
+      path.join(dest, "databases", "Users.sqlite")
+    );
 
     for (const tenantId of listAllTenantIds(core)) {
       const safe = tenantId.replace(/[^a-zA-Z0-9._-]/g, "_");

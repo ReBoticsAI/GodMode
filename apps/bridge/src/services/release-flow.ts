@@ -1034,6 +1034,12 @@ export async function createCoordinatedSnapshot(
   ).run(id, releaseId, location, JSON.stringify(lock), JSON.stringify(diagnostics));
   try {
     await backupDb(core, path.join(location, "databases", "core.sqlite"));
+    await backupDb(core, path.join(location, "databases", "Cloud.sqlite"));
+    const { getHostUsersDb } = await import("../host-users-db.js");
+    await backupDb(
+      getHostUsersDb(),
+      path.join(location, "databases", "Users.sqlite")
+    );
     for (const tenantId of listAllTenantIds(core)) {
       const safe = tenantId.replace(/[^a-zA-Z0-9._-]/g, "_");
       await backupDb(

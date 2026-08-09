@@ -1,16 +1,17 @@
 import { v4 as uuidv4 } from "uuid";
-import type {
-  CoreDatabase,
-  CoreDmConversation,
-  CoreDmMessage,
-  CoreDmMessageAttachment,
-  DmAttachmentKind,
-  DmConversationKind,
-  DmMemberKind,
-  DmMemberRole,
-  DmSenderKind,
-  MarketplaceListingKind,
-  ShareGrantRole,
+import {
+  getCoreDb,
+  type CoreDatabase,
+  type CoreDmConversation,
+  type CoreDmMessage,
+  type CoreDmMessageAttachment,
+  type DmAttachmentKind,
+  type DmConversationKind,
+  type DmMemberKind,
+  type DmMemberRole,
+  type DmSenderKind,
+  type MarketplaceListingKind,
+  type ShareGrantRole,
 } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getAgent } from "./agents/agents-db.js";
@@ -135,10 +136,10 @@ function agentSummary(
 }
 
 function userSummary(
-  db: CoreDatabase,
+  _hubDb: CoreDatabase,
   userId: string
 ): DmUserSummary | null {
-  const row = db
+  const row = getCoreDb()
     .prepare(
       `SELECT id, email, display_name, avatar_url FROM users WHERE id = ?`
     )
@@ -161,11 +162,11 @@ function userSummary(
 }
 
 export function lookupUserByEmail(
-  db: CoreDatabase,
+  _hubOrCloudDb: CoreDatabase,
   email: string,
   excludeUserId?: string
 ): DmUserSummary | null {
-  const row = db
+  const row = getCoreDb()
     .prepare(
       `SELECT id, email, display_name, avatar_url
        FROM users WHERE email = ? AND id <> 'system-local'`
@@ -189,13 +190,14 @@ export function lookupUserByEmail(
 }
 
 export function listDmContacts(
-  db: CoreDatabase,
+  _hubDb: CoreDatabase,
   userId: string,
   emailLookup?: string
 ): DmContact[] {
+  const cloud = getCoreDb();
   const byId = new Map<string, DmContact>();
 
-  const shareRows = db
+  const shareRows = cloud
     .prepare(
       `SELECT DISTINCT
          CASE WHEN g.owner_user_id = ? THEN g.grantee_user_id ELSE g.owner_user_id END AS other_id
@@ -208,11 +210,11 @@ export function listDmContacts(
 
   for (const row of shareRows) {
     if (!row.other_id || row.other_id === userId) continue;
-    const user = userSummary(db, row.other_id);
+    const user = userSummary(cloud, row.other_id);
     if (user) byId.set(user.id, { ...user, relationship: "share" });
   }
 
-  const tenantRows = db
+  const tenantRows = cloud
     .prepare(
       `SELECT DISTINCT m2.user_id AS other_id
        FROM tenant_memberships m1
@@ -223,12 +225,12 @@ export function listDmContacts(
 
   for (const row of tenantRows) {
     if (byId.has(row.other_id)) continue;
-    const user = userSummary(db, row.other_id);
+    const user = userSummary(cloud, row.other_id);
     if (user) byId.set(user.id, { ...user, relationship: "tenant" });
   }
 
   if (emailLookup?.trim()) {
-    const found = lookupUserByEmail(db, emailLookup, userId);
+    const found = lookupUserByEmail(cloud, emailLookup, userId);
     if (found) {
       byId.set(found.id, {
         ...found,

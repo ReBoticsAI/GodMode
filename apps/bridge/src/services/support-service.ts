@@ -8,6 +8,7 @@ import {
   type SupportRequesterKind,
   type SupportTicketStatus,
 } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { createNotification } from "./notification-service.js";
 import { emitEvent } from "./event-bus.js";
 import {
@@ -26,15 +27,19 @@ export class SupportError extends Error {
   }
 }
 
-function adminUserIds(db: CoreDatabase): string[] {
+function adminUserIds(): string[] {
   return (
-    db.prepare(`SELECT id FROM users WHERE is_admin = 1`).all() as Array<{ id: string }>
+    getCoreDb()
+      .prepare(`SELECT id FROM users WHERE is_admin = 1`)
+      .all() as Array<{ id: string }>
   ).map((r) => r.id);
 }
 
 /** Platform admins + Support group users (deduped). */
-function staffUserIds(db: CoreDatabase): string[] {
-  return [...new Set([...adminUserIds(db), ...listSupportStaffUserIds(db)])];
+function staffUserIds(): string[] {
+  return [
+    ...new Set([...adminUserIds(), ...listSupportStaffUserIds(getHostUsersDb())]),
+  ];
 }
 
 function notifyStaff(
@@ -43,7 +48,7 @@ function notifyStaff(
   title: string,
   body: string
 ): void {
-  for (const userId of staffUserIds(db)) {
+  for (const userId of staffUserIds()) {
     createNotification(
       {
         recipientKind: "user",
@@ -117,7 +122,7 @@ export interface CreateTicketInput {
 
 export function createTicket(
   input: CreateTicketInput,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket | { redirectUrl: string; kind: "platform_github" } {
   if (input.targetKind === "platform_github") {
     // Interactive Support UI may call createCoreGithubIssue separately when App is configured.
@@ -192,7 +197,7 @@ export function createTicket(
 
 export function getTicket(
   id: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket | null {
   return (
     (db
@@ -203,7 +208,7 @@ export function getTicket(
 
 export function listTicketsForOwner(
   ownerUserId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket[] {
   return db
     .prepare(
@@ -217,7 +222,7 @@ export function listTicketsForOwner(
 export function listTicketsForRequester(
   requesterKind: SupportRequesterKind,
   requesterId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket[] {
   return db
     .prepare(
@@ -230,7 +235,7 @@ export function listTicketsForRequester(
 
 export function listAllTickets(
   opts: { status?: SupportTicketStatus } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket[] {
   if (opts.status) {
     return db
@@ -246,7 +251,7 @@ export function listAllTickets(
 
 export function getTicketMessages(
   ticketId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportMessage[] {
   return db
     .prepare(
@@ -259,7 +264,7 @@ export function addMessage(
   ticketId: string,
   author: { kind: SupportAuthorKind; id: string },
   body: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportMessage {
   const ticket = getTicket(ticketId, db);
   if (!ticket) throw new SupportError("Ticket not found", 404);
@@ -300,7 +305,7 @@ export function addMessage(
 export function updateTicket(
   ticketId: string,
   patch: { status?: SupportTicketStatus; priority?: string | null },
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreSupportTicket {
   const ticket = getTicket(ticketId, db);
   if (!ticket) throw new SupportError("Ticket not found", 404);

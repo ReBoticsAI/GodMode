@@ -151,7 +151,7 @@ const RELEASE_ACTIONS: ActionDef[] = [
 ];
 
 export const PLATFORM_SPECS: BuiltinSpec[] = [
-  { name: "Notification", label: "Notification", module: "platform", id: "notification_service", table: "notifications", database: "core", scope: "tenant", scopeColumn: "recipient_tenant_id", defaultSort: "created_at", writable: ["recipient_kind", "recipient_id", "recipient_tenant_id", "category", "title", "body", "link", "resource_kind", "resource_id"], required: ["recipient_kind", "recipient_id", "title"], operations: ["list", "get", "create", "delete"], actions: NOTIFICATION_ACTIONS, fields: ["id", "recipient_kind", "recipient_id", "recipient_tenant_id", "category", "title", "body", "link", "resource_kind", "resource_id", "read_at", "created_at"] },
+  { name: "Notification", label: "Notification", module: "platform", id: "notification_service", table: "notifications", database: "users", scope: "tenant", scopeColumn: "recipient_tenant_id", defaultSort: "created_at", writable: ["recipient_kind", "recipient_id", "recipient_tenant_id", "category", "title", "body", "link", "resource_kind", "resource_id"], required: ["recipient_kind", "recipient_id", "title"], operations: ["list", "get", "create", "delete"], actions: NOTIFICATION_ACTIONS, fields: ["id", "recipient_kind", "recipient_id", "recipient_tenant_id", "category", "title", "body", "link", "resource_kind", "resource_id", "read_at", "created_at"] },
   { name: "ActionLog", label: "Action Log", module: "platform", id: "action_log_read", table: "platform_action_log", idColumn: "id", defaultSort: "created_at", fields: ["id", "agent_id", "action", "scope", "payload_hash", "result", "created_at"] },
   {
     name: "OperationRun",

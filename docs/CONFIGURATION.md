@@ -175,7 +175,7 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 |----------|---------|-------------|
 | `BRIDGE_PORT` | `3847` | HTTP + WebSocket port |
 | `BRIDGE_HOST` | `127.0.0.1` | Bind address |
-| `PLATFORM_DATA_DIR` | OS app data | SQLite and runtime files (`core.sqlite`, `users/*.sqlite` User Vault, `tenants/*.sqlite` workspaces, backups). Cloud owners can download their workspace file from Settings; place it under `PLATFORM_DATA_DIR/tenants/` for local restore (see [multi-tenant-model.md](./multi-tenant-model.md#tenant-export-cloud-to-local)). |
+| `PLATFORM_DATA_DIR` | OS app data | SQLite and runtime files (`core.sqlite` Cloud plane, `Users.sqlite` hub, `users/*.sqlite` User Vault, `tenants/*.sqlite` workspaces, backups). Cloud owners can download their workspace file from Settings; place it under `PLATFORM_DATA_DIR/tenants/` for local restore (see [multi-tenant-model.md](./multi-tenant-model.md#tenant-export-cloud-to-local)). |
 | `PLATFORM_REPO_ROOT` | auto | Monorepo root override |
 
 ## Plugins and marketplace

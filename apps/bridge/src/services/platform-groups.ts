@@ -1,8 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
-import {
-  getCoreDb,
-  type CoreDatabase,
-} from "../core-db.js";
+import type { CoreDatabase } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 
 export const SUPPORT_GROUP_SLUG = "support";
 
@@ -25,7 +23,7 @@ export interface PlatformGroupMember {
   created_at: string;
 }
 
-export function ensurePlatformGroups(db: CoreDatabase = getCoreDb()): void {
+export function ensurePlatformGroups(db: CoreDatabase = getHostUsersDb()): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS platform_groups (
       id TEXT PRIMARY KEY,
@@ -64,7 +62,7 @@ export function ensurePlatformGroups(db: CoreDatabase = getCoreDb()): void {
 
 export function getGroupBySlug(
   slug: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): PlatformGroup | null {
   return (
     (db
@@ -75,7 +73,7 @@ export function getGroupBySlug(
 
 export function listGroupMembers(
   groupId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): PlatformGroupMember[] {
   return db
     .prepare(
@@ -93,7 +91,7 @@ export function addGroupMember(
     memberId: string;
     tenantId?: string | null;
   },
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): PlatformGroupMember {
   const tenantId =
     input.memberKind === "agent" ? (input.tenantId ?? null) : null;
@@ -127,7 +125,7 @@ export function removeGroupMember(
     memberId: string;
     tenantId?: string | null;
   },
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): boolean {
   const tenantId =
     input.memberKind === "agent" ? (input.tenantId ?? "") : "";
@@ -144,7 +142,7 @@ export function removeGroupMember(
 export function isUserInGroup(
   slug: string,
   userId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): boolean {
   const row = db
     .prepare(
@@ -162,7 +160,7 @@ export function isAgentInGroup(
   slug: string,
   agentId: string,
   tenantId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): boolean {
   const row = db
     .prepare(
@@ -179,7 +177,7 @@ export function isAgentInGroup(
   return Boolean(row);
 }
 
-export function listSupportStaffUserIds(db: CoreDatabase = getCoreDb()): string[] {
+export function listSupportStaffUserIds(db: CoreDatabase = getHostUsersDb()): string[] {
   const group = getGroupBySlug(SUPPORT_GROUP_SLUG, db);
   if (!group) return [];
   return (
@@ -195,7 +193,7 @@ export function listSupportStaffUserIds(db: CoreDatabase = getCoreDb()): string[
 /** Platform admin or Support group member. */
 export function canStaffSupportAsUser(
   user: { id: string; isAdmin?: boolean } | null | undefined,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): boolean {
   if (!user) return false;
   if (user.isAdmin) return true;

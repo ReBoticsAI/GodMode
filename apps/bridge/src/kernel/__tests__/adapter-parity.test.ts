@@ -39,7 +39,7 @@ describe("production core ObjectType bootstrap", () => {
     for (const def of listObjectTypes().filter((candidate) => !candidate.pluginId)) {
       expect(validateObjectTypeDef(def), def.name).toEqual([]);
       expect(def.database ?? "tenant", `${def.name} database ownership`).toMatch(
-        /^(tenant|core)$/
+        /^(tenant|core|users)$/
       );
       expect(def.accessPolicy, `${def.name} access policy`).toBeTruthy();
       for (const action of def.actions ?? []) {

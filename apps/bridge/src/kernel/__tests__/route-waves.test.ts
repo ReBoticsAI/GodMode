@@ -140,7 +140,7 @@ describe("legacy route wave", () => {
   it("delegates DM blob persistence to a kernel action", () => {
     expect(routeSources.get("dm.ts")).not.toMatch(/storeDmBlob\(/);
     expect(routeSources.get("dm.ts")).toMatch(
-      /executeCollectionAction\(\s*getCoreDb\(\),\s*"DmBlob",\s*"upload"/
+      /executeCollectionAction\(\s*getHostUsersDb\(\),\s*"DmBlob",\s*"upload"/
     );
   });
 

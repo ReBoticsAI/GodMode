@@ -58,26 +58,33 @@ security, tenancy, storage, and compatibility contract.
 ```mermaid
 flowchart LR
   Bridge[Bridge]
-  Core[(core.sqlite)]
+  Cloud[(core.sqlite Cloud)]
+  HostUsers[(Users.sqlite hub)]
   U1[(users/userA.sqlite)]
   T1[(tenants/workspaceA.sqlite)]
   T2[(tenants/workspaceB.sqlite)]
-  Bridge --> Core
+  Bridge --> Cloud
+  Bridge --> HostUsers
   Bridge --> U1
   Bridge --> T1
   Bridge --> T2
 ```
 
-### Host control plane (`core.sqlite`)
+### Host Cloud (`core.sqlite`)
 
-Global platform state (still one file; later epic may split into Cloud + Users):
+Identity and commerce plane (`getCloudDb` / `getCoreDb`):
 
 - **Users and sessions** — email/password auth, session cookies
 - **Tenants and memberships** — workspaces and roles
 - **Marketplace** — Official/Local catalogs, Community user listings, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
 - **Share grants** — cross-tenant resource sharing
 - **Bridge connections** — federation between Bridge instances
-- **DMs / Support / Notifications** — account-hub surfaces (not Workspace sand)
+
+### Host Users (`Users.sqlite`)
+
+Cross-account hub (`getHostUsersDb`):
+
+- **DMs / Support / Notifications / platform groups** — not Workspace sandboxes; soft refs to Cloud `users`
 
 ### User database (`users/<userId>.sqlite`)
 
