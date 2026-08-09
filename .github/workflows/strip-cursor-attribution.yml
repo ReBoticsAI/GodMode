@@ -1,0 +1,70 @@
+name: Strip Cursor attribution
+
+# Cursor Cloud/SDK injects Co-authored-by: Cursor <cursoragent@cursor.com>
+# even when IDE Attribution is OFF. Rewrite same-repo PR branches so those
+# trailers never land on main. Fork PRs are left to the CI audit gate.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  strip:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch base
+        run: git fetch origin "${{ github.base_ref }}" --depth=50
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Detect Cursor trailers
+        id: detect
+        run: |
+          set -euo pipefail
+          BASE="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          if node scripts/strip-cursor-attribution-range.mjs --check --base "$BASE"; then
+            echo "dirty=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "dirty=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rewrite commit messages
+        if: steps.detect.outputs.dirty == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BASE="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          node scripts/strip-cursor-attribution-range.mjs --rewrite --base "$BASE"
+          git push --force-with-lease origin "HEAD:refs/heads/${{ github.head_ref }}"
+
+      - name: Comment when rewritten
+        if: steps.detect.outputs.dirty == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              "Stripped Cursor Cloud commit attribution (`Co-authored-by: Cursor <cursoragent@cursor.com>` / `Made-with: Cursor`) from this branch and force-pushed.",
+              "",
+              "IDE Attribution OFF does not apply to Cloud Agents. This workflow keeps those trailers off `main`.",
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
