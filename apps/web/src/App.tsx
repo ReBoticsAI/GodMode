@@ -377,6 +377,7 @@ function AuthGatedApp() {
   const { authenticated, loading, user, tenants } = useTenant();
   const { checking, needsWizard, wizardEpoch, onFinished, onOpenVault, control } = useOnboardingGate();
   const [pluginsReady, setPluginsReady] = useState(false);
+  const [pluginsEpoch, setPluginsEpoch] = useState(0);
   const [saas, setSaas] = useState(false);
 
   useEffect(() => {
@@ -409,6 +410,20 @@ function AuthGatedApp() {
     }
     setPluginsReady(false);
     void loadWebPlugins().finally(() => setPluginsReady(true));
+  }, [authenticated, needsAuthInterstitial, needsWorkspace]);
+
+  useEffect(() => {
+    if (!authenticated || needsAuthInterstitial || needsWorkspace) return;
+    const onPluginsChanged = () => setPluginsEpoch((n) => n + 1);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadWebPlugins();
+    };
+    window.addEventListener("godmode:plugins-changed", onPluginsChanged);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("godmode:plugins-changed", onPluginsChanged);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [authenticated, needsAuthInterstitial, needsWorkspace]);
 
   if (loading) {
@@ -456,7 +471,9 @@ function AuthGatedApp() {
               onFinished={onFinished}
               onOpenVault={onOpenVault}
             />
-            {webPluginRuntime.wrapWithRootProviders(<AppShell />)}
+            {webPluginRuntime.wrapWithRootProviders(
+              <AppShell key={pluginsEpoch} />
+            )}
           </OnboardingWizardProvider>
         </PageChromeProvider>
       </IntelligenceProvider>

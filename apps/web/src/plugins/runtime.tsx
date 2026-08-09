@@ -169,6 +169,20 @@ class WebPluginRuntime {
   loadedIds(): string[] {
     return this.plugins.map((p) => p.id);
   }
+
+  /** Drop a prior web registration so a newer bundle can re-register kinds. */
+  unregister(pluginId: string): void {
+    const idx = this.plugins.findIndex((p) => p.id === pluginId);
+    if (idx < 0) return;
+    const [removed] = this.plugins.splice(idx, 1);
+    for (const k of removed.pageKinds) {
+      this.extraRenderers.delete(k.kind);
+    }
+  }
+
+  getLoadedVersion(pluginId: string): string | null {
+    return this.plugins.find((p) => p.id === pluginId)?.version ?? null;
+  }
 }
 
 export const webPluginRuntime = new WebPluginRuntime();

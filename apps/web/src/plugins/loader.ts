@@ -1,9 +1,18 @@
 import { api } from "@/api";
 import { webPluginRuntime } from "./runtime.js";
 
+interface PluginManifestLoaded {
+  id: string;
+  version: string;
+  name: string;
+  webBundle?: string;
+  /** Bundle mtime from Bridge; changes on rebuild even when package version does not. */
+  webRevision?: string;
+}
+
 interface PluginManifestResponse {
   plugins: Array<{ id: string; version: string; name: string }>;
-  loaded: Array<{ id: string; version: string; name: string; webBundle?: string }>;
+  loaded: PluginManifestLoaded[];
 }
 
 type ImportShimFn = ((url: string) => Promise<unknown>) & {
@@ -58,11 +67,22 @@ async function dynamicImportModule(url: string): Promise<unknown> {
   }
 }
 
+function cacheBustedBundleUrl(id: string, meta: PluginManifestLoaded): string {
+  const base = meta.webBundle ?? `/api/plugins/${id}/web.js`;
+  const sep = base.includes("?") ? "&" : "?";
+  const rev = meta.webRevision || meta.version;
+  return `${base}${sep}v=${encodeURIComponent(rev)}`;
+}
+
+function activationKey(meta: PluginManifestLoaded): string {
+  return `${meta.version}::${meta.webRevision ?? "0"}`;
+}
+
 async function importPluginWebBundle(
   id: string,
-  meta: { version: string; name: string; webBundle?: string }
+  meta: PluginManifestLoaded
 ): Promise<{ ok: boolean; error?: string }> {
-  const url = meta.webBundle ?? `/api/plugins/${id}/web.js`;
+  const url = cacheBustedBundleUrl(id, meta);
   try {
     const mod = (await dynamicImportModule(url)) as {
       default?: import("@godmode/plugin-api").GodModeWebPluginRegister;
@@ -72,6 +92,7 @@ async function importPluginWebBundle(
     if (typeof registerFn !== "function") {
       return { ok: false, error: `Plugin ${id}: export is not a register function` };
     }
+    webPluginRuntime.unregister(id);
     webPluginRuntime.register(
       { id, version: meta.version, name: meta.name },
       registerFn
@@ -96,9 +117,22 @@ async function waitForImportShim(maxMs = 5000): Promise<void> {
   }
 }
 
-const activatedPluginIds = new Set<string>();
+/** Last successfully activated key (`version::webRevision`) per plugin id. */
+const activatedKeys = new Map<string, string>();
 
-export async function loadWebPlugins(): Promise<string[]> {
+function notifyPluginsChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("godmode:plugins-changed"));
+}
+
+/**
+ * Load (or reload) web bundles for tenant-installed plugins.
+ * Reloads when version/bundle mtime changes or when `force` is set so
+ * install/rebuild picks up new page kinds without a full browser refresh.
+ */
+export async function loadWebPlugins(opts?: {
+  force?: boolean;
+}): Promise<string[]> {
   await waitForImportShim();
   const errors: string[] = [];
   let loaded: PluginManifestResponse["loaded"] = [];
@@ -119,16 +153,30 @@ export async function loadWebPlugins(): Promise<string[]> {
   }
 
   const activated: string[] = [];
+  let changed = false;
+  const desiredIds = new Set(loaded.map((m) => m.id));
+
+  for (const id of [...activatedKeys.keys()]) {
+    if (!desiredIds.has(id)) {
+      webPluginRuntime.unregister(id);
+      activatedKeys.delete(id);
+      changed = true;
+    }
+  }
 
   for (const meta of loaded) {
-    if (activatedPluginIds.has(meta.id)) {
+    const key = activationKey(meta);
+    const prev = activatedKeys.get(meta.id);
+    const needsLoad = opts?.force === true || prev !== key;
+    if (!needsLoad) {
       activated.push(meta.id);
       continue;
     }
     const result = await importPluginWebBundle(meta.id, meta);
     if (result.ok) {
-      activatedPluginIds.add(meta.id);
+      activatedKeys.set(meta.id, key);
       activated.push(meta.id);
+      changed = true;
     } else if (result.error) {
       errors.push(`${meta.name}: ${result.error}`);
       console.error(`[plugins] failed to load ${meta.id}:`, result.error);
@@ -141,5 +189,12 @@ export async function loadWebPlugins(): Promise<string[]> {
     );
   }
 
+  if (changed) notifyPluginsChanged();
+
   return activated;
+}
+
+/** Force re-fetch of every installed web bundle (install / rebuild path). */
+export function reloadWebPlugins(): Promise<string[]> {
+  return loadWebPlugins({ force: true });
 }
