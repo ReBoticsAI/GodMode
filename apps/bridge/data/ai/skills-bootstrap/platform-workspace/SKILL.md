@@ -11,7 +11,7 @@ Use for everyday workspace setup. Stay in native tools; do not scaffold plugins 
 3. `list_object_types` / `use_skill('object-types')` for existing shapes. Defining a new ObjectType is Tier 2 (`use_skill('plugin-authoring')`).
 4. `create_agent` for specialists; link via structure when appropriate.
 5. `create_wiki_page` / `update_wiki_page` for guides and notes.
-6. `todo_write` + `create_project_card` for tasks and automations.
+6. Agent chat plans: `todo_write` only (nests under the host Active Work run card). Use `create_project_card` only when the user wants a standing Kanban card outside the current chat run.
 
 **When integration/API/hardware is implied:** stop. Call `use_skill('plugin-authoring')` and `scaffold_plugin` instead of bare structure tools.
 
