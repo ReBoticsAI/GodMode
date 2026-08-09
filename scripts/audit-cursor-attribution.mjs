@@ -3,13 +3,11 @@
  * Fail CI when commit messages in the PR range (or recent main commits)
  * contain Cursor Cloud marketing attribution (cursoragent@cursor.com).
  *
- * IDE Attribution OFF does not apply to Cursor Cloud Agents / SDK; they still
- * inject Co-authored-by trailers. Public GodMode must not land those.
+ * Same-repo PRs are auto-rewritten by .github/workflows/strip-cursor-attribution.yml
+ * before merge; this audit is the hard gate if rewrite did not run or is a fork.
  */
 import { execFileSync } from "node:child_process";
-
-const TRAILER =
-  /Co-authored-by:\s*Cursor\s*<[^>\n]*cursor\.com>|Made-with:\s*Cursor|cursoragent@cursor\.com/i;
+import { messageHasCursorAttribution } from "./lib/strip-cursor-attribution.mjs";
 
 function git(args) {
   return execFileSync("git", args, {
@@ -28,44 +26,52 @@ function rangeSpec() {
         stdio: "ignore",
       });
     } catch {
-      /* shallow clones may already have enough */
+      /* bridge not up yet or shallow */
     }
     return `origin/${baseRef}..${sha}`;
   }
-  // Push to main: scan the pushed tip only (merge commit / squash).
   return `${sha}^!`;
 }
 
 const range = rangeSpec();
 let log;
 try {
-  log = git(["log", "--format=%H%n%B%n---", range]);
+  log = git(["log", "--format=%H%n%B%n---COMMIT---", range]);
 } catch (err) {
-  // Empty range or missing parent on orphan; treat as pass.
-  console.log(`audit-cursor-attribution: skip (${err instanceof Error ? err.message : err})`);
+  console.log(
+    `audit-cursor-attribution: skip (${err instanceof Error ? err.message : err})`
+  );
   process.exit(0);
 }
 
-if (!log || !TRAILER.test(log)) {
-  console.log("audit-cursor-attribution: ok (no Cursor co-author trailers)");
+if (!log) {
+  console.log("audit-cursor-attribution: ok (empty range)");
   process.exit(0);
 }
 
 const hits = [];
-for (const block of log.split("\n---\n")) {
-  const lines = block.trim().split("\n");
-  const sha = lines[0] || "";
-  if (TRAILER.test(block)) hits.push(sha.slice(0, 7));
+for (const block of log.split("---COMMIT---")) {
+  const trimmed = block.trim();
+  if (!trimmed) continue;
+  const nl = trimmed.indexOf("\n");
+  const sha = (nl >= 0 ? trimmed.slice(0, nl) : trimmed).trim();
+  const body = nl >= 0 ? trimmed.slice(nl + 1) : "";
+  if (sha && messageHasCursorAttribution(body)) hits.push(sha.slice(0, 7));
+}
+
+if (hits.length === 0) {
+  console.log("audit-cursor-attribution: ok (no Cursor co-author trailers)");
+  process.exit(0);
 }
 
 console.error(
   "audit-cursor-attribution: forbidden Cursor attribution in commit message(s):",
-  hits.join(", ") || "(unknown)"
+  hits.join(", ")
 );
 console.error(
-  "Strip Co-authored-by: Cursor <cursoragent@cursor.com> (and Made-with: Cursor) before merge."
+  "Same-repo PRs: wait for strip-cursor-attribution workflow to rewrite, or push a clean branch."
 );
 console.error(
-  "GodMode git_commit strips these; prefer it over Cursor Cloud Agent commits on public repos."
+  "Forks / manual: remove Co-authored-by: Cursor <cursoragent@cursor.com> (and Made-with: Cursor)."
 );
 process.exit(1);
