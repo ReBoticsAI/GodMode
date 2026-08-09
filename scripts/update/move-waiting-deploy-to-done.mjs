@@ -3,7 +3,7 @@
  * After Cloud health OK: move GitHub Project items from Waiting Deploy → Done
  * when the issue's merge commit is an ancestor of (or equal to) DEPLOYED_SHA.
  *
- * Soft-fail: exits 0 even when GraphQL / ancestry checks partially fail.
+ * Exits 1 when GraphQL / scan errors occur (caller job should continue-on-error).
  * Logs a summary; never prints secrets.
  *
  * Env:
@@ -68,6 +68,20 @@ function isAncestor(candidate, tip) {
   }
 }
 
+function prLinksIssue(pr, issueNumber) {
+  const n = Number(issueNumber);
+  if ((pr.closingIssuesReferences || []).some((r) => Number(r.number) === n)) {
+    return true;
+  }
+  const needle = `#${issueNumber}`;
+  const title = typeof pr.title === "string" ? pr.title : "";
+  const body = typeof pr.body === "string" ? pr.body : "";
+  if (title.includes(needle)) return true;
+  // Core ship loop uses Part of #N (not Closes) so ancestry can resolve.
+  if (body.includes(needle)) return true;
+  return false;
+}
+
 function resolveMergeSha(issueNumber) {
   try {
     const out = execFileSync(
@@ -82,7 +96,7 @@ function resolveMergeSha(issueNumber) {
         "--search",
         `${issueNumber}`,
         "--json",
-        "number,mergeCommit,closingIssuesReferences,title",
+        "number,mergeCommit,closingIssuesReferences,title,body",
         "--limit",
         "20",
       ],
@@ -90,14 +104,7 @@ function resolveMergeSha(issueNumber) {
     );
     const prs = JSON.parse(out);
     for (const pr of prs) {
-      const closes = (pr.closingIssuesReferences || []).some(
-        (r) => Number(r.number) === Number(issueNumber)
-      );
-      const titleHit =
-        typeof pr.title === "string" &&
-        (pr.title.includes(`#${issueNumber}`) ||
-          pr.title.includes(`Closes #${issueNumber}`));
-      if (!closes && !titleHit) continue;
+      if (!prLinksIssue(pr, issueNumber)) continue;
       const sha = pr.mergeCommit?.oid;
       if (sha) return sha;
     }
@@ -201,11 +208,11 @@ async function main() {
   }
 
   log(`summary moved=${moved} skipped=${skipped} errors=${errors}`);
-  // Soft-fail: always exit 0 so deploy job stays green
-  process.exit(0);
+  // Non-zero on errors so the GitHub-hosted job shows red; workflow uses continue-on-error.
+  process.exit(errors > 0 ? 1 : 0);
 }
 
 main().catch((err) => {
   log(`fatal: ${(err && err.message) || err}`);
-  process.exit(0);
+  process.exit(1);
 });
