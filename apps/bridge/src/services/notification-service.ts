@@ -1,10 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
   type CoreDatabase,
   type CoreNotification,
   type NotificationRecipientKind,
 } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { getShareBroker } from "../ws-broker.js";
 
 export interface CreateNotificationInput {
@@ -37,7 +37,7 @@ function broadcastNotification(n: CoreNotification): void {
 
 export function createNotification(
   input: CreateNotificationInput,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreNotification {
   const id = uuidv4();
   db.prepare(
@@ -67,7 +67,7 @@ export function createNotification(
 export function listNotificationsForUser(
   userId: string,
   opts: { unreadOnly?: boolean; limit?: number } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreNotification[] {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const where = opts.unreadOnly ? "AND read_at IS NULL" : "";
@@ -85,7 +85,7 @@ export function listNotificationsForAgent(
   agentId: string,
   tenantId: string | null,
   opts: { unreadOnly?: boolean; limit?: number } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): CoreNotification[] {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const where = opts.unreadOnly ? "AND read_at IS NULL" : "";
@@ -112,7 +112,7 @@ export function listNotificationsForAgent(
 
 export function markRead(
   ids: string[],
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): number {
   if (ids.length === 0) return 0;
   const now = new Date().toISOString();
@@ -129,7 +129,7 @@ export function markRead(
 
 export function markAllRead(
   recipient: NotificationRecipient,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): number {
   const now = new Date().toISOString();
   return db
@@ -145,7 +145,7 @@ export function markAllRead(
 export function deleteNotification(
   id: string,
   recipient: NotificationRecipient,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): number {
   return db
     .prepare(
@@ -160,7 +160,7 @@ export function deleteNotification(
 export function clearNotifications(
   recipient: NotificationRecipient,
   opts: { readOnly?: boolean } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): number {
   const where = opts.readOnly ? "AND read_at IS NOT NULL" : "";
   return db
@@ -173,7 +173,7 @@ export function clearNotifications(
 
 export function unreadCount(
   recipient: NotificationRecipient,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getHostUsersDb()
 ): number {
   const row = db
     .prepare(

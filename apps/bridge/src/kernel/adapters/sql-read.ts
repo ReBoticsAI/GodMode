@@ -9,7 +9,7 @@ import type {
 export interface SqlReadAdapterOptions {
   id: string;
   table: string;
-  database?: "tenant" | "core";
+  database?: "tenant" | "core" | "users";
   idColumn?: string;
   /** Restrict rows to the active tenant or user when the column exists. */
   scope?: "tenant" | "user" | "admin";

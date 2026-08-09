@@ -13,6 +13,7 @@ import type {
   RecordRow,
 } from "@godmode/kernel";
 import { getCoreDb } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { insertEvent } from "../services/data-management-migration.js";
 import { getObjectType, listObjectTypes } from "./registry.js";
 import {
@@ -106,6 +107,7 @@ function withDataContext(
     data: {
       tenantDb: ctx.data?.tenantDb ?? db,
       coreDb: ctx.data?.coreDb ?? getCoreDb(),
+      hostUsersDb: ctx.data?.hostUsersDb ?? getHostUsersDb(),
       declaredDatabase: def.database ?? "tenant",
     },
   };
@@ -117,6 +119,9 @@ function declaredDatabase(
   ctx?: OperationContext
 ): AppDatabase {
   if (def.database === "core") return ctx?.data?.coreDb ?? getCoreDb();
+  if (def.database === "users") {
+    return ctx?.data?.hostUsersDb ?? getHostUsersDb();
+  }
   return ctx?.data?.tenantDb ?? db;
 }
 

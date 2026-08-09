@@ -143,12 +143,20 @@ export const config = {
   /** Root directory for per-agent sandboxes ({dataDir}/agents/<agentId>). */
   agentsDir: path.join(appData, "agents"),
   dbPath: path.join(appData, "platform.db"),
-  /** Shared core DB: users, tenants, marketplace, credits, share grants. */
+  /**
+   * Host Cloud DB (identity, tenants, billing, marketplace, releases).
+   * File may still be named core.sqlite on disk for install compat; alias getCloudDb().
+   */
   coreDbPath: path.join(appData, "core.sqlite"),
+  /**
+   * Host Users DB (DMs, Support, Notifications, platform groups).
+   * Distinct from per-account User Vault files under usersDir.
+   */
+  hostUsersDbPath: path.join(appData, "Users.sqlite"),
   /**
    * Per-account User DB files ({usersDir}/<userId>.sqlite).
    * Holds User Vault (Connect keys) and future personal-layer continuity.
-   * Distinct from Workspace tenant DBs and from the host control-plane core file.
+   * Distinct from Workspace tenant DBs and from host Cloud / Users files.
    */
   usersDir: path.join(appData, "users"),
   /** Per-tenant workspace SQLite files ({tenantsDir}/<tenantId>.sqlite). */

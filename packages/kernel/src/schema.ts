@@ -62,8 +62,8 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
   if (def.storage?.kind === "native" && def.database === "core") {
     errors.push("native ObjectTypes must be tenant-local");
   }
-  if (def.database != null && !["tenant", "core"].includes(def.database)) {
-    errors.push("database must be tenant or core");
+  if (def.database != null && !["tenant", "core", "users"].includes(def.database)) {
+    errors.push("database must be tenant, core, or users");
   }
   if (def.contractVersion != null && (!Number.isInteger(def.contractVersion) || def.contractVersion < 1)) {
     errors.push("contractVersion must be a positive integer");

@@ -68,7 +68,7 @@ describe("ObjectType schema", () => {
     });
     expect(errors).toEqual(
       expect.arrayContaining([
-        "database must be tenant or core",
+        "database must be tenant, core, or users",
         "schemaVersion must be a positive integer",
         "versionField is not a declared field: missing",
         "action archive has invalid target",

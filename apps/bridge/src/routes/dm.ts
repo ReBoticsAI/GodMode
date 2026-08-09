@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
-import { getCoreDb, type MarketplaceListingKind, type ShareGrantRole } from "../core-db.js";
+import type { MarketplaceListingKind, ShareGrantRole } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import type { LlmManager } from "../services/llm-manager.js";
 import { scheduleAgentResponses } from "../services/agent-response-service.js";
 import {
@@ -65,12 +66,12 @@ function broadcastDm(
 }
 
 export function authorizeTypingEvent(
-  core: ReturnType<typeof getCoreDb>,
+  hub: ReturnType<typeof getHostUsersDb>,
   conversationId: string,
   authenticatedUserId: string,
   body: unknown
 ): string[] {
-  assertConversationMember(core, conversationId, authenticatedUserId);
+  assertConversationMember(hub, conversationId, authenticatedUserId);
   const input =
     body && typeof body === "object"
       ? (body as Record<string, unknown>)
@@ -84,7 +85,7 @@ export function authorizeTypingEvent(
       throw new DmError("Typing sender does not match authenticated user", 403);
     }
   }
-  return listConversationMemberUserIds(core, conversationId);
+  return listConversationMemberUserIds(hub, conversationId);
 }
 
 export interface DmRouterDeps {
@@ -99,23 +100,23 @@ export function createDmRouter(deps: DmRouterDeps): Router {
   router.get("/contacts", (req, res) => {
     const email =
       typeof req.query.email === "string" ? req.query.email : undefined;
-    const contacts = listDmContacts(getCoreDb(), req.user!.id, email);
+    const contacts = listDmContacts(getHostUsersDb(), req.user!.id, email);
     res.json({ contacts });
   });
 
   router.get("/unread", (req, res) => {
-    res.json({ unread: totalUnreadForUser(getCoreDb(), req.user!.id) });
+    res.json({ unread: totalUnreadForUser(getHostUsersDb(), req.user!.id) });
   });
 
   router.get("/conversations", (req, res) => {
-    const conversations = listConversationsForUser(getCoreDb(), req.user!.id);
+    const conversations = listConversationsForUser(getHostUsersDb(), req.user!.id);
     res.json({ conversations });
   });
 
   router.get("/conversations/:id", (req, res) => {
     try {
       const conversation = getConversationForUser(
-        getCoreDb(),
+        getHostUsersDb(),
         paramId(req.params.id),
         req.user!.id
       );
@@ -135,7 +136,7 @@ export function createDmRouter(deps: DmRouterDeps): Router {
     const limit =
       typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
     try {
-      const messages = listMessages(getCoreDb(), paramId(req.params.id), req.user!.id, {
+      const messages = listMessages(getHostUsersDb(), paramId(req.params.id), req.user!.id, {
         before,
         limit: Number.isFinite(limit) ? limit : undefined,
       });
@@ -150,7 +151,7 @@ export function createDmRouter(deps: DmRouterDeps): Router {
   });
 
   router.post("/conversations/:id/typing", (req, res) => {
-    const core = getCoreDb();
+    const core = getHostUsersDb();
     const conversationId = paramId(req.params.id);
     const userId = req.user!.id;
     try {
@@ -184,7 +185,7 @@ export function createDmRouter(deps: DmRouterDeps): Router {
     }
     try {
       const uploaded = await executeCollectionAction(
-        getCoreDb(),
+        getHostUsersDb(),
         "DmBlob",
         "upload",
         {
@@ -227,7 +228,7 @@ export function createDmRouter(deps: DmRouterDeps): Router {
   });
 
   router.get("/blobs/:id", (req, res) => {
-    const core = getCoreDb();
+    const core = getHostUsersDb();
     const blob = getDmBlob(core, paramId(req.params.id));
     if (!blob) {
       res.status(404).json({ error: "Blob not found" });

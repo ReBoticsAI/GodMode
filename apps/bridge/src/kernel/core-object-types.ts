@@ -319,7 +319,7 @@ export function registerCoreObjectTypes(): void {
             ? "user-private"
             : spec.scope === "tenant"
               ? "tenant-member"
-              : spec.database === "core"
+              : spec.database === "core" || spec.database === "users"
                 ? "relationship-scoped"
                 : "tenant-local"),
       database: spec.database ?? "tenant",

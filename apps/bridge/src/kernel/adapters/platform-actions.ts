@@ -7,6 +7,7 @@ import type {
 import { randomUUID } from "node:crypto";
 import { config } from "../../config.js";
 import type { AppDatabase } from "../../db.js";
+import { getHostUsersDb } from "../../host-users-db.js";
 import {
   createShareGrant,
   listShareGrantsForUser,
@@ -388,12 +389,17 @@ export const federatedShareInviteAdapter: RecordAdapter = {
   },
 };
 
+
+function hubDb(ctx: OperationContext): AppDatabase {
+  return ctx.data?.hostUsersDb ?? getHostUsersDb();
+}
+
 export const directConversationAdapter: RecordAdapter = {
   id: "dm_conversation_read",
   list(_db, def, query, ctx) {
     return result(
       def,
-      listConversationsForUser(ctx.data!.coreDb, requireUser(ctx)) as unknown as Array<
+      listConversationsForUser(hubDb(ctx), requireUser(ctx)) as unknown as Array<
         Record<string, unknown>
       >,
       query,
@@ -405,7 +411,7 @@ export const directConversationAdapter: RecordAdapter = {
       return record(
         def,
         getConversationForUser(
-          ctx.data!.coreDb,
+          hubDb(ctx),
           id,
           requireUser(ctx)
         ) as unknown as Record<string, unknown>,
@@ -420,7 +426,7 @@ export const directConversationAdapter: RecordAdapter = {
     const members = Array.isArray(data.member_user_ids)
       ? data.member_user_ids.filter((id): id is string => typeof id === "string")
       : [];
-    const row = createConversation(ctx.data!.coreDb, {
+    const row = createConversation(hubDb(ctx), {
       creatorUserId: requireUser(ctx),
       kind: data.kind === "group" ? "group" : "direct",
       title: typeof data.title === "string" ? data.title : undefined,
@@ -438,7 +444,7 @@ export const directConversationAdapter: RecordAdapter = {
     },
     mark_read(_db, _def, id, input, ctx) {
       markConversationRead(
-        ctx.data!.coreDb,
+        hubDb(ctx),
         id,
         requireUser(ctx),
         typeof input.message_id === "string" ? input.message_id : undefined
@@ -447,7 +453,7 @@ export const directConversationAdapter: RecordAdapter = {
     },
     add_member(_db, _def, id, input, ctx) {
       return addConversationMember(
-        ctx.data!.coreDb,
+        hubDb(ctx),
         id,
         requireUser(ctx),
         requiredText(input, "user_id")
@@ -455,7 +461,7 @@ export const directConversationAdapter: RecordAdapter = {
     },
     remove_member(_db, _def, id, input, ctx) {
       removeConversationMember(
-        ctx.data!.coreDb,
+        hubDb(ctx),
         id,
         requireUser(ctx),
         requiredText(input, "user_id")
@@ -464,7 +470,7 @@ export const directConversationAdapter: RecordAdapter = {
     },
     share(_db, _def, id, input, ctx) {
       return {
-        grants: shareResourceToConversation(ctx.data!.coreDb, {
+        grants: shareResourceToConversation(hubDb(ctx), {
           conversationId: id,
           actorUserId: requireUser(ctx),
           actorTenantId: requireTenant(ctx),
@@ -487,7 +493,7 @@ export const directMessageAdapter: RecordAdapter = {
     if (!conversationId) throw httpError(400, "conversation_id filter required");
     return result(
       def,
-      listMessages(ctx.data!.coreDb, conversationId, requireUser(ctx), {
+      listMessages(hubDb(ctx), conversationId, requireUser(ctx), {
         limit: Math.min(Math.max(Number(query.limit) || 50, 1), 200),
         before:
           typeof query.filters?.before === "string" ? query.filters.before : undefined,
@@ -497,7 +503,7 @@ export const directMessageAdapter: RecordAdapter = {
     );
   },
   get(_db, def, id, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = hubDb(ctx);
     const pointer = core
       .prepare("SELECT conversation_id FROM dm_messages WHERE id=?")
       .get(id) as { conversation_id: string } | undefined;
@@ -514,7 +520,7 @@ export const directMessageAdapter: RecordAdapter = {
       : null;
   },
   create(_db, def, data, ctx) {
-    const row = createMessage(ctx.data!.coreDb, {
+    const row = createMessage(hubDb(ctx), {
       conversationId: requiredText(data, "conversation_id"),
       senderUserId: requireUser(ctx),
       bodyText: typeof data.body_text === "string" ? data.body_text : undefined,
@@ -536,7 +542,7 @@ export const directMessageAdapter: RecordAdapter = {
 export const dmBlobAdapter: RecordAdapter = {
   id: "dm_blob_service",
   list(_db, def, query, ctx) {
-    const rows = ctx.data!.coreDb
+    const rows = hubDb(ctx)
       .prepare(
         `SELECT id, owner_user_id, filename, mime, size, created_at
          FROM dm_blobs WHERE owner_user_id=? ORDER BY created_at DESC`
@@ -545,7 +551,7 @@ export const dmBlobAdapter: RecordAdapter = {
     return result(def, rows, query);
   },
   get(_db, def, id, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = hubDb(ctx);
     const row = getDmBlob(core, id);
     if (!row || !userCanAccessBlob(core, id, requireUser(ctx))) return null;
     const { path: _path, ...metadata } = row;
@@ -557,7 +563,7 @@ export const dmBlobAdapter: RecordAdapter = {
         throw httpError(400, "Binary upload buffer required");
       }
       try {
-        const row = storeDmBlob(ctx.data!.coreDb, {
+        const row = storeDmBlob(hubDb(ctx), {
           ownerUserId: requireUser(ctx),
           filename: requiredText(input, "filename"),
           mime: requiredText(input, "mime"),
@@ -586,7 +592,7 @@ function canAccessTicket(
 }
 
 function accessibleTickets(ctx: OperationContext) {
-  const core = ctx.data!.coreDb;
+  const core = hubDb(ctx);
   const userId = requireUser(ctx);
   if (ctx.isAdmin) return listAllTickets({}, core);
   const byId = new Map(
@@ -608,7 +614,7 @@ export const supportTicketAdapter: RecordAdapter = {
     );
   },
   get(_db, def, id, ctx) {
-    const row = getTicket(id, ctx.data!.coreDb);
+    const row = getTicket(id, hubDb(ctx));
     return row && canAccessTicket(row, ctx)
       ? record(def, row as unknown as Record<string, unknown>)
       : null;
@@ -630,7 +636,7 @@ export const supportTicketAdapter: RecordAdapter = {
         ownerUserId:
           typeof data.owner_user_id === "string" ? data.owner_user_id : undefined,
       },
-      ctx.data!.coreDb
+      hubDb(ctx)
     );
     if ("redirectUrl" in row) {
       throw httpError(409, "GitHub support requires the interactive support workflow");
@@ -676,13 +682,13 @@ export const supportTicketAdapter: RecordAdapter = {
       return supportTicketAdapter.create!(db, def, input, ctx);
     },
     reply(_db, def, id, input, ctx) {
-      const ticket = getTicket(id, ctx.data!.coreDb);
+      const ticket = getTicket(id, hubDb(ctx));
       if (!ticket || !canAccessTicket(ticket, ctx)) throw httpError(404, "Ticket not found");
       const row = addMessage(
         id,
         { kind: ctx.isAdmin ? "admin" : "user", id: requireUser(ctx) },
         requiredText(input, "body"),
-        ctx.data!.coreDb
+        hubDb(ctx)
       );
       return record(def, row as unknown as Record<string, unknown>);
     },
@@ -698,7 +704,7 @@ export const supportTicketAdapter: RecordAdapter = {
               ? input.priority
               : undefined,
         },
-        ctx.data!.coreDb
+        hubDb(ctx)
       );
       return record(def, row as unknown as Record<string, unknown>);
     },
@@ -710,24 +716,24 @@ export const supportMessageAdapter: RecordAdapter = {
   list(_db, def, query, ctx) {
     const ticketId =
       typeof query.filters?.ticket_id === "string" ? query.filters.ticket_id : "";
-    const ticket = getTicket(ticketId, ctx.data!.coreDb);
+    const ticket = getTicket(ticketId, hubDb(ctx));
     if (!ticket || !canAccessTicket(ticket, ctx)) throw httpError(404, "Ticket not found");
     return result(
       def,
-      getTicketMessages(ticketId, ctx.data!.coreDb) as unknown as Array<
+      getTicketMessages(ticketId, hubDb(ctx)) as unknown as Array<
         Record<string, unknown>
       >,
       query
     );
   },
   get(_db, def, id, ctx) {
-    const row = ctx.data!.coreDb
+    const row = hubDb(ctx)
       .prepare("SELECT ticket_id FROM support_messages WHERE id=?")
       .get(id) as { ticket_id: string } | undefined;
     if (!row) return null;
-    const ticket = getTicket(row.ticket_id, ctx.data!.coreDb);
+    const ticket = getTicket(row.ticket_id, hubDb(ctx));
     if (!ticket || !canAccessTicket(ticket, ctx)) return null;
-    const message = getTicketMessages(row.ticket_id, ctx.data!.coreDb).find(
+    const message = getTicketMessages(row.ticket_id, hubDb(ctx)).find(
       (candidate) => candidate.id === id
     );
     return message
@@ -737,7 +743,7 @@ export const supportMessageAdapter: RecordAdapter = {
   actions: {
     reply(_db, def, _id, input, ctx) {
       return supportTicketAdapter.actions!.reply(
-        ctx.data!.coreDb,
+        hubDb(ctx),
         def,
         requiredText(input, "ticket_id"),
         input,
@@ -1667,7 +1673,7 @@ function requirePlatformAdmin(ctx: OperationContext): void {
 export const platformGroupAdapter: RecordAdapter = {
   id: "platform_group_service",
   list(_db, def, query, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = hubDb(ctx);
     ensurePlatformGroups(core);
     const userId = requireUser(ctx);
     const rows = ctx.isAdmin
@@ -1692,7 +1698,7 @@ export const platformGroupAdapter: RecordAdapter = {
 export const platformGroupMemberAdapter: RecordAdapter = {
   id: "platform_group_member_service",
   list(_db, def, query, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = hubDb(ctx);
     ensurePlatformGroups(core);
     const groupId =
       typeof query.filters?.group_id === "string" ? query.filters.group_id : "";
@@ -1741,7 +1747,7 @@ export const platformGroupMemberAdapter: RecordAdapter = {
             tenantId:
               typeof input.tenant_id === "string" ? input.tenant_id : undefined,
           },
-          ctx.data!.coreDb
+          hubDb(ctx)
           ),
           id: `${input.group_id}:${input.member_kind}:${input.member_id}:${input.tenant_id ?? ""}`,
         } as unknown as Record<string, unknown>
@@ -1758,7 +1764,7 @@ export const platformGroupMemberAdapter: RecordAdapter = {
             tenantId:
               typeof input.tenant_id === "string" ? input.tenant_id : undefined,
           },
-          ctx.data!.coreDb
+          hubDb(ctx)
         ),
       };
     },

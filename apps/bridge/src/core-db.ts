@@ -4,17 +4,14 @@ import { v4 as uuidv4 } from "uuid";
 import { config } from "./config.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { backfillWelcomeWikiPages } from "./services/welcome-wiki.js";
-import { ensurePlatformGroups } from "./services/platform-groups.js";
 import {
   addCol,
   runMigrations,
+  tableExists,
   type Migration,
 } from "./services/db-migrations.js";
 import { ensureAuthSecuritySchema } from "./services/auth/mfa-and-tokens.js";
-
-function ensurePlatformGroupsTables(db: CoreDatabase): void {
-  ensurePlatformGroups(db);
-}
+import { migrateHubTablesFromCore } from "./host-users-db.js";
 
 export type MembershipRole = "viewer" | "editor" | "owner";
 export type ShareGrantRole = "viewer" | "editor" | "owner";
@@ -478,71 +475,8 @@ export function initCoreDb(): CoreDatabase {
     CREATE INDEX IF NOT EXISTS shared_chat_sessions_agent_idx
       ON shared_chat_sessions(agent_id);
 
-    -- Human-to-human persistent chat (cross-tenant; lives in core DB).
-    CREATE TABLE IF NOT EXISTS dm_conversations (
-      id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('direct', 'group')),
-      title TEXT,
-      created_by_user_id TEXT NOT NULL REFERENCES users(id),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_message_at TEXT,
-      last_message_preview TEXT
-    );
-    CREATE INDEX IF NOT EXISTS dm_conversations_updated_idx
-      ON dm_conversations(last_message_at DESC, updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS dm_conversation_members (
-      conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
-      user_id TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
-      joined_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_read_at TEXT,
-      last_read_message_id TEXT,
-      PRIMARY KEY (conversation_id, user_id)
-    );
-    CREATE INDEX IF NOT EXISTS dm_conversation_members_user_idx
-      ON dm_conversation_members(user_id, conversation_id);
-
-    CREATE TABLE IF NOT EXISTS dm_messages (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
-      sender_user_id TEXT NOT NULL REFERENCES users(id),
-      body_text TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      edited_at TEXT,
-      deleted_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS dm_messages_conversation_idx
-      ON dm_messages(conversation_id, created_at DESC);
-
-    CREATE TABLE IF NOT EXISTS dm_blobs (
-      id TEXT PRIMARY KEY,
-      owner_user_id TEXT NOT NULL REFERENCES users(id),
-      filename TEXT NOT NULL,
-      mime TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      path TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS dm_blobs_owner_idx
-      ON dm_blobs(owner_user_id, created_at DESC);
-
-    CREATE TABLE IF NOT EXISTS dm_message_attachments (
-      id TEXT PRIMARY KEY,
-      message_id TEXT NOT NULL REFERENCES dm_messages(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN ('image', 'file', 'resource_ref')),
-      blob_id TEXT REFERENCES dm_blobs(id) ON DELETE SET NULL,
-      resource_kind TEXT,
-      resource_id TEXT,
-      label TEXT,
-      href TEXT,
-      mime TEXT,
-      size INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS dm_message_attachments_message_idx
-      ON dm_message_attachments(message_id);
+    -- Hub surfaces (DMs, Support, Notifications, platform groups) live in
+    -- host Users.sqlite after Epic #499. Legacy rows are migrated on boot.
 
     CREATE TABLE IF NOT EXISTS marketplace_entitlements (
       id TEXT PRIMARY KEY,
@@ -633,24 +567,6 @@ export function initCoreDb(): CoreDatabase {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    -- Cross-cutting notifications for both human users and agents.
-    CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      recipient_kind TEXT NOT NULL CHECK (recipient_kind IN ('user', 'agent')),
-      recipient_id TEXT NOT NULL,
-      recipient_tenant_id TEXT,
-      category TEXT NOT NULL DEFAULT 'system',
-      title TEXT NOT NULL,
-      body TEXT,
-      link TEXT,
-      resource_kind TEXT,
-      resource_id TEXT,
-      read_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS notifications_recipient_idx
-      ON notifications(recipient_kind, recipient_id, read_at, created_at DESC);
-
     -- Append-only platform event log feeding the autonomy (hooks) engine.
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -701,37 +617,6 @@ export function initCoreDb(): CoreDatabase {
     CREATE INDEX IF NOT EXISTS hook_runs_hook_idx
       ON hook_runs(hook_id, created_at DESC);
 
-    -- Support desk: tickets + threaded messages.
-    CREATE TABLE IF NOT EXISTS support_tickets (
-      id TEXT PRIMARY KEY,
-      requester_kind TEXT NOT NULL CHECK (requester_kind IN ('user', 'agent')),
-      requester_id TEXT NOT NULL,
-      requester_tenant_id TEXT,
-      subject TEXT NOT NULL,
-      body TEXT NOT NULL DEFAULT '',
-      category TEXT,
-      status TEXT NOT NULL DEFAULT 'open'
-        CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
-      priority TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS support_tickets_status_idx
-      ON support_tickets(status, updated_at DESC);
-    CREATE INDEX IF NOT EXISTS support_tickets_requester_idx
-      ON support_tickets(requester_kind, requester_id, updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS support_messages (
-      id TEXT PRIMARY KEY,
-      ticket_id TEXT NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
-      author_kind TEXT NOT NULL CHECK (author_kind IN ('user', 'agent', 'admin')),
-      author_id TEXT NOT NULL,
-      body TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS support_messages_ticket_idx
-      ON support_messages(ticket_id, created_at ASC);
-
     -- Internal/external knowledge base pages.
     CREATE TABLE IF NOT EXISTS wiki_pages (
       id TEXT PRIMARY KEY,
@@ -763,20 +648,11 @@ export function initCoreDb(): CoreDatabase {
   `);
 
   runMigrations(db, CORE_MIGRATIONS);
-  ensurePlatformGroupsTables(db);
 
   backfillWelcomeWikiPages(db);
 
-  // Self-heal: purge blank notification rows
-  try {
-    db.prepare(
-      `DELETE FROM notifications
-       WHERE (title IS NULL OR trim(title) = '')
-         AND (body IS NULL OR trim(body) = '')`
-    ).run();
-  } catch {
-    /* optional cleanup */
-  }
+  // Host Users.sqlite: hub surfaces (DMs, Support, Notifications, groups).
+  migrateHubTablesFromCore(db);
 
   coreDbSingleton = db;
   return db;
@@ -1122,6 +998,9 @@ function ensureAuthSecurityMigration(db: CoreDatabase): void {
  */
 /** Idempotent migration: mixed human+agent conversation members and agent senders. */
 function ensureDmAgentColumns(db: CoreDatabase): void {
+  if (!tableExists(db, "dm_conversation_members") || !tableExists(db, "dm_messages")) {
+    return;
+  }
   addCol(db, "dm_conversation_members", "member_kind", "TEXT NOT NULL DEFAULT 'user'");
   addCol(db, "dm_conversation_members", "agent_id", "TEXT");
   addCol(db, "dm_conversation_members", "agent_tenant_id", "TEXT");
@@ -1138,6 +1017,7 @@ function ensureDmAgentColumns(db: CoreDatabase): void {
  * Rebuild the table without the user_id FK (keeping the conversation FK).
  */
 function ensureDmMembersAgentFkFix(db: CoreDatabase): void {
+  if (!tableExists(db, "dm_conversation_members")) return;
   const fks = db
     .prepare("PRAGMA foreign_key_list(dm_conversation_members)")
     .all() as Array<{ table: string }>;
@@ -1324,14 +1204,16 @@ function ensureOssPlatformV2Tables(db: CoreDatabase): void {
     CREATE INDEX IF NOT EXISTS federated_share_invites_token_idx ON federated_share_invites(invite_token);
   `);
 
-  addCol(
-    db,
-    "support_tickets",
-    "target_kind",
-    "TEXT NOT NULL DEFAULT 'resource_owner'"
-  );
-  addCol(db, "support_tickets", "shared_grant_id", "TEXT");
-  addCol(db, "support_tickets", "owner_user_id", "TEXT");
+  if (tableExists(db, "support_tickets")) {
+    addCol(
+      db,
+      "support_tickets",
+      "target_kind",
+      "TEXT NOT NULL DEFAULT 'resource_owner'"
+    );
+    addCol(db, "support_tickets", "shared_grant_id", "TEXT");
+    addCol(db, "support_tickets", "owner_user_id", "TEXT");
+  }
 }
 
 /** Installation-scoped release discovery, durable state, history, and snapshots. */
@@ -1445,6 +1327,11 @@ function ensureReleaseFlowTables(db: CoreDatabase): void {
 export function getCoreDb(): CoreDatabase {
   if (!coreDbSingleton) return initCoreDb();
   return coreDbSingleton;
+}
+
+/** Host Cloud DB (same handle as getCoreDb during the hub-split transition). */
+export function getCloudDb(): CoreDatabase {
+  return getCoreDb();
 }
 
 export function getPlatformMeta(db: CoreDatabase, key: string): string | null {

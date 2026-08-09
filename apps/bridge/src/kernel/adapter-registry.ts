@@ -48,7 +48,8 @@ export interface OperationContext {
   data?: {
     tenantDb: AppDatabase;
     coreDb: AppDatabase;
-    declaredDatabase: "tenant" | "core";
+    hostUsersDb?: AppDatabase;
+    declaredDatabase: "tenant" | "core" | "users";
   };
   /** Set only by the Bridge's internal system-context factory. */
   systemCapability?: symbol;
