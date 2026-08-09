@@ -19,6 +19,22 @@ import { assertCodingKillSwitch } from "./coding-quota.js";
 const DIFF_CAP = 24_000;
 const LOG_CAP = 4_000;
 
+/** Cursor Cloud/SDK injects these even when IDE Attribution toggles are off. */
+const CURSOR_ATTRIBUTION_LINE =
+  /^(Co-authored-by:\s*Cursor\s*<[^>\n]*cursor\.com>|Made-with:\s*Cursor|Made with Cursor)\s*$/gim;
+
+/**
+ * Strip Cursor marketing attribution from commit messages before `git commit`.
+ * IDE Attribution OFF does not apply to Cloud Agents / SDK; strip locally instead.
+ */
+export function stripCursorCommitAttribution(message: string): string {
+  const cleaned = String(message ?? "")
+    .replace(CURSOR_ATTRIBUTION_LINE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return cleaned;
+}
+
 export type GitToolOpts = FsRootOpts;
 
 function gitEnv(): NodeJS.ProcessEnv {
@@ -197,7 +213,7 @@ export function gitCommit(opts: GitToolOpts & { message: string; paths?: string[
 } {
   const codingRoot = resolveCodingRoot(opts);
   assertCodingKillSwitch(opts.tenantId ?? undefined);
-  const message = String(opts.message ?? "").trim();
+  const message = stripCursorCommitAttribution(String(opts.message ?? ""));
   if (!message) throw new Error("commit message required");
   if (opts.paths?.length) {
     gitAdd({ ...opts, paths: opts.paths });

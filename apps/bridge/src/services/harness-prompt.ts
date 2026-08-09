@@ -141,7 +141,8 @@ export function getNativeCodingHarnessExtension(): string {
     "4. Edit with edit_file/write_file under plugins/<id>/; build_plugin then install_plugin.",
     "5. Verify with run_terminal and working-surface checks (Structure pages resolve, primary CTAs have handlers, create/list works when asked); fix failures before reporting completion.",
     "6. Ship local git with git_status → git_branch → git_diff → git_add → git_commit → git_push (confirm). Do not use run_terminal for routine git. Opening a host review request is a separate connector/plugin tool when installed.",
-    "7. Keep going until fully resolved - partial progress is not done.",
+    "7. Never add Co-authored-by: Cursor, Made with Cursor, or cursoragent@cursor.com trailers to commits or PR bodies. Prefer GodMode git_commit (strips them) over Cursor Cloud Agent git for public GodMode commits.",
+    "8. Keep going until fully resolved - partial progress is not done.",
     "</agent_loop>",
     "",
     "<persistence>",
@@ -200,4 +201,4 @@ export function getHarnessPromptForTenant(
 }
 
 /** Harness version stamp for debugging prompt drift. */
-export const HARNESS_VERSION = "cursor-parity-v4";
+export const HARNESS_VERSION = "cursor-parity-v5";

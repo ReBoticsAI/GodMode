@@ -12,6 +12,7 @@ import {
   gitPush,
   gitStatus,
   previewGitToolDiff,
+  stripCursorCommitAttribution,
 } from "../coding/git-tools.js";
 
 const temps: string[] = [];
@@ -94,5 +95,31 @@ describe("git-tools (#443)", () => {
     gitAdd({ root, paths: ["a.txt"] });
     const preview = previewGitToolDiff("git_commit", { message: "x" }, { root });
     expect(preview.previewDiff).toMatch(/preview|a\.txt/i);
+  });
+
+  it("strips Cursor Cloud co-author trailers from commit messages", () => {
+    expect(
+      stripCursorCommitAttribution(
+        "Fix foo.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>\n"
+      )
+    ).toBe("Fix foo.");
+    expect(
+      stripCursorCommitAttribution("Ship it.\n\nMade-with: Cursor\n")
+    ).toBe("Ship it.");
+
+    const root = initRepo();
+    writeFileSync(join(root, "c.txt"), "c\n");
+    gitAdd({ root, paths: ["c.txt"] });
+    const commit = gitCommit({
+      root,
+      message:
+        "add c\n\nCo-authored-by: Cursor <cursoragent@cursor.com>\n",
+    });
+    expect(commit.message).toBe("add c");
+    const body = execFileSync("git", ["log", "-1", "--format=%B"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(body).not.toMatch(/cursoragent/i);
   });
 });
