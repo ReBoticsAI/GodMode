@@ -206,7 +206,7 @@ const OS_FEATURES = [
   {
     title: "Vault",
     description:
-      "Keys and connections in one safe place, ready for Intelligence and your tools when you need them.",
+      "User Vault keeps your Connect keys with your account across workspaces. Personal and Agent vaults hold the rest.",
     Icon: VaultIcon,
     slug: "vault",
   },

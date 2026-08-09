@@ -18,7 +18,14 @@ const pinned = new Set<string>();
 const MAX_OPEN = 8;
 const IDLE_MS = 10 * 60 * 1000;
 
+/** Workspace DB handle → tenantId (User Vault fallthrough via workspace owner). */
+const tenantDbIdentity = new WeakMap<AppDatabase, { tenantId: string }>();
+
 let idleTimer: ReturnType<typeof setInterval> | null = null;
+
+export function getTenantIdForDb(db: AppDatabase): string | null {
+  return tenantDbIdentity.get(db)?.tenantId ?? null;
+}
 
 function tenantDbPath(tenantId: string): string {
   const safe = tenantId.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -92,6 +99,7 @@ export function getTenantDb(tenantId: string): AppDatabase {
     }
   }
 
+  tenantDbIdentity.set(db, { tenantId });
   cache.set(tenantId, { db, lastAccess: Date.now() });
   evictIfNeeded();
   ensureIdleTimer();

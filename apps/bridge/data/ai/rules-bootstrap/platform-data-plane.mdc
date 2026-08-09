@@ -1,0 +1,20 @@
+---
+description: User DB + Workspace DB data plane and User Vault
+alwaysApply: true
+priority: 18
+---
+# Data plane (User-level split)
+
+Storage planes:
+
+- Host control plane: `core.sqlite` (identity, workspace registry, billing, DMs/Support/Notifications). Do not store consumer Connect secrets here.
+- **User** DB: `users/<userId>.sqlite` per signed-up account. Holds **User Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
+- **Workspace** DB: `tenants/<workspaceId>.sqlite` per project. Structure, agents/chats, plugins, Personal/Agent vault, optional workspace key override.
+
+User Vault UI: sidebar **User Vault** (`/settings/vault`). Formerly called Platform Vault.
+
+Resolve Connect secrets: env (when checked) → Agent Vault → workspace platform override → User Vault. Never use Personal Vault (`owner_kind=user`) for LLM/Exa. Never pool keys across different Cloud users.
+
+When connecting Cursor/OpenAI/Exa for an account, write to User Vault by default (not a one-off workspace-only secret unless the user asks for a project override).
+
+Host split of `core.sqlite` into Cloud + Users DBs is a later epic; do not document it as shipped.

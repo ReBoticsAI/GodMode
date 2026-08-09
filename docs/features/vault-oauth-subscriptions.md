@@ -57,7 +57,7 @@ Reuse the GitHub Connect shape (`apps/bridge/src/routes/github-integration.ts`):
 1. Operator registers an OAuth app with the provider.
 2. Set host env: `OAUTH_<PROVIDER>_CLIENT_ID`, `OAUTH_<PROVIDER>_CLIENT_SECRET`.
 3. Redirect URI: `{AUTH_PUBLIC_URL}/api/integrations/<provider>/callback`.
-4. Vault card starts authorize → Bridge stores per-tenant tokens in Platform Vault → Apply routes into Intelligence with a transport harness (#232).
+4. Vault card starts authorize → Bridge stores account User Vault tokens → Apply routes into Intelligence with a transport harness (#232).
 
 Until those env vars are set, Connect must stay unavailable (clear empty state), not a stub that fails after click.
 

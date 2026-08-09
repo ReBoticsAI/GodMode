@@ -166,14 +166,14 @@ export default function Vault({
     mode === "agent"
       ? "Agent Vault"
       : mode === "platform"
-        ? "Platform Vault"
+        ? "User Vault"
         : "Personal Vault";
   const description =
     mode === "agent"
-      ? "Secrets and wallets private to this agent. LLM subscriptions, API keys, and search credentials live in Platform Vault."
+      ? "Secrets and wallets private to this agent. LLM subscriptions, API keys, and search credentials live in User Vault."
       : mode === "platform"
         ? "Shared platform credentials (GodMode Cloud, subscriptions, API keys, Exa). Agents fall back here when they have no matching secret of their own."
-        : "Personal connect hub for GitHub, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in Platform Vault. Storage and workspace data live in Settings → Storage.";
+        : "Personal connect hub for GitHub, wallets and accounts, marketplace, and secrets. GodMode Cloud and inference keys live in User Vault. Storage and workspace data live in Settings → Storage.";
 
   const body = (
     <>
@@ -244,7 +244,7 @@ export default function Vault({
                 <p className="text-sm text-muted-foreground">
                   Private to this agent. Platform keys are used only when this
                   agent has no matching secret. LLM subscriptions, API keys, and
-                  search (Exa) are configured under Platform Vault → Inference.
+                  search (Exa) are configured under User Vault → Inference.
                 </p>
               </div>
               <AiSecretsCard
@@ -330,7 +330,7 @@ function WalletsAndAccountsSection({
   );
 }
 
-/** Platform Inference Connect cards (Platform Vault → Inference). */
+/** Platform Inference Connect cards (User Vault → Inference). */
 export function InferenceTab({
   sub,
   onSubChange,
@@ -353,7 +353,7 @@ export function InferenceTab({
             <p className="text-sm text-muted-foreground">
               Use your plan (billed by the provider). Cursor, Z.AI GLM Coding Plan,
               OpenCode Go, DigitalOcean Inference, and Snowflake Cortex PAT are
-              available today. Stored in the Platform Vault.
+              available today. Stored in the User Vault.
             </p>
           </div>
           <CursorSubscriptionCard vaultAgentId={null} />
@@ -398,7 +398,7 @@ export function InferenceTab({
             <h2 className="text-sm font-medium">Web search</h2>
             <p className="text-sm text-muted-foreground">
               Keys for agent web_search and fetch_url. Exa is available today.
-              Stored in the Platform Vault.
+              Stored in the User Vault.
             </p>
           </div>
           <ExaConnectCard vaultAgentId={null} />

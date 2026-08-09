@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { config } from "../config.js";
 import { listAllTenantIds, type CoreDatabase } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
+import { getUserDb } from "../user-registry.js";
 import { getTimeseriesStore } from "./timeseries-store.js";
 
 export type PlatformBackupResult = {
@@ -83,6 +84,7 @@ export async function runLocalPlatformBackup(
   try {
     fs.mkdirSync(path.join(dest, "databases"), { recursive: true });
     fs.mkdirSync(path.join(dest, "tenants"), { recursive: true });
+    fs.mkdirSync(path.join(dest, "users"), { recursive: true });
 
     await backupSqlite(core, path.join(dest, "databases", "core.sqlite"));
 
@@ -91,6 +93,19 @@ export async function runLocalPlatformBackup(
       await backupSqlite(
         getTenantDb(tenantId),
         path.join(dest, "tenants", `${safe}.sqlite`)
+      );
+    }
+
+    const userIds = core
+      .prepare(`SELECT id FROM users`)
+      .all() as Array<{ id: string }>;
+    for (const { id: userId } of userIds) {
+      const safe = userId.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const userFile = path.join(config.usersDir, `${safe}.sqlite`);
+      if (!fs.existsSync(userFile)) continue;
+      await backupSqlite(
+        getUserDb(userId),
+        path.join(dest, "users", `${safe}.sqlite`)
       );
     }
 

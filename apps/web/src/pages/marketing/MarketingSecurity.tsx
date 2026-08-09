@@ -20,8 +20,10 @@ export default function MarketingSecurity() {
           That paywall is part of how we keep random signup noise off the shared host.
         </li>
         <li>
-          Your workspace data is kept separate from other customers. One tenant cannot read
-          another tenant&apos;s files or database by design.
+          Your account and workspace data are kept separate from other customers. One account
+          cannot read another account&apos;s User Vault or workspace databases by design.
+          Connect keys for your LLM providers live in your User Vault (per account), not in a
+          shared platform pool.
         </li>
         <li>
           Sign-in uses secure browser cookies over HTTPS. Verification and password-reset mail

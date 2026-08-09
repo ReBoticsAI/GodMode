@@ -42,7 +42,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Coding stage](features/coding-stage.md) - Files, git status/diff, terminal, and agent git tools on the coding root.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
-- [Vault](features/vault.md) - User connect hub: Integrations, Wallets & Accounts, Marketplace, and secrets (Platform Vault and Storage live under Settings).
+- [Vault](features/vault.md) - User connect hub: Integrations, Wallets & Accounts, Marketplace, and secrets (User Vault and Storage live under Settings).
 - [Bank](features/bank.md) - Ledger across connected wallets and accounts (connect holdings under Vault).
 - [Support](features/support.md) - Platform bugs via GitHub; shared resource issues to owners; optional Support group.
 
@@ -50,7 +50,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 
 - [Contacts](features/contacts.md) - Social graph for people, groups, and relationships.
 - [Shared](features/shared.md) - Live resources another user granted you; federation tooling.
-- [Settings](features/settings.md) - Account, Platform Vault, storage, appearance, and session settings.
+- [Settings](features/settings.md) - Account, User Vault, storage, appearance, and session settings.
 - [Marketplace](features/marketplace.md) - Official, Local, Community, Installed, and Sell tabs with real checkout.
 - [Intelligence plugin pipeline](features/plugin-pipeline.md) - scaffold_plugin → build_plugin → install_plugin for local and hub authoring.
 - [Git and GitHub plugins](features/git-github-plugins.md) - Core local git cycle plus optional Official host and review-request tools.

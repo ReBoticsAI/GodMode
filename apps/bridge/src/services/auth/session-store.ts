@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import type { CoreDatabase, CoreUser } from "../../core-db.js";
+import { ensureUserDb } from "../../user-registry.js";
 
 const SESSION_COOKIE = "godmode_session";
 const LEGACY_SESSION_COOKIE = "money_session";
@@ -167,6 +168,7 @@ export function upsertOAuthUser(
       `INSERT OR IGNORE INTO credit_wallets (user_id, balance) VALUES (?, 100)`
     ).run(id);
     user = core.prepare("SELECT * FROM users WHERE id=?").get(id) as CoreUser;
+    ensureUserDb(id);
   } else {
     core.prepare(
       `UPDATE users SET display_name=?, avatar_url=COALESCE(?, avatar_url),
