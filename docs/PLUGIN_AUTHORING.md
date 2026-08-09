@@ -252,7 +252,15 @@ Import host singletons from `@godmode/web-host` instead of `@/…`:
 import { StructureTabGroupPage } from "@godmode/web-host";
 ```
 
-Add `"@godmode/web-host"` to your web `external` list in `tsup.config.ts`. You may still use `@/` for presentational imports (buttons, cards, `PageHeader`) that do not carry cross-bundle singleton state.
+Add `"@godmode/web-host"` to your web `external` list in `tsup.config.ts`.
+
+### Plugin UI (two paths)
+
+Call `use_skill('shadcn-ui')` for semantic tokens and composition rules before building plugin pages.
+
+**Intelligence / SaaS `build_plugin`:** Tenant coding roots usually have no `apps/web`. Do **not** import `@/components/ui/*` (aliases and shadcn source are not available). Use semantic tokens (`bg-card`, `text-muted-foreground`, `border-border`, …) and `cn` from `@godmode/web-host`. Do **not** hand-roll Card/Button/Empty shells and call them shadcn. Prefer simple markup that matches host tokens until host UI primitives ship on `@godmode/web-host`.
+
+**Full monorepo / Marketplace tsup:** Presentational `@/` imports (buttons, cards, `PageHeader`) may work when aliases and externals are configured. Never bundle host singletons via `@/`.
 
 Define `import.meta.env.*` in the web build if you bundle host `@/api` code — the host inlines those at compile time; plugin bundles do not.
 

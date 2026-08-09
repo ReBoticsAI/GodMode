@@ -65,6 +65,13 @@ import { cn } from "@/lib/utils";
 - Validation: `data-invalid` on `Field`, `aria-invalid` on the control.
 - Icons in buttons: `data-icon="inline-start"` or `data-icon="inline-end"` on the icon; no `size-4` on icons inside components.
 
+## Plugins
+
+Plugin pages follow the same tokens and composition rules, but the import path depends on the coding root:
+
+- **`apps/web` present (full monorepo / some Marketplace packs):** prefer `@/components/ui/*` and `cn` from `@/lib/utils` when aliases are configured. Never bundle host singletons.
+- **Intelligence / SaaS tenant coding root (usually no `apps/web`):** do **not** import `@/components/ui`. Use semantic tokens and `cn` from `@godmode/web-host`. Do not reimplement Card/Button/Empty and claim they are shadcn. Keep markup simple until host UI primitives are exported on `@godmode/web-host`.
+
 ## Scope
 
-GodMode web UI is shared across all workspaces. Prefer edits under `apps/web/src/pages/**` and `@/components/ui`.
+GodMode web UI is shared across all workspaces. Prefer edits under `apps/web/src/pages/**` and `@/components/ui` when that tree exists. For plugin-only SaaS work, follow the Plugins section above.
