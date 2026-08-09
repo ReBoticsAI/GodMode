@@ -13,8 +13,13 @@ Use for everyday workspace setup. Stay in native tools; do not scaffold plugins 
 5. `create_wiki_page` / `update_wiki_page` for guides and notes.
 6. Agent chat plans: `todo_write` only (nests under the host Active Work run card). Use `create_project_card` only when the user wants a standing Kanban card outside the current chat run.
 
+**Notes / personal notes / notes-taker:**
+- Do **not** stop after an empty department (DepartmentOverview with "No workspaces configured…"). That is not a notes app.
+- Prefer wiki pages the user can open and edit (`create_wiki_page`), and/or a division + page with kind `record-list` bound to a Note (or similar) ObjectType so **New** / edit work.
+- After Structure changes, `list_structure` and confirm a path the user can open. Optionally create one sample wiki page or record so the surface is not empty.
+
 **When integration/API/hardware is implied:** stop. Call `use_skill('plugin-authoring')` and `scaffold_plugin` instead of bare structure tools.
 
 **One step at a time:** complete one tool call, confirm result, then continue. Prefer short plans (3–5 bullets) before acting.
 
-**Do not:** edit Bridge source or scaffold plugins for wiki-only requests.
+**Do not:** edit Bridge source or scaffold plugins for wiki-only requests. Do not claim a notes/tips surface is done when only a department shell exists.

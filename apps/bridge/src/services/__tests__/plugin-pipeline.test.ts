@@ -144,6 +144,8 @@ describe("plugin loop reliability (#433)", () => {
     );
     expect(webJs).toMatch(/from\s*["']@godmode\/web-host["']/);
     expect(webJs).toMatch(/from\s*["']react\/jsx-runtime["']/);
+    expect(webJs).toMatch(/from\s*["']react-router-dom["']/);
+    expect(webJs).toMatch(/onClick/);
     expect(webJs).not.toMatch(/function Button\b/);
     expect(webJs).not.toMatch(/function Card\b/);
 

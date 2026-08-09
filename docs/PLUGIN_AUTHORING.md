@@ -268,6 +268,12 @@ Intelligence `build_plugin` externalizes `@godmode/web-host`, `react`, `react/js
 
 Call `use_skill('shadcn-ui')` for tokens and composition rules. Do **not** hand-roll Card/Button/Empty shells and call them shadcn. Do **not** adopt third-party UI kits.
 
+**Working UX checklist (ship blockers):**
+- Primary `Button`s must navigate, dismiss, or mutate (`onClick`, router `Link`/`navigate`, or form submit). Decorative Got it / Get started labels are incomplete.
+- Seed Structure departments **with** divisions/pages that match registered page kinds. An empty department overview is not a product surface.
+- Prefer host `record-list` / `record-form` for CRUD. Archive / history pages need an ObjectType field or action and a filtered list; omit the page until wired.
+- After `build_plugin` + `install_plugin`, confirm Structure paths render real UI (not `placeholder`) before claiming done.
+
 **Full monorepo / Marketplace tsup:** Presentational `@/` imports may still work when aliases are configured. Prefer `@godmode/web-host` for anything that must match host chrome. Never bundle host singletons via `@/`.
 
 Define `import.meta.env.*` in the web build if you bundle host `@/api` code — the host inlines those at compile time; plugin bundles do not.

@@ -11,8 +11,9 @@ Use when the change adds ObjectTypes, routes, web pages, AI tools, department ty
 4. Bridge exports `register(api)`; web exports `registerWeb(api)`. Executable manifests declare `kernelApiVersion: 1`. Service-backed ObjectTypes use `api.objectTypes.register(definition, adapter)` and implement every declared capability.
 5. Seed StructureNode / domain Records in manifest `records` or `tenant:install`, then `build_plugin` → `install_plugin` (no Bridge restart for tools, ObjectTypes, `api.routes.mount`, or tenant:install).
 6. Web UI: call `use_skill('shadcn-ui')` for tokens/composition. Import host shadcn from `@godmode/web-host` (`Button`, `Card`, `Empty`, `Badge`, `Alert`, `Tabs`, `Separator`, `Skeleton`, `cn`, …). Do not import `@/components/ui` on Intelligence/SaaS (no `apps/web`). Do not invent parallel UI kits or hand-rolled Card/Button/Empty trees.
-7. Custom Express routes must enforce authentication, tenant membership, and installed-plugin visibility. Prefer tools + ObjectTypes + tenant hooks when HTTP is unnecessary.
-8. Declare strict action schemas/policies (roles, confirmation, idempotency, concurrency, retry, timeout, cancellation). Verify `OperationRun` terminal state and tenant isolation.
-9. For public packs: `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
-10. Ship coding-root changes with `git_*` tools; use Official GitHub plugin tools for PRs when installed.
-11. After `use_skill('plugin-authoring')`, prefer `scaffold_plugin` (or edit under `plugins/<id>/`) over long host-repo archaeology. Few explore tools before the first write on Tier-2 asks.
+7. **Working UX (required before done):** Primary Buttons need `onClick`, `Link`, or form submit (no decorative Got it / Get started). Seed Structure pages that match registered page kinds (not empty department overviews). Archive / history pages need an ObjectType field or action plus a filtered list; omit the page until wired. Prefer host `record-list` for CRUD lists. Verify: `build_plugin` → `install_plugin` → `list_structure` → create or update one Record when the ask includes content.
+8. Custom Express routes must enforce authentication, tenant membership, and installed-plugin visibility. Prefer tools + ObjectTypes + tenant hooks when HTTP is unnecessary.
+9. Declare strict action schemas/policies (roles, confirmation, idempotency, concurrency, retry, timeout, cancellation). Verify `OperationRun` terminal state and tenant isolation.
+10. For public packs: `prepare_marketplace_submission` and open a PR to GodMode-Marketplace.
+11. Ship coding-root changes with `git_*` tools; use Official GitHub plugin tools for PRs when installed.
+12. After `use_skill('plugin-authoring')`, prefer `scaffold_plugin` (or edit under `plugins/<id>/`) over long host-repo archaeology. Few explore tools before the first write on Tier-2 asks.

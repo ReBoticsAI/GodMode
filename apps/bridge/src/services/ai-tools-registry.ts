@@ -536,7 +536,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_department",
     description:
-      "Create a new top-level department. Platform-wide action — Intelligence only. Requires confirmation.",
+      "Create a new top-level department. Empty departments show DepartmentOverview (\"No workspaces configured…\") and are NOT a notes/app surface - also create divisions/pages (or wiki) the user can open. Platform-wide action — Intelligence only. Requires confirmation.",
     mode: "confirm",
     parameters: {
       type: "object",
@@ -571,7 +571,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "create_page",
     description:
-      "Create a page under a division (starts as a placeholder renderer). Requires editor on the division. Requires confirmation.",
+      "Create a page under a division (starts as a placeholder renderer unless kind is set, e.g. record-list). For notes/content apps set a real kind and object_type; placeholder-only pages are incomplete. Requires editor on the division. Requires confirmation.",
     mode: "confirm",
     parameters: {
       type: "object",
@@ -1365,7 +1365,8 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: supersededStaticName("create_wiki_page"),
-    description: "Create a wiki page. Requires confirmation.",
+    description:
+      "Create a wiki page. Prefer this (or record-list pages) for personal notes / notes-taker asks instead of an empty department. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1675,7 +1676,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "scaffold_plugin",
     description:
-      "Create a plugin under plugins/<id> (active coding root / worktree). Returns pluginRoot + codingPath. Then edit → build_plugin → install_plugin. Requires confirmation.",
+      "Create a plugin under plugins/<id> (active coding root / worktree). Returns pluginRoot + codingPath. Then edit (ObjectTypes, Structure seed, wire primary Button handlers) → build_plugin → install_plugin. Do not ship decorative CTAs or empty department-only Structure. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
