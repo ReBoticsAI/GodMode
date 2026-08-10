@@ -31,7 +31,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **Preferred** GitHub App for sign-in + Connect + webhooks + Core Support issues |
 | `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on production hosts) |
 | `GITHUB_APP_WEBHOOK_SECRET` | empty | App webhook HMAC secret |
-| `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory (stamps include `databases/core.sqlite`, `Cloud.sqlite` alias, `Users.sqlite`, `users/*.sqlite`, tenants, timeseries) |
+| `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory (stamps include `databases/Cloud.sqlite`, `core.sqlite` alias, `Users.sqlite`, `users/*.sqlite`, tenants, timeseries) |
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see [DEPLOY.md](../DEPLOY.md)) |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix when using S3/R2 |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
@@ -175,7 +175,7 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 |----------|---------|-------------|
 | `BRIDGE_PORT` | `3847` | HTTP + WebSocket port |
 | `BRIDGE_HOST` | `127.0.0.1` | Bind address |
-| `PLATFORM_DATA_DIR` | OS app data | SQLite and runtime files (`core.sqlite` Cloud plane, `Users.sqlite` hub, `users/*.sqlite` User Vault, `tenants/*.sqlite` workspaces, backups). Cloud owners can download their workspace file from Settings; place it under `PLATFORM_DATA_DIR/tenants/` for local restore (see [multi-tenant-model.md](./multi-tenant-model.md#tenant-export-cloud-to-local)). |
+| `PLATFORM_DATA_DIR` | OS app data | SQLite and runtime files (`Cloud.sqlite` Cloud plane, `Users.sqlite` hub, `users/*.sqlite` Platform Vault / User DB, `tenants/*.sqlite` workspaces, backups). Cloud owners can download their workspace file from Settings; place it under `PLATFORM_DATA_DIR/tenants/` for local restore (see [multi-tenant-model.md](./multi-tenant-model.md#tenant-export-cloud-to-local)). |
 | `PLATFORM_REPO_ROOT` | auto | Monorepo root override |
 
 ## Plugins and marketplace
@@ -243,7 +243,7 @@ unless a trusted signature-verification policy is configured.
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 
 On SaaS installs, authenticated users open Stripe Customer Portal via
-`POST /api/saas/portal` (User Vault → GodMode Cloud → Manage subscription). Platform admins list
+`POST /api/saas/portal` (Platform Vault → GodMode Cloud → Manage subscription). Platform admins list
 customers at `GET /api/admin/saas/customers`.
 
 Not used in local OSS installs. Private hubs ignore SaaS paywall env vars.

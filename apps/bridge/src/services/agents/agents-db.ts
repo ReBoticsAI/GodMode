@@ -708,7 +708,7 @@ export function normalizeVaultAgentId(agentId?: string | null): string | null {
 }
 
 /**
- * Map Connect-card scope: omitted/null agentId → User Vault (platform kind);
+ * Map Connect-card scope: omitted/null agentId → Platform Vault (platform kind);
  * set agentId → that Agent Vault. Never Personal Vault (owner_kind=user) for LLM/Exa.
  */
 export function vaultOwnerFromAgentScope(agentId?: string | null): VaultOwner {
@@ -814,7 +814,7 @@ function secretOwnerClause(owner: VaultOwner): {
 function ownerLabel(owner: VaultOwner): string {
   if (owner.kind === "agent") return "this agent Vault";
   if (owner.kind === "user") return "the Personal Vault";
-  return "the User Vault";
+  return "the Platform Vault";
 }
 
 function toListItem(r: AiSecretRow): VaultSecretListItem {
@@ -929,7 +929,7 @@ export function findSecretByName(
 }
 
 /**
- * Account userId for User Vault fallthrough: explicit, User DB identity, or
+ * Account userId for Platform Vault fallthrough: explicit, User DB identity, or
  * Workspace DB owner. Never Personal Vault (owner_kind=user).
  */
 export function resolveVaultAccountUserId(
@@ -1067,7 +1067,7 @@ function writePlatformSecretRow(
 }
 
 /**
- * Resolve by name: agent Vault → Workspace platform → User Vault (account).
+ * Resolve by name: agent Vault → Workspace platform → Platform Vault (account).
  * Never falls back to Personal Vault (owner_kind=user). No cross-agent reads.
  */
 export function resolveSecretByName(
@@ -1093,7 +1093,7 @@ export function resolveSecretByName(
 
 /**
  * Resolve a fixed Connect-card secret (by stable base id + name).
- * Agent Vault → Workspace platform override → User Vault (account User DB).
+ * Agent Vault → Workspace platform override → Platform Vault (account User DB).
  * Never Personal Vault (owner_kind=user).
  */
 export function resolvePlatformVaultSecret(
@@ -1136,7 +1136,7 @@ export function resolvePlatformVaultSecret(
 
 /**
  * Status lookup for one owner. Agent scope stays agent-only.
- * Platform scope also checks User Vault (account) after Workspace override.
+ * Platform scope also checks Platform Vault (account) after Workspace override.
  */
 export function getPlatformVaultSecretInScope(
   db: AppDatabase,
@@ -1163,7 +1163,7 @@ export function getPlatformVaultSecretInScope(
 }
 
 /**
- * Upsert Connect secret. Default (no agentId): User Vault when account is known.
+ * Upsert Connect secret. Default (no agentId): Platform Vault when account is known.
  * Pass workspaceOnly to write a Workspace platform override instead.
  * Agent scope always writes the Workspace Agent Vault.
  */

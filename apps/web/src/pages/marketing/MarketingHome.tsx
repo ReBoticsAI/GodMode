@@ -206,7 +206,7 @@ const OS_FEATURES = [
   {
     title: "Vault",
     description:
-      "User Vault keeps your Connect keys with your account across workspaces. Personal and Agent vaults hold the rest.",
+      "Platform Vault keeps your Connect keys with your account across workspaces. Personal and Agent vaults hold the rest.",
     Icon: VaultIcon,
     slug: "vault",
   },

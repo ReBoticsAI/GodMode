@@ -251,7 +251,7 @@ export function BackendTab({
                 to={platformVaultSettingsHref("subscriptions")}
                 className="text-primary underline-offset-2 hover:underline"
               >
-                User Vault → Inference → Subscriptions
+                Platform Vault → Inference → Subscriptions
               </Link>
               . Common ids:{" "}
               <span className="font-mono">auto</span>,{" "}

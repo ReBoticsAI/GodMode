@@ -75,7 +75,7 @@ flowchart TB
     Services[Authoritative services and adapters]
     CloudDb[(core.sqlite Cloud)]
     HostUsersDb[(Users.sqlite hub)]
-    UserDb[(users/*.sqlite User Vault)]
+    UserDb[(users/*.sqlite Platform Vault)]
     TenantDb[(tenants/*.sqlite per workspace)]
     Web -->|REST and WebSocket| Bridge
     Bridge --> Kernel

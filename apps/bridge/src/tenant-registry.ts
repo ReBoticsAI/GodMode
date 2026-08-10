@@ -18,7 +18,7 @@ const pinned = new Set<string>();
 const MAX_OPEN = 8;
 const IDLE_MS = 10 * 60 * 1000;
 
-/** Workspace DB handle → tenantId (User Vault fallthrough via workspace owner). */
+/** Workspace DB handle → tenantId (Platform Vault fallthrough via workspace owner). */
 const tenantDbIdentity = new WeakMap<AppDatabase, { tenantId: string }>();
 
 let idleTimer: ReturnType<typeof setInterval> | null = null;

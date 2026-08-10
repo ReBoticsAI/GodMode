@@ -58,7 +58,7 @@ security, tenancy, storage, and compatibility contract.
 ```mermaid
 flowchart LR
   Bridge[Bridge]
-  Cloud[(core.sqlite Cloud)]
+  Cloud[(Cloud.sqlite)]
   HostUsers[(Users.sqlite hub)]
   U1[(users/userA.sqlite)]
   T1[(tenants/workspaceA.sqlite)]
@@ -70,7 +70,7 @@ flowchart LR
   Bridge --> T2
 ```
 
-### Host Cloud (`core.sqlite`)
+### Host Cloud (`Cloud.sqlite`)
 
 Identity and commerce plane (`getCloudDb()`):
 
@@ -90,7 +90,7 @@ Cross-account hub (`getHostUsersDb`):
 
 Per signed-up account:
 
-- **User Vault** — Connect secrets (Cursor, LLM keys, Exa) shared across that account’s workspaces
+- **Platform Vault** — Connect secrets (Cursor, LLM keys, Exa) shared across that account’s workspaces
 
 ### Workspace database (`tenants/<id>.sqlite`)
 
@@ -112,7 +112,7 @@ sequenceDiagram
   participant Bridge
   participant Kernel as ObjectType kernel
   participant Service as Adapter/service
-  participant CoreDb as core.sqlite
+  participant CoreDb as Cloud.sqlite
   participant TenantDb as tenant.sqlite
 
   Browser->>Bridge: HTTP /api/... + session cookie

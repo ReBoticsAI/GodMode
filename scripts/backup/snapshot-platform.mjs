@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Snapshot host Cloud (core.sqlite + Cloud.sqlite alias), Users.sqlite hub,
- * users/*.sqlite User Vaults, tenants/*.sqlite, and timeseries DuckDB.
+ * Snapshot host Cloud (live Cloud.sqlite, legacy core.sqlite fallback; dual archive
+ * names), Users.sqlite hub, users/*.sqlite User DBs, tenants/*.sqlite, and timeseries DuckDB.
  * Optionally upload to S3-compatible storage.
  *
  * Env:
@@ -62,14 +62,20 @@ async function backupSqlite(src, destFile) {
   return true;
 }
 
-const coreSrc = path.join(dataDir, "core.sqlite");
-const coreOk = await backupSqlite(
-  coreSrc,
-  path.join(dest, "databases", "core.sqlite")
+const cloudLive = path.join(dataDir, "Cloud.sqlite");
+const coreLegacy = path.join(dataDir, "core.sqlite");
+const cloudSrc = fs.existsSync(cloudLive)
+  ? cloudLive
+  : fs.existsSync(coreLegacy)
+    ? coreLegacy
+    : cloudLive;
+const cloudOk = await backupSqlite(
+  cloudSrc,
+  path.join(dest, "databases", "Cloud.sqlite")
 );
-// Archive alias for the host Cloud plane name (live runtime stays core.sqlite).
-if (coreOk) {
-  await backupSqlite(coreSrc, path.join(dest, "databases", "Cloud.sqlite"));
+// Keep legacy archive name for older restore tools.
+if (cloudOk) {
+  await backupSqlite(cloudSrc, path.join(dest, "databases", "core.sqlite"));
 }
 
 const usersHubSrc = path.join(dataDir, "Users.sqlite");
@@ -215,11 +221,15 @@ if (endpoint && bucket && accessKey && secretKey) {
   console.log("S3 env not fully set — local snapshot only");
 }
 
-// Best-effort: write platform_backup_meta when core is writable
+// Best-effort: write platform_backup_meta when Cloud DB is writable
 try {
-  const coreWrite = path.join(dataDir, "core.sqlite");
-  if (fs.existsSync(coreWrite)) {
-    const db = new Database(coreWrite);
+  const cloudWrite = fs.existsSync(cloudLive)
+    ? cloudLive
+    : fs.existsSync(coreLegacy)
+      ? coreLegacy
+      : null;
+  if (cloudWrite) {
+    const db = new Database(cloudWrite);
     db.exec(`
       CREATE TABLE IF NOT EXISTS platform_backup_meta (
         id TEXT PRIMARY KEY CHECK (id = 'latest'),

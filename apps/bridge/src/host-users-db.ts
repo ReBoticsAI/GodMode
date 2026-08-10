@@ -1,6 +1,6 @@
 /**
  * Host Users DB (Epic #499): cross-account hub surfaces.
- * Distinct from per-account User Vault files under users/<userId>.sqlite.
+ * Distinct from per-account Platform Vault files under users/<userId>.sqlite.
  */
 import fs from "node:fs";
 import Database from "better-sqlite3";

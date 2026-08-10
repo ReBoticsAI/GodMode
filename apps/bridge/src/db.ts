@@ -351,7 +351,7 @@ function migrateAiSecretsOwnerKind(db: Database.Database): void {
      WHERE agent_id IS NULL
        AND (owner_kind IS NULL OR owner_kind = '');
   `);
-  // GitHub Projects token lives in the User Vault, not Platform.
+  // GitHub Projects token lives in the Personal Vault, not Platform Vault.
   db.prepare(
     `UPDATE ai_secrets
         SET owner_kind = 'user'

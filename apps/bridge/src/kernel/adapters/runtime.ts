@@ -1056,7 +1056,7 @@ function vaultSecretRecord(
 /**
  * Resolve Vault owner from request context / body.
  * Default (no agentId, no owner_kind) is Platform for Connect cards.
- * Explicit owner_kind=user selects User Vault. agent_id selects Agent.
+ * Explicit owner_kind=user selects Platform Vault. agent_id selects Agent.
  */
 function vaultOwnerScope(
   ctx: { agentId?: string },
@@ -1087,12 +1087,12 @@ function vaultOwnerScope(
   }
 }
 
-/** Platform helpers take agentId | null (null = User Vault). */
+/** Platform helpers take agentId | null (null = Platform Vault). */
 function platformAgentScope(owner: VaultOwner): string | null {
   if (owner.kind === "user") {
     throw httpError(
       400,
-      "LLM provider credentials belong in Platform or Agent Vault, not User Vault"
+      "LLM provider credentials belong in Platform or Agent Vault, not Personal Vault"
     );
   }
   return owner.kind === "agent" ? owner.agentId : null;
