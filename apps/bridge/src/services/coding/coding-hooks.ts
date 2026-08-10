@@ -4,7 +4,6 @@
  */
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCloudDb,
   type CoreDatabase,
   type CoreEvent,
   type CoreHook,
@@ -12,6 +11,7 @@ import {
 import {
   eventTypeMatches,
   executeHook,
+  loadEnabledEventHooks,
   ownerCanSeeEvent,
 } from "../hook-dispatcher.js";
 
@@ -41,7 +41,6 @@ export async function assertCodingHooksAllow(opts: {
   db?: CoreDatabase;
 }): Promise<void> {
   if (!codingHookExecutionEnabled()) return;
-  const db = opts.db ?? getCloudDb();
   const event: CoreEvent = {
     id: `pre-${uuidv4()}`,
     type: opts.eventType,
@@ -51,10 +50,8 @@ export async function assertCodingHooksAllow(opts: {
     payload_json: opts.payload ? JSON.stringify(opts.payload) : null,
     created_at: new Date().toISOString(),
   };
-  const hooks = db
-    .prepare(`SELECT * FROM hooks WHERE trigger_kind = 'event' AND enabled = 1`)
-    .all() as CoreHook[];
-  for (const hook of hooks) {
+  const candidates = loadEnabledEventHooks(event, opts.db);
+  for (const { hook, db } of candidates) {
     if (!eventTypeMatches(hook.event_type, event.type)) continue;
     if (!ownerCanSeeEvent(hook, event)) continue;
     const isGate = hook.action_kind === "gate";

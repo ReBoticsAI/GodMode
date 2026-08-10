@@ -1,7 +1,7 @@
 import type { ObjectTypeDef, RecordData, RecordRow } from "@godmode/kernel";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../../db.js";
-import { getCloudDb, type CoreDatabase } from "../../core-db.js";
+import { type CoreDatabase } from "../../core-db.js";
 import { getTenantDb } from "../../tenant-registry.js";
 import {
   createWorkflow,
@@ -35,11 +35,13 @@ import {
   updateAgent,
 } from "../../services/agents/agents-db.js";
 import {
+  createHook,
   deleteHook,
+  findHookRunLocation,
   getHook,
   getHookForRun,
+  listHookRuns,
   listHooks,
-  createHook,
   updateHook,
   type HookOwnerScope,
 } from "../../services/hook-service.js";
@@ -209,26 +211,35 @@ export const workflowServiceAdapter: RecordAdapter = {
   delete(db, _def, id, ctx) {
     if (!getWorkflow(db, id)) notFound("Workflow not found");
 
-    const coreDb = getCloudDb();
+    const hooksDb = db as CoreDatabase;
     const hookIds: string[] = [];
-    const rows = coreDb
-      .prepare(
-        `SELECT id, action_config_json FROM hooks
-         WHERE action_kind = 'run_workflow'
-           AND owner_tenant_id = ?`
-      )
-      .all(ctx.tenantId ?? "") as Array<{
-        id: string;
-        action_config_json: string | null;
-      }>;
-    for (const row of rows) {
-      const config = parseJson(row.action_config_json);
-      if (
-        config &&
-        typeof config === "object" &&
-        (config as Record<string, unknown>).workflowId === id
-      ) {
-        hookIds.push(row.id);
+    const hasHooks = Boolean(
+      hooksDb
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type='table' AND name = 'hooks'`
+        )
+        .get()
+    );
+    if (hasHooks) {
+      const rows = hooksDb
+        .prepare(
+          `SELECT id, action_config_json FROM hooks
+           WHERE action_kind = 'run_workflow'
+             AND owner_tenant_id = ?`
+        )
+        .all(ctx.tenantId ?? "") as Array<{
+          id: string;
+          action_config_json: string | null;
+        }>;
+      for (const row of rows) {
+        const config = parseJson(row.action_config_json);
+        if (
+          config &&
+          typeof config === "object" &&
+          (config as Record<string, unknown>).workflowId === id
+        ) {
+          hookIds.push(row.id);
+        }
       }
     }
 
@@ -260,8 +271,8 @@ export const workflowServiceAdapter: RecordAdapter = {
     })();
 
     if (hookIds.length) {
-      coreDb.transaction(() => {
-        const remove = coreDb.prepare(`DELETE FROM hooks WHERE id = ?`);
+      hooksDb.transaction(() => {
+        const remove = hooksDb.prepare(`DELETE FROM hooks WHERE id = ?`);
         for (const hookId of hookIds) remove.run(hookId);
       })();
     }
@@ -1025,14 +1036,16 @@ function hookRecord(def: ObjectTypeDef, row: ReturnType<typeof getHook>): Record
 export const hookServiceAdapter: RecordAdapter = {
   id: "hook_service",
   list(db, def, query, ctx) {
-    const result = page(listHooks(hookScope(db, ctx)), query);
+    const workspace = db as CoreDatabase;
+    const result = page(listHooks(hookScope(db, ctx), workspace), query);
     return {
       objectType: def.name,
       records: result.rows.map((row) => hookRecord(def, row)),
       total: result.total,
     };
   },
-  get: (db, def, id, ctx) => hookRecord(def, getHook(id, hookScope(db, ctx))),
+  get: (db, def, id, ctx) =>
+    hookRecord(def, getHook(id, hookScope(db, ctx), db as CoreDatabase)),
   create(db, def, data, ctx) {
     const scope = hookScope(db, ctx);
     const created = hookRecord(
@@ -1055,7 +1068,8 @@ export const hookServiceAdapter: RecordAdapter = {
           actionConfigJson: jsonText(data.action_config_json),
           requireApproval: Boolean(data.require_approval),
         },
-        scope
+        scope,
+        db as CoreDatabase
       )
     );
     refreshScheduler();
@@ -1089,24 +1103,35 @@ export const hookServiceAdapter: RecordAdapter = {
             ? { requireApproval: data.require_approval }
             : {}),
         },
-        hookScope(db, ctx)
+        hookScope(db, ctx),
+        db as CoreDatabase
       )
     );
     refreshScheduler();
     return updated;
   },
   delete(db, _def, id, ctx) {
-    deleteHook(id, hookScope(db, ctx));
+    deleteHook(id, hookScope(db, ctx), db as CoreDatabase);
     refreshScheduler();
   },
   actions: {
     enable(db, def, id, _input, ctx) {
-      const row = updateHook(id, { enabled: true }, hookScope(db, ctx));
+      const row = updateHook(
+        id,
+        { enabled: true },
+        hookScope(db, ctx),
+        db as CoreDatabase
+      );
       refreshScheduler();
       return hookRecord(def, row);
     },
     disable(db, def, id, _input, ctx) {
-      const row = updateHook(id, { enabled: false }, hookScope(db, ctx));
+      const row = updateHook(
+        id,
+        { enabled: false },
+        hookScope(db, ctx),
+        db as CoreDatabase
+      );
       refreshScheduler();
       return hookRecord(def, row);
     },
@@ -1133,15 +1158,11 @@ function hookRunRecord(
 export const hookRunServiceAdapter: RecordAdapter = {
   id: "hook_run_read",
   list(db, def, query, ctx) {
+    const workspace = db as CoreDatabase;
     const scope = hookScope(db, ctx);
-    const rows = listHooks(scope).flatMap((hook) =>
-      getCloudDb()
-        .prepare(
-          `SELECT * FROM hook_runs WHERE hook_id = ?
-           ORDER BY created_at DESC LIMIT 200`
-        )
-        .all(hook.id) as Record<string, unknown>[]
-    );
+    const rows = listHooks(scope, workspace).flatMap((hook) =>
+      listHookRuns(hook.id, scope, workspace)
+    ) as unknown as Record<string, unknown>[];
     const result = page(rows, query);
     return {
       objectType: def.name,
@@ -1150,38 +1171,41 @@ export const hookRunServiceAdapter: RecordAdapter = {
     };
   },
   get(db, def, id, ctx) {
+    const workspace = db as CoreDatabase;
     const scope = hookScope(db, ctx);
-    getHookForRun(id, scope);
-    const row = getCloudDb()
+    getHookForRun(id, scope, workspace);
+    const found = findHookRunLocation(id, workspace);
+    if (!found) return null;
+    const row = found.db
       .prepare(`SELECT * FROM hook_runs WHERE id = ?`)
       .get(id) as Record<string, unknown> | undefined;
     return row ? hookRunRecord(def, row) : null;
   },
   actions: {
     async approve(db, _def, id, _input, ctx) {
-      const coreDb = getCloudDb();
-      getHookForRun(id, hookScope(db, ctx), coreDb);
-      const row = coreDb
-        .prepare(`SELECT status FROM hook_runs WHERE id = ?`)
-        .get(id) as { status: string } | undefined;
-      if (!row) notFound("Hook run not found");
-      if (row.status !== "pending_approval") {
-        conflict(`Hook run is not pending approval (status=${row.status})`);
+      const workspace = db as CoreDatabase;
+      getHookForRun(id, hookScope(db, ctx), workspace);
+      const found = findHookRunLocation(id, workspace);
+      if (!found) notFound("Hook run not found");
+      if (found.run.status !== "pending_approval") {
+        conflict(
+          `Hook run is not pending approval (status=${found.run.status})`
+        );
       }
-      await approveHookRun(id, coreDb);
+      await approveHookRun(id, found.db);
       return { ok: true };
     },
     reject(db, _def, id, _input, ctx) {
-      const coreDb = getCloudDb();
-      getHookForRun(id, hookScope(db, ctx), coreDb);
-      const row = coreDb
-        .prepare(`SELECT status FROM hook_runs WHERE id = ?`)
-        .get(id) as { status: string } | undefined;
-      if (!row) notFound("Hook run not found");
-      if (row.status !== "pending_approval") {
-        conflict(`Hook run is not pending approval (status=${row.status})`);
+      const workspace = db as CoreDatabase;
+      getHookForRun(id, hookScope(db, ctx), workspace);
+      const found = findHookRunLocation(id, workspace);
+      if (!found) notFound("Hook run not found");
+      if (found.run.status !== "pending_approval") {
+        conflict(
+          `Hook run is not pending approval (status=${found.run.status})`
+        );
       }
-      rejectHookRun(id, coreDb);
+      rejectHookRun(id, found.db);
       return { ok: true };
     },
   },

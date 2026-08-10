@@ -68,6 +68,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/vault-agent-scope.test.ts",
       "apps/bridge/src/services/__tests__/user-vault-scope.test.ts",
       "apps/bridge/src/services/__tests__/wiki-workspace-migrate.test.ts",
+      "apps/bridge/src/services/__tests__/hooks-workspace-migrate.test.ts",
       "apps/bridge/src/services/__tests__/host-users-hub.test.ts",
       "apps/bridge/src/services/__tests__/secret-scrub.test.ts",
       "apps/bridge/src/services/__tests__/build-supervisor-lib.test.ts",

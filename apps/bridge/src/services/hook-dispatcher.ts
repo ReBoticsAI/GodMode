@@ -22,6 +22,12 @@ import {
   assertSendAllowed,
   isSendAuthorityError,
 } from "./authority/send-authority.js";
+import {
+  dbForHook,
+  findHookRunLocation,
+  hookDbForTenant,
+  listHookTenantIds,
+} from "./hook-service.js";
 
 interface DispatcherDeps {
   llm?: LlmManager;
@@ -442,16 +448,70 @@ async function dispatchAction(
   }
 }
 
+const ENABLED_EVENT_HOOKS_SQL = `SELECT * FROM hooks WHERE trigger_kind = 'event' AND enabled = 1`;
+
+/**
+ * Load enabled event hooks for dispatch.
+ * Tenant-scoped events query that workspace; global events fan-out all tenants.
+ * Always includes Cloud orphan hooks (`owner_tenant_id IS NULL`).
+ */
+export function loadEnabledEventHooks(
+  event: CoreEvent,
+  preferredDb?: CoreDatabase
+): Array<{ hook: CoreHook; db: CoreDatabase }> {
+  const out: Array<{ hook: CoreHook; db: CoreDatabase }> = [];
+  const seen = new Set<string>();
+
+  const pushAll = (db: CoreDatabase, rows: CoreHook[]) => {
+    for (const hook of rows) {
+      if (seen.has(hook.id)) continue;
+      seen.add(hook.id);
+      out.push({ hook, db });
+    }
+  };
+
+  if (preferredDb) {
+    pushAll(
+      preferredDb,
+      preferredDb.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]
+    );
+    return out;
+  }
+
+  if (event.tenant_id) {
+    const db = hookDbForTenant(event.tenant_id);
+    pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
+  } else {
+    for (const tenantId of listHookTenantIds()) {
+      const db = hookDbForTenant(tenantId);
+      pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
+    }
+  }
+
+  const cloud = getCloudDb();
+  pushAll(
+    cloud,
+    cloud
+      .prepare(
+        `${ENABLED_EVENT_HOOKS_SQL} AND owner_tenant_id IS NULL`
+      )
+      .all() as CoreHook[]
+  );
+  return out;
+}
+
 /**
  * Run one hook against a (possibly synthetic) event. Handles condition gating,
  * rate limiting, approval gating, and action execution + audit. Shared by the
- * event path and the scheduler.
+ * event path and the scheduler. Writes hook_runs to the hook's workspace DB
+ * (or Cloud for orphans).
  */
 export async function executeHook(
   hook: CoreHook,
   event: CoreEvent | null,
-  db: CoreDatabase = getCloudDb()
+  db?: CoreDatabase
 ): Promise<HookRunStatus> {
+  const runDb = db ?? dbForHook(hook);
   const payload: Record<string, unknown> = {
     eventType: event?.type ?? "schedule.tick",
     actorKind: event?.actor_kind ?? "system",
@@ -467,18 +527,18 @@ export async function executeHook(
   }
 
   if (!evaluateCondition(hook.condition_json, payload)) {
-    recordRun(db, hook.id, event?.id ?? null, "skipped", "condition not met");
+    recordRun(runDb, hook.id, event?.id ?? null, "skipped", "condition not met");
     return "skipped";
   }
 
-  if (isRateLimited(db, hook)) {
-    recordRun(db, hook.id, event?.id ?? null, "skipped", "rate limit reached");
+  if (isRateLimited(runDb, hook)) {
+    recordRun(runDb, hook.id, event?.id ?? null, "skipped", "rate limit reached");
     return "skipped";
   }
 
   if (hook.require_approval) {
     const runId = recordRun(
-      db,
+      runDb,
       hook.id,
       event?.id ?? null,
       "pending_approval",
@@ -495,9 +555,9 @@ export async function executeHook(
       resourceKind: "hook_run",
       resourceId: runId,
     });
-    db.prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`).run(
-      hook.id
-    );
+    runDb
+      .prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`)
+      .run(hook.id);
     return "pending_approval";
   }
 
@@ -507,28 +567,36 @@ export async function executeHook(
   } catch (err) {
     result = { status: "error", detail: (err as Error).message };
   }
-  recordRun(db, hook.id, event?.id ?? null, result.status, result.detail, result.result);
-  db.prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`).run(
-    hook.id
+  recordRun(
+    runDb,
+    hook.id,
+    event?.id ?? null,
+    result.status,
+    result.detail,
+    result.result
   );
+  runDb
+    .prepare(`UPDATE hooks SET last_fired_at = datetime('now') WHERE id = ?`)
+    .run(hook.id);
   return result.status;
 }
 
 /** Approve a pending_approval run: execute its action now and log the outcome. */
 export async function approveHookRun(
   runId: string,
-  db: CoreDatabase = getCloudDb()
+  db?: CoreDatabase
 ): Promise<void> {
-  const run = db
-    .prepare(`SELECT * FROM hook_runs WHERE id = ?`)
-    .get(runId) as { id: string; hook_id: string; event_id: string | null; status: string } | undefined;
-  if (!run || run.status !== "pending_approval") return;
-  const hook = db.prepare(`SELECT * FROM hooks WHERE id = ?`).get(run.hook_id) as
-    | CoreHook
-    | undefined;
+  const found = findHookRunLocation(runId, db);
+  if (!found || found.run.status !== "pending_approval") return;
+  const hook = found.db
+    .prepare(`SELECT * FROM hooks WHERE id = ?`)
+    .get(found.run.hook_id) as CoreHook | undefined;
   if (!hook) return;
-  const event = run.event_id
-    ? (db.prepare(`SELECT * FROM events WHERE id = ?`).get(run.event_id) as CoreEvent | undefined) ?? null
+  // Platform events stay on Cloud even when the hook/run live on Workspace.
+  const event = found.run.event_id
+    ? ((getCloudDb()
+        .prepare(`SELECT * FROM events WHERE id = ?`)
+        .get(found.run.event_id) as CoreEvent | undefined) ?? null)
     : null;
   const payload: Record<string, unknown> = {};
   if (event?.payload_json) {
@@ -544,36 +612,40 @@ export async function approveHookRun(
   } catch (err) {
     result = { status: "error", detail: (err as Error).message };
   }
-  db.prepare(`UPDATE hook_runs SET status = ?, detail = ?, result_json = ? WHERE id = ?`).run(
-    result.status,
-    `approved: ${result.detail}`,
-    result.result === undefined ? null : JSON.stringify(result.result),
-    runId
-  );
+  found.db
+    .prepare(
+      `UPDATE hook_runs SET status = ?, detail = ?, result_json = ? WHERE id = ?`
+    )
+    .run(
+      result.status,
+      `approved: ${result.detail}`,
+      result.result === undefined ? null : JSON.stringify(result.result),
+      runId
+    );
 }
 
-export function rejectHookRun(runId: string, db: CoreDatabase = getCloudDb()): void {
-  db.prepare(
-    `UPDATE hook_runs SET status = 'skipped', detail = 'rejected by owner'
-     WHERE id = ? AND status = 'pending_approval'`
-  ).run(runId);
+export function rejectHookRun(runId: string, db?: CoreDatabase): void {
+  const found = findHookRunLocation(runId, db);
+  if (!found) return;
+  found.db
+    .prepare(
+      `UPDATE hook_runs SET status = 'skipped', detail = 'rejected by owner'
+       WHERE id = ? AND status = 'pending_approval'`
+    )
+    .run(runId);
 }
 
 /** Entry point for the event bus. */
 export async function dispatchEvent(
   event: CoreEvent,
-  db: CoreDatabase = getCloudDb()
+  db?: CoreDatabase
 ): Promise<void> {
-  const hooks = db
-    .prepare(
-      `SELECT * FROM hooks WHERE trigger_kind = 'event' AND enabled = 1`
-    )
-    .all() as CoreHook[];
-  for (const hook of hooks) {
+  const candidates = loadEnabledEventHooks(event, db);
+  for (const { hook, db: hookDb } of candidates) {
     if (!eventTypeMatches(hook.event_type, event.type)) continue;
     if (!ownerCanSeeEvent(hook, event)) continue;
     try {
-      await executeHook(hook, event, db);
+      await executeHook(hook, event, hookDb);
     } catch (err) {
       console.error(`[hook-dispatcher] hook ${hook.id} failed`, err);
     }

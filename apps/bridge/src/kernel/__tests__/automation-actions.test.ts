@@ -109,10 +109,6 @@ describe("safe automation service actions", () => {
         result_json TEXT, error TEXT, tenant_id TEXT, created_at TEXT DEFAULT (datetime('now')),
         started_at TEXT, finished_at TEXT
       );
-    `);
-
-    mocks.coreDb.exec(`
-      PRAGMA foreign_keys = ON;
       CREATE TABLE hooks (
         id TEXT PRIMARY KEY, owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL,
         owner_tenant_id TEXT, name TEXT NOT NULL, enabled INTEGER NOT NULL,
@@ -125,6 +121,16 @@ describe("safe automation service actions", () => {
       CREATE TABLE hook_runs (
         id TEXT PRIMARY KEY, hook_id TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE,
         event_id TEXT, status TEXT NOT NULL, detail TEXT, result_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    mocks.coreDb.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE tenants (id TEXT PRIMARY KEY);
+      CREATE TABLE events (
+        id TEXT PRIMARY KEY, type TEXT NOT NULL, actor_kind TEXT, actor_id TEXT,
+        tenant_id TEXT, payload_json TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
@@ -221,7 +227,7 @@ describe("safe automation service actions", () => {
       `INSERT INTO ai_schedules (id, workflow_id, cron_expr, timezone, enabled)
        VALUES ('schedule', 'wf', '0 9 * * *', 'UTC', 1)`
     ).run();
-    mocks.coreDb.prepare(
+    db.prepare(
       `INSERT INTO hooks
        (id, owner_kind, owner_id, owner_tenant_id, name, enabled, trigger_kind,
         action_kind, action_config_json, require_approval)
@@ -265,9 +271,9 @@ describe("safe automation service actions", () => {
     expect(db.prepare(`SELECT COUNT(*) AS c FROM ai_schedules`).get()).toEqual({
       c: 0,
     });
-    expect(
-      mocks.coreDb.prepare(`SELECT COUNT(*) AS c FROM hooks`).get()
-    ).toEqual({ c: 0 });
+    expect(db.prepare(`SELECT COUNT(*) AS c FROM hooks`).get()).toEqual({
+      c: 0,
+    });
   });
 
   it("toggles schedules and refreshes hook scheduling after every mutation", async () => {
@@ -330,14 +336,14 @@ describe("safe automation service actions", () => {
   });
 
   it("enforces hook ownership before approving or rejecting runs", async () => {
-    mocks.coreDb.prepare(
+    db.prepare(
       `INSERT INTO hooks
        (id, owner_kind, owner_id, owner_tenant_id, name, enabled, trigger_kind,
         action_kind, require_approval)
        VALUES ('owned', 'user', ?, ?, 'Owned', 1, 'event', 'notify', 1),
               ('other', 'user', 'other-user', ?, 'Other', 1, 'event', 'notify', 1)`
     ).run(ctx.userId, ctx.tenantId, ctx.tenantId);
-    mocks.coreDb.prepare(
+    db.prepare(
       `INSERT INTO hook_runs (id, hook_id, status)
        VALUES ('approve-run', 'owned', 'pending_approval'),
               ('reject-run', 'owned', 'pending_approval'),
@@ -358,14 +364,8 @@ describe("safe automation service actions", () => {
       {},
       ctx
     );
-    expect(mocks.approveHookRun).toHaveBeenCalledWith(
-      "approve-run",
-      mocks.coreDb
-    );
-    expect(mocks.rejectHookRun).toHaveBeenCalledWith(
-      "reject-run",
-      mocks.coreDb
-    );
+    expect(mocks.approveHookRun).toHaveBeenCalledWith("approve-run", db);
+    expect(mocks.rejectHookRun).toHaveBeenCalledWith("reject-run", db);
     await expect(
       hookRunServiceAdapter.actions!.approve(
         db,
