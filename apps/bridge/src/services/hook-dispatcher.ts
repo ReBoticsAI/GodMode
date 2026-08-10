@@ -28,6 +28,7 @@ import {
   hookDbForTenant,
   listHookTenantIds,
 } from "./hook-service.js";
+import { ensureHooksWorkspaceSchema } from "./hooks-workspace-migrate.js";
 
 interface DispatcherDeps {
   llm?: LlmManager;
@@ -471,6 +472,7 @@ export function loadEnabledEventHooks(
   };
 
   if (preferredDb) {
+    ensureHooksWorkspaceSchema(preferredDb);
     pushAll(
       preferredDb,
       preferredDb.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]
@@ -483,8 +485,15 @@ export function loadEnabledEventHooks(
     pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
   } else {
     for (const tenantId of listHookTenantIds()) {
-      const db = hookDbForTenant(tenantId);
-      pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
+      try {
+        const db = hookDbForTenant(tenantId);
+        pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
+      } catch (err) {
+        console.warn(
+          `[hooks] skip tenant ${tenantId} during dispatch:`,
+          err instanceof Error ? err.message : err
+        );
+      }
     }
   }
 

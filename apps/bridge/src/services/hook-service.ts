@@ -9,6 +9,7 @@ import {
   type HookTriggerKind,
 } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
+import { ensureHooksWorkspaceSchema } from "./hooks-workspace-migrate.js";
 
 export class HookError extends Error {
   constructor(
@@ -47,7 +48,9 @@ export interface CreateHookInput {
 
 /** Workspace DB for a tenant (runs hooks Cloud→Workspace migrate on open). */
 export function hookDbForTenant(tenantId: string): CoreDatabase {
-  return getTenantDb(tenantId) as CoreDatabase;
+  const db = getTenantDb(tenantId) as CoreDatabase;
+  ensureHooksWorkspaceSchema(db);
+  return db;
 }
 
 export function listHookTenantIds(): string[] {
