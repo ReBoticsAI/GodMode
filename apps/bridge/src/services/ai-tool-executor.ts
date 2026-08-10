@@ -49,6 +49,7 @@ import {
 } from "../kernel/tool-exec.js";
 import { isRegisteredPageKind } from "../kernel/kind-registry.js";
 import { getCoreDb } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { broadcastCardActivity } from "../ws-broker.js";
 import {
   advanceSubtaskOnResultComment,
@@ -2807,16 +2808,18 @@ export async function executeTool(
 
     case "list_conversations": {
       if (!ctx.userId) throw new Error("userId required");
-      const convs = listConversationsForUser(getCoreDb(), ctx.userId);
+      const hub = getHostUsersDb();
+      const convs = listConversationsForUser(hub, ctx.userId);
       const limit = args.limit != null ? Number(args.limit) : undefined;
       return limit ? convs.slice(0, limit) : convs;
     }
 
     case "read_conversation": {
       if (!ctx.userId) throw new Error("userId required");
+      const hub = getHostUsersDb();
       const conversationId = String(args.conversationId ?? "");
-      getConversationForUser(getCoreDb(), conversationId, ctx.userId);
-      return listDmMessages(getCoreDb(), conversationId, ctx.userId, {
+      getConversationForUser(hub, conversationId, ctx.userId);
+      return listDmMessages(hub, conversationId, ctx.userId, {
         limit: args.limit != null ? Number(args.limit) : 50,
         before: args.before ? String(args.before) : undefined,
       });
@@ -2824,7 +2827,7 @@ export async function executeTool(
 
     case "send_message": {
       if (!ctx.userId) throw new Error("userId required");
-      return createDmMessage(getCoreDb(), {
+      return createDmMessage(getHostUsersDb(), {
         conversationId: String(args.conversationId ?? ""),
         senderUserId: ctx.userId,
         bodyText: String(args.body ?? ""),
@@ -2843,7 +2846,7 @@ export async function executeTool(
             agentTenantId: ctx.tenantId ?? "",
           }))
         : [];
-      return createConversation(getCoreDb(), {
+      return createConversation(getHostUsersDb(), {
         creatorUserId: ctx.userId,
         kind,
         title: args.title ? String(args.title) : null,

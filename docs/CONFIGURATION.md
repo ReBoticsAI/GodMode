@@ -31,7 +31,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `GITHUB_APP_ID` / `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | empty | **Preferred** GitHub App for sign-in + Connect + webhooks + Core Support issues |
 | `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | empty | App private key (PEM path preferred on production hosts) |
 | `GITHUB_APP_WEBHOOK_SECRET` | empty | App webhook HMAC secret |
-| `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory |
+| `BACKUP_LOCAL_DIR` | `{data}/backups` | Local snapshot directory (stamps include `databases/core.sqlite`, `Cloud.sqlite` alias, `Users.sqlite`, `users/*.sqlite`, tenants, timeseries) |
 | `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | empty | Optional S3-compatible offsite upload (PC download is the default offsite path; see [DEPLOY.md](../DEPLOY.md)) |
 | `BACKUP_S3_REGION` / `BACKUP_S3_PREFIX` | `auto` / `godmode/` | Optional offsite region/prefix when using S3/R2 |
 | `PLATFORM_SAAS_ALLOW_CODE_ACCESS` | SaaS: `true` when unset; else `false` | When SaaS, allow agent coding/terminal + Coding UI (#178). Opt out with `false`. Non-SaaS ignores this gate. |
