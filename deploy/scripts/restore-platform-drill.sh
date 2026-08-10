@@ -4,15 +4,16 @@
 # Default mode (--verify-only):
 #   1. Pick latest local snapshot under BACKUP_LOCAL_DIR (or /data/backups)
 #   2. Copy snapshot into a scratch directory
-#   3. Run SQLite integrity_check on core (+ optional Cloud.sqlite alias),
+#   3. Run SQLite integrity_check on Cloud (or legacy core),
 #      Users.sqlite when present, each tenant DB, and users/*.sqlite vaults
 #   4. Verify DuckDB timeseries files present, non-empty, and openable
 #   5. Optionally download the same stamp from S3 into another scratch dir and
 #      compare file sizes / integrity
 #
 # Full cutover restore (--apply) stops the godmode container, replaces live
-# SQLite (core, Users, user vaults, tenants) + timeseries DuckDB files from the
-# snapshot, and starts the container again. Live Cloud path remains core.sqlite.
+# SQLite (Cloud, Users, user vaults, tenants) + timeseries DuckDB files from the
+# snapshot, and starts the container again. Live Cloud path is Cloud.sqlite
+# (archive may still include core.sqlite for legacy stamps).
 # Pre-#501 stamps (core-only) still restore; hub may be empty until boot migrate.
 # Use only when intentionally practicing a real restore; keep the pre-restore tree.
 #
@@ -139,11 +140,16 @@ verify_tree() {
   local root="$1"
   local label="$2"
   echo "== integrity: $label =="
-  integrity_check "$root/databases/core.sqlite"
   if [[ -f "$root/databases/Cloud.sqlite" ]]; then
     integrity_check "$root/databases/Cloud.sqlite"
+  elif [[ -f "$root/databases/core.sqlite" ]]; then
+    integrity_check "$root/databases/core.sqlite"
   else
-    echo "  (no databases/Cloud.sqlite alias in stamp; ok for legacy)"
+    echo "Snapshot missing databases/Cloud.sqlite and databases/core.sqlite" >&2
+    exit 1
+  fi
+  if [[ -f "$root/databases/Cloud.sqlite" && -f "$root/databases/core.sqlite" ]]; then
+    integrity_check "$root/databases/core.sqlite"
   fi
   if [[ -f "$root/databases/Users.sqlite" ]]; then
     integrity_check "$root/databases/Users.sqlite"
@@ -221,22 +227,25 @@ PRE_DIR="$SCRATCH_ROOT/pre-apply-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$PRE_DIR"
 compose_prod stop godmode
 
+cp -a "$DATA_MOUNT/Cloud.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/core.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/Users.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/tenants" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/users" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/timeseries" "$PRE_DIR/" 2>/dev/null || true
 
-# Prefer databases/core.sqlite; fall back to Cloud.sqlite alias if needed.
-if [[ -f "$SNAP/databases/core.sqlite" ]]; then
-  cp -a "$SNAP/databases/core.sqlite" "$DATA_MOUNT/core.sqlite"
-elif [[ -f "$SNAP/databases/Cloud.sqlite" ]]; then
-  cp -a "$SNAP/databases/Cloud.sqlite" "$DATA_MOUNT/core.sqlite"
+# Prefer databases/Cloud.sqlite; fall back to core.sqlite. Live path is Cloud.sqlite.
+if [[ -f "$SNAP/databases/Cloud.sqlite" ]]; then
+  cp -a "$SNAP/databases/Cloud.sqlite" "$DATA_MOUNT/Cloud.sqlite"
+elif [[ -f "$SNAP/databases/core.sqlite" ]]; then
+  cp -a "$SNAP/databases/core.sqlite" "$DATA_MOUNT/Cloud.sqlite"
 else
-  echo "Snapshot missing databases/core.sqlite (and Cloud.sqlite)" >&2
+  echo "Snapshot missing databases/Cloud.sqlite (and core.sqlite)" >&2
   exit 1
 fi
-rm -f "$DATA_MOUNT/core.sqlite-wal" "$DATA_MOUNT/core.sqlite-shm"
+rm -f "$DATA_MOUNT/Cloud.sqlite-wal" "$DATA_MOUNT/Cloud.sqlite-shm"
+# Drop leftover legacy live core so boot does not see both files.
+rm -f "$DATA_MOUNT/core.sqlite" "$DATA_MOUNT/core.sqlite-wal" "$DATA_MOUNT/core.sqlite-shm"
 
 if [[ -f "$SNAP/databases/Users.sqlite" ]]; then
   cp -a "$SNAP/databases/Users.sqlite" "$DATA_MOUNT/Users.sqlite"

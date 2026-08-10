@@ -25,7 +25,7 @@ function userDbPath(userId: string): string {
 
 /**
  * User DB schema (Epic: User-level data plane).
- * Starts with User Vault secrets only; personal-layer tables land in follow-ups.
+ * Starts with Platform Vault secrets only; personal-layer tables land in follow-ups.
  */
 export function migrateUserDb(db: AppDatabase): void {
   db.exec(`

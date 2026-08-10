@@ -3,9 +3,9 @@ description: Sidebar pages and StructureNode tree context
 alwaysApply: true
 priority: 15
 ---
-Sidebar pages outside the department tree: Home, Notifications, Calendar, Tasks, Bank, Personal Vault, Support, Wiki, Structure, Shared, Marketplace. Account Connect keys live under **User Vault** (sidebar; shared across the account’s workspaces via the User DB).
+Sidebar pages outside the department tree: Home, Notifications, Calendar, Tasks, Bank, Personal Vault, Support, Wiki, Structure, Shared, Marketplace. Account Connect keys live under **Platform Vault** (sidebar; shared across the account’s workspaces via the User DB).
 
-New workspaces start with an empty department tree. Users add departments via Intelligence or Structure. Creating a workspace does not wipe User Vault keys.
+New workspaces start with an empty department tree. Users add departments via Intelligence or Structure. Creating a workspace does not wipe Platform Vault keys.
 
 Work is organized as department → division → page (`StructureNode` Records). `object_type` selects rendering; `segment` is the URL piece.
 

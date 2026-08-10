@@ -1033,8 +1033,8 @@ export async function createCoordinatedSnapshot(
      VALUES (?, ?, ?, 'creating', ?, ?)`
   ).run(id, releaseId, location, JSON.stringify(lock), JSON.stringify(diagnostics));
   try {
-    await backupDb(core, path.join(location, "databases", "core.sqlite"));
     await backupDb(core, path.join(location, "databases", "Cloud.sqlite"));
+    await backupDb(core, path.join(location, "databases", "core.sqlite"));
     const { getHostUsersDb } = await import("../host-users-db.js");
     await backupDb(
       getHostUsersDb(),

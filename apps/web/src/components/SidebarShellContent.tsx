@@ -71,7 +71,7 @@ export function SidebarShellContent({
           className={footerLinkClass}
         >
           <KeyRoundIcon className="size-4 shrink-0" />
-          User Vault
+          Platform Vault
         </NavLink>
         <NavLink to={SETTINGS_PATH} onClick={onNavigate} className={footerLinkClass}>
           <SettingsIcon className="size-4 shrink-0" />

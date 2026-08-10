@@ -87,9 +87,9 @@ export async function runLocalPlatformBackup(
     fs.mkdirSync(path.join(dest, "tenants"), { recursive: true });
     fs.mkdirSync(path.join(dest, "users"), { recursive: true });
 
-    await backupSqlite(core, path.join(dest, "databases", "core.sqlite"));
-    // Also archive as Cloud.sqlite for the host Cloud plane name.
     await backupSqlite(core, path.join(dest, "databases", "Cloud.sqlite"));
+    // Keep legacy archive name for older restore tools.
+    await backupSqlite(core, path.join(dest, "databases", "core.sqlite"));
     await backupSqlite(
       getHostUsersDb(),
       path.join(dest, "databases", "Users.sqlite")

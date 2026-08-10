@@ -1,5 +1,5 @@
 ---
-description: Cloud + Users host DBs, User Vault, Workspace sandboxes
+description: Cloud + Users host DBs, Platform Vault, Workspace sandboxes
 alwaysApply: true
 priority: 18
 ---
@@ -7,15 +7,15 @@ priority: 18
 
 Storage planes:
 
-- **Cloud** (host): `core.sqlite` (live filename) via `getCloudDb()`. Identity, tenants, billing, marketplace, shares, releases. Kernel ObjectTypes use `database: "cloud"`. Do not store consumer Connect secrets here.
+- **Cloud** (host): `Cloud.sqlite` via `getCloudDb()` (boot-migrates from legacy `core.sqlite`). Identity, tenants, billing, marketplace, shares, releases. Kernel ObjectTypes use `database: "cloud"`. Do not store consumer Connect secrets here.
 - **Users** (host hub): `Users.sqlite` / `getHostUsersDb()`. DMs, Support, Notifications, platform groups. Soft user ids (no FK into Cloud).
-- **User** (per account): `users/<userId>.sqlite`. **User Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
+- **User** (per account): `users/<userId>.sqlite`. **Platform Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
 - **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins, Personal/Agent vault, optional workspace key override.
 
-User Vault UI: sidebar **User Vault** (`/settings/vault`). Formerly called Platform Vault.
+Platform Vault UI: sidebar **Platform Vault** (`/settings/vault`). Account Connect hub (not Personal Vault).
 
-Resolve Connect secrets: env (when checked) → Agent Vault → workspace platform override → User Vault. Never use Personal Vault (`owner_kind=user`) for LLM/Exa. Never pool keys across different Cloud users.
+Resolve Connect secrets: env (when checked) → Agent Vault → workspace platform override → Platform Vault. Never use Personal Vault (`owner_kind=user`) for LLM/Exa. Never pool keys across different Cloud users.
 
-When connecting Cursor/OpenAI/Exa for an account, write to User Vault by default (not a one-off workspace-only secret unless the user asks for a project override).
+When connecting Cursor/OpenAI/Exa for an account, write to Platform Vault by default (not a one-off workspace-only secret unless the user asks for a project override).
 
 Do not confuse host `Users.sqlite` with per-account `users/<userId>.sqlite`.

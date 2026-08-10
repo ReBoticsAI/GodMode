@@ -15,7 +15,7 @@ const { tmpRoot, tenantsDir, usersDir, cloudDbPath, hostUsersDbPath } = vi.hoist
       tmpRoot: root,
       tenantsDir: p.join(root, "tenants"),
       usersDir: p.join(root, "users"),
-      cloudDbPath: p.join(root, "core.sqlite"),
+      cloudDbPath: p.join(root, "Cloud.sqlite"),
       hostUsersDbPath: p.join(root, "Users.sqlite"),
     };
   }

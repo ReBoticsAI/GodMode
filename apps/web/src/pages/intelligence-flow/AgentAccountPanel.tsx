@@ -59,7 +59,7 @@ export function AgentAccountPanel({ agentId }: { agentId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Per-agent API keys used before User Vault secrets. Add provider
+        Per-agent API keys used before Platform Vault secrets. Add provider
         keys here so this agent can call external LLM or tool APIs (for example
         openai, anthropic, or exa for web_search / fetch_url on Cloud).
       </p>

@@ -982,7 +982,7 @@ export function IntelligenceComposer({
               {catalogBySource.provider.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Cloud API (User Vault keys)</DropdownMenuLabel>
+                  <DropdownMenuLabel>Cloud API (Platform Vault keys)</DropdownMenuLabel>
                   {catalogBySource.provider
                     .filter((m) => m && typeof m.id === "string")
                     .map((m) => (
@@ -1009,7 +1009,7 @@ export function IntelligenceComposer({
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled className="text-[11px]">
-                Add cloud keys in User Vault · manage in Builder
+                Add cloud keys in Platform Vault · manage in Builder
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

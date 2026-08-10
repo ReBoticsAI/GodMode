@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultPlatformDataDir } from "./services/data-dir-migration.js";
+import {
+  defaultPlatformDataDir,
+  resolveCloudDbPath,
+} from "./services/data-dir-migration.js";
 
 const bridgeDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot =
@@ -145,17 +148,17 @@ export const config = {
   dbPath: path.join(appData, "platform.db"),
   /**
    * Host Cloud DB path (identity, tenants, billing, marketplace, releases).
-   * Live file remains core.sqlite until a later rename child; open via getCloudDb().
+   * Live file is Cloud.sqlite (boot-migrates from legacy core.sqlite). Open via getCloudDb().
    */
-  cloudDbPath: path.join(appData, "core.sqlite"),
+  cloudDbPath: resolveCloudDbPath(appData),
   /**
    * Host Users DB (DMs, Support, Notifications, platform groups).
-   * Distinct from per-account User Vault files under usersDir.
+   * Distinct from per-account User DB files under usersDir.
    */
   hostUsersDbPath: path.join(appData, "Users.sqlite"),
   /**
    * Per-account User DB files ({usersDir}/<userId>.sqlite).
-   * Holds User Vault (Connect keys) and future personal-layer continuity.
+   * Holds Platform Vault Connect keys and future personal-layer continuity.
    * Distinct from Workspace tenant DBs and from host Cloud / Users files.
    */
   usersDir: path.join(appData, "users"),

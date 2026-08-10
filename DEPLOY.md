@@ -96,7 +96,7 @@ the origin host stays idle except when you ship.
 6. Set monthly/yearly Price IDs (`STRIPE_SAAS_PRICE_MONTHLY` /
    `STRIPE_SAAS_PRICE_YEARLY`) for the paywall plan picker.
 
-Paid customers manage billing from **User Vault → GodMode Cloud** (Stripe Customer
+Paid customers manage billing from **Platform Vault → GodMode Cloud** (Stripe Customer
 Portal). Platform admins see customers under **Admin → SaaS** (plan, status,
 last seen, Stripe link, disable access). `INITIAL_ADMINS` remain paywall-exempt
 and are not blocked when a subscription lapses.

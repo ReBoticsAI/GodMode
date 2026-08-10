@@ -6,14 +6,14 @@ This document defines how the GodMode platform partitions data, routes requests,
 
 | Plane | Path | Scope |
 |-------|------|--------|
-| **Cloud** (host) | `core.sqlite` via `getCloudDb()` (also archived as `Cloud.sqlite` in backups; kernel `database: "cloud"`) | Identity, workspace registry, billing, marketplace registry, shares, releases |
+| **Cloud** (host) | `Cloud.sqlite` via `getCloudDb()` (boot-migrates from legacy `core.sqlite`; archives still include both names; kernel `database: "cloud"`) | Identity, workspace registry, billing, marketplace registry, shares, releases |
 | **Users** (host hub) | `Users.sqlite` | Cross-account hub: DMs, Support, Notifications, platform groups |
-| **User** (per account) | `users/<userId>.sqlite` | **User Vault** (Connect keys) and future personal-layer continuity |
+| **User** (per account) | `users/<userId>.sqlite` | **Platform Vault** Connect keys and future personal-layer continuity |
 | **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, optional workspace key override |
 
-Mental model: host Cloud + host Users, then each account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the per-account User DB, not on Cloud or host Users.
+Mental model: host Cloud + host Users, then each account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the per-account User DB (Platform Vault chrome), not on Cloud or host Users.
 
-## Host Cloud (`core.sqlite`)
+## Host Cloud (`Cloud.sqlite`)
 
 Installation-wide identity and commerce (not hub chat surfaces):
 
@@ -52,7 +52,7 @@ One SQLite file per signed-up account (created on signup / first workspace).
 
 | Table group | Purpose |
 |-------------|---------|
-| `ai_secrets` (`owner_kind=platform`) | **User Vault** Connect secrets (Cursor, LLM keys, Exa, etc.), shared across that account’s workspaces |
+| `ai_secrets` (`owner_kind=platform`) | **Platform Vault** Connect secrets (Cursor, LLM keys, Exa, etc.), shared across that account’s workspaces |
 
 Personal Vault (`owner_kind=user`) and Agent Vault remain workspace-scoped today; moving personal chrome / Intelligence / Digital You onto the User DB is a follow-up.
 
@@ -65,7 +65,7 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 | `structure_nodes` | Navigation structure and generic Record page metadata |
 | `ai_agents`, `ai_chats`, `ai_messages`, `ai_memories`, … | AI workspace |
 | `holdings_*` | Financial connections |
-| Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (User Vault Connect keys live on the User DB) |
+| Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (Platform Vault Connect keys live on the User DB) |
 | `ai_secrets` workspace override | Optional project-specific Connect keys (`owner_kind=platform`) |
 | `gm_ot_*` | Native plugin ObjectType Records |
 | `kernel_action_idempotency`, `kernel_operation_runs`, action logs | Kernel action execution and audit state |
@@ -74,9 +74,9 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 
 Domain-specific tables (trading, external integrations) are added by **plugins** when installed.
 
-### User Vault resolve order
+### Platform Vault resolve order
 
-For LLM / Exa Connect secrets: process env (when checked) → Agent Vault (workspace) → workspace platform override → **User Vault** (account User DB). Personal Vault never feeds LLM/Exa. Different accounts never share User Vault rows.
+For LLM / Exa Connect secrets: process env (when checked) → Agent Vault (workspace) → workspace platform override → **Platform Vault** (account User DB). Personal Vault never feeds LLM/Exa. Different accounts never share Platform Vault rows.
 
 ## Tenant export (Cloud to local)
 
@@ -86,7 +86,7 @@ from Cloud Settings (**Download my database**), via `GET /api/tenant/database/do
 - Authz: session + membership; **owner** role only. Tenant id comes from membership
   resolution (`X-Tenant-Id` / session), never from a client-supplied filesystem path.
 - Snapshot: better-sqlite3 `backup()` API (not a raw copy of a live WAL-open file).
-- Scope: one `tenants/<tenantId>.sqlite` only. No `core.sqlite`, no `users/*.sqlite`,
+- Scope: one `tenants/<tenantId>.sqlite` only. No `Cloud.sqlite`, no `users/*.sqlite`,
   no other tenants, no DuckDB analytics. Platform-admin DR of full stamps is a
   separate path (#243 / Admin Observability).
 - Rate-limited; success/failure audited in core `platform_action_log`

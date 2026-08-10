@@ -34,7 +34,7 @@ const OPENAI_MODELS = [
   { id: "o4-mini", label: "o4-mini" },
 ] as const;
 
-/** Connect OpenAI Platform (metered) API key for the User Vault. */
+/** Connect OpenAI Platform (metered) API key for the Platform Vault. */
 export function OpenAiPlatformCard({
   vaultAgentId = null,
 }: {

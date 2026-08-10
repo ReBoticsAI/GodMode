@@ -30,7 +30,7 @@ export default function Bank({
     ? agentVaultHref(agentId.trim(), "wallets")
     : userVaultWalletsHref();
 
-  // Legacy Bank wallet/account deep-links → User Vault.
+  // Legacy Bank wallet/account deep-links → Platform Vault.
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "wallets" || tab === "accounts") {

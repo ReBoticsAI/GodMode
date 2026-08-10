@@ -21,8 +21,8 @@ export default function MarketingSecurity() {
         </li>
         <li>
           Your account and workspace data are kept separate from other customers. One account
-          cannot read another account&apos;s User Vault or workspace databases by design.
-          Connect keys for your LLM providers live in your User Vault (per account), not in a
+          cannot read another account&apos;s Platform Vault or workspace databases by design.
+          Connect keys for your LLM providers live in your Platform Vault (per account), not in a
           shared platform pool.
         </li>
         <li>

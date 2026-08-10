@@ -1,5 +1,5 @@
 /**
- * User Vault on per-account User DB (#491): share Connect keys across workspaces.
+ * Platform Vault on per-account User DB (#491): share Connect keys across workspaces.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -80,7 +80,7 @@ function seedWorkspace(userId: string, tenantId: string, name: string): void {
   getTenantDb(tenantId);
 }
 
-describe("User Vault across workspaces", () => {
+describe("Platform Vault across workspaces", () => {
   let tenantIds: string[] = [];
   let userIds: string[] = [];
 
@@ -155,7 +155,7 @@ describe("User Vault across workspaces", () => {
     expect(wsBPlatform.n).toBe(0);
   });
 
-  it("isolates User Vault between different accounts", () => {
+  it("isolates Platform Vault between different accounts", () => {
     const user1 = uid("user");
     const user2 = uid("user");
     const wsA = tid("ws");
@@ -170,7 +170,7 @@ describe("User Vault across workspaces", () => {
     expect(resolveOpenAiApiKey(getTenantDb(wsA))).toBe("sk-user-one");
   });
 
-  it("prefers workspace override over User Vault", () => {
+  it("prefers workspace override over Platform Vault", () => {
     const user1 = uid("user");
     const wsA = tid("ws");
     const wsB = tid("ws");
@@ -190,7 +190,7 @@ describe("User Vault across workspaces", () => {
     expect(resolveOpenAiApiKey(getTenantDb(wsA))).toBe("sk-account");
   });
 
-  it("lazy-migrates an existing workspace Platform secret into User Vault", () => {
+  it("lazy-migrates an existing workspace Platform secret into Platform Vault", () => {
     const user1 = uid("user");
     const wsA = tid("ws");
     const wsB = tid("ws");

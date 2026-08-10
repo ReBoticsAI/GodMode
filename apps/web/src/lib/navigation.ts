@@ -67,7 +67,7 @@ export const MARKETPLACE_PATH = "/marketplace";
 export const SHARED_PATH = "/settings/shared";
 export const STRUCTURE_SETTINGS_PATH = "/settings/structure";
 export const SETTINGS_PATH = "/settings/platform";
-/** User Vault (GodMode Cloud seats, Inference Connect, account secrets). */
+/** Platform Vault (GodMode Cloud seats, Inference Connect, account secrets). */
 export const PLATFORM_VAULT_PATH = "/settings/vault";
 /** @deprecated Prefer PLATFORM_VAULT_PATH; same route (/settings/vault). */
 export const USER_VAULT_PATH = PLATFORM_VAULT_PATH;
@@ -91,7 +91,7 @@ export const VAULT_TABS = [
 ] as const;
 export type VaultTab = (typeof VAULT_TABS)[number];
 
-/** Personal Vault `/vault` tabs (Cloud/Inference → User Vault; Storage → Settings → Storage). */
+/** Personal Vault `/vault` tabs (Cloud/Inference → Platform Vault; Storage → Settings → Storage). */
 export const USER_VAULT_TABS = [
   "integrations",
   "wallets",
@@ -99,7 +99,7 @@ export const USER_VAULT_TABS = [
   "secrets",
 ] as const satisfies readonly VaultTab[];
 
-/** Agent Vault tabs (Inference is platform-only under User Vault). */
+/** Agent Vault tabs (Inference is platform-only under Platform Vault). */
 export const AGENT_VAULT_TABS = ["secrets", "wallets"] as const satisfies readonly VaultTab[];
 
 export const SETTINGS_TABS = ["general", "storage"] as const;
@@ -128,7 +128,7 @@ export function normalizeVaultTab(raw: string | null | undefined): VaultTab {
   if ((VAULT_TABS as readonly string[]).includes(raw ?? "")) {
     return raw as VaultTab;
   }
-  // Personal Vault default (Cloud + Inference live on User Vault).
+  // Personal Vault default (Cloud + Inference live on Platform Vault).
   return "integrations";
 }
 
@@ -141,7 +141,7 @@ export function normalizeSettingsTab(
   return "general";
 }
 
-/** True when Settings URL still uses the retired Vault tab (redirect to User Vault). */
+/** True when Settings URL still uses the retired Vault tab (redirect to Platform Vault). */
 export function isLegacySettingsVaultDeepLink(
   tab: string | null | undefined,
   vaultSection?: string | null
@@ -172,7 +172,7 @@ export function normalizeVaultInferenceSub(
   return "subscriptions";
 }
 
-/** Deep link into User Vault. */
+/** Deep link into Platform Vault. */
 export function platformVaultHref(
   target: VaultInferenceSub | PlatformVaultSection | "inference" = "subscriptions"
 ): string {
@@ -270,7 +270,7 @@ export function chromelessHeaderSegments(pathname: string): string[] | null {
   if (norm.startsWith(MARKETPLACE_PATH)) return ["Marketplace"];
   if (norm.startsWith(CONTACTS_PATH)) return ["Contacts"];
   if (norm.startsWith(ADMIN_PATH)) return ["Admin"];
-  if (norm.startsWith(PLATFORM_VAULT_PATH)) return ["User Vault"];
+  if (norm.startsWith(PLATFORM_VAULT_PATH)) return ["Platform Vault"];
   if (norm.startsWith(STRUCTURE_SETTINGS_PATH)) return ["Settings", "Workspace template"];
   if (norm.startsWith(USERS_PATH)) return ["Profile"];
   if (norm.startsWith(SHARED_PATH)) return ["Settings", "Shared"];

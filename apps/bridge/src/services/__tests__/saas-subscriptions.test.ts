@@ -20,7 +20,7 @@ vi.mock("../../config.js", () => ({
   config: {
     isSaas: true,
     dataDir: "/tmp/gm-saas-sub",
-    cloudDbPath: "/tmp/gm-saas-sub/core.sqlite",
+    cloudDbPath: "/tmp/gm-saas-sub/Cloud.sqlite",
     usersDir: "/tmp/gm-saas-sub/users",
     tenantsDir: "/tmp/gm-saas-sub/tenants",
     saas: {
