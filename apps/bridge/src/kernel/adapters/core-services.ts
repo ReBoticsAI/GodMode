@@ -1,7 +1,8 @@
 import type { ObjectTypeDef, RecordData, RecordRow } from "@godmode/kernel";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../../db.js";
-import { getCloudDb } from "../../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../../core-db.js";
+import { getTenantDb } from "../../tenant-registry.js";
 import {
   createWorkflow,
   createWorkflowComment,
@@ -946,21 +947,24 @@ function revisionRecord(
 
 export const wikiRevisionServiceAdapter: RecordAdapter = {
   id: "wiki_revision_service",
-  list(_db, def, query, ctx) {
-    const db = getCloudDb();
+  list(db, def, query, ctx) {
+    // Prefer tenant Workspace DB (wiki SoR); fall back to adapter db.
+    const workspace = (
+      ctx.tenantId ? getTenantDb(ctx.tenantId) : db
+    ) as CoreDatabase;
     const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
     const tenantId = ctx.tenantId ?? "";
     const predicate = `(p.visibility='external' OR p.tenant_id=?)`;
     const total = (
-      db
+      workspace
         .prepare(
           `SELECT COUNT(*) AS c FROM wiki_revisions r
            JOIN wiki_pages p ON p.id=r.page_id WHERE ${predicate}`
         )
         .get(tenantId) as { c: number }
     ).c;
-    const rows = db
+    const rows = workspace
       .prepare(
         `SELECT r.* FROM wiki_revisions r
          JOIN wiki_pages p ON p.id=r.page_id
@@ -974,8 +978,11 @@ export const wikiRevisionServiceAdapter: RecordAdapter = {
       total,
     };
   },
-  get(_db, def, id, ctx) {
-    const row = getCloudDb()
+  get(db, def, id, ctx) {
+    const workspace = (
+      ctx.tenantId ? getTenantDb(ctx.tenantId) : db
+    ) as CoreDatabase;
+    const row = workspace
       .prepare(
         `SELECT r.* FROM wiki_revisions r
          JOIN wiki_pages p ON p.id=r.page_id

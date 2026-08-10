@@ -1,5 +1,5 @@
 import type { AppDatabase } from "../db.js";
-import { getCloudDb } from "../core-db.js";
+import { wikiDbForTenant } from "./wiki-service.js";
 import type { LlmManager } from "./llm-manager.js";
 import { createWikiProposal } from "./wiki-proposals.js";
 import {
@@ -52,8 +52,8 @@ export async function runWikiSynthesize(opts: {
     return { ok: false, skipped: "insufficient_memories" };
   }
 
-  const core = getCloudDb();
-  const existing = core
+  const workspace = wikiDbForTenant(tenantId);
+  const existing = workspace
     .prepare(
       `SELECT id, space, slug, title FROM wiki_pages
        WHERE tenant_id = ? AND visibility = 'internal'
@@ -150,7 +150,7 @@ export async function runWikiSynthesize(opts: {
         reason: p.reason ? String(p.reason) : null,
         source: "synthesize",
       },
-      core
+      workspace
     );
     proposalIds.push(row.id);
   }

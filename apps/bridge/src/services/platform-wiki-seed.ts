@@ -1,6 +1,9 @@
+import { createRequire } from "node:module";
 import type { CoreDatabase } from "../core-db.js";
 import { createPage, updatePage } from "./wiki-service.js";
 import { featureDocsForWikiSeed } from "./feature-docs.js";
+
+const require = createRequire(import.meta.url);
 
 export type PlatformWikiPageSeed = {
   slug: string;
@@ -15,12 +18,12 @@ export function getPlatformWikiPages(): PlatformWikiPageSeed[] {
   return featureDocsForWikiSeed();
 }
 function ensureWikiSlug(
-  core: CoreDatabase,
+  workspace: CoreDatabase,
   tenantId: string,
   authorUserId: string,
   seed: PlatformWikiPageSeed
 ): void {
-  const existing = core
+  const existing = workspace
     .prepare(
       `SELECT id, title, body_markdown, space FROM wiki_pages
        WHERE tenant_id = ? AND slug = ? AND visibility = 'internal'`
@@ -45,7 +48,7 @@ function ensureWikiSlug(
         visibility: "internal",
         slug: seed.slug,
       },
-      core
+      workspace
     );
     return;
   }
@@ -70,28 +73,33 @@ function ensureWikiSlug(
       space: PLATFORM_WIKI_SPACE,
     },
     { tenantIds: [tenantId] },
-    core
+    workspace
   );
 }
 
-/** Idempotent: seed (and refresh) platform reference wiki pages for a tenant. */
+/** Idempotent: seed (and refresh) platform reference wiki pages for a tenant (Workspace DB). */
 export function ensurePlatformWikiPages(
-  core: CoreDatabase,
+  workspace: CoreDatabase,
   tenantId: string,
   authorUserId: string
 ): void {
   for (const page of getPlatformWikiPages()) {
-    ensureWikiSlug(core, tenantId, authorUserId, page);
+    ensureWikiSlug(workspace, tenantId, authorUserId, page);
   }
 }
 
-export function backfillPlatformWikiPages(core: CoreDatabase): void {
-  const tenants = core
+export function backfillPlatformWikiPages(cloud: CoreDatabase): void {
+  const tenants = cloud
     .prepare(`SELECT id, owner_user_id FROM tenants`)
     .all() as Array<{ id: string; owner_user_id: string }>;
   for (const t of tenants) {
     try {
-      ensurePlatformWikiPages(core, t.id, t.owner_user_id);
+      const { getTenantDb } = require("../tenant-registry.js") as typeof import("../tenant-registry.js");
+      ensurePlatformWikiPages(
+        getTenantDb(t.id) as CoreDatabase,
+        t.id,
+        t.owner_user_id
+      );
     } catch {
       /* skip broken rows */
     }

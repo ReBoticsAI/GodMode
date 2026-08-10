@@ -118,18 +118,15 @@ export class EmbedQueueWorker {
     const vec = await client.embed(text, { profile });
     if (!vec) return false;
 
+    const db = this.resolveDb(job.tenant_id);
     if (job.target_kind === "wiki") {
-      const { getCloudDb } = await import("../../core-db.js");
-      getCloudDb()
-        .prepare(
-          `UPDATE wiki_pages SET embedding = ?, embedding_dim = ? WHERE id = ?`
-        )
-        .run(vectorToBlob(vec), vec.length, job.target_id);
+      db.prepare(
+        `UPDATE wiki_pages SET embedding = ?, embedding_dim = ? WHERE id = ?`
+      ).run(vectorToBlob(vec), vec.length, job.target_id);
       scheduleAnnInvalidate("wiki:");
       return true;
     }
 
-    const db = this.resolveDb(job.tenant_id);
     if (job.target_kind === "memory") {
       db.prepare(
         `UPDATE ai_memories SET embedding = ?, embedding_dim = ? WHERE id = ?`

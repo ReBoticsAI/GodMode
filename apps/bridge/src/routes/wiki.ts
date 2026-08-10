@@ -9,21 +9,15 @@ import {
 import { getUserOwnerTenantId } from "../services/user-scope.js";
 import { ensureWelcomeWikiPage } from "../services/welcome-wiki.js";
 import {
-  createPage,
-  deletePage,
   getBacklinksForPage,
   getPageBySlug,
   getPublicPageBySlug,
   listPages,
-  updatePage,
+  wikiDbForTenant,
   WikiError,
   type WikiScope,
 } from "../services/wiki-service.js";
-import {
-  approveWikiProposal,
-  listWikiProposals,
-  rejectWikiProposal,
-} from "../services/wiki-proposals.js";
+import { listWikiProposals } from "../services/wiki-proposals.js";
 import type { WikiVisibility } from "../core-db.js";
 import type { EmbeddingManager } from "../services/embeddings/embedding-manager.js";
 
@@ -66,11 +60,15 @@ export function createWikiRouter(embeddings?: EmbeddingManager): Router {
       | "rejected"
       | "all";
     const tenantId = req.tenantId ?? getUserOwnerTenantId(req.user!.id);
+    if (!tenantId) {
+      res.json({ proposals: [] });
+      return;
+    }
     res.json({
-      proposals: listWikiProposals({
-        tenantId,
-        status,
-      }),
+      proposals: listWikiProposals(
+        { tenantId, status },
+        wikiDbForTenant(tenantId)
+      ),
     });
   });
 
@@ -93,7 +91,11 @@ export function createWikiRouter(embeddings?: EmbeddingManager): Router {
     const scope = resolveScope(req.user!.id);
     const slug = paramId(req.params.slug);
     if (slug === "welcome" && req.tenantId) {
-      ensureWelcomeWikiPage(getCloudDb(), req.tenantId, req.user!.id);
+      ensureWelcomeWikiPage(
+        wikiDbForTenant(req.tenantId),
+        req.tenantId,
+        req.user!.id
+      );
     }
     try {
       const page = getPageBySlug(slug, scope);

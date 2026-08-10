@@ -206,10 +206,12 @@ export class EmbeddingManager {
         );
       }
     }
-    try {
-      backfillWikiFts(getCloudDb());
-    } catch {
-      /* optional */
+    for (const { db } of dbs) {
+      try {
+        backfillWikiFts(db);
+      } catch {
+        /* optional */
+      }
     }
   }
 

@@ -5,6 +5,7 @@ import {
   type CoreWikiPage,
   type WikiVisibility,
 } from "../core-db.js";
+import { getTenantDb } from "../tenant-registry.js";
 import { findBacklinksForPage, type WikiBacklink } from "../lib/wiki-links.js";
 import {
   cascadeWikiProposalCleanup,
@@ -28,6 +29,19 @@ export class WikiError extends Error {
     super(message);
     this.name = "WikiError";
   }
+}
+
+/** Workspace DB for a tenant (runs wiki Cloud→Workspace migrate on open). */
+export function wikiDbForTenant(tenantId: string): CoreDatabase {
+  return getTenantDb(tenantId) as CoreDatabase;
+}
+
+export function listWikiTenantIds(): string[] {
+  return (
+    getCloudDb()
+      .prepare(`SELECT id FROM tenants`)
+      .all() as Array<{ id: string }>
+  ).map((r) => r.id);
 }
 
 function slugify(input: string): string {
@@ -81,33 +95,11 @@ export interface WikiScope {
   tenantIds: string[];
 }
 
-/**
- * Pages visible to the requester: all external pages, plus internal pages owned
- * by a tenant the requester is a member of.
- */
-export function listPages(
-  scope: WikiScope,
-  opts: { visibility?: WikiVisibility; space?: string; q?: string } = {},
-  db: CoreDatabase = getCloudDb()
+function queryPagesOnDb(
+  db: CoreDatabase,
+  where: string[],
+  params: unknown[]
 ): CoreWikiPage[] {
-  const tenantPlaceholders = scope.tenantIds.map(() => "?").join(",");
-  const internalClause = scope.tenantIds.length
-    ? `(visibility = 'internal' AND tenant_id IN (${tenantPlaceholders}))`
-    : "0";
-  const where: string[] = [`(visibility = 'external' OR ${internalClause})`];
-  const params: unknown[] = [...scope.tenantIds];
-  if (opts.visibility) {
-    where.push(`visibility = ?`);
-    params.push(opts.visibility);
-  }
-  if (opts.space) {
-    where.push(`space = ?`);
-    params.push(opts.space);
-  }
-  if (opts.q) {
-    where.push(`(title LIKE ? OR body_markdown LIKE ?)`);
-    params.push(`%${opts.q}%`, `%${opts.q}%`);
-  }
   return db
     .prepare(
       `SELECT * FROM wiki_pages WHERE ${where.join(" AND ")}
@@ -116,46 +108,117 @@ export function listPages(
     .all(...params) as CoreWikiPage[];
 }
 
-export function getPageById(
-  id: string,
-  db: CoreDatabase = getCloudDb()
-): CoreWikiPage | null {
-  return (
-    (db.prepare(`SELECT * FROM wiki_pages WHERE id = ?`).get(id) as
-      | CoreWikiPage
-      | undefined) ?? null
-  );
+/**
+ * Pages visible to the requester: external pages across workspaces, plus
+ * internal pages owned by a tenant the requester is a member of.
+ */
+export function listPages(
+  scope: WikiScope,
+  opts: { visibility?: WikiVisibility; space?: string; q?: string } = {}
+): CoreWikiPage[] {
+  const seen = new Set<string>();
+  const pages: CoreWikiPage[] = [];
+
+  const pushAll = (rows: CoreWikiPage[]) => {
+    for (const row of rows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      pages.push(row);
+    }
+  };
+
+  for (const tenantId of scope.tenantIds) {
+    const db = wikiDbForTenant(tenantId);
+    const w = [`tenant_id = ?`];
+    const p: unknown[] = [tenantId];
+    if (opts.visibility) {
+      w.push(`visibility = ?`);
+      p.push(opts.visibility);
+    }
+    if (opts.space) {
+      w.push(`space = ?`);
+      p.push(opts.space);
+    }
+    if (opts.q) {
+      w.push(`(title LIKE ? OR body_markdown LIKE ?)`);
+      p.push(`%${opts.q}%`, `%${opts.q}%`);
+    }
+    pushAll(queryPagesOnDb(db, w, p));
+  }
+
+  // Global external pages from workspaces the user may not belong to.
+  if (!opts.visibility || opts.visibility === "external") {
+    for (const tenantId of listWikiTenantIds()) {
+      if (scope.tenantIds.includes(tenantId)) continue;
+      const db = wikiDbForTenant(tenantId);
+      const w = [`visibility = 'external'`];
+      const p: unknown[] = [];
+      if (opts.space) {
+        w.push(`space = ?`);
+        p.push(opts.space);
+      }
+      if (opts.q) {
+        w.push(`(title LIKE ? OR body_markdown LIKE ?)`);
+        p.push(`%${opts.q}%`, `%${opts.q}%`);
+      }
+      pushAll(queryPagesOnDb(db, w, p));
+    }
+  }
+
+  return pages.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)).slice(0, 500);
+}
+
+export function getPageById(id: string, db?: CoreDatabase): CoreWikiPage | null {
+  if (db) {
+    return (
+      (db.prepare(`SELECT * FROM wiki_pages WHERE id = ?`).get(id) as
+        | CoreWikiPage
+        | undefined) ?? null
+    );
+  }
+  for (const tenantId of listWikiTenantIds()) {
+    const row = getPageById(id, wikiDbForTenant(tenantId));
+    if (row) return row;
+  }
+  return null;
 }
 
 /** Resolve a page by slug for an authenticated requester (membership-checked). */
-export function getPageBySlug(
-  slug: string,
-  scope: WikiScope,
-  db: CoreDatabase = getCloudDb()
-): CoreWikiPage {
-  const rows = db
-    .prepare(`SELECT * FROM wiki_pages WHERE slug = ?`)
-    .all(slug) as CoreWikiPage[];
-  // External first (world-readable), else an internal page in the user's tenant.
-  const external = rows.find((r) => r.visibility === "external");
+export function getPageBySlug(slug: string, scope: WikiScope): CoreWikiPage {
+  let external: CoreWikiPage | undefined;
+  let internal: CoreWikiPage | undefined;
+  for (const tenantId of listWikiTenantIds()) {
+    const db = wikiDbForTenant(tenantId);
+    const rows = db
+      .prepare(`SELECT * FROM wiki_pages WHERE slug = ?`)
+      .all(slug) as CoreWikiPage[];
+    for (const row of rows) {
+      if (row.visibility === "external" && !external) external = row;
+      if (
+        row.visibility === "internal" &&
+        scope.tenantIds.includes(row.tenant_id) &&
+        !internal
+      ) {
+        internal = row;
+      }
+    }
+  }
   if (external) return external;
-  const internal = rows.find(
-    (r) => r.visibility === "internal" && scope.tenantIds.includes(r.tenant_id)
-  );
   if (internal) return internal;
   throw new WikiError("Page not found", 404);
 }
 
 /** External-only resolver for the unauthenticated public read path. */
-export function getPublicPageBySlug(
-  slug: string,
-  db: CoreDatabase = getCloudDb()
-): CoreWikiPage {
-  const page = db
-    .prepare(`SELECT * FROM wiki_pages WHERE slug = ? AND visibility = 'external'`)
-    .get(slug) as CoreWikiPage | undefined;
-  if (!page) throw new WikiError("Page not found", 404);
-  return page;
+export function getPublicPageBySlug(slug: string): CoreWikiPage {
+  for (const tenantId of listWikiTenantIds()) {
+    const page = wikiDbForTenant(tenantId)
+      .prepare(
+        `SELECT * FROM wiki_pages WHERE slug = ? AND visibility = 'external'`
+      )
+      .get(slug) as CoreWikiPage | undefined;
+    if (page) return page;
+  }
+  throw new WikiError("Page not found", 404);
 }
 
 export interface CreatePageInput {
@@ -177,7 +240,7 @@ function captureRevision(db: CoreDatabase, page: CoreWikiPage): void {
 
 export function createPage(
   input: CreatePageInput,
-  db: CoreDatabase = getCloudDb()
+  db: CoreDatabase = wikiDbForTenant(input.tenantId)
 ): CoreWikiPage {
   const title = input.title.trim();
   if (!title) throw new WikiError("Title is required");
@@ -214,13 +277,14 @@ export function updatePage(
     visibility?: WikiVisibility;
   },
   scope: WikiScope,
-  db: CoreDatabase = getCloudDb()
+  db?: CoreDatabase
 ): CoreWikiPage {
-  const page = getPageById(id, db);
+  const page = db ? getPageById(id, db) : getPageById(id);
   if (!page) throw new WikiError("Page not found", 404);
   if (!scope.tenantIds.includes(page.tenant_id)) {
     throw new WikiError("Only the owner tenant can edit this page", 403);
   }
+  const workspace = db ?? wikiDbForTenant(page.tenant_id);
   const sets: string[] = [];
   const values: unknown[] = [];
   if (patch.title !== undefined) {
@@ -236,29 +300,26 @@ export function updatePage(
     values.push(patch.space);
   }
   if (patch.visibility && patch.visibility !== page.visibility) {
-    // Moving across the visibility scope may require a fresh unique slug.
     sets.push("visibility = ?", "slug = ?");
-    values.push(patch.visibility, uniqueSlug(db, patch.visibility, page.slug, page.tenant_id));
+    values.push(
+      patch.visibility,
+      uniqueSlug(workspace, patch.visibility, page.slug, page.tenant_id)
+    );
   }
   if (sets.length > 0) {
     sets.push("updated_at = datetime('now')");
-    db.prepare(`UPDATE wiki_pages SET ${sets.join(", ")} WHERE id = ?`).run(
-      ...values,
-      id
-    );
-    captureRevision(db, getPageById(id, db)!);
+    workspace
+      .prepare(`UPDATE wiki_pages SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...values, id);
+    captureRevision(workspace, getPageById(id, workspace)!);
   }
-  const updated = getPageById(id, db)!;
-  indexWikiPage(db, wikiEmbedder, updated);
+  const updated = getPageById(id, workspace)!;
+  indexWikiPage(workspace, wikiEmbedder, updated);
   return updated;
 }
 
-export function deletePage(
-  id: string,
-  scope: WikiScope,
-  db: CoreDatabase = getCloudDb()
-): void {
-  const page = getPageById(id, db);
+export function deletePage(id: string, scope: WikiScope, db?: CoreDatabase): void {
+  const page = db ? getPageById(id, db) : getPageById(id);
   if (!page) throw new WikiError("Page not found", 404);
   if (!scope.tenantIds.includes(page.tenant_id)) {
     throw new WikiError("Only the owner tenant can delete this page", 403);
@@ -267,19 +328,19 @@ export function deletePage(
     tenantId: page.tenant_id,
     action: "delete_wiki_page",
   });
-  cascadeWikiProposalCleanup(id, db);
-  removeWikiPageFromIndex(db, id);
-  db.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);
+  const workspace = db ?? wikiDbForTenant(page.tenant_id);
+  cascadeWikiProposalCleanup(id, workspace);
+  removeWikiPageFromIndex(workspace, id);
+  workspace.prepare(`DELETE FROM wiki_pages WHERE id = ?`).run(id);
 }
 
 export function getBacklinksForPage(
   pageId: string,
-  scope: WikiScope,
-  db: CoreDatabase = getCloudDb()
+  scope: WikiScope
 ): WikiBacklink[] {
-  const page = getPageById(pageId, db);
+  const page = getPageById(pageId);
   if (!page) throw new WikiError("Page not found", 404);
-  const visible = listPages(scope, {}, db);
+  const visible = listPages(scope, {});
   if (!visible.some((p) => p.id === pageId)) {
     throw new WikiError("Page not found", 404);
   }

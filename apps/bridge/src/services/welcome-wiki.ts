@@ -1,6 +1,9 @@
 import type { CoreDatabase, CoreWikiPage } from "../core-db.js";
+import { createRequire } from "node:module";
 import { createPage } from "./wiki-service.js";
 import { ensurePlatformWikiPages } from "./platform-wiki-seed.js";
+
+const require = createRequire(import.meta.url);
 
 export const WELCOME_WIKI_BODY = [
   "# Welcome to GodMode",
@@ -16,13 +19,13 @@ export const WELCOME_WIKI_BODY = [
   "Add API keys in **Vault → Inference**, then set Intelligence to use a cloud provider in **Agents → Pipeline → Backend**.",
 ].join("\n");
 
-/** Idempotent: ensure the onboarding welcome page exists for a tenant (core DB). */
+/** Idempotent: ensure the onboarding welcome page exists for a tenant (Workspace DB). */
 export function ensureWelcomeWikiPage(
-  core: CoreDatabase,
+  workspace: CoreDatabase,
   tenantId: string,
   authorUserId: string
 ): CoreWikiPage {
-  const existing = core
+  const existing = workspace
     .prepare(
       `SELECT id FROM wiki_pages
        WHERE tenant_id = ? AND slug = 'welcome' AND visibility = 'internal'`
@@ -30,8 +33,8 @@ export function ensureWelcomeWikiPage(
     .get(tenantId) as { id: string } | undefined;
 
   if (existing) {
-    ensurePlatformWikiPages(core, tenantId, authorUserId);
-    return core
+    ensurePlatformWikiPages(workspace, tenantId, authorUserId);
+    return workspace
       .prepare(`SELECT * FROM wiki_pages WHERE id = ?`)
       .get(existing.id) as CoreWikiPage;
   }
@@ -46,20 +49,29 @@ export function ensureWelcomeWikiPage(
       visibility: "internal",
       slug: "welcome",
     },
-    core
+    workspace
   );
-  ensurePlatformWikiPages(core, tenantId, authorUserId);
+  ensurePlatformWikiPages(workspace, tenantId, authorUserId);
   return page;
 }
 
-/** Backfill welcome pages for tenants that predate correct wiki seeding. */
-export function backfillWelcomeWikiPages(core: CoreDatabase): void {
-  const tenants = core
+/**
+ * Backfill welcome pages for tenants that predate correct wiki seeding.
+ * `cloud` is used only to list tenants; writes go to each Workspace DB.
+ */
+export function backfillWelcomeWikiPages(cloud: CoreDatabase): void {
+  const tenants = cloud
     .prepare(`SELECT id, owner_user_id FROM tenants`)
     .all() as Array<{ id: string; owner_user_id: string }>;
   for (const t of tenants) {
     try {
-      ensureWelcomeWikiPage(core, t.id, t.owner_user_id);
+      // Dynamic require avoids core-db ↔ tenant-registry import cycle at load time.
+      const { getTenantDb } = require("../tenant-registry.js") as typeof import("../tenant-registry.js");
+      ensureWelcomeWikiPage(
+        getTenantDb(t.id) as CoreDatabase,
+        t.id,
+        t.owner_user_id
+      );
     } catch {
       /* skip broken rows */
     }

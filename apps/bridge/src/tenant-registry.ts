@@ -6,6 +6,8 @@ import { migrateTenantDb, type AppDatabase } from "./db.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { ensureTenantKindMeta } from "./services/tenant-kind.js";
 import { seedDomainSkills } from "./services/ai-skills.js";
+import { getCloudDb } from "./core-db.js";
+import { migrateWikiFromCloud } from "./services/wiki-workspace-migrate.js";
 
 interface CachedTenant {
   db: AppDatabase;
@@ -81,6 +83,14 @@ export function getTenantDb(tenantId: string): AppDatabase {
   if (existing) {
     existing.lastAccess = Date.now();
     migrateTenantDb(existing.db);
+    try {
+      migrateWikiFromCloud(tenantId, existing.db, getCloudDb());
+    } catch (err) {
+      console.warn(
+        `[wiki] migrate for ${tenantId} failed:`,
+        err instanceof Error ? err.message : err
+      );
+    }
     return existing.db;
   }
 
@@ -90,6 +100,14 @@ export function getTenantDb(tenantId: string): AppDatabase {
   configureDbPragmas(db);
   logDbConfig(db);
   migrateTenantDb(db);
+  try {
+    migrateWikiFromCloud(tenantId, db, getCloudDb());
+  } catch (err) {
+    console.warn(
+      `[wiki] migrate for ${tenantId} failed:`,
+      err instanceof Error ? err.message : err
+    );
+  }
   const kind = ensureTenantKindMeta(tenantId, db);
   if (kind === "operator") {
     try {

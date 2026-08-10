@@ -649,12 +649,12 @@ export function initCoreDb(): CoreDatabase {
 
   runMigrations(db, CORE_MIGRATIONS);
 
-  backfillWelcomeWikiPages(db);
-
   // Host Users.sqlite: hub surfaces (DMs, Support, Notifications, groups).
   migrateHubTablesFromCore(db);
 
   coreDbSingleton = db;
+  // After singleton so getTenantDb → getCloudDb works during wiki Workspace writes.
+  backfillWelcomeWikiPages(db);
   return db;
 }
 

@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import type { EventEmitter } from "node:events";
 import { config } from "../config.js";
-import { requireEditorForMutation } from "../services/auth/middleware.js";
+import { requireEditorForMutation, getReqTenantDb } from "../services/auth/middleware.js";
 import {
   assertSpendAllowed,
   isSpendAuthorityError,
@@ -87,11 +87,6 @@ import type { EmbeddingManager } from "../services/embeddings/embedding-manager.
 import type { ReflectionService } from "../services/reflection-service.js";
 import type { MemoryMaintenanceService } from "../services/memory-maintenance.js";
 import { getHybridWikiText } from "../services/wiki-rag.js";
-import {
-  approveWikiProposal,
-  listWikiProposals,
-  rejectWikiProposal,
-} from "../services/wiki-proposals.js";
 import {
   getReflectionConfig,
   patchReflectionConfig,
@@ -475,7 +470,8 @@ export function createAiRouter(
     );
     let pendingWikiProposals = 0;
     try {
-      const row = getCloudDb()
+      const wikiDb = getReqTenantDb(req);
+      const row = wikiDb
         .prepare(
           `SELECT COUNT(*) AS n FROM wiki_page_proposals WHERE status = 'pending'`
         )
@@ -1458,15 +1454,23 @@ export function createAiRouter(
         )
       ),
     ];
-    const wikiOverride = await getHybridWikiText(
-      getCloudDb(),
-      embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : undefined,
-      message?.trim() ?? "",
-      {
-        tenantIds: wikiTenantIds.length ? wikiTenantIds : [scope.tenantId].filter(Boolean),
-        topK: config.embeddings.wikiRagTopK,
-      }
-    );
+    const wikiTenantId =
+      req.tenantId ?? wikiTenantIds[0] ?? scope.tenantId ?? null;
+    const wikiOverride = wikiTenantId
+      ? await getHybridWikiText(
+          getTenantDb(wikiTenantId),
+          embeddings?.isEmbedderReady()
+            ? embeddings.getEmbeddingClient()
+            : undefined,
+          message?.trim() ?? "",
+          {
+            tenantIds: wikiTenantIds.length
+              ? wikiTenantIds
+              : [wikiTenantId],
+            topK: config.embeddings.wikiRagTopK,
+          }
+        )
+      : "";
     const agentWorkspace =
       typeof (agent.config as { workspace?: unknown } | undefined)?.workspace ===
       "string"
