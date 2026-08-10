@@ -6,7 +6,7 @@ Share live resources (divisions, agents, models, plugin-backed pages) across sep
 
 ## Same Bridge
 
-Grants live in `core.sqlite`. Share by user email from any resource's share UI.
+Grants live in `Cloud.sqlite`. Share by user email from any resource's share UI.
 Share grants and other durable collaboration state are kernel Records dispatched
 with tenant/user context and adapter-level authorization.
 The local models are `ShareGrant`, `BridgeConnection`, and `PeerConnection`.

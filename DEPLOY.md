@@ -197,16 +197,17 @@ the bridge. First-party example: Sierra `playbook-schema` codegen.
 
 ## Data persistence
 
-Both compose files mount `PLATFORM_DATA_DIR=/data` (SQLite tenants, core DB, tenant sandboxes).
+Both compose files mount `PLATFORM_DATA_DIR=/data` (Cloud + Users host DBs, per-account User DBs, workspace sandboxes).
 
 That volume also contains native ObjectType tables, durable operation/audit
 state (including leases, retries, cancellation, idempotency, and recovery),
 event-consumer receipts, cross-database acquisition saga/outbox rows, and
 Intelligence-authored plugins. Back up the entire platform data directory before
 image upgrades, plugin lifecycle changes, or ObjectType schema changes. The
-release updater coordinates SQLite backups for `core.sqlite`, every User DB, and every workspace tenant
-database, captures tenant workspaces and plugin locks, verifies integrity and
-hashes, and stores the snapshot outside the active data volume before
+release updater coordinates SQLite backups for `Cloud.sqlite` (and legacy
+`core.sqlite` when present), `Users.sqlite`, every User DB, and every workspace
+tenant database, captures tenant workspaces and plugin locks, verifies integrity
+and hashes, and stores the snapshot outside the active data volume before
 replacement.
 
 Native ObjectType evolution is additive only. Plugin uninstall removes runtime
@@ -266,7 +267,7 @@ Generic origin hardening (any Ubuntu-class VPS + Docker):
 - Cron backups via `deploy/scripts/run-platform-backup.sh` (Docker volume +
   `scripts/backup/snapshot-platform.mjs`); offsite via operator download of a
   nightly stamp (`deploy/scripts/pull-platform-backup.sh`), optional `BACKUP_S3_*`
-- Optional: external Postgres later for `core.sqlite` at scale (not required for launch)
+- Optional: external Postgres later for the Cloud plane at scale (not required for launch)
 
 ## Public marketing site (Stripe business website)
 

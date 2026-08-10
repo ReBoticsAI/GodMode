@@ -73,10 +73,10 @@ flowchart TB
     Bridge[Bridge API Node.js]
     Kernel[ObjectType kernel]
     Services[Authoritative services and adapters]
-    CloudDb[(core.sqlite Cloud)]
+    CloudDb[(Cloud.sqlite identity and commerce)]
     HostUsersDb[(Users.sqlite hub)]
     UserDb[(users/*.sqlite Platform Vault)]
-    TenantDb[(tenants/*.sqlite per workspace)]
+    TenantDb[(tenants/*.sqlite workspace SoR)]
     Web -->|REST and WebSocket| Bridge
     Bridge --> Kernel
     Kernel --> Services

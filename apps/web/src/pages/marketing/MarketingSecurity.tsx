@@ -26,6 +26,11 @@ export default function MarketingSecurity() {
           shared platform pool.
         </li>
         <li>
+          Cloud storage is split by plane: host Cloud (identity, billing, marketplace), host Users
+          hub (DMs, Support, Notifications), your account User database (Platform Vault), and one
+          Workspace database per project (wiki, automations hooks, and related sandbox data).
+        </li>
+        <li>
           Sign-in uses secure browser cookies over HTTPS. Verification and password-reset mail
           go through a dedicated email provider (or SMTP), not a personal inbox.
         </li>
