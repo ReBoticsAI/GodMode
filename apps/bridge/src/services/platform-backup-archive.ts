@@ -172,6 +172,7 @@ function shouldIncludeArchivePath(relPosix: string): boolean {
   return (
     top === "databases" ||
     top === "tenants" ||
+    top === "users" ||
     top === "timeseries" ||
     top === "manifest.json"
   );
@@ -195,7 +196,13 @@ function collectStampFiles(stampDir: string): Array<{ abs: string; rel: string; 
         continue;
       }
       if (ent.isDirectory()) {
-        if (!shouldIncludeArchivePath(relPosix) && relPosix !== "databases" && relPosix !== "tenants" && relPosix !== "timeseries") {
+        if (
+          !shouldIncludeArchivePath(relPosix) &&
+          relPosix !== "databases" &&
+          relPosix !== "tenants" &&
+          relPosix !== "users" &&
+          relPosix !== "timeseries"
+        ) {
           continue;
         }
         walk(abs, relPosix);

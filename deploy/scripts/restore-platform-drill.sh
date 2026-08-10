@@ -4,15 +4,17 @@
 # Default mode (--verify-only):
 #   1. Pick latest local snapshot under BACKUP_LOCAL_DIR (or /data/backups)
 #   2. Copy snapshot into a scratch directory
-#   3. Run SQLite integrity_check on core + each tenant DB
+#   3. Run SQLite integrity_check on core (+ optional Cloud.sqlite alias),
+#      Users.sqlite when present, each tenant DB, and users/*.sqlite vaults
 #   4. Verify DuckDB timeseries files present, non-empty, and openable
 #   5. Optionally download the same stamp from S3 into another scratch dir and
 #      compare file sizes / integrity
 #
 # Full cutover restore (--apply) stops the godmode container, replaces live
-# SQLite + timeseries DuckDB files from the snapshot, and starts the container
-# again. Use only when intentionally practicing a real restore; keep the
-# pre-restore tree.
+# SQLite (core, Users, user vaults, tenants) + timeseries DuckDB files from the
+# snapshot, and starts the container again. Live Cloud path remains core.sqlite.
+# Pre-#501 stamps (core-only) still restore; hub may be empty until boot migrate.
+# Use only when intentionally practicing a real restore; keep the pre-restore tree.
 #
 # Usage:
 #   /opt/godmode/deploy/scripts/restore-platform-drill.sh --verify-only
@@ -138,12 +140,31 @@ verify_tree() {
   local label="$2"
   echo "== integrity: $label =="
   integrity_check "$root/databases/core.sqlite"
+  if [[ -f "$root/databases/Cloud.sqlite" ]]; then
+    integrity_check "$root/databases/Cloud.sqlite"
+  else
+    echo "  (no databases/Cloud.sqlite alias in stamp; ok for legacy)"
+  fi
+  if [[ -f "$root/databases/Users.sqlite" ]]; then
+    integrity_check "$root/databases/Users.sqlite"
+  else
+    echo "  (no databases/Users.sqlite in stamp; ok for pre-hub stamps)"
+  fi
   if [[ -d "$root/tenants" ]]; then
     local f
     for f in "$root/tenants"/*.sqlite; do
       [[ -e "$f" ]] || continue
       integrity_check "$f"
     done
+  fi
+  if [[ -d "$root/users" ]]; then
+    local u
+    for u in "$root/users"/*.sqlite; do
+      [[ -e "$u" ]] || continue
+      integrity_check "$u"
+    done
+  else
+    echo "  (no users/ vault tree in stamp)"
   fi
   if [[ -d "$root/timeseries" ]]; then
     echo "== duckdb: $label =="
@@ -201,11 +222,27 @@ mkdir -p "$PRE_DIR"
 compose_prod stop godmode
 
 cp -a "$DATA_MOUNT/core.sqlite" "$PRE_DIR/" 2>/dev/null || true
+cp -a "$DATA_MOUNT/Users.sqlite" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/tenants" "$PRE_DIR/" 2>/dev/null || true
+cp -a "$DATA_MOUNT/users" "$PRE_DIR/" 2>/dev/null || true
 cp -a "$DATA_MOUNT/timeseries" "$PRE_DIR/" 2>/dev/null || true
 
-cp -a "$SNAP/databases/core.sqlite" "$DATA_MOUNT/core.sqlite"
+# Prefer databases/core.sqlite; fall back to Cloud.sqlite alias if needed.
+if [[ -f "$SNAP/databases/core.sqlite" ]]; then
+  cp -a "$SNAP/databases/core.sqlite" "$DATA_MOUNT/core.sqlite"
+elif [[ -f "$SNAP/databases/Cloud.sqlite" ]]; then
+  cp -a "$SNAP/databases/Cloud.sqlite" "$DATA_MOUNT/core.sqlite"
+else
+  echo "Snapshot missing databases/core.sqlite (and Cloud.sqlite)" >&2
+  exit 1
+fi
 rm -f "$DATA_MOUNT/core.sqlite-wal" "$DATA_MOUNT/core.sqlite-shm"
+
+if [[ -f "$SNAP/databases/Users.sqlite" ]]; then
+  cp -a "$SNAP/databases/Users.sqlite" "$DATA_MOUNT/Users.sqlite"
+  rm -f "$DATA_MOUNT/Users.sqlite-wal" "$DATA_MOUNT/Users.sqlite-shm"
+fi
+
 mkdir -p "$DATA_MOUNT/tenants"
 for f in "$SNAP/tenants"/*.sqlite; do
   [[ -e "$f" ]] || continue
@@ -213,6 +250,16 @@ for f in "$SNAP/tenants"/*.sqlite; do
   cp -a "$f" "$DATA_MOUNT/tenants/$base"
   rm -f "$DATA_MOUNT/tenants/${base}-wal" "$DATA_MOUNT/tenants/${base}-shm"
 done
+
+if [[ -d "$SNAP/users" ]]; then
+  mkdir -p "$DATA_MOUNT/users"
+  for f in "$SNAP/users"/*.sqlite; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    cp -a "$f" "$DATA_MOUNT/users/$base"
+    rm -f "$DATA_MOUNT/users/${base}-wal" "$DATA_MOUNT/users/${base}-shm"
+  done
+fi
 
 if [[ -d "$SNAP/timeseries" ]]; then
   mkdir -p "$DATA_MOUNT/timeseries"

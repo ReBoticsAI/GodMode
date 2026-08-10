@@ -131,9 +131,15 @@ per-file Sigstore bundles inside the verification archive).
 
 An update snapshot is one consistency unit containing:
 
-- `core.sqlite` (Cloud), `Users.sqlite` (hub), every `users/*.sqlite` User DB, and every workspace (`tenants/*.sqlite`) database;
+- `core.sqlite` (Cloud live filename) plus a `Cloud.sqlite` archive alias, `Users.sqlite` (hub), every `users/*.sqlite` User Vault, and every workspace (`tenants/*.sqlite`) database;
 - tenant workspaces and installed plugin state;
 - installation/release metadata and the plugin lock snapshot.
+
+Cron (`scripts/backup/snapshot-platform.mjs`) and admin/release backups write that
+host layout under each stamp. `deploy/scripts/restore-platform-drill.sh` verifies
+and can `--apply` Cloud + Users (+ vaults). Legacy core-only stamps still restore;
+hub tables may be empty until Bridge boot migration. Live Cloud path remains
+`core.sqlite`.
 
 Snapshots use SQLite backup APIs, integrity checks, file hashes, and external
 storage outside the active data directory. Preflight refuses an update when

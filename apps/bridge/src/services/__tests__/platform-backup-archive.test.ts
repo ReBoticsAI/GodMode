@@ -33,11 +33,15 @@ function writeClosedStamp(stamp: string, extras?: Record<string, string>) {
   const dir = path.join(backupsDir, stamp);
   fs.mkdirSync(path.join(dir, "databases"), { recursive: true });
   fs.mkdirSync(path.join(dir, "tenants"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "users"), { recursive: true });
   fs.mkdirSync(path.join(dir, "timeseries", "tenant=platform"), {
     recursive: true,
   });
   fs.writeFileSync(path.join(dir, "databases", "core.sqlite"), "core-bytes");
+  fs.writeFileSync(path.join(dir, "databases", "Cloud.sqlite"), "cloud-bytes");
+  fs.writeFileSync(path.join(dir, "databases", "Users.sqlite"), "users-hub");
   fs.writeFileSync(path.join(dir, "tenants", "t1.sqlite"), "tenant-bytes");
+  fs.writeFileSync(path.join(dir, "users", "u1.sqlite"), "vault-bytes");
   fs.writeFileSync(
     path.join(dir, "timeseries", "tenant=platform", "analytics.duckdb"),
     "duck-bytes"
@@ -112,6 +116,9 @@ describe("platform-backup-archive", () => {
 
   it("excludes secret-looking paths from the archive", () => {
     expect(__test.shouldIncludeArchivePath("databases/core.sqlite")).toBe(true);
+    expect(__test.shouldIncludeArchivePath("databases/Cloud.sqlite")).toBe(true);
+    expect(__test.shouldIncludeArchivePath("databases/Users.sqlite")).toBe(true);
+    expect(__test.shouldIncludeArchivePath("users/u1.sqlite")).toBe(true);
     expect(__test.shouldIncludeArchivePath("manifest.json")).toBe(true);
     expect(__test.shouldIncludeArchivePath(".env")).toBe(false);
     expect(__test.shouldIncludeArchivePath("secrets/credentials.json")).toBe(
@@ -168,6 +175,9 @@ describe("platform-backup-archive", () => {
     });
     const asText = gunzipped.toString("binary");
     expect(asText).toContain(`${stamp}/databases/core.sqlite`);
+    expect(asText).toContain(`${stamp}/databases/Cloud.sqlite`);
+    expect(asText).toContain(`${stamp}/databases/Users.sqlite`);
+    expect(asText).toContain(`${stamp}/users/u1.sqlite`);
     expect(asText).toContain(`${stamp}/tenants/t1.sqlite`);
     expect(asText).toContain(
       `${stamp}/timeseries/tenant=platform/analytics.duckdb`

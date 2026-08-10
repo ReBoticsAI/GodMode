@@ -438,6 +438,12 @@ describe("release flow", () => {
       const snapshot = await createCoordinatedSnapshot(db, null, "admin-a");
       expect(fs.existsSync(path.join(snapshot.location, "databases", "core.sqlite"))).toBe(true);
       expect(
+        fs.existsSync(path.join(snapshot.location, "databases", "Cloud.sqlite"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(snapshot.location, "databases", "Users.sqlite"))
+      ).toBe(true);
+      expect(
         fs.existsSync(
           path.join(snapshot.location, "databases", "tenant-a.sqlite")
         )

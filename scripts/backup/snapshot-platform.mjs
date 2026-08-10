@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Snapshot core.sqlite + tenants/*.sqlite + timeseries DuckDB, optionally upload
- * to S3-compatible storage.
+ * Snapshot host Cloud (core.sqlite + Cloud.sqlite alias), Users.sqlite hub,
+ * users/*.sqlite User Vaults, tenants/*.sqlite, and timeseries DuckDB.
+ * Optionally upload to S3-compatible storage.
  *
  * Env:
- *   PLATFORM_DATA_DIR   — GodMode data root (required)
- *   BACKUP_LOCAL_DIR    — output dir (default: PLATFORM_DATA_DIR/backups)
+ *   PLATFORM_DATA_DIR   GodMode data root (required)
+ *   BACKUP_LOCAL_DIR    output dir (default: PLATFORM_DATA_DIR/backups)
  *   BACKUP_S3_ENDPOINT, BACKUP_S3_REGION, BACKUP_S3_BUCKET,
  *   BACKUP_S3_ACCESS_KEY_ID, BACKUP_S3_SECRET_ACCESS_KEY, BACKUP_S3_PREFIX
  */
@@ -27,6 +28,7 @@ const localRoot =
 const dest = path.join(localRoot, stamp);
 fs.mkdirSync(path.join(dest, "databases"), { recursive: true });
 fs.mkdirSync(path.join(dest, "tenants"), { recursive: true });
+fs.mkdirSync(path.join(dest, "users"), { recursive: true });
 
 async function backupSqlite(src, destFile) {
   if (!fs.existsSync(src)) {
@@ -61,7 +63,17 @@ async function backupSqlite(src, destFile) {
 }
 
 const coreSrc = path.join(dataDir, "core.sqlite");
-await backupSqlite(coreSrc, path.join(dest, "databases", "core.sqlite"));
+const coreOk = await backupSqlite(
+  coreSrc,
+  path.join(dest, "databases", "core.sqlite")
+);
+// Archive alias for the host Cloud plane name (live runtime stays core.sqlite).
+if (coreOk) {
+  await backupSqlite(coreSrc, path.join(dest, "databases", "Cloud.sqlite"));
+}
+
+const usersHubSrc = path.join(dataDir, "Users.sqlite");
+await backupSqlite(usersHubSrc, path.join(dest, "databases", "Users.sqlite"));
 
 const tenantsDir = path.join(dataDir, "tenants");
 if (fs.existsSync(tenantsDir)) {
@@ -70,6 +82,17 @@ if (fs.existsSync(tenantsDir)) {
     await backupSqlite(
       path.join(tenantsDir, name),
       path.join(dest, "tenants", name)
+    );
+  }
+}
+
+const userVaultsDir = path.join(dataDir, "users");
+if (fs.existsSync(userVaultsDir)) {
+  for (const name of fs.readdirSync(userVaultsDir)) {
+    if (!name.endsWith(".sqlite")) continue;
+    await backupSqlite(
+      path.join(userVaultsDir, name),
+      path.join(dest, "users", name)
     );
   }
 }
@@ -89,6 +112,9 @@ fs.writeFileSync(
       dest,
       includes: {
         sqlite: true,
+        cloud: coreOk,
+        hostUsers: fs.existsSync(path.join(dest, "databases", "Users.sqlite")),
+        userVaults: fs.existsSync(userVaultsDir),
         duckdbTimeseries: duckdbFiles,
       },
     },
