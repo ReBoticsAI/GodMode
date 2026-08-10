@@ -1,32 +1,33 @@
-import { Router } from "express";
-import { attachAuthContext, requireAuth } from "../services/auth/middleware.js";
+import { Router, type Request } from "express";
+import {
+  attachAuthContext,
+  getReqTenantDb,
+  requireAuth,
+} from "../services/auth/middleware.js";
 import {
   getUserOwnerTenantDb,
   getUserOwnerTenantId,
 } from "../services/user-scope.js";
 import { listAgents } from "../services/agents/agents-db.js";
 import {
-  createHook,
-  deleteHook,
   getHook,
   HookError,
   listHookRuns,
   listHooks,
-  updateHook,
-  getHookForRun,
   type HookOwnerScope,
 } from "../services/hook-service.js";
-import { refreshScheduler } from "../services/scheduler.js";
-import { approveHookRun, rejectHookRun } from "../services/hook-dispatcher.js";
 import {
-  emitEvent,
   listEventsForOwner,
   listKnownEventTypes,
 } from "../services/event-bus.js";
 
-function resolveScope(userId: string): HookOwnerScope {
-  const tenantId = getUserOwnerTenantId(userId);
-  const agentIds = listAgents(getUserOwnerTenantDb(userId)).map((a) => a.id);
+function resolveScope(req: Request): HookOwnerScope {
+  const userId = req.user!.id;
+  const tenantId = req.tenantId ?? getUserOwnerTenantId(userId);
+  const agentDb = req.tenantId
+    ? getReqTenantDb(req)
+    : getUserOwnerTenantDb(userId);
+  const agentIds = listAgents(agentDb).map((a) => a.id);
   return { userId, tenantId, agentIds };
 }
 
@@ -39,12 +40,12 @@ export function createHooksRouter(): Router {
   router.use(attachAuthContext, requireAuth);
 
   router.get("/", (req, res) => {
-    const scope = resolveScope(req.user!.id);
+    const scope = resolveScope(req);
     res.json({ hooks: listHooks(scope), agentIds: scope.agentIds });
   });
 
   router.get("/:id", (req, res) => {
-    const scope = resolveScope(req.user!.id);
+    const scope = resolveScope(req);
     try {
       res.json({ hook: getHook(paramId(req.params.id), scope) });
     } catch (err) {
@@ -57,7 +58,7 @@ export function createHooksRouter(): Router {
   });
 
   router.get("/:id/runs", (req, res) => {
-    const scope = resolveScope(req.user!.id);
+    const scope = resolveScope(req);
     try {
       res.json({ runs: listHookRuns(paramId(req.params.id), scope) });
     } catch (err) {
@@ -78,7 +79,7 @@ export function createEventsRouter(): Router {
 
   router.get("/", (req, res) => {
     const userId = req.user!.id;
-    const tenantId = getUserOwnerTenantId(userId);
+    const tenantId = req.tenantId ?? getUserOwnerTenantId(userId);
     const limit = Number(req.query.limit);
     res.json({
       events: listEventsForOwner(
