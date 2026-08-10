@@ -127,7 +127,7 @@ export function createTenantForUser(
     `INSERT OR IGNORE INTO credit_wallets (user_id, balance) VALUES (?, 100)`
   ).run(userId);
 
-  ensureWelcomeWikiPage(core, tenantId, userId);
+  ensureWelcomeWikiPage(getTenantDb(tenantId), tenantId, userId);
 
   return tenantId;
 }

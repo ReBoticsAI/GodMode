@@ -694,7 +694,7 @@ function wikiProposal(
   if (!ctx.tenantId) return undefined;
   return listWikiProposals(
     { tenantId: ctx.tenantId, status: "all" },
-    coreDb(db, ctx)
+    db
   ).find((row) => row.id === id);
 }
 
@@ -711,10 +711,7 @@ export const wikiProposalServiceAdapter: RecordAdapter = {
       query.filters?.status === "rejected"
         ? (query.filters.status as WikiProposalStatus | "all")
         : "all";
-    const rows = listWikiProposals(
-      { tenantId: ctx.tenantId, status },
-      coreDb(db, ctx)
-    );
+    const rows = listWikiProposals({ tenantId: ctx.tenantId, status }, db);
     const result = page(rows, query);
     return {
       objectType: def.name,
@@ -751,7 +748,7 @@ export const wikiProposalServiceAdapter: RecordAdapter = {
           reason: data.reason as string | null | undefined,
           source: typeof data.source === "string" ? data.source : "manual",
         },
-        coreDb(db, ctx)
+        db
       )
     );
   },
@@ -770,7 +767,7 @@ export const wikiProposalServiceAdapter: RecordAdapter = {
           authorUserId: ctx.userId,
           scope: { tenantIds: [ctx.tenantId] },
         },
-        coreDb(db, ctx)
+        db
       );
       if (!result.ok) {
         throw Object.assign(new Error(result.error ?? "Approval failed"), {
@@ -781,7 +778,7 @@ export const wikiProposalServiceAdapter: RecordAdapter = {
     },
     reject(db, _def, id, _input, ctx) {
       if (!wikiProposal(db, id, ctx)) notFound("Wiki proposal");
-      if (!rejectWikiProposal(id, coreDb(db, ctx))) {
+      if (!rejectWikiProposal(id, db)) {
         throw Object.assign(new Error("Wiki proposal is not pending"), {
           status: 409,
         });

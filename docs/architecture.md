@@ -98,7 +98,7 @@ One SQLite file per workspace:
 
 - **Structure** — departments, divisions, pages
 - **Intelligence** — agents, chats, messages, memories, artifacts, rules, skills (personal-layer move to User DB is follow-up)
-- **Productivity** — wiki, kanban cards, calendar, Personal/Agent vault
+- **Productivity** — wiki (Workspace system of record), kanban cards, calendar, Personal/Agent vault
 - **Optional workspace Connect override** — project-specific keys
 - **Automations** — workflows, hooks, schedules
 

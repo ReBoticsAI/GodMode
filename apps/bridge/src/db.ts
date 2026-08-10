@@ -14,6 +14,7 @@ import { registerDataManagementMigrations, ensureCapabilityTables } from "./serv
 import { registerStructureNodesMigration, cleanupProvisionedStructureAgents } from "./services/structure-nodes-migration.js";
 import { registerStructureRegroupMigration } from "./services/structure-regroup-migration.js";
 import { registerGroupTabsMigration } from "./services/group-tabs-migration.js";
+import { ensureWikiWorkspaceSchema } from "./services/wiki-workspace-migrate.js";
 
 /**
  * Canonical autonomous task-runner workflow graph (executor-shaped). Stored in
@@ -290,7 +291,12 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 19, name: "ai_projects_columns_json_backfill_v1", up: migrateAiProjectsColumnsJsonBackfill },
   { version: 20, name: "ai_secrets_agent_vault_v1", up: migrateAiSecretsAgentVault },
   { version: 21, name: "ai_secrets_owner_kind_v1", up: migrateAiSecretsOwnerKind },
+  { version: 22, name: "wiki_workspace_schema_v1", up: migrateWikiWorkspaceSchema },
 ] as const;
+
+function migrateWikiWorkspaceSchema(db: Database.Database): void {
+  ensureWikiWorkspaceSchema(db);
+}
 
 /** Personal multi-board Tasks + optional GitHub Project sync columns on ai_projects. */
 function migrateMultiBoardTasksSchema(db: Database.Database): void {

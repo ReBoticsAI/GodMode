@@ -161,6 +161,7 @@ import {
   getPageBySlug,
   listPages as listWikiPages,
   updatePage as updateWikiPage,
+  wikiDbForTenant,
   type WikiScope,
 } from "./wiki-service.js";
 import {
@@ -2772,25 +2773,30 @@ export async function executeTool(
       });
 
     case "read_wiki_page": {
-      if (args.id) return getPageById(String(args.id));
+      const wikiDb = ctx.tenantId ? wikiDbForTenant(ctx.tenantId) : undefined;
+      if (args.id) return getPageById(String(args.id), wikiDb);
       if (args.slug) return getPageBySlug(String(args.slug), wikiScope(ctx));
       throw new Error("id or slug required");
     }
 
     case "create_wiki_page": {
       if (!ctx.userId || !ctx.tenantId) throw new Error("user and tenant required");
-      return createWikiPage({
-        tenantId: ctx.tenantId,
-        authorUserId: ctx.userId,
-        title: String(args.title ?? ""),
-        bodyMarkdown: args.bodyMarkdown ? String(args.bodyMarkdown) : "",
-        visibility: args.visibility === "external" ? "external" : "internal",
-        space: args.space ? String(args.space) : null,
-        slug: args.slug ? String(args.slug) : undefined,
-      });
+      return createWikiPage(
+        {
+          tenantId: ctx.tenantId,
+          authorUserId: ctx.userId,
+          title: String(args.title ?? ""),
+          bodyMarkdown: args.bodyMarkdown ? String(args.bodyMarkdown) : "",
+          visibility: args.visibility === "external" ? "external" : "internal",
+          space: args.space ? String(args.space) : null,
+          slug: args.slug ? String(args.slug) : undefined,
+        },
+        wikiDbForTenant(ctx.tenantId)
+      );
     }
 
     case "update_wiki_page":
+      if (!ctx.tenantId) throw new Error("tenant required");
       return updateWikiPage(
         String(args.id ?? ""),
         {
@@ -2799,11 +2805,17 @@ export async function executeTool(
           visibility: args.visibility === "external" ? "external" : args.visibility === "internal" ? "internal" : undefined,
           space: args.space !== undefined ? (args.space ? String(args.space) : null) : undefined,
         },
-        wikiScope(ctx)
+        wikiScope(ctx),
+        wikiDbForTenant(ctx.tenantId)
       );
 
     case "delete_wiki_page":
-      deleteWikiPage(String(args.id ?? ""), wikiScope(ctx));
+      if (!ctx.tenantId) throw new Error("tenant required");
+      deleteWikiPage(
+        String(args.id ?? ""),
+        wikiScope(ctx),
+        wikiDbForTenant(ctx.tenantId)
+      );
       return { ok: true };
 
     case "list_conversations": {

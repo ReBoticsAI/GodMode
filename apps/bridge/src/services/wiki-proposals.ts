@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { getCloudDb, type CoreDatabase } from "../core-db.js";
+import type { CoreDatabase } from "../core-db.js";
 import { createPage, updatePage, type WikiScope } from "./wiki-service.js";
 import { indexWikiPage, removeWikiPageFromIndex } from "./wiki-rag.js";
 import type { EmbeddingClient } from "./embeddings/embedding-client.js";
@@ -25,7 +25,7 @@ export interface WikiPageProposal {
 
 export function listWikiProposals(
   opts: { tenantId?: string; status?: WikiProposalStatus | "all" } = {},
-  db: CoreDatabase = getCloudDb()
+  db: CoreDatabase
 ): WikiPageProposal[] {
   const status = opts.status ?? "pending";
   if (opts.tenantId && status !== "all") {
@@ -70,7 +70,7 @@ export function createWikiProposal(
     reason?: string | null;
     source?: string;
   },
-  db: CoreDatabase = getCloudDb()
+  db: CoreDatabase
 ): WikiPageProposal {
   const id = uuidv4();
   db.prepare(
@@ -94,10 +94,7 @@ export function createWikiProposal(
     .get(id) as WikiPageProposal;
 }
 
-export function rejectWikiProposal(
-  id: string,
-  db: CoreDatabase = getCloudDb()
-): boolean {
+export function rejectWikiProposal(id: string, db: CoreDatabase): boolean {
   const r = db
     .prepare(
       `UPDATE wiki_page_proposals SET status = 'rejected', updated_at = datetime('now')
@@ -114,7 +111,7 @@ export function approveWikiProposal(
     scope: WikiScope;
     embedder?: EmbeddingClient | null;
   },
-  db: CoreDatabase = getCloudDb()
+  db: CoreDatabase
 ): { ok: boolean; pageId?: string; error?: string } {
   const row = db
     .prepare(`SELECT * FROM wiki_page_proposals WHERE id = ?`)
@@ -167,7 +164,7 @@ export function approveWikiProposal(
 /** Used when deleting a page that had proposals pending. */
 export function cascadeWikiProposalCleanup(
   pageId: string,
-  db: CoreDatabase = getCloudDb()
+  db: CoreDatabase
 ): void {
   try {
     db.prepare(
