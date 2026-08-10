@@ -84,7 +84,7 @@ import {
   type PlatformScope,
 } from "./platform-scope.js";
 import { getAssignment } from "./ai-agent-assignments.js";
-import { getUserOwnerTenantDb } from "./user-scope.js";
+import { getUserOwnerTenantDb, getUserOwnerTenantId } from "./user-scope.js";
 import { ensureUserProject, ensureAgentProject } from "./user-productivity.js";
 import {
   readFile as fsReadFile,
@@ -1006,18 +1006,33 @@ async function beforeCodingMutation(
   });
 }
 
+function resolveToolWorkspaceId(ctx: ToolExecContext): string | null {
+  if (typeof ctx.tenantId === "string" && ctx.tenantId.trim()) {
+    return ctx.tenantId.trim();
+  }
+  if (ctx.userId) return getUserOwnerTenantId(ctx.userId);
+  return null;
+}
+
 function afterCodingMutation(
   ctx: ToolExecContext,
   eventType: string,
   payload: Record<string, unknown>
 ): void {
   if (!codingHookExecutionEnabled()) return;
+  const tenantId = resolveToolWorkspaceId(ctx);
+  if (!tenantId) {
+    console.warn(
+      `[event-bus] skip ${eventType}: no Workspace id on tool context`
+    );
+    return;
+  }
   emitEvent({
     type: eventType,
     actor: ctx.userId
       ? { kind: "user", id: ctx.userId }
       : { kind: "agent", id: ctx.activeAgentId ?? "intelligence" },
-    tenantId: ctx.tenantId ?? null,
+    tenantId,
     payload,
   });
 }
@@ -2975,21 +2990,29 @@ export async function executeTool(
 
     case "emit_event": {
       const agentId = ctx.activeAgentId ?? "intelligence";
+      const tenantId = resolveToolWorkspaceId(ctx);
+      if (!tenantId) {
+        throw new Error("emit_event requires an active Workspace");
+      }
       return emitEvent({
         type: String(args.type ?? ""),
         actor: ctx.userId
           ? { kind: "user", id: ctx.userId }
           : { kind: "agent", id: agentId },
-        tenantId: ctx.tenantId ?? null,
+        tenantId,
         payload: (args.payload as Record<string, unknown>) ?? {},
       });
     }
 
     case "list_events": {
       const agentId = ctx.activeAgentId ?? "intelligence";
+      const tenantId = resolveToolWorkspaceId(ctx);
+      if (!tenantId) {
+        throw new Error("list_events requires an active Workspace");
+      }
       const owner = ctx.userId
-        ? { kind: "user" as const, id: ctx.userId, tenantId: ctx.tenantId ?? null }
-        : { kind: "agent" as const, id: agentId, tenantId: ctx.tenantId ?? null };
+        ? { kind: "user" as const, id: ctx.userId, tenantId }
+        : { kind: "agent" as const, id: agentId, tenantId };
       return listEventsForOwner(owner, {
         limit: args.limit != null ? Number(args.limit) : undefined,
       });

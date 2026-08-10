@@ -79,7 +79,7 @@ Identity and commerce plane (`getCloudDb()`):
 - **Marketplace** — Official/Local catalogs, Community user listings, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
 - **Share grants** — cross-tenant resource sharing
 - **Bridge connections** — federation between Bridge instances
-- **PlatformEvent log** — automation `events` (hooks and hook_runs SoR live on Workspace)
+- **PlatformEvent log** — Workspace `platform_events` (hooks and hook_runs SoR also on Workspace; Cloud may keep orphan null-tenant rows)
 
 ### Host Users (`Users.sqlite`)
 
@@ -101,7 +101,7 @@ One SQLite file per workspace:
 - **Intelligence** — agents, chats, messages, memories, artifacts, rules, skills (personal-layer move to User DB is follow-up)
 - **Productivity** — wiki (Workspace system of record), kanban cards, calendar, Personal/Agent vault
 - **Optional workspace Connect override** — project-specific keys
-- **Automations** — workflows, schedules, hooks (Workspace system of record; PlatformEvent log stays on Cloud)
+- **Automations** — workflows, schedules, hooks, PlatformEvent log (Workspace system of record)
 
 Physical file separation provides workspace isolation; most workspace tables omit a redundant `tenant_id` column.
 

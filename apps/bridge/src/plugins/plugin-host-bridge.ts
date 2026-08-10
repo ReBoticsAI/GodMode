@@ -90,7 +90,7 @@ export function initPluginHost(): PluginHostServices {
       type: string;
       actor: { kind: string; id?: string | null };
       payload?: Record<string, unknown>;
-      tenantId?: string | null;
+      tenantId: string;
     }) {
       emitEvent({
         type: input.type,

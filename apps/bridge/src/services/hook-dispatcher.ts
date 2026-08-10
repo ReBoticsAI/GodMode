@@ -26,9 +26,9 @@ import {
   dbForHook,
   findHookRunLocation,
   hookDbForTenant,
-  listHookTenantIds,
 } from "./hook-service.js";
 import { ensureHooksWorkspaceSchema } from "./hooks-workspace-migrate.js";
+import { ensurePlatformEventsWorkspaceSchema } from "./platform-events-workspace-migrate.js";
 
 interface DispatcherDeps {
   llm?: LlmManager;
@@ -453,8 +453,7 @@ const ENABLED_EVENT_HOOKS_SQL = `SELECT * FROM hooks WHERE trigger_kind = 'event
 
 /**
  * Load enabled event hooks for dispatch.
- * Tenant-scoped events query that workspace; global events fan-out all tenants.
- * Always includes Cloud orphan hooks (`owner_tenant_id IS NULL`).
+ * Requires event.tenant_id; loads that Workspace's hooks (plus Cloud orphan hooks).
  */
 export function loadEnabledEventHooks(
   event: CoreEvent,
@@ -477,24 +476,13 @@ export function loadEnabledEventHooks(
       preferredDb,
       preferredDb.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]
     );
-    return out;
-  }
-
-  if (event.tenant_id) {
+  } else if (event.tenant_id) {
     const db = hookDbForTenant(event.tenant_id);
     pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
   } else {
-    for (const tenantId of listHookTenantIds()) {
-      try {
-        const db = hookDbForTenant(tenantId);
-        pushAll(db, db.prepare(ENABLED_EVENT_HOOKS_SQL).all() as CoreHook[]);
-      } catch (err) {
-        console.warn(
-          `[hooks] skip tenant ${tenantId} during dispatch:`,
-          err instanceof Error ? err.message : err
-        );
-      }
-    }
+    console.warn(
+      "[hooks] PlatformEvent missing tenant_id; skipping Workspace hook dispatch"
+    );
   }
 
   const cloud = getCloudDb();
@@ -601,12 +589,21 @@ export async function approveHookRun(
     .prepare(`SELECT * FROM hooks WHERE id = ?`)
     .get(found.run.hook_id) as CoreHook | undefined;
   if (!hook) return;
-  // Platform events stay on Cloud even when the hook/run live on Workspace.
-  const event = found.run.event_id
-    ? ((getCloudDb()
-        .prepare(`SELECT * FROM events WHERE id = ?`)
-        .get(found.run.event_id) as CoreEvent | undefined) ?? null)
-    : null;
+  // PlatformEvents live on Workspace; Cloud may still hold orphan NULL-tenant rows.
+  let event: CoreEvent | null = null;
+  if (found.run.event_id) {
+    ensurePlatformEventsWorkspaceSchema(found.db);
+    event =
+      (found.db
+        .prepare(`SELECT * FROM platform_events WHERE id = ?`)
+        .get(found.run.event_id) as CoreEvent | undefined) ?? null;
+    if (!event) {
+      event =
+        (getCloudDb()
+          .prepare(`SELECT * FROM events WHERE id = ?`)
+          .get(found.run.event_id) as CoreEvent | undefined) ?? null;
+    }
+  }
   const payload: Record<string, unknown> = {};
   if (event?.payload_json) {
     try {

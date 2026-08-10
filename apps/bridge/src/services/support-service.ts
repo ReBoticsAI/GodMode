@@ -16,6 +16,7 @@ import {
 } from "./platform-groups.js";
 import { createCoreGithubIssue } from "./github-app-issues.js";
 import { githubAppConfigured } from "./github-app.js";
+import { getUserOwnerTenantId } from "./user-scope.js";
 
 export class SupportError extends Error {
   constructor(
@@ -161,15 +162,25 @@ export function createTicket(
   }
   const ticket = getTicket(id, db)!;
 
-  emitEvent(
-    {
-      type: "support.ticket.created",
-      actor: { kind: input.requesterKind, id: input.requesterId },
-      tenantId: input.requesterTenantId ?? null,
-      payload: { ticketId: id, subject, category: input.category ?? null },
-    },
-    db
-  );
+  const workspaceId =
+    (typeof input.requesterTenantId === "string" &&
+    input.requesterTenantId.trim()
+      ? input.requesterTenantId.trim()
+      : null) ??
+    (input.requesterKind === "user"
+      ? getUserOwnerTenantId(input.requesterId)
+      : null);
+  if (!workspaceId) {
+    throw new SupportError(
+      "Workspace required to record support.ticket.created PlatformEvent"
+    );
+  }
+  emitEvent({
+    type: "support.ticket.created",
+    actor: { kind: input.requesterKind, id: input.requesterId },
+    tenantId: workspaceId,
+    payload: { ticketId: id, subject, category: input.category ?? null },
+  });
   if (input.ownerUserId) {
     createNotification(
       {

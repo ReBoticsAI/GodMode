@@ -10,7 +10,7 @@ Storage planes:
 - **Cloud** (host): `Cloud.sqlite` via `getCloudDb()` (boot-migrates from legacy `core.sqlite`). Identity, tenants, billing, marketplace, shares, releases. Kernel ObjectTypes use `database: "cloud"`. Do not store consumer Connect secrets here.
 - **Users** (host hub): `Users.sqlite` / `getHostUsersDb()`. DMs, Support, Notifications, platform groups. Soft user ids (no FK into Cloud).
 - **User** (per account): `users/<userId>.sqlite`. **Platform Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
-- **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins, wiki (SoR), hooks (SoR), Personal/Agent vault, optional workspace key override.
+- **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins, wiki (SoR), hooks (SoR), PlatformEvent `platform_events` (SoR), Personal/Agent vault, optional workspace key override.
 
 Platform Vault UI: sidebar **Platform Vault** (`/settings/vault`). Account Connect hub (not Personal Vault).
 
@@ -20,4 +20,4 @@ When connecting Cursor/OpenAI/Exa for an account, write to Platform Vault by def
 
 Do not confuse host `Users.sqlite` with per-account `users/<userId>.sqlite`.
 
-PlatformEvent (`events`) stays on Cloud. Hook definitions and `hook_runs` live on Workspace (orphans with null `owner_tenant_id` may remain on Cloud until assigned).
+PlatformEvent SoR is Workspace table `platform_events` (`tenant_id` required on emit). Do not use the Workspace durable outbox `events` (`seq` / `dispatched`) for PlatformEvents. Cloud may retain orphan PlatformEvent rows with null `tenant_id` until cleaned. Hook definitions and `hook_runs` live on Workspace (orphans with null `owner_tenant_id` may remain on Cloud until assigned).

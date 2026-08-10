@@ -219,21 +219,18 @@ export function createShareGrant(
     federationToken,
     expiresAt
   );
-  emitEvent(
-    {
-      type: "share.created",
-      actor: { kind: "user", id: opts.ownerUserId },
-      tenantId: opts.ownerTenantId,
-      payload: {
-        shareGrantId: id,
-        resourceKind: opts.resourceKind,
-        resourceId: opts.resourceId,
-        granteeUserId: opts.granteeUserId ?? null,
-        granteeTenantId: opts.granteeTenantId ?? null,
-      },
+  emitEvent({
+    type: "share.created",
+    actor: { kind: "user", id: opts.ownerUserId },
+    tenantId: opts.ownerTenantId,
+    payload: {
+      shareGrantId: id,
+      resourceKind: opts.resourceKind,
+      resourceId: opts.resourceId,
+      granteeUserId: opts.granteeUserId ?? null,
+      granteeTenantId: opts.granteeTenantId ?? null,
     },
-    core
-  );
+  });
   return id;
 }
 
