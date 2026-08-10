@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -38,7 +38,7 @@ export function createAdminMarketplaceRouter(): Router {
     const limit = Number(req.query.limit ?? 200);
     res.json({
       sellers: listSellerAccountsForAdmin(
-        getCoreDb(),
+        getCloudDb(),
         Number.isFinite(limit) ? limit : 200
       ),
     });
@@ -61,8 +61,8 @@ export function createAdminMarketplaceRouter(): Router {
         res.status(400).json({ error: "verifiedSeller boolean required" });
         return;
       }
-      const seller = setSellerVerified(getCoreDb(), { userId, verified });
-      const snap = getSellerVerifiedSnapshot(getCoreDb(), userId);
+      const seller = setSellerVerified(getCloudDb(), { userId, verified });
+      const snap = getSellerVerifiedSnapshot(getCloudDb(), userId);
       res.json({
         seller: {
           id: seller.id,
@@ -100,8 +100,8 @@ export function createAdminMarketplaceRouter(): Router {
         res.status(400).json({ error: "verifiedFrozen boolean required" });
         return;
       }
-      const seller = setSellerVerifiedFrozen(getCoreDb(), { userId, frozen });
-      const snap = getSellerVerifiedSnapshot(getCoreDb(), userId);
+      const seller = setSellerVerifiedFrozen(getCloudDb(), { userId, frozen });
+      const snap = getSellerVerifiedSnapshot(getCloudDb(), userId);
       res.json({
         seller: {
           id: seller.id,
@@ -123,7 +123,7 @@ export function createAdminMarketplaceRouter(): Router {
   });
 
   router.get("/fees", (_req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const rows = core
       .prepare(
         `SELECT id, amount_cents, platform_fee_cents, status, provider,
@@ -170,7 +170,7 @@ export function createAdminMarketplaceRouter(): Router {
   });
 
   router.get("/backup-status", (_req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const row = core
       .prepare(`SELECT * FROM platform_backup_meta WHERE id='latest'`)
       .get() as
@@ -196,7 +196,7 @@ export function createAdminMarketplaceRouter(): Router {
   });
 
   router.post("/backup", async (_req, res) => {
-    const result = await runLocalPlatformBackup(getCoreDb());
+    const result = await runLocalPlatformBackup(getCloudDb());
     if (result.status !== "ok") {
       res.status(500).json({
         error: result.error ?? "Backup failed",
@@ -244,7 +244,7 @@ export function createAdminMarketplaceRouter(): Router {
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("X-Content-Type-Options", "nosniff");
       const stats = await streamBackupStampTarGz(stamp, dir, res);
-      logBackupDownloadAudit(getCoreDb(), {
+      logBackupDownloadAudit(getCloudDb(), {
         userId,
         stamp,
         bytesIn: stats.bytesIn,
@@ -258,7 +258,7 @@ export function createAdminMarketplaceRouter(): Router {
         } else {
           res.end();
         }
-        logBackupDownloadAudit(getCoreDb(), {
+        logBackupDownloadAudit(getCloudDb(), {
           userId,
           stamp: raw,
           bytesIn: 0,
@@ -269,7 +269,7 @@ export function createAdminMarketplaceRouter(): Router {
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
-      logBackupDownloadAudit(getCoreDb(), {
+      logBackupDownloadAudit(getCloudDb(), {
         userId,
         stamp: raw,
         bytesIn: 0,
@@ -294,7 +294,7 @@ export function createAdminObservabilityRouter(): Router {
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
 
   router.get("/requests", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const limit = Number(req.query.limit ?? 100);
     const level =
       typeof req.query.level === "string" ? req.query.level : undefined;

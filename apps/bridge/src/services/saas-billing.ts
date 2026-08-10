@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { resolveStripeSecretKey, getPublicBillingConfig } from "./platform-billing.js";
 import {
   findEntitlementByStripeSession,
@@ -177,7 +177,7 @@ function syncSubscriptionFromCheckoutSession(session: {
 export async function resolveEntitlementForCheckoutSession(
   sessionId: string
 ): Promise<SaasEntitlement | null> {
-  const existing = findEntitlementByStripeSession(getCoreDb(), sessionId);
+  const existing = findEntitlementByStripeSession(getCloudDb(), sessionId);
   if (existing) {
     // Best-effort: ensure subscription row exists when entitlement already recorded.
     return existing;
@@ -240,10 +240,10 @@ export async function createSaasBillingPortalSession(opts: {
   if (!secret) {
     throw Object.assign(new Error("Stripe is not configured"), { status: 503 });
   }
-  const sub = findSubscriptionByUserId(getCoreDb(), opts.userId);
+  const sub = findSubscriptionByUserId(getCloudDb(), opts.userId);
   let customerId = sub?.stripe_customer_id ?? null;
   if (!customerId) {
-    const entitlement = getCoreDb()
+    const entitlement = getCloudDb()
       .prepare(
         `SELECT stripe_customer_id FROM saas_entitlements
          WHERE consumed_by_user_id=? AND status='consumed'
@@ -386,7 +386,7 @@ export function handleSaasStripeWebhook(
 export async function syncMissingSaasSubscriptionsFromStripe(): Promise<number> {
   const secret = resolveStripeSecretKey();
   if (!secret) return 0;
-  const core = getCoreDb();
+  const core = getCloudDb();
   const entitlements = core
     .prepare(
       `SELECT email, stripe_session_id, stripe_customer_id, consumed_by_user_id

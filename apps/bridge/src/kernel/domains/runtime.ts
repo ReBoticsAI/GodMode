@@ -118,7 +118,7 @@ export const RUNTIME_SPECS: BuiltinSpec[] =
       ? WRITE_PERMISSIONS
       : undefined,
     accessPolicy:
-      registration.database === "core" ? "platform-admin" : "tenant-local",
+      registration.database === "cloud" ? "platform-admin" : "tenant-local",
     fields: registration.fields.map(
       (field) => FIELD_TYPES[field] ?? field
     ),

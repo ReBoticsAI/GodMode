@@ -105,8 +105,8 @@ function sharedAccesses(
   ctx: OperationContext,
   resourceKind: "user_calendar" | "user_tasks"
 ): ProductivityAccess[] {
-  if (!ctx.data?.coreDb || !ctx.userId || !ctx.tenantId) return [];
-  const resources = ctx.data.coreDb
+  if (!ctx.data?.cloudDb || !ctx.userId || !ctx.tenantId) return [];
+  const resources = ctx.data.cloudDb
     .prepare(
       `SELECT DISTINCT resource_id
        FROM share_grants
@@ -118,7 +118,7 @@ function sharedAccesses(
   }>;
   const accesses: ProductivityAccess[] = [];
   for (const { resource_id: ownerUserId } of resources) {
-    const access = resolveShareAccess(ctx.data.coreDb, {
+    const access = resolveShareAccess(ctx.data.cloudDb, {
       userId: ctx.userId,
       tenantId: ctx.tenantId,
       resourceKind,

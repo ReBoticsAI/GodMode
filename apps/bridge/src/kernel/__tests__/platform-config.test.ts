@@ -37,7 +37,7 @@ function context(
     source: "http",
     data: {
       tenantDb: db,
-      coreDb: db,
+      cloudDb: db,
       declaredDatabase: "tenant",
     },
   };

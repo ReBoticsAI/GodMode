@@ -144,10 +144,10 @@ export const config = {
   agentsDir: path.join(appData, "agents"),
   dbPath: path.join(appData, "platform.db"),
   /**
-   * Host Cloud DB (identity, tenants, billing, marketplace, releases).
-   * File may still be named core.sqlite on disk for install compat; alias getCloudDb().
+   * Host Cloud DB path (identity, tenants, billing, marketplace, releases).
+   * Live file remains core.sqlite until a later rename child; open via getCloudDb().
    */
-  coreDbPath: path.join(appData, "core.sqlite"),
+  cloudDbPath: path.join(appData, "core.sqlite"),
   /**
    * Host Users DB (DMs, Support, Notifications, platform groups).
    * Distinct from per-account User Vault files under usersDir.

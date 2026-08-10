@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import { config } from "../../config.js";
 
 function clientIp(req: Request): string {
@@ -43,7 +43,7 @@ export function durableRateLimit(opts: {
     }
 
     try {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const row = core
         .prepare(`SELECT count, reset_at FROM rate_limit_buckets WHERE bucket_key=?`)
         .get(key) as { count: number; reset_at: number } | undefined;

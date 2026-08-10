@@ -15,7 +15,7 @@ import {
   extraPluginPathsFromMeta,
 } from "../services/marketplace-catalog.js";
 import { buildPublicOfficialCatalog } from "../services/marketplace-official-catalog.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
 import { listInstalledPlugins, listAvailablePlugins } from "../plugins/plugin-install.js";
 
@@ -26,7 +26,7 @@ export function createMarketplaceCatalogRouter(): Router {
   router.get("/official", async (_req, res) => {
     try {
       if (config.isSaas) {
-        const index = await buildPublicOfficialCatalog(getCoreDb());
+        const index = await buildPublicOfficialCatalog(getCloudDb());
         res.json({
           catalogUrl: "saas-official",
           entries: index.entries,
@@ -82,7 +82,7 @@ export function createMarketplaceCatalogRouter(): Router {
 
   router.get("/unofficial", async (req, res) => {
     try {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const sources = listCatalogSources(core, req.user!.id);
       const entries = await fetchUnofficialCatalog(core, req.user!.id);
       const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
@@ -96,12 +96,12 @@ export function createMarketplaceCatalogRouter(): Router {
   });
 
   router.get("/sources", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     res.json({ sources: listCatalogSources(core, req.user!.id) });
   });
 
   router.get("/installed", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const catalogInstalls = listCatalogInstalls(core, req.tenantId!);
     const plugins = listInstalledPlugins(core, req.tenantId!);
     const available = listAvailablePlugins();

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { getCoreDb, type CoreDatabase } from "../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../core-db.js";
 import { getPluginHost } from "@godmode/plugin-host";
 import {
   attachAuthContext,
@@ -130,7 +130,7 @@ function federationAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
   try {
-    federationGrantForToken(getCoreDb(), token);
+    federationGrantForToken(getCloudDb(), token);
     next();
   } catch (err) {
     if (err instanceof FederationAuthorizationError) {
@@ -152,7 +152,7 @@ export function createFederationRouter(deps: {
   const router = Router();
 
   router.get("/invites/:token", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const invite = core
       .prepare(
         `SELECT id, resource_kind, resource_id, role, invitee_email, owner_user_id, status, expires_at
@@ -183,7 +183,7 @@ export function createFederationRouter(deps: {
     }
     try {
       const result = await executeCollectionAction(
-        getCoreDb(),
+        getCloudDb(),
         "FederatedShareInvite",
         "accept",
         {
@@ -236,7 +236,7 @@ export function createFederationRouter(deps: {
           throw new FederationAuthorizationError(400, `${name} required`);
         }
       }
-      authorizeFederationScCommand(getCoreDb(), token, {
+      authorizeFederationScCommand(getCloudDb(), token, {
         verb: String(req.params.verb ?? "").toLowerCase(),
         resourceKind: body.resourceKind!,
         resourceId: body.resourceId!,

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -30,7 +30,7 @@ export function createInferenceRouter(llm: LlmManager): Router {
   router.use(attachAuthContext, requireAuth, resolveTenant);
 
   router.get("/endpoints", (req, res) => {
-    res.json({ endpoints: listInferenceEndpoints(getCoreDb(), req.user!.id) });
+    res.json({ endpoints: listInferenceEndpoints(getCloudDb(), req.user!.id) });
   });
 
   return router;

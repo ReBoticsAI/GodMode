@@ -5,7 +5,7 @@ import {
   requirePlatformAdmin,
 } from "../services/auth/middleware.js";
 import { getUserOwnerTenantId } from "../services/user-scope.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   addMessage,
   createTicket,

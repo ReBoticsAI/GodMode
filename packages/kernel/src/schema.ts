@@ -59,11 +59,11 @@ export function validateObjectTypeDef(def: ObjectTypeDef): string[] {
   if (idField && idField.fieldType !== "Data") {
     errors.push("id field must use Data");
   }
-  if (def.storage?.kind === "native" && def.database === "core") {
+  if (def.storage?.kind === "native" && def.database === "cloud") {
     errors.push("native ObjectTypes must be tenant-local");
   }
-  if (def.database != null && !["tenant", "core", "users"].includes(def.database)) {
-    errors.push("database must be tenant, core, or users");
+  if (def.database != null && !["tenant", "cloud", "users"].includes(def.database)) {
+    errors.push("database must be tenant, cloud, or users");
   }
   if (def.contractVersion != null && (!Number.isInteger(def.contractVersion) || def.contractVersion < 1)) {
     errors.push("contractVersion must be a positive integer");

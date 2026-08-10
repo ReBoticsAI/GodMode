@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreDmConversation,
   type CoreDmMessage,
@@ -139,7 +139,7 @@ function userSummary(
   _hubDb: CoreDatabase,
   userId: string
 ): DmUserSummary | null {
-  const row = getCoreDb()
+  const row = getCloudDb()
     .prepare(
       `SELECT id, email, display_name, avatar_url FROM users WHERE id = ?`
     )
@@ -166,7 +166,7 @@ export function lookupUserByEmail(
   email: string,
   excludeUserId?: string
 ): DmUserSummary | null {
-  const row = getCoreDb()
+  const row = getCloudDb()
     .prepare(
       `SELECT id, email, display_name, avatar_url
        FROM users WHERE email = ? AND id <> 'system-local'`
@@ -194,7 +194,7 @@ export function listDmContacts(
   userId: string,
   emailLookup?: string
 ): DmContact[] {
-  const cloud = getCoreDb();
+  const cloud = getCloudDb();
   const byId = new Map<string, DmContact>();
 
   const shareRows = cloud

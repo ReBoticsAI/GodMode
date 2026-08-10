@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../../config.js";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import type { AppDatabase } from "../../db.js";
 import { getTenantDb, getTenantIdForDb } from "../../tenant-registry.js";
 import { ensureUserDb, getUserDb, getUserIdForDb } from "../../user-registry.js";
@@ -969,7 +969,7 @@ export function migrateConnectSecretToUserVault(
   const existing = readPlatformPlain(userDb, baseId, name);
   if (existing) return existing;
 
-  const tenants = getCoreDb()
+  const tenants = getCloudDb()
     .prepare(
       `SELECT id FROM tenants
        WHERE owner_user_id = ? AND is_operator = 0
@@ -1019,7 +1019,7 @@ function resolveNameFromUserVault(userId: string, name: string): string | null {
     const plain = tryReadSecretPlain(row.value);
     if (plain) return plain;
   }
-  const tenants = getCoreDb()
+  const tenants = getCloudDb()
     .prepare(
       `SELECT id FROM tenants
        WHERE owner_user_id = ? AND is_operator = 0

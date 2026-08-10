@@ -160,7 +160,7 @@ function agentClause(ctx: OperationContext): { sql: string; params: string[] } {
 }
 
 function coreDb(db: AppDatabase, ctx: OperationContext): AppDatabase {
-  return ctx.data?.coreDb ?? db;
+  return ctx.data?.cloudDb ?? db;
 }
 
 function jsonArray(value: unknown, fallback: string[] = []): string[] {

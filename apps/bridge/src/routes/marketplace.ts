@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { config } from "../config.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { getReqTenantDb } from "../services/auth/middleware.js";
 import { requireAuth, resolveTenant, attachAuthContext } from "../services/auth/middleware.js";
 import {
@@ -114,7 +114,7 @@ export function createMarketplaceRouter(): Router {
   });
 
   router.get("/listings", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const q =
       typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
     const kind =
@@ -134,7 +134,7 @@ export function createMarketplaceRouter(): Router {
   });
 
   router.get("/my/listings", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const rows = core
       .prepare(
         `SELECT ${LISTING_COLS_JOINED}
@@ -148,7 +148,7 @@ export function createMarketplaceRouter(): Router {
   });
 
   router.get("/entitlements", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     res.json({
       entitlements: listEntitlementsForBuyer(core, req.user!.id, req.tenantId!),
     });
@@ -159,7 +159,7 @@ export function createMarketplaceRouter(): Router {
   });
 
   router.get("/inference/endpoints", (req, res) => {
-    res.json({ endpoints: listInferenceEndpoints(getCoreDb(), req.user!.id) });
+    res.json({ endpoints: listInferenceEndpoints(getCloudDb(), req.user!.id) });
   });
 
   return router;

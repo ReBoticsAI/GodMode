@@ -7,7 +7,7 @@ vi.mock("../coding/coding-ui-access.js", () => ({
 vi.mock("../../core-db.js", () => {
   const store = new Map<string, string>();
   return {
-    getCoreDb: () => ({}),
+    getCloudDb: () => ({}),
     getPlatformMeta: (_db: unknown, key: string) => store.get(key) ?? null,
     setPlatformMeta: (_db: unknown, key: string, value: string) => {
       store.set(key, value);

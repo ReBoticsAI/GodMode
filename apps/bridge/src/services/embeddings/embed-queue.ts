@@ -4,7 +4,7 @@
  */
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../../config.js";
-import { getCoreDb, type CoreDatabase } from "../../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../../core-db.js";
 import type { EmbedProfileId } from "./profiles.js";
 
 export type EmbedLane = "interactive" | "backfill";
@@ -63,7 +63,7 @@ export function resetEmbedQueueFairness(): void {
 }
 
 function core(): CoreDatabase {
-  return getCoreDb();
+  return getCloudDb();
 }
 
 export function enqueueEmbedJob(input: EnqueueEmbedInput): string | null {

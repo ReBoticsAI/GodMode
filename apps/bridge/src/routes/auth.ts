@@ -3,7 +3,7 @@ import { Router } from "express";
 import { config } from "../config.js";
 import { resolveGithubOauthClient } from "../services/github-app.js";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreUser,
   type CoreUserProfile,
 } from "../core-db.js";
@@ -84,7 +84,7 @@ export function createAuthRouter(): Router {
   });
 
   router.get("/tenants", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const tenants = listUserTenants(core, req.user!.id);
     res.json({ tenants, operatorTenantId: getOperatorTenantIdCached() });
   });
@@ -110,7 +110,7 @@ export function createAuthRouter(): Router {
       }
       try {
         const created = createAdminTenantForUser(
-          getCoreDb(),
+          getCloudDb(),
           req.user!.id,
           name,
           slug || undefined
@@ -132,7 +132,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "email and password required" });
       return;
     }
-    const core = getCoreDb();
+    const core = getCloudDb();
     const user = core
       .prepare("SELECT * FROM users WHERE email=?")
       .get(email.trim().toLowerCase()) as CoreUser | undefined;
@@ -224,7 +224,7 @@ export function createAuthRouter(): Router {
     const displayName =
       typeof name === "string" && name.trim() ? name.trim() : normalized.split("@")[0];
 
-    const core = getCoreDb();
+    const core = getCloudDb();
     if (config.isSaas && paidSessionId) {
       const entitlement = findPendingEntitlementByStripeSession(core, paidSessionId);
       if (entitlement?.email && entitlement.email !== normalized) {
@@ -310,7 +310,7 @@ export function createAuthRouter(): Router {
   });
 
   router.post("/logout", attachAuthContext, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const sessionId = req.sessionId ?? parseSessionCookie(req.headers.cookie);
     if (sessionId) deleteSession(core, sessionId);
     res.setHeader("Set-Cookie", [
@@ -334,7 +334,7 @@ export function createAuthRouter(): Router {
     }
     try {
       await executeRecordAction(
-        getCoreDb(),
+        getCloudDb(),
         "UserCredential",
         req.user!.id,
         "change_password",
@@ -360,7 +360,7 @@ export function createAuthRouter(): Router {
   });
 
   router.get("/profile", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const user = core
       .prepare("SELECT * FROM users WHERE id=?")
       .get(req.user!.id) as CoreUser | undefined;
@@ -385,7 +385,7 @@ export function createAuthRouter(): Router {
         res.status(400).json({ error: "email required" });
         return;
       }
-      const row = getCoreDb()
+      const row = getCloudDb()
         .prepare(
           `SELECT id, email, display_name, avatar_url, is_admin
            FROM users WHERE email=? AND id <> 'system-local'`
@@ -420,7 +420,7 @@ export function createAuthRouter(): Router {
     attachAuthContext,
     requireAuth,
     (req, res) => {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const tenantId = String(req.params.tenantId);
       const role = userHasTenantAccess(core, req.user!.id, tenantId);
       if (!role) {
@@ -460,7 +460,7 @@ export function createAuthRouter(): Router {
     requireAuth,
     requirePlatformAdmin,
     (_req, res) => {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const rows = core
         .prepare(
           `SELECT id, email, display_name, avatar_url, is_admin, created_at
@@ -495,7 +495,7 @@ export function createAuthRouter(): Router {
       res.json({ authenticated: false });
       return;
     }
-    const core = getCoreDb();
+    const core = getCloudDb();
     const tenants = listUserTenants(core, req.user.id);
     // Zero-workspace users are still authenticated. resolveTenant would 403
     // with "No workspace access" and make login look like a false Signed In.
@@ -524,7 +524,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "mfaToken and code required" });
       return;
     }
-    const core = getCoreDb();
+    const core = getCloudDb();
     // Peek first: a wrong TOTP must not burn the step-up token (user can retry).
     const pending = findValidAuthToken(core, { rawToken: mfaToken, purpose: "mfa_login" });
     if (!pending) {
@@ -559,7 +559,7 @@ export function createAuthRouter(): Router {
     res.json({ ok: true });
     if (!email) return;
     try {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const user = core.prepare("SELECT * FROM users WHERE email=?").get(email) as
         | CoreUser
         | undefined;
@@ -602,7 +602,7 @@ export function createAuthRouter(): Router {
         return;
       }
       try {
-        const core = getCoreDb();
+        const core = getCloudDb();
         const user = core.prepare("SELECT * FROM users WHERE id=?").get(req.user!.id) as
           | CoreUser
           | undefined;
@@ -638,7 +638,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "token required" });
       return;
     }
-    const core = getCoreDb();
+    const core = getCloudDb();
     const consumed = consumeAuthToken(core, { rawToken: token, purpose: "verify" });
     if (!consumed) {
       res.status(400).json({ error: "Invalid or expired token" });
@@ -654,7 +654,7 @@ export function createAuthRouter(): Router {
     res.json({ ok: true });
     if (!email) return;
     try {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const user = core.prepare("SELECT * FROM users WHERE email=?").get(email) as
         | CoreUser
         | undefined;
@@ -679,7 +679,7 @@ export function createAuthRouter(): Router {
       res.status(400).json({ error: "token and newPassword (min 6) required" });
       return;
     }
-    const core = getCoreDb();
+    const core = getCloudDb();
     const consumed = consumeAuthToken(core, { rawToken: token, purpose: "reset" });
     if (!consumed) {
       res.status(400).json({ error: "Invalid or expired token" });
@@ -690,14 +690,14 @@ export function createAuthRouter(): Router {
   });
 
   router.post("/mfa/begin", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const result = beginMfaEnroll(core, req.user!.id, req.user!.email);
     res.json(result);
   });
 
   router.post("/mfa/confirm", attachAuthContext, requireAuth, (req, res) => {
     const code = typeof req.body?.code === "string" ? req.body.code : "";
-    const core = getCoreDb();
+    const core = getCloudDb();
     if (!confirmMfaEnroll(core, req.user!.id, code)) {
       res.status(400).json({ error: "Invalid code" });
       return;
@@ -707,7 +707,7 @@ export function createAuthRouter(): Router {
 
   router.post("/mfa/disable", attachAuthContext, requireAuth, (req, res) => {
     const code = typeof req.body?.code === "string" ? req.body.code : "";
-    const core = getCoreDb();
+    const core = getCloudDb();
     if (!verifyMfaChallenge(core, req.user!.id, code)) {
       res.status(400).json({ error: "Invalid code" });
       return;
@@ -717,7 +717,7 @@ export function createAuthRouter(): Router {
   });
 
   router.get("/mfa/status", attachAuthContext, requireAuth, (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     res.json({
       enabled: mfaEnabled(core, req.user!.id),
       required: Boolean(config.isSaas && req.user!.isAdmin),
@@ -781,7 +781,7 @@ export function createAuthRouter(): Router {
     }
     try {
       const profile = await exchangeOauthCode(provider, code);
-      const core = getCoreDb();
+      const core = getCloudDb();
       let userId: string | undefined;
       const linked = core
         .prepare(

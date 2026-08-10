@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreEvent,
   type EventActorKind,
@@ -26,7 +26,7 @@ export interface EmitEventInput {
  */
 export function emitEvent(
   input: EmitEventInput,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreEvent {
   const id = uuidv4();
   db.prepare(
@@ -60,7 +60,7 @@ export function emitEvent(
 export function listEventsForOwner(
   owner: { kind: EventActorKind; id: string; tenantId: string | null },
   opts: { limit?: number } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreEvent[] {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
   return db
@@ -76,7 +76,7 @@ export function listEventsForOwner(
 }
 
 /** Distinct event types seen recently, to populate hook-builder dropdowns. */
-export function listKnownEventTypes(db: CoreDatabase = getCoreDb()): string[] {
+export function listKnownEventTypes(db: CoreDatabase = getCloudDb()): string[] {
   const rows = db
     .prepare(`SELECT DISTINCT type FROM events ORDER BY type ASC LIMIT 200`)
     .all() as Array<{ type: string }>;

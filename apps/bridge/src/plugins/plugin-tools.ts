@@ -1,6 +1,6 @@
 import type { AiToolDef, ToolMode } from "../services/ai-tools-registry.js";
 import { pluginRuntime } from "./runtime.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { installedPluginIdsForTenant } from "./plugin-install.js";
 
 export interface PluginToolExecContext {
@@ -40,7 +40,7 @@ export async function executePluginTool(
   if (
     !execCtx?.tenantId ||
     !def.pluginId ||
-    !installedPluginIdsForTenant(getCoreDb(), execCtx.tenantId).includes(
+    !installedPluginIdsForTenant(getCloudDb(), execCtx.tenantId).includes(
       def.pluginId
     )
   ) {

@@ -2,7 +2,7 @@ import type { EventEmitter } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
-import { getCoreDb, getOperatorTenantId, listAllTenantIds } from "../core-db.js";
+import { getCloudDb, getOperatorTenantId, listAllTenantIds } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import {
   executeWorkflow,
@@ -134,7 +134,7 @@ export class AiQueueWorker {
   private listTenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
     const out: Array<{ tenantId: string; db: AppDatabase }> = [];
     try {
-      for (const id of listAllTenantIds(getCoreDb())) {
+      for (const id of listAllTenantIds(getCloudDb())) {
         try {
           out.push({ tenantId: id, db: getTenantDb(id) });
         } catch {
@@ -145,7 +145,7 @@ export class AiQueueWorker {
       /* core unavailable — fall back to the default db below */
     }
     if (out.length === 0) {
-      out.push({ tenantId: getOperatorTenantId(getCoreDb()) ?? "", db: this.db });
+      out.push({ tenantId: getOperatorTenantId(getCloudDb()) ?? "", db: this.db });
     }
     return out;
   }
@@ -320,7 +320,7 @@ export class AiQueueWorker {
 
     if (ctx.wikiSynthesize === true) {
       const tenantId =
-        job.tenant_id || getOperatorTenantId(getCoreDb()) || "";
+        job.tenant_id || getOperatorTenantId(getCloudDb()) || "";
       return runWikiSynthesize({
         db,
         llm: this.llm,

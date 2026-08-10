@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CoreDatabase, CoreUser } from "../core-db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
 
 /** Admin-granted Cloud access without Stripe. Distinct from platform admin (`is_admin`). */
@@ -150,7 +150,7 @@ export function upsertSubscriptionFromCheckout(opts: {
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
 }): SaasSubscription {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const existing =
     (opts.stripeSubscriptionId
       ? findSubscriptionByStripeSubscriptionId(core, opts.stripeSubscriptionId)
@@ -231,7 +231,7 @@ export function applyStripeSubscriptionObject(sub: {
   items?: { data?: Array<{ price?: { id?: string } }> };
   metadata?: { godmode_plan?: string; godmode_saas?: string };
 }): SaasSubscription | null {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const subscriptionId = typeof sub.id === "string" ? sub.id : "";
   if (!subscriptionId) return null;
 
@@ -312,7 +312,7 @@ export function applyStripeSubscriptionObject(sub: {
 export function markSubscriptionPastDueByCustomer(
   customerId: string
 ): SaasSubscription | null {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const existing = findSubscriptionByCustomerId(core, customerId);
   if (!existing) return null;
   core
@@ -332,7 +332,7 @@ export function linkSubscriptionToUser(opts: {
   stripeCustomerId?: string | null;
   email?: string | null;
 }): SaasSubscription | null {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const bySession = opts.stripeSessionId
     ? findSubscriptionBySessionId(core, opts.stripeSessionId)
     : undefined;
@@ -380,7 +380,7 @@ export function grantComplimentaryAccess(
   userId: string,
   opts?: { expiresAt?: string | null }
 ): SaasSubscription {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as
     | CoreUser
     | undefined;
@@ -454,7 +454,7 @@ export function grantComplimentaryAccess(
  * Paid Stripe rows are left alone; use Disable access for those.
  */
 export function revokeComplimentaryAccess(userId: string): SaasSubscription {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const user = core.prepare(`SELECT id FROM users WHERE id=?`).get(userId) as
     | { id: string }
     | undefined;
@@ -490,7 +490,7 @@ export function revokeComplimentaryAccess(userId: string): SaasSubscription {
 }
 
 export function userHasActiveComplimentaryAccess(userId: string): boolean {
-  const sub = findSubscriptionByUserId(getCoreDb(), userId);
+  const sub = findSubscriptionByUserId(getCloudDb(), userId);
   return isComplimentarySubscription(sub) && subscriptionGrantsAccess(sub);
 }
 
@@ -512,7 +512,7 @@ export function assertSaasUserMayAccess(user: CoreUser): {
     };
   }
 
-  const core = getCoreDb();
+  const core = getCloudDb();
   const sub = findSubscriptionByUserId(core, user.id);
   if (subscriptionGrantsAccess(sub)) return { ok: true };
 
@@ -534,7 +534,7 @@ export function assertSaasUserMayAccess(user: CoreUser): {
 }
 
 export function touchUserLastSeen(userId: string): void {
-  getCoreDb()
+  getCloudDb()
     .prepare(
       `UPDATE users SET last_seen_at=datetime('now'), updated_at=datetime('now') WHERE id=?`
     )
@@ -545,7 +545,7 @@ export function setUserAccessDisabled(
   userId: string,
   disabled: boolean
 ): CoreUser | undefined {
-  const core = getCoreDb();
+  const core = getCloudDb();
   core
     .prepare(
       `UPDATE users SET access_disabled=?, updated_at=datetime('now') WHERE id=?`
@@ -569,7 +569,7 @@ export function setUserAccessDisabled(
 }
 
 export function revokeAccessForSubscription(sub: SaasSubscription): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   core
     .prepare(
       `UPDATE saas_subscriptions
@@ -615,7 +615,7 @@ function stripeDashboardCustomerUrl(customerId: string | null): string | null {
 }
 
 export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const fromSubs = core
     .prepare(
       `SELECT
@@ -752,9 +752,9 @@ export function getPublicSubscriptionForUser(userId: string): {
   cancelAtPeriodEnd: boolean;
   hasCustomer: boolean;
 } | null {
-  const sub = findSubscriptionByUserId(getCoreDb(), userId);
+  const sub = findSubscriptionByUserId(getCloudDb(), userId);
   if (!sub) {
-    const entitlement = getCoreDb()
+    const entitlement = getCloudDb()
       .prepare(
         `SELECT stripe_customer_id FROM saas_entitlements
          WHERE consumed_by_user_id=? AND status='consumed' LIMIT 1`

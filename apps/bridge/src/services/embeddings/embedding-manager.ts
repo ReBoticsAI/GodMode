@@ -1,6 +1,6 @@
 import { config } from "../../config.js";
 import type { AppDatabase } from "../../db.js";
-import { getCoreDb, listAllTenantIds } from "../../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../../core-db.js";
 import { getTenantDb } from "../../tenant-registry.js";
 import { CpuLlamaServer, type CpuServerStatus } from "./cpu-llama-server.js";
 import { EmbeddingClient } from "./embedding-client.js";
@@ -207,7 +207,7 @@ export class EmbeddingManager {
       }
     }
     try {
-      backfillWikiFts(getCoreDb());
+      backfillWikiFts(getCloudDb());
     } catch {
       /* optional */
     }
@@ -270,7 +270,7 @@ export class EmbeddingManager {
   private listTenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
     const out: Array<{ tenantId: string; db: AppDatabase }> = [];
     try {
-      for (const id of listAllTenantIds(getCoreDb())) {
+      for (const id of listAllTenantIds(getCloudDb())) {
         try {
           out.push({ tenantId: id, db: getTenantDb(id) });
         } catch {

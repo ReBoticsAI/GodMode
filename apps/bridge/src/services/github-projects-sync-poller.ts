@@ -3,7 +3,7 @@
  * Primary near-real-time path for user-owned Projects (GitHub does not emit
  * projects_v2_item for personal boards). Org-owned Projects also get App webhooks.
  */
-import { getCoreDb, listAllTenantIds } from "../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../core-db.js";
 import { config } from "../config.js";
 import { getTenantDb } from "../tenant-registry.js";
 import {
@@ -62,7 +62,7 @@ export class GithubProjectsSyncPoller {
     if (this.running) return;
     this.running = true;
     try {
-      const core = getCoreDb();
+      const core = getCloudDb();
       for (const tenantId of listAllTenantIds(core)) {
         let db;
         try {

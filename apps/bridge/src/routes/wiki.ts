@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -32,7 +32,7 @@ function paramId(value: string | string[]): string {
 }
 
 function resolveScope(userId: string): WikiScope {
-  const rows = getCoreDb()
+  const rows = getCloudDb()
     .prepare(`SELECT tenant_id FROM tenant_memberships WHERE user_id = ?`)
     .all(userId) as Array<{ tenant_id: string }>;
   const tenantIds = rows.map((r) => r.tenant_id);
@@ -93,7 +93,7 @@ export function createWikiRouter(embeddings?: EmbeddingManager): Router {
     const scope = resolveScope(req.user!.id);
     const slug = paramId(req.params.slug);
     if (slug === "welcome" && req.tenantId) {
-      ensureWelcomeWikiPage(getCoreDb(), req.tenantId, req.user!.id);
+      ensureWelcomeWikiPage(getCloudDb(), req.tenantId, req.user!.id);
     }
     try {
       const page = getPageBySlug(slug, scope);

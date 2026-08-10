@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import type { ShareGrantRole } from "../core-db.js";
 import {
   assertShareRole,
@@ -52,7 +52,7 @@ function resolveUserResourceAccess(
 ): UserProductivityAccess {
   const callerId = req.user!.id;
   const targetUserId = parseTargetUserId(req);
-  const core = getCoreDb();
+  const core = getCloudDb();
 
   if (targetUserId === callerId) {
     const ownerTenantId = getUserOwnerTenantId(callerId);

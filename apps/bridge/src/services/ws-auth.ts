@@ -1,4 +1,4 @@
-import { getCoreDb, type MarketplaceListingKind } from "../core-db.js";
+import { getCloudDb, type MarketplaceListingKind } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getAgent } from "./agents/agents-db.js";
 import { resolveShareAccess } from "./share-service.js";
@@ -37,14 +37,14 @@ export function resolveWsTenantId(
 ): string | undefined {
   const candidate = opts.queryTenant ?? opts.headerTenant;
   if (!userId || !candidate) return opts.fallbackTenantId;
-  const role = userHasTenantAccess(getCoreDb(), userId, candidate);
+  const role = userHasTenantAccess(getCloudDb(), userId, candidate);
   return role ? candidate : opts.fallbackTenantId;
 }
 
 export function canJoinTenantRoom(userId: string | undefined, room: string): boolean {
   if (!userId || !room.startsWith("tenant:")) return false;
   const tenantId = room.slice("tenant:".length);
-  return userHasTenantAccess(getCoreDb(), userId, tenantId) != null;
+  return userHasTenantAccess(getCloudDb(), userId, tenantId) != null;
 }
 
 export function canJoinUserRoom(userId: string | undefined, room: string): boolean {
@@ -60,7 +60,7 @@ export function canJoinResourceRoom(
 ): boolean {
   if (!userId) return false;
   if (kind === "conversation") {
-    return isConversationMember(getCoreDb(), resourceId, userId);
+    return isConversationMember(getCloudDb(), resourceId, userId);
   }
   if (!tenantId) return false;
   if (kind === "agent") {
@@ -68,7 +68,7 @@ export function canJoinResourceRoom(
     if (owned) return true;
   }
   return (
-    resolveShareAccess(getCoreDb(), {
+    resolveShareAccess(getCloudDb(), {
       userId,
       tenantId,
       resourceKind: kind as MarketplaceListingKind,

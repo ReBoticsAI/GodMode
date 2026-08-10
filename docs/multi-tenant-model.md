@@ -6,7 +6,7 @@ This document defines how the GodMode platform partitions data, routes requests,
 
 | Plane | Path | Scope |
 |-------|------|--------|
-| **Cloud** (host) | `core.sqlite` (Cloud plane; also archived as `Cloud.sqlite` in backups) | Identity, workspace registry, billing, marketplace registry, shares, releases |
+| **Cloud** (host) | `core.sqlite` via `getCloudDb()` (also archived as `Cloud.sqlite` in backups; kernel `database: "cloud"`) | Identity, workspace registry, billing, marketplace registry, shares, releases |
 | **Users** (host hub) | `Users.sqlite` | Cross-account hub: DMs, Support, Notifications, platform groups |
 | **User** (per account) | `users/<userId>.sqlite` | **User Vault** (Connect keys) and future personal-layer continuity |
 | **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, optional workspace key override |

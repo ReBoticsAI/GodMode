@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { tmpRoot, tenantsDir, usersDir, coreDbPath, hostUsersDbPath } = vi.hoisted(
+const { tmpRoot, tenantsDir, usersDir, cloudDbPath, hostUsersDbPath } = vi.hoisted(
   () => {
     const f = require("node:fs") as typeof import("node:fs");
     const o = require("node:os") as typeof import("node:os");
@@ -15,7 +15,7 @@ const { tmpRoot, tenantsDir, usersDir, coreDbPath, hostUsersDbPath } = vi.hoiste
       tmpRoot: root,
       tenantsDir: p.join(root, "tenants"),
       usersDir: p.join(root, "users"),
-      coreDbPath: p.join(root, "core.sqlite"),
+      cloudDbPath: p.join(root, "core.sqlite"),
       hostUsersDbPath: p.join(root, "Users.sqlite"),
     };
   }
@@ -32,14 +32,14 @@ vi.mock("../../config.js", async () => {
       dataDir: tmpRoot,
       usersDir,
       tenantsDir,
-      coreDbPath,
+      cloudDbPath,
       hostUsersDbPath,
     },
   };
 });
 
 import Database from "better-sqlite3";
-import { getCoreDb, getPlatformMeta } from "../../core-db.js";
+import { getCloudDb, getPlatformMeta } from "../../core-db.js";
 import {
   closeHostUsersDbForTests,
   getHostUsersDb,
@@ -65,7 +65,7 @@ describe("host Users hub split", () => {
   });
 
   it("opens Users.sqlite with hub tables and Support group", () => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     expect(getPlatformMeta(core, "hub_tables_moved_to_users_v1")).toBe("1");
     const hub = getHostUsersDb();
     expect(tableExists(hub, "notifications")).toBe(true);
@@ -78,7 +78,7 @@ describe("host Users hub split", () => {
   });
 
   it("writes notifications to Users.sqlite not Cloud", () => {
-    getCoreDb();
+    getCloudDb();
     const note = createNotification({
       recipientKind: "user",
       recipientId: "user-1",
@@ -87,7 +87,7 @@ describe("host Users hub split", () => {
     });
     const listed = listNotificationsForUser("user-1");
     expect(listed.some((n) => n.id === note.id)).toBe(true);
-    expect(tableExists(getCoreDb(), "notifications")).toBe(false);
+    expect(tableExists(getCloudDb(), "notifications")).toBe(false);
   });
 
   it("copies legacy hub rows from a core handle into Users", () => {

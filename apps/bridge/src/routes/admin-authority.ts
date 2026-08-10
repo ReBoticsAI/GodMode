@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb, listAllTenantIds } from "../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -87,7 +87,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/coding-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getCodingKillState(tenantIds));
   });
 
@@ -127,7 +127,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalCodingKill({ codingDisabled, buildsDisabled });
-    res.json(getCodingKillState(listAllTenantIds(getCoreDb())));
+    res.json(getCodingKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/coding-kills/tenant/:tenantId", (req, res) => {
@@ -154,7 +154,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/spend-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getSpendKillState(tenantIds));
   });
 
@@ -190,7 +190,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalSpendKill({ spendDisabled });
-    res.json(getSpendKillState(listAllTenantIds(getCoreDb())));
+    res.json(getSpendKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/spend-kills/tenant/:tenantId", (req, res) => {
@@ -213,7 +213,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/deploy-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getDeployKillState(tenantIds));
   });
 
@@ -249,7 +249,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalDeployKill({ deployDisabled });
-    res.json(getDeployKillState(listAllTenantIds(getCoreDb())));
+    res.json(getDeployKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/deploy-kills/tenant/:tenantId", (req, res) => {
@@ -272,7 +272,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/delete-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getDeleteKillState(tenantIds));
   });
 
@@ -308,7 +308,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalDeleteKill({ deleteDisabled });
-    res.json(getDeleteKillState(listAllTenantIds(getCoreDb())));
+    res.json(getDeleteKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/delete-kills/tenant/:tenantId", (req, res) => {
@@ -331,7 +331,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/send-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getSendKillState(tenantIds));
   });
 
@@ -367,7 +367,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalSendKill({ sendDisabled });
-    res.json(getSendKillState(listAllTenantIds(getCoreDb())));
+    res.json(getSendKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/send-kills/tenant/:tenantId", (req, res) => {
@@ -390,7 +390,7 @@ export function createAdminAuthorityRouter(): Router {
   });
 
   router.get("/agent-pause-kills", (_req, res) => {
-    const tenantIds = listAllTenantIds(getCoreDb());
+    const tenantIds = listAllTenantIds(getCloudDb());
     res.json(getAgentPauseKillState(tenantIds));
   });
 
@@ -426,7 +426,7 @@ export function createAdminAuthorityRouter(): Router {
       return;
     }
     setGlobalAgentPause({ agentsPaused });
-    res.json(getAgentPauseKillState(listAllTenantIds(getCoreDb())));
+    res.json(getAgentPauseKillState(listAllTenantIds(getCloudDb())));
   });
 
   router.post("/agent-pause-kills/tenant/:tenantId", (req, res) => {

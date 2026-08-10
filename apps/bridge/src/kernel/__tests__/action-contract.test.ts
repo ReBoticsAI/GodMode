@@ -637,7 +637,7 @@ describe("ObjectType action contract", () => {
       name: "CoreOwnedActionItem",
       label: "Core Owned Action Item",
       pluginId: "action-contract-tests",
-      database: "core",
+      database: "cloud",
       storage: { kind: "adapter", adapterId: "core_owned_action_test" },
       fields: [{ name: "id", label: "Id", fieldType: "Data" }],
       operations: ["get"],
@@ -676,7 +676,7 @@ describe("ObjectType action contract", () => {
 
     await executeRecordAction(tenant, coreDefinition.name, "one", "activate", {}, {
       ...owner,
-      data: { tenantDb: tenant, coreDb: core, declaredDatabase: "core" },
+      data: { tenantDb: tenant, cloudDb: core, declaredDatabase: "cloud" },
     });
 
     expect(core.prepare(`SELECT state FROM core_owned_items WHERE id='one'`).get()).toEqual({

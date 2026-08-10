@@ -48,7 +48,7 @@ import {
   objectTypeForKernelTool,
 } from "../kernel/tool-exec.js";
 import { isRegisteredPageKind } from "../kernel/kind-registry.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { getHostUsersDb } from "../host-users-db.js";
 import { broadcastCardActivity } from "../ws-broker.js";
 import {
@@ -279,7 +279,7 @@ function kernelOperationContext(ctx: ToolExecContext): OperationContext {
     trustedConfirmation: ctx.confirmationApproved === true,
     installedPluginIds: new Set(
       ctx.tenantId
-        ? installedPluginIdsForTenant(getCoreDb(), ctx.tenantId)
+        ? installedPluginIdsForTenant(getCloudDb(), ctx.tenantId)
         : []
     ),
   };
@@ -718,7 +718,7 @@ async function executeStaticKernelAlias(
         ),
       };
     case "share_model": {
-      const granteeUserId = resolveGranteeUserId(getCoreDb(), args);
+      const granteeUserId = resolveGranteeUserId(getCloudDb(), args);
       if (!granteeUserId) {
         throw new Error("granteeUserId or granteeEmail required");
       }
@@ -1034,7 +1034,7 @@ function wikiScope(ctx: ToolExecContext): WikiScope {
 
 function isPlatformAdmin(userId?: string): boolean {
   if (!userId) return false;
-  const row = getCoreDb()
+  const row = getCloudDb()
     .prepare(`SELECT is_admin FROM users WHERE id = ?`)
     .get(userId) as { is_admin: number } | undefined;
   return row?.is_admin === 1;
@@ -1163,7 +1163,7 @@ function requireShareActor(ctx: ToolExecContext): {
 }
 
 function resolveGranteeUserId(
-  core: ReturnType<typeof getCoreDb>,
+  core: ReturnType<typeof getCloudDb>,
   args: Record<string, unknown>
 ): string | undefined {
   if (args.granteeUserId != null && String(args.granteeUserId).trim()) {
@@ -2071,7 +2071,7 @@ export async function executeTool(
     /* -------------------- Shares & collaboration ------------------------- */
     case "list_share_grants": {
       const { userId } = requireShareActor(ctx);
-      const core = getCoreDb();
+      const core = getCloudDb();
       return {
         grants: listShareGrantsForUser(core, userId),
         sharedTree: buildSharedSidebarTree(core, userId),
@@ -2079,7 +2079,7 @@ export async function executeTool(
     }
     case "create_share_grant": {
       const { userId, tenantId } = requireShareActor(ctx);
-      const core = getCoreDb();
+      const core = getCloudDb();
       const resourceKind = String(args.resourceKind ?? "") as MarketplaceListingKind;
       const resourceId = String(args.resourceId ?? "");
       if (!resourceKind || !resourceId) {
@@ -2112,7 +2112,7 @@ export async function executeTool(
     }
     case "share_model": {
       const { userId, tenantId } = requireShareActor(ctx);
-      const core = getCoreDb();
+      const core = getCloudDb();
       const modelPath = String(args.modelPath ?? "").trim();
       if (!modelPath) throw new Error("modelPath required");
       const granteeUserId = resolveGranteeUserId(core, args);
@@ -2147,7 +2147,7 @@ export async function executeTool(
       const grantId = String(args.grantId ?? "");
       if (!grantId) throw new Error("grantId required");
       try {
-        revokeShareGrant(getCoreDb(), grantId, userId);
+        revokeShareGrant(getCloudDb(), grantId, userId);
         return { ok: true };
       } catch (err) {
         if (err instanceof ShareError) throw new Error(err.message);
@@ -3028,7 +3028,7 @@ export async function executeTool(
     }
 
     case "search_marketplace": {
-      const core = getCoreDb();
+      const core = getCloudDb();
       const q = args.q ? String(args.q).toLowerCase() : "";
       const kind = args.kind ? String(args.kind) : undefined;
       let sql = `SELECT id, kind, title, description, price_credits, delivery_mode
@@ -3052,7 +3052,7 @@ export async function executeTool(
 
     case "list_my_listings": {
       if (!ctx.userId) throw new Error("userId required");
-      const rows = getCoreDb()
+      const rows = getCloudDb()
         .prepare(
           `SELECT id, kind, title, description, price_credits, status
            FROM marketplace_listings WHERE seller_user_id=? AND status='active'
@@ -3065,7 +3065,7 @@ export async function executeTool(
 
     case "install_catalog_entry": {
       if (!ctx.userId || !ctx.tenantId || !ctx.db) throw new Error("user, tenant, and db required");
-      return installCatalogEntry(getCoreDb(), ctx.db, {
+      return installCatalogEntry(getCloudDb(), ctx.db, {
         userId: ctx.userId,
         tenantId: ctx.tenantId,
         entryId: String(args.entryId ?? ""),
@@ -3076,7 +3076,7 @@ export async function executeTool(
 
     case "list_available_plugins": {
       if (!ctx.tenantId) throw new Error("tenant required");
-      const core = getCoreDb();
+      const core = getCloudDb();
       return {
         available: listAvailablePlugins(),
         installed: listInstalledPlugins(core, ctx.tenantId),
@@ -3416,7 +3416,7 @@ export async function executeTool(
 
     case "list_inference_endpoints": {
       if (!ctx.userId) throw new Error("userId required");
-      return { endpoints: listInferenceEndpoints(getCoreDb(), ctx.userId) };
+      return { endpoints: listInferenceEndpoints(getCloudDb(), ctx.userId) };
     }
 
     case "watch_pr_checks": {
@@ -3490,7 +3490,7 @@ export async function executeTool(
         try {
           const installedPluginIds = new Set(
             ctx.tenantId
-              ? installedPluginIdsForTenant(getCoreDb(), ctx.tenantId)
+              ? installedPluginIdsForTenant(getCloudDb(), ctx.tenantId)
               : []
           );
           const runKernel = () =>

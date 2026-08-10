@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../core-db.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../core-db.js")>();
-  return { ...actual, getCoreDb: () => mocks.coreDb };
+  return { ...actual, getCloudDb: () => mocks.coreDb };
 });
 
 vi.mock("../../services/scheduler.js", () => ({

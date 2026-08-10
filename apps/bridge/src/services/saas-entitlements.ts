@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { CoreDatabase } from "../core-db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 
 export type SaasEntitlementStatus = "pending" | "consumed" | "revoked";
 
@@ -41,7 +41,7 @@ export function upsertEntitlementFromCheckout(opts: {
   email?: string | null;
   stripeCustomerId?: string | null;
 }): SaasEntitlement {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const existing = findEntitlementByStripeSession(core, opts.stripeSessionId);
   if (existing) return existing;
 

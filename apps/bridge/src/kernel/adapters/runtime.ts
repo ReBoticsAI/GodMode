@@ -6,7 +6,7 @@ import type {
 } from "@godmode/kernel";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../../db.js";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import {
   resolveToolConfirmation,
   type AgentMessage,
@@ -2075,7 +2075,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
       const catalog = await listModelCatalog(
         db,
         active.llm as LlmManager,
-        getCoreDb(),
+        getCloudDb(),
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
@@ -2980,7 +2980,7 @@ export const inferenceRuntimeAdapter: RecordAdapter = {
           content: String(item.content ?? ""),
         };
       });
-      return runRemoteInference(getCoreDb(), active.llm as LlmManager, {
+      return runRemoteInference(getCloudDb(), active.llm as LlmManager, {
         endpointId: requiredText(input, "endpoint_id"),
         buyerUserId: requiredUser(ctx),
         buyerTenantId:
@@ -3304,7 +3304,7 @@ export const runtimeAdapterRegistrations = [
   {
     objectType: "InferenceRuntime",
     adapterId: "inference_runtime",
-    database: "core",
+    database: "cloud",
     operations: [],
     fields: ["id"],
     actions: INFERENCE_RUNTIME_ACTIONS,

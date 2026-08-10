@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { AppDatabase } from "../db.js";
-import { getCoreDb, getPlatformMeta } from "../core-db.js";
+import { getCloudDb, getPlatformMeta } from "../core-db.js";
 import { config } from "../config.js";
 import type { LlmManager } from "./llm-manager.js";
 import { isEmbeddingGguf } from "./llm-manager.js";
@@ -114,7 +114,7 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
   if (config.isHub) return;
   if (readTenantSetting(db, META_COMPLETED) != null) return;
 
-  const core = getCoreDb();
+  const core = getCloudDb();
   const completed = getPlatformMeta(core, PLATFORM_COMPLETED);
   const llmReady = getPlatformMeta(core, PLATFORM_LLM_READY);
   if (completed === "true") writeTenantSetting(db, META_COMPLETED, "true");

@@ -1,5 +1,5 @@
 import cron, { type ScheduledTask } from "node-cron";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   chargeSubscriptionPeriod,
   expireEntitlement,
@@ -8,7 +8,7 @@ import {
 let billingTask: ScheduledTask | null = null;
 
 export function sweepSubscriptionEntitlements(): number {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const now = new Date().toISOString();
   const due = core
     .prepare(

@@ -1,6 +1,6 @@
 import type { AiAgent } from "./types.js";
 import { assembleUserAgentPrompt, isUserAgentId } from "./user-agent-prompt.js";
-import { getCoreDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
+import { getCloudDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
 import type { AppDatabase } from "../../db.js";
 
 export interface AgentTypedProfile {
@@ -52,7 +52,7 @@ function loadCoreUserProfile(userId: string): {
   user: CoreUser;
   profile: CoreUserProfile | undefined;
 } | null {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as CoreUser | undefined;
   if (!user) return null;
   const profile = core

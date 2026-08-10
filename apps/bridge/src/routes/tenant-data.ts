@@ -3,7 +3,7 @@
  * Owner-only download of the caller's tenant SQLite snapshot.
  */
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -47,7 +47,7 @@ export function createTenantDataRouter(): Router {
         const snapshot = await createTenantDatabaseSnapshot(tenantDb);
         snapshotPath = snapshot.filePath;
         const slug =
-          lookupTenantSlug(getCoreDb(), tenantId) ??
+          lookupTenantSlug(getCloudDb(), tenantId) ??
           sanitizeWorkspaceFilenameSlug(tenantId);
         const filename = `godmode-workspace-${sanitizeWorkspaceFilenameSlug(slug)}.sqlite`;
 
@@ -61,7 +61,7 @@ export function createTenantDataRouter(): Router {
         res.setHeader("Content-Length", String(snapshot.bytes));
 
         await streamTenantSqliteFile(snapshot.filePath, res);
-        logTenantDatabaseDownloadAudit(getCoreDb(), {
+        logTenantDatabaseDownloadAudit(getCloudDb(), {
           userId,
           tenantId,
           bytes: snapshot.bytes,
@@ -69,7 +69,7 @@ export function createTenantDataRouter(): Router {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        logTenantDatabaseDownloadAudit(getCoreDb(), {
+        logTenantDatabaseDownloadAudit(getCloudDb(), {
           userId,
           tenantId,
           bytes: 0,

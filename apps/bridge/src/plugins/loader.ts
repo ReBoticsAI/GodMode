@@ -8,7 +8,7 @@ import {
   assertEngineCompatible,
   type GodModePluginRegister,
 } from "@godmode/plugin-api";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { pluginRuntime } from "./runtime.js";
 import { registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
 import {
@@ -18,7 +18,7 @@ import {
 
 function extraMarketplacePluginPaths(): string[] {
   try {
-    const row = getCoreDb()
+    const row = getCloudDb()
       .prepare(`SELECT value FROM platform_meta WHERE key=?`)
       .get("marketplace.plugin_paths") as { value: string } | undefined;
     if (!row?.value) return [];

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -34,7 +34,7 @@ export function createSharesRouter(): Router {
   router.use(attachAuthContext, requireAuth, resolveTenant, requireEditorForMutation);
 
   router.get("/", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const userId = req.user!.id;
     res.json({
       grants: listShareGrantsForUser(core, userId),
@@ -44,7 +44,7 @@ export function createSharesRouter(): Router {
 
   // Models shared WITH the caller (incoming `model` grants → endpoint + owner).
   router.get("/models", (req, res) => {
-    res.json({ models: listSharedModelsForUser(getCoreDb(), req.user!.id) });
+    res.json({ models: listSharedModelsForUser(getCloudDb(), req.user!.id) });
   });
 
   router.get("/resource/:kind/:resourceId", (req, res) => {
@@ -54,7 +54,7 @@ export function createSharesRouter(): Router {
       ? getUserOwnerTenantId(req.user!.id)
       : req.tenantId!;
     const grants = listShareGrantsForResource(
-      getCoreDb(),
+      getCloudDb(),
       ownerTenantId,
       req.params.kind,
       req.params.resourceId
@@ -63,7 +63,7 @@ export function createSharesRouter(): Router {
   });
 
   router.get("/live/:kind/:resourceId", (req, res) => {
-    const access = resolveShareAccess(getCoreDb(), {
+    const access = resolveShareAccess(getCloudDb(), {
       userId: req.user!.id,
       tenantId: req.tenantId!,
       resourceKind: req.params.kind as MarketplaceListingKind,

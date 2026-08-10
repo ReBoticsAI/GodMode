@@ -1,4 +1,4 @@
-import { getCoreDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
+import { getCloudDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
 import { getTenantOwnerUserId } from "../user-scope.js";
 import type { AiAgent } from "./types.js";
 import { agentKnowsUser } from "./agent-profile-prompt.js";
@@ -60,7 +60,7 @@ export function assembleUserContextSection(
 
   if (!userId) return "";
 
-  const core = getCoreDb();
+  const core = getCloudDb();
   const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as CoreUser | undefined;
   if (!user) return "";
 

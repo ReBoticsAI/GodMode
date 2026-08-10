@@ -143,7 +143,7 @@ export interface ObjectTypeDef {
   schemaVersion?: number;
   /** Database containing adapter records. Native ObjectTypes are tenant-local. */
   /** core = host Cloud; users = host Users hub (DMs/Support/Notifications). */
-  database?: "tenant" | "core" | "users";
+  database?: "tenant" | "cloud" | "users";
   /** Field used as the stable resource version for conditional mutations. */
   versionField?: string;
   /** Contract-level deprecation metadata. */

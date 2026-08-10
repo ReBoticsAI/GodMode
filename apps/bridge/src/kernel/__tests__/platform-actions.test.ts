@@ -18,7 +18,7 @@ function definition(name: string, fields: string[]): ObjectTypeDef {
     label: name,
     labelPlural: `${name}s`,
     module: "test",
-    database: "core",
+    database: "cloud",
     storage: { kind: "adapter", adapterId: "test" },
     fields: fields.map((field) => ({
       name: field,
@@ -42,9 +42,9 @@ function context(
     role: "owner",
     source: "http",
     data: {
-      coreDb: core,
+      cloudDb: core,
       tenantDb: core,
-      declaredDatabase: "core",
+      declaredDatabase: "cloud",
     },
     ...overrides,
   };

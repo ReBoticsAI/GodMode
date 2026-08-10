@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreEvent,
   type CoreHook,
@@ -314,7 +314,7 @@ async function runActionSendMessage(
   }
   const text = fillTemplate(String(cfg.text ?? ""), payload);
   if (!text.trim()) return { status: "error", detail: "send_message: empty text" };
-  const core = getCoreDb();
+  const core = getCloudDb();
   let messageId: string;
   if (hook.owner_kind === "agent") {
     const agentTenantId =
@@ -450,7 +450,7 @@ async function dispatchAction(
 export async function executeHook(
   hook: CoreHook,
   event: CoreEvent | null,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): Promise<HookRunStatus> {
   const payload: Record<string, unknown> = {
     eventType: event?.type ?? "schedule.tick",
@@ -517,7 +517,7 @@ export async function executeHook(
 /** Approve a pending_approval run: execute its action now and log the outcome. */
 export async function approveHookRun(
   runId: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): Promise<void> {
   const run = db
     .prepare(`SELECT * FROM hook_runs WHERE id = ?`)
@@ -552,7 +552,7 @@ export async function approveHookRun(
   );
 }
 
-export function rejectHookRun(runId: string, db: CoreDatabase = getCoreDb()): void {
+export function rejectHookRun(runId: string, db: CoreDatabase = getCloudDb()): void {
   db.prepare(
     `UPDATE hook_runs SET status = 'skipped', detail = 'rejected by owner'
      WHERE id = ? AND status = 'pending_approval'`
@@ -562,7 +562,7 @@ export function rejectHookRun(runId: string, db: CoreDatabase = getCoreDb()): vo
 /** Entry point for the event bus. */
 export async function dispatchEvent(
   event: CoreEvent,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): Promise<void> {
   const hooks = db
     .prepare(
