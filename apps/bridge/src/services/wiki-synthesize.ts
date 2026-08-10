@@ -1,5 +1,5 @@
 import type { AppDatabase } from "../db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import type { LlmManager } from "./llm-manager.js";
 import { createWikiProposal } from "./wiki-proposals.js";
 import {
@@ -52,7 +52,7 @@ export async function runWikiSynthesize(opts: {
     return { ok: false, skipped: "insufficient_memories" };
   }
 
-  const core = getCoreDb();
+  const core = getCloudDb();
   const existing = core
     .prepare(
       `SELECT id, space, slug, title FROM wiki_pages

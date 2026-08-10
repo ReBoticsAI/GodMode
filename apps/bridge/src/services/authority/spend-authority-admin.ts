@@ -1,7 +1,7 @@
 /**
  * Admin Authority read models for spend hard-stop (#96 Slice 3).
  */
-import { getCoreDb, listAllTenantIds } from "../../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../../core-db.js";
 import { getTenantDb } from "../../tenant-registry.js";
 import { ensureToolAuditTable } from "../coding/tool-audit.js";
 import { getSpendKillState } from "./spend-kill-switch.js";
@@ -19,7 +19,7 @@ export type SpendAuthorityEvent = {
 
 export function listSpendAuthorityEvents(limit = 100): SpendAuthorityEvent[] {
   const cap = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tenantRows = core
     .prepare(`SELECT id, name FROM tenants ORDER BY name ASC`)
     .all() as Array<{ id: string; name: string }>;
@@ -71,7 +71,7 @@ export function listSpendAuthorityEvents(limit = 100): SpendAuthorityEvent[] {
 }
 
 export function getSpendAuthorityStatus() {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tenantRows = core
     .prepare(
       `SELECT id, name, is_operator FROM tenants ORDER BY is_operator DESC, name ASC`

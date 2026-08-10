@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { getCoreDb, type CoreDatabase } from "../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../core-db.js";
 
 export function ensurePlatformRequestLog(db: CoreDatabase): void {
   db.exec(`
@@ -35,7 +35,7 @@ function persistRow(row: {
   error: string | null;
 }): void {
   try {
-    const core = getCoreDb();
+    const core = getCloudDb();
     ensurePlatformRequestLog(core);
     core
       .prepare(

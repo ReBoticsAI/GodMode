@@ -1,4 +1,4 @@
-import { getCoreDb, getPlatformMeta, setPlatformMeta } from "../core-db.js";
+import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../core-db.js";
 import { encryptSecret, decryptSecret } from "./holdings/crypto-box.js";
 
 const META_SECRET = "billing.stripe_secret_enc";
@@ -13,7 +13,7 @@ export interface PlatformBillingConfig {
 }
 
 export function getPlatformBillingConfig(): PlatformBillingConfig {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const enc = getPlatformMeta(core, META_SECRET);
   const envSecret = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
   const publishableKey = getPlatformMeta(core, META_PUBLISHABLE);
@@ -34,7 +34,7 @@ export function getPlatformBillingConfig(): PlatformBillingConfig {
 export function resolveStripeSecretKey(): string {
   const env = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
   if (env) return env;
-  const core = getCoreDb();
+  const core = getCloudDb();
   const enc = getPlatformMeta(core, META_SECRET);
   if (!enc) return "";
   try {
@@ -49,7 +49,7 @@ export function setPlatformBillingKeys(opts: {
   publishableKey?: string;
   creditsPerUsd?: number;
 }): PlatformBillingConfig {
-  const core = getCoreDb();
+  const core = getCloudDb();
   if (opts.secretKey !== undefined) {
     const trimmed = opts.secretKey.trim();
     if (trimmed) {

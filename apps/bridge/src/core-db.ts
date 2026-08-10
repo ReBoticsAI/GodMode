@@ -230,7 +230,7 @@ export function initCoreDb(): CoreDatabase {
   if (coreDbSingleton) return coreDbSingleton;
 
   fs.mkdirSync(config.dataDir, { recursive: true });
-  const db = new Database(config.coreDbPath);
+  const db = new Database(config.cloudDbPath);
   configureDbPragmas(db);
   logDbConfig(db);
 
@@ -1324,14 +1324,10 @@ function ensureReleaseFlowTables(db: CoreDatabase): void {
   );
 }
 
-export function getCoreDb(): CoreDatabase {
+/** Host Cloud DB (identity, tenants, billing, marketplace, releases). */
+export function getCloudDb(): CoreDatabase {
   if (!coreDbSingleton) return initCoreDb();
   return coreDbSingleton;
-}
-
-/** Host Cloud DB (same handle as getCoreDb during the hub-split transition). */
-export function getCloudDb(): CoreDatabase {
-  return getCoreDb();
 }
 
 export function getPlatformMeta(db: CoreDatabase, key: string): string | null {

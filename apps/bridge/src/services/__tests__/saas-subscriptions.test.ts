@@ -8,7 +8,7 @@ mem.pragma("foreign_keys = ON");
 const platformMeta = new Map<string, string>();
 
 vi.mock("../../core-db.js", () => ({
-  getCoreDb: () => mem,
+  getCloudDb: () => mem,
   initCoreDb: () => mem,
   getPlatformMeta: (_db: unknown, key: string) => platformMeta.get(key) ?? null,
   setPlatformMeta: (_db: unknown, key: string, value: string) => {
@@ -20,7 +20,7 @@ vi.mock("../../config.js", () => ({
   config: {
     isSaas: true,
     dataDir: "/tmp/gm-saas-sub",
-    coreDbPath: "/tmp/gm-saas-sub/core.sqlite",
+    cloudDbPath: "/tmp/gm-saas-sub/core.sqlite",
     usersDir: "/tmp/gm-saas-sub/users",
     tenantsDir: "/tmp/gm-saas-sub/tenants",
     saas: {

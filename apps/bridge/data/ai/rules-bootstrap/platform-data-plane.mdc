@@ -7,7 +7,7 @@ priority: 18
 
 Storage planes:
 
-- **Cloud** (host): `core.sqlite` / `getCloudDb()` / `getCoreDb()`. Identity, tenants, billing, marketplace, shares, releases. Do not store consumer Connect secrets here.
+- **Cloud** (host): `core.sqlite` (live filename) via `getCloudDb()`. Identity, tenants, billing, marketplace, shares, releases. Kernel ObjectTypes use `database: "cloud"`. Do not store consumer Connect secrets here.
 - **Users** (host hub): `Users.sqlite` / `getHostUsersDb()`. DMs, Support, Notifications, platform groups. Soft user ids (no FK into Cloud).
 - **User** (per account): `users/<userId>.sqlite`. **User Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
 - **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins, Personal/Agent vault, optional workspace key override.

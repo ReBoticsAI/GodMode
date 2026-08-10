@@ -222,16 +222,16 @@ const DM_MESSAGE_ALIASES = {
 export const shareGrantAdapter: RecordAdapter = {
   id: "share_grant_read",
   list(_db, def, query, ctx) {
-    return result(def, listShareGrantsForUser(ctx.data!.coreDb, requireUser(ctx)), query);
+    return result(def, listShareGrantsForUser(ctx.data!.cloudDb, requireUser(ctx)), query);
   },
   get(_db, def, id, ctx) {
-    const row = listShareGrantsForUser(ctx.data!.coreDb, requireUser(ctx)).find(
+    const row = listShareGrantsForUser(ctx.data!.cloudDb, requireUser(ctx)).find(
       (candidate) => String(candidate.id) === id
     );
     return row ? record(def, row) : null;
   },
   create(_db, def, data, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = ctx.data!.cloudDb;
     const id = createShareGrant(core, {
       ownerTenantId: requireTenant(ctx),
       ownerUserId: requireUser(ctx),
@@ -248,18 +248,18 @@ export const shareGrantAdapter: RecordAdapter = {
     return this.get!(core, def, id, ctx)!;
   },
   delete(_db, _def, id, ctx) {
-    revokeShareGrant(ctx.data!.coreDb, id, requireUser(ctx));
+    revokeShareGrant(ctx.data!.cloudDb, id, requireUser(ctx));
   },
   actions: {
     grant(db, def, _id, input, ctx) {
       return shareGrantAdapter.create!(db, def, input, ctx);
     },
     revoke(_db, _def, id, _input, ctx) {
-      revokeShareGrant(ctx.data!.coreDb, id, requireUser(ctx));
+      revokeShareGrant(ctx.data!.cloudDb, id, requireUser(ctx));
       return { ok: true };
     },
     share_model(_db, _def, _id, input, ctx) {
-      const core = ctx.data!.coreDb;
+      const core = ctx.data!.cloudDb;
       const userId = requireUser(ctx);
       const tenantId = requireTenant(ctx);
       const modelPath = requiredText(input, "model_path");
@@ -305,7 +305,7 @@ export const shareGrantAdapter: RecordAdapter = {
     clone_shared(db, _def, _id, input, ctx) {
       const kind = requiredText(input, "kind");
       const resourceId = requiredText(input, "resource_id");
-      const access = resolveShareAccess(ctx.data!.coreDb, {
+      const access = resolveShareAccess(ctx.data!.cloudDb, {
         userId: requireUser(ctx),
         tenantId: requireTenant(ctx),
         resourceKind: kind as never,
@@ -325,7 +325,7 @@ export const federatedShareInviteAdapter: RecordAdapter = {
   id: "federated_share_invite_service",
   actions: {
     accept(_db, _def, _id, input, ctx) {
-      const core = ctx.data!.coreDb;
+      const core = ctx.data!.cloudDb;
       const actorId = requireUser(ctx);
       const token = requiredText(input, "invite_token");
       return core.transaction(() => {
@@ -758,18 +758,18 @@ export const catalogSourceAdapter: RecordAdapter = {
   list(_db, def, query, ctx) {
     return result(
       def,
-      listCatalogSources(ctx.data!.coreDb, requireUser(ctx)),
+      listCatalogSources(ctx.data!.cloudDb, requireUser(ctx)),
       query
     );
   },
   get(_db, def, id, ctx) {
-    const row = listCatalogSources(ctx.data!.coreDb, requireUser(ctx)).find(
+    const row = listCatalogSources(ctx.data!.cloudDb, requireUser(ctx)).find(
       (source) => source.id === id
     );
     return row ? record(def, row) : null;
   },
   create(_db, def, data, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = ctx.data!.cloudDb;
     const userId = requireUser(ctx);
     const url = requiredText(data, "url");
     if (
@@ -791,7 +791,7 @@ export const catalogSourceAdapter: RecordAdapter = {
     return record(def, listCatalogSources(core, userId).find((row) => row.id === id)!);
   },
   delete(_db, _def, id, ctx) {
-    if (!removeCatalogSource(ctx.data!.coreDb, requireUser(ctx), id)) {
+    if (!removeCatalogSource(ctx.data!.cloudDb, requireUser(ctx), id)) {
       throw httpError(404, "Catalog source not found");
     }
   },
@@ -800,7 +800,7 @@ export const catalogSourceAdapter: RecordAdapter = {
       return catalogSourceAdapter.create!(db, def, input, ctx);
     },
     remove(_db, _def, id, _input, ctx) {
-      if (!removeCatalogSource(ctx.data!.coreDb, requireUser(ctx), id)) {
+      if (!removeCatalogSource(ctx.data!.cloudDb, requireUser(ctx), id)) {
         throw httpError(404, "Catalog source not found");
       }
       return { ok: true };
@@ -808,7 +808,7 @@ export const catalogSourceAdapter: RecordAdapter = {
     async fetch_external(_db, _def, _id, _input, ctx) {
       const [official, unofficial] = await Promise.all([
         fetchOfficialCatalog(),
-        fetchUnofficialCatalog(ctx.data!.coreDb, requireUser(ctx)),
+        fetchUnofficialCatalog(ctx.data!.cloudDb, requireUser(ctx)),
       ]);
       return { official, unofficial };
     },
@@ -818,10 +818,10 @@ export const catalogSourceAdapter: RecordAdapter = {
 export const catalogInstallAdapter: RecordAdapter = {
   id: "catalog_install_read",
   list(_db, def, query, ctx) {
-    return result(def, listCatalogInstalls(ctx.data!.coreDb, requireTenant(ctx)), query);
+    return result(def, listCatalogInstalls(ctx.data!.cloudDb, requireTenant(ctx)), query);
   },
   get(_db, def, id, ctx) {
-    const row = listCatalogInstalls(ctx.data!.coreDb, requireTenant(ctx)).find(
+    const row = listCatalogInstalls(ctx.data!.cloudDb, requireTenant(ctx)).find(
       (candidate) => String(candidate.id) === id
     );
     return row ? record(def, row) : null;
@@ -830,7 +830,7 @@ export const catalogInstallAdapter: RecordAdapter = {
     async activate_plugin_path(_db, _def, _id, input, ctx) {
       try {
         return await activatePluginForTenant(
-          ctx.data!.coreDb,
+          ctx.data!.cloudDb,
           requireTenant(ctx),
           requiredText(input, "path"),
           {
@@ -846,7 +846,7 @@ export const catalogInstallAdapter: RecordAdapter = {
     },
     install_entry(_db, _def, _id, input, ctx) {
       try {
-        return installCatalogEntry(ctx.data!.coreDb, ctx.data!.tenantDb, {
+        return installCatalogEntry(ctx.data!.cloudDb, ctx.data!.tenantDb, {
           userId: requireUser(ctx),
           tenantId: requireTenant(ctx),
           entryId: requiredText(input, "entry_id"),
@@ -862,7 +862,7 @@ export const catalogInstallAdapter: RecordAdapter = {
     },
     async install_plugin(_db, _def, _id, input, ctx) {
       await installDiscoveredPlugin(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requireTenant(ctx),
         requiredText(input, "plugin_id")
       );
@@ -881,21 +881,21 @@ export const catalogInstallAdapter: RecordAdapter = {
         );
       }
       return registerLocalPluginFolder(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requireTenant(ctx),
         requiredText(input, "path"),
         { userId: requireUser(ctx), installForTenant: true }
       );
     },
     unregister_local_plugin(_db, _def, _id, input, ctx) {
-      if (!removeLocalPluginFolder(ctx.data!.coreDb, requiredText(input, "path"))) {
+      if (!removeLocalPluginFolder(ctx.data!.cloudDb, requiredText(input, "path"))) {
         throw httpError(404, "Local plugin registration not found");
       }
       return { ok: true };
     },
     async uninstall_plugin(_db, _def, _id, input, ctx) {
       await uninstallPluginForTenant(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requireTenant(ctx),
         requiredText(input, "plugin_id")
       );
@@ -908,7 +908,7 @@ export const catalogInstallAdapter: RecordAdapter = {
     async reconcile_runtime(_db, _def, _id, input, ctx) {
       if (ctx.source !== "system") throw httpError(403, "System lifecycle action required");
       await reconcilePluginLifecycle(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requiredText(input, "operator_tenant_id"),
         ctx.data!.tenantDb
       );
@@ -931,10 +931,10 @@ function visibleListings(core: AppDatabase, ctx: OperationContext) {
 export const marketplaceListingAdapter: RecordAdapter = {
   id: "marketplace_listing_read",
   list(_db, def, query, ctx) {
-    return result(def, visibleListings(ctx.data!.coreDb, ctx), query);
+    return result(def, visibleListings(ctx.data!.cloudDb, ctx), query);
   },
   get(_db, def, id, ctx) {
-    const row = visibleListings(ctx.data!.coreDb, ctx).find(
+    const row = visibleListings(ctx.data!.cloudDb, ctx).find(
       (listing) => String(listing.id) === id
     );
     return row ? record(def, row) : null;
@@ -977,7 +977,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
     },
     publish(_db, def, _id, input, ctx) {
       try {
-        const row = publishMarketplaceListing(ctx.data!.coreDb, ctx.data!.tenantDb, {
+        const row = publishMarketplaceListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
           sellerUserId: requireUser(ctx),
           sellerTenantId: requireTenant(ctx),
           kind: requiredText(input, "kind") as never,
@@ -1029,7 +1029,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
     archive(_db, def, id, _input, ctx) {
       return record(
         def,
-        archiveMarketplaceListing(ctx.data!.coreDb, {
+        archiveMarketplaceListing(ctx.data!.cloudDb, {
           listingId: id,
           sellerUserId: requireUser(ctx),
           sellerTenantId: requireTenant(ctx),
@@ -1059,7 +1059,7 @@ export const marketplaceEntitlementAdapter: RecordAdapter = {
     return result(
       def,
       listEntitlementsForBuyer(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requireUser(ctx),
         requireTenant(ctx)
       ),
@@ -1068,7 +1068,7 @@ export const marketplaceEntitlementAdapter: RecordAdapter = {
   },
   get(_db, def, id, ctx) {
     const row = listEntitlementsForBuyer(
-      ctx.data!.coreDb,
+      ctx.data!.cloudDb,
       requireUser(ctx),
       requireTenant(ctx)
     ).find((entitlement) => String(entitlement.id) === id);
@@ -1076,7 +1076,7 @@ export const marketplaceEntitlementAdapter: RecordAdapter = {
   },
   actions: {
     cancel(_db, _def, id, _input, ctx) {
-      cancelEntitlement(ctx.data!.coreDb, id, requireUser(ctx));
+      cancelEntitlement(ctx.data!.cloudDb, id, requireUser(ctx));
       return { ok: true };
     },
   },
@@ -1092,10 +1092,10 @@ function commerceHttpError(err: unknown): never {
 export const marketplaceOrderAdapter: RecordAdapter = {
   id: "marketplace_order_read",
   list(_db, def, query, ctx) {
-    return result(def, listOrdersForBuyer(ctx.data!.coreDb, requireUser(ctx)), query);
+    return result(def, listOrdersForBuyer(ctx.data!.cloudDb, requireUser(ctx)), query);
   },
   get(_db, def, id, ctx) {
-    const row = getMarketplaceOrder(ctx.data!.coreDb, id);
+    const row = getMarketplaceOrder(ctx.data!.cloudDb, id);
     if (!row || String(row.buyer_user_id) !== requireUser(ctx)) return null;
     return record(def, row);
   },
@@ -1108,7 +1108,7 @@ export const marketplaceOrderAdapter: RecordAdapter = {
         }
         const successUrl = requiredText(input, "success_url");
         const cancelUrl = requiredText(input, "cancel_url");
-        const core = ctx.data!.coreDb;
+        const core = ctx.data!.cloudDb;
         const userId = requireUser(ctx);
         const tenantId = requireTenant(ctx);
 
@@ -1170,13 +1170,13 @@ export const marketplaceOrderAdapter: RecordAdapter = {
     },
     async capture_paypal(_db, def, id, _input, ctx) {
       try {
-        const order = getMarketplaceOrder(ctx.data!.coreDb, id);
+        const order = getMarketplaceOrder(ctx.data!.cloudDb, id);
         if (!order || String(order.buyer_user_id) !== requireUser(ctx)) {
           throw httpError(404, "Order not found");
         }
         const paypalId = String(order.provider_ref ?? "");
         if (!paypalId) throw httpError(400, "Missing PayPal order id");
-        const updated = await capturePayPalOrder(ctx.data!.coreDb, paypalId);
+        const updated = await capturePayPalOrder(ctx.data!.cloudDb, paypalId);
         return record(def, updated);
       } catch (err) {
         commerceHttpError(err);
@@ -1184,7 +1184,7 @@ export const marketplaceOrderAdapter: RecordAdapter = {
     },
     confirm_crypto(_db, def, id, input, ctx) {
       try {
-        const updated = confirmCryptoPayment(ctx.data!.coreDb, {
+        const updated = confirmCryptoPayment(ctx.data!.cloudDb, {
           orderId: id,
           txHash: requiredText(input, "tx_hash"),
           buyerUserId: requireUser(ctx),
@@ -1200,18 +1200,18 @@ export const marketplaceOrderAdapter: RecordAdapter = {
 export const marketplaceSellerAccountAdapter: RecordAdapter = {
   id: "marketplace_seller_account_read",
   list(_db, def, query, ctx) {
-    const row = ensureSellerAccount(ctx.data!.coreDb, requireUser(ctx));
+    const row = ensureSellerAccount(ctx.data!.cloudDb, requireUser(ctx));
     return result(def, [row], query);
   },
   get(_db, def, id, ctx) {
-    const row = ensureSellerAccount(ctx.data!.coreDb, requireUser(ctx));
+    const row = ensureSellerAccount(ctx.data!.cloudDb, requireUser(ctx));
     if (String(row.id) !== id && String(row.user_id) !== id) return null;
     return record(def, row);
   },
   actions: {
     accept_tos(_db, _def, _id, _input, ctx) {
       try {
-        return acceptMarketplaceTos(ctx.data!.coreDb, requireUser(ctx));
+        return acceptMarketplaceTos(ctx.data!.cloudDb, requireUser(ctx));
       } catch (err) {
         commerceHttpError(err);
       }
@@ -1219,7 +1219,7 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
     connect_payout(_db, def, _id, input, ctx) {
       try {
         const pref = input.payout_preference;
-        const updated = updateSellerPayout(ctx.data!.coreDb, {
+        const updated = updateSellerPayout(ctx.data!.cloudDb, {
           userId: requireUser(ctx),
           stripeConnectAccountId:
             typeof input.stripe_connect_account_id === "string"
@@ -1249,7 +1249,7 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
     },
     async start_stripe_connect(_db, _def, _id, input, ctx) {
       try {
-        return await startStripeConnectOnboarding(ctx.data!.coreDb, {
+        return await startStripeConnectOnboarding(ctx.data!.cloudDb, {
           userId: requireUser(ctx),
           returnUrl: typeof input.return_url === "string" ? input.return_url : undefined,
           refreshUrl: typeof input.refresh_url === "string" ? input.refresh_url : undefined,
@@ -1260,7 +1260,7 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
     },
     async refresh_stripe_connect(_db, def, _id, _input, ctx) {
       try {
-        const updated = await refreshStripeConnectStatus(ctx.data!.coreDb, requireUser(ctx));
+        const updated = await refreshStripeConnectStatus(ctx.data!.cloudDb, requireUser(ctx));
         return record(def, updated);
       } catch (err) {
         commerceHttpError(err);
@@ -1277,20 +1277,20 @@ export const bridgeConnectionAdapter: RecordAdapter = {
   list(_db, def, query, ctx) {
     return result(
       def,
-      listBridgeConnections(ctx.data!.coreDb, requireTenant(ctx)) as unknown as Array<
+      listBridgeConnections(ctx.data!.cloudDb, requireTenant(ctx)) as unknown as Array<
         Record<string, unknown>
       >,
       query
     );
   },
   get(_db, def, id, ctx) {
-    const row = getBridgeConnection(ctx.data!.coreDb, id);
+    const row = getBridgeConnection(ctx.data!.cloudDb, id);
     return row && row.owner_tenant_id === requireTenant(ctx)
       ? record(def, row as unknown as Record<string, unknown>)
       : null;
   },
   create(_db, def, data, ctx) {
-    const row = createBridgeConnection(ctx.data!.coreDb, {
+    const row = createBridgeConnection(ctx.data!.cloudDb, {
       ownerTenantId: requireTenant(ctx),
       ownerUserId: requireUser(ctx),
       label: requiredText(data, "label"),
@@ -1305,11 +1305,11 @@ export const bridgeConnectionAdapter: RecordAdapter = {
     return record(def, row as unknown as Record<string, unknown>);
   },
   delete(_db, _def, id, ctx) {
-    const row = getBridgeConnection(ctx.data!.coreDb, id);
+    const row = getBridgeConnection(ctx.data!.cloudDb, id);
     if (!row || row.owner_tenant_id !== requireTenant(ctx)) {
       throw httpError(404, "Bridge connection not found");
     }
-    if (!deleteBridgeConnection(ctx.data!.coreDb, id)) {
+    if (!deleteBridgeConnection(ctx.data!.cloudDb, id)) {
       throw httpError(404, "Bridge connection not found");
     }
   },
@@ -1318,19 +1318,19 @@ export const bridgeConnectionAdapter: RecordAdapter = {
       return bridgeConnectionAdapter.create!(db, def, input, ctx);
     },
     touch(_db, _def, id, _input, ctx) {
-      const row = getBridgeConnection(ctx.data!.coreDb, id);
+      const row = getBridgeConnection(ctx.data!.cloudDb, id);
       if (!row || row.owner_tenant_id !== requireTenant(ctx)) {
         throw httpError(404, "Bridge connection not found");
       }
-      touchBridgeConnection(ctx.data!.coreDb, id);
+      touchBridgeConnection(ctx.data!.cloudDb, id);
       return { ok: true };
     },
     probe_remote(_db, _def, id, _input, ctx) {
-      const row = getBridgeConnection(ctx.data!.coreDb, id);
+      const row = getBridgeConnection(ctx.data!.cloudDb, id);
       if (!row || row.owner_tenant_id !== requireTenant(ctx)) {
         throw httpError(404, "Bridge connection not found");
       }
-      return probeBridgeConnection(ctx.data!.coreDb, row, ctx.signal);
+      return probeBridgeConnection(ctx.data!.cloudDb, row, ctx.signal);
     },
   },
 };
@@ -1340,14 +1340,14 @@ export const peerConnectionAdapter: RecordAdapter = {
   list(_db, def, query, ctx) {
     return result(
       def,
-      listPeerConnections(ctx.data!.coreDb, requireUser(ctx)) as unknown as Array<
+      listPeerConnections(ctx.data!.cloudDb, requireUser(ctx)) as unknown as Array<
         Record<string, unknown>
       >,
       query
     );
   },
   get(_db, def, id, ctx) {
-    const row = listPeerConnections(ctx.data!.coreDb, requireUser(ctx)).find(
+    const row = listPeerConnections(ctx.data!.cloudDb, requireUser(ctx)).find(
       (peer) => peer.id === id
     );
     return row
@@ -1360,7 +1360,7 @@ export const peerConnectionAdapter: RecordAdapter = {
     },
     invite(_db, _def, _id, input, ctx) {
       return invitePeerByEmail(
-        ctx.data!.coreDb,
+        ctx.data!.cloudDb,
         requireUser(ctx),
         requiredText(input, "email"),
         typeof input.remote_bridge_url === "string"
@@ -1370,7 +1370,7 @@ export const peerConnectionAdapter: RecordAdapter = {
     },
     accept(_db, _def, _id, input, ctx) {
       return {
-        id: acceptPeerConnection(ctx.data!.coreDb, requireUser(ctx), {
+        id: acceptPeerConnection(ctx.data!.cloudDb, requireUser(ctx), {
           remoteBridgeUrl: requiredText(input, "remote_bridge_url"),
           federationToken: requiredText(input, "federation_token"),
           remoteUserId:
@@ -1396,11 +1396,11 @@ export const peerConnectionAdapter: RecordAdapter = {
       const userId = requireUser(ctx);
       if (
         id &&
-        !listPeerConnections(ctx.data!.coreDb, userId).some((peer) => peer.id === id)
+        !listPeerConnections(ctx.data!.cloudDb, userId).some((peer) => peer.id === id)
       ) {
         throw httpError(404, "Peer connection not found");
       }
-      await refreshPeerHealth(ctx.data!.coreDb, userId);
+      await refreshPeerHealth(ctx.data!.cloudDb, userId);
       return { ok: true };
     },
   },
@@ -1411,12 +1411,12 @@ export const inferenceEndpointAdapter: RecordAdapter = {
   list(_db, def, query, ctx) {
     return result(
       def,
-      listInferenceEndpoints(ctx.data!.coreDb, requireUser(ctx)),
+      listInferenceEndpoints(ctx.data!.cloudDb, requireUser(ctx)),
       query
     );
   },
   get(_db, def, id, ctx) {
-    const row = getInferenceEndpoint(ctx.data!.coreDb, id);
+    const row = getInferenceEndpoint(ctx.data!.cloudDb, id);
     return row &&
       row.owner_user_id === requireUser(ctx) &&
       row.owner_tenant_id === requireTenant(ctx)
@@ -1424,7 +1424,7 @@ export const inferenceEndpointAdapter: RecordAdapter = {
       : null;
   },
   create(_db, def, data, ctx) {
-    const core = ctx.data!.coreDb;
+    const core = ctx.data!.cloudDb;
     const id = createInferenceEndpoint(core, {
       ownerTenantId: requireTenant(ctx),
       ownerUserId: requireUser(ctx),
@@ -1449,7 +1449,7 @@ export const inferenceEndpointAdapter: RecordAdapter = {
     async run_remote(_db, _def, id, input, ctx) {
       const rawMessages = Array.isArray(input.messages) ? input.messages : [];
       const content = await runConfiguredRemoteInference({
-        core: ctx.data!.coreDb,
+        core: ctx.data!.cloudDb,
         endpointId: id || requiredText(input, "endpoint_id"),
         buyerUserId: requireUser(ctx),
         buyerTenantId: requireTenant(ctx),

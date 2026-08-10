@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { attachAuthContext, requireAuth, resolveTenant } from "../services/auth/middleware.js";
 import { config } from "../config.js";
-import { getCoreDb, type MarketplaceListingKind } from "../core-db.js";
+import { getCloudDb, type MarketplaceListingKind } from "../core-db.js";
 import {
   createFederatedShareInvite,
   enableTailscaleFederation,
@@ -20,7 +20,7 @@ export function createNetworkRouter(): Router {
   });
 
   router.get("/peers", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     res.json({ peers: listPeerConnections(core, req.user!.id) });
   });
 

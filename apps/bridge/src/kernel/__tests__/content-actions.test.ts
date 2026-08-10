@@ -41,7 +41,7 @@ function ctx(
     source: "agent",
     data: {
       tenantDb: db,
-      coreDb: db,
+      cloudDb: db,
       declaredDatabase: "tenant",
     },
     ...overrides,

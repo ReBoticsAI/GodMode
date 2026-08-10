@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
-import { getCoreDb, type CoreDatabase } from "../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { importEntity, type PortableBundle } from "./portability.js";
 import {
@@ -291,7 +291,7 @@ export async function findCatalogEntry(
     catalogs.push({ url: resolveCatalogUrl(), name: "Official" });
     catalogs.push({ url: resolveCommunityCatalogUrl(), name: "Community" });
     if (opts?.userId) {
-      for (const s of listCatalogSources(getCoreDb(), opts.userId)) {
+      for (const s of listCatalogSources(getCloudDb(), opts.userId)) {
         catalogs.push({ url: s.url, name: s.name });
       }
     }

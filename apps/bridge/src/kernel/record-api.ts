@@ -12,7 +12,7 @@ import type {
   RecordData,
   RecordRow,
 } from "@godmode/kernel";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { getHostUsersDb } from "../host-users-db.js";
 import { insertEvent } from "../services/data-management-migration.js";
 import { getObjectType, listObjectTypes } from "./registry.js";
@@ -106,7 +106,7 @@ function withDataContext(
     ...ctx,
     data: {
       tenantDb: ctx.data?.tenantDb ?? db,
-      coreDb: ctx.data?.coreDb ?? getCoreDb(),
+      cloudDb: ctx.data?.cloudDb ?? getCloudDb(),
       hostUsersDb: ctx.data?.hostUsersDb ?? getHostUsersDb(),
       declaredDatabase: def.database ?? "tenant",
     },
@@ -118,7 +118,7 @@ function declaredDatabase(
   def: ObjectTypeDef,
   ctx?: OperationContext
 ): AppDatabase {
-  if (def.database === "core") return ctx?.data?.coreDb ?? getCoreDb();
+  if (def.database === "cloud") return ctx?.data?.cloudDb ?? getCloudDb();
   if (def.database === "users") {
     return ctx?.data?.hostUsersDb ?? getHostUsersDb();
   }

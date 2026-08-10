@@ -1,5 +1,5 @@
 import type { AppDatabase } from "../db.js";
-import { getCoreDb, type CoreDatabase } from "../core-db.js";
+import { getCloudDb, type CoreDatabase } from "../core-db.js";
 
 export type TenantKind = "operator" | "personal";
 
@@ -42,7 +42,7 @@ export function writeTenantKind(db: AppDatabase, kind: TenantKind): void {
 export function ensureTenantKindMeta(tenantId: string, db: AppDatabase): TenantKind {
   const existing = readTenantKind(db);
   if (existing) return existing;
-  const kind = tenantKindFromCore(getCoreDb(), tenantId);
+  const kind = tenantKindFromCore(getCloudDb(), tenantId);
   writeTenantKind(db, kind);
   return kind;
 }

@@ -39,7 +39,7 @@ describe("production core ObjectType bootstrap", () => {
     for (const def of listObjectTypes().filter((candidate) => !candidate.pluginId)) {
       expect(validateObjectTypeDef(def), def.name).toEqual([]);
       expect(def.database ?? "tenant", `${def.name} database ownership`).toMatch(
-        /^(tenant|core|users)$/
+        /^(tenant|cloud|users)$/
       );
       expect(def.accessPolicy, `${def.name} access policy`).toBeTruthy();
       for (const action of def.actions ?? []) {
@@ -83,7 +83,7 @@ describe("production core ObjectType bootstrap", () => {
     const def: ObjectTypeDef = {
       name: "OwnershipProbe",
       label: "Ownership Probe",
-      database: "core",
+      database: "cloud",
       accessPolicy: "platform-admin",
       storage: { kind: "adapter", adapterId: "ownership_probe" },
       fields: [
@@ -96,7 +96,7 @@ describe("production core ObjectType bootstrap", () => {
     const adapter = createSqlReadAdapter({
       id: "ownership_probe",
       table: "owned_rows",
-      database: "core",
+      database: "cloud",
     });
 
     expect(

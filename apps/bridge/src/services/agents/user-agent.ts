@@ -1,5 +1,5 @@
 import type { AppDatabase } from "../../db.js";
-import { getCoreDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
+import { getCloudDb, type CoreUser, type CoreUserProfile } from "../../core-db.js";
 import { getAgent, updateAgent, createAgent } from "./agents-db.js";
 import {
   assembleUserAgentPrompt,
@@ -41,7 +41,7 @@ function personaToolAllowNeedsRepair(allow: string[] | null | undefined): boolea
 }
 
 function loadProfile(userId: string): CoreUserProfile | undefined {
-  return getCoreDb()
+  return getCloudDb()
     .prepare(`SELECT * FROM user_profiles WHERE user_id=?`)
     .get(userId) as CoreUserProfile | undefined;
 }
@@ -165,7 +165,7 @@ export function ensureUserAgent(
 
 /** Rebuild persona prompt after profile or memory changes. */
 export function refreshUserAgentPrompt(db: AppDatabase, userId: string): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as CoreUser | undefined;
   if (!user) return;
   const id = userAgentIdForUserId(userId);

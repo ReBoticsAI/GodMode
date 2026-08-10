@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -21,12 +21,12 @@ export function createConnectionsRouter(): Router {
   router.use(attachAuthContext, requireAuth, resolveTenant);
 
   router.get("/", (req, res) => {
-    const connections = listBridgeConnections(getCoreDb(), req.tenantId!);
+    const connections = listBridgeConnections(getCloudDb(), req.tenantId!);
     res.json({ connections, bridgePublicUrl: config.auth.publicUrl });
   });
 
   router.get("/resolve/:kind/:resourceId", (req, res) => {
-    const resolved = resolveConnectionForResource(getCoreDb(), {
+    const resolved = resolveConnectionForResource(getCloudDb(), {
       userId: req.user!.id,
       tenantId: req.tenantId!,
       resourceKind: req.params.kind as MarketplaceListingKind,

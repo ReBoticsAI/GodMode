@@ -119,8 +119,8 @@ export class EmbedQueueWorker {
     if (!vec) return false;
 
     if (job.target_kind === "wiki") {
-      const { getCoreDb } = await import("../../core-db.js");
-      getCoreDb()
+      const { getCloudDb } = await import("../../core-db.js");
+      getCloudDb()
         .prepare(
           `UPDATE wiki_pages SET embedding = ?, embedding_dim = ? WHERE id = ?`
         )

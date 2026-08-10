@@ -167,7 +167,7 @@ import {
 } from "../services/ai-agent-assignments.js";
 import { listPlatformActions } from "../services/platform-scope.js";
 import {
-  getCoreDb,
+  getCloudDb,
   getSharedChatSession,
   listSharedChatSessionsForUser,
   type CoreSharedChatSession,
@@ -316,7 +316,7 @@ export function createAiRouter(
     const userId = req.user?.id;
     const tenantId = req.tenantId;
     if (!userId || !tenantId) return null;
-    const access = resolveShareAccess(getCoreDb(), {
+    const access = resolveShareAccess(getCloudDb(), {
       userId,
       tenantId,
       resourceKind: "agent",
@@ -378,7 +378,7 @@ export function createAiRouter(
     if (getAgent(tdb(req), session.agent_id)) return true;
     // Any grantee with at least viewer access on the agent may join.
     return Boolean(
-      resolveShareAccess(getCoreDb(), {
+      resolveShareAccess(getCloudDb(), {
         userId,
         tenantId,
         resourceKind: "agent",
@@ -396,7 +396,7 @@ export function createAiRouter(
     const ownDb = tdb(req);
     const ownTenant = req.tenantId!;
     if (chatId) {
-      const session = getSharedChatSession(getCoreDb(), chatId);
+      const session = getSharedChatSession(getCloudDb(), chatId);
       if (session && canAccessSharedSession(req, session)) {
         return {
           db: getTenantDb(session.home_tenant_id),
@@ -475,7 +475,7 @@ export function createAiRouter(
     );
     let pendingWikiProposals = 0;
     try {
-      const row = getCoreDb()
+      const row = getCloudDb()
         .prepare(
           `SELECT COUNT(*) AS n FROM wiki_page_proposals WHERE status = 'pending'`
         )
@@ -1102,7 +1102,7 @@ export function createAiRouter(
       const catalog = await listModelCatalog(
         tdb(req),
         llm,
-        getCoreDb(),
+        getCloudDb(),
         req.user?.id
       );
       res.json(catalog);
@@ -1139,7 +1139,7 @@ export function createAiRouter(
       merged.set(row.id, { ...row, shared: false });
     }
 
-    const core = getCoreDb();
+    const core = getCloudDb();
     for (const session of listSharedChatSessionsForUser(core, userId)) {
       if (!canAccessSharedSession(req, session)) continue;
       if (merged.has(session.chat_id)) {
@@ -1220,7 +1220,7 @@ export function createAiRouter(
 
   // Resolve a chat's shared-session status (its cross-tenant home), if any.
   router.get("/chats/:id/session", (req, res) => {
-    const session = getSharedChatSession(getCoreDb(), req.params.id);
+    const session = getSharedChatSession(getCloudDb(), req.params.id);
     if (!session || !canAccessSharedSession(req, session)) {
       res.json({ shared: false, session: null });
       return;
@@ -1459,7 +1459,7 @@ export function createAiRouter(
       ),
     ];
     const wikiOverride = await getHybridWikiText(
-      getCoreDb(),
+      getCloudDb(),
       embeddings?.isEmbedderReady() ? embeddings.getEmbeddingClient() : undefined,
       message?.trim() ?? "",
       {

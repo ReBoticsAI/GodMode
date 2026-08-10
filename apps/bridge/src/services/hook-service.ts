@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreHook,
   type CoreHookRun,
@@ -55,7 +55,7 @@ function assertManageable(hook: CoreHook, scope: HookOwnerScope): void {
 
 export function listHooks(
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook[] {
   const agentPlaceholders = scope.agentIds.map(() => "?").join(",");
   const agentClause = scope.agentIds.length
@@ -73,7 +73,7 @@ export function listHooks(
 export function getHook(
   id: string,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook {
   const hook = db.prepare(`SELECT * FROM hooks WHERE id = ?`).get(id) as
     | CoreHook
@@ -86,7 +86,7 @@ export function getHook(
 export function createHook(
   input: CreateHookInput,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook {
   if (input.ownerKind === "user" && input.ownerId !== scope.userId) {
     throw new HookError("Cannot create a hook for another user", 403);
@@ -143,7 +143,7 @@ export function updateHook(
   id: string,
   patch: Record<string, unknown>,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook {
   getHook(id, scope, db);
   const sets: string[] = [];
@@ -167,7 +167,7 @@ export function updateHook(
 export function deleteHook(
   id: string,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): void {
   getHook(id, scope, db);
   db.prepare(`DELETE FROM hooks WHERE id = ?`).run(id);
@@ -176,7 +176,7 @@ export function deleteHook(
 export function listHookRuns(
   hookId: string,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHookRun[] {
   getHook(hookId, scope, db);
   return db
@@ -190,7 +190,7 @@ export function listHookRuns(
 export function getHookForRun(
   runId: string,
   scope: HookOwnerScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook {
   const run = db
     .prepare(`SELECT hook_id FROM hook_runs WHERE id = ?`)
@@ -201,7 +201,7 @@ export function getHookForRun(
 
 /** All enabled schedule hooks (used by the scheduler at boot / refresh). */
 export function listEnabledScheduleHooks(
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreHook[] {
   return db
     .prepare(

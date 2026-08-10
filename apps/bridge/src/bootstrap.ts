@@ -536,7 +536,7 @@ server.listen(config.port, config.host, () => {
   }
   console.log(`IPC directory: ${config.ipcDir}`);
   console.log(`Database (operator tenant): ${config.tenantsDir}/${operatorTenantId}.sqlite`);
-  console.log(`Core database: ${config.coreDbPath}`);
+  console.log(`Cloud database: ${config.cloudDbPath}`);
   void llmManager.maybeAutoStart();
   void (async () => {
     if (

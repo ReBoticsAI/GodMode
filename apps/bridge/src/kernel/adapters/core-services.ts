@@ -1,7 +1,7 @@
 import type { ObjectTypeDef, RecordData, RecordRow } from "@godmode/kernel";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../../db.js";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import {
   createWorkflow,
   createWorkflowComment,
@@ -208,7 +208,7 @@ export const workflowServiceAdapter: RecordAdapter = {
   delete(db, _def, id, ctx) {
     if (!getWorkflow(db, id)) notFound("Workflow not found");
 
-    const coreDb = getCoreDb();
+    const coreDb = getCloudDb();
     const hookIds: string[] = [];
     const rows = coreDb
       .prepare(
@@ -947,7 +947,7 @@ function revisionRecord(
 export const wikiRevisionServiceAdapter: RecordAdapter = {
   id: "wiki_revision_service",
   list(_db, def, query, ctx) {
-    const db = getCoreDb();
+    const db = getCloudDb();
     const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 500);
     const offset = Math.max(Number(query.offset) || 0, 0);
     const tenantId = ctx.tenantId ?? "";
@@ -975,7 +975,7 @@ export const wikiRevisionServiceAdapter: RecordAdapter = {
     };
   },
   get(_db, def, id, ctx) {
-    const row = getCoreDb()
+    const row = getCloudDb()
       .prepare(
         `SELECT r.* FROM wiki_revisions r
          JOIN wiki_pages p ON p.id=r.page_id
@@ -1128,7 +1128,7 @@ export const hookRunServiceAdapter: RecordAdapter = {
   list(db, def, query, ctx) {
     const scope = hookScope(db, ctx);
     const rows = listHooks(scope).flatMap((hook) =>
-      getCoreDb()
+      getCloudDb()
         .prepare(
           `SELECT * FROM hook_runs WHERE hook_id = ?
            ORDER BY created_at DESC LIMIT 200`
@@ -1145,14 +1145,14 @@ export const hookRunServiceAdapter: RecordAdapter = {
   get(db, def, id, ctx) {
     const scope = hookScope(db, ctx);
     getHookForRun(id, scope);
-    const row = getCoreDb()
+    const row = getCloudDb()
       .prepare(`SELECT * FROM hook_runs WHERE id = ?`)
       .get(id) as Record<string, unknown> | undefined;
     return row ? hookRunRecord(def, row) : null;
   },
   actions: {
     async approve(db, _def, id, _input, ctx) {
-      const coreDb = getCoreDb();
+      const coreDb = getCloudDb();
       getHookForRun(id, hookScope(db, ctx), coreDb);
       const row = coreDb
         .prepare(`SELECT status FROM hook_runs WHERE id = ?`)
@@ -1165,7 +1165,7 @@ export const hookRunServiceAdapter: RecordAdapter = {
       return { ok: true };
     },
     reject(db, _def, id, _input, ctx) {
-      const coreDb = getCoreDb();
+      const coreDb = getCloudDb();
       getHookForRun(id, hookScope(db, ctx), coreDb);
       const row = coreDb
         .prepare(`SELECT status FROM hook_runs WHERE id = ?`)

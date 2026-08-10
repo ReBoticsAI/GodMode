@@ -288,7 +288,7 @@ describe("release flow", () => {
       userId: "user-a",
       role: "owner" as const,
       source: "http" as const,
-      data: { coreDb: db, tenantDb: db, declaredDatabase: "core" as const },
+      data: { cloudDb: db, tenantDb: db, declaredDatabase: "cloud" as const },
     };
     expect(() =>
       installationUpdateStateAdapter.list!(db, def, {}, { ...base, isAdmin: false })

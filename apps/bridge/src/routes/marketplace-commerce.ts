@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { config } from "../config.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -41,7 +41,7 @@ export function createMarketplaceCommerceRouter(): Router {
       if (!config.isSaas && !config.isHub) {
         // Still allow local hub/dev to serve curated rows when present.
       }
-      const index = await buildPublicOfficialCatalog(getCoreDb());
+      const index = await buildPublicOfficialCatalog(getCloudDb());
       res.json(index);
     } catch (err) {
       res.status(502).json({
@@ -59,7 +59,7 @@ export function createMarketplaceCommerceRouter(): Router {
         res.status(400).json({ error: "paypalOrderId required" });
         return;
       }
-      const order = await capturePayPalOrder(getCoreDb(), paypalOrderId);
+      const order = await capturePayPalOrder(getCloudDb(), paypalOrderId);
       if (String(order.buyer_user_id) !== req.user!.id) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -84,7 +84,7 @@ export function createMarketplaceCommerceRouter(): Router {
         res.status(403).json({ error: "Admin required" });
         return;
       }
-      const entries = listOfficialCatalogRows(getCoreDb());
+      const entries = listOfficialCatalogRows(getCloudDb());
       res.json({
         entries,
         pinAudit: auditOfficialCatalogPluginPins(entries),
@@ -112,7 +112,7 @@ export function createMarketplaceCommerceRouter(): Router {
           res.status(400).json({ error: "entryId and title required" });
           return;
         }
-        const row = upsertOfficialCatalogEntry(getCoreDb(), {
+        const row = upsertOfficialCatalogEntry(getCloudDb(), {
           entryId,
           title,
           description: body.description,
@@ -164,7 +164,7 @@ export function createMarketplaceCommerceRouter(): Router {
         return;
       }
       try {
-        const result = await syncOfficialCatalogFromPublicFeed(getCoreDb());
+        const result = await syncOfficialCatalogFromPublicFeed(getCloudDb());
         res.json(result);
       } catch (err) {
         res.status(502).json({
@@ -186,7 +186,7 @@ export function marketplaceStripeWebhookHandler(req: Request, res: Response): vo
     ? req.body
     : Buffer.from(typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {}));
   const result = handleMarketplaceStripeWebhook(
-    getCoreDb(),
+    getCloudDb(),
     raw,
     req.get("stripe-signature") ?? undefined
   );
@@ -209,6 +209,6 @@ export function marketplacePayPalWebhookHandler(req: Request, res: Response): vo
           string,
           unknown
         >);
-  const result = handleMarketplacePayPalWebhook(getCoreDb(), body);
+  const result = handleMarketplacePayPalWebhook(getCloudDb(), body);
   res.json({ received: true, orderId: result.orderId });
 }

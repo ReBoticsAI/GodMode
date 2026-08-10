@@ -1,6 +1,6 @@
 import type { Request } from "express";
 import type { AppDatabase } from "../db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import type { ShareGrantRole } from "../core-db.js";
 import { getAgent } from "../services/agents/agents-db.js";
 import { resolveShareAccess } from "../services/share-service.js";
@@ -51,7 +51,7 @@ export function resolveKernelAgentScope(
   if (!userId) {
     throw new KernelError(404, `Agent not found: ${agentId}`);
   }
-  const access = resolveShareAccess(getCoreDb(), {
+  const access = resolveShareAccess(getCloudDb(), {
     userId,
     tenantId: req.tenantId,
     resourceKind: "agent",

@@ -2,7 +2,7 @@
  * GitHub App webhook receiver (Projects v2 item → Tasks board sync).
  */
 import type { Request, Response } from "express";
-import { getCoreDb, listAllTenantIds } from "../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { verifyGithubWebhookSignature } from "../services/github-app.js";
 import { syncBoardWithGithub } from "../services/github-projects.js";
@@ -78,7 +78,7 @@ async function syncBoardsForProject(
   projectNodeId: string,
   action?: string
 ): Promise<void> {
-  const core = getCoreDb();
+  const core = getCloudDb();
   let matched = 0;
   let synced = 0;
   let skipped = 0;

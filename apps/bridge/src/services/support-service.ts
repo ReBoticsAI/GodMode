@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreSupportMessage,
   type CoreSupportTicket,
@@ -29,7 +29,7 @@ export class SupportError extends Error {
 
 function adminUserIds(): string[] {
   return (
-    getCoreDb()
+    getCloudDb()
       .prepare(`SELECT id FROM users WHERE is_admin = 1`)
       .all() as Array<{ id: string }>
   ).map((r) => r.id);

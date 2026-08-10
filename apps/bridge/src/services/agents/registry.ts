@@ -10,7 +10,7 @@ import { AcpBackend } from "./acp-backend.js";
 import { CursorBackend } from "./cursor-backend.js";
 import { CursorCloudBackend } from "./cursor-cloud-backend.js";
 import { RemoteInferenceBackend } from "./remote-backend.js";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import {
   assertAgentExecutionAllowed,
 } from "../authority/agent-pause-authority.js";
@@ -69,7 +69,7 @@ export function getBackend(
     case "cursor_cloud":
       return new CursorCloudBackend(db);
     case "remote":
-      return new RemoteInferenceBackend(getCoreDb(), llm);
+      return new RemoteInferenceBackend(getCloudDb(), llm);
     default:
       return new LocalLlamaBackend(llm, db);
   }

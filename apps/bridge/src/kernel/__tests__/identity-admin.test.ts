@@ -20,7 +20,7 @@ function definition(name: string, adapterId: string, fields: string[]): ObjectTy
     label: name,
     labelPlural: `${name}s`,
     module: "platform",
-    database: "core",
+    database: "cloud",
     storage: { kind: "adapter", adapterId },
     fields: fields.map((field) => ({
       name: field,
@@ -44,9 +44,9 @@ function context(
     role: "owner",
     source: "http",
     data: {
-      coreDb: db,
+      cloudDb: db,
       tenantDb: db,
-      declaredDatabase: "core",
+      declaredDatabase: "cloud",
     },
     ...overrides,
   };

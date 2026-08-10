@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { config } from "../../config.js";
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import { getTenantDb } from "../../tenant-registry.js";
 import { ensureUserAgent } from "../agents/user-agent.js";
 import { isOperatorTenantId } from "../tenant-kind.js";
@@ -41,7 +41,7 @@ export function attachAuthContext(
   _res: Response,
   next: NextFunction
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   for (const sessionId of collectRequestSessionIds(req)) {
     const resolved = resolveSession(core, sessionId);
     if (resolved) {
@@ -191,7 +191,7 @@ export function resolveTenant(
   res: Response,
   next: NextFunction
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const headerTenant =
     typeof req.headers["x-tenant-id"] === "string"
       ? req.headers["x-tenant-id"]

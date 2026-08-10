@@ -47,9 +47,9 @@ export interface OperationContext {
   signal?: AbortSignal;
   data?: {
     tenantDb: AppDatabase;
-    coreDb: AppDatabase;
+    cloudDb: AppDatabase;
     hostUsersDb?: AppDatabase;
-    declaredDatabase: "tenant" | "core" | "users";
+    declaredDatabase: "tenant" | "cloud" | "users";
   };
   /** Set only by the Bridge's internal system-context factory. */
   systemCapability?: symbol;

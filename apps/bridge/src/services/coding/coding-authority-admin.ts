@@ -2,7 +2,7 @@
  * Admin Authority read models for coding (#96 Slice 2).
  */
 import { config } from "../../config.js";
-import { getCoreDb, listAllTenantIds } from "../../core-db.js";
+import { getCloudDb, listAllTenantIds } from "../../core-db.js";
 import { getTenantDb } from "../../tenant-registry.js";
 import { ensureToolAuditTable } from "./tool-audit.js";
 import {
@@ -26,7 +26,7 @@ export type CodingAuthorityEvent = {
 
 export function listCodingAuthorityEvents(limit = 100): CodingAuthorityEvent[] {
   const cap = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tenantRows = core
     .prepare(`SELECT id, name FROM tenants ORDER BY name ASC`)
     .all() as Array<{ id: string; name: string }>;
@@ -137,7 +137,7 @@ async function fetchBuildSupervisorHealth(): Promise<BuildSupervisorHealth | nul
 }
 
 export async function getCodingAuthorityStatus() {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tenantRows = core
     .prepare(
       `SELECT id, name, is_operator FROM tenants ORDER BY is_operator DESC, name ASC`

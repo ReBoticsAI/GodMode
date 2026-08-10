@@ -79,7 +79,7 @@ vi.mock("../../core-db.js", async () => {
   );
   return {
     ...actual,
-    getCoreDb: () => mem,
+    getCloudDb: () => mem,
   };
 });
 

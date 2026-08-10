@@ -72,7 +72,7 @@ flowchart LR
 
 ### Host Cloud (`core.sqlite`)
 
-Identity and commerce plane (`getCloudDb` / `getCoreDb`):
+Identity and commerce plane (`getCloudDb()`):
 
 - **Users and sessions** — email/password auth, session cookies
 - **Tenants and memberships** — workspaces and roles

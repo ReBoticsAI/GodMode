@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -22,12 +22,12 @@ export function createAdminUsersRouter(): Router {
   router.use(attachAuthContext, requireAuth, requirePlatformAdmin);
 
   router.get("/users", (_req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     res.json({ users: listAdminUsers(core) });
   });
 
   router.get("/users/:userId", (req, res) => {
-    const core = getCoreDb();
+    const core = getCloudDb();
     const user = getAdminUser(core, req.params.userId);
     if (!user) {
       res.status(404).json({ error: "User not found" });

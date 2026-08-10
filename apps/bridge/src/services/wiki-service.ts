@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreWikiPage,
   type WikiVisibility,
@@ -88,7 +88,7 @@ export interface WikiScope {
 export function listPages(
   scope: WikiScope,
   opts: { visibility?: WikiVisibility; space?: string; q?: string } = {},
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage[] {
   const tenantPlaceholders = scope.tenantIds.map(() => "?").join(",");
   const internalClause = scope.tenantIds.length
@@ -118,7 +118,7 @@ export function listPages(
 
 export function getPageById(
   id: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage | null {
   return (
     (db.prepare(`SELECT * FROM wiki_pages WHERE id = ?`).get(id) as
@@ -131,7 +131,7 @@ export function getPageById(
 export function getPageBySlug(
   slug: string,
   scope: WikiScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage {
   const rows = db
     .prepare(`SELECT * FROM wiki_pages WHERE slug = ?`)
@@ -149,7 +149,7 @@ export function getPageBySlug(
 /** External-only resolver for the unauthenticated public read path. */
 export function getPublicPageBySlug(
   slug: string,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage {
   const page = db
     .prepare(`SELECT * FROM wiki_pages WHERE slug = ? AND visibility = 'external'`)
@@ -177,7 +177,7 @@ function captureRevision(db: CoreDatabase, page: CoreWikiPage): void {
 
 export function createPage(
   input: CreatePageInput,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage {
   const title = input.title.trim();
   if (!title) throw new WikiError("Title is required");
@@ -214,7 +214,7 @@ export function updatePage(
     visibility?: WikiVisibility;
   },
   scope: WikiScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): CoreWikiPage {
   const page = getPageById(id, db);
   if (!page) throw new WikiError("Page not found", 404);
@@ -256,7 +256,7 @@ export function updatePage(
 export function deletePage(
   id: string,
   scope: WikiScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): void {
   const page = getPageById(id, db);
   if (!page) throw new WikiError("Page not found", 404);
@@ -275,7 +275,7 @@ export function deletePage(
 export function getBacklinksForPage(
   pageId: string,
   scope: WikiScope,
-  db: CoreDatabase = getCoreDb()
+  db: CoreDatabase = getCloudDb()
 ): WikiBacklink[] {
   const page = getPageById(pageId, db);
   if (!page) throw new WikiError("Page not found", 404);

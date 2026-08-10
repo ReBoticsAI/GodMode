@@ -2,7 +2,7 @@
  * Runtime delete kill switches (#96 Slice 5).
  * Stored in core platform_meta; no image redeploy required.
  */
-import { getCoreDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
+import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
 
 const CACHE_MS = 3_000;
 
@@ -21,7 +21,7 @@ let globalCache: KillCache | null = null;
 const tenantCache = new Map<string, KillCache>();
 
 function readFlag(key: string): boolean {
-  const raw = getPlatformMeta(getCoreDb(), key);
+  const raw = getPlatformMeta(getCloudDb(), key);
   return raw === "true" || raw === "1";
 }
 
@@ -87,7 +87,7 @@ export function getDeleteKillState(tenantIds?: string[]): DeleteKillState {
 }
 
 export function setGlobalDeleteKill(opts: { deleteDisabled?: boolean }): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   if (opts.deleteDisabled === true) {
     setPlatformMeta(core, META_GLOBAL_DELETE_DISABLED, "true");
   } else if (opts.deleteDisabled === false) {
@@ -100,7 +100,7 @@ export function setTenantDeleteKill(
   tenantId: string,
   opts: { deleteDisabled?: boolean }
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tid = tenantId.trim();
   if (!tid) throw new Error("tenantId required");
   if (opts.deleteDisabled === true) {

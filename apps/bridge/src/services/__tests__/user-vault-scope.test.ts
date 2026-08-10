@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { tmpRoot, tenantsDir, usersDir, coreDbPath } = vi.hoisted(() => {
+const { tmpRoot, tenantsDir, usersDir, cloudDbPath } = vi.hoisted(() => {
   const f = require("node:fs") as typeof import("node:fs");
   const o = require("node:os") as typeof import("node:os");
   const p = require("node:path") as typeof import("node:path");
@@ -15,7 +15,7 @@ const { tmpRoot, tenantsDir, usersDir, coreDbPath } = vi.hoisted(() => {
     tmpRoot: root,
     tenantsDir: p.join(root, "tenants"),
     usersDir: p.join(root, "users"),
-    coreDbPath: p.join(root, "core.sqlite"),
+    cloudDbPath: p.join(root, "core.sqlite"),
   };
 });
 
@@ -30,12 +30,12 @@ vi.mock("../../config.js", async () => {
       dataDir: tmpRoot,
       usersDir,
       tenantsDir,
-      coreDbPath,
+      cloudDbPath,
     },
   };
 });
 
-import { getCoreDb } from "../../core-db.js";
+import { getCloudDb } from "../../core-db.js";
 import { getTenantDb, evictTenantDb } from "../../tenant-registry.js";
 import {
   closeAllUserDbs,
@@ -55,7 +55,7 @@ import {
 } from "../openai-platform.js";
 
 function seedCoreUser(userId: string, email: string): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   core
     .prepare(
       `INSERT OR IGNORE INTO users (id, email, display_name, is_admin)
@@ -65,7 +65,7 @@ function seedCoreUser(userId: string, email: string): void {
 }
 
 function seedWorkspace(userId: string, tenantId: string, name: string): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   core
     .prepare(
       `INSERT OR IGNORE INTO tenants (id, name, slug, is_operator, owner_user_id)

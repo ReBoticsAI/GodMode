@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { deleteRuleFile } from "./ai-rules.js";
 import { deleteSkillFile } from "./ai-skills.js";
 import {
@@ -228,7 +228,7 @@ export function approveReflectionProposal(db: AppDatabase, id: string): boolean 
       };
       const column = field ? columnMap[field] : undefined;
       if (column) {
-        const core = getCoreDb();
+        const core = getCloudDb();
         core.prepare(
           `INSERT INTO user_profiles (user_id) VALUES (?) ON CONFLICT(user_id) DO NOTHING`
         ).run(userId);

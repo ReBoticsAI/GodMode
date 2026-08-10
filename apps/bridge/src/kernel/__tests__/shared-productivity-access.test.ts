@@ -258,7 +258,7 @@ describe("two-tenant shared productivity authorization", () => {
       userId: "viewer-user",
       role: "owner" as const,
       source: "http" as const,
-      data: { tenantDb: viewerDb, coreDb: core, declaredDatabase: "tenant" as const },
+      data: { tenantDb: viewerDb, cloudDb: core, declaredDatabase: "tenant" as const },
     };
 
     expect(taskCardServiceAdapter.get!(viewerDb, taskDef, "owner-card", ctx)?.data.title).toBe(
@@ -312,7 +312,7 @@ describe("two-tenant shared productivity authorization", () => {
       userId: "editor-user",
       role: "owner" as const,
       source: "http" as const,
-      data: { tenantDb: editorDb, coreDb: core, declaredDatabase: "tenant" as const },
+      data: { tenantDb: editorDb, cloudDb: core, declaredDatabase: "tenant" as const },
     };
 
     taskCardServiceAdapter.update!(
@@ -376,7 +376,7 @@ describe("two-tenant shared productivity authorization", () => {
       userId: "viewer-user",
       role: "owner" as const,
       source: "http" as const,
-      data: { tenantDb: viewerDb, coreDb: core, declaredDatabase: "core" as const },
+      data: { tenantDb: viewerDb, cloudDb: core, declaredDatabase: "cloud" as const },
     };
     expect(taskCardServiceAdapter.get!(viewerDb, taskDef, "owner-card", ctx)).toBeNull();
 

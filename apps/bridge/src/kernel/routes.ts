@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
 import type { AppDatabase } from "../db.js";
-import { getCoreDb } from "../core-db.js";
+import { getCloudDb } from "../core-db.js";
 import { installedPluginIdsForTenant } from "../plugins/plugin-install.js";
 import { listPageKinds, isRegisteredPageKind } from "./kind-registry.js";
 import {
@@ -63,7 +63,7 @@ export function createKernelRouter(
       confirmationId: req.get("X-Kernel-Confirmation") || undefined,
       bus: deps.bus,
       installedPluginIds: new Set(
-        req.tenantId ? installedPluginIdsForTenant(getCoreDb(), req.tenantId) : []
+        req.tenantId ? installedPluginIdsForTenant(getCloudDb(), req.tenantId) : []
       ),
     };
   };

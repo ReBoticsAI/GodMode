@@ -2,7 +2,7 @@
  * Runtime spend kill switches (#96 Slice 3 / thin #91 wire).
  * Stored in core platform_meta; no image redeploy required.
  */
-import { getCoreDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
+import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
 
 const CACHE_MS = 3_000;
 
@@ -21,7 +21,7 @@ let globalCache: KillCache | null = null;
 const tenantCache = new Map<string, KillCache>();
 
 function readFlag(key: string): boolean {
-  const raw = getPlatformMeta(getCoreDb(), key);
+  const raw = getPlatformMeta(getCloudDb(), key);
   return raw === "true" || raw === "1";
 }
 
@@ -87,7 +87,7 @@ export function getSpendKillState(tenantIds?: string[]): SpendKillState {
 }
 
 export function setGlobalSpendKill(opts: { spendDisabled?: boolean }): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   if (opts.spendDisabled === true) {
     setPlatformMeta(core, META_GLOBAL_SPEND_DISABLED, "true");
   } else if (opts.spendDisabled === false) {
@@ -100,7 +100,7 @@ export function setTenantSpendKill(
   tenantId: string,
   opts: { spendDisabled?: boolean }
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tid = tenantId.trim();
   if (!tid) throw new Error("tenantId required");
   if (opts.spendDisabled === true) {

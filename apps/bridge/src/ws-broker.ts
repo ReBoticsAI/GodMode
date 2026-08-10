@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import type { EventEmitter } from "node:events";
 import { parseSessionCookie, resolveSession } from "./services/auth/session-store.js";
-import { getCoreDb } from "./core-db.js";
+import { getCloudDb } from "./core-db.js";
 import { listUserTenants } from "./services/tenant-bootstrap.js";
 import {
   parseWsSessionFromUrl,
@@ -96,7 +96,7 @@ export function authenticateWsClient(
   querySession?: string
 ): WsClientMeta {
   const meta: WsClientMeta = { ws, rooms: new Set() };
-  const core = getCoreDb();
+  const core = getCloudDb();
   const sessionId =
     parseSessionCookie(cookieHeader) ?? querySession?.trim() ?? undefined;
   const resolved = resolveSession(core, sessionId);

@@ -3,7 +3,7 @@ import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
 import {
-  getCoreDb,
+  getCloudDb,
   getOperatorTenantId,
   getPlatformMeta,
   setPlatformMeta,
@@ -31,7 +31,7 @@ export function ensurePlatformBootstrap(): {
   operatorTenantId: string;
   systemUserId: string;
 } {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const migrated = getPlatformMeta(core, "tenant_bootstrap_v1");
   if (migrated === "done") {
     const operatorId = getOperatorTenantId(core);

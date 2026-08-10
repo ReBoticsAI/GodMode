@@ -4,7 +4,7 @@
  */
 import { v4 as uuidv4 } from "uuid";
 import {
-  getCoreDb,
+  getCloudDb,
   type CoreDatabase,
   type CoreEvent,
   type CoreHook,
@@ -41,7 +41,7 @@ export async function assertCodingHooksAllow(opts: {
   db?: CoreDatabase;
 }): Promise<void> {
   if (!codingHookExecutionEnabled()) return;
-  const db = opts.db ?? getCoreDb();
+  const db = opts.db ?? getCloudDb();
   const event: CoreEvent = {
     id: `pre-${uuidv4()}`,
     type: opts.eventType,

@@ -2,7 +2,7 @@
  * Runtime agent execution pause switches (#96 Slice 8).
  * Stored in core platform_meta; no image redeploy required.
  */
-import { getCoreDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
+import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../../core-db.js";
 
 const CACHE_MS = 3_000;
 
@@ -26,7 +26,7 @@ const tenantCache = new Map<string, PauseCache>();
 const agentCache = new Map<string, PauseCache>();
 
 function readFlag(key: string): boolean {
-  const raw = getPlatformMeta(getCoreDb(), key);
+  const raw = getPlatformMeta(getCloudDb(), key);
   return raw === "true" || raw === "1";
 }
 
@@ -123,7 +123,7 @@ export function getAgentPauseKillState(tenantIds?: string[]): AgentPauseKillStat
 }
 
 export function setGlobalAgentPause(opts: { agentsPaused?: boolean }): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   if (opts.agentsPaused === true) {
     setPlatformMeta(core, META_GLOBAL_AGENTS_PAUSED, "true");
   } else if (opts.agentsPaused === false) {
@@ -136,7 +136,7 @@ export function setTenantAgentPause(
   tenantId: string,
   opts: { agentsPaused?: boolean }
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tid = tenantId.trim();
   if (!tid) throw new Error("tenantId required");
   if (opts.agentsPaused === true) {
@@ -152,7 +152,7 @@ export function setAgentPause(
   agentId: string,
   opts: { paused?: boolean }
 ): void {
-  const core = getCoreDb();
+  const core = getCloudDb();
   const tid = tenantId.trim();
   const aid = agentId.trim();
   if (!tid || !aid) throw new Error("tenantId and agentId required");

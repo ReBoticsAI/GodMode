@@ -149,7 +149,7 @@ describe("legacy route wave", () => {
       /createShareGrant\(|UPDATE federated_share_invites/
     );
     expect(routeSources.get("federation.ts")).toMatch(
-      /executeCollectionAction\(\s*getCoreDb\(\),\s*"FederatedShareInvite",\s*"accept"/
+      /executeCollectionAction\(\s*getCloudDb\(\),\s*"FederatedShareInvite",\s*"accept"/
     );
   });
 });

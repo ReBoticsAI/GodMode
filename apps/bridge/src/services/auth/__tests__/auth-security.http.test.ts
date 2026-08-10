@@ -29,7 +29,7 @@ vi.mock("../../../core-db.js", async () => {
   );
   return {
     ...actual,
-    getCoreDb: () => mem,
+    getCloudDb: () => mem,
   };
 });
 
@@ -128,7 +128,7 @@ import { attachAuthContext } from "../middleware.js";
 import { requireTrustedOrigin } from "../rate-limit.js";
 import { createAuthRouter } from "../../../routes/auth.js";
 import { config } from "../../../config.js";
-import { getCoreDb } from "../../../core-db.js";
+import { getCloudDb } from "../../../core-db.js";
 
 function seedSchema(): void {
   mem.exec(`
@@ -400,7 +400,7 @@ describe("auth security HTTP integration", () => {
       });
       expect(verified.status).toBe(200);
       expect(verified.json).toEqual({ ok: true });
-      const row = getCoreDb()
+      const row = getCloudDb()
         .prepare(`SELECT email_verified_at FROM users WHERE email=?`)
         .get("verify@example.com") as { email_verified_at: string | null };
       expect(row.email_verified_at).toBeTruthy();
@@ -458,7 +458,7 @@ describe("auth security HTTP integration", () => {
       password: "secret12",
       isAdmin: true,
     });
-    const core = getCoreDb();
+    const core = getCloudDb();
     const enroll = beginMfaEnroll(core, userId, "mfa@example.com");
     expect(confirmMfaEnroll(core, userId, totpCode(enroll.secretBase32))).toBe(true);
     const recoveryCode = enroll.recoveryCodes[0]!;
@@ -527,7 +527,7 @@ describe("auth security HTTP integration", () => {
       expect(webhook.status).toBe(200);
 
       const sessionId = createSession(
-        getCoreDb(),
+        getCloudDb(),
         insertUser({
           email: "bearer@example.com",
           password: "secret12",
@@ -560,13 +560,13 @@ describe("auth security HTTP integration", () => {
       verified: false,
     });
     // Non-admins need an active subscription or attachAuthContext drops the session.
-    getCoreDb()
+    getCloudDb()
       .prepare(
         `INSERT INTO saas_subscriptions (id, user_id, email, status, access_revoked)
          VALUES (?, ?, ?, 'active', 0)`
       )
       .run(randomUUID(), userId, "gate@example.com");
-    const sessionId = createSession(getCoreDb(), userId, 7);
+    const sessionId = createSession(getCloudDb(), userId, 7);
     const app = buildApp();
     await withServer(app, async (base) => {
       const blocked = await api(base, "GET", "/api/structure", {
@@ -591,7 +591,7 @@ describe("auth security HTTP integration", () => {
       isAdmin: true,
       verified: false,
     });
-    const sessionId = createSession(getCoreDb(), userId, 7);
+    const sessionId = createSession(getCloudDb(), userId, 7);
     const app = buildApp();
     await withServer(app, async (base) => {
       const ok = await api(base, "GET", "/api/structure", {
@@ -610,13 +610,13 @@ describe("auth security HTTP integration", () => {
       isAdmin: false,
       verified: true,
     });
-    getCoreDb()
+    getCloudDb()
       .prepare(
         `INSERT INTO saas_subscriptions (id, user_id, email, status, access_revoked)
          VALUES (?, ?, ?, 'active', 0)`
       )
       .run(randomUUID(), userId, "noworkspace@example.com");
-    const sessionId = createSession(getCoreDb(), userId, 7);
+    const sessionId = createSession(getCloudDb(), userId, 7);
     const app = buildApp();
     await withServer(app, async (base) => {
       const session = await api(base, "GET", "/api/auth/session", {
@@ -639,7 +639,7 @@ describe("auth security HTTP integration", () => {
       expect(created.json.name).toBe("Recovery Workspace");
       expect(typeof created.json.id).toBe("string");
 
-      const membership = getCoreDb()
+      const membership = getCloudDb()
         .prepare(
           `SELECT role FROM tenant_memberships WHERE user_id=? AND tenant_id=?`
         )
@@ -688,14 +688,14 @@ describe("auth security HTTP integration", () => {
       const location = res.headers.get("location") ?? "";
       expect(location.startsWith(ALLOWED_ORIGIN)).toBe(true);
 
-      const linked = getCoreDb()
+      const linked = getCloudDb()
         .prepare(
           `SELECT user_id FROM oauth_accounts WHERE provider=? AND provider_user_id=?`
         )
         .get("google", "google-user-1") as { user_id: string } | undefined;
       expect(linked?.user_id).toBe(userId);
 
-      const verified = getCoreDb()
+      const verified = getCloudDb()
         .prepare(`SELECT email_verified_at FROM users WHERE id=?`)
         .get(userId) as { email_verified_at: string | null };
       expect(verified.email_verified_at).toBeTruthy();
