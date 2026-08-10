@@ -12,4 +12,6 @@ summary: "Direct messages and group conversations with users and agents."
 
 Use the Chat panel DMs and Channels sections for direct and group conversations involving users and agents.
 
+On Cloud, DMs live on the host **Users** hub database (`Users.sqlite`), shared across workspaces for that install.
+
 See [[chat-panel]].

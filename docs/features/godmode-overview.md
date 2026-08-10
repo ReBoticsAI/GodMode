@@ -32,8 +32,9 @@ Core depth is still growing (owned email, accounting, robots/IoT, GodMode Infere
 - **Intelligence**: platform builder/guide; scaffold plugins, structure, wiki, tasks from chat ([[intelligence]])
 - **Structure**: departments / divisions / pages (empty tree on day one) ([[structure]])
 - **Agents**: specialized AIs under Intelligence for scoped work ([[agents]])
-- **Wiki / memory**: durable knowledge + hybrid RAG (knowledge graph is on the roadmap)
+- **Wiki / memory**: durable knowledge + hybrid RAG (knowledge graph is on the roadmap); wiki SoR is per Workspace
 - **Shared**: live grants for your team ([[shared]])
 - **Marketplace**: Official / Community / Local (self-host); real-money commerce, no credits ([[marketplace]])
+- **Data planes**: Cloud (identity/commerce), Users hub (DMs/Support/Notifications), User DB (Platform Vault), Workspace sandboxes (wiki, hooks, agents)
 
 See also: [[plugin-pipeline]], [[memory]].

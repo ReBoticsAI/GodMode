@@ -99,11 +99,11 @@ Authorization is layered:
 Plugin ObjectTypes are visible only to tenants where their owning plugin is
 installed. Definition replacement is ownership checked and atomic. Plugin
 activation records separate durable lifecycle steps with compensation.
-Marketplace clone acquisition uses an idempotent cross-database saga: core and
-tenant steps are recorded independently and resume safely after interruption
+Marketplace clone acquisition uses an idempotent cross-database saga: Cloud and
+Workspace steps are recorded independently and resume safely after interruption
 instead of pretending SQLite files share one transaction. Native plugin tables
 and records are intentionally retained on uninstall so reinstall and recovery
-do not destroy tenant data.
+do not destroy Workspace data.
 
 Shared-resource adapters resolve the exact active grant and owner database for
 each resource. Viewers receive read parity, editors mutate the owner's record,

@@ -144,7 +144,7 @@ export function AdminObservabilityPanel() {
           <CardDescription>
             Latest entry from <code>platform_backup_meta</code>. Cron and this
             one-click local snapshot write here. Soft retention for request logs
-            keeps the newest ~5k warn/error rows in core.sqlite. Optional S3
+            keeps the newest ~5k warn/error rows in Cloud.sqlite. Optional S3
             upload stays on the operator cron script. Download streams a closed
             stamp (SQLite + DuckDB timeseries) as tar.gz for offsite PC copy;
             platform admin only.

@@ -9,7 +9,7 @@ This document defines how the GodMode platform partitions data, routes requests,
 | **Cloud** (host) | `Cloud.sqlite` via `getCloudDb()` (boot-migrates from legacy `core.sqlite`; archives still include both names; kernel `database: "cloud"`) | Identity, workspace registry, billing, marketplace registry, shares, releases |
 | **Users** (host hub) | `Users.sqlite` | Cross-account hub: DMs, Support, Notifications, platform groups |
 | **User** (per account) | `users/<userId>.sqlite` | **Platform Vault** Connect keys and future personal-layer continuity |
-| **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, wiki (system of record), hooks (system of record), optional workspace key override |
+| **Workspace** | `tenants/<workspaceId>.sqlite` | Per project sandbox: Structure, agents/chats, plugins, wiki (SoR), hooks / `hook_runs` (SoR), `platform_events` (SoR; Workspace id required), optional workspace key override |
 
 Mental model: host Cloud + host Users, then each account gets a **User** DB plus one or more **Workspace** DBs. Consumer Connect secrets live on the per-account User DB (Platform Vault chrome), not on Cloud or host Users.
 
@@ -92,7 +92,7 @@ from Cloud Settings (**Download my database**), via `GET /api/tenant/database/do
 - Scope: one `tenants/<tenantId>.sqlite` only. No `Cloud.sqlite`, no `users/*.sqlite`,
   no other tenants, no DuckDB analytics. Platform-admin DR of full stamps is a
   separate path (#243 / Admin Observability).
-- Rate-limited; success/failure audited in core `platform_action_log`
+- Rate-limited; success/failure audited in Cloud `platform_action_log`
   (`tenant.database.download`). Response is `Cache-Control: no-store`.
 - Local import: place the file under `PLATFORM_DATA_DIR/tenants/` (or the desktop
   data dir equivalent) with a matching GodMode version, or migrate after open.
@@ -129,11 +129,11 @@ confirmation state, and trusted system capability where applicable.
 
 ### ObjectType routing
 
-An ObjectType declares whether it uses the core or tenant database. Tenant
-ObjectTypes operate on the database selected after membership validation; core
-ObjectTypes still receive caller and tenant context for policy checks. The
-registry only exposes plugin-owned ObjectTypes to tenants where the plugin is
-installed.
+An ObjectType declares whether it uses the Cloud (`database: "cloud"`) or
+Workspace database. Workspace ObjectTypes operate on the database selected after
+membership validation; Cloud ObjectTypes still receive caller and tenant context
+for policy checks. The registry only exposes plugin-owned ObjectTypes to tenants
+where the plugin is installed.
 
 Generic Record dispatch enforces ObjectType access policies and action roles,
 then delegates to authoritative adapters/services for resource-level rules.
@@ -151,14 +151,14 @@ plugin uninstall. Uninstall removes runtime visibility and plugin-owned
 knowledge, not tenant data. Backups and explicit retention/erasure procedures
 must account for these retained tables.
 
-Native ObjectTypes are always tenant-local. Core-database ObjectTypes require a
-reviewed service-backed adapter.
+Native ObjectTypes are always Workspace-local. Cloud-database ObjectTypes require
+a reviewed service-backed adapter.
 
 ### Cross-database workflows
 
-SQLite cannot atomically commit `core.sqlite` and a tenant file. Marketplace
+SQLite cannot atomically commit `Cloud.sqlite` and a Workspace file. Marketplace
 clone acquisition therefore records an idempotent saga: operation registration
-in core, import in the buyer tenant, purchase recording in core, then
+in Cloud, import in the buyer Workspace, purchase recording in Cloud, then
 completion. Each database retains step, audit, and outbox evidence; retrying the
 same idempotency key resumes the recorded operation and does not duplicate the
 import or purchase. Plugin lifecycle uses the same durable-step principle
@@ -194,7 +194,7 @@ A **connection** resolves to another GodMode Bridge instance — used when a plu
 | `local` | This Bridge on the same machine |
 | `remote` | Another Bridge's federation API (peer URL + token) |
 
-Connections are registered in `bridge_connections` (core DB) and resolved at runtime.
+Connections are registered in `bridge_connections` (Cloud DB) and resolved at runtime.
 
 ## Signup and admin bootstrap
 
@@ -208,7 +208,7 @@ Pre-seeded admins (`INITIAL_ADMINS=Name:email`) receive optional `INITIAL_ADMIN_
 
 ## Marketplace and sharing
 
-- **Listings** live in core DB; **entitlements** gate access to portable resources.
+- **Listings** live in Cloud DB; **entitlements** gate access to portable resources.
 - **Share grants** allow read/editor access to agents, pages, or workflows across tenants.
 - **Credits** debit on purchase; hub mode uses Stripe for top-ups.
 

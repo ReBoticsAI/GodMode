@@ -278,7 +278,7 @@ export default function MarketingPrivacy() {
                   First-party operational logs (for example request method, path, status,
                   timing, approximate IP such as Cloudflare connecting IP when present, user
                   id, and error text) used to run, debug, and secure Cloud. Warn and error
-                  rows may be persisted in core databases (for example{" "}
+                  rows may be persisted in the host Cloud database (for example{" "}
                   <code className="text-foreground">platform_request_log</code>).
                 </li>
                 <li>
@@ -286,8 +286,8 @@ export default function MarketingPrivacy() {
                 </li>
                 <li>
                   Platform and plugin metrics may be stored in first-party GodMode databases
-                  or tenant workspace analytics stores (for example DuckDB-backed platform
-                  analytics) when core or a plugin enables that telemetry. That is operational
+                  or Workspace analytics stores (for example DuckDB-backed platform
+                  analytics) when Cloud or a plugin enables that telemetry. That is operational
                   and product metrics under our (or your Part A) control, not a third-party
                   marketing analytics suite.
                 </li>

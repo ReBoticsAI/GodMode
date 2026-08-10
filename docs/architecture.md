@@ -26,7 +26,7 @@ flowchart LR
   Adapters[Service-backed adapters]
   Native[Native ObjectType storage]
   Services[Authoritative domain services]
-  Databases[(core and tenant SQLite)]
+  Databases[(Cloud Users User and Workspace SQLite)]
   Consumers --> Auth --> Kernel
   Kernel --> Adapters --> Services --> Databases
   Kernel --> Native --> Databases
@@ -79,7 +79,7 @@ Identity and commerce plane (`getCloudDb()`):
 - **Marketplace** — Official/Local catalogs, Community user listings, paid commerce on SaaS (Stripe/PayPal/crypto), seller payouts
 - **Share grants** — cross-tenant resource sharing
 - **Bridge connections** — federation between Bridge instances
-- **PlatformEvent log** — Workspace `platform_events` (hooks and hook_runs SoR also on Workspace; Cloud may keep orphan null-tenant rows)
+- **Legacy PlatformEvent orphans** — Cloud `events` may still hold null-Workspace rows until cleaned; live SoR is Workspace `platform_events`
 
 ### Host Users (`Users.sqlite`)
 
@@ -101,7 +101,7 @@ One SQLite file per workspace:
 - **Intelligence** — agents, chats, messages, memories, artifacts, rules, skills (personal-layer move to User DB is follow-up)
 - **Productivity** — wiki (Workspace system of record), kanban cards, calendar, Personal/Agent vault
 - **Optional workspace Connect override** — project-specific keys
-- **Automations** — workflows, schedules, hooks, PlatformEvent log (Workspace system of record)
+- **Automations** — workflows, schedules, `hooks` / `hook_runs`, and PlatformEvent log in `platform_events` (Workspace id required on emit). Do not confuse `platform_events` with the durable outbox table also named `events` (`seq` / `dispatched`)
 
 Physical file separation provides workspace isolation; most workspace tables omit a redundant `tenant_id` column.
 
@@ -121,19 +121,19 @@ sequenceDiagram
   Bridge->>CoreDb: Validate tenant membership
   Bridge->>Kernel: OperationContext + CRUD/action
   Kernel->>Service: authorized validated dispatch
-  Service->>CoreDb: declared core-scoped operation
-  Service->>TenantDb: declared tenant-scoped operation
+  Service->>CoreDb: declared Cloud-scoped operation
+  Service->>TenantDb: declared Workspace-scoped operation
   Bridge->>Browser: JSON response
 ```
 
 Every kernel request carries an `OperationContext` derived from authenticated
 user, tenant, role, source, confirmation, request/idempotency keys, version, and
 installed-plugin context. Handlers use `getReqTenantDb(req)` — never a global
-operator database for tenant-scoped data.
+operator database for Workspace-scoped data.
 
 Cross-database workflows do not claim atomicity across SQLite files.
 Marketplace clone acquisition and plugin lifecycle use durable, idempotent saga
-steps with core/tenant audit and outbox state so interruption can resume safely.
+steps with Cloud/Workspace audit and outbox state so interruption can resume safely.
 Shared-resource adapters resolve the exact active grant and owner database:
 viewers read, editors mutate the owner's record, and invalid or guessed access
 fails closed.
