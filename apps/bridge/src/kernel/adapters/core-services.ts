@@ -1048,12 +1048,21 @@ export const hookServiceAdapter: RecordAdapter = {
     hookRecord(def, getHook(id, hookScope(db, ctx), db as CoreDatabase)),
   create(db, def, data, ctx) {
     const scope = hookScope(db, ctx);
+    const ownerKind = requiredText(data, "owner_kind") as never;
+    const ownerIdRaw =
+      typeof data.owner_id === "string" ? data.owner_id.trim() : "";
+    const ownerId =
+      ownerIdRaw ||
+      (ownerKind === "user" && ctx.userId ? ctx.userId : "");
+    if (!ownerId) {
+      throw Object.assign(new Error("Owner Id is required"), { status: 400 });
+    }
     const created = hookRecord(
       def,
       createHook(
         {
-          ownerKind: requiredText(data, "owner_kind") as never,
-          ownerId: requiredText(data, "owner_id"),
+          ownerKind,
+          ownerId,
           ownerTenantId:
             data.owner_tenant_id === undefined
               ? undefined

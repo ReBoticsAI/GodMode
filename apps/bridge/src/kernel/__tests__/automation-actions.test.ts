@@ -324,6 +324,21 @@ describe("safe automation service actions", () => {
       message: "Safe",
       authorization: "[REDACTED]",
     });
+    const hookDefaultOwner = hookServiceAdapter.create!(
+      db,
+      def("Hook"),
+      {
+        owner_kind: "user",
+        name: "Default owner",
+        trigger_kind: "event",
+        event_type: "dm.message.created",
+        action_kind: "notify",
+        action_config_json: { title: "hi", body: "" },
+      },
+      ctx
+    );
+    expect(hookDefaultOwner.data.owner_id).toBe(ctx.userId);
+    hookServiceAdapter.delete!(db, def("Hook"), hookDefaultOwner.id, ctx);
     await hookServiceAdapter.actions!.disable(
       db,
       def("Hook"),
@@ -332,7 +347,7 @@ describe("safe automation service actions", () => {
       ctx
     );
     hookServiceAdapter.delete!(db, def("Hook"), hook.id, ctx);
-    expect(mocks.refreshScheduler).toHaveBeenCalledTimes(3);
+    expect(mocks.refreshScheduler).toHaveBeenCalledTimes(5);
   });
 
   it("enforces hook ownership before approving or rejecting runs", async () => {

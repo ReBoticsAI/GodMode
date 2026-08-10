@@ -1,13 +1,11 @@
 import { Router, type Request } from "express";
+import type { CoreDatabase } from "../core-db.js";
 import {
   attachAuthContext,
   getReqTenantDb,
   requireAuth,
+  resolveTenant,
 } from "../services/auth/middleware.js";
-import {
-  getUserOwnerTenantDb,
-  getUserOwnerTenantId,
-} from "../services/user-scope.js";
 import { listAgents } from "../services/agents/agents-db.js";
 import {
   getHook,
@@ -23,10 +21,8 @@ import {
 
 function resolveScope(req: Request): HookOwnerScope {
   const userId = req.user!.id;
-  const tenantId = req.tenantId ?? getUserOwnerTenantId(userId);
-  const agentDb = req.tenantId
-    ? getReqTenantDb(req)
-    : getUserOwnerTenantDb(userId);
+  const tenantId = req.tenantId ?? null;
+  const agentDb = getReqTenantDb(req);
   const agentIds = listAgents(agentDb).map((a) => a.id);
   return { userId, tenantId, agentIds };
 }
@@ -37,17 +33,24 @@ function paramId(value: string | string[]): string {
 
 export function createHooksRouter(): Router {
   const router = Router();
-  router.use(attachAuthContext, requireAuth);
+  router.use(attachAuthContext, requireAuth, resolveTenant);
 
   router.get("/", (req, res) => {
     const scope = resolveScope(req);
-    res.json({ hooks: listHooks(scope), agentIds: scope.agentIds });
+    const workspace = getReqTenantDb(req) as CoreDatabase;
+    res.json({
+      hooks: listHooks(scope, workspace),
+      agentIds: scope.agentIds,
+    });
   });
 
   router.get("/:id", (req, res) => {
     const scope = resolveScope(req);
+    const workspace = getReqTenantDb(req) as CoreDatabase;
     try {
-      res.json({ hook: getHook(paramId(req.params.id), scope) });
+      res.json({
+        hook: getHook(paramId(req.params.id), scope, workspace),
+      });
     } catch (err) {
       if (err instanceof HookError) {
         res.status(err.status).json({ error: err.message });
@@ -59,8 +62,11 @@ export function createHooksRouter(): Router {
 
   router.get("/:id/runs", (req, res) => {
     const scope = resolveScope(req);
+    const workspace = getReqTenantDb(req) as CoreDatabase;
     try {
-      res.json({ runs: listHookRuns(paramId(req.params.id), scope) });
+      res.json({
+        runs: listHookRuns(paramId(req.params.id), scope, workspace),
+      });
     } catch (err) {
       if (err instanceof HookError) {
         res.status(err.status).json({ error: err.message });
@@ -75,11 +81,11 @@ export function createHooksRouter(): Router {
 
 export function createEventsRouter(): Router {
   const router = Router();
-  router.use(attachAuthContext, requireAuth);
+  router.use(attachAuthContext, requireAuth, resolveTenant);
 
   router.get("/", (req, res) => {
     const userId = req.user!.id;
-    const tenantId = req.tenantId ?? getUserOwnerTenantId(userId);
+    const tenantId = req.tenantId ?? null;
     const limit = Number(req.query.limit);
     res.json({
       events: listEventsForOwner(
