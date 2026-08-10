@@ -210,7 +210,14 @@ jobs:
       - name: Waiting Deploy to Done
         env:
           DEPLOYED_SHA: ${{ needs.metadata.outputs.commit }}
+          # User project list/write needs a PAT; Actions GITHUB_TOKEN is not enough.
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GODMODE_REPO_DIR: ${{ github.workspace }}
-        run: node scripts/update/move-waiting-deploy-to-done.mjs
+        run: |
+          if [[ -z "${PROJECT_TOKEN}" ]]; then
+            echo "::error::PROJECT_TOKEN secret is empty. Add a classic PAT (project + repo) as repo secret PROJECT_TOKEN so Waiting Deploy can move to Done."
+            exit 1
+          fi
+          node scripts/update/move-waiting-deploy-to-done.mjs

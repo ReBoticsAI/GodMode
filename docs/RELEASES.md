@@ -141,6 +141,18 @@ and can `--apply` Cloud + Users (+ vaults). Legacy core-only stamps still restor
 hub tables may be empty until Bridge boot migration. Live Cloud path remains
 `core.sqlite`.
 
+### Project board after Cloud pin
+
+Publish SaaS image runs `mark-waiting-deploy-done` on `ubuntu-latest` after
+Hostinger health is OK. It moves Waiting Deploy → Done for issues whose merge
+is contained in the pinned commit.
+
+Required repo secret: `PROJECT_TOKEN`, a classic personal access token with
+`project` and `repo` scopes (user project read/write). The default Actions
+`GITHUB_TOKEN` cannot reliably list or update the ReBoticsAI user project.
+Without `PROJECT_TOKEN`, the board job fails visibly (`continue-on-error`) and
+items stay in Waiting Deploy until the secret is set or status is updated by hand.
+
 Snapshots use SQLite backup APIs, integrity checks, file hashes, and external
 storage outside the active data directory. Preflight refuses an update when
 signatures, free space, schema bounds, plugin compatibility, snapshot

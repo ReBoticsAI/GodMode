@@ -3,12 +3,15 @@
  * After Cloud health OK: move GitHub Project items from Waiting Deploy → Done
  * when the issue's merge commit is an ancestor of (or equal to) DEPLOYED_SHA.
  *
- * Exits 1 when GraphQL / scan errors occur (caller job should continue-on-error).
+ * Exits 1 when GraphQL / scan errors occur, or when PROJECT_TOKEN is missing
+ * (caller job should continue-on-error so deploy stays green).
  * Logs a summary; never prints secrets.
  *
  * Env:
  *   DEPLOYED_SHA (required)  full or short commit SHA that is live
- *   GH_TOKEN / GITHUB_TOKEN   token with project write (optional PROJECT_TOKEN)
+ *   PROJECT_TOKEN (required) PAT with project read/write on the user project
+ *   GH_TOKEN / GITHUB_TOKEN   fallback only for local dry-runs (often cannot
+ *                            list/write user projects from Actions)
  *   GODMODE_REPO_DIR         git repo for merge-base (default cwd)
  *   GODMODE_PROJECT_OWNER    default ReBoticsAI
  *   GODMODE_PROJECT_NUMBER   default 1
@@ -19,20 +22,37 @@ import { existsSync } from "node:fs";
 
 const PROJECT_ID = "PVT_kwHODvOEJs4BeDG0";
 const STATUS_FIELD_ID = "PVTSSF_lAHODvOEJs4BeDG0zhYgLOE";
-const WAITING_DEPLOY = "df73e18b";
 const DONE = "98236657";
 const OWNER = process.env.GODMODE_PROJECT_OWNER || "ReBoticsAI";
 const PROJECT_NUMBER = Number(process.env.GODMODE_PROJECT_NUMBER || "1");
 const DEPLOYED_SHA = (process.env.DEPLOYED_SHA || "").trim();
 const REPO_DIR = process.env.GODMODE_REPO_DIR || process.cwd();
+const HAS_PROJECT_TOKEN = Boolean(process.env.PROJECT_TOKEN?.trim());
 const TOKEN =
-  process.env.PROJECT_TOKEN ||
-  process.env.GH_TOKEN ||
-  process.env.GITHUB_TOKEN ||
+  process.env.PROJECT_TOKEN?.trim() ||
+  process.env.GH_TOKEN?.trim() ||
+  process.env.GITHUB_TOKEN?.trim() ||
   "";
 
 function log(msg) {
   console.log(`[waiting-deploy-done] ${msg}`);
+}
+
+function ghEnv() {
+  // Prefer PROJECT_TOKEN for both `gh` CLI and GraphQL (user project access).
+  const env = { ...process.env };
+  if (TOKEN) env.GH_TOKEN = TOKEN;
+  if (TOKEN) env.GITHUB_TOKEN = TOKEN;
+  return env;
+}
+
+function runGh(args, options = {}) {
+  return execFileSync("gh", args, {
+    encoding: "utf8",
+    cwd: REPO_DIR,
+    env: ghEnv(),
+    ...options,
+  });
 }
 
 async function ghGraphql(query, variables = {}) {
@@ -68,6 +88,68 @@ function isAncestor(candidate, tip) {
   }
 }
 
+function containedInDeploy(mergeSha) {
+  if (!mergeSha) return false;
+  if (
+    mergeSha === DEPLOYED_SHA ||
+    mergeSha.startsWith(DEPLOYED_SHA) ||
+    DEPLOYED_SHA.startsWith(mergeSha)
+  ) {
+    return true;
+  }
+  return isAncestor(mergeSha, DEPLOYED_SHA);
+}
+
+/** Prefer merge commits still on the deploy tip (survives history rewrites). */
+function resolveMergeShaFromGit(issueNumber) {
+  try {
+    const out = execFileSync(
+      "git",
+      [
+        "log",
+        DEPLOYED_SHA,
+        "--merges",
+        `--grep=Merge pull request #${issueNumber} `,
+        "-n",
+        "1",
+        "--format=%H",
+      ],
+      { cwd: REPO_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim();
+    if (out) return out;
+  } catch {
+    /* fall through */
+  }
+  try {
+    // Squash / non-merge landings that mention the issue in the subject.
+    const out = execFileSync(
+      "git",
+      [
+        "log",
+        DEPLOYED_SHA,
+        `--grep=#${issueNumber}`,
+        "-n",
+        "5",
+        "--format=%H %s",
+      ],
+      { cwd: REPO_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim();
+    for (const line of out.split("\n").filter(Boolean)) {
+      const sha = line.slice(0, 40);
+      const subject = line.slice(41);
+      if (
+        subject.includes(`(#${issueNumber})`) ||
+        subject.includes(`#${issueNumber}`)
+      ) {
+        return sha;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
 function prLinksIssue(pr, issueNumber) {
   const n = Number(issueNumber);
   if ((pr.closingIssuesReferences || []).some((r) => Number(r.number) === n)) {
@@ -77,31 +159,26 @@ function prLinksIssue(pr, issueNumber) {
   const title = typeof pr.title === "string" ? pr.title : "";
   const body = typeof pr.body === "string" ? pr.body : "";
   if (title.includes(needle)) return true;
-  // Core ship loop uses Part of #N (not Closes) so ancestry can resolve.
   if (body.includes(needle)) return true;
   return false;
 }
 
-function resolveMergeSha(issueNumber) {
+function resolveMergeShaFromGh(issueNumber) {
   try {
-    const out = execFileSync(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--repo",
-        `${OWNER}/GodMode`,
-        "--state",
-        "merged",
-        "--search",
-        `${issueNumber}`,
-        "--json",
-        "number,mergeCommit,closingIssuesReferences,title,body",
-        "--limit",
-        "20",
-      ],
-      { encoding: "utf8" }
-    );
+    const out = runGh([
+      "pr",
+      "list",
+      "--repo",
+      `${OWNER}/GodMode`,
+      "--state",
+      "merged",
+      "--search",
+      `${issueNumber}`,
+      "--json",
+      "number,mergeCommit,closingIssuesReferences,title,body",
+      "--limit",
+      "20",
+    ]);
     const prs = JSON.parse(out);
     for (const pr of prs) {
       if (!prLinksIssue(pr, issueNumber)) continue;
@@ -112,6 +189,12 @@ function resolveMergeSha(issueNumber) {
     log(`pr lookup failed for #${issueNumber}: ${(err && err.message) || err}`);
   }
   return null;
+}
+
+function resolveMergeSha(issueNumber) {
+  return (
+    resolveMergeShaFromGit(issueNumber) || resolveMergeShaFromGh(issueNumber)
+  );
 }
 
 async function setDone(itemId) {
@@ -131,17 +214,123 @@ async function setDone(itemId) {
   );
 }
 
+/**
+ * List Waiting Deploy items via Projects filter (avoids truncated unfiltered pages).
+ * Falls back to GraphQL pagination if the CLI query returns nothing usable.
+ */
+function listWaitingDeployViaCli() {
+  const listRaw = runGh([
+    "project",
+    "item-list",
+    String(PROJECT_NUMBER),
+    "--owner",
+    OWNER,
+    "--format",
+    "json",
+    "--limit",
+    "100",
+    "--query",
+    'status:"Waiting Deploy"',
+  ]);
+  const parsed = JSON.parse(listRaw);
+  const items = parsed.items || parsed;
+  if (!Array.isArray(items)) {
+    throw new Error("gh project item-list returned unexpected JSON");
+  }
+  return items
+    .filter((i) => !i.status || i.status === "Waiting Deploy")
+    .map((i) => ({
+      id: i.id,
+      number: i.content?.number,
+      title: i.content?.title || i.title || "",
+    }))
+    .filter((i) => i.id && i.number);
+}
+
+async function listWaitingDeployViaGraphql() {
+  const waiting = [];
+  let cursor = null;
+  let hasNext = true;
+  while (hasNext) {
+    const data = await ghGraphql(
+      `query($owner: String!, $number: Int!, $after: String) {
+        user(login: $owner) {
+          projectV2(number: $number) {
+            items(first: 50, after: $after) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                id
+                fieldValues(first: 20) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      name
+                      field { ... on ProjectV2FieldCommon { name } }
+                    }
+                  }
+                }
+                content {
+                  ... on Issue { number title }
+                }
+              }
+            }
+          }
+        }
+      }`,
+      { owner: OWNER, number: PROJECT_NUMBER, after: cursor }
+    );
+    const conn = data?.user?.projectV2?.items;
+    if (!conn) {
+      throw new Error("GraphQL project items missing (token may lack project scope)");
+    }
+    for (const node of conn.nodes || []) {
+      const status = (node.fieldValues?.nodes || []).find(
+        (f) => f.field?.name === "Status" && f.name
+      )?.name;
+      if (status !== "Waiting Deploy") continue;
+      const number = node.content?.number;
+      if (!number || !node.id) continue;
+      waiting.push({
+        id: node.id,
+        number,
+        title: node.content?.title || "",
+      });
+    }
+    hasNext = Boolean(conn.pageInfo?.hasNextPage);
+    cursor = conn.pageInfo?.endCursor || null;
+  }
+  return waiting;
+}
+
+async function listWaitingDeploy() {
+  try {
+    const viaCli = listWaitingDeployViaCli();
+    if (viaCli.length > 0) return { items: viaCli, source: "cli-query" };
+    log("CLI status query returned 0; trying GraphQL pagination");
+  } catch (err) {
+    log(`CLI list failed: ${(err && err.message) || err}; trying GraphQL`);
+  }
+  const viaGql = await listWaitingDeployViaGraphql();
+  return { items: viaGql, source: "graphql" };
+}
+
 async function main() {
   if (!DEPLOYED_SHA) {
     log("DEPLOYED_SHA missing; skip board move");
-    return;
+    process.exit(1);
   }
   if (!TOKEN) {
-    log("No GitHub token; skip board move");
-    return;
+    log("No GitHub token; set PROJECT_TOKEN (PAT with project scope)");
+    process.exit(1);
+  }
+  if (!HAS_PROJECT_TOKEN) {
+    log(
+      "PROJECT_TOKEN unset. Actions GITHUB_TOKEN often cannot list/write the user project; configure repo secret PROJECT_TOKEN (classic PAT: project + repo)."
+    );
+    process.exit(1);
   }
   if (!existsSync(REPO_DIR)) {
-    log(`Repo dir missing (${REPO_DIR}); skip ancestry checks`);
+    log(`Repo dir missing (${REPO_DIR}); cannot resolve ancestry`);
+    process.exit(1);
   }
 
   let moved = 0;
@@ -149,47 +338,23 @@ async function main() {
   let errors = 0;
 
   try {
-    // Prefer gh project item-list for Waiting Deploy rows
-    const listRaw = execFileSync(
-      "gh",
-      [
-        "project",
-        "item-list",
-        String(PROJECT_NUMBER),
-        "--owner",
-        OWNER,
-        "--format",
-        "json",
-        "--limit",
-        "200",
-      ],
-      { encoding: "utf8" }
+    const { items: waiting, source } = await listWaitingDeploy();
+    log(
+      `Waiting Deploy count=${waiting.length} via ${source}; deployed=${DEPLOYED_SHA.slice(0, 12)}`
     );
-    const parsed = JSON.parse(listRaw);
-    const items = parsed.items || parsed;
-    const waiting = items.filter((i) => i.status === "Waiting Deploy");
-    log(`Waiting Deploy count=${waiting.length}; deployed=${DEPLOYED_SHA.slice(0, 12)}`);
 
     for (const item of waiting) {
-      const number = item.content?.number;
-      const itemId = item.id;
-      if (!number || !itemId) {
-        skipped += 1;
-        continue;
-      }
+      const { number, id: itemId, title } = item;
       const mergeSha = resolveMergeSha(number);
       if (!mergeSha) {
-        log(`#${number}: no merged PR SHA; leave Waiting Deploy`);
+        log(`#${number}: no merge SHA on tip (${title.slice(0, 48)}); leave Waiting Deploy`);
         skipped += 1;
         continue;
       }
-      const contained =
-        mergeSha === DEPLOYED_SHA ||
-        mergeSha.startsWith(DEPLOYED_SHA) ||
-        DEPLOYED_SHA.startsWith(mergeSha) ||
-        isAncestor(mergeSha, DEPLOYED_SHA);
-      if (!contained) {
-        log(`#${number}: merge ${mergeSha.slice(0, 12)} not in deploy tip; leave`);
+      if (!containedInDeploy(mergeSha)) {
+        log(
+          `#${number}: merge ${mergeSha.slice(0, 12)} not in deploy tip; leave`
+        );
         skipped += 1;
         continue;
       }
@@ -208,7 +373,6 @@ async function main() {
   }
 
   log(`summary moved=${moved} skipped=${skipped} errors=${errors}`);
-  // Non-zero on errors so the GitHub-hosted job shows red; workflow uses continue-on-error.
   process.exit(errors > 0 ? 1 : 0);
 }
 
