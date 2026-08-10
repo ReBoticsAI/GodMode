@@ -32,7 +32,7 @@ Installation-wide identity and commerce (not hub chat surfaces):
 | `legacy_endpoint_usage` | Historical upgrade telemetry; strict audit has no legacy callers |
 | `marketplace_acquisition_operations`, steps/audit/outbox | Durable cross-DB acquisition saga |
 | `releases`, `installation_update_state`, history/attempts/snapshots/receipts | Signed release discovery, deduplicated notification, update and rollback evidence |
-| `events` (PlatformEvent) | Immutable automation event log (hooks SoR lives on Workspace; orphan hooks may remain here) |
+| `events` (legacy PlatformEvent) | May hold orphan rows with null `tenant_id` until cleaned; live SoR is Workspace `platform_events` |
 
 ### Host Users (`Users.sqlite`)
 
@@ -67,7 +67,8 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 | `ai_agents`, `ai_chats`, `ai_messages`, `ai_memories`, … | AI workspace |
 | `holdings_*` | Financial connections |
 | Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (wiki SoR lives on Workspace; Platform Vault Connect keys live on the User DB) |
-| `hooks`, `hook_runs` | Automations hooks SoR (migrated from Cloud by `owner_tenant_id`; PlatformEvent `events` stay on Cloud) |
+| `hooks`, `hook_runs` | Automations hooks SoR (migrated from Cloud by `owner_tenant_id`) |
+| `platform_events` | PlatformEvent trigger log SoR (`tenant_id` required; not the outbox `events` table) |
 | `ai_secrets` workspace override | Optional project-specific Connect keys (`owner_kind=platform`) |
 | `gm_ot_*` | Native plugin ObjectType Records |
 | `kernel_action_idempotency`, `kernel_operation_runs`, action logs | Kernel action execution and audit state |

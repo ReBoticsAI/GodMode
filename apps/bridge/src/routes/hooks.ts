@@ -85,14 +85,20 @@ export function createEventsRouter(): Router {
 
   router.get("/", (req, res) => {
     const userId = req.user!.id;
-    const tenantId = req.tenantId ?? null;
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      res.status(400).json({ error: "Workspace required" });
+      return;
+    }
+    const workspace = getReqTenantDb(req) as CoreDatabase;
     const limit = Number(req.query.limit);
     res.json({
       events: listEventsForOwner(
         { kind: "user", id: userId, tenantId },
-        { limit: Number.isFinite(limit) ? limit : undefined }
+        { limit: Number.isFinite(limit) ? limit : undefined },
+        workspace
       ),
-      eventTypes: listKnownEventTypes(),
+      eventTypes: listKnownEventTypes(workspace),
     });
   });
 

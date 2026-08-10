@@ -97,7 +97,8 @@ export interface PluginHostServices {
     type: string;
     actor: { kind: string; id?: string | null };
     payload?: Record<string, unknown>;
-    tenantId?: string | null;
+    /** Required Workspace id. */
+    tenantId: string;
   }): void;
 
   /** Register a named health probe (plugins choose ids, e.g. "chart-ipc"). */

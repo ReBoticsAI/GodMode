@@ -9,6 +9,7 @@ import { seedDomainSkills } from "./services/ai-skills.js";
 import { getCloudDb } from "./core-db.js";
 import { migrateWikiFromCloud } from "./services/wiki-workspace-migrate.js";
 import { migrateHooksFromCloud } from "./services/hooks-workspace-migrate.js";
+import { migratePlatformEventsFromCloud } from "./services/platform-events-workspace-migrate.js";
 
 interface CachedTenant {
   db: AppDatabase;
@@ -100,6 +101,14 @@ export function getTenantDb(tenantId: string): AppDatabase {
         err instanceof Error ? err.message : err
       );
     }
+    try {
+      migratePlatformEventsFromCloud(tenantId, existing.db, getCloudDb());
+    } catch (err) {
+      console.warn(
+        `[platform_events] migrate for ${tenantId} failed:`,
+        err instanceof Error ? err.message : err
+      );
+    }
     return existing.db;
   }
 
@@ -122,6 +131,14 @@ export function getTenantDb(tenantId: string): AppDatabase {
   } catch (err) {
     console.warn(
       `[hooks] migrate for ${tenantId} failed:`,
+      err instanceof Error ? err.message : err
+    );
+  }
+  try {
+    migratePlatformEventsFromCloud(tenantId, db, getCloudDb());
+  } catch (err) {
+    console.warn(
+      `[platform_events] migrate for ${tenantId} failed:`,
       err instanceof Error ? err.message : err
     );
   }
