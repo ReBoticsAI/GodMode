@@ -1191,6 +1191,29 @@ export function upsertPlatformVaultSecret(
   writePlatformSecretRow(getUserDb(accountId), { ...opts, agentId: null });
 }
 
+function deletePlatformSecretRows(
+  targetDb: AppDatabase,
+  baseId: string,
+  name: string
+): boolean {
+  const owner = vaultOwnerFromAgentScope(null);
+  const rowId = platformVaultSecretId(baseId, null);
+  const clause = secretOwnerClause(owner);
+  return (
+    targetDb
+      .prepare(
+        `DELETE FROM ai_secrets WHERE ${clause.sql} AND (id = ? OR LOWER(name) = LOWER(?))`
+      )
+      .run(...clause.params, rowId, name).changes > 0
+  );
+}
+
+/**
+ * Remove a Connect-card secret.
+ * Account-level disconnect must purge User DB and every owned workspace copy.
+ * Otherwise the next status read re-migrates a leftover workspace row and the
+ * UI stays "Connected" after a successful Disconnect toast.
+ */
 export function removePlatformVaultSecret(
   db: AppDatabase,
   opts: {
@@ -1215,37 +1238,42 @@ export function removePlatformVaultSecret(
     );
   }
 
-  let removed = false;
-  const wsOwner = vaultOwnerFromAgentScope(null);
-  const wsRowId = platformVaultSecretId(opts.baseId, null);
-  const wsClause = secretOwnerClause(wsOwner);
-  if (
-    db
-      .prepare(
-        `DELETE FROM ai_secrets WHERE ${wsClause.sql} AND (id = ? OR LOWER(name) = LOWER(?))`
-      )
-      .run(...wsClause.params, wsRowId, opts.name).changes > 0
-  ) {
-    removed = true;
-  }
+  let removed = deletePlatformSecretRows(db, opts.baseId, opts.name);
   if (opts.workspaceOnly) return removed;
 
   const accountId = resolveVaultAccountUserId(db, opts.userId);
   if (!accountId) return removed;
+
   try {
-    const userDb = getUserDb(accountId);
-    if (
-      userDb
-        .prepare(
-          `DELETE FROM ai_secrets WHERE ${wsClause.sql} AND (id = ? OR LOWER(name) = LOWER(?))`
-        )
-        .run(...wsClause.params, wsRowId, opts.name).changes > 0
-    ) {
+    if (deletePlatformSecretRows(getUserDb(accountId), opts.baseId, opts.name)) {
       removed = true;
     }
   } catch {
     /* ignore */
   }
+
+  // Purge legacy / stray workspace copies so migrateConnectSecretToUserVault
+  // cannot resurrect the key on the next status or resolve call.
+  try {
+    const tenants = getCloudDb()
+      .prepare(
+        `SELECT id FROM tenants
+         WHERE owner_user_id = ? AND is_operator = 0`
+      )
+      .all(accountId) as Array<{ id: string }>;
+    for (const t of tenants) {
+      try {
+        if (deletePlatformSecretRows(getTenantDb(t.id), opts.baseId, opts.name)) {
+          removed = true;
+        }
+      } catch {
+        /* ignore missing / locked workspace DBs */
+      }
+    }
+  } catch {
+    /* ignore core lookup failures */
+  }
+
   return removed;
 }
 

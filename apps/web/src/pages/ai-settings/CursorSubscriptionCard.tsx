@@ -101,8 +101,21 @@ export function CursorSubscriptionCard({
     try {
       const res = await disconnectCursorApiKey(vaultAgentId);
       setStatus(res.status);
-      setModels([]);
-      toast.success("Cursor disconnected");
+      if (res.status.connected) {
+        if (res.status.source === "env") {
+          toast.error(
+            "Vault key removed, but CURSOR_API_KEY is still set in the server environment, so Cursor stays Connected."
+          );
+        } else {
+          toast.error(
+            "Disconnect did not clear Cursor. Refresh the page and try again."
+          );
+          await reload();
+        }
+      } else {
+        setModels([]);
+        toast.success("Cursor disconnected");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
@@ -139,6 +152,11 @@ export function CursorSubscriptionCard({
           <Badge variant={status?.connected ? "default" : "secondary"}>
             {status?.connected ? "Connected" : "Not connected"}
           </Badge>
+          {status?.connected && status.source === "env" ? (
+            <Badge variant="outline" className="text-[10px]">
+              server env
+            </Badge>
+          ) : null}
           {status?.connected && status.masked ? (
             <span className="font-mono text-xs text-muted-foreground">{status.masked}</span>
           ) : null}

@@ -44,6 +44,7 @@ import {
 } from "../../user-registry.js";
 import {
   getPlatformVaultSecretInScope,
+  removePlatformVaultSecret,
   resolvePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "../agents/agents-db.js";
@@ -206,5 +207,42 @@ describe("Platform Vault across workspaces", () => {
     });
 
     expect(resolveOpenAiApiKey(getTenantDb(wsB))).toBe("sk-legacy-ws");
+  });
+
+  it("account disconnect purges User Vault and all workspace copies", () => {
+    const user1 = uid("user");
+    const wsA = tid("ws");
+    const wsB = tid("ws");
+    seedCoreUser(user1, `${user1}@example.com`);
+    seedWorkspace(user1, wsA, "ProjectA");
+    seedWorkspace(user1, wsB, "ProjectB");
+
+    upsertOpenAiApiKey(getTenantDb(wsA), "sk-shared-account");
+    // Leave a legacy workspace-only copy that used to resurrect after disconnect.
+    upsertPlatformVaultSecret(getTenantDb(wsB), {
+      baseId: OPENAI_API_KEY_SECRET_ID,
+      name: OPENAI_API_KEY_SECRET_NAME,
+      value: "sk-legacy-ws-copy",
+      workspaceOnly: true,
+    });
+
+    expect(resolveOpenAiApiKey(getTenantDb(wsA))).toBe("sk-shared-account");
+
+    expect(
+      removePlatformVaultSecret(getTenantDb(wsA), {
+        baseId: OPENAI_API_KEY_SECRET_ID,
+        name: OPENAI_API_KEY_SECRET_NAME,
+      })
+    ).toBe(true);
+
+    expect(resolveOpenAiApiKey(getTenantDb(wsA))).toBeNull();
+    expect(resolveOpenAiApiKey(getTenantDb(wsB))).toBeNull();
+    expect(
+      getPlatformVaultSecretInScope(getTenantDb(wsA), {
+        baseId: OPENAI_API_KEY_SECRET_ID,
+        name: OPENAI_API_KEY_SECRET_NAME,
+        agentId: null,
+      })
+    ).toBeNull();
   });
 });
