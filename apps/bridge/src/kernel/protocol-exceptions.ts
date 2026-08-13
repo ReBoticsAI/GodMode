@@ -666,4 +666,12 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "Shared PTY session close/kill (#162); filesystem/shell domain, not ObjectType Record CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "ai-cursor-sdk-session-refresh",
+    methods: ["POST"],
+    pathPattern: "/api/ai/cursor/refresh",
+    rationale:
+      "Evict cached Cursor SDK Agent handles and re-probe models with the same Vault API key (#525); transport session hygiene, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;

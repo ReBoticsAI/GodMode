@@ -1,5 +1,5 @@
 /**
- * cursor_cloud MCP pass-through on create/resume/send (#71).
+ * cursor_cloud MCP pass-through on create/send (#71).
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +52,7 @@ describe("buildCursorSdkAgentOptions mcpServers", () => {
 });
 
 describe("resolveCursorSdkAgent mcpServers", () => {
-  it("passes mcpServers on resume and recreates when fingerprint changes", async () => {
+  it("passes mcpServers on create and recreates when fingerprint changes", async () => {
     const cwd = tempRoot();
     mkdirSync(join(cwd, ".cursor"), { recursive: true });
     writeFileSync(
@@ -78,7 +78,11 @@ describe("resolveCursorSdkAgent mcpServers", () => {
       close: vi.fn(),
       send: vi.fn(),
     }));
-    const create = vi.fn();
+    const create = vi.fn(async () => ({
+      agentId: "godmode-c1-new",
+      close: vi.fn(),
+      send: vi.fn(),
+    }));
 
     const first = await resolveCursorSdkAgent({
       chatKey: "godmode-c1",
@@ -90,8 +94,9 @@ describe("resolveCursorSdkAgent mcpServers", () => {
       mcpServers,
       sdk: { resume, create },
     });
-    expect(resume).toHaveBeenCalledOnce();
-    expect(resume.mock.calls[0]![1]).toMatchObject({ mcpServers });
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]![0]).toMatchObject({ mcpServers });
+    expect(resume).not.toHaveBeenCalled();
 
     const second = await resolveCursorSdkAgent({
       chatKey: "godmode-c1",
@@ -104,7 +109,7 @@ describe("resolveCursorSdkAgent mcpServers", () => {
       sdk: { resume, create },
     });
     expect(second.agent).toBe(first.agent);
-    expect(resume).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledOnce();
 
     writeFileSync(
       join(cwd, ".cursor", "mcp.json"),
@@ -125,7 +130,12 @@ describe("resolveCursorSdkAgent mcpServers", () => {
       "agent",
       cursorMcpServersFingerprint(cwd, true)
     );
-    resume.mockClear();
+    create.mockClear();
+    create.mockImplementation(async () => ({
+      agentId: "godmode-c1-rotated",
+      close: vi.fn(),
+      send: vi.fn(),
+    }));
     await resolveCursorSdkAgent({
       chatKey: "godmode-c1",
       apiKey: "k",
@@ -136,8 +146,9 @@ describe("resolveCursorSdkAgent mcpServers", () => {
       mcpServers: mcpServers2,
       sdk: { resume, create },
     });
-    expect(resume).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledOnce();
     expect(first.agent.close).toHaveBeenCalled();
-    expect(resume.mock.calls[0]![1]).toMatchObject({ mcpServers: mcpServers2 });
+    expect(create.mock.calls[0]![0]).toMatchObject({ mcpServers: mcpServers2 });
+    expect(resume).not.toHaveBeenCalled();
   });
 });
