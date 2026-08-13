@@ -1,13 +1,15 @@
 /**
- * cursor_cloud Agent.resume + transcript fallback (#71 slice 6).
+ * cursor_cloud agent cache / TTL + transcript fallback (#71 / #525).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "../ai-agent.js";
 import {
   buildPrompt,
   clearCursorCloudAgentCacheForTests,
+  isCursorSdkAgentCacheExpired,
   isCursorSdkAuthStaleError,
   resolveCursorSdkAgent,
+  setCursorSdkAgentTtlForTests,
   shouldIncludeTranscriptAppendix,
 } from "../agents/cursor-cloud-backend.js";
 
@@ -45,6 +47,26 @@ describe("isCursorSdkAuthStaleError", () => {
   });
 });
 
+describe("isCursorSdkAgentCacheExpired", () => {
+  it("expires on idle and on max age", () => {
+    const entry = { createdAt: 1_000, lastUsedAt: 1_000 };
+    expect(
+      isCursorSdkAgentCacheExpired(entry, 1_000 + 60_000, 10 * 60_000, 60 * 60_000)
+    ).toBe(false);
+    expect(
+      isCursorSdkAgentCacheExpired(entry, 1_000 + 11 * 60_000, 10 * 60_000, 60 * 60_000)
+    ).toBe(true);
+    expect(
+      isCursorSdkAgentCacheExpired(
+        { createdAt: 1_000, lastUsedAt: 1_000 + 50 * 60_000 },
+        1_000 + 61 * 60_000,
+        10 * 60_000,
+        60 * 60_000
+      )
+    ).toBe(true);
+  });
+});
+
 describe("buildPrompt transcript gate", () => {
   const messages: AgentMessage[] = [
     { role: "system", content: "sys" },
@@ -73,7 +95,7 @@ describe("buildPrompt transcript gate", () => {
 });
 
 describe("resolveCursorSdkAgent", () => {
-  it("resumes when Agent.resume succeeds", async () => {
+  it("creates a fresh agent and does not cold-resume", async () => {
     const resume = vi.fn(async () => fakeAgent);
     const create = vi.fn(async () => fakeAgent);
     const result = await resolveCursorSdkAgent({
@@ -85,37 +107,51 @@ describe("resolveCursorSdkAgent", () => {
       mode: "agent",
       sdk: { resume, create },
     });
-    expect(result.continued).toBe(true);
-    expect(resume).toHaveBeenCalledOnce();
-    expect(create).not.toHaveBeenCalled();
+    expect(result.continued).toBe(false);
+    expect(resume).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]![0]).toMatchObject({
+      mode: "agent",
+    });
+    expect(String((create.mock.calls[0]![0] as { agentId: string }).agentId)).toMatch(
+      /^godmode-c1-[a-f0-9]+$/
+    );
   });
 
-  it("creates when resume fails and marks continued false", async () => {
-    const resume = vi.fn(async () => {
-      throw new Error("not found");
-    });
+  it("creates with unique agent ids across rotates", async () => {
+    const resume = vi.fn(async () => fakeAgent);
     const create = vi.fn(async () => fakeAgent);
-    const result = await resolveCursorSdkAgent({
+    await resolveCursorSdkAgent({
       chatKey: "godmode-c2",
       apiKey: "k",
       cwd: process.cwd(),
       fingerprint: "fp1",
       modelId: "auto",
       mode: "plan",
+      forceFresh: true,
       sdk: { resume, create },
     });
-    expect(result.continued).toBe(false);
-    expect(resume).toHaveBeenCalledOnce();
-    expect(create).toHaveBeenCalledOnce();
-    expect(create.mock.calls[0]![0]).toMatchObject({
-      agentId: "godmode-c2",
+    await resolveCursorSdkAgent({
+      chatKey: "godmode-c2",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp1",
+      modelId: "auto",
       mode: "plan",
+      forceFresh: true,
+      sdk: { resume, create },
     });
+    expect(create).toHaveBeenCalledTimes(2);
+    const id1 = (create.mock.calls[0]![0] as { agentId: string }).agentId;
+    const id2 = (create.mock.calls[1]![0] as { agentId: string }).agentId;
+    expect(id1).not.toBe(id2);
+    expect(resume).not.toHaveBeenCalled();
   });
 
-  it("reuses in-memory agent when fingerprint matches", async () => {
+  it("reuses in-memory agent when fingerprint matches and TTL is fresh", async () => {
     const resume = vi.fn(async () => fakeAgent);
     const create = vi.fn(async () => fakeAgent);
+    const t0 = 1_000_000;
     await resolveCursorSdkAgent({
       chatKey: "godmode-c3",
       apiKey: "k",
@@ -123,6 +159,7 @@ describe("resolveCursorSdkAgent", () => {
       fingerprint: "fp1",
       modelId: "auto",
       mode: "agent",
+      nowMs: t0,
       sdk: { resume, create },
     });
     resume.mockClear();
@@ -134,6 +171,7 @@ describe("resolveCursorSdkAgent", () => {
       fingerprint: "fp1",
       modelId: "auto",
       mode: "agent",
+      nowMs: t0 + 60_000,
       sdk: { resume, create },
     });
     expect(second.continued).toBe(true);
@@ -141,11 +179,50 @@ describe("resolveCursorSdkAgent", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("creates again after idle TTL instead of resuming a dead session", async () => {
+    setCursorSdkAgentTtlForTests({ idleMs: 5_000, maxAgeMs: 60 * 60_000 });
+    const close = vi.fn();
+    const firstAgent = { ...fakeAgent, close };
+    const resume = vi.fn(async () => fakeAgent);
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(firstAgent)
+      .mockResolvedValueOnce(fakeAgent);
+    const t0 = 1_000_000;
+    await resolveCursorSdkAgent({
+      chatKey: "godmode-c3b",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp1",
+      modelId: "auto",
+      mode: "agent",
+      nowMs: t0,
+      sdk: { resume, create },
+    });
+    const second = await resolveCursorSdkAgent({
+      chatKey: "godmode-c3b",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp1",
+      modelId: "auto",
+      mode: "agent",
+      nowMs: t0 + 6_000,
+      sdk: { resume, create },
+    });
+    expect(close).toHaveBeenCalled();
+    expect(second.continued).toBe(false);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(resume).not.toHaveBeenCalled();
+  });
+
   it("recreates when fingerprint changes", async () => {
     const close = vi.fn();
     const firstAgent = { ...fakeAgent, close };
-    const resume = vi.fn(async () => firstAgent);
-    const create = vi.fn(async () => fakeAgent);
+    const resume = vi.fn(async () => fakeAgent);
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(firstAgent)
+      .mockResolvedValueOnce(fakeAgent);
     await resolveCursorSdkAgent({
       chatKey: "godmode-c4",
       apiKey: "k",
@@ -155,9 +232,6 @@ describe("resolveCursorSdkAgent", () => {
       mode: "agent",
       sdk: { resume, create },
     });
-    resume.mockClear();
-    create.mockClear();
-    resume.mockImplementation(async () => fakeAgent);
     const second = await resolveCursorSdkAgent({
       chatKey: "godmode-c4",
       apiKey: "k",
@@ -168,11 +242,12 @@ describe("resolveCursorSdkAgent", () => {
       sdk: { resume, create },
     });
     expect(close).toHaveBeenCalled();
-    expect(resume).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(resume).not.toHaveBeenCalled();
     expect(second.continued).toBe(false);
   });
 
-  it("forceFresh skips resume and creates a new agent", async () => {
+  it("forceFresh skips cache and creates a new agent", async () => {
     const resume = vi.fn(async () => fakeAgent);
     const create = vi.fn(async () => fakeAgent);
     await resolveCursorSdkAgent({

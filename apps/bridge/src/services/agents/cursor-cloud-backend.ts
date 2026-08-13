@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { AppDatabase } from "../../db.js";
@@ -36,6 +36,10 @@ interface ChatAgentEntry {
   agent: SdkAgent;
   /** Last structural fingerprint observed for this in-memory handle. */
   cacheFingerprint: string;
+  /** Wall clock when this handle was created (Agent.create). */
+  createdAt: number;
+  /** Wall clock of last successful resolve/reuse. */
+  lastUsedAt: number;
 }
 
 /** Soft cap for prior-turn transcript appendix (chars). */
@@ -46,7 +50,53 @@ const TRANSCRIPT_TOOL_ARGS_CAP = 400;
 /** Align with chat-history `compactAgentMessages` tool-result truncation. */
 const TRANSCRIPT_TOOL_RESULT_CAP = 1_500;
 
+/**
+ * Discard in-memory SDK handles after this much idle time.
+ * Cursor cloud/gRPC sessions die while the Vault API key stays valid; forever
+ * reuse is what surfaced as recurring AuthenticationError.
+ */
+export const CURSOR_SDK_AGENT_IDLE_MS = 10 * 60 * 1000;
+/** Hard cap on a single SDK agent handle age even if the chat stays active. */
+export const CURSOR_SDK_AGENT_MAX_AGE_MS = 60 * 60 * 1000;
+
 const chatAgents = new Map<string, ChatAgentEntry>();
+
+let idleMsForTests: number | null = null;
+let maxAgeMsForTests: number | null = null;
+
+/** @internal test helper */
+export function setCursorSdkAgentTtlForTests(opts: {
+  idleMs?: number | null;
+  maxAgeMs?: number | null;
+}): void {
+  if ("idleMs" in opts) idleMsForTests = opts.idleMs ?? null;
+  if ("maxAgeMs" in opts) maxAgeMsForTests = opts.maxAgeMs ?? null;
+}
+
+function agentIdleMs(): number {
+  return idleMsForTests ?? CURSOR_SDK_AGENT_IDLE_MS;
+}
+
+function agentMaxAgeMs(): number {
+  return maxAgeMsForTests ?? CURSOR_SDK_AGENT_MAX_AGE_MS;
+}
+
+/** True when a cached handle should be closed and replaced. */
+export function isCursorSdkAgentCacheExpired(
+  entry: { createdAt: number; lastUsedAt: number },
+  nowMs: number,
+  idleMs = agentIdleMs(),
+  maxAgeMs = agentMaxAgeMs()
+): boolean {
+  return (
+    nowMs - entry.lastUsedAt > idleMs || nowMs - entry.createdAt > maxAgeMs
+  );
+}
+
+/** Mint a new Cursor-side agent id (never reuse a stable chat key as agentId). */
+export function newCursorSdkAgentId(chatKey: string): string {
+  return `${chatKey}-${randomBytes(6).toString("hex")}`;
+}
 
 /** True when Cursor SDK failed with a stale-session auth error (key usually still valid). */
 export function isCursorSdkAuthStaleError(err: unknown): boolean {
@@ -80,7 +130,7 @@ export function evictCursorSdkAgent(chatKey: string): void {
 
 /**
  * Clear all in-memory Cursor SDK agent handles.
- * Same Vault API key; new Agent.create / resume on next chat turn.
+ * Same Vault API key; new Agent.create on next chat turn.
  */
 export function clearCursorCloudAgentCache(): void {
   for (const [key, entry] of chatAgents) {
@@ -92,6 +142,7 @@ export function clearCursorCloudAgentCache(): void {
 /** @internal test helper */
 export function clearCursorCloudAgentCacheForTests(): void {
   clearCursorCloudAgentCache();
+  setCursorSdkAgentTtlForTests({ idleMs: null, maxAgeMs: null });
 }
 
 function filterSchemas(
@@ -409,9 +460,13 @@ export function buildCursorSdkAgentOptions(args: {
 }
 
 /**
- * Resolve an SDK agent for a chat key: reuse in-memory handle, else
- * `Agent.resume`, else `Agent.create`. `continued` is true when native SDK
- * history should be trusted (skip transcript appendix).
+ * Resolve an SDK agent for a chat key: reuse a fresh in-memory handle, else
+ * `Agent.create` with a new Cursor agent id.
+ *
+ * We deliberately do not cold-`Agent.resume` a stable chat key. Cursor sessions
+ * expire independently of the Vault API key; resume/reuse of a dead id shows up
+ * as AuthenticationError. Multi-turn continuity within idle TTL uses memory;
+ * after rotate we rely on the transcript appendix (`continued: false`).
  */
 export async function resolveCursorSdkAgent(args: {
   chatKey: string;
@@ -424,10 +479,12 @@ export async function resolveCursorSdkAgent(args: {
   mcpServers?: CursorSdkMcpServers;
   sandboxEnabled?: boolean;
   /**
-   * Skip in-memory reuse and Agent.resume; create a new SDK agent.
+   * Skip in-memory reuse; create a new SDK agent with a new Cursor agent id.
    * Used after a stale AuthenticationError so the same API key gets a fresh session.
    */
   forceFresh?: boolean;
+  /** Injectable clock for idle/max-age tests. */
+  nowMs?: number;
   /** Injectable for tests. */
   sdk?: {
     resume: (
@@ -437,16 +494,19 @@ export async function resolveCursorSdkAgent(args: {
     create: (options: Record<string, unknown>) => Promise<SdkAgent>;
   };
 }): Promise<{ agent: SdkAgent; continued: boolean }> {
-  let forceTranscript = false;
+  const now = args.nowMs ?? Date.now();
   const existing = chatAgents.get(args.chatKey);
   if (existing) {
-    if (!args.forceFresh && existing.cacheFingerprint === args.fingerprint) {
+    const reusable =
+      !args.forceFresh &&
+      existing.cacheFingerprint === args.fingerprint &&
+      !isCursorSdkAgentCacheExpired(existing, now);
+    if (reusable) {
+      existing.lastUsedAt = now;
       return { agent: existing.agent, continued: true };
     }
     closeCachedAgent(existing);
     chatAgents.delete(args.chatKey);
-    // Structural change or forced refresh: keep transcript appendix.
-    forceTranscript = true;
   }
 
   const baseOpts = buildCursorSdkAgentOptions({
@@ -470,26 +530,15 @@ export async function resolveCursorSdkAgent(args: {
     };
   }
 
-  if (!args.forceFresh) {
-    try {
-      const agent = await sdk.resume(args.chatKey, baseOpts);
-      chatAgents.set(args.chatKey, {
-        agent,
-        cacheFingerprint: args.fingerprint,
-      });
-      return { agent, continued: !forceTranscript };
-    } catch {
-      /* create below */
-    }
-  }
-
   const agent = await sdk.create({
     ...baseOpts,
-    agentId: args.chatKey,
+    agentId: newCursorSdkAgentId(args.chatKey),
   });
   chatAgents.set(args.chatKey, {
     agent,
     cacheFingerprint: args.fingerprint,
+    createdAt: now,
+    lastUsedAt: now,
   });
   return { agent, continued: false };
 }
