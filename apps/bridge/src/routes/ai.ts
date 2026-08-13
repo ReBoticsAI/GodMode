@@ -117,7 +117,7 @@ import {
   revokeAgentAccount,
 } from "../services/agents/agent-accounts.js";
 import { resolveAgent, getBackend } from "../services/agents/registry.js";
-import { agentCanRunWithoutLocalLlm } from "../services/agents/cursor-cloud-backend.js";
+import { agentCanRunWithoutLocalLlm, clearCursorCloudAgentCache } from "../services/agents/cursor-cloud-backend.js";
 import {
   getCursorAuthStatus,
   upsertCursorApiKey,
@@ -127,6 +127,8 @@ import {
   refreshCursorCliAuthInBackground,
   startCursorCliLoginUrl,
   normalizeCursorVaultSecret,
+  invalidateCursorModelsCache,
+  resolveCursorApiKey,
 } from "../services/cursor-subscription.js";
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
@@ -1090,6 +1092,43 @@ export function createAiRouter(
       res.json({ models });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /**
+   * Drop in-memory Cursor SDK agent handles and re-probe models with the
+   * existing Vault key. Does not rotate or require a new API key.
+   */
+  router.post("/cursor/refresh", async (req, res) => {
+    try {
+      const db = tdb(req);
+      const agentIdRaw = req.query.agentId ?? req.body?.agentId;
+      const agentId =
+        typeof agentIdRaw === "string" && agentIdRaw.trim()
+          ? agentIdRaw.trim()
+          : null;
+      normalizeCursorVaultSecret(db);
+      const key = resolveCursorApiKey(db, agentId);
+      if (!key) {
+        res.status(400).json({
+          error:
+            "Cursor is not connected. Paste your API key in Platform Vault → Cursor subscription.",
+        });
+        return;
+      }
+      clearCursorCloudAgentCache();
+      invalidateCursorModelsCache(key);
+      const models = await listCursorSubscriptionModels(db, agentId);
+      const status = getCursorAuthStatus(db, agentId);
+      res.json({
+        ok: true,
+        status,
+        modelCount: models.length,
+      });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   });
 

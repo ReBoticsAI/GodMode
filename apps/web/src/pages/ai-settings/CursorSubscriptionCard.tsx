@@ -26,6 +26,7 @@ import {
   disconnectCursorApiKey,
   fetchCursorModels,
   fetchCursorStatus,
+  refreshCursorSession,
   type CursorAuthStatus,
   type CursorModelOption,
 } from "@/api";
@@ -118,6 +119,29 @@ export function CursorSubscriptionCard({
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshSession = async () => {
+    setBusy(true);
+    try {
+      const res = await refreshCursorSession(vaultAgentId);
+      setStatus(res.status);
+      if (!res.status.connected) {
+        setModels([]);
+        toast.error("Cursor is not connected. Paste your API key again.");
+        return;
+      }
+      await loadModels();
+      toast.success(
+        `Cursor session refreshed (${res.modelCount} models). Same API key; no new key needed.`
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to refresh Cursor session"
+      );
     } finally {
       setBusy(false);
     }
@@ -218,12 +242,24 @@ export function CursorSubscriptionCard({
               <Button type="button" disabled={busy} onClick={() => void useForIntelligence()}>
                 Use Cursor for Intelligence
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void refreshSession()}
+              >
+                Refresh session
+              </Button>
               <Button type="button" variant="outline" disabled={busy} onClick={() => void disconnect()}>
                 Disconnect
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Sets Intelligence to Cursor Cloud. Prefer{" "}
+              If Intelligence shows an Authentication error, use{" "}
+              <span className="font-medium">Refresh session</span> first. That
+              clears the Bridge Cursor SDK handle and keeps your existing API key
+              (keys are not calendar-expired when Cursor says they last until
+              2027). Prefer{" "}
               <span className="font-medium">Auto (Cursor picks)</span> for everyday
               use; pin a named model only when you need a fixed route. Manage MCP
               servers on Agents → Pipeline →{" "}

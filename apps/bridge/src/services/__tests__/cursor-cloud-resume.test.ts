@@ -6,6 +6,7 @@ import type { AgentMessage } from "../ai-agent.js";
 import {
   buildPrompt,
   clearCursorCloudAgentCacheForTests,
+  isCursorSdkAuthStaleError,
   resolveCursorSdkAgent,
   shouldIncludeTranscriptAppendix,
 } from "../agents/cursor-cloud-backend.js";
@@ -20,6 +21,27 @@ describe("shouldIncludeTranscriptAppendix", () => {
   it("skips transcript when SDK conversation continued", () => {
     expect(shouldIncludeTranscriptAppendix(true)).toBe(false);
     expect(shouldIncludeTranscriptAppendix(false)).toBe(true);
+  });
+});
+
+describe("isCursorSdkAuthStaleError", () => {
+  it("matches Cursor AuthenticationError wording", () => {
+    expect(
+      isCursorSdkAuthStaleError(
+        new Error(
+          "Cursor agent run failed: Authentication error If you are logged in, try logging out and back in."
+        )
+      )
+    ).toBe(true);
+    expect(
+      isCursorSdkAuthStaleError(new Error("code=unauthenticated"))
+    ).toBe(true);
+    expect(isCursorSdkAuthStaleError(new Error("ERROR_NOT_LOGGED_IN"))).toBe(
+      true
+    );
+    expect(isCursorSdkAuthStaleError(new Error("git clone timed out"))).toBe(
+      false
+    );
   });
 });
 
@@ -148,5 +170,22 @@ describe("resolveCursorSdkAgent", () => {
     expect(close).toHaveBeenCalled();
     expect(resume).toHaveBeenCalledOnce();
     expect(second.continued).toBe(false);
+  });
+
+  it("forceFresh skips resume and creates a new agent", async () => {
+    const resume = vi.fn(async () => fakeAgent);
+    const create = vi.fn(async () => fakeAgent);
+    await resolveCursorSdkAgent({
+      chatKey: "godmode-c5",
+      apiKey: "k",
+      cwd: process.cwd(),
+      fingerprint: "fp1",
+      modelId: "auto",
+      mode: "agent",
+      forceFresh: true,
+      sdk: { resume, create },
+    });
+    expect(resume).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledOnce();
   });
 });

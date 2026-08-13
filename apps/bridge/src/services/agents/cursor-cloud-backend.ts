@@ -48,6 +48,52 @@ const TRANSCRIPT_TOOL_RESULT_CAP = 1_500;
 
 const chatAgents = new Map<string, ChatAgentEntry>();
 
+/** True when Cursor SDK failed with a stale-session auth error (key usually still valid). */
+export function isCursorSdkAuthStaleError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("authentication error") ||
+    lower.includes("error_not_logged_in") ||
+    lower.includes("not_logged_in") ||
+    lower.includes("[unauthenticated]") ||
+    lower.includes("unauthenticated") ||
+    /code\s*=\s*unauthenticated/i.test(msg)
+  );
+}
+
+function closeCachedAgent(entry: ChatAgentEntry): void {
+  try {
+    entry.agent.close();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Drop one in-memory SDK agent handle so the next turn creates a fresh connection. */
+export function evictCursorSdkAgent(chatKey: string): void {
+  const existing = chatAgents.get(chatKey);
+  if (!existing) return;
+  closeCachedAgent(existing);
+  chatAgents.delete(chatKey);
+}
+
+/**
+ * Clear all in-memory Cursor SDK agent handles.
+ * Same Vault API key; new Agent.create / resume on next chat turn.
+ */
+export function clearCursorCloudAgentCache(): void {
+  for (const [key, entry] of chatAgents) {
+    closeCachedAgent(entry);
+    chatAgents.delete(key);
+  }
+}
+
+/** @internal test helper */
+export function clearCursorCloudAgentCacheForTests(): void {
+  clearCursorCloudAgentCache();
+}
+
 function filterSchemas(
   allow: string[] | null,
   agentId: string,
@@ -377,6 +423,11 @@ export async function resolveCursorSdkAgent(args: {
   mode: "agent" | "plan";
   mcpServers?: CursorSdkMcpServers;
   sandboxEnabled?: boolean;
+  /**
+   * Skip in-memory reuse and Agent.resume; create a new SDK agent.
+   * Used after a stale AuthenticationError so the same API key gets a fresh session.
+   */
+  forceFresh?: boolean;
   /** Injectable for tests. */
   sdk?: {
     resume: (
@@ -389,16 +440,12 @@ export async function resolveCursorSdkAgent(args: {
   let forceTranscript = false;
   const existing = chatAgents.get(args.chatKey);
   if (existing) {
-    if (existing.cacheFingerprint === args.fingerprint) {
+    if (!args.forceFresh && existing.cacheFingerprint === args.fingerprint) {
       return { agent: existing.agent, continued: true };
     }
-    try {
-      existing.agent.close();
-    } catch {
-      /* ignore */
-    }
+    closeCachedAgent(existing);
     chatAgents.delete(args.chatKey);
-    // Structural change (model/mode/MCP/system): keep transcript appendix.
+    // Structural change or forced refresh: keep transcript appendix.
     forceTranscript = true;
   }
 
@@ -423,29 +470,28 @@ export async function resolveCursorSdkAgent(args: {
     };
   }
 
-  try {
-    const agent = await sdk.resume(args.chatKey, baseOpts);
-    chatAgents.set(args.chatKey, {
-      agent,
-      cacheFingerprint: args.fingerprint,
-    });
-    return { agent, continued: !forceTranscript };
-  } catch {
-    const agent = await sdk.create({
-      ...baseOpts,
-      agentId: args.chatKey,
-    });
-    chatAgents.set(args.chatKey, {
-      agent,
-      cacheFingerprint: args.fingerprint,
-    });
-    return { agent, continued: false };
+  if (!args.forceFresh) {
+    try {
+      const agent = await sdk.resume(args.chatKey, baseOpts);
+      chatAgents.set(args.chatKey, {
+        agent,
+        cacheFingerprint: args.fingerprint,
+      });
+      return { agent, continued: !forceTranscript };
+    } catch {
+      /* create below */
+    }
   }
-}
 
-/** @internal test helper: clears in-memory SDK agent cache. */
-export function clearCursorCloudAgentCacheForTests(): void {
-  chatAgents.clear();
+  const agent = await sdk.create({
+    ...baseOpts,
+    agentId: args.chatKey,
+  });
+  chatAgents.set(args.chatKey, {
+    agent,
+    cacheFingerprint: args.fingerprint,
+  });
+  return { agent, continued: false };
 }
 
 /**
@@ -624,90 +670,120 @@ export class CursorCloudBackend implements AgentBackend {
       cursorSdkSandboxFingerprint(sandboxEnabled)
     );
 
-    const { agent: sdkAgent, continued } = await resolveCursorSdkAgent({
-      chatKey,
-      apiKey,
-      cwd,
-      fingerprint,
-      modelId,
-      modelParams,
-      mode: sdkMode,
-      mcpServers,
-      sandboxEnabled,
-    });
-    const prompt = buildPrompt(req, {
-      includeTranscript: shouldIncludeTranscriptAppendix(continued),
-    });
-    const modelSelection = modelParams?.length
-      ? { id: modelId, params: modelParams }
-      : { id: modelId };
-    const run = await sdkAgent.send(prompt, {
-      model: modelSelection,
-      mode: sdkMode,
-      ...(mcpServers ? { mcpServers } : {}),
-      local: { customTools },
-    });
-
-    let streamed = "";
-    for await (const event of run.stream()) {
-      if (req.abortSignal?.aborted) {
-        await run.cancel();
-        throw new DOMException("Aborted", "AbortError");
-      }
-      if (event.type === "assistant") {
-        for (const block of event.message.content) {
-          if (block.type === "text" && block.text) {
-            streamed += block.text;
-            req.onToken?.(block.text);
-          }
-        }
-      } else if (event.type === "thinking" && event.text) {
-        req.onReasoning?.(event.text);
-      }
-    }
-
-    const result = await run.wait();
-    if (result.status === "error") {
-      const detailParts: string[] = [];
-      const runErr = result.error;
-      if (runErr?.message?.trim()) detailParts.push(runErr.message.trim());
-      if (runErr?.code?.trim()) detailParts.push(`code=${runErr.code.trim()}`);
-      if (typeof result.result === "string" && result.result.trim()) {
-        detailParts.push(result.result.trim());
-      }
-      try {
-        console.error(
-          "[cursor_cloud] agent run error",
-          JSON.stringify(result, (_k, v) =>
-            typeof v === "string" && v.length > 2000 ? `${v.slice(0, 2000)}…` : v
-          )
-        );
-      } catch {
-        console.error("[cursor_cloud] agent run error (unserializable)", result);
-      }
-      throw new Error(
-        detailParts.length
-          ? `Cursor agent run failed: ${detailParts.join(" | ")}`
-          : "Cursor agent run failed"
-      );
-    }
-
-    const usageRaw = (result as { usage?: Record<string, number> }).usage;
-    if (usageRaw && req.onUsage) {
-      req.onUsage({
-        prompt_tokens: Number(usageRaw.inputTokens ?? usageRaw.prompt_tokens ?? 0),
-        completion_tokens: Number(
-          usageRaw.outputTokens ?? usageRaw.completion_tokens ?? 0
-        ),
-        total_tokens: Number(
-          usageRaw.totalTokens ??
-            usageRaw.total_tokens ??
-            (Number(usageRaw.inputTokens ?? 0) + Number(usageRaw.outputTokens ?? 0))
-        ),
+    const runOnce = async (forceFresh: boolean): Promise<string> => {
+      const { agent: sdkAgent, continued } = await resolveCursorSdkAgent({
+        chatKey,
+        apiKey,
+        cwd,
+        fingerprint,
+        modelId,
+        modelParams,
+        mode: sdkMode,
+        mcpServers,
+        sandboxEnabled,
+        forceFresh,
       });
-    }
+      const prompt = buildPrompt(req, {
+        includeTranscript: shouldIncludeTranscriptAppendix(continued),
+      });
+      const modelSelection = modelParams?.length
+        ? { id: modelId, params: modelParams }
+        : { id: modelId };
+      const run = await sdkAgent.send(prompt, {
+        model: modelSelection,
+        mode: sdkMode,
+        ...(mcpServers ? { mcpServers } : {}),
+        local: { customTools },
+      });
 
-    return result.result?.trim() || streamed.trim();
+      let streamed = "";
+      for await (const event of run.stream()) {
+        if (req.abortSignal?.aborted) {
+          await run.cancel();
+          throw new DOMException("Aborted", "AbortError");
+        }
+        if (event.type === "assistant") {
+          for (const block of event.message.content) {
+            if (block.type === "text" && block.text) {
+              streamed += block.text;
+              req.onToken?.(block.text);
+            }
+          }
+        } else if (event.type === "thinking" && event.text) {
+          req.onReasoning?.(event.text);
+        }
+      }
+
+      const result = await run.wait();
+      if (result.status === "error") {
+        const detailParts: string[] = [];
+        const runErr = result.error;
+        if (runErr?.message?.trim()) detailParts.push(runErr.message.trim());
+        if (runErr?.code?.trim()) detailParts.push(`code=${runErr.code.trim()}`);
+        if (typeof result.result === "string" && result.result.trim()) {
+          detailParts.push(result.result.trim());
+        }
+        try {
+          console.error(
+            "[cursor_cloud] agent run error",
+            JSON.stringify(result, (_k, v) =>
+              typeof v === "string" && v.length > 2000 ? `${v.slice(0, 2000)}…` : v
+            )
+          );
+        } catch {
+          console.error("[cursor_cloud] agent run error (unserializable)", result);
+        }
+        throw new Error(
+          detailParts.length
+            ? `Cursor agent run failed: ${detailParts.join(" | ")}`
+            : "Cursor agent run failed"
+        );
+      }
+
+      const usageRaw = (result as { usage?: Record<string, number> }).usage;
+      if (usageRaw && req.onUsage) {
+        req.onUsage({
+          prompt_tokens: Number(usageRaw.inputTokens ?? usageRaw.prompt_tokens ?? 0),
+          completion_tokens: Number(
+            usageRaw.outputTokens ?? usageRaw.completion_tokens ?? 0
+          ),
+          total_tokens: Number(
+            usageRaw.totalTokens ??
+              usageRaw.total_tokens ??
+              (Number(usageRaw.inputTokens ?? 0) + Number(usageRaw.outputTokens ?? 0))
+          ),
+        });
+      }
+
+      return result.result?.trim() || streamed.trim();
+    };
+
+    try {
+      return await runOnce(false);
+    } catch (err) {
+      if (req.abortSignal?.aborted || !isCursorSdkAuthStaleError(err)) {
+        throw err;
+      }
+      // Same Vault API key. Cursor SDK often surfaces stale gRPC/session as
+      // AuthenticationError; a fresh Agent.create recovers without a new key.
+      console.warn(
+        "[cursor_cloud] stale auth on SDK agent; clearing handle and retrying once",
+        err instanceof Error ? err.message : err
+      );
+      evictCursorSdkAgent(chatKey);
+      try {
+        return await runOnce(true);
+      } catch (retryErr) {
+        if (isCursorSdkAuthStaleError(retryErr)) {
+          throw new Error(
+            "Cursor session expired for this agent run (your API key is usually still valid). " +
+              "Open Platform Vault → Cursor subscription → Refresh session, then retry. " +
+              "You do not need a new API key unless Connect itself fails."
+          );
+        }
+        throw retryErr;
+      }
+    }
     });
   }
 }

@@ -2003,6 +2003,18 @@ export const fetchCursorModels = (agentId?: string | null) => {
       : "";
   return api<{ models: CursorModelOption[] }>(`/ai/cursor/models${q}`);
 };
+/** Clear Bridge Cursor SDK session cache; keep the same Vault API key. */
+export const refreshCursorSession = (agentId?: string | null) => {
+  const q =
+    agentId != null && agentId !== ""
+      ? `?agentId=${encodeURIComponent(agentId)}`
+      : "";
+  return api<{
+    ok: boolean;
+    status: CursorAuthStatus;
+    modelCount: number;
+  }>(`/ai/cursor/refresh${q}`, { method: "POST", body: "{}" });
+};
 export const applyCursorToIntelligence = (model = "auto") =>
   actionDto<{ ok: boolean }>(
     "ModelRuntime",
