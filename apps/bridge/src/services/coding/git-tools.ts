@@ -1,7 +1,8 @@
 /**
- * Structured coding-root git tools (#443).
+ * Structured coding-root git tools (#443 / #442).
  * Local cycle: status / diff / branch / checkout / add / commit / push.
  * No force-push. Push uses HTTPS allowlist when the terminal sandbox is on.
+ * github.com HTTPS remotes can authenticate via Vault GitHub Connect.
  */
 import { resolveCodingRoot, resolveRepoPath, type FsRootOpts } from "./fs-tools.js";
 import {
@@ -15,6 +16,11 @@ import {
 } from "./terminal-sandbox.js";
 import { startTerminalEgressProxy } from "./terminal-egress-proxy.js";
 import { assertCodingKillSwitch } from "./coding-quota.js";
+import {
+  githubHttpsAuthGitEnv,
+  parseGithubHttpsRemote,
+  redactRemoteUrl,
+} from "./git-host-auth.js";
 
 const DIFF_CAP = 24_000;
 const LOG_CAP = 4_000;
@@ -37,13 +43,68 @@ export function stripCursorCommitAttribution(message: string): string {
 
 export type GitToolOpts = FsRootOpts;
 
-function gitEnv(): NodeJS.ProcessEnv {
+function gitEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "GodMode",
     GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || "godmode@localhost",
     GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || "GodMode",
     GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || "godmode@localhost",
+    ...(extra ?? {}),
   };
+}
+
+function remoteGetUrl(codingRoot: string, remote: string): string {
+  return runGit(codingRoot, ["remote", "get-url", remote], {
+    allowFail: true,
+  }).stdout.trim();
+}
+
+/** Read a remote URL without credentials (for PR owner/repo resolution). */
+export function gitRemoteHttpsUrl(
+  opts: GitToolOpts & { remote?: string }
+): string {
+  const codingRoot = resolveCodingRoot(opts);
+  assertCodingKillSwitch(opts.tenantId ?? undefined);
+  const remote = assertSafeRemote(String(opts.remote ?? "origin"));
+  const url = remoteGetUrl(codingRoot, remote);
+  if (!url) {
+    throw new Error(
+      `Remote "${remote}" is not configured. Set an HTTPS remote, or connect GitHub in Vault → Integrations.`
+    );
+  }
+  return redactRemoteUrl(url);
+}
+
+async function withGitNetwork<T>(
+  codingRoot: string,
+  run: (proxy: {
+    jailProxyUrl?: string;
+    jailSocketPath?: string;
+    hostEgressDir?: string;
+  } | null) => Promise<T>
+): Promise<T> {
+  const sandboxed = requiresTerminalSandbox();
+  const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
+  let proxy: Awaited<ReturnType<typeof startTerminalEgressProxy>> | null = null;
+  if (sandboxed && netMode === "allowlist") {
+    proxy = await startTerminalEgressProxy({
+      codingRoot,
+      allowlist: codingTerminalEgressHosts(),
+    });
+  }
+  try {
+    return await run(
+      proxy
+        ? {
+            jailProxyUrl: proxy.jailProxyUrl,
+            jailSocketPath: proxy.jailSocketPath,
+            hostEgressDir: proxy.hostEgressDir,
+          }
+        : null
+    );
+  } finally {
+    await proxy?.close().catch(() => undefined);
+  }
 }
 
 function runGit(
@@ -251,15 +312,50 @@ export function previewGitToolDiff(
         ["log", "--oneline", `@{upstream}..HEAD`],
         { allowFail: true }
       ).stdout.trim();
-      const remoteUrl = runGit(codingRoot, ["remote", "get-url", remote], {
-        allowFail: true,
-      }).stdout.trim();
+      const remoteUrl = redactRemoteUrl(remoteGetUrl(codingRoot, remote));
+      const gh = parseGithubHttpsRemote(remoteUrl);
       const lines = [
         `Push ${branch} → ${remote}${remoteUrl ? ` (${remoteUrl})` : ""}`,
         `ahead ${status.ahead} / behind ${status.behind}`,
+        gh
+          ? "Auth: Vault GitHub Connect when connected; otherwise host HTTPS credentials"
+          : "Auth: host HTTPS credentials (non-GitHub remote)",
         log ? cap(log, LOG_CAP) : "(no upstream commits to list; first push or no upstream)",
       ];
       return { previewDiff: lines.join("\n") };
+    }
+    if (toolName === "git_clone") {
+      const url = redactRemoteUrl(String(args.url ?? ""));
+      const directory = String(args.directory ?? "").trim() || "(repo name)";
+      const gh = parseGithubHttpsRemote(url);
+      if (!gh) {
+        return {
+          previewError:
+            "git_clone only supports https://github.com/owner/repo URLs",
+        };
+      }
+      return {
+        previewDiff: `Clone ${gh.httpsUrl} → ${directory}\nAuth: Vault GitHub Connect`,
+      };
+    }
+    if (toolName === "github_pr_create") {
+      const status = gitStatus(opts ?? {});
+      const title = String(args.title ?? "").trim() || "(untitled)";
+      const base = String(args.base ?? "main").trim() || "main";
+      const head = String(args.head ?? status.branch).trim() || status.branch;
+      const remote = String(args.remote ?? "origin").trim() || "origin";
+      const remoteUrl = redactRemoteUrl(
+        remoteGetUrl(resolveCodingRoot(opts ?? {}), remote)
+      );
+      return {
+        previewDiff: [
+          `Open PR: ${head} → ${base}`,
+          `Title: ${title}`,
+          `Remote: ${remote}${remoteUrl ? ` (${remoteUrl})` : ""}`,
+          args.draft === true ? "Draft: yes" : "Draft: no",
+          "Auth: Vault GitHub Connect",
+        ].join("\n"),
+      };
     }
     if (toolName === "git_checkout" || toolName === "git_branch") {
       const status = gitStatus(opts ?? {});
@@ -278,12 +374,21 @@ export function previewGitToolDiff(
 }
 
 export async function gitPush(
-  opts: GitToolOpts & { remote?: string; branch?: string; force?: unknown }
+  opts: GitToolOpts & {
+    remote?: string;
+    branch?: string;
+    force?: unknown;
+    /** Vault GitHub Connect token for github.com HTTPS remotes (#442). */
+    githubAccessToken?: string | null;
+    /** @deprecated use githubAccessToken */
+    accessToken?: string | null;
+  }
 ): Promise<{
   remote: string;
   branch: string;
   output: string;
   ok: boolean;
+  usedConnectAuth: boolean;
 }> {
   const codingRoot = resolveCodingRoot(opts);
   assertCodingKillSwitch(opts.tenantId ?? undefined);
@@ -295,28 +400,99 @@ export async function gitPush(
   const branch = assertSafeRef(String(opts.branch ?? status.branch), "branch");
   if (!status.remotes.includes(remote)) {
     throw new Error(
-      `Remote "${remote}" is not configured. Set an HTTPS remote locally, or connect a git host connector for clone/auth/PR flows.`
+      `Remote "${remote}" is not configured. Set an HTTPS remote locally, or connect GitHub in Vault → Integrations for clone/auth/PR flows.`
     );
   }
 
+  const remoteUrl = remoteGetUrl(codingRoot, remote);
+  const token = String(
+    opts.githubAccessToken ?? opts.accessToken ?? ""
+  ).trim();
+  const githubRemote = Boolean(parseGithubHttpsRemote(remoteUrl));
+  const usedConnectAuth = Boolean(token && githubRemote);
+  const authEnv = usedConnectAuth ? githubHttpsAuthGitEnv(token) : undefined;
   const sandboxed = requiresTerminalSandbox();
   const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
-  let proxy: Awaited<ReturnType<typeof startTerminalEgressProxy>> | null = null;
-  if (sandboxed && netMode === "allowlist") {
-    proxy = await startTerminalEgressProxy({
-      codingRoot,
-      allowlist: codingTerminalEgressHosts(),
-    });
-  }
 
-  try {
+  return withGitNetwork(codingRoot, async (proxy) => {
     const res = await runSandboxedArgv({
       codingRoot,
       cwd: codingRoot,
       argv: ["git", "push", remote, branch],
       net: sandboxed ? netMode : "none",
       timeoutMs: 120_000,
-      envExtra: gitEnv(),
+      envExtra: gitEnv(authEnv),
+      proxyUrl: proxy?.jailProxyUrl,
+      jailSocketPath: proxy?.jailSocketPath,
+      hostEgressDir: proxy?.hostEgressDir,
+    });
+    const output = cap((res.stdout + res.stderr).trim(), LOG_CAP);
+    if (res.timedOut || (res.exitCode ?? 1) !== 0) {
+      const hint = githubRemote
+        ? " Connect GitHub in Vault → Integrations, or use an HTTPS remote with credentials already on this host."
+        : " Use an HTTPS remote with credentials already on this host, or connect a git host.";
+      throw new Error(
+        res.timedOut
+          ? "git push timed out"
+          : `git push failed: ${output || "unknown"}.${hint}`
+      );
+    }
+    return { remote, branch, output, ok: true, usedConnectAuth };
+  });
+}
+
+/**
+ * Clone a github.com HTTPS repo into a subdirectory of the coding root (#442).
+ * Requires Vault GitHub Connect.
+ */
+export async function gitClone(
+  opts: GitToolOpts & {
+    url: string;
+    directory?: string;
+    githubAccessToken?: string;
+    /** @deprecated use githubAccessToken */
+    accessToken?: string;
+  }
+): Promise<{ path: string; url: string; usedConnectAuth: true }> {
+  const codingRoot = resolveCodingRoot(opts);
+  assertCodingKillSwitch(opts.tenantId ?? undefined);
+  const parsed = parseGithubHttpsRemote(String(opts.url ?? ""));
+  if (!parsed) {
+    throw new Error(
+      "git_clone only supports https://github.com/owner/repo URLs"
+    );
+  }
+  const token = String(
+    opts.githubAccessToken ?? opts.accessToken ?? ""
+  ).trim();
+  if (!token) {
+    throw new Error(
+      "Connect GitHub in Vault → Integrations before cloning a github.com repo"
+    );
+  }
+  const defaultDir = parsed.repo;
+  const directory = assertSafeRef(
+    String(opts.directory ?? defaultDir).trim() || defaultDir,
+    "directory"
+  );
+  if (directory.includes("/") || directory.includes("\\")) {
+    throw new Error(
+      "directory must be a single path segment under the coding root"
+    );
+  }
+  const target = resolveRepoPath(directory, opts);
+  const sandboxed = requiresTerminalSandbox();
+  const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
+  const authEnv = githubHttpsAuthGitEnv(token);
+
+  return withGitNetwork(codingRoot, async (proxy) => {
+    const res = await runSandboxedArgv({
+      codingRoot,
+      cwd: codingRoot,
+      argv: ["git", "clone", "--", parsed.httpsUrl, directory],
+      net: sandboxed ? netMode : "none",
+      timeoutMs: 300_000,
+      envExtra: gitEnv(authEnv),
       proxyUrl: proxy?.jailProxyUrl,
       jailSocketPath: proxy?.jailSocketPath,
       hostEgressDir: proxy?.hostEgressDir,
@@ -325,12 +501,14 @@ export async function gitPush(
     if (res.timedOut || (res.exitCode ?? 1) !== 0) {
       throw new Error(
         res.timedOut
-          ? "git push timed out"
-          : `git push failed: ${output || "unknown"}. Use an HTTPS remote with credentials already on this host, or a git host connector.`
+          ? "git clone timed out"
+          : `git clone failed: ${output || "unknown"}. Connect GitHub in Vault → Integrations and retry.`
       );
     }
-    return { remote, branch, output, ok: true };
-  } finally {
-    await proxy?.close().catch(() => undefined);
-  }
+    return {
+      path: target,
+      url: parsed.httpsUrl,
+      usedConnectAuth: true as const,
+    };
+  });
 }
