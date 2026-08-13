@@ -41,7 +41,10 @@ Same pattern as the chat LLM: attach to a **host** embedder — do not ship CUDA
 
 Default local installs share one llama-server for both profiles. Status UI shows each profile's readiness and dimension.
 
-`codebase_search` fuses vector chunk hits with ripgrep; when the code profile is unavailable it falls back to grep-only.
+`codebase_search` fuses vector chunk hits with ripgrep; when the code profile is
+unavailable or embeddings are still warming it soft-fails to grep-only and
+returns an explicit `fallbackReason` / `note` so empty results are not treated as
+"nothing exists".
 
 ### SaaS embed queue (#69 track C)
 

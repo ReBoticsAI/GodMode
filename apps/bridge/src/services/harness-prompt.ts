@@ -42,7 +42,7 @@ export function getHarnessEarlyBlock(appName = "GodMode"): string {
     "<search_and_reading>",
     "Gather information yourself (tools, context) before asking the USER to provide it.",
     "If you are unsure about an answer, investigate with tools rather than guessing.",
-    "Prefer semantic exploration: grep/glob for 'where is X handled?' before opening random files.",
+    "Prefer semantic exploration: codebase_search for \"where is X handled?\" NL questions; grep/glob for exact symbols and paths before opening random files.",
     "</search_and_reading>",
     "",
     "<citations>",
@@ -111,10 +111,11 @@ export function getNativeCodingHarnessExtension(): string {
     "This is a real environment with shell access - run typecheck, tests, and builds with run_terminal.",
     "",
     "<codebase_exploration>",
-    "Before editing: codebase_search or grep/glob/list_dir to locate files, then read_file for context.",
-    "Prefer explore_codebase with parallel queries for wide searches; merge results before editing once.",
+    "Before editing: locate files, then read_file for context.",
+    "Search routing: use codebase_search for natural-language questions (\"where is X handled?\", \"how does Y work?\"). Use grep for exact symbols, strings, or regex. Use glob for filename/path patterns. Prefer explore_codebase with parallel queries for wide multi-angle searches; merge results before editing once.",
+    "If codebase_search returns mode=grep with a note (embedder down or embeddings warming), treat empty results as inconclusive: retry with grep/glob on tighter terms, or retry semantic search after the index warms. Never claim a symbol is absent from an empty soft-fail alone.",
     "Prefer parallel reads when exploring unrelated areas in one turn.",
-    "Tool budget: prefer grep/codebase_search before read_file; batch reads; avoid re-reading unchanged files.",
+    "Tool budget: prefer codebase_search/grep before read_file; batch reads; avoid re-reading unchanged files.",
     "Tier 2 plugins: after use_skill('plugin-authoring'), prefer scaffold_plugin or edit under plugins/<id>/ over long host-repo archaeology. Cap explore tools before the first write (about five). Do not web_search for shadcn primitives that are not in the coding root.",
     "Never guess file paths, symbol names, or API shapes - verify in the repo.",
     "Read surrounding code before writing; match existing naming, imports, types, and abstractions.",
@@ -136,7 +137,7 @@ export function getNativeCodingHarnessExtension(): string {
     "<agent_loop>",
     "Operate in a read → act → verify loop until the task is done (same pattern as Cursor Agent / Pi / Claude Code):",
     "1. Understand the goal from conversation history and platform context.",
-    "2. Explore with grep/glob/read_file (parallel when independent). For new plugins, skip straight to scaffold after the skill.",
+    "2. Explore with codebase_search (NL) or grep/glob/read_file (exact). Parallel when independent. For new plugins, skip straight to scaffold after the skill.",
     "3. Plan multi-step work with todo_write before destructive or long execution chains.",
     "4. Edit with edit_file/write_file under plugins/<id>/; build_plugin then install_plugin.",
     "5. Verify with run_terminal and working-surface checks (Structure pages resolve, primary CTAs have handlers, create/list works when asked); fix failures before reporting completion.",
@@ -201,4 +202,4 @@ export function getHarnessPromptForTenant(
 }
 
 /** Harness version stamp for debugging prompt drift. */
-export const HARNESS_VERSION = "cursor-parity-v5";
+export const HARNESS_VERSION = "cursor-parity-v6";
