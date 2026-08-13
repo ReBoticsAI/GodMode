@@ -1,5 +1,5 @@
 /**
- * AST chunker + hybrid codebase search (#69 A+B).
+ * AST chunker + hybrid codebase search (#69 / #447).
  */
 import Database from "better-sqlite3";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -8,9 +8,18 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AppDatabase } from "../../db.js";
 import { chunkSourceFile } from "../coding/code-chunker.js";
-import { syncCodeIndex, searchCodeChunks, walkFiles } from "../coding/code-index.js";
-import { codebaseSearch } from "../coding/codebase-search.js";
+import {
+  getCodeIndexStats,
+  syncCodeIndex,
+  searchCodeChunks,
+  walkFiles,
+} from "../coding/code-index.js";
+import {
+  codebaseSearch,
+  extractSearchKeywords,
+} from "../coding/codebase-search.js";
 import { cosineSimilarity, l2normalize } from "../embeddings/embedding-client.js";
+import { getNativeCodingHarnessExtension } from "../harness-prompt.js";
 
 const temps: string[] = [];
 
@@ -142,8 +151,25 @@ describe("syncCodeIndex", () => {
   }, 60_000);
 });
 
+describe("extractSearchKeywords", () => {
+  it("drops NL stopwords and keeps meaningful tokens", () => {
+    const terms = extractSearchKeywords(
+      "Where is chat compaction handled in the codebase?"
+    );
+    expect(terms.map((t) => t.toLowerCase())).toEqual(
+      expect.arrayContaining(["chat", "compaction"])
+    );
+    expect(terms.map((t) => t.toLowerCase())).not.toContain("where");
+    expect(terms.map((t) => t.toLowerCase())).not.toContain("handled");
+  });
+
+  it("preserves camelCase symbols as a single term", () => {
+    expect(extractSearchKeywords("syncCodeIndex")).toEqual(["syncCodeIndex"]);
+  });
+});
+
 describe("codebaseSearch hybrid", () => {
-  it("returns grep mode without embedder", async () => {
+  it("returns grep mode without embedder and soft-fail metadata", async () => {
     const root = tempRoot();
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(
@@ -156,19 +182,45 @@ describe("codebaseSearch hybrid", () => {
       root,
     });
     expect(res.mode).toBe("grep");
+    expect(res.fallbackReason).toBe("embedder_unavailable");
+    expect(res.index.status).toBe("unavailable");
+    expect(res.note).toMatch(/Soft-fail|embedder|Grep-only/i);
+    expect(res.keywords).toContain("validateAuthToken");
     expect(res.results.length).toBeGreaterThanOrEqual(0);
-    // Grep engines vary; when matches exist they should reference the file.
     if (res.results.length > 0) {
-      expect(res.results.some((r) => /auth\.ts|validateAuthToken/.test(r.path + r.snippet))).toBe(
-        true
-      );
+      expect(
+        res.results.some((r) =>
+          /auth\.ts|validateAuthToken/.test(r.path + r.snippet)
+        )
+      ).toBe(true);
     }
+  });
+
+  it("marks empty soft-fail as inconclusive, not proven absence", async () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "a.ts"), "export const x = 1;\n", "utf8");
+    const res = await codebaseSearch({
+      query: "definitelyMissingSymbolZzz999",
+      root,
+    });
+    expect(res.mode).toBe("grep");
+    expect(res.fallbackReason).toBe("embedder_unavailable");
+    expect(res.results).toEqual([]);
+    expect(res.note).toMatch(/do not prove|absent|Empty results/i);
   });
 
   it("ranks vector hits ahead via RRF when present", () => {
     const a = l2normalize(Float32Array.from([1, 0, 0]));
     const b = l2normalize(Float32Array.from([0.9, 0.1, 0]));
     expect(cosineSimilarity(a, b)).toBeGreaterThan(0.8);
+  });
+});
+
+describe("getCodeIndexStats", () => {
+  it("returns null for an unscanned root", () => {
+    const db = openDb();
+    expect(getCodeIndexStats(db, "/tmp/none-root")).toBeNull();
   });
 });
 
@@ -180,5 +232,15 @@ describe("searchCodeChunks", () => {
       queryVec: l2normalize(Float32Array.from([1, 0, 0])),
     });
     expect(hits).toEqual([]);
+  });
+});
+
+describe("harness search routing (#447)", () => {
+  it("documents codebase_search vs grep routing and soft-fail honesty", () => {
+    const text = getNativeCodingHarnessExtension();
+    expect(text).toMatch(/codebase_search/);
+    expect(text).toMatch(/natural-language/);
+    expect(text).toMatch(/soft-fail|inconclusive|warming/i);
+    expect(text).toMatch(/\bgrep\b/);
   });
 });

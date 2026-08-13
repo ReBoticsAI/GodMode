@@ -60,6 +60,80 @@ export interface CodeChunkHit {
   score: number;
 }
 
+/** Snapshot of code index readiness for a coding root (search transparency). */
+export interface CodeIndexStats {
+  rootId: string;
+  rootPath: string;
+  fingerprint: string;
+  filesScanned: number;
+  chunksTotal: number;
+  chunksEmbedded: number;
+  updatedAt: string | null;
+}
+
+async function embedPendingChunks(
+  db: AppDatabase,
+  opts: {
+    rootId: string;
+    embedder?: EmbeddingClient | null;
+    tenantId?: string | null;
+  }
+): Promise<number> {
+  const pending = db
+    .prepare(
+      `SELECT id, text FROM code_chunks
+       WHERE root_id = ? AND embedding IS NULL
+       LIMIT 256`
+    )
+    .all(opts.rootId) as Array<{ id: string; text: string }>;
+  if (pending.length === 0) return 0;
+
+  const profile = resolveEmbedProfile("code");
+  const modelId = embedProfileModelId(profile);
+  let embedded = 0;
+
+  if (isEmbedQueueEnabled()) {
+    for (const item of pending) {
+      const jobId = enqueueEmbedJob({
+        tenantId: opts.tenantId ?? "",
+        profile: "code",
+        lane: "backfill",
+        targetKind: "code_chunk",
+        targetId: item.id,
+        text: item.text,
+        extra: { modelId },
+      });
+      if (jobId) embedded++;
+    }
+    return embedded;
+  }
+
+  const embedder = opts.embedder;
+  if (!embedder?.isReady()) return 0;
+
+  const batchSize = 16;
+  for (let i = 0; i < pending.length; i += batchSize) {
+    const batch = pending.slice(i, i + batchSize);
+    const vectors = await embedder.embedBatch(
+      batch.map((b) => b.text),
+      { profile: "code" }
+    );
+    if (!vectors) break;
+    for (let j = 0; j < batch.length; j++) {
+      const vec = vectors[j];
+      if (!vec) continue;
+      db.prepare(
+        `UPDATE code_chunks
+         SET embedding = ?, embedding_dim = ?, model_id = ?, updated_at = datetime('now')
+         WHERE id = ?`
+      ).run(vectorToBlob(vec), vec.length, modelId, batch[j].id);
+      embedded++;
+    }
+  }
+  if (embedded > 0) scheduleAnnInvalidate(`code:${opts.rootId}`);
+  return embedded;
+}
+
 function rootIdFor(rootPath: string): string {
   return createHash("sha256").update(rootPath).digest("hex").slice(0, 16);
 }
@@ -159,6 +233,13 @@ export async function syncCodeIndex(
       .prepare(`SELECT fingerprint FROM code_index_roots WHERE id = ?`)
       .get(rootId) as { fingerprint: string } | undefined;
     if (!opts.force && prev?.fingerprint === fingerprint) {
+      // Fingerprint match means files are current, but embeddings may still be NULL
+      // (queue lag or prior soft-fail). Backfill pending so search stays fresh.
+      await embedPendingChunks(db, {
+        rootId,
+        embedder: opts.embedder,
+        tenantId: opts.tenantId,
+      });
       const counts = db
         .prepare(
           `SELECT COUNT(*) AS n,
@@ -318,6 +399,44 @@ export async function syncCodeIndex(
     return await run;
   } finally {
     INDEX_LOCK.delete(lockKey);
+  }
+}
+
+/** Read code index coverage for a root without mutating the index. */
+export function getCodeIndexStats(
+  db: AppDatabase,
+  rootPath: string
+): CodeIndexStats | null {
+  const resolved = path.resolve(rootPath);
+  const rootId = rootIdFor(resolved);
+  try {
+    const root = db
+      .prepare(
+        `SELECT fingerprint, updated_at FROM code_index_roots WHERE id = ?`
+      )
+      .get(rootId) as
+      | { fingerprint: string; updated_at: string }
+      | undefined;
+    if (!root) return null;
+    const counts = db
+      .prepare(
+        `SELECT COUNT(*) AS n,
+                SUM(CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END) AS e,
+                COUNT(DISTINCT path) AS files
+         FROM code_chunks WHERE root_id = ?`
+      )
+      .get(rootId) as { n: number; e: number | null; files: number };
+    return {
+      rootId,
+      rootPath: resolved,
+      fingerprint: root.fingerprint,
+      filesScanned: Number(counts.files ?? 0),
+      chunksTotal: Number(counts.n ?? 0),
+      chunksEmbedded: Number(counts.e ?? 0),
+      updatedAt: root.updated_at ?? null,
+    };
+  } catch {
+    return null;
   }
 }
 

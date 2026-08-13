@@ -52,7 +52,7 @@ describe("prompt-assembler Cursor heading order", () => {
     expect(wiki).toBeLessThan(caps);
     expect(caps).toBeLessThan(tasks);
     expect(tasks).toBeLessThan(stamp);
-    expect(HARNESS_VERSION).toBe("cursor-parity-v5");
+    expect(HARNESS_VERSION).toBe("cursor-parity-v6");
   });
 
   it("migrates stale prompt-flow orders while preserving enabled=false", () => {

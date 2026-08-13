@@ -1043,13 +1043,17 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "codebase_search",
     description:
-      "Hybrid codebase search: semantic code-chunk vectors (when the code embedding profile is ready) fused with ripgrep path ranking. Falls back to grep-only without embeddings. Prefer this over raw grep for exploratory questions.",
+      "Hybrid semantic codebase search for natural-language questions (where/how is X handled?). Fuses code-chunk vectors with ripgrep when the code embedder is ready; soft-fails to grep-only with an explicit note when embeddings are down or warming. Empty results in soft-fail mode are inconclusive. Prefer this for exploratory NL queries; use grep for exact symbols/regex and glob for path patterns.",
     mode: "auto",
     category: "coding",
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string" },
+        query: {
+          type: "string",
+          description:
+            "Natural-language or symbol query (e.g. \"where is chat compaction handled?\")",
+        },
         path: { type: "string" },
         glob: { type: "string" },
         limit: { type: "number" },
