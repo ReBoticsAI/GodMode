@@ -155,23 +155,54 @@ function repairPersonalTenantKnowledge(db: AppDatabase): void {
   removeLeakedPersonalSkills(db);
 }
 
+/**
+ * Merge registry defaults into an existing Intelligence allowlist.
+ * Adds newly registered personal tools; strips trading/excluded tools.
+ * Does not remove intentionally kept names that are still valid.
+ */
+export function mergeIntelligenceToolAllowWithRegistry(
+  existing: string[]
+): string[] {
+  const merged = new Set(
+    existing.filter((name) => name && !isPersonalExcludedTool(name))
+  );
+  for (const name of personalIntelligenceToolNames()) {
+    if (!isPersonalExcludedTool(name)) merged.add(name);
+  }
+  return [...merged].sort();
+}
+
 function intelligenceToolAllowNeedsRepair(db: AppDatabase): boolean {
   const intel = getAgent(db, "intelligence");
   if (!intel) return false;
   const allow = intel.toolAllow;
+  // null → seed full defaults. [] → explicit lockdown; leave alone.
   if (allow === null || allow === undefined) return true;
-  return allow.some((name) => isPersonalExcludedTool(name));
+  if (allow.length === 0) return false;
+  if (allow.some((name) => isPersonalExcludedTool(name))) return true;
+  // Stale snapshot: registry grew (e.g. git_clone) but agent allowlist did not.
+  const defaults = personalIntelligenceToolNames();
+  return defaults.some((name) => !allow.includes(name));
 }
 
 /** Full personal-tenant defaults repair: knowledge, tools, bootstrap sync. */
 export function repairPersonalTenantDefaults(db: AppDatabase): void {
   if (isOperatorTenantDb(db)) return;
   repairPersonalTenantKnowledge(db);
-  if (intelligenceToolAllowNeedsRepair(db)) {
+  if (!intelligenceToolAllowNeedsRepair(db)) return;
+  const intel = getAgent(db, "intelligence");
+  if (!intel) return;
+  const allow = intel.toolAllow;
+  if (allow === null || allow === undefined) {
     updateAgent(db, "intelligence", {
       toolAllow: personalIntelligenceToolNames(),
     });
+    return;
   }
+  if (allow.length === 0) return;
+  updateAgent(db, "intelligence", {
+    toolAllow: mergeIntelligenceToolAllowWithRegistry(allow),
+  });
 }
 
 export function syncPersonalBootstrapKnowledge(db: AppDatabase): void {
