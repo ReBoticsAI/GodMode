@@ -1631,8 +1631,14 @@ export function createAiRouter(
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
 
+    let lastSseWriteAt = Date.now();
     const send = (event: string, data: unknown) => {
+      if (res.writableEnded || res.destroyed) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      lastSseWriteAt = Date.now();
+      // SSE heartbeats / tokens must leave Node promptly; otherwise nginx or
+      // Cloudflare can treat a quiet stream as idle and drop it ("network error").
+      (res as { flush?: () => void }).flush?.();
     };
 
     send("chat_id", { chatId: activeChatId });
@@ -1665,12 +1671,20 @@ export function createAiRouter(
     let fullContent = "";
     let reasoningRaw = "";
     let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-    let sawStreamActivity = false;
     const markStreamActivity = () => {
-      sawStreamActivity = true;
+      lastSseWriteAt = Date.now();
     };
+    /**
+     * Keep the SSE socket alive for the whole turn: Cursor waits, tool confirms,
+     * and quiet stretches after the first token. Stopping heartbeats after the
+     * first token left confirm-gated tools (git_clone) exposed to the 60s
+     * nginx default and showed up as "network error" in Chat.
+     */
     const statusHeartbeat = setInterval(() => {
-      if (abortController.signal.aborted || sawStreamActivity) return;
+      if (abortController.signal.aborted || res.writableEnded || res.destroyed) {
+        return;
+      }
+      if (Date.now() - lastSseWriteAt < 3500) return;
       send("status", {
         phase: "waiting",
         message:
@@ -1820,20 +1834,17 @@ export function createAiRouter(
           maxIterations: harnessProfile.maxChatIterations,
           onToken: (chunk) => {
             markStreamActivity();
-            clearInterval(statusHeartbeat);
             streamed += chunk;
             segRaw += chunk;
             send("token", { content: chunk });
           },
           onReasoning: (chunk) => {
             markStreamActivity();
-            clearInterval(statusHeartbeat);
             partReasoning(chunk);
             send("reasoning", { content: chunk });
           },
           onToolCall: (name, args, toolCallId) => {
             markStreamActivity();
-            clearInterval(statusHeartbeat);
             partToolCall(name, args, toolCallId);
             send("tool_call", { toolCallId, name, args });
           },
