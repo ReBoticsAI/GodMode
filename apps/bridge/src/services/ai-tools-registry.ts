@@ -1193,7 +1193,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "git_push",
     description:
-      "Push the current (or named) branch to an existing HTTPS remote. Never force-pushes. Always requires confirmation, including full autonomy. PR create is a separate host connector / Official GitHub plugin tool.",
+      "Push the current (or named) branch to an existing HTTPS remote. Never force-pushes. Always requires confirmation, including full autonomy. For github.com HTTPS remotes, uses Vault GitHub Connect when connected. Open a review with github_pr_create after push.",
     mode: "confirm",
     category: "coding",
     write: true,
@@ -1203,6 +1203,57 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         remote: { type: "string", description: "Remote name (default origin)" },
         branch: { type: "string", description: "Branch to push (default current)" },
       },
+    },
+  },
+  {
+    name: "git_clone",
+    description:
+      "Clone an https://github.com/owner/repo repository into the coding root using Vault GitHub Connect. Always requires confirmation. Does not support SSH remotes.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "https://github.com/owner/repo URL",
+        },
+        directory: {
+          type: "string",
+          description: "Single folder name under the coding root (default: repo name)",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "github_pr_create",
+    description:
+      "Open a GitHub pull request for the coding-root remote using Vault GitHub Connect. Always requires confirmation. Strip Cursor Co-authored-by / Made-with trailers from title and body. Prefer after git_push.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        body: { type: "string" },
+        head: {
+          type: "string",
+          description: "Head branch (default: current branch)",
+        },
+        base: {
+          type: "string",
+          description: "Base branch (default: main)",
+        },
+        remote: {
+          type: "string",
+          description: "Remote name used to resolve owner/repo (default origin)",
+        },
+        draft: { type: "boolean" },
+      },
+      required: ["title"],
     },
   },
   {
@@ -1943,6 +1994,8 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "git_add",
   "git_commit",
   "git_push",
+  "git_clone",
+  "github_pr_create",
   "delete_file",
   "run_terminal",
   "terminal_session_create",
@@ -1976,6 +2029,8 @@ const CODING_WRITE_TOOLS = new Set([
   "git_add",
   "git_commit",
   "git_push",
+  "git_clone",
+  "github_pr_create",
   "scaffold_plugin",
   "coding_worktree_create",
   "coding_worktree_discard",

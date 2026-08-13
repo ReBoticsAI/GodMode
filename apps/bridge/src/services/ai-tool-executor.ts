@@ -104,12 +104,22 @@ import { runTerminal } from "./coding/terminal-service.js";
 import {
   gitAdd,
   gitCheckout,
+  gitClone,
   gitCommit,
   gitCreateBranch,
   gitDiff,
   gitPush,
+  gitRemoteHttpsUrl,
   gitStatus,
 } from "./coding/git-tools.js";
+import {
+  createGithubPullRequest,
+  resolveGithubRemoteFromUrl,
+} from "./coding/github-pr.js";
+import {
+  parseGithubHttpsRemote,
+  resolveCodingGithubAccessToken,
+} from "./coding/git-host-auth.js";
 import {
   assertCodingHooksAllow,
   codingHookExecutionEnabled,
@@ -2642,18 +2652,135 @@ export async function executeTool(
     }
 
     case "git_push": {
-      const res = await gitPush({
+      let githubAccessToken: string | null = null;
+      const remoteName = args.remote ? String(args.remote) : "origin";
+      try {
+        const remoteUrl = gitRemoteHttpsUrl({
+          ...codingFsOpts(ctx),
+          remote: remoteName,
+        });
+        if (parseGithubHttpsRemote(remoteUrl) && ctx.userId) {
+          const ownerDb = getUserOwnerTenantDb(ctx.userId);
+          githubAccessToken = await resolveCodingGithubAccessToken(ownerDb);
+        }
+      } catch {
+        /* host credentials fallback for non-Connect or missing remote */
+      }
+      try {
+        const res = await gitPush({
+          ...codingFsOpts(ctx),
+          remote: args.remote ? String(args.remote) : undefined,
+          branch: args.branch ? String(args.branch) : undefined,
+          force: args.force,
+          githubAccessToken,
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "git_push",
+          result: res.ok ? "ok" : "error",
+        });
+        return res;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        if (ctx.userId) {
+          createNotification({
+            recipientKind: "user",
+            recipientId: ctx.userId,
+            recipientTenantId: ctx.tenantId ?? null,
+            category: "coding_git",
+            title: "Git push failed",
+            body: detail.slice(0, 500),
+            link: "/coding",
+          });
+        }
+        throw err;
+      }
+    }
+
+    case "git_clone": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const githubAccessToken = await resolveCodingGithubAccessToken(ownerDb);
+      try {
+        const res = await gitClone({
+          ...codingFsOpts(ctx),
+          url: String(args.url ?? ""),
+          directory: args.directory ? String(args.directory) : undefined,
+          githubAccessToken,
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "git_clone",
+          result: "ok",
+        });
+        return res;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "Git clone failed",
+          body: detail.slice(0, 500),
+          link: "/coding",
+        });
+        throw err;
+      }
+    }
+
+    case "github_pr_create": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      const status = gitStatus(codingFsOpts(ctx));
+      const remoteUrl = gitRemoteHttpsUrl({
         ...codingFsOpts(ctx),
-        remote: args.remote ? String(args.remote) : undefined,
-        branch: args.branch ? String(args.branch) : undefined,
-        force: args.force,
+        remote: args.remote ? String(args.remote) : "origin",
       });
-      logToolAudit(ctx.db, {
-        ...auditCtx(ctx),
-        action: "git_push",
-        result: res.ok ? "ok" : "error",
-      });
-      return res;
+      const remote = resolveGithubRemoteFromUrl(remoteUrl);
+      const head = String(args.head ?? status.branch).trim() || status.branch;
+      try {
+        const res = await createGithubPullRequest({
+          accessToken,
+          owner: remote.owner,
+          repo: remote.repo,
+          title: String(args.title ?? ""),
+          body: args.body != null ? String(args.body) : undefined,
+          head,
+          base: args.base ? String(args.base) : "main",
+          draft: args.draft === true,
+        });
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: `Pull request #${res.number} opened`,
+          body: res.title.slice(0, 200),
+          link: res.htmlUrl,
+          resourceKind: "github_pr",
+          resourceId: String(res.number),
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_pr_create",
+          result: "ok",
+        });
+        return res;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "Pull request failed",
+          body: detail.slice(0, 500),
+          link: "/coding",
+        });
+        throw err;
+      }
     }
 
     case "explore_codebase": {

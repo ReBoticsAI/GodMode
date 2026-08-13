@@ -120,7 +120,7 @@ See [AGENT_MEMORY.md](./AGENT_MEMORY.md) and [CONFIGURATION.md](./CONFIGURATION.
 2. Ask Intelligence to `git_status` on the coding root
 3. Small edit → `git_branch` (throwaway) → `git_diff` → `git_add` → `git_commit` (confirm shows diff) → `git_push` if an HTTPS remote already exists (confirm; deny force-push)
 4. Deny a push confirm once and confirm the push does not run
-5. Optional: Official GitHub plugin `gh_pr_create` for a host review request (not required for core)
+5. Optional: with Vault GitHub Connect linked, `github_pr_create` opens a host review request (Attention shows the PR link or failure)
 
 See [coding-stage](./features/coding-stage.md) and [git-github-plugins](./features/git-github-plugins.md).
 

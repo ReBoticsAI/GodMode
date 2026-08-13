@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   gitAdd,
   gitCheckout,
+  gitClone,
   gitCommit,
   gitCreateBranch,
   gitDiff,
@@ -82,6 +83,31 @@ describe("git-tools (#443)", () => {
       gitPush({ root, remote: "origin", force: true })
     ).rejects.toThrow(/force-push/i);
     expect(() => gitCreateBranch({ root, name: "-evil" })).toThrow(/invalid/);
+  });
+
+  it("git_clone rejects non-github URLs and nested directories", async () => {
+    const root = initRepo();
+    await expect(
+      gitClone({
+        root,
+        url: "https://gitlab.com/acme/widget.git",
+        githubAccessToken: "tok",
+      })
+    ).rejects.toThrow(/github\.com/i);
+    await expect(
+      gitClone({
+        root,
+        url: "https://github.com/acme/widget.git",
+        directory: "nested/path",
+        githubAccessToken: "tok",
+      })
+    ).rejects.toThrow(/single path segment/i);
+    await expect(
+      gitClone({
+        root,
+        url: "https://github.com/acme/widget.git",
+      })
+    ).rejects.toThrow(/Connect GitHub/i);
   });
 
   it("refuses paths that escape the coding root", () => {

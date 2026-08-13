@@ -22,6 +22,8 @@ const EXPLORE_BLOCKED = new Set([
   "git_add",
   "git_commit",
   "git_push",
+  "git_clone",
+  "github_pr_create",
   "revert_file",
 ]);
 

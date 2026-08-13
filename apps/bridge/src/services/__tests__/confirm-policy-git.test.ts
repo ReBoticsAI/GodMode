@@ -48,4 +48,17 @@ describe("confirm-policy git_push", () => {
     );
     expect(ok).toBe(true);
   });
+
+  it("does not auto-approve git_clone or github_pr_create under full autonomy", async () => {
+    for (const name of ["git_clone", "github_pr_create"] as const) {
+      const ok = await shouldAutoApproveTool(
+        agent(),
+        name,
+        async () => false,
+        { toolCallId: "t1", name, args: {} },
+        "full"
+      );
+      expect(ok).toBe(false);
+    }
+  });
 });

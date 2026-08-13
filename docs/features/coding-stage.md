@@ -15,7 +15,7 @@ The Coding page (`/coding`) is the human surface for the same sandboxed coding r
 - **Git:** branch, dirty/ahead summary, and unstaged diff. Refresh after agent edits.
 - **Terminal:** sandboxed one-shot commands and shared PTY sessions (when policy allows).
 
-Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, `git_branch`, `git_checkout`, `git_add`, `git_commit`, `git_push`. Commit and push show a confirm preview. Push never auto-approves, including full autonomy, and never force-pushes.
+Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, `git_branch`, `git_checkout`, `git_add`, `git_commit`, `git_push`, plus `git_clone` and `github_pr_create` when Vault GitHub Connect is linked. Commit, push, clone, and PR create show a confirm preview. Push never auto-approves, including full autonomy, and never force-pushes.
 
 For wide questions, `explore_coding` (or `delegate_to_subagent` with `mode=explore`) returns a read-only handoff. The parent implements edits under Authority. Explore timeouts land in Attention.
 
@@ -25,7 +25,7 @@ Automations can gate coding with event types `coding.file.before` / `coding.shel
 
 ## What is not here
 
-- GodMode is not a git forge. Host clone/auth and review-request tools stay on Official git-host connectors or plugins.
-- SSH remotes (`git@`) are not the SaaS default. Prefer HTTPS remotes with credentials already on the host.
+- GodMode is not a git forge. Host auth and review requests use Vault **Connect GitHub** (same token as Projects sync) for github.com HTTPS remotes.
+- SSH remotes (`git@`) are not the SaaS default. Prefer HTTPS remotes with Connect or credentials already on the host.
 
 See [[plugin-pipeline]] and [[git-github-plugins]].

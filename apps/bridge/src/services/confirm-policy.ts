@@ -11,6 +11,8 @@ const NEVER_AUTO_APPROVE = new Set([
   "flatten_playbook",
   "deploy_playbook",
   "git_push",
+  "git_clone",
+  "github_pr_create",
 ]);
 
 export interface ConfirmPayload {

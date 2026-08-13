@@ -88,8 +88,9 @@ export function GithubConnectCard() {
           Connect GitHub
         </CardTitle>
         <CardDescription>
-          One GitHub App connection for Projects sync (and the same App powers
-          sign-in on this host). Install on the account that owns your Projects.
+          One GitHub App connection for Projects sync, coding clone/push, and
+          opening pull requests (and the same App powers sign-in on this host).
+          Install on the account that owns your Projects and repos.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -103,7 +104,8 @@ export function GithubConnectCard() {
               {status.installationId
                 ? ` (install #${status.installationId})`
                 : null}
-              . Open Tasks → Board settings to link a Project.
+              . Open Tasks → Board settings to link a Project. Coding agents use
+              the same connection for github.com clone, push, and pull requests.
             </p>
             {!status.installationId ? (
               <div className="flex flex-col gap-2">
