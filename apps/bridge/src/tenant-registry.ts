@@ -1,15 +1,44 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import Database from "better-sqlite3";
 import { config } from "./config.js";
 import { migrateTenantDb, type AppDatabase } from "./db.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
-import { ensureTenantKindMeta } from "./services/tenant-kind.js";
+import { ensureTenantKindMeta, isOperatorTenantDb } from "./services/tenant-kind.js";
 import { seedDomainSkills } from "./services/ai-skills.js";
 import { getCloudDb } from "./core-db.js";
 import { migrateWikiFromCloud } from "./services/wiki-workspace-migrate.js";
 import { migrateHooksFromCloud } from "./services/hooks-workspace-migrate.js";
 import { migratePlatformEventsFromCloud } from "./services/platform-events-workspace-migrate.js";
+
+const require = createRequire(import.meta.url);
+
+/** Once per open DB handle (process lifetime / until eviction). */
+const personalRepaired = new WeakSet<AppDatabase>();
+
+/**
+ * Personal toolAllow / bootstrap repair on every getTenantDb open.
+ * Lazy require avoids a cycle: tenant-registry → personal-os-seed →
+ * knowledge-store → agents-db → tenant-registry.
+ */
+function repairPersonalTenantIfNeeded(db: AppDatabase): void {
+  try {
+    if (personalRepaired.has(db)) return;
+    if (isOperatorTenantDb(db)) {
+      personalRepaired.add(db);
+      return;
+    }
+    const { repairPersonalOsTenant } = require("./services/personal-os-seed.js") as typeof import("./services/personal-os-seed.js");
+    repairPersonalOsTenant(db);
+    personalRepaired.add(db);
+  } catch (err) {
+    console.warn(
+      "[tenant] personal toolAllow repair failed:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
 
 interface CachedTenant {
   db: AppDatabase;
@@ -109,6 +138,7 @@ export function getTenantDb(tenantId: string): AppDatabase {
         err instanceof Error ? err.message : err
       );
     }
+    repairPersonalTenantIfNeeded(existing.db);
     return existing.db;
   }
 
@@ -155,6 +185,7 @@ export function getTenantDb(tenantId: string): AppDatabase {
   cache.set(tenantId, { db, lastAccess: Date.now() });
   evictIfNeeded();
   ensureIdleTimer();
+  repairPersonalTenantIfNeeded(db);
   return db;
 }
 
