@@ -20,11 +20,33 @@ import {
 } from "../coding/mcp-host.js";
 
 const temps: string[] = [];
+const repoRoot = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+  ".."
+);
 const fixtureServer = join(
   dirname(fileURLToPath(import.meta.url)),
   "fixtures",
-  "tiny-mcp-server.ts"
+  "tiny-mcp-server.mjs"
 );
+
+function tinyStdioServer(): {
+  type: "stdio";
+  command: string;
+  args: string[];
+  cwd: string;
+} {
+  return {
+    type: "stdio",
+    command: process.execPath,
+    args: [fixtureServer],
+    cwd: repoRoot,
+  };
+}
 
 afterEach(async () => {
   await resetBridgeMcpHostForTests();
@@ -103,11 +125,7 @@ describe("ensureBridgeMcpHost stdio", () => {
     const root = tempRoot();
     writeMcpJson(root, {
       mcpServers: {
-        tiny: {
-          type: "stdio",
-          command: process.execPath,
-          args: ["--import", "tsx", fixtureServer],
-        },
+        tiny: tinyStdioServer(),
       },
     });
 
@@ -147,11 +165,7 @@ describe("ensureBridgeMcpHost stdio", () => {
     const root = tempRoot();
     writeMcpJson(root, {
       mcpServers: {
-        tiny: {
-          type: "stdio",
-          command: process.execPath,
-          args: ["--import", "tsx", fixtureServer],
-        },
+        tiny: tinyStdioServer(),
       },
     });
 
@@ -179,9 +193,7 @@ describe("ensureBridgeMcpHost stdio", () => {
     writeMcpJson(root, {
       mcpServers: {
         tiny: {
-          type: "stdio",
-          command: process.execPath,
-          args: ["--import", "tsx", fixtureServer],
+          ...tinyStdioServer(),
           env: { DEMO_TOKEN: "vault:demo_token" },
         },
       },

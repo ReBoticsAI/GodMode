@@ -1,6 +1,6 @@
 /**
- * Minimal stdio MCP server for Bridge host tests.
- * Usage: node --import tsx path/to/tiny-mcp-server.ts
+ * Minimal stdio MCP server for Bridge host tests (plain ESM, no tsx).
+ * Usage: node path/to/tiny-mcp-server.mjs
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

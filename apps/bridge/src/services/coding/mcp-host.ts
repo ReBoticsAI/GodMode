@@ -8,7 +8,10 @@
  * prefixed with `vault:` or `{{vault:…}}` resolve via the supplied Vault callback.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  StdioClientTransport,
+  getDefaultEnvironment,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -185,10 +188,23 @@ async function connectStdio(
   envResolved: Record<string, string> | undefined,
   codingRoot: string
 ): Promise<{ client: Client; transport: Transport }> {
+  // Merge defaults always so custom env (e.g. vault tokens) does not drop PATH.
+  // Prefer coding-root as cwd so relative server paths resolve; keep Bridge
+  // node_modules on NODE_PATH so `node --import tsx` still resolves.
+  const defaults = getDefaultEnvironment();
+  const bridgeNodeModules = `${process.cwd()}${process.platform === "win32" ? "\\" : "/"}node_modules`;
+  const nodePath = [bridgeNodeModules, defaults.NODE_PATH, process.env.NODE_PATH]
+    .filter(Boolean)
+    .join(process.platform === "win32" ? ";" : ":");
+  const env = {
+    ...defaults,
+    ...(envResolved ?? {}),
+    NODE_PATH: nodePath,
+  };
   const transport = new StdioClientTransport({
     command: cfg.command,
     args: cfg.args,
-    env: envResolved,
+    env,
     cwd: cfg.cwd?.trim() || codingRoot,
     stderr: "pipe",
   });
