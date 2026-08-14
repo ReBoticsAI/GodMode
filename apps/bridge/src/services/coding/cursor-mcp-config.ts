@@ -18,7 +18,8 @@ export const MAX_SDK_MCP_SERVERS = 8;
 export type McpDiscoveryExecution =
   | "discovery-only"
   | "sdk-project"
-  | "sdk-inline";
+  | "sdk-inline"
+  | "bridge-host";
 
 /** SDK-compatible MCP server config (stdio or http/sse). */
 export type CursorSdkMcpServerConfig =
@@ -236,6 +237,9 @@ function executionNote(execution: McpDiscoveryExecution): string {
   if (execution === "sdk-project") {
     return "available via Cursor SDK project settings";
   }
+  if (execution === "bridge-host") {
+    return "hosted by Bridge MCP (local/provider backends)";
+  }
   return "discovery only (not executed by Bridge)";
 }
 
@@ -255,7 +259,8 @@ export function resolveMcpFromWorkspace(
 /**
  * How the MCP Page Context line should describe availability for this agent.
  * cursor_cloud with inline gate → sdk-inline; otherwise cursor_cloud with
- * project settingSources → sdk-project; else discovery-only.
+ * project settingSources → sdk-project; non-SDK with host gate → bridge-host;
+ * else discovery-only.
  */
 export function resolveMcpDiscoveryExecution(args: {
   backend?: string | null;
@@ -265,7 +270,9 @@ export function resolveMcpDiscoveryExecution(args: {
   if (args.backend === "cursor_cloud") {
     if (args.mcpFromWorkspace) return "sdk-inline";
     if (args.hasProjectSettingSources) return "sdk-project";
+    return "discovery-only";
   }
+  if (args.backend && args.mcpFromWorkspace) return "bridge-host";
   return "discovery-only";
 }
 

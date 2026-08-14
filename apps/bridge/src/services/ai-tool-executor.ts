@@ -27,6 +27,10 @@ import {
   summarizePrChecks,
 } from "./github-pr-ci.js";
 import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
+import {
+  executeBridgeMcpTool,
+  isBridgeMcpToolName,
+} from "./coding/mcp-host.js";
 import type { LlmManager } from "./llm-manager.js";
 import { runSubagent } from "./agents/runner.js";
 import { runBoundedSubagentDelegation } from "./agents/subagent-bounds.js";
@@ -856,6 +860,9 @@ async function executeStaticKernelAlias(
 function toolMode(name: string): "auto" | "confirm" | null {
   const core = AI_TOOL_REGISTRY.find((t) => t.name === name);
   if (core) return core.mode;
+  // MCP tools require confirm unless the model already got a readOnlyHint
+  // schema (auto). requiresConfirmation only has the name, so default confirm.
+  if (isBridgeMcpToolName(name)) return "confirm";
   if (isKernelToolName(name)) {
     if (
       name.startsWith("create_") ||
@@ -1297,6 +1304,15 @@ export async function executeTool(
     throw new Error(
       `Explore sub-run cannot call ${name}. Return findings to the parent for implementation.`
     );
+  }
+  if (isBridgeMcpToolName(name)) {
+    if (!ctx.activeAgentId) {
+      throw new Error("MCP tools require an active agent");
+    }
+    return executeBridgeMcpTool(name, args, {
+      agentId: ctx.activeAgentId,
+      tenantId: ctx.tenantId,
+    });
   }
   if (
     isPluginToolName(name) &&

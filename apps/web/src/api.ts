@@ -822,6 +822,9 @@ export interface AiMcpServerStatus {
   transport: "stdio" | "http" | "sse" | "unknown";
   detail?: string;
   enabled: boolean;
+  hostOk?: boolean | null;
+  hostToolCount?: number | null;
+  hostError?: string | null;
 }
 
 export interface AiMcpStatus {
@@ -829,6 +832,7 @@ export interface AiMcpStatus {
   sourcePath: string | null;
   summary: string | null;
   mcpFromWorkspace: boolean;
+  host?: "sdk" | "bridge";
   backend: string | null;
   settingSources: string[];
   projectInstructions: "sdk" | "knowledge" | "none";

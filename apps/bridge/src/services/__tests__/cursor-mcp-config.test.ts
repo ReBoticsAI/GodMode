@@ -198,6 +198,21 @@ describe("resolveMcpDiscoveryExecution", () => {
       "discovery-only"
     );
   });
+
+  it("labels bridge-host for local backends when enabled", () => {
+    expect(
+      resolveMcpDiscoveryExecution({
+        backend: "local",
+        mcpFromWorkspace: true,
+      })
+    ).toBe("bridge-host");
+    expect(
+      resolveMcpDiscoveryExecution({
+        backend: "provider",
+        mcpFromWorkspace: true,
+      })
+    ).toBe("bridge-host");
+  });
 });
 
 describe("cursorMcpServersFingerprint", () => {

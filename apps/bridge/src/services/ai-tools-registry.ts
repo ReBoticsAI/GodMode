@@ -11,6 +11,7 @@ import {
   objectTypeAutoToolDefs,
 } from "../kernel/auto-tools.js";
 import { pageKindJsonSchema } from "../kernel/kind-registry.js";
+import { getBridgeMcpToolDefsForAgent } from "./coding/mcp-host.js";
 
 /** JSON-schema for structure node `kind` — live Kind registry (plugins extend). */
 function kindSchema(): Record<string, unknown> {
@@ -2263,7 +2264,12 @@ export function getToolSchemasForLlm(
   function: { name: string; description: string; parameters: Record<string, unknown> };
 }> {
   const visible = visibleTools(db, agentId);
-  const schemas = visible.map((t) => ({
+  const mcpDefs = agentId ? getBridgeMcpToolDefsForAgent(agentId) : [];
+  // MCP host tools are appended when the Bridge host session is active for
+  // this agent (enabled via mcpFromWorkspace). They bypass personal default
+  // allowlists the same way SDK inline MCP sits outside GodMode toolAllow.
+  const withMcp = [...visible, ...mcpDefs.filter((m) => !visible.some((v) => v.name === m.name))];
+  const schemas = withMcp.map((t) => ({
     type: "function" as const,
     function: {
       name: t.name,
@@ -2276,15 +2282,20 @@ export function getToolSchemasForLlm(
     },
   }));
   if (!chatMode || chatMode === "agent") return schemas;
-  const defsByName = new Map(visible.map((t) => [t.name, t]));
+  const defsByName = new Map(withMcp.map((t) => [t.name, t]));
   return filterToolsForChatMode(schemas, chatMode, defsByName);
 }
 
 export function getToolsIndexText(db?: AppDatabase, agentId?: string): string {
   const visible = visibleTools(db, agentId);
-  const autoRead = visible.filter((t) => t.mode === "auto" && !t.write);
-  const autoWrite = visible.filter((t) => t.mode === "auto" && t.write);
-  const confirm = visible.filter((t) => t.mode === "confirm");
+  const mcpDefs = agentId ? getBridgeMcpToolDefsForAgent(agentId) : [];
+  const all = [
+    ...visible,
+    ...mcpDefs.filter((m) => !visible.some((v) => v.name === m.name)),
+  ];
+  const autoRead = all.filter((t) => t.mode === "auto" && !t.write);
+  const autoWrite = all.filter((t) => t.mode === "auto" && t.write);
+  const confirm = all.filter((t) => t.mode === "confirm");
   const lines = ["--- Available tools ---"];
   if (autoRead.length) {
     lines.push("Auto (read-only): " + autoRead.map((t) => t.name).join(", "));
