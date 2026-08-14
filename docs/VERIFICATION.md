@@ -26,14 +26,25 @@ Expect: `{ ok: true, deploymentMode: "local", hub: false }`
 
 1. Sign in at http://127.0.0.1:5173
 2. Open **Marketplace** (`/marketplace`)
-3. **Official** tab should list three packs from [GodMode-Marketplace](https://github.com/ReBoticsAI/GodMode-Marketplace):
+3. **Official** tab should list curated entries from [GodMode-Marketplace](https://github.com/ReBoticsAI/GodMode-Marketplace) (and Cloud Official rows on SaaS), including:
    - Research Agent Pack
    - Work Starter Department
    - Productivity Skills
-4. Click **Install** on any pack (free)
+   - Git (`godmode-plugin-git`) when present in the feed
+   - GitHub (`godmode-plugin-github`) when present in the feed
+4. Click **Install** on any free pack
 5. Open **Installed** tab to confirm
+6. On Cloud, an empty Official tab must not suggest `MARKETPLACE_LOCAL_CATALOG_PATH` (that hint is self-host/dev only)
 
 ![Marketplace Official tab](assets/readme/marketplace.png)
+
+### Official connector smoke (GitHub reference, #434)
+
+1. Vault / AI Settings → **Connect GitHub** (App configured via `GITHUB_APP_*`)
+2. Confirm status shows connected; disconnect clears tokens
+3. With Connect linked, coding host tools (`git_clone` / `github_pr_create`) work under confirmation
+4. Optional: Marketplace → Official → install pinned `godmode-plugin-github`; uninstall revokes capability grants
+5. Quality bar: [OFFICIAL_CONNECTORS.md](./OFFICIAL_CONNECTORS.md)
 
 ---
 

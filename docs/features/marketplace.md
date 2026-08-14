@@ -29,6 +29,17 @@ Marketplace is how you **connect** specialty packs into GodMode without forking 
 - SaaS is the commerce authority for paid checkout.
 - Chargebacks lead to a permanent Marketplace ban.
 
+## Official connectors
+
+Official is a real curated feed (starter packs plus Official plugins such as Git
+and GitHub), not an empty tab. Account-link and host connectors must meet the
+written quality bar in [OFFICIAL_CONNECTORS.md](../OFFICIAL_CONNECTORS.md).
+GitHub Vault Connect plus the Official GitHub plugin is the Cloud reference.
+
+On Cloud, an empty Official tab means network or admin catalog sync issues. It
+does not mean setting a local catalog path (that hint is self-host / local dev
+only).
+
 ## Seller payouts
 
 Vault → Marketplace is the connect home for seller Stripe Connect. Marketplace → Sell links there for Connect; ToS Accept, Publish, and My listings stay on Sell. See [[vault]].
