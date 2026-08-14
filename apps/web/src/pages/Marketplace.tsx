@@ -33,6 +33,7 @@ import {
 import {
   communityCheckoutBody,
   formatMarketplaceCents,
+  officialCatalogEmptyMessage,
 } from "@/lib/marketplace-format";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -845,8 +846,7 @@ export default function MarketplacePage() {
             <p className="text-sm text-muted-foreground">Loading official catalog…</p>
           ) : officialFiltered.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No official listings found. Check your network or set MARKETPLACE_LOCAL_CATALOG_PATH
-              for local dev.
+              {officialCatalogEmptyMessage(saas)}
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

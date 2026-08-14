@@ -110,6 +110,7 @@ import {
   createSecret,
   deleteSecret,
   resolveVaultOwnerInput,
+  resolveSecretByName,
 } from "../services/agents/agents-db.js";
 import {
   listAgentAccounts,
@@ -148,6 +149,11 @@ import {
   resolveMcpDiscoveryExecution,
   resolveMcpFromWorkspace,
 } from "../services/coding/cursor-mcp-config.js";
+import {
+  ensureBridgeMcpHost,
+  getBridgeMcpStatusesForAgent,
+  resolveBridgeMcpHostEnabled,
+} from "../services/coding/mcp-host.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import {
   syncCursorWorkspaceKnowledge,
@@ -211,18 +217,60 @@ function mcpExecutionForAgent(
     tenantId: opts?.tenantId,
     root: opts?.workspace?.trim() || undefined,
   });
-  const mcpFromWorkspace =
+  const mcpFromWorkspace = resolveMcpFromWorkspace(
+    agent?.config as { mcpFromWorkspace?: unknown },
+    { isSaas: config.isSaas }
+  );
+  // cursor_cloud uses SDK pass-through; other backends use Bridge host when on.
+  const forDiscovery =
     agent?.backend === "cursor_cloud"
-      ? resolveMcpFromWorkspace(
-          agent.config as { mcpFromWorkspace?: unknown },
-          { isSaas: config.isSaas }
-        )
-      : false;
+      ? mcpFromWorkspace
+      : resolveBridgeMcpHostEnabled({
+          backend: agent?.backend,
+          mcpFromWorkspace: (agent?.config as { mcpFromWorkspace?: unknown })
+            ?.mcpFromWorkspace,
+          isSaas: config.isSaas,
+        });
   return resolveMcpDiscoveryExecution({
     backend: agent?.backend,
-    mcpFromWorkspace,
+    mcpFromWorkspace: forDiscovery,
     hasProjectSettingSources:
       resolveCursorSettingSources(cwd).includes("project"),
+  });
+}
+
+async function ensureMcpHostBeforeRun(opts: {
+  agent: AiAgent;
+  tenantId?: string | null;
+  db: AppDatabase;
+}): Promise<void> {
+  const cfg = (opts.agent.config ?? {}) as {
+    workspace?: unknown;
+    mcpFromWorkspace?: unknown;
+    mcpDisabledServers?: unknown;
+  };
+  const enabled = resolveBridgeMcpHostEnabled({
+    backend: opts.agent.backend,
+    mcpFromWorkspace: cfg.mcpFromWorkspace,
+    isSaas: config.isSaas,
+  });
+  const agentWorkspace =
+    typeof cfg.workspace === "string" ? cfg.workspace : undefined;
+  const root = resolveCodingRoot({
+    tenantId: opts.tenantId,
+    root: agentWorkspace?.trim() || undefined,
+  });
+  const disabled = Array.isArray(cfg.mcpDisabledServers)
+    ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
+    : [];
+  await ensureBridgeMcpHost({
+    tenantId: opts.tenantId,
+    agentId: opts.agent.id,
+    codingRoot: root,
+    enabled,
+    disabled,
+    resolveVaultSecret: (name) =>
+      resolveSecretByName(opts.db, name, opts.agent.id),
   });
 }
 
@@ -744,7 +792,7 @@ export function createAiRouter(
   });
 
 
-  router.get("/mcp", (req, res) => {
+  router.get("/mcp", async (req, res) => {
     const agentId = agentIdFromRequest(req);
     const agent = getAgent(tdb(req), agentId);
     const cfg = (agent?.config ?? {}) as {
@@ -764,11 +812,30 @@ export function createAiRouter(
             { mcpFromWorkspace: cfg.mcpFromWorkspace },
             { isSaas: config.isSaas }
           )
-        : false;
+        : resolveBridgeMcpHostEnabled({
+            backend: agent?.backend,
+            mcpFromWorkspace: cfg.mcpFromWorkspace,
+            isSaas: config.isSaas,
+          });
     const disabled = Array.isArray(cfg.mcpDisabledServers)
       ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
       : [];
     const disabledSet = new Set(disabled);
+    if (agent && resolveBridgeMcpHostEnabled({
+      backend: agent.backend,
+      mcpFromWorkspace: cfg.mcpFromWorkspace,
+      isSaas: config.isSaas,
+    })) {
+      await ensureBridgeMcpHost({
+        tenantId: req.tenantId,
+        agentId: agent.id,
+        codingRoot: root,
+        enabled: true,
+        disabled,
+        resolveVaultSecret: (name) =>
+          resolveSecretByName(tdb(req), name, agent.id),
+      });
+    }
     const discovery = collectCursorMcpDiscovery(root, {
       execution: mcpExecutionForAgent(agent, {
         tenantId: req.tenantId,
@@ -776,11 +843,16 @@ export function createAiRouter(
       }),
     });
     const settingSources = resolveCursorSettingSources(root);
+    const hostStatuses = agent
+      ? getBridgeMcpStatusesForAgent(agent.id)
+      : [];
+    const hostByName = new Map(hostStatuses.map((s) => [s.name, s]));
     res.json({
       workspace: root,
       sourcePath: discovery?.sourcePath ?? null,
       summary: discovery?.summary ?? null,
       mcpFromWorkspace,
+      host: agent?.backend === "cursor_cloud" ? "sdk" : "bridge",
       backend: agent?.backend ?? null,
       settingSources,
       projectInstructions:
@@ -789,10 +861,16 @@ export function createAiRouter(
             ? "sdk"
             : "none"
           : "knowledge",
-      servers: (discovery?.servers ?? []).map((s) => ({
-        ...s,
-        enabled: !disabledSet.has(s.name),
-      })),
+      servers: (discovery?.servers ?? []).map((s) => {
+        const host = hostByName.get(s.name);
+        return {
+          ...s,
+          enabled: !disabledSet.has(s.name),
+          hostOk: host?.ok ?? null,
+          hostToolCount: host?.toolCount ?? null,
+          hostError: host?.error ?? null,
+        };
+      }),
     });
   });
 
@@ -1869,6 +1947,11 @@ export function createAiRouter(
         // engine DB; tool execution writes (artifacts, memory) land in the work
         // DB. Memory contribute-back (if enabled) mirrors into the engine DB.
         const backend = getBackend(agent, engineDb, llm);
+        await ensureMcpHostBeforeRun({
+          agent,
+          tenantId: auth.tenantId,
+          db: engineDb,
+        });
         const rawSchemas = getToolSchemasForLlm(engineDb, agent.id, chatMode);
         const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, {
           userMessage: message?.trim(),

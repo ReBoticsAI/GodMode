@@ -16,6 +16,7 @@
     "@godmode/kernel": "*",
     "@godmode/plugin-api": "*",
     "@godmode/plugin-host": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "ajv": "^8.20.0",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
@@ -31,7 +32,8 @@
     "tree-sitter-typescript": "^0.23.2",
     "uuid": "^11.0.5",
     "web-tree-sitter": "^0.26.11",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

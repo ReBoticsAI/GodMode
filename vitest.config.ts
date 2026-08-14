@@ -84,6 +84,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/write-tool-verify.test.ts",
       "apps/bridge/src/services/__tests__/cursor-workspace-knowledge.test.ts",
       "apps/bridge/src/services/__tests__/cursor-mcp-config.test.ts",
+      "apps/bridge/src/services/__tests__/mcp-host.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-mcp.test.ts",
       "apps/bridge/src/services/__tests__/compaction-scratchpad.test.ts",
       "apps/bridge/src/services/__tests__/code-index.test.ts",

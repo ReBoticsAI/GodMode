@@ -47,6 +47,13 @@ Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` /
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
+Official **connectors** (Vault Connect account links and Official Marketplace
+plugins that talk to external hosts) must meet the written quality bar in
+[OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md): auth, refresh, scopes, webhooks,
+rate limits / failure UX, teardown, capability grants, Cloud pins, and docs.
+GitHub (Vault Connect + Official `godmode-plugin-github`) is the reference that
+meets the bar on Cloud.
+
 ### Seller intake verify (Community)
 
 Public **Community** catalog PRs for `installType: "plugin"` require a public

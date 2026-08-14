@@ -66,4 +66,4 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Ask mode](features/ask-mode.md) - Read-only Q&A without tool side effects.
 - [Slash commands](features/slash-commands.md) - Type / for /help, /clear, and custom commands from Settings.
 
-Architecture notes remain in the longer engineering docs: [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [MARKETPLACE.md](MARKETPLACE.md).
+Architecture notes remain in the longer engineering docs: [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md), [architecture.md](architecture.md), [MARKETPLACE.md](MARKETPLACE.md), [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md).
