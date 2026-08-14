@@ -91,6 +91,16 @@ export function beginActiveWorkRunCard(args: {
         contextJson,
         cardId
       );
+    // Children keep parent_card_id but may still sit on the old board after remap.
+    if (existing.project_id !== projectId) {
+      args.db
+        .prepare(
+          `UPDATE ai_project_cards
+           SET project_id=?, updated_at=datetime('now')
+           WHERE parent_card_id=?`
+        )
+        .run(projectId, cardId);
+    }
   } else {
     const order = (
       args.db
@@ -127,6 +137,29 @@ export function beginActiveWorkRunCard(args: {
   });
 
   return { cardId, projectId, title };
+}
+
+/**
+ * Model-visible host status for this chat turn (SSE alone is UI-only).
+ * Append to the assembled system prompt so agents do not invent a second plan parent.
+ */
+export function formatActiveWorkHostContext(
+  hostCardId: string | null | undefined
+): string {
+  if (hostCardId?.trim()) {
+    return [
+      "<active_work_host>",
+      `Host-run card id: ${hostCardId.trim()}. todo_write nests under this card automatically.`,
+      "Do NOT open a second plan parent with create_project_card or create_subtask for this chat plan.",
+      "</active_work_host>",
+    ].join("\n");
+  }
+  return [
+    "<active_work_host>",
+    "Host-run card unavailable this turn (begin failed). Prefer todo_write as a top-level nested plan.",
+    "Do NOT invent a second plan parent with create_project_card or create_subtask, and do not narrate a board glitch.",
+    "</active_work_host>",
+  ].join("\n");
 }
 
 function isTerminalSubtask(columnId: string, status: string | null): boolean {

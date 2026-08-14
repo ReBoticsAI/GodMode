@@ -4,6 +4,7 @@ import type { AppDatabase } from "../../db.js";
 import {
   beginActiveWorkRunCard,
   completeActiveWorkRunCard,
+  formatActiveWorkHostContext,
   sanitizeRunCardUserMessage,
 } from "../active-work-run-card.js";
 import { broadcastCardActivity } from "../../ws-broker.js";
@@ -129,6 +130,58 @@ describe("beginActiveWorkRunCard", () => {
     expect(row.project_id).toBe("default");
     expect(row.column_id).toBe("in_progress");
     expect(row.status).toBe("working");
+  });
+
+  it("remaps orphan children onto the new agent board with the host", () => {
+    const db = makeDb();
+    db.prepare(
+      `INSERT INTO ai_projects (id, name, agent_id, columns_json) VALUES ('old', 'Old', 'other', ?)`
+    ).run("[]");
+    db.prepare(
+      `INSERT INTO ai_project_cards
+       (id, project_id, column_id, title, context_json, status)
+       VALUES ('run_kids', 'old', 'in_progress', 'Host', ?, 'working')`
+    ).run(JSON.stringify({ __activeWorkRun: true, chatId: "kids" }));
+    db.prepare(
+      `INSERT INTO ai_project_cards
+       (id, project_id, column_id, title, parent_card_id, status)
+       VALUES ('run_kids__a', 'old', 'in_progress', 'Step A', 'run_kids', 'working')`
+    ).run();
+    db.prepare(
+      `INSERT INTO ai_project_cards
+       (id, project_id, column_id, title, parent_card_id, status)
+       VALUES ('run_kids__b', 'old', 'backlog', 'Step B', 'run_kids', 'pending')`
+    ).run();
+
+    beginActiveWorkRunCard({
+      db,
+      agentId: "intelligence",
+      chatId: "kids",
+      userMessage: "Resume nested plan",
+    });
+
+    const kids = db
+      .prepare(
+        `SELECT id, project_id FROM ai_project_cards WHERE parent_card_id=? ORDER BY id`
+      )
+      .all("run_kids") as Array<{ id: string; project_id: string }>;
+    expect(kids).toHaveLength(2);
+    expect(kids.every((k) => k.project_id === "default")).toBe(true);
+  });
+});
+
+describe("formatActiveWorkHostContext", () => {
+  it("names the host when begin succeeded", () => {
+    const text = formatActiveWorkHostContext("run_abc");
+    expect(text).toContain("run_abc");
+    expect(text).toContain("nests under");
+  });
+
+  it("tells the model host is unavailable without inventing a glitch", () => {
+    const text = formatActiveWorkHostContext(null);
+    expect(text).toMatch(/unavailable/i);
+    expect(text).toMatch(/Do NOT invent a second plan parent/i);
+    expect(text).toMatch(/do not narrate a board glitch/i);
   });
 });
 

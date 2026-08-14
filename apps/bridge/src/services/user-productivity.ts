@@ -218,6 +218,48 @@ export function boardHasColumn(board: UserBoardRow, columnId: string): boolean {
   return columnsForBoard(board).some((c) => c.id === columnId);
 }
 
+/**
+ * Ensure backlog / ready / in_progress / review / done exist in columns_json.
+ * Partial custom boards still accept todo_write canonical lane ids.
+ */
+export function mergeCanonicalColumnsJson(
+  raw: string | null | undefined
+): string {
+  const existing = parseBoardColumns(raw);
+  const byId = new Map(existing.map((c) => [c.id, c]));
+  let changed = !raw || !String(raw).trim();
+  for (const [id, name, sort_order] of CANONICAL_COLUMNS) {
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        name,
+        sort_order,
+        hidden: false,
+        wip_limit: null,
+      });
+      changed = true;
+    }
+  }
+  if (!changed && raw?.trim()) return raw;
+  return JSON.stringify(
+    [...byId.values()].sort((a, b) => a.sort_order - b.sort_order)
+  );
+}
+
+function ensureProjectColumnsJson(db: AppDatabase, projectId: string): void {
+  const row = db
+    .prepare(`SELECT columns_json FROM ai_projects WHERE id=?`)
+    .get(projectId) as { columns_json: string | null } | undefined;
+  if (!row) return;
+  const merged = mergeCanonicalColumnsJson(row.columns_json);
+  if (merged !== (row.columns_json ?? "")) {
+    db.prepare(`UPDATE ai_projects SET columns_json=? WHERE id=?`).run(
+      merged,
+      projectId
+    );
+  }
+}
+
 export function slugBoardColumnId(name: string): string {
   const slug = name
     .toLowerCase()
@@ -448,9 +490,7 @@ export function ensureAgentProject(agentId: string, db: AppDatabase): string {
     .prepare(`SELECT id FROM ai_projects WHERE agent_id = ? ORDER BY created_at ASC LIMIT 1`)
     .get(agentId) as { id: string } | undefined;
   if (existing) {
-    db.prepare(
-      `UPDATE ai_projects SET columns_json=? WHERE id=? AND (columns_json IS NULL OR columns_json='')`
-    ).run(JSON.stringify(defaultBoardColumns()), existing.id);
+    ensureProjectColumnsJson(db, existing.id);
     seedCanonicalColumns(db, existing.id);
     return existing.id;
   }
@@ -469,9 +509,7 @@ export function ensureAgentProject(agentId: string, db: AppDatabase): string {
     `INSERT OR IGNORE INTO ai_projects (id, name, agent_id, columns_json) VALUES (?, ?, ?, ?)`
   ).run(id, name, agentId, JSON.stringify(defaultBoardColumns()));
   db.prepare(`UPDATE ai_projects SET agent_id = ? WHERE id = ?`).run(agentId, id);
-  db.prepare(
-    `UPDATE ai_projects SET columns_json=? WHERE id=? AND (columns_json IS NULL OR columns_json='')`
-  ).run(JSON.stringify(defaultBoardColumns()), id);
+  ensureProjectColumnsJson(db, id);
   seedCanonicalColumns(db, id);
   return id;
 }
