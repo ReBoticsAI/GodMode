@@ -1459,6 +1459,84 @@ export function createAiRouter(
       work.tenantId
     );
 
+    // Open SSE before RAG / prompt assembly. Cloudflare proxy-read (~100–125s)
+    // kills quiet origins before the first response byte; waiting on embeddings
+    // or MCP enrichment first showed up as an empty Chat warning with no
+    // "Starting Cursor…" status.
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    let lastSseWriteAt = Date.now();
+    const send = (event: string, data: unknown) => {
+      if (res.writableEnded || res.destroyed) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      lastSseWriteAt = Date.now();
+      // SSE heartbeats / tokens must leave Node promptly; otherwise nginx or
+      // Cloudflare can treat a quiet stream as idle and drop it ("network error").
+      (res as { flush?: () => void }).flush?.();
+    };
+    const sendSsePing = () => {
+      if (res.writableEnded || res.destroyed) return;
+      res.write(`: ping ${Date.now()}\n\n`);
+      lastSseWriteAt = Date.now();
+      (res as { flush?: () => void }).flush?.();
+    };
+
+    send("chat_id", { chatId: activeChatId });
+    send("status", {
+      phase: "preparing",
+      message:
+        agent.backend === "cursor_cloud" || agent.backend === "cursor"
+          ? "Preparing Cursor…"
+          : "Preparing…",
+    });
+
+    const abortController = new AbortController();
+    const onClientClose = () => abortController.abort();
+    req.on("close", onClientClose);
+    res.on("close", onClientClose);
+
+    /**
+     * Keep the SSE socket alive for the whole turn: prompt prep, Cursor waits,
+     * tool confirms, and quiet stretches after the first token. Stopping
+     * heartbeats after the first token left confirm-gated tools (git_clone)
+     * exposed to idle proxy cutoffs ("network error" / empty Chat warning).
+     */
+    const statusHeartbeat = setInterval(() => {
+      if (abortController.signal.aborted || res.writableEnded || res.destroyed) {
+        return;
+      }
+      if (Date.now() - lastSseWriteAt < 2500) return;
+      // Comment ping first so intermediaries see bytes even if they buffer events.
+      sendSsePing();
+      send("status", {
+        phase: "waiting",
+        message:
+          agent.backend === "cursor_cloud" || agent.backend === "cursor"
+            ? "Waiting on Cursor…"
+            : "Waiting on model…",
+      });
+    }, 3000);
+    abortController.signal.addEventListener("abort", () => {
+      clearInterval(statusHeartbeat);
+    });
+
+    let activeWorkCardId: string | null = null;
+    try {
+      const runCard = beginActiveWorkRunCard({
+        db: workDb,
+        agentId: agent.id,
+        chatId: activeChatId!,
+        userMessage: message?.trim() ?? "",
+      });
+      activeWorkCardId = runCard.cardId;
+    } catch (err) {
+      console.error("[active-work] begin run card failed", err);
+    }
+
     const flowConfig = loadPromptFlowConfig(engineDb);
     const harnessProfile = resolveProfileForAgent(
       agent,
@@ -1467,49 +1545,80 @@ export function createAiRouter(
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
-    if (embeddings) {
-      void embeddings.ensureTenantBackfill(scope.tenantId);
+    // Runs after SSE is open so Cloudflare sees heartbeats during slow prep.
+    let memoryOverride: string | undefined;
+    let capabilitiesOverride: string | undefined;
+    let wikiOverride = "";
+    try {
+      if (embeddings) {
+        void embeddings.ensureTenantBackfill(scope.tenantId);
+      }
+      memoryOverride = embeddings
+        ? await getSemanticMemoriesText(
+            engineDb,
+            embeddings.getEmbeddingClient(),
+            message?.trim() ?? "",
+            { chatId: activeChatId, agentId: agent.id, topK: config.embeddings.ragTopK }
+          )
+        : undefined;
+      capabilitiesOverride = embeddings
+        ? await getCapabilitiesText(
+            engineDb,
+            embeddings.getEmbeddingClient(),
+            message?.trim() ?? "",
+            { agentId: agent.id, topK: config.embeddings.ragTopK }
+          )
+        : undefined;
+      const wikiTenantIds = [
+        ...new Set(
+          [req.tenantId, scope.tenantId, work.tenantId].filter(
+            (id): id is string => Boolean(id)
+          )
+        ),
+      ];
+      const wikiTenantId =
+        req.tenantId ?? wikiTenantIds[0] ?? scope.tenantId ?? null;
+      wikiOverride = wikiTenantId
+        ? await getHybridWikiText(
+            getTenantDb(wikiTenantId),
+            embeddings?.isEmbedderReady()
+              ? embeddings.getEmbeddingClient()
+              : undefined,
+            message?.trim() ?? "",
+            {
+              tenantIds: wikiTenantIds.length
+                ? wikiTenantIds
+                : [wikiTenantId],
+              topK: config.embeddings.wikiRagTopK,
+            }
+          )
+        : "";
+    } catch (prepErr) {
+      const prepMessage =
+        prepErr instanceof Error ? prepErr.message : String(prepErr);
+      console.error("[ai/chat] prompt prep failed", prepErr);
+      send("error", {
+        error: prepMessage || "Chat prep failed before the model started.",
+      });
+      if (activeWorkCardId) {
+        try {
+          completeActiveWorkRunCard({
+            db: workDb,
+            cardId: activeWorkCardId,
+            tenantId: work.tenantId,
+            outcome: "error",
+            summary: prepMessage,
+          });
+        } catch (completeErr) {
+          console.error("[active-work] complete run card failed", completeErr);
+        }
+      }
+      clearInterval(statusHeartbeat);
+      req.off("close", onClientClose);
+      res.off("close", onClientClose);
+      res.end();
+      return;
     }
-    const memoryOverride = embeddings
-      ? await getSemanticMemoriesText(
-          engineDb,
-          embeddings.getEmbeddingClient(),
-          message?.trim() ?? "",
-          { chatId: activeChatId, agentId: agent.id, topK: config.embeddings.ragTopK }
-        )
-      : undefined;
-    const capabilitiesOverride = embeddings
-      ? await getCapabilitiesText(
-          engineDb,
-          embeddings.getEmbeddingClient(),
-          message?.trim() ?? "",
-          { agentId: agent.id, topK: config.embeddings.ragTopK }
-        )
-      : undefined;
-    const wikiTenantIds = [
-      ...new Set(
-        [req.tenantId, scope.tenantId, work.tenantId].filter(
-          (id): id is string => Boolean(id)
-        )
-      ),
-    ];
-    const wikiTenantId =
-      req.tenantId ?? wikiTenantIds[0] ?? scope.tenantId ?? null;
-    const wikiOverride = wikiTenantId
-      ? await getHybridWikiText(
-          getTenantDb(wikiTenantId),
-          embeddings?.isEmbedderReady()
-            ? embeddings.getEmbeddingClient()
-            : undefined,
-          message?.trim() ?? "",
-          {
-            tenantIds: wikiTenantIds.length
-              ? wikiTenantIds
-              : [wikiTenantId],
-            topK: config.embeddings.wikiRagTopK,
-          }
-        )
-      : "";
     const agentWorkspace =
       typeof (agent.config as { workspace?: unknown } | undefined)?.workspace ===
       "string"
@@ -1626,76 +1735,12 @@ export function createAiRouter(
       }),
     });
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders?.();
-
-    let lastSseWriteAt = Date.now();
-    const send = (event: string, data: unknown) => {
-      if (res.writableEnded || res.destroyed) return;
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      lastSseWriteAt = Date.now();
-      // SSE heartbeats / tokens must leave Node promptly; otherwise nginx or
-      // Cloudflare can treat a quiet stream as idle and drop it ("network error").
-      (res as { flush?: () => void }).flush?.();
-    };
-
-    send("chat_id", { chatId: activeChatId });
-    send("status", {
-      phase: "starting",
-      message:
-        agent.backend === "cursor_cloud" || agent.backend === "cursor"
-          ? "Starting Cursor…"
-          : "Starting model…",
-    });
-
-    const abortController = new AbortController();
-    const onClientClose = () => abortController.abort();
-    req.on("close", onClientClose);
-    res.on("close", onClientClose);
-
-    let activeWorkCardId: string | null = null;
-    try {
-      const runCard = beginActiveWorkRunCard({
-        db: workDb,
-        agentId: agent.id,
-        chatId: activeChatId!,
-        userMessage: message?.trim() ?? "",
-      });
-      activeWorkCardId = runCard.cardId;
-    } catch (err) {
-      console.error("[active-work] begin run card failed", err);
-    }
-
     let fullContent = "";
     let reasoningRaw = "";
     let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     const markStreamActivity = () => {
       lastSseWriteAt = Date.now();
     };
-    /**
-     * Keep the SSE socket alive for the whole turn: Cursor waits, tool confirms,
-     * and quiet stretches after the first token. Stopping heartbeats after the
-     * first token left confirm-gated tools (git_clone) exposed to the 60s
-     * nginx default and showed up as "network error" in Chat.
-     */
-    const statusHeartbeat = setInterval(() => {
-      if (abortController.signal.aborted || res.writableEnded || res.destroyed) {
-        return;
-      }
-      if (Date.now() - lastSseWriteAt < 3500) return;
-      send("status", {
-        phase: "waiting",
-        message:
-          agent.backend === "cursor_cloud" || agent.backend === "cursor"
-            ? "Waiting on Cursor…"
-            : "Waiting on model…",
-      });
-    }, 4000);
-    abortController.signal.addEventListener("abort", () => {
-      clearInterval(statusHeartbeat);
-    });
 
     // Server-side accumulation of Cursor-style parts (thinking / tool / todos /
     // text) so a reloaded chat replays tool cards and reasoning faithfully.
@@ -1760,6 +1805,13 @@ export function createAiRouter(
     };
 
     try {
+      send("status", {
+        phase: "starting",
+        message:
+          agent.backend === "cursor_cloud" || agent.backend === "cursor"
+            ? "Starting Cursor…"
+            : "Starting model…",
+      });
       const baseUrl = llm.getServerBaseUrl();
       const agentMessages: AgentMessage[] = messages.map((m) => ({
         role: m.role as AgentMessage["role"],
