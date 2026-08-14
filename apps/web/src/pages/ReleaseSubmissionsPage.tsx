@@ -82,11 +82,11 @@ export default function ReleaseSubmissionsPage() {
         description="Ship-from-GodMode status for GitHub Releases. Connect GitHub in Vault, then use github_release_prepare / create (draft) / publish from Coding."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" asChild>
-              <Link to={`${VAULT_PATH}?tab=integrations`}>Vault Connect</Link>
+            <Button variant="outline" render={<Link to={`${VAULT_PATH}?tab=integrations`} />}>
+              Vault Connect
             </Button>
-            <Button type="button" variant="outline" asChild>
-              <Link to={CODING_PATH}>Coding</Link>
+            <Button variant="outline" render={<Link to={CODING_PATH} />}>
+              Coding
             </Button>
             <Button
               type="button"
@@ -165,15 +165,19 @@ export default function ReleaseSubmissionsPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       {row.html_url ? (
-                        <Button type="button" variant="ghost" size="sm" asChild>
-                          <a
-                            href={row.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLinkIcon data-icon="inline-start" />
-                            GitHub
-                          </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          render={
+                            <a
+                              href={row.html_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            />
+                          }
+                        >
+                          <ExternalLinkIcon data-icon="inline-start" />
+                          GitHub
                         </Button>
                       ) : null}
                       {row.github_release_id ? (
