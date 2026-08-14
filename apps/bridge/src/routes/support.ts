@@ -3,6 +3,7 @@ import {
   attachAuthContext,
   requireAuth,
   requirePlatformAdmin,
+  resolveTenant,
 } from "../services/auth/middleware.js";
 import { getUserOwnerTenantId } from "../services/user-scope.js";
 import { getCloudDb } from "../core-db.js";
@@ -25,7 +26,9 @@ import {
   removeGroupMember,
 } from "../services/platform-groups.js";
 import type { SupportTicketStatus } from "../core-db.js";
-import { registerSupportToKanbanRoute } from "./support-to-kanban.js";
+import { getHostUsersDb } from "../host-users-db.js";
+import { getTenantDb } from "../tenant-registry.js";
+import { promoteSupportTicketToCard } from "../services/support-to-kanban.js";
 
 function paramId(value: string | string[]): string {
   return Array.isArray(value) ? value[0]! : value;
@@ -47,7 +50,41 @@ function canAccessTicket(
 export function createSupportRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth);
-  registerSupportToKanbanRoute(router);
+
+  router.post("/tickets/:id/to-kanban", resolveTenant, (req, res) => {
+    try {
+      const ticketId = paramId(req.params.id);
+      const hub = getHostUsersDb();
+      const ticket = getTicket(ticketId, hub);
+      if (!ticket) {
+        res.status(404).json({ error: "Ticket not found" });
+        return;
+      }
+      const user = req.user!;
+      if (!canAccessTicket(ticket, user)) {
+        res.status(403).json({ error: "Not allowed" });
+        return;
+      }
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: "Workspace required" });
+        return;
+      }
+      const title =
+        typeof req.body?.title === "string" ? req.body.title : undefined;
+      const result = promoteSupportTicketToCard({
+        tenantDb: getTenantDb(tenantId),
+        hubDb: hub,
+        ticketId,
+        userId: user.id,
+        title,
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      const e = err as { status?: number; message?: string };
+      res.status(e?.status ?? 500).json({ error: e?.message ?? String(err) });
+    }
+  });
 
   router.get("/tickets", (req, res) => {
     res.json({ tickets: listTicketsForRequester("user", req.user!.id) });
