@@ -43,6 +43,44 @@ export function stripCursorCommitAttribution(message: string): string {
 
 export type GitToolOpts = FsRootOpts;
 
+/**
+ * Network for sandboxed git clone/push/fetch (#442).
+ * Interactive terminals may use CODING_TERMINAL_NET=none; git host ops still
+ * need allowlisted CONNECT egress or clones fail with "Could not resolve host".
+ */
+export function resolveSandboxedGitNetMode(opts: {
+  sandboxed: boolean;
+  terminalNet: "none" | "shared" | "allowlist";
+}): "none" | "shared" | "allowlist" {
+  if (!opts.sandboxed) return "none";
+  if (opts.terminalNet === "none") return "allowlist";
+  return opts.terminalNet;
+}
+
+export function sandboxedGitNetMode(): "none" | "shared" | "allowlist" {
+  return resolveSandboxedGitNetMode({
+    sandboxed: requiresTerminalSandbox(),
+    terminalNet: codingTerminalNetPolicy(),
+  });
+}
+
+/** Force libcurl/git to use the jail CONNECT proxy (env alone is unreliable). */
+function gitArgvWithProxy(
+  gitArgs: string[],
+  proxyUrl: string | null | undefined
+): string[] {
+  const url = String(proxyUrl ?? "").trim();
+  if (!url) return ["git", ...gitArgs];
+  return [
+    "git",
+    "-c",
+    `http.proxy=${url}`,
+    "-c",
+    `https.proxy=${url}`,
+    ...gitArgs,
+  ];
+}
+
 function gitEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "GodMode",
@@ -84,7 +122,7 @@ async function withGitNetwork<T>(
   } | null) => Promise<T>
 ): Promise<T> {
   const sandboxed = requiresTerminalSandbox();
-  const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
+  const netMode = sandboxed ? sandboxedGitNetMode() : "none";
   let proxy: Awaited<ReturnType<typeof startTerminalEgressProxy>> | null = null;
   if (sandboxed && netMode === "allowlist") {
     proxy = await startTerminalEgressProxy({
@@ -412,13 +450,13 @@ export async function gitPush(
   const usedConnectAuth = Boolean(token && githubRemote);
   const authEnv = usedConnectAuth ? githubHttpsAuthGitEnv(token) : undefined;
   const sandboxed = requiresTerminalSandbox();
-  const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
+  const netMode = sandboxed ? sandboxedGitNetMode() : "none";
 
   return withGitNetwork(codingRoot, async (proxy) => {
     const res = await runSandboxedArgv({
       codingRoot,
       cwd: codingRoot,
-      argv: ["git", "push", remote, branch],
+      argv: gitArgvWithProxy(["push", remote, branch], proxy?.jailProxyUrl),
       net: sandboxed ? netMode : "none",
       timeoutMs: 120_000,
       envExtra: gitEnv(authEnv),
@@ -482,14 +520,17 @@ export async function gitClone(
   }
   const target = resolveRepoPath(directory, opts);
   const sandboxed = requiresTerminalSandbox();
-  const netMode = sandboxed ? codingTerminalNetPolicy() : "none";
+  const netMode = sandboxed ? sandboxedGitNetMode() : "none";
   const authEnv = githubHttpsAuthGitEnv(token);
 
   return withGitNetwork(codingRoot, async (proxy) => {
     const res = await runSandboxedArgv({
       codingRoot,
       cwd: codingRoot,
-      argv: ["git", "clone", "--", parsed.httpsUrl, directory],
+      argv: gitArgvWithProxy(
+        ["clone", "--", parsed.httpsUrl, directory],
+        proxy?.jailProxyUrl
+      ),
       net: sandboxed ? netMode : "none",
       timeoutMs: 300_000,
       envExtra: gitEnv(authEnv),
