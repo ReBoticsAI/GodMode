@@ -497,6 +497,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "websocket-chat",
+    methods: ["GET"],
+    pathPattern: "/ws/chat",
+    rationale:
+      "Intelligence Chat turn streaming (#442); negotiated over WS so Cloudflare does not kill long Cursor turns.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-chat-sse",
+    methods: ["POST"],
+    pathPattern: "/api/ai/chat",
+    rationale:
+      "SSE adapter over the shared AI chat turn runner; dual-stack with /ws/chat until clients fully migrate.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
     id: "dm-binary-upload",
     methods: ["POST"],
     pathPattern: "/api/dm/uploads",

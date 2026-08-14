@@ -182,6 +182,9 @@ import {
   beginActiveWorkRunCard,
   completeActiveWorkRunCard,
 } from "../services/active-work-run-card.js";
+import {
+  setAiChatTurnHandlers,
+} from "../services/ai-chat-turn.js";
 
 export type { PlatformContext } from "../types/platform-context.js";
 import type { PlatformContext } from "../types/platform-context.js";
@@ -1274,7 +1277,27 @@ export function createAiRouter(
     });
   });
 
-  router.post("/chat", async (req, res) => {
+  function reqFromAuth(auth: import("../services/ai-chat-turn.js").AiChatAuthContext): Request {
+    return {
+      user: {
+        id: auth.user.id,
+        email: "",
+        displayName: "",
+        avatarUrl: null,
+        isAdmin: auth.user.isAdmin,
+        emailVerified: true,
+        mfaEnabled: false,
+      },
+      tenantId: auth.tenantId,
+      tenantRole: auth.tenantRole as import("../core-db.js").MembershipRole,
+      tenantDb: auth.tenantDb,
+    } as Request;
+  }
+
+  async function prepareAiChatTurn(
+    auth: import("../services/ai-chat-turn.js").AiChatAuthContext,
+    body: import("../services/ai-chat-turn.js").AiChatTurnBody
+  ): Promise<import("../services/ai-chat-turn.js").PrepareAiChatTurnResult> {
     const {
       chatId,
       message,
@@ -1286,7 +1309,7 @@ export function createAiRouter(
       autoAcceptTools = false,
       chatMode: rawChatMode,
       toolAutonomy: rawToolAutonomy,
-    } = req.body as {
+    } = body as {
       chatId?: string;
       message: string;
       history?: HistoryTurn[];
@@ -1308,11 +1331,12 @@ export function createAiRouter(
           ? "full"
           : "off";
 
+    const req = reqFromAuth(auth);
+
     const resolvedAgentId = agentId ?? "intelligence";
     const scope = resolveAgentScope(req, resolvedAgentId, "viewer");
     if (!scope) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
+      return { ok: false, status: 404, body: { error: "Agent not found" } };
     }
 
     try {
@@ -1324,12 +1348,11 @@ export function createAiRouter(
       });
     } catch (err) {
       if (isSpendAuthorityError(err)) {
-        res.status(err.status).json({
+        return { ok: false, status: err.status, body: {
           error: err.message,
           code: err.code,
           spendDisabled: true,
-        });
-        return;
+        } };
       }
       throw err;
     }
@@ -1343,12 +1366,11 @@ export function createAiRouter(
       });
     } catch (err) {
       if (isAgentPauseAuthorityError(err)) {
-        res.status(err.status).json({
+        return { ok: false, status: err.status, body: {
           error: err.message,
           code: err.code,
           agentPaused: true,
-        });
-        return;
+        } };
       }
       throw err;
     }
@@ -1361,21 +1383,18 @@ export function createAiRouter(
         action: "ai_chat",
       });
     } catch (err) {
-      res.status(404).json({ error: err instanceof Error ? err.message : "Agent not found" });
-      return;
+      return { ok: false, status: 404, body: { error: err instanceof Error ? err.message : "Agent not found" } };
     }
 
     if (!llm.isReady() && !agentCanRunWithoutLocalLlm(agent.backend, scope.db, agent.id)) {
-      res.status(503).json({
+      return { ok: false, status: 503, body: {
         error:
           "LLM server not running. Start a local model, or connect Cursor subscription in Vault.",
-      });
-      return;
+      } };
     }
 
     if (!message?.trim() && images.length === 0) {
-      res.status(400).json({ error: "Message or image required" });
-      return;
+      return { ok: false, status: 400, body: { error: "Message or image required" } };
     }
 
     // ENGINE vs WORK split. The engine DB (agent owner's, or own when owned)
@@ -1388,9 +1407,9 @@ export function createAiRouter(
     const workDb = work.db;
     const chatKernelContext: OperationContext = {
       tenantId: work.tenantId,
-      userId: req.user!.id,
-      isAdmin: req.user!.isAdmin,
-      role: req.tenantRole ?? "editor",
+      userId: auth.user.id,
+      isAdmin: auth.user.isAdmin,
+      role: (auth.tenantRole as OperationContext["role"]) ?? "editor",
       source: "http",
       bus,
     };
@@ -1427,23 +1446,10 @@ export function createAiRouter(
       ).id;
     } catch (err) {
       if (err instanceof KernelError) {
-        res.status(err.status).json({ error: err.message });
-        return;
+        return { ok: false, status: err.status, body: { error: err.message } };
       }
       throw err;
     }
-
-    const userParts: ChatMessagePart[] = [];
-    if (message?.trim()) userParts.push({ type: "text", text: message.trim() });
-    for (const img of images) {
-      const url = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
-      userParts.push({ type: "image_url", image_url: { url } });
-    }
-
-    const userContent =
-      userParts.length === 1 && userParts[0].type === "text"
-        ? userParts[0].text!
-        : userParts;
 
     broadcastAgentEvent(
       resolvedAgentId,
@@ -1459,30 +1465,75 @@ export function createAiRouter(
       work.tenantId
     );
 
-    // Open SSE before RAG / prompt assembly. Cloudflare proxy-read (~100–125s)
-    // kills quiet origins before the first response byte; waiting on embeddings
-    // or MCP enrichment first showed up as an empty Chat warning with no
-    // "Starting Cursor…" status.
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders?.();
+    return {
+      ok: true,
+      prepared: {
+        auth,
+        chatMode,
+        sessionAutonomy,
+        resolvedAgentId,
+        agent,
+        scope,
+        engineDb,
+        work,
+        workDb,
+        contributeDb,
+        activeChatId: activeChatId!,
+        userMsgId,
+        chatKernelContext,
+        images,
+        history,
+        platformContext,
+        message: message ?? "",
+      },
+    };
+
+  }
+
+  async function runAiChatTurn(
+    prepared: import("../services/ai-chat-turn.js").PreparedAiChatTurn,
+    transport: import("../services/ai-chat-turn.js").AiChatTurnTransport
+  ): Promise<void> {
+    const {
+      auth,
+      chatMode,
+      sessionAutonomy,
+      resolvedAgentId,
+      agent,
+      scope,
+      engineDb,
+      work,
+      workDb,
+      contributeDb,
+      activeChatId,
+      chatKernelContext,
+      images,
+      history,
+      platformContext,
+      message,
+    } = prepared;
+
+    const userParts: ChatMessagePart[] = [];
+    if (message?.trim()) userParts.push({ type: "text", text: message.trim() });
+    for (const img of images) {
+      const url = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+      userParts.push({ type: "image_url", image_url: { url } });
+    }
+    const userContent =
+      userParts.length === 1 && userParts[0].type === "text"
+        ? userParts[0].text!
+        : userParts;
 
     let lastSseWriteAt = Date.now();
     const send = (event: string, data: unknown) => {
-      if (res.writableEnded || res.destroyed) return;
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (transport.isClosed()) return;
+      transport.send(event, data);
       lastSseWriteAt = Date.now();
-      // SSE heartbeats / tokens must leave Node promptly; otherwise nginx or
-      // Cloudflare can treat a quiet stream as idle and drop it ("network error").
-      (res as { flush?: () => void }).flush?.();
     };
     const sendSsePing = () => {
-      if (res.writableEnded || res.destroyed) return;
-      res.write(`: ping ${Date.now()}\n\n`);
+      if (transport.isClosed()) return;
+      transport.sendPing?.();
       lastSseWriteAt = Date.now();
-      (res as { flush?: () => void }).flush?.();
     };
 
     send("chat_id", { chatId: activeChatId });
@@ -1494,29 +1545,13 @@ export function createAiRouter(
           : "Preparing…",
     });
 
-    const abortController = new AbortController();
-    const onClientClose = () => {
-      // Node can emit IncomingMessage "close" while the SSE response is still
-      // live (client still reading). Abort only when the TCP socket is gone
-      // (browser Stop / disconnect). Spurious closes were cancelling Cursor
-      // turns within seconds and showing "Chat turn was cancelled".
-      if (req.socket && !req.socket.destroyed) return;
-      abortController.abort();
-    };
-    req.on("close", onClientClose);
+    const abortController = { signal: transport.abortSignal };
 
-    /**
-     * Keep the SSE socket alive for the whole turn: prompt prep, Cursor waits,
-     * tool confirms, and quiet stretches after the first token. Stopping
-     * heartbeats after the first token left confirm-gated tools (git_clone)
-     * exposed to idle proxy cutoffs ("network error" / empty Chat warning).
-     */
     const statusHeartbeat = setInterval(() => {
-      if (abortController.signal.aborted || res.writableEnded || res.destroyed) {
+      if (transport.abortSignal.aborted || transport.isClosed()) {
         return;
       }
       if (Date.now() - lastSseWriteAt < 2500) return;
-      // Comment ping first so intermediaries see bytes even if they buffer events.
       sendSsePing();
       send("status", {
         phase: "waiting",
@@ -1526,7 +1561,7 @@ export function createAiRouter(
             : "Waiting on model…",
       });
     }, 3000);
-    abortController.signal.addEventListener("abort", () => {
+    transport.abortSignal.addEventListener("abort", () => {
       clearInterval(statusHeartbeat);
     });
 
@@ -1577,13 +1612,13 @@ export function createAiRouter(
         : undefined;
       const wikiTenantIds = [
         ...new Set(
-          [req.tenantId, scope.tenantId, work.tenantId].filter(
+          [auth.tenantId, scope.tenantId, work.tenantId].filter(
             (id): id is string => Boolean(id)
           )
         ),
       ];
       const wikiTenantId =
-        req.tenantId ?? wikiTenantIds[0] ?? scope.tenantId ?? null;
+        auth.tenantId ?? wikiTenantIds[0] ?? scope.tenantId ?? null;
       wikiOverride = wikiTenantId
         ? await getHybridWikiText(
             getTenantDb(wikiTenantId),
@@ -1620,8 +1655,6 @@ export function createAiRouter(
         }
       }
       clearInterval(statusHeartbeat);
-      req.off("close", onClientClose);
-      res.end();
       return;
     }
     const agentWorkspace =
@@ -1632,19 +1665,19 @@ export function createAiRouter(
     maybeSyncCursorWorkspaceKnowledge(
       engineDb,
       agent,
-      req.tenantId,
+      auth.tenantId,
       agentWorkspace
     );
     const platformContextEnriched = enrichPlatformContextWithMcp(
       enrichPlatformContextWithGit(platformContext, {
-        tenantId: req.tenantId,
+        tenantId: auth.tenantId,
         workspace: agentWorkspace,
       }),
       {
-        tenantId: req.tenantId,
+        tenantId: auth.tenantId,
         workspace: agentWorkspace,
         execution: mcpExecutionForAgent(agent, {
-          tenantId: req.tenantId,
+          tenantId: auth.tenantId,
           workspace: agentWorkspace,
         }),
       }
@@ -1660,7 +1693,7 @@ export function createAiRouter(
       thinkingEfficiency: agent.thinking.thinkingEfficiency,
       nativeTools: agent.thinking.nativeTools,
       agentId: agent.id,
-      tenantId: req.tenantId,
+      tenantId: auth.tenantId,
       agent,
       memoryOverride,
       wikiOverride: wikiOverride || undefined,
@@ -1868,7 +1901,7 @@ export function createAiRouter(
                 : undefined,
             activeAgentId: agent.id,
             activeTaskCardId: activeWorkCardId ?? undefined,
-            userId: req.user?.id,
+            userId: auth.user.id,
             tenantId: work.tenantId,
             sessionAutonomy,
             abortSignal: abortController.signal,
@@ -2110,7 +2143,7 @@ export function createAiRouter(
         send("error", {
           error: err instanceof Error ? err.message : String(err),
         });
-      } else if (!res.writableEnded && !res.destroyed) {
+      } else if (!transport.isClosed()) {
         // Client still connected but the turn was aborted (Stop, or a
         // spurious close). Prefer an explicit SSE error over a silent end.
         send("error", {
@@ -2136,10 +2169,7 @@ export function createAiRouter(
       }
     } finally {
       clearInterval(statusHeartbeat);
-      req.off("close", onClientClose);
     }
-
-    res.end();
 
     // Signal listeners (e.g. the Reflection engine) that a chat turn finished,
     // so they can schedule best-effort post-chat knowledge maintenance. The work
@@ -2154,6 +2184,73 @@ export function createAiRouter(
       contributeMemory: Boolean(contributeDb),
       owned: scope.owned,
     });
+
+  }
+
+  setAiChatTurnHandlers({
+    prepare: prepareAiChatTurn,
+    run: runAiChatTurn,
+  });
+
+  router.post("/chat", async (req, res) => {
+    if (!req.user?.id || !req.tenantId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const auth: import("../services/ai-chat-turn.js").AiChatAuthContext = {
+      user: { id: req.user.id, isAdmin: Boolean(req.user.isAdmin) },
+      tenantId: req.tenantId,
+      tenantRole: req.tenantRole ?? "editor",
+      tenantDb: tdb(req),
+    };
+
+    const preparedResult = await prepareAiChatTurn(
+      auth,
+      (req.body ?? {}) as import("../services/ai-chat-turn.js").AiChatTurnBody
+    );
+    if (!preparedResult.ok) {
+      res.status(preparedResult.status).json(preparedResult.body);
+      return;
+    }
+
+    // Open SSE before RAG / prompt assembly. Cloudflare proxy-read (~100–125s)
+    // kills quiet origins before the first response byte. WS /ws/chat is preferred
+    // for Cloud; SSE remains as a thin adapter over the same core turn.
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const abortController = new AbortController();
+    const onClientClose = () => {
+      if (req.socket && !req.socket.destroyed) return;
+      abortController.abort();
+    };
+    req.on("close", onClientClose);
+
+    const transport: import("../services/ai-chat-turn.js").AiChatTurnTransport = {
+      send: (event, data) => {
+        if (res.writableEnded || res.destroyed) return;
+        res.write("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n");
+        (res as { flush?: () => void }).flush?.();
+      },
+      sendPing: () => {
+        if (res.writableEnded || res.destroyed) return;
+        res.write(": ping " + Date.now() + "\n\n");
+        (res as { flush?: () => void }).flush?.();
+      },
+      abortSignal: abortController.signal,
+      isClosed: () =>
+        res.writableEnded || res.destroyed || Boolean(req.socket?.destroyed),
+    };
+
+    try {
+      await runAiChatTurn(preparedResult.prepared, transport);
+    } finally {
+      req.off("close", onClientClose);
+      if (!res.writableEnded) res.end();
+    }
   });
 
   router.get("/lora-adapters", async (req, res) => {

@@ -979,6 +979,7 @@ export function IntelligencePanel() {
       },
       {
         onChatId: (chatId) => {
+          activeChatIdRef.current = chatId;
           if (!activeChatId) setActiveChatId(chatId);
         },
         onStatus: ({ message }) => {
@@ -1094,7 +1095,8 @@ export function IntelligencePanel() {
           pendingAssistantIdRef.current = assistantId;
           sync();
           if (toolAutonomy === "full") {
-            void confirmAiTool(payload.toolCallId, true);
+            const chatId = activeChatIdRef.current;
+            if (chatId) void confirmAiTool(payload.toolCallId, true, chatId);
           }
         },
       }
@@ -1121,7 +1123,8 @@ export function IntelligencePanel() {
         )
       );
     }
-    void confirmAiTool(toolCallId, approved);
+    const chatId = activeChatIdRef.current;
+    if (chatId) void confirmAiTool(toolCallId, approved, chatId);
   }, []);
 
   const handleApproveTool = useCallback(

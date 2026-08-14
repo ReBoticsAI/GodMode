@@ -73,6 +73,7 @@ import { setWikiEmbedder } from "./services/wiki-service.js";
 import { syncAdaptersFromDisk } from "./services/ai-adapters.js";
 import { attachWebSocket } from "./ws.js";
 import { attachTerminalWebSocket } from "./terminal-ws.js";
+import { attachChatWebSocket } from "./chat-ws.js";
 import { attachWsUpgradeRouter } from "./ws-upgrade-router.js";
 import { EngineRegistry } from "./services/engines/registry.js";
 import { EngineReconciler } from "./services/engines/reconciler.js";
@@ -484,9 +485,12 @@ const wss = new WebSocketServer({ noServer: true });
 const broadcast = attachWebSocket(wss, bus);
 const terminalWss = new WebSocketServer({ noServer: true });
 attachTerminalWebSocket(terminalWss);
+const chatWss = new WebSocketServer({ noServer: true });
+attachChatWebSocket(chatWss);
 attachWsUpgradeRouter(server, [
   { path: "/ws", wss },
   { path: "/ws/terminal", wss: terminalWss },
+  { path: "/ws/chat", wss: chatWss },
 ]);
 
 await pluginRuntime.emitHook("server:beforeListen", {
