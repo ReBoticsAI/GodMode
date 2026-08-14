@@ -291,7 +291,9 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
   return [
     "Project MCP configuration (from coding-root `.cursor/mcp.json`):",
     ctx.mcpDiscovery.summary,
-    "GodMode native tools are separate from MCP. Local/provider backends do not spawn MCP from Bridge.",
+    "GodMode native tools are separate from MCP.",
+    "To call listed MCP tools from GodMode Intelligence chat: enable Pass workspace MCP to SDK (cursor_cloud) or Host workspace MCP in Bridge (other backends) on Agents → Pipeline → MCP. SaaS defaults that switch off until enabled.",
+    "Do not tell the USER to reload an external IDE for GodMode-hosted MCP; enable the GodMode toggle and call the tools here.",
   ].join("\n");
 }
 

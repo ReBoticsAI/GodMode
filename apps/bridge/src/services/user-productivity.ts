@@ -447,7 +447,13 @@ export function ensureAgentProject(agentId: string, db: AppDatabase): string {
   const existing = db
     .prepare(`SELECT id FROM ai_projects WHERE agent_id = ? ORDER BY created_at ASC LIMIT 1`)
     .get(agentId) as { id: string } | undefined;
-  if (existing) return existing.id;
+  if (existing) {
+    db.prepare(
+      `UPDATE ai_projects SET columns_json=? WHERE id=? AND (columns_json IS NULL OR columns_json='')`
+    ).run(JSON.stringify(defaultBoardColumns()), existing.id);
+    seedCanonicalColumns(db, existing.id);
+    return existing.id;
+  }
   let agentName: string | undefined;
   try {
     const agent = db
@@ -460,9 +466,13 @@ export function ensureAgentProject(agentId: string, db: AppDatabase): string {
   const id = agentId === "intelligence" ? "default" : uuidv4();
   const name = `${agentName ?? "Agent"} Tasks`;
   db.prepare(
-    `INSERT OR IGNORE INTO ai_projects (id, name, agent_id) VALUES (?, ?, ?)`
-  ).run(id, name, agentId);
+    `INSERT OR IGNORE INTO ai_projects (id, name, agent_id, columns_json) VALUES (?, ?, ?, ?)`
+  ).run(id, name, agentId, JSON.stringify(defaultBoardColumns()));
   db.prepare(`UPDATE ai_projects SET agent_id = ? WHERE id = ?`).run(agentId, id);
+  db.prepare(
+    `UPDATE ai_projects SET columns_json=? WHERE id=? AND (columns_json IS NULL OR columns_json='')`
+  ).run(JSON.stringify(defaultBoardColumns()), id);
+  seedCanonicalColumns(db, id);
   return id;
 }
 

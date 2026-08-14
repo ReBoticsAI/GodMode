@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-react";
 import { Page, PageHeader } from "@/components/PageHeader";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +41,15 @@ const STATUS_VARIANT: Record<
   published: "default",
   failed: "destructive",
 };
+
+function isContentsPermissionFailure(error: string | null | undefined): boolean {
+  const m = String(error ?? "");
+  return (
+    /Resource not accessible by integration/i.test(m) ||
+    /Contents write/i.test(m) ||
+    (/reconnect GitHub/i.test(m) && /Vault/i.test(m))
+  );
+}
 
 export default function ReleaseSubmissionsPage() {
   const [rows, setRows] = useState<ReleaseSubmission[]>([]);
@@ -109,6 +123,26 @@ export default function ReleaseSubmissionsPage() {
           <Metric label="Failed" value={metrics.failed} />
           <Metric label="Downloads" value={metrics.downloadCount} />
         </div>
+      ) : null}
+
+      {rows.some((r) => r.status === "failed" && isContentsPermissionFailure(r.error)) ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Reconnect GitHub with Contents write</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <p>
+              A release create failed because the GitHub App installation lacks
+              Contents write (or the new permission was not accepted yet).
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              render={<Link to={`${VAULT_PATH}?tab=integrations`} />}
+            >
+              Open Vault Integrations
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {loading ? (

@@ -1209,7 +1209,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "git_clone",
     description:
-      "Clone an https://github.com/owner/repo repository into the coding root using Vault GitHub Connect. Always requires confirmation. Does not support SSH remotes.",
+      "Clone an https://github.com/owner/repo repository into a folder under the coding root using Vault GitHub Connect. Sets agent coding workspace to that folder so git/release tools use the nested checkout. Always requires confirmation. Does not support SSH remotes.",
     mode: "confirm",
     category: "coding",
     write: true,
@@ -1875,6 +1875,36 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "coding_workspace_set",
+    description:
+      "Point coding tools at a relative git checkout under the tenant/local coding root (e.g. after git_clone into a named folder). Validates the path stays inside the coding base and is a git work tree. Prefer this over Agent.update_config. Sets agent.config.workspace only.",
+    mode: "auto",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Relative folder under the coding root (e.g. my-repo)",
+        },
+        workspace: {
+          type: "string",
+          description: "Alias for path",
+        },
+      },
+    },
+  },
+  {
+    name: "coding_workspace_clear",
+    description:
+      "Clear agent.config.workspace so coding tools use the tenant/local coding root again (not a nested clone or worktree).",
+    mode: "auto",
+    category: "coding",
+    write: true,
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "coding_worktree_create",
     description:
       "Create a Bridge-owned git worktree under .worktrees/<slug> inside the tenant coding root and set agent.config.workspace to it so subsequent coding tools edit the worktree. Requires confirmation.",
@@ -2139,6 +2169,8 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "terminal_session_close",
   "terminal_monitor",
   "scaffold_plugin",
+  "coding_workspace_set",
+  "coding_workspace_clear",
   "coding_worktree_create",
   "coding_worktree_list",
   "coding_worktree_discard",
@@ -2169,6 +2201,8 @@ const CODING_WRITE_TOOLS = new Set([
   "github_release_create",
   "github_release_publish",
   "scaffold_plugin",
+  "coding_workspace_set",
+  "coding_workspace_clear",
   "coding_worktree_create",
   "coding_worktree_discard",
   "coding_worktree_promote",

@@ -115,6 +115,7 @@ import {
   gitPush,
   gitRemoteHttpsUrl,
   gitStatus,
+  resolveRelativeCodingWorkspace,
 } from "./coding/git-tools.js";
 import {
   createGithubPullRequest,
@@ -122,6 +123,8 @@ import {
 } from "./coding/github-pr.js";
 import {
   createGithubRelease,
+  formatGithubReleasePermissionError,
+  isGithubIntegrationPermissionError,
   listGithubReleases,
   prepareGithubRelease,
   publishGithubRelease,
@@ -2766,12 +2769,29 @@ export async function executeTool(
           directory: args.directory ? String(args.directory) : undefined,
           githubAccessToken,
         });
+        const agentId = ctx.activeAgentId ?? "intelligence";
+        const agent = getAgent(ctx.db, agentId);
+        let workspaceSet = false;
+        if (agent) {
+          updateAgent(ctx.db, agentId, {
+            config: { ...agent.config, workspace: res.directory },
+          });
+          workspaceSet = true;
+        }
         logToolAudit(ctx.db, {
           ...auditCtx(ctx),
           action: "git_clone",
           result: "ok",
         });
-        return res;
+        return {
+          ...res,
+          workspace: res.directory,
+          workspaceSet,
+          agentId,
+          next: workspaceSet
+            ? `Coding tools now use workspace "${res.directory}". git/release tools resolve remotes from that checkout. Call coding_workspace_clear to return to the tenant coding root.`
+            : `Clone landed in "${res.directory}". Call coding_workspace_set with path "${res.directory}" so git/release tools use that checkout.`,
+        };
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         createNotification({
@@ -2956,18 +2976,23 @@ export async function executeTool(
         });
         return { ...release, submissionId: updated.id, submission: updated };
       } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
+        const raw = err instanceof Error ? err.message : String(err);
+        const detail = formatGithubReleasePermissionError(raw);
         markReleaseSubmissionFailed(ctx.db, stagedRow.id, detail);
         createNotification({
           recipientKind: "user",
           recipientId: ctx.userId,
           recipientTenantId: ctx.tenantId ?? null,
           category: "coding_git",
-          title: "Release create failed",
+          title: isGithubIntegrationPermissionError(raw)
+            ? "Release create failed: reconnect GitHub"
+            : "Release create failed",
           body: detail.slice(0, 500),
-          link: "/releases",
+          link: isGithubIntegrationPermissionError(raw)
+            ? "/vault?tab=integrations"
+            : "/releases",
         });
-        throw err;
+        throw new Error(detail);
       }
     }
 
@@ -3041,17 +3066,22 @@ export async function executeTool(
         });
         return { ...release, submissionId: updated.id, submission: updated };
       } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
+        const raw = err instanceof Error ? err.message : String(err);
+        const detail = formatGithubReleasePermissionError(raw);
         createNotification({
           recipientKind: "user",
           recipientId: ctx.userId,
           recipientTenantId: ctx.tenantId ?? null,
           category: "coding_git",
-          title: "Release publish failed",
+          title: isGithubIntegrationPermissionError(raw)
+            ? "Release publish failed: reconnect GitHub"
+            : "Release publish failed",
           body: detail.slice(0, 500),
-          link: "/releases",
+          link: isGithubIntegrationPermissionError(raw)
+            ? "/vault?tab=integrations"
+            : "/releases",
         });
-        throw err;
+        throw new Error(detail);
       }
     }
 
@@ -3583,6 +3613,57 @@ export async function executeTool(
           : undefined,
         ...codingFsOpts(ctx),
       });
+    }
+
+    case "coding_workspace_set": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error("tenant required for coding_workspace_set on hub/client");
+      }
+      const resolved = resolveRelativeCodingWorkspace({
+        ...codingFsOpts(ctx),
+        root: undefined,
+        workspace: String(args.path ?? args.workspace ?? ""),
+      });
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const agent = getAgent(ctx.db, agentId);
+      if (!agent) {
+        throw new Error(`Agent not found: ${agentId}`);
+      }
+      updateAgent(ctx.db, agentId, {
+        config: { ...agent.config, workspace: resolved.relative },
+      });
+      return {
+        workspace: resolved.relative,
+        absolute: resolved.absolute,
+        agentId,
+        next: `Coding tools now use workspace "${resolved.relative}". git/release remotes resolve from that checkout.`,
+      };
+    }
+
+    case "coding_workspace_clear": {
+      if ((config.isHub || config.isClient) && !ctx.tenantId) {
+        throw new Error(
+          "tenant required for coding_workspace_clear on hub/client"
+        );
+      }
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const agent = getAgent(ctx.db, agentId);
+      if (!agent) {
+        throw new Error(`Agent not found: ${agentId}`);
+      }
+      const prev =
+        typeof agent.config?.workspace === "string"
+          ? agent.config.workspace.trim()
+          : "";
+      const next = { ...agent.config };
+      delete next.workspace;
+      updateAgent(ctx.db, agentId, { config: next });
+      return {
+        cleared: Boolean(prev),
+        previousWorkspace: prev || null,
+        agentId,
+        next: "Coding tools now use the tenant/local coding root.",
+      };
     }
 
     case "coding_worktree_create": {

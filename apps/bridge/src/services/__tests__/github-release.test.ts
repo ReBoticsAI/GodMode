@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { prepareGithubRelease } from "../coding/github-release.js";
+import {
+  formatGithubReleasePermissionError,
+  isGithubIntegrationPermissionError,
+  prepareGithubRelease,
+} from "../coding/github-release.js";
 
 describe("prepareGithubRelease", () => {
   it("stages a draft payload with stripped attribution", () => {
@@ -31,5 +35,27 @@ describe("prepareGithubRelease", () => {
         tag: "../evil",
       })
     ).toThrow(/invalid/);
+  });
+});
+
+describe("GitHub integration permission errors", () => {
+  it("detects Resource not accessible by integration", () => {
+    expect(
+      isGithubIntegrationPermissionError(
+        "GitHub release create failed: Resource not accessible by integration"
+      )
+    ).toBe(true);
+    expect(isGithubIntegrationPermissionError("network timeout")).toBe(false);
+  });
+
+  it("rewrites failures with Contents write reconnect guidance", () => {
+    const msg = formatGithubReleasePermissionError(
+      "GitHub release create failed: Resource not accessible by integration"
+    );
+    expect(msg).toMatch(/Contents write/i);
+    expect(msg).toMatch(/Vault/i);
+    expect(formatGithubReleasePermissionError("other failure")).toBe(
+      "other failure"
+    );
   });
 });

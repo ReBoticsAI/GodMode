@@ -44,6 +44,8 @@ Every Official connector must document and implement:
 ### 3. Scopes / permissions
 
 - Least privilege: declare the App permissions or OAuth scopes the product needs.
+- For Vault GitHub Connect on Cloud: document Contents write (Releases), Pull requests write (PR create), Issues write, Projects write, and Metadata read. See `CONFIGURATION.md`.
+- On permission failures (`Resource not accessible by integration`), Attention / connector UI must tell the user to reconnect and accept the new install permissions.
 - Do not request broad admin scopes "just in case."
 - Document what agents can do once connected (clone, PR create, read issues, and so on).
 
@@ -88,7 +90,7 @@ GitHub is the first Official connector held to this bar end to end on Cloud.
 |----------|-----------------------------------------|
 | Auth | Vault **Connect GitHub** (GitHub App user auth). UI: AI Settings / Vault Connect card. |
 | Refresh | `refreshGithubUserToken` when `expiresAt` + refresh token present (`github-integration`). |
-| Scopes | App permissions for projects/PRs; legacy OAuth scope string only when App auth is not configured. |
+| Scopes | App permissions: Contents write (Releases + private clone), Pull requests write, Issues write, Projects write, Metadata read. Documented in CONFIGURATION.md. Legacy OAuth scope string only when App auth is not configured. Reconnect UX on Connect card + `/releases` when Contents write is missing. |
 | Webhooks | GitHub App webhook HMAC verification (`github-app-webhook`); raw body; signature fail-closed. |
 | Rate limits / UX | Provider errors returned on Connect status and coding/host tools; PR create confirm + Attention. |
 | Teardown | `POST /integrations/github/disconnect` clears stored user tokens. |

@@ -134,6 +134,20 @@ Templates: [deploy/.env.saas-staging.example](../deploy/.env.saas-staging.exampl
 | `GITHUB_APP_PLATFORM_INSTALLATION_ID` | Optional install id on the platform account for Core Support issues |
 | `GITHUB_APP_PLATFORM_ACCOUNT_LOGIN` | Account login for platform install discovery (default `ReBoticsAI`) |
 
+### Required App repository permissions (Cloud)
+
+Configure these on the GitHub App (github.com → App settings → Permissions), then have each install **Accept** updates:
+
+| Permission | Level | Why |
+|------------|-------|-----|
+| Contents | Read and write | Clone private repos; create/publish GitHub Releases and upload assets |
+| Metadata | Read | Required baseline for Apps |
+| Issues | Read and write | Support / issue flows |
+| Pull requests | Read and write | `github_pr_create` |
+| Projects (repo + org as needed) | Write | Tasks ↔ Projects sync |
+
+After a permission upgrade, users reconnect from Vault → Integrations (or open the install URL and accept). Classic OAuth `scope=` is ignored when App auth is configured.
+
 Callback URLs on the App (add both):
 | Purpose | Callback URL |
 |---------|----------------|
@@ -141,6 +155,18 @@ Callback URLs on the App (add both):
 | Connect / install | `{AUTH_PUBLIC_URL}/api/integrations/github/callback` |
 
 Webhook URL: `{AUTH_PUBLIC_URL}/api/integrations/github/webhook` (subscribe to Projects v2 item + installation events).
+
+**Required repository permissions (GodMode Cloud App):**
+
+| Permission | Level | Why |
+|------------|-------|-----|
+| Contents | Read and write | Clone private repos; create/publish GitHub Releases and upload assets |
+| Metadata | Read | Default App metadata |
+| Issues | Read and write | Core Support / issue flows |
+| Pull requests | Read and write | `github_pr_create` |
+| Projects (org/user as needed) | Write | Tasks ↔ GitHub Projects sync |
+
+After changing App permissions, each installation must **accept** the new permissions. Users reconnect from Vault → Integrations (Reconnect / update permissions).
 
 **Projects webhooks note:** Live `projects_v2_item` delivery is **organization-level only** (GitHub limitation). User-owned Projects (for example `users/*/projects/N`) sync via the **1-minute poll** (or manual Sync). The Bridge HMAC webhook handler is ready for org-owned Projects when the App is installed on that org.
 

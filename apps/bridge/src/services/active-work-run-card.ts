@@ -39,6 +39,7 @@ export function beginActiveWorkRunCard(args: {
   agentId: string;
   chatId: string;
   userMessage: string;
+  tenantId?: string | null;
 }): { cardId: string; projectId: string; title: string } {
   const projectId = ensureAgentProject(args.agentId, args.db);
   const cardId = runCardId(args.chatId);
@@ -52,9 +53,10 @@ export function beginActiveWorkRunCard(args: {
         ? clipTitle(preview, TITLE_MAX)
         : `Run ${args.chatId.slice(0, 8)}`;
 
+  // Card ids are globally unique. Remap project_id if the agent board changed.
   const existing = args.db
-    .prepare(`SELECT id FROM ai_project_cards WHERE id=? AND project_id=?`)
-    .get(cardId, projectId) as { id: string } | undefined;
+    .prepare(`SELECT id, project_id FROM ai_project_cards WHERE id=?`)
+    .get(cardId) as { id: string; project_id: string } | undefined;
 
   const description = [
     "Host Active-work card for this Intelligence chat.",
@@ -74,11 +76,12 @@ export function beginActiveWorkRunCard(args: {
     args.db
       .prepare(
         `UPDATE ai_project_cards
-         SET title=?, description=?, column_id=?, status=?, linked_chat_id=?,
+         SET project_id=?, title=?, description=?, column_id=?, status=?, linked_chat_id=?,
              assigned_agent_id=?, context_json=?, updated_at=datetime('now')
-         WHERE id=? AND project_id=?`
+         WHERE id=?`
       )
       .run(
+        projectId,
         title,
         description,
         "in_progress",
@@ -86,8 +89,7 @@ export function beginActiveWorkRunCard(args: {
         args.chatId,
         args.agentId,
         contextJson,
-        cardId,
-        projectId
+        cardId
       );
   } else {
     const order = (
@@ -118,6 +120,11 @@ export function beginActiveWorkRunCard(args: {
         order + 1
       );
   }
+
+  broadcastCardActivity(args.tenantId, {
+    cardId,
+    reason: "active-work-begin",
+  });
 
   return { cardId, projectId, title };
 }

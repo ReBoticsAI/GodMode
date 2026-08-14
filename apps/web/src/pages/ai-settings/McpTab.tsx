@@ -13,6 +13,20 @@ import {
 } from "@/api";
 import { platformVaultSettingsHref } from "@/lib/navigation";
 
+function executionLabel(execution: string | undefined): string {
+  switch (execution) {
+    case "sdk-inline":
+      return "Callable (SDK inline)";
+    case "sdk-project":
+      return "Callable (SDK project settings)";
+    case "bridge-host":
+      return "Callable (Bridge host)";
+    case "discovery-only":
+    default:
+      return "Discovery only";
+  }
+}
+
 export function McpTab({
   agent,
   saveAgent,
@@ -49,10 +63,13 @@ export function McpTab({
 
   const cfg = agent.config ?? {};
   const isCursorCloud = agent.backend === "cursor_cloud";
+  // Prefer explicit agent config; otherwise use Bridge-resolved value (SaaS default off).
   const mcpFromWorkspace =
     typeof cfg.mcpFromWorkspace === "boolean"
       ? Boolean(cfg.mcpFromWorkspace)
-      : true;
+      : status != null
+        ? Boolean(status.mcpFromWorkspace)
+        : false;
   const disabled = Array.isArray(cfg.mcpDisabledServers)
     ? (cfg.mcpDisabledServers as string[]).filter((n) => typeof n === "string")
     : [];
@@ -101,6 +118,27 @@ export function McpTab({
             <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
               {status.sourcePath}
             </p>
+          )}
+          {status && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge
+                variant={
+                  status.execution === "discovery-only" || !status.execution
+                    ? "secondary"
+                    : "outline"
+                }
+                className="text-[10px]"
+              >
+                {executionLabel(status.execution)}
+              </Badge>
+              {status.execution === "discovery-only" &&
+                (status.servers?.length ?? 0) > 0 && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                    Listed in Pipeline only. Enable the switch below to call
+                    tools from Intelligence chat.
+                  </span>
+                )}
+            </div>
           )}
         </div>
         <Button

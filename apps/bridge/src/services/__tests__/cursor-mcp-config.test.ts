@@ -278,6 +278,9 @@ describe("prompt-assembler MCP line", () => {
     expect(assembled.systemPrompt).toContain(
       "github (stdio) cmd:npx | discovery only (not executed by Bridge)"
     );
+    expect(assembled.systemPrompt).toContain(
+      "Do not tell the USER to reload an external IDE"
+    );
     expect(assembled.systemPrompt).toContain("Route: /intelligence");
   });
 });
