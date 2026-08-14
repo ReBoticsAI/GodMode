@@ -315,13 +315,18 @@ export const config = {
   })(),
   /**
    * Network inside the terminal sandbox.
-   * - none: --unshare-net (SaaS + hub default)
-   * - allowlist: FS jail + --unshare-net + UDS CONNECT allowlist (kernel-enforced; prefer over shared)
+   * - none: --unshare-net (local default; no egress)
+   * - allowlist: FS jail + --unshare-net + UDS CONNECT allowlist (kernel-enforced)
    * - shared: full host network (FS jail still on)
+   *
+   * Hub/client (including SaaS) default to allowlist so git_clone / push can
+   * reach GitHub via the Bridge CONNECT proxy (#442). Override with
+   * CODING_TERMINAL_NET=none to lock interactive terminals to no egress.
    */
   codingTerminalNet: ((): "none" | "shared" | "allowlist" => {
     const raw = (process.env.CODING_TERMINAL_NET ?? "").trim().toLowerCase();
     if (raw === "shared" || raw === "none" || raw === "allowlist") return raw;
+    if (isHub || deploymentMode === "client") return "allowlist";
     return "none";
   })(),
   /**
