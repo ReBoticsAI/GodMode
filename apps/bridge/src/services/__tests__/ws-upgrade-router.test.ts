@@ -12,6 +12,7 @@ import {
 describe("wsUpgradePathname", () => {
   it("strips query and returns pathname", () => {
     expect(wsUpgradePathname("/ws/terminal?tenantId=abc")).toBe("/ws/terminal");
+    expect(wsUpgradePathname("/ws/chat?tenantId=abc")).toBe("/ws/chat");
     expect(wsUpgradePathname("/ws")).toBe("/ws");
   });
 
@@ -42,16 +43,18 @@ describe("attachWsUpgradeRouter", () => {
     termWss = null;
   });
 
-  it("routes /ws and /ws/terminal without aborting the other path", async () => {
+  it("routes /ws, /ws/terminal, and /ws/chat without aborting other paths", async () => {
     server = http.createServer((_req, res) => {
       res.writeHead(200);
       res.end("ok");
     });
     mainWss = new WebSocketServer({ noServer: true });
     termWss = new WebSocketServer({ noServer: true });
+    const chatWss = new WebSocketServer({ noServer: true });
     attachWsUpgradeRouter(server, [
       { path: "/ws", wss: mainWss },
       { path: "/ws/terminal", wss: termWss },
+      { path: "/ws/chat", wss: chatWss },
     ]);
 
     mainWss.on("connection", (ws) => {
@@ -59,6 +62,9 @@ describe("attachWsUpgradeRouter", () => {
     });
     termWss.on("connection", (ws) => {
       ws.send(JSON.stringify({ type: "terminal" }));
+    });
+    chatWss.on("connection", (ws) => {
+      ws.send(JSON.stringify({ type: "chat" }));
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -95,5 +101,10 @@ describe("attachWsUpgradeRouter", () => {
     expect(
       JSON.parse(await recv(`ws://127.0.0.1:${port}/ws/terminal`))
     ).toEqual({ type: "terminal" });
+    expect(JSON.parse(await recv(`ws://127.0.0.1:${port}/ws/chat`))).toEqual({
+      type: "chat",
+    });
+
+    await new Promise<void>((resolve) => chatWss.close(() => resolve()));
   });
 });

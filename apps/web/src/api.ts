@@ -1119,160 +1119,249 @@ export interface AiStreamHandlers {
   onError?: (error: string) => void;
 }
 
+/** Open `/ws/chat` socket for the in-flight turn (Approve via same WS). */
+let activeAiChatWs: WebSocket | null = null;
+
 /**
- * Streams a chat completion from the bridge AI proxy via SSE-over-fetch.
- * Returns an abort function.
+ * Streams a chat completion from the bridge over `/ws/chat` (default).
+ * Same AiStreamHandlers event names as the legacy SSE path. Returns abort fn.
  */
 export function streamAiChat(
   req: AiChatRequest,
   handlers: AiStreamHandlers
 ): () => void {
-  const controller = new AbortController();
+  let closedByClient = false;
+  let settled = false;
+  let ws: WebSocket | null = null;
+  const requestId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const dispatchEvent = (event: string, parsed: Record<string, unknown>) => {
+    switch (event) {
+      case "chat_id":
+        handlers.onChatId?.(parsed.chatId as string);
+        break;
+      case "status":
+        handlers.onStatus?.({
+          phase: String(parsed.phase ?? "working"),
+          message: String(parsed.message ?? "Working…"),
+        });
+        break;
+      case "token":
+        handlers.onToken?.(parsed.content as string);
+        break;
+      case "reasoning":
+        handlers.onReasoning?.(parsed.content as string);
+        break;
+      case "tool_call":
+        handlers.onToolCall?.(
+          parsed.name as string,
+          (parsed.args as Record<string, unknown>) ?? {},
+          parsed.toolCallId as string | undefined
+        );
+        break;
+      case "tool_result":
+        handlers.onToolResult?.(
+          parsed.name as string,
+          parsed.result,
+          parsed.toolCallId as string | undefined,
+          parsed.isError as boolean | undefined
+        );
+        break;
+      case "tool_call_delta":
+        handlers.onToolCallDelta?.(
+          parsed.toolCallId as string,
+          parsed.name as string,
+          (parsed.args as Record<string, unknown>) ?? {}
+        );
+        break;
+      case "tool_confirm_required":
+        handlers.onToolConfirmRequired?.({
+          toolCallId: parsed.toolCallId as string,
+          name: parsed.name as string,
+          args: (parsed.args as Record<string, unknown>) ?? {},
+          previewDiff:
+            typeof parsed.previewDiff === "string"
+              ? parsed.previewDiff
+              : undefined,
+          previewError:
+            typeof parsed.previewError === "string"
+              ? parsed.previewError
+              : undefined,
+        });
+        break;
+      case "terminal_output":
+        handlers.onTerminalOutput?.({
+          toolCallId: parsed.toolCallId as string,
+          stream: parsed.stream as "stdout" | "stderr",
+          text: parsed.text as string,
+        });
+        break;
+      case "terminal_monitor":
+        handlers.onTerminalMonitor?.({
+          toolCallId: parsed.toolCallId as string,
+          sessionId: parsed.sessionId as string,
+          text: parsed.text as string,
+        });
+        break;
+      case "done":
+        settled = true;
+        handlers.onDone?.(parsed as never);
+        break;
+      case "error":
+        settled = true;
+        handlers.onError?.(
+          String(
+            (parsed as { error?: string }).error ??
+              (parsed as { message?: string }).message ??
+              ""
+          ).trim() || "Chat failed without a message. Try sending again."
+        );
+        break;
+    }
+  };
 
   (async () => {
     try {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
       const tenantId = getActiveTenantId();
-      const res = await fetch(`${API_BASE}/ai/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(tenantId ? { "X-Tenant-Id": tenantId } : {}),
-        },
-        body: JSON.stringify(req),
-        signal: controller.signal,
+      const params = new URLSearchParams();
+      if (tenantId) params.set("tenantId", tenantId);
+      const sessionToken = allowSessionTokenFallback ? readSessionToken() : null;
+      if (sessionToken) params.set("session", sessionToken);
+      const qs = params.size ? `?${params.toString()}` : "";
+      const socket = new WebSocket(`${protocol}//${host}/ws/chat${qs}`);
+      ws = socket;
+      activeAiChatWs = socket;
+
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error("Chat WebSocket connection timed out"));
+        }, 15000);
+        socket.onopen = () => {
+          /* wait for connected frame */
+        };
+        socket.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error("Chat WebSocket connection failed"));
+        };
+        socket.onclose = () => {
+          window.clearTimeout(timer);
+          if (!closedByClient && !settled) {
+            reject(new Error("Chat WebSocket closed before connect"));
+          }
+        };
+        socket.onmessage = (ev) => {
+          let msg: {
+            type?: string;
+            requestId?: string;
+            event?: string;
+            data?: unknown;
+            error?: string;
+          };
+          try {
+            msg = JSON.parse(String(ev.data));
+          } catch {
+            return;
+          }
+          if (msg.type === "connected") {
+            window.clearTimeout(timer);
+            resolve();
+            return;
+          }
+          if (msg.type === "error" && !msg.event) {
+            window.clearTimeout(timer);
+            reject(new Error(String(msg.error ?? "Chat WebSocket error")));
+          }
+        };
       });
 
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        const raw =
-          (err as { error?: string }).error ?? res.statusText ?? "";
-        const trimmed = String(raw).trim();
-        handlers.onError?.(
-          trimmed ||
-            (res.status === 524
-              ? "Chat timed out before the server started streaming (proxy 524). Try again."
-              : res.status
-                ? `Chat request failed (${res.status}).`
-                : "Chat connection failed. Try again.")
-        );
+      if (closedByClient) {
+        try {
+          socket.close();
+        } catch {
+          /* ignore */
+        }
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let settled = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
-
-        for (const block of events) {
-          let event = "message";
-          let data = "";
-          for (const line of block.split("\n")) {
-            if (line.startsWith("event: ")) event = line.slice(7).trim();
-            else if (line.startsWith("data: ")) data += line.slice(6);
+      socket.onmessage = (ev) => {
+        let msg: {
+          type?: string;
+          requestId?: string;
+          event?: string;
+          data?: unknown;
+          error?: string;
+        };
+        try {
+          msg = JSON.parse(String(ev.data));
+        } catch {
+          return;
+        }
+        if (msg.type === "ai_chat_ping") return;
+        if (msg.type === "error" && msg.requestId === requestId) {
+          settled = true;
+          handlers.onError?.(
+            String(msg.error ?? "").trim() ||
+              "Chat failed without a message. Try sending again."
+          );
+          return;
+        }
+        if (msg.type !== "ai_chat_event" || msg.requestId !== requestId) return;
+        const event = String(msg.event ?? "message");
+        const data = msg.data;
+        if (!data || typeof data !== "object") {
+          if (event === "error") {
+            settled = true;
+            handlers.onError?.(
+              "Chat failed without a message. Try sending again."
+            );
           }
-          if (!data) continue;
-          let parsed: Record<string, unknown>;
+          return;
+        }
+        dispatchEvent(event, data as Record<string, unknown>);
+        if (event === "done" || event === "error") {
+          if (activeAiChatWs === socket) activeAiChatWs = null;
           try {
-            parsed = JSON.parse(data);
+            socket.close();
           } catch {
-            continue;
-          }
-          switch (event) {
-            case "chat_id":
-              handlers.onChatId?.(parsed.chatId as string);
-              break;
-            case "status":
-              handlers.onStatus?.({
-                phase: String(parsed.phase ?? "working"),
-                message: String(parsed.message ?? "Working…"),
-              });
-              break;
-            case "token":
-              handlers.onToken?.(parsed.content as string);
-              break;
-            case "reasoning":
-              handlers.onReasoning?.(parsed.content as string);
-              break;
-            case "tool_call":
-              handlers.onToolCall?.(
-                parsed.name as string,
-                (parsed.args as Record<string, unknown>) ?? {},
-                parsed.toolCallId as string | undefined
-              );
-              break;
-            case "tool_result":
-              handlers.onToolResult?.(
-                parsed.name as string,
-                parsed.result,
-                parsed.toolCallId as string | undefined,
-                parsed.isError as boolean | undefined
-              );
-              break;
-            case "tool_call_delta":
-              handlers.onToolCallDelta?.(
-                parsed.toolCallId as string,
-                parsed.name as string,
-                (parsed.args as Record<string, unknown>) ?? {}
-              );
-              break;
-            case "tool_confirm_required":
-              handlers.onToolConfirmRequired?.({
-                toolCallId: parsed.toolCallId as string,
-                name: parsed.name as string,
-                args: (parsed.args as Record<string, unknown>) ?? {},
-                previewDiff:
-                  typeof parsed.previewDiff === "string"
-                    ? parsed.previewDiff
-                    : undefined,
-                previewError:
-                  typeof parsed.previewError === "string"
-                    ? parsed.previewError
-                    : undefined,
-              });
-              break;
-            case "terminal_output":
-              handlers.onTerminalOutput?.({
-                toolCallId: parsed.toolCallId as string,
-                stream: parsed.stream as "stdout" | "stderr",
-                text: parsed.text as string,
-              });
-              break;
-            case "terminal_monitor":
-              handlers.onTerminalMonitor?.({
-                toolCallId: parsed.toolCallId as string,
-                sessionId: parsed.sessionId as string,
-                text: parsed.text as string,
-              });
-              break;
-            case "done":
-              settled = true;
-              handlers.onDone?.(parsed as never);
-              break;
-            case "error":
-              settled = true;
-              handlers.onError?.(
-                String(parsed.error ?? "").trim() ||
-                  "Chat failed without a message. Try sending again."
-              );
-              break;
+            /* ignore */
           }
         }
-      }
-      if (!settled && !controller.signal.aborted) {
-        handlers.onError?.(
-          "Chat stream ended before the assistant finished. Try sending again."
-        );
-      }
+      };
+
+      socket.onerror = () => {
+        if (activeAiChatWs === socket) activeAiChatWs = null;
+        if (!closedByClient && !settled) {
+          settled = true;
+          handlers.onError?.(
+            "Chat connection dropped (network or proxy timeout). Try sending again."
+          );
+        }
+      };
+
+      socket.onclose = () => {
+        if (activeAiChatWs === socket) activeAiChatWs = null;
+        if (!closedByClient && !settled) {
+          settled = true;
+          handlers.onError?.(
+            "Chat stream ended before the assistant finished. Try sending again."
+          );
+        }
+      };
+
+      socket.send(
+        JSON.stringify({
+          type: "chat_turn",
+          requestId,
+          ...req,
+        })
+      );
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
+      if (!closedByClient && !settled) {
         const msg =
           err instanceof Error ? err.message.trim() : String(err).trim();
         handlers.onError?.(
@@ -1283,7 +1372,22 @@ export function streamAiChat(
     }
   })();
 
-  return () => controller.abort();
+  return () => {
+    closedByClient = true;
+    if (activeAiChatWs === ws) activeAiChatWs = null;
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "chat_abort", requestId }));
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      ws?.close();
+    } catch {
+      /* ignore */
+    }
+  };
 }
 
 export interface AiAdapter {
@@ -1495,12 +1599,33 @@ export interface AiLoraAdapter {
   scale: number;
 }
 
-export const confirmAiTool = (toolCallId: string, approved: boolean) =>
-  actionDto<{ ok: boolean }>(
+export const confirmAiTool = (
+  toolCallId: string,
+  approved: boolean,
+  chatId: string
+) => {
+  // Unblock waitForToolConfirmation on the same `/ws/chat` turn immediately.
+  // Kernel HTTP confirm remains for durable/auth consistency.
+  try {
+    if (activeAiChatWs && activeAiChatWs.readyState === WebSocket.OPEN) {
+      activeAiChatWs.send(
+        JSON.stringify({
+          type: "confirm_tool",
+          toolCallId,
+          approved,
+        })
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+  return actionDto<{ ok: boolean }>(
     "ChatSession",
     "confirm_tool",
-    { tool_call_id: toolCallId, approved }
+    { tool_call_id: toolCallId, approved },
+    chatId
   );
+};
 
 export const fetchAiAdapters = () => api<{ adapters: AiAdapter[] }>("/ai/adapters");
 export const createAiAdapter = (body: {
