@@ -187,6 +187,7 @@ import { summarizeRunCardTitle } from "../services/run-card-title.js";
 import {
   beginActiveWorkRunCard,
   completeActiveWorkRunCard,
+  formatActiveWorkHostContext,
 } from "../services/active-work-run-card.js";
 import {
   setAiChatTurnHandlers,
@@ -1796,7 +1797,7 @@ export function createAiRouter(
       chatMode,
       harnessDelta: harnessProfile.harnessDelta,
     });
-    const systemPrompt = assembled.systemPrompt;
+    const systemPrompt = `${assembled.systemPrompt}\n\n${formatActiveWorkHostContext(activeWorkCardId)}`;
 
     const historyAgentMessages = historyToAgentMessages(history, {
       stripThinking: harnessProfile.stripThinkingFromHistory,

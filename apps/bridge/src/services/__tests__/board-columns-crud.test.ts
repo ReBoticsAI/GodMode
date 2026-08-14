@@ -3,7 +3,9 @@ import Database from "better-sqlite3";
 import {
   columnsForBoard,
   createUserBoard,
+  ensureAgentProject,
   ensureUserProject,
+  mergeCanonicalColumnsJson,
   parseBoardColumns,
   updateBoardColumns,
   visibleColumnsForBoard,
@@ -16,6 +18,57 @@ function openMigratedDb(): Database.Database {
   migrateTenantDb(db);
   return db;
 }
+
+describe("mergeCanonicalColumnsJson", () => {
+  it("adds missing canonical lanes to a partial custom board", () => {
+    const merged = JSON.parse(
+      mergeCanonicalColumnsJson(
+        JSON.stringify([{ id: "triage", name: "Triage", sort_order: 0 }])
+      )
+    ) as Array<{ id: string }>;
+    const ids = merged.map((c) => c.id);
+    expect(ids).toContain("triage");
+    expect(ids).toContain("backlog");
+    expect(ids).toContain("in_progress");
+    expect(ids).toContain("done");
+  });
+
+  it("leaves a complete board string unchanged", () => {
+    const full = JSON.stringify([
+      { id: "backlog", name: "Backlog", sort_order: 0 },
+      { id: "ready", name: "Ready", sort_order: 1 },
+      { id: "in_progress", name: "In Progress", sort_order: 2 },
+      { id: "review", name: "Review", sort_order: 3 },
+      { id: "done", name: "Done", sort_order: 4 },
+    ]);
+    expect(mergeCanonicalColumnsJson(full)).toBe(full);
+  });
+});
+
+describe("ensureAgentProject canonical merge", () => {
+  it("merges canonical lanes into an existing partial columns_json", () => {
+    const db = openMigratedDb();
+    db.prepare(
+      `INSERT INTO ai_projects (id, name, agent_id, columns_json) VALUES (?, ?, ?, ?)`
+    ).run(
+      "agent-partial",
+      "Partial",
+      "agent-partial",
+      JSON.stringify([{ id: "custom", name: "Custom", sort_order: 0 }])
+    );
+    const id = ensureAgentProject("agent-partial", db);
+    expect(id).toBe("agent-partial");
+    const row = db
+      .prepare(`SELECT columns_json FROM ai_projects WHERE id=?`)
+      .get(id) as { columns_json: string };
+    const ids = parseBoardColumns(row.columns_json).map((c) => c.id);
+    expect(ids).toContain("custom");
+    expect(ids).toContain("backlog");
+    expect(ids).toContain("in_progress");
+    expect(ids).toContain("done");
+    db.close();
+  });
+});
 
 describe("board columns CRUD", () => {
   it("parses hidden and wip_limit", () => {

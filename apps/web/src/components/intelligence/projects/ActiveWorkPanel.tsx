@@ -336,6 +336,7 @@ export function ActiveWorkPanel({
   onOpenBoard?: () => void;
 }) {
   const [tasks, setTasks] = useState<ActiveTask[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const loadingRef = useRef(false);
   const reloadQueuedRef = useRef(false);
@@ -398,8 +399,12 @@ export function ActiveWorkPanel({
         })
       );
       setTasks(detail);
-    } catch {
-      setTasks([]);
+      setLoadError(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load Active Work";
+      setLoadError(message || "Failed to load Active Work");
+      // Keep prior tasks visible; do not clear to empty on transient failures.
     } finally {
       loadingRef.current = false;
       if (reloadQueuedRef.current) {
@@ -480,7 +485,7 @@ export function ActiveWorkPanel({
     return tasks.length > 1 ? `${first} +${tasks.length - 1} more` : first;
   }, [tasks]);
 
-  if (tasks.length === 0) return null;
+  if (tasks.length === 0 && !loadError) return null;
 
   return (
     <div className="shrink-0 border-b bg-muted/20">
@@ -508,6 +513,14 @@ export function ActiveWorkPanel({
       </button>
       {!collapsed && (
         <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-2 pb-2 text-xs">
+          {loadError && (
+            <div
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-600 dark:text-amber-400"
+            >
+              Could not refresh Active Work: {loadError}
+            </div>
+          )}
           {tasks
             .filter((t) => t?.parent && typeof t.parent.id === "string")
             .map((t) => (
