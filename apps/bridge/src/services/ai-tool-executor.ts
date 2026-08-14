@@ -675,14 +675,31 @@ async function executeStaticKernelAlias(
         index: number,
         parentId: string | null
       ): Promise<void> => {
+        const explicit = todo.id?.trim() || "";
+        const slug =
+          explicit && !explicit.includes("__")
+            ? explicit
+            : keyOf({ ...todo, id: undefined });
         const id = parentId
-          ? `${parentId}__${keyOf(todo)}`
-          : `todo_${scope}_${keyOf(todo)}`;
+          ? explicit.startsWith(`${parentId}__`)
+            ? explicit
+            : `${parentId}__${slug}`
+          : explicit.startsWith(`todo_${scope}_`)
+            ? explicit
+            : `todo_${scope}_${slug}`;
         const { columnId, cardStatus } = lane(todo.status);
-        const existing = await dispatchKernelTool(ctx, "get_record", {
-          objectType: "TaskCard",
-          id,
-        });
+        // Production get_record throws KernelError 404 when missing. Treat that
+        // as "create" so nested plans under a host-run card can insert children.
+        let existing: unknown = null;
+        try {
+          existing = await dispatchKernelTool(ctx, "get_record", {
+            objectType: "TaskCard",
+            id,
+          });
+        } catch (err) {
+          if (!(err instanceof KernelError) || err.status !== 404) throw err;
+          existing = null;
+        }
         const data = {
           title: todo.content,
           status: cardStatus,

@@ -149,6 +149,54 @@ describe("static AI tool kernel cutover", () => {
     );
   });
 
+  it("creates nested todos under a host when get_record throws 404", async () => {
+    const { KernelError } = await import("../record-api.js");
+    const created: string[] = [];
+    const dispatch = vi.fn(
+      (_db, name: string, args: Record<string, unknown>) => {
+        if (name === "get_record") {
+          throw new KernelError(
+            404,
+            `TaskCard record not found: ${String(args.id ?? "")}`
+          );
+        }
+        if (name === "list_records") return { records: [] };
+        if (name === "create_record") {
+          const id = String(
+            (args.data as { id?: string } | undefined)?.id ?? "ok"
+          );
+          created.push(id);
+          return { id };
+        }
+        return { id: "ok" };
+      }
+    );
+    setKernelToolDispatcherForTests(dispatch);
+
+    const host = "run_chat-host";
+    const result = await executeTool(
+      "todo_write",
+      {
+        parent_card_id: host,
+        todos: [
+          {
+            content: "Wiki tip plan",
+            status: "in_progress",
+            subtasks: [
+              { content: "Outline", status: "in_progress" },
+              { content: "Publish", status: "pending" },
+            ],
+          },
+        ],
+      },
+      context()
+    );
+
+    expect(result).toMatchObject({ ok: true, count: 3 });
+    expect(created.some((id) => id.startsWith(`${host}__`))).toBe(true);
+    expect(created.length).toBe(3);
+  });
+
   it("mirrors contributed memories through kernel dispatch on both databases", async () => {
     const dispatch = vi.fn((_db, _name, args: Record<string, unknown>) => ({
       id: String((args.data as { id?: string } | undefined)?.id ?? "memory"),
