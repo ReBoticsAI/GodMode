@@ -1495,9 +1495,16 @@ export function createAiRouter(
     });
 
     const abortController = new AbortController();
-    const onClientClose = () => abortController.abort();
+    const onClientClose = () => {
+      // Only the request close means the browser dropped the SSE fetch.
+      // Listening on res "close" can fire while the stream is still writing
+      // (proxy/flush), which aborted Cursor turns and showed
+      // "Chat stream ended before the assistant finished".
+      if (!res.writableEnded && !res.writableFinished) {
+        abortController.abort();
+      }
+    };
     req.on("close", onClientClose);
-    res.on("close", onClientClose);
 
     /**
      * Keep the SSE socket alive for the whole turn: prompt prep, Cursor waits,
@@ -1615,7 +1622,6 @@ export function createAiRouter(
       }
       clearInterval(statusHeartbeat);
       req.off("close", onClientClose);
-      res.off("close", onClientClose);
       res.end();
       return;
     }
@@ -2105,6 +2111,12 @@ export function createAiRouter(
         send("error", {
           error: err instanceof Error ? err.message : String(err),
         });
+      } else if (!res.writableEnded && !res.destroyed) {
+        // Client still connected but the turn was aborted (Stop, or a
+        // spurious close). Prefer an explicit SSE error over a silent end.
+        send("error", {
+          error: "Chat turn was cancelled before it finished.",
+        });
       }
       if (activeWorkCardId) {
         try {
@@ -2126,7 +2138,6 @@ export function createAiRouter(
     } finally {
       clearInterval(statusHeartbeat);
       req.off("close", onClientClose);
-      res.off("close", onClientClose);
     }
 
     res.end();
