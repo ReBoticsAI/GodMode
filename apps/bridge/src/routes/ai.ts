@@ -1496,13 +1496,12 @@ export function createAiRouter(
 
     const abortController = new AbortController();
     const onClientClose = () => {
-      // Only the request close means the browser dropped the SSE fetch.
-      // Listening on res "close" can fire while the stream is still writing
-      // (proxy/flush), which aborted Cursor turns and showed
-      // "Chat stream ended before the assistant finished".
-      if (!res.writableEnded && !res.writableFinished) {
-        abortController.abort();
-      }
+      // Node can emit IncomingMessage "close" while the SSE response is still
+      // live (client still reading). Abort only when the TCP socket is gone
+      // (browser Stop / disconnect). Spurious closes were cancelling Cursor
+      // turns within seconds and showing "Chat turn was cancelled".
+      if (req.socket && !req.socket.destroyed) return;
+      abortController.abort();
     };
     req.on("close", onClientClose);
 
