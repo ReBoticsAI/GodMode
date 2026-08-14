@@ -149,14 +149,14 @@ export function formatActiveWorkHostContext(
   if (hostCardId?.trim()) {
     return [
       "<active_work_host>",
-      `Host-run card id: ${hostCardId.trim()}. todo_write nests under this card automatically.`,
+      `Host-run card id: ${hostCardId.trim()}. Call GodMode todo_write; it nests under this card automatically.`,
       "Do NOT open a second plan parent with create_project_card or create_subtask for this chat plan.",
       "</active_work_host>",
     ].join("\n");
   }
   return [
     "<active_work_host>",
-    "Host-run card unavailable this turn (begin failed). Prefer todo_write as a top-level nested plan.",
+    "Host-run card unavailable this turn (begin failed). Prefer GodMode todo_write as a top-level nested plan.",
     "Do NOT invent a second plan parent with create_project_card or create_subtask, and do not narrate a board glitch.",
     "</active_work_host>",
   ].join("\n");
