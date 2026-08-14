@@ -509,8 +509,8 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/ai/chat",
     rationale:
-      "SSE adapter over the shared AI chat turn runner; dual-stack with /ws/chat until clients fully migrate.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "SSE adapter over the shared AI chat turn runner; dual-stack with /ws/chat until clients fully migrate. Durable ChatSession/ChatMessage writes stay on createRecord inside the shared runner.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "dm-binary-upload",
