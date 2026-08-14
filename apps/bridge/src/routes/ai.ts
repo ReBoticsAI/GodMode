@@ -118,7 +118,11 @@ import {
   revokeAgentAccount,
 } from "../services/agents/agent-accounts.js";
 import { resolveAgent, getBackend } from "../services/agents/registry.js";
-import { agentCanRunWithoutLocalLlm, clearCursorCloudAgentCache } from "../services/agents/cursor-cloud-backend.js";
+import {
+  agentCanRunWithoutLocalLlm,
+  clearCursorCloudAgentCache,
+  cursorSdkSandboxEnabled,
+} from "../services/agents/cursor-cloud-backend.js";
 import {
   getCursorAuthStatus,
   upsertCursorApiKey,
@@ -222,21 +226,25 @@ function mcpExecutionForAgent(
     agent?.config as { mcpFromWorkspace?: unknown },
     { isSaas: config.isSaas }
   );
-  // cursor_cloud uses SDK pass-through; other backends use Bridge host when on.
+  const sdkSandbox = cursorSdkSandboxEnabled();
+  const bridgeHost = resolveBridgeMcpHostEnabled({
+    backend: agent?.backend,
+    mcpFromWorkspace: (agent?.config as { mcpFromWorkspace?: unknown })
+      ?.mcpFromWorkspace,
+    isSaas: config.isSaas,
+    sdkSandboxEnabled: sdkSandbox,
+  });
+  // cursor_cloud: Bridge host on sandboxed SaaS; else SDK inline when MCP on.
+  // Other backends: Bridge host gate only.
   const forDiscovery =
-    agent?.backend === "cursor_cloud"
-      ? mcpFromWorkspace
-      : resolveBridgeMcpHostEnabled({
-          backend: agent?.backend,
-          mcpFromWorkspace: (agent?.config as { mcpFromWorkspace?: unknown })
-            ?.mcpFromWorkspace,
-          isSaas: config.isSaas,
-        });
+    agent?.backend === "cursor_cloud" ? mcpFromWorkspace : bridgeHost;
   return resolveMcpDiscoveryExecution({
     backend: agent?.backend,
     mcpFromWorkspace: forDiscovery,
     hasProjectSettingSources:
       resolveCursorSettingSources(cwd).includes("project"),
+    bridgeHostForCursorCloud:
+      agent?.backend === "cursor_cloud" && bridgeHost,
   });
 }
 
@@ -254,6 +262,7 @@ async function ensureMcpHostBeforeRun(opts: {
     backend: opts.agent.backend,
     mcpFromWorkspace: cfg.mcpFromWorkspace,
     isSaas: config.isSaas,
+    sdkSandboxEnabled: cursorSdkSandboxEnabled(),
   });
   const agentWorkspace =
     typeof cfg.workspace === "string" ? cfg.workspace : undefined;
@@ -807,6 +816,7 @@ export function createAiRouter(
       tenantId: req.tenantId,
       root: agentWorkspace?.trim() || undefined,
     });
+    const sdkSandbox = cursorSdkSandboxEnabled();
     const mcpFromWorkspace =
       agent?.backend === "cursor_cloud"
         ? resolveMcpFromWorkspace(
@@ -817,6 +827,7 @@ export function createAiRouter(
             backend: agent?.backend,
             mcpFromWorkspace: cfg.mcpFromWorkspace,
             isSaas: config.isSaas,
+            sdkSandboxEnabled: sdkSandbox,
           });
     const disabled = Array.isArray(cfg.mcpDisabledServers)
       ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
@@ -826,6 +837,7 @@ export function createAiRouter(
       backend: agent.backend,
       mcpFromWorkspace: cfg.mcpFromWorkspace,
       isSaas: config.isSaas,
+      sdkSandboxEnabled: sdkSandbox,
     })) {
       await ensureBridgeMcpHost({
         tenantId: req.tenantId,
@@ -858,7 +870,16 @@ export function createAiRouter(
       summary: discovery?.summary ?? null,
       mcpFromWorkspace,
       execution,
-      host: agent?.backend === "cursor_cloud" ? "sdk" : "bridge",
+      host:
+        agent?.backend === "cursor_cloud" &&
+        !resolveBridgeMcpHostEnabled({
+          backend: agent.backend,
+          mcpFromWorkspace: cfg.mcpFromWorkspace,
+          isSaas: config.isSaas,
+          sdkSandboxEnabled: sdkSandbox,
+        })
+          ? "sdk"
+          : "bridge",
       backend: agent?.backend ?? null,
       settingSources,
       projectInstructions:

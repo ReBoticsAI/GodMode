@@ -103,21 +103,29 @@ export function isBridgeMcpToolName(name: string): boolean {
 
 /**
  * Whether Bridge should host MCP for this agent.
- * Off for cursor_cloud (SDK path) and the legacy cursor CLI backend.
- * Otherwise same gate as SDK inline: default on non-SaaS, off on SaaS unless
- * mcpFromWorkspace is explicitly true.
+ * Legacy `cursor` CLI backend stays off.
+ * `cursor_cloud` uses Bridge host when MCP is enabled and the SDK sandbox is
+ * on: SDK inline `mcpServers` fail closed under Auto-review (no interactive
+ * approval), while Bridge tools run as SDK `customTools` and stay callable.
+ * Other backends: same gate as SDK inline (default on non-SaaS; SaaS opt-in).
  */
 export function resolveBridgeMcpHostEnabled(args: {
   backend?: string | null;
   mcpFromWorkspace?: unknown;
   isSaas?: boolean;
+  /** Hub/SaaS Linux sandbox (`CURSOR_SDK_SANDBOX=required`). */
+  sdkSandboxEnabled?: boolean;
 }): boolean {
-  if (args.backend === "cursor_cloud" || args.backend === "cursor") return false;
+  if (args.backend === "cursor") return false;
   if (!args.backend) return false;
-  return resolveMcpFromWorkspace(
+  const gated = resolveMcpFromWorkspace(
     { mcpFromWorkspace: args.mcpFromWorkspace },
     { isSaas: args.isSaas }
   );
+  if (args.backend === "cursor_cloud") {
+    return gated && Boolean(args.sdkSandboxEnabled);
+  }
+  return gated;
 }
 
 /** Parse `vault:name` or `{{vault:name}}`. */

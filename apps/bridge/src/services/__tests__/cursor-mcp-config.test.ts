@@ -191,6 +191,13 @@ describe("resolveMcpDiscoveryExecution", () => {
     expect(
       resolveMcpDiscoveryExecution({
         backend: "cursor_cloud",
+        mcpFromWorkspace: true,
+        bridgeHostForCursorCloud: true,
+      })
+    ).toBe("bridge-host");
+    expect(
+      resolveMcpDiscoveryExecution({
+        backend: "cursor_cloud",
         hasProjectSettingSources: true,
       })
     ).toBe("sdk-project");
