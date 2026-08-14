@@ -66,15 +66,36 @@ export function McpTab({
     saveAgent({ config: { ...cfg, mcpDisabledServers: next } });
   };
 
+  const hostLabel = isCursorCloud
+    ? "Pass workspace MCP to SDK"
+    : "Host workspace MCP in Bridge";
+  const hostHelp = isCursorCloud ? (
+    <>
+      Inline <span className="font-mono">mcpServers</span> (cap 8). Default on
+      for local installs; off on SaaS unless enabled. Ambient project MCP may
+      still load via SDK settingSources.
+    </>
+  ) : (
+    <>
+      Bridge connects stdio and HTTP/SSE servers from{" "}
+      <span className="font-mono">.cursor/mcp.json</span> and exposes tools to
+      this backend (cap 8). Default on for local installs; off on SaaS unless
+      enabled. Use <span className="font-mono">vault:secret_name</span> in env
+      or headers for Vault-backed values. Interactive OAuth still needs a prior
+      login in Cursor or the MCP app.
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs text-muted-foreground">
             Servers discovered from coding-root{" "}
-            <span className="font-mono">.cursor/mcp.json</span>. Manage pass-through
-            here; GodMode Automations Hooks are unrelated. Tenant-owned MCP CRUD
-            (without a disk file) is planned next.
+            <span className="font-mono">.cursor/mcp.json</span>. Manage
+            pass-through or Bridge host here; GodMode Automations Hooks are
+            unrelated. Tenant-owned MCP CRUD (without a disk file) is planned
+            next.
           </p>
           {status?.sourcePath && (
             <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
@@ -95,37 +116,30 @@ export function McpTab({
         </Button>
       </div>
 
-      {isCursorCloud ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-          <div className="flex flex-col gap-0.5">
-            <Label className="text-[11px]">Pass workspace MCP to SDK</Label>
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+        <div className="flex flex-col gap-0.5">
+          <Label className="text-[11px]">{hostLabel}</Label>
+          <p className="text-[10px] text-muted-foreground">{hostHelp}</p>
+          {!isCursorCloud && (
             <p className="text-[10px] text-muted-foreground">
-              Inline <span className="font-mono">mcpServers</span> (cap 8). Default on
-              for local installs; off on SaaS unless enabled. Ambient project MCP may
-              still load via SDK settingSources.
+              Prefer Cursor subscription for SDK-native MCP? Connect in{" "}
+              <Link
+                to={platformVaultSettingsHref("subscriptions")}
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                Platform Vault → Inference → Subscriptions
+              </Link>
+              .
             </p>
-          </div>
-          <Switch
-            checked={mcpFromWorkspace}
-            onCheckedChange={(v) =>
-              saveAgent({ config: { ...cfg, mcpFromWorkspace: v } })
-            }
-          />
+          )}
         </div>
-      ) : (
-        <p className="rounded-md border bg-muted/20 p-2 text-[10px] text-muted-foreground">
-          This backend uses MCP discovery in the prompt only. Switch the agent to{" "}
-          <span className="font-medium">Cursor subscription</span> to pass servers to
-          the SDK. Connect in{" "}
-          <Link
-            to={platformVaultSettingsHref("subscriptions")}
-            className="text-primary underline-offset-2 hover:underline"
-          >
-            Platform Vault → Inference → Subscriptions
-          </Link>
-          .
-        </p>
-      )}
+        <Switch
+          checked={mcpFromWorkspace}
+          onCheckedChange={(v) =>
+            saveAgent({ config: { ...cfg, mcpFromWorkspace: v } })
+          }
+        />
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-[11px]">Servers</Label>
@@ -147,19 +161,34 @@ export function McpTab({
                   <Badge variant="secondary" className="text-[10px]">
                     {s.transport}
                   </Badge>
+                  {s.hostOk === true && (
+                    <Badge variant="outline" className="text-[10px]">
+                      host ok
+                      {typeof s.hostToolCount === "number"
+                        ? ` (${s.hostToolCount})`
+                        : ""}
+                    </Badge>
+                  )}
+                  {s.hostOk === false && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      host error
+                    </Badge>
+                  )}
                 </div>
                 {s.detail && (
                   <span className="truncate font-mono text-[10px] text-muted-foreground">
                     {s.detail}
                   </span>
                 )}
+                {s.hostError && (
+                  <span className="truncate text-[10px] text-destructive">
+                    {s.hostError}
+                  </span>
+                )}
               </div>
               <Switch
-                checked={
-                  !disabled.includes(s.name) &&
-                  (isCursorCloud ? mcpFromWorkspace : true)
-                }
-                disabled={!isCursorCloud || !mcpFromWorkspace}
+                checked={!disabled.includes(s.name) && mcpFromWorkspace}
+                disabled={!mcpFromWorkspace}
                 onCheckedChange={(v) => setServerEnabled(s.name, v)}
               />
             </div>

@@ -85,14 +85,15 @@ export interface AgentCursorCloudConfig {
   modelParams?: Record<string, unknown>;
   workspace?: string;
   /**
-   * Pass coding-root `.cursor/mcp.json` as inline SDK `mcpServers` on create/resume/send.
+   * Pass coding-root `.cursor/mcp.json` as inline SDK `mcpServers` (cursor_cloud)
+   * or as Bridge MCP host tools (local/provider/cli/…).
    * Default: on for non-SaaS, off on SaaS. Project MCP may still load ambiently via
-   * `local.settingSources: ["project"]` when `.cursor/` exists.
+   * `local.settingSources: ["project"]` when `.cursor/` exists (SDK only).
    */
   mcpFromWorkspace?: boolean;
   /**
    * Server names from coding-root `.cursor/mcp.json` to skip when passing
-   * inline SDK `mcpServers`. Ignored when `mcpFromWorkspace` is false.
+   * inline SDK `mcpServers` or Bridge host tools. Ignored when `mcpFromWorkspace` is false.
    */
   mcpDisabledServers?: string[];
 }
