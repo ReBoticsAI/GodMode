@@ -109,6 +109,8 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
     ]);
     expect(merged).toContain("git_clone");
     expect(merged).toContain("github_pr_create");
+    expect(merged).toContain("github_release_create");
+    expect(merged).toContain("promote_support_to_card");
     expect(merged).toContain("git_push");
     expect(merged).toContain("remember");
   });
@@ -132,6 +134,7 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
     const allow = getAgent(db, "intelligence")?.toolAllow ?? [];
     expect(allow).toContain("git_clone");
     expect(allow).toContain("github_pr_create");
+    expect(allow).toContain("github_release_create");
     expect(allow).toContain("git_push");
     for (const name of stale) expect(allow).toContain(name);
   });

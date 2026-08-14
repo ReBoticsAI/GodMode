@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +20,12 @@ import {
   fetchSupportGroup,
   fetchSupportTicket,
   postSupportMessage,
+  promoteSupportTicketToKanban,
   type SupportMessage,
   type SupportTicket,
   type SupportTicketStatus,
 } from "@/api";
+import { TASKS_PATH } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 const STATUS_TONE: Record<SupportTicketStatus, string> = {
@@ -34,6 +36,7 @@ const STATUS_TONE: Record<SupportTicketStatus, string> = {
 };
 
 export default function Support() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inboxParam = searchParams.get("inbox") === "staff" ? "staff" : "mine";
   const [inbox, setInbox] = useState<"mine" | "staff">(inboxParam);
@@ -43,6 +46,7 @@ export default function Support() {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
+  const [promoting, setPromoting] = useState(false);
 
   useEffect(() => {
     void fetchSupportGroup()
@@ -112,6 +116,20 @@ export default function Support() {
       toast.error((err as Error).message);
     }
   }, [active, reply]);
+
+  const promoteToKanban = useCallback(async () => {
+    if (!active) return;
+    setPromoting(true);
+    try {
+      const res = await promoteSupportTicketToKanban(active.id);
+      toast.success(`Follow-up card created: ${res.title}`);
+      navigate(TASKS_PATH);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setPromoting(false);
+    }
+  }, [active, navigate]);
 
   return (
     <Page>
@@ -224,8 +242,36 @@ export default function Support() {
                       onChange={(e) => setReply(e.target.value)}
                       placeholder="Write a reply…"
                     />
-                    <Button onClick={() => void sendReply()} disabled={!reply.trim()}>
-                      Send reply
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={() => void sendReply()} disabled={!reply.trim()}>
+                        Send reply
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={promoting}
+                        onClick={() => void promoteToKanban()}
+                      >
+                        Create follow-up task
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const res = await promoteSupportTicketToKanban(active.id);
+                            toast.success(`Kanban card created: ${res.title}`);
+                            window.location.assign(TASKS_PATH);
+                          } catch (err) {
+                            toast.error(
+                              err instanceof Error ? err.message : "Promote failed"
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      Promote to Kanban
                     </Button>
                   </CardContent>
                 </Card>

@@ -690,4 +690,20 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
       "Evict cached Cursor SDK Agent handles and re-probe models with the same Vault API key (#525); transport session hygiene, not ObjectType Record CRUD.",
     authenticatedDomainMutations: "none",
   },
+  {
+    id: "release-submissions-refresh",
+    methods: ["POST"],
+    pathPattern: "/api/release-submissions/:/refresh",
+    rationale:
+      "Refresh publisher release metrics from GitHub API (#445); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "support-ticket-to-kanban",
+    methods: ["POST"],
+    pathPattern: "/api/support/tickets/:/to-kanban",
+    rationale:
+      "Promote Support inbound into a Kanban TaskCard for release follow-up (#445); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
 ] as const;

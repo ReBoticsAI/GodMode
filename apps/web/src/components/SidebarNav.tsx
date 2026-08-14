@@ -14,6 +14,7 @@ import {
   LifeBuoyIcon,
   ListChecksIcon,
   MessageCircleIcon,
+  RocketIcon,
   Share2Icon,
   StoreIcon,
   UsersIcon,
@@ -45,6 +46,7 @@ import {
   SUPPORT_PATH,
   WIKI_PATH,
   CODING_PATH,
+  RELEASES_PATH,
 } from "@/lib/navigation";
 import { useStructure } from "@/lib/structure-context";
 import { useTenant } from "@/lib/tenant-context";
@@ -447,6 +449,23 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         >
           <FolderTreeIcon className="size-4 shrink-0" />
           <span className="truncate">Coding</span>
+        </NavLink>
+
+        <NavLink
+          to={RELEASES_PATH}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-2 rounded-lg border border-sidebar-border/60 bg-sidebar-accent/10 px-2 py-2 text-sm font-semibold transition-colors",
+              "hover:bg-sidebar-accent/50",
+              isActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-foreground"
+            )
+          }
+        >
+          <RocketIcon className="size-4 shrink-0" />
+          <span className="truncate">Releases</span>
         </NavLink>
 
         {canEditStructure ? (

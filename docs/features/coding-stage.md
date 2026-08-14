@@ -15,7 +15,7 @@ The Coding page (`/coding`) is the human surface for the same sandboxed coding r
 - **Git:** branch, dirty/ahead summary, and unstaged diff. Refresh after agent edits.
 - **Terminal:** sandboxed one-shot commands and shared PTY sessions (when policy allows).
 
-Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, `git_branch`, `git_checkout`, `git_add`, `git_commit`, `git_push`, plus `git_clone` and `github_pr_create` when Vault GitHub Connect is linked. Commit, push, clone, and PR create show a confirm preview. Push never auto-approves, including full autonomy, and never force-pushes.
+Agents complete the ship cycle with structured tools: `git_status`, `git_diff`, `git_branch`, `git_checkout`, `git_add`, `git_commit`, `git_push`, plus `git_clone`, `github_pr_create`, and the GitHub Releases loop (`github_release_prepare` / `github_release_create` draft-first / `github_release_publish` / `github_release_list`) when Vault GitHub Connect is linked. Commit, push, clone, PR create, and release create/publish show a confirm preview. Push and release submit never auto-approve, including full autonomy, and never force-push.
 
 For wide questions, `explore_coding` (or `delegate_to_subagent` with `mode=explore`) returns a read-only handoff. The parent implements edits under Authority. Explore timeouts land in Attention.
 

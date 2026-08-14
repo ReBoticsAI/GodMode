@@ -395,6 +395,35 @@ export function previewGitToolDiff(
         ].join("\n"),
       };
     }
+    if (
+      toolName === "github_release_create" ||
+      toolName === "github_release_publish"
+    ) {
+      const remote = String(args.remote ?? "origin").trim() || "origin";
+      const remoteUrl = redactRemoteUrl(
+        remoteGetUrl(resolveCodingRoot(opts ?? {}), remote)
+      );
+      if (toolName === "github_release_publish") {
+        return {
+          previewDiff: [
+            `Publish draft release id=${String(args.releaseId ?? "")}`,
+            `Remote: ${remote}${remoteUrl ? ` (${remoteUrl})` : ""}`,
+            "Auth: Vault GitHub Connect",
+            "Authority: Deploy kill switch applies",
+          ].join("\n"),
+        };
+      }
+      return {
+        previewDiff: [
+          `Create GitHub release ${String(args.tag ?? "(tag)")}`,
+          `Name: ${String(args.name ?? args.tag ?? "")}`,
+          args.draft === false ? "Draft: no (publish)" : "Draft: yes (default)",
+          `Remote: ${remote}${remoteUrl ? ` (${remoteUrl})` : ""}`,
+          "Auth: Vault GitHub Connect",
+          "Authority: Deploy kill switch applies",
+        ].join("\n"),
+      };
+    }
     if (toolName === "git_checkout" || toolName === "git_branch") {
       const status = gitStatus(opts ?? {});
       return {

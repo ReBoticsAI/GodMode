@@ -43,6 +43,7 @@ import { createWikiRouter } from "./routes/wiki.js";
 import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createGithubIntegrationRouter } from "./routes/github-integration.js";
+import { createReleaseSubmissionsRouter } from "./routes/release-submissions.js";
 import { githubAppWebhookHandler } from "./services/github-app-webhook.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
@@ -451,6 +452,7 @@ if (!config.isHub) {
 }
 // GitHub Projects OAuth (Vault → Integrations) is required on hub/SaaS too.
 app.use("/api/integrations/github", createGithubIntegrationRouter());
+app.use("/api/release-submissions", createReleaseSubmissionsRouter());
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
   app.use("/api/admin/authority", createAdminAuthorityRouter());
