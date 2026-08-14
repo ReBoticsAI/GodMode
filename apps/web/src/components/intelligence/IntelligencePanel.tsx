@@ -1061,6 +1061,9 @@ export function IntelligencePanel() {
           refreshChats();
         },
         onError: (error) => {
+          const errorText =
+            String(error ?? "").trim() ||
+            "Chat connection dropped. Try sending again.";
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -1068,16 +1071,16 @@ export function IntelligencePanel() {
                     ...m,
                     parts: [
                       ...builder.finalize(),
-                      { kind: "text", text: `⚠️ ${error}` },
+                      { kind: "text", text: `⚠️ ${errorText}` },
                     ],
-                    text: `⚠️ ${error}`,
+                    text: `⚠️ ${errorText}`,
                     streaming: false,
                     statusText: undefined,
                   }
                 : m
             )
           );
-          setErrorMsg(error);
+          setErrorMsg(errorText);
           setBusy(false);
           busyRef.current = false;
           abortRef.current = null;

@@ -1144,7 +1144,17 @@ export function streamAiChat(
 
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        handlers.onError?.((err as { error?: string }).error ?? res.statusText);
+        const raw =
+          (err as { error?: string }).error ?? res.statusText ?? "";
+        const trimmed = String(raw).trim();
+        handlers.onError?.(
+          trimmed ||
+            (res.status === 524
+              ? "Chat timed out before the server started streaming (proxy 524). Try again."
+              : res.status
+                ? `Chat request failed (${res.status}).`
+                : "Chat connection failed. Try again.")
+        );
         return;
       }
 
@@ -1248,7 +1258,10 @@ export function streamAiChat(
               break;
             case "error":
               settled = true;
-              handlers.onError?.(parsed.error as string);
+              handlers.onError?.(
+                String(parsed.error ?? "").trim() ||
+                  "Chat failed without a message. Try sending again."
+              );
               break;
           }
         }
@@ -1260,7 +1273,12 @@ export function streamAiChat(
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        handlers.onError?.(err instanceof Error ? err.message : String(err));
+        const msg =
+          err instanceof Error ? err.message.trim() : String(err).trim();
+        handlers.onError?.(
+          msg ||
+            "Chat connection dropped (network or proxy timeout). Try sending again."
+        );
       }
     }
   })();
