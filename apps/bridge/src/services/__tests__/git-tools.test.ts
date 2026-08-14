@@ -11,8 +11,10 @@ import {
   gitCreateBranch,
   gitDiff,
   gitPush,
+  gitRemoteHttpsUrl,
   gitStatus,
   previewGitToolDiff,
+  resolveRelativeCodingWorkspace,
   stripCursorCommitAttribution,
 } from "../coding/git-tools.js";
 
@@ -147,5 +149,53 @@ describe("git-tools (#443)", () => {
       encoding: "utf8",
     });
     expect(body).not.toMatch(/cursoragent/i);
+  });
+
+  it("resolves nested coding workspace remotes (#539)", () => {
+    const base = tempDir();
+    const nested = join(base, "gm-442-smoke-test");
+    mkdirSync(nested, { recursive: true });
+    git(nested, ["init"]);
+    git(nested, ["config", "user.email", "test@example.com"]);
+    git(nested, ["config", "user.name", "Test"]);
+    writeFileSync(join(nested, "README.md"), "hi\n");
+    git(nested, ["add", "README.md"]);
+    git(nested, ["commit", "-m", "init"]);
+    git(nested, [
+      "remote",
+      "add",
+      "origin",
+      "https://github.com/Acme/gm-442-smoke-test.git",
+    ]);
+
+    expect(() =>
+      gitRemoteHttpsUrl({ localRepoRoot: base, remote: "origin" })
+    ).toThrow(/not configured|not a git/i);
+
+    const resolved = resolveRelativeCodingWorkspace({
+      localRepoRoot: base,
+      workspace: "gm-442-smoke-test",
+    });
+    expect(resolved.relative).toBe("gm-442-smoke-test");
+
+    const url = gitRemoteHttpsUrl({
+      localRepoRoot: base,
+      root: resolved.relative,
+      remote: "origin",
+    });
+    expect(url).toMatch(/github\.com\/Acme\/gm-442-smoke-test/i);
+
+    expect(() =>
+      resolveRelativeCodingWorkspace({
+        localRepoRoot: base,
+        workspace: "../escape",
+      })
+    ).toThrow(/escapes|relative/i);
+    expect(() =>
+      resolveRelativeCodingWorkspace({
+        localRepoRoot: base,
+        workspace: "missing-folder",
+      })
+    ).toThrow(/does not exist/i);
   });
 });

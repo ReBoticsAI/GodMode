@@ -4,7 +4,14 @@
  * No force-push. Push uses HTTPS allowlist when the terminal sandbox is on.
  * github.com HTTPS remotes can authenticate via Vault GitHub Connect.
  */
-import { resolveCodingRoot, resolveRepoPath, type FsRootOpts } from "./fs-tools.js";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  resolveCodingRoot,
+  resolveRepoPath,
+  resolveUnderBase,
+  type FsRootOpts,
+} from "./fs-tools.js";
 import {
   runSandboxedArgv,
   runSandboxedArgvSync,
@@ -111,6 +118,46 @@ export function gitRemoteHttpsUrl(
     );
   }
   return redactRemoteUrl(url);
+}
+
+/**
+ * Resolve a relative coding workspace under the tenant/local coding base
+ * (ignores the current agent workspace override). Path must exist and be a
+ * git work tree. Returns the relative path to store on agent.config.workspace.
+ */
+export function resolveRelativeCodingWorkspace(
+  opts: GitToolOpts & { workspace: string }
+): { absolute: string; relative: string; base: string } {
+  assertCodingKillSwitch(opts.tenantId ?? undefined);
+  const base = resolveCodingRoot({ ...opts, root: undefined });
+  const raw = String(opts.workspace ?? "")
+    .trim()
+    .replace(/\\/g, "/");
+  if (!raw || raw === ".") {
+    throw new Error(
+      "workspace must be a relative subfolder under the coding root (use coding_workspace_clear for the base root)"
+    );
+  }
+  if (path.isAbsolute(raw) || raw.startsWith("/") || /^[A-Za-z]:/.test(raw)) {
+    throw new Error("workspace must be a relative path under the coding root");
+  }
+  const absolute = resolveUnderBase(base, raw);
+  if (!fs.existsSync(absolute) || !fs.statSync(absolute).isDirectory()) {
+    throw new Error(`Workspace path does not exist: ${raw}`);
+  }
+  const inside = runGit(absolute, ["rev-parse", "--is-inside-work-tree"], {
+    allowFail: true,
+  });
+  if (inside.stdout.trim() !== "true") {
+    throw new Error(
+      `Workspace path is not a git work tree: ${raw}. Clone or init a repo there first.`
+    );
+  }
+  const relative = path.relative(base, absolute).replace(/\\/g, "/");
+  if (!relative || relative.startsWith("..")) {
+    throw new Error(`Path escapes coding root: ${raw}`);
+  }
+  return { absolute, relative, base };
 }
 
 async function withGitNetwork<T>(
@@ -520,7 +567,12 @@ export async function gitClone(
     /** @deprecated use githubAccessToken */
     accessToken?: string;
   }
-): Promise<{ path: string; url: string; usedConnectAuth: true }> {
+): Promise<{
+  path: string;
+  url: string;
+  directory: string;
+  usedConnectAuth: true;
+}> {
   const codingRoot = resolveCodingRoot(opts);
   assertCodingKillSwitch(opts.tenantId ?? undefined);
   const parsed = parseGithubHttpsRemote(String(opts.url ?? ""));
@@ -578,6 +630,7 @@ export async function gitClone(
     return {
       path: target,
       url: parsed.httpsUrl,
+      directory,
       usedConnectAuth: true as const,
     };
   });

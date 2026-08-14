@@ -4,6 +4,36 @@
  */
 import { stripCursorPrAttribution } from "./github-pr.js";
 
+/** Vault Integrations deep link for reconnect after permission upgrades. */
+export const GITHUB_CONNECT_VAULT_PATH = "/vault?tab=integrations";
+
+/**
+ * GitHub App installation lacks the permission for this REST call
+ * (typical: Contents write for Releases).
+ */
+export function isGithubIntegrationPermissionError(
+  message: string | null | undefined
+): boolean {
+  const m = String(message ?? "");
+  return (
+    /Resource not accessible by integration/i.test(m) ||
+    (/HTTP 403/.test(m) && /releas/i.test(m)) ||
+    (/403/.test(m) && /not accessible by integration/i.test(m))
+  );
+}
+
+/** User-facing guidance when release create/publish fails on App permissions. */
+export function formatGithubReleasePermissionError(
+  detail: string
+): string {
+  const base = String(detail ?? "").trim() || "GitHub release request failed";
+  if (!isGithubIntegrationPermissionError(base)) return base;
+  return (
+    `${base}. Reconnect GitHub in Vault → Integrations and accept ` +
+    `Contents write (Read and write) on the App installation, then retry.`
+  );
+}
+
 export type GithubReleaseAssetInput = {
   name: string;
   /** Base64-encoded file bytes (small Near-proof assets). */

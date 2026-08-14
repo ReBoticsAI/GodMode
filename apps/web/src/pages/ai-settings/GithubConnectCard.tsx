@@ -142,7 +142,41 @@ export function GithubConnectCard() {
                   </Button>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  After the App gains Contents write (or other new permissions),
+                  reconnect or open the install page and accept the updated
+                  permissions so draft Releases can succeed.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {status.installUrl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        window.open(
+                          status.installUrl!,
+                          "_blank",
+                          "noopener,noreferrer"
+                        );
+                      }}
+                    >
+                      Review App install
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || status.configured === false}
+                    onClick={() => void connect()}
+                  >
+                    <FolderGit2Icon data-icon="inline-start" />
+                    Reconnect / update permissions
+                  </Button>
+                </div>
+              </div>
+            )}
             <Button
               type="button"
               variant="outline"

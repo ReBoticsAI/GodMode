@@ -847,11 +847,16 @@ export function createAiRouter(
       ? getBridgeMcpStatusesForAgent(agent.id)
       : [];
     const hostByName = new Map(hostStatuses.map((s) => [s.name, s]));
+    const execution = mcpExecutionForAgent(agent, {
+      tenantId: req.tenantId,
+      workspace: agentWorkspace,
+    });
     res.json({
       workspace: root,
       sourcePath: discovery?.sourcePath ?? null,
       summary: discovery?.summary ?? null,
       mcpFromWorkspace,
+      execution,
       host: agent?.backend === "cursor_cloud" ? "sdk" : "bridge",
       backend: agent?.backend ?? null,
       settingSources,
@@ -1650,10 +1655,22 @@ export function createAiRouter(
         agentId: agent.id,
         chatId: activeChatId!,
         userMessage: message?.trim() ?? "",
+        tenantId: work.tenantId,
       });
       activeWorkCardId = runCard.cardId;
+      send("status", {
+        phase: "preparing",
+        message: "Active Work host card ready",
+        hostCardId: runCard.cardId,
+      });
     } catch (err) {
       console.error("[active-work] begin run card failed", err);
+      send("status", {
+        phase: "preparing",
+        message:
+          "Active Work host card unavailable; prefer todo_write still, avoid inventing a second plan parent",
+        hostCardId: null,
+      });
     }
 
     const flowConfig = loadPromptFlowConfig(engineDb);

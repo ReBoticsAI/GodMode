@@ -832,6 +832,8 @@ export interface AiMcpStatus {
   sourcePath: string | null;
   summary: string | null;
   mcpFromWorkspace: boolean;
+  /** discovery-only | sdk-inline | sdk-project | bridge-host */
+  execution?: string;
   host?: "sdk" | "bridge";
   backend: string | null;
   settingSources: string[];
