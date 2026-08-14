@@ -4375,6 +4375,62 @@ export const startGithubIntegrationConnect = () =>
 export const disconnectGithubIntegration = () =>
   api<{ ok: boolean }>("/integrations/github/disconnect", { method: "POST" });
 
+export type ReleaseSubmission = {
+  id: string;
+  target: string;
+  owner: string;
+  repo: string;
+  tag: string;
+  title: string | null;
+  status: "draft" | "published" | "failed" | "staged";
+  github_release_id: number | null;
+  html_url: string | null;
+  download_count: number;
+  metrics_json: string | null;
+  error: string | null;
+  support_ticket_id: string | null;
+  task_card_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReleaseSubmissionMetrics = {
+  total: number;
+  draft: number;
+  published: number;
+  failed: number;
+  staged: number;
+  downloadCount: number;
+};
+
+export const fetchReleaseSubmissions = (limit = 50) =>
+  api<{
+    submissions: ReleaseSubmission[];
+    metrics: ReleaseSubmissionMetrics;
+    target: string;
+  }>(`/release-submissions?limit=${limit}`);
+
+export const refreshReleaseSubmission = (id: string) =>
+  api<{ submission: ReleaseSubmission }>(`/release-submissions/${id}/refresh`, {
+    method: "POST",
+  });
+
+export const promoteSupportTicketToKanban = (
+  ticketId: string,
+  body?: { title?: string }
+) =>
+  api<{
+    ok: boolean;
+    cardId: string;
+    projectId: string;
+    columnId: string;
+    title: string;
+    supportTicketId: string;
+  }>(`/support/tickets/${ticketId}/to-kanban`, {
+    method: "POST",
+    body: JSON.stringify(body ?? {}),
+  });
+
 export const createUserProjectCard = (body: {
   columnId?: string;
   title: string;

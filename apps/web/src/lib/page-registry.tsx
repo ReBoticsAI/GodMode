@@ -4,6 +4,7 @@ import Placeholder from "@/pages/Placeholder";
 import TenantCustomPage from "@/pages/TenantCustomPage";
 import RecordListPage from "@/pages/records/RecordListPage";
 import RecordFormPage from "@/pages/records/RecordFormPage";
+import ReleaseSubmissionsPage from "@/pages/ReleaseSubmissionsPage";
 import { webPluginRuntime } from "@/plugins/runtime";
 
 /** Core page kinds — plugin domains register additional kinds at runtime. */
@@ -13,6 +14,7 @@ export const CORE_PAGE_KINDS = [
   "custom",
   "record-list",
   "record-form",
+  "release-console",
 ] as const;
 
 export type CorePageKind = (typeof CORE_PAGE_KINDS)[number];
@@ -23,6 +25,7 @@ const CORE_RENDERERS: Record<CorePageKind, () => ReactElement> = {
   custom: () => <TenantCustomPage />,
   "record-list": () => <RecordListPage />,
   "record-form": () => <RecordFormPage />,
+  "release-console": () => <ReleaseSubmissionsPage />,
 };
 
 export function pageElementFor(kind: string): ReactElement {

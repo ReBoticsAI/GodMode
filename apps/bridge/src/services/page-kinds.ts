@@ -18,6 +18,7 @@ export const PAGE_KINDS = [
   "custom",
   "record-list",
   "record-form",
+  "release-console",
 ] as const;
 
 export type PageKind = (typeof PAGE_KINDS)[number];

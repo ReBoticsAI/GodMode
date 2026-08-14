@@ -61,4 +61,20 @@ describe("confirm-policy git_push", () => {
       expect(ok).toBe(false);
     }
   });
+
+  it("does not auto-approve github release submit tools under full autonomy", async () => {
+    for (const name of [
+      "github_release_create",
+      "github_release_publish",
+    ] as const) {
+      const ok = await shouldAutoApproveTool(
+        agent(),
+        name,
+        async () => false,
+        { toolCallId: "t1", name, args: {} },
+        "full"
+      );
+      expect(ok).toBe(false);
+    }
+  });
 });

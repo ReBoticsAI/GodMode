@@ -1257,6 +1257,135 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "github_release_prepare",
+    description:
+      "Validate and stage a GitHub Releases payload (tag, notes, optional assets) for the coding-root remote without submitting. Records a prepared row on the Release submissions page. Prefer before github_release_create.",
+    mode: "auto",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        tag: { type: "string", description: "Release tag (e.g. v1.2.3)" },
+        name: { type: "string", description: "Release title (default: tag)" },
+        body: { type: "string", description: "Release notes markdown" },
+        targetCommitish: {
+          type: "string",
+          description: "Commitish / branch (optional)",
+        },
+        remote: {
+          type: "string",
+          description: "Remote name used to resolve owner/repo (default origin)",
+        },
+        draft: {
+          type: "boolean",
+          description: "Stage as draft (default true)",
+        },
+        prerelease: { type: "boolean" },
+        assets: {
+          type: "array",
+          description: "Optional small assets (base64) for Near-proof uploads",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              contentBase64: { type: "string" },
+              contentType: { type: "string" },
+            },
+            required: ["name", "contentBase64"],
+          },
+        },
+      },
+      required: ["tag"],
+    },
+  },
+  {
+    name: "github_release_create",
+    description:
+      "Create a GitHub Release via Vault GitHub Connect. Defaults to draft (human-final publish). Always requires confirmation, including full autonomy. Deploy Authority must allow. Prefer after github_release_prepare.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        tag: { type: "string" },
+        name: { type: "string" },
+        body: { type: "string" },
+        targetCommitish: { type: "string" },
+        remote: { type: "string" },
+        draft: {
+          type: "boolean",
+          description: "Default true. Set false only when intentionally publishing.",
+        },
+        prerelease: { type: "boolean" },
+        assets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              contentBase64: { type: "string" },
+              contentType: { type: "string" },
+            },
+            required: ["name", "contentBase64"],
+          },
+        },
+      },
+      required: ["tag"],
+    },
+  },
+  {
+    name: "github_release_publish",
+    description:
+      "Publish an existing draft GitHub Release (sets draft=false). Always requires confirmation. Deploy Authority must allow.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        releaseId: { type: "number", description: "GitHub release id" },
+        remote: { type: "string" },
+        submissionId: {
+          type: "string",
+          description: "Optional local release_submissions id to update",
+        },
+      },
+      required: ["releaseId"],
+    },
+  },
+  {
+    name: "github_release_list",
+    description:
+      "List recent GitHub Releases for the coding-root remote plus local submission ledger rows (status/metrics).",
+    mode: "auto",
+    category: "coding",
+    parameters: {
+      type: "object",
+      properties: {
+        remote: { type: "string" },
+        perPage: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "promote_support_to_card",
+    description:
+      "Turn a Support ticket into a Kanban TaskCard tagged auto/support-followup/release-loop so a coding agent can ship a follow-up within Authority.",
+    mode: "auto",
+    category: "tasks",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        ticketId: { type: "string" },
+        title: { type: "string", description: "Optional card title override" },
+      },
+      required: ["ticketId"],
+    },
+  },
+  {
     name: "explore_codebase",
     description:
       "Spawn parallel read-only codebase explorations (grep/search). Use for wide searches before editing.",
@@ -1996,6 +2125,10 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "git_push",
   "git_clone",
   "github_pr_create",
+  "github_release_prepare",
+  "github_release_create",
+  "github_release_publish",
+  "github_release_list",
   "delete_file",
   "run_terminal",
   "terminal_session_create",
@@ -2031,6 +2164,9 @@ const CODING_WRITE_TOOLS = new Set([
   "git_push",
   "git_clone",
   "github_pr_create",
+  "github_release_prepare",
+  "github_release_create",
+  "github_release_publish",
   "scaffold_plugin",
   "coding_worktree_create",
   "coding_worktree_discard",
@@ -2062,6 +2198,7 @@ const TASK_TOOLS = new Set<string>([
   "list_card_comments",
   "update_card",
   "watch_pr_checks",
+  "promote_support_to_card",
 ]);
 
 // Platform Builder — Phase A structure tools every department agent may hold

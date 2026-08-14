@@ -1047,6 +1047,36 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       ON bank_ledger_entries(recorded_at DESC);
   `);
 
+  // Publisher release submissions (#445): local status/metrics for ship-from-GodMode.
+  // Distinct from Cloud consumer poller tables in core-db (releases / installation_update_state).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS publisher_release_submissions (
+      id TEXT PRIMARY KEY,
+      target TEXT NOT NULL DEFAULT 'github_releases',
+      owner TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      title TEXT,
+      status TEXT NOT NULL,
+      github_release_id INTEGER,
+      html_url TEXT,
+      download_count INTEGER NOT NULL DEFAULT 0,
+      metrics_json TEXT,
+      staged_payload_json TEXT,
+      error TEXT,
+      support_ticket_id TEXT,
+      task_card_id TEXT,
+      created_by_agent_id TEXT,
+      created_by_user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS publisher_release_submissions_by_updated
+      ON publisher_release_submissions(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS publisher_release_submissions_by_repo
+      ON publisher_release_submissions(owner, repo, updated_at DESC);
+  `);
+
   // Platform Builder role on each assignment: viewer | editor | owner. Existing
   // rows predate roles and default to 'owner' (the historical de-facto behavior
   // where an assigned agent fully owned its scope).

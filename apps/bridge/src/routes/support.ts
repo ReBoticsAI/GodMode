@@ -25,6 +25,7 @@ import {
   removeGroupMember,
 } from "../services/platform-groups.js";
 import type { SupportTicketStatus } from "../core-db.js";
+import { registerSupportToKanbanRoute } from "./support-to-kanban.js";
 
 function paramId(value: string | string[]): string {
   return Array.isArray(value) ? value[0]! : value;
@@ -46,6 +47,7 @@ function canAccessTicket(
 export function createSupportRouter(): Router {
   const router = Router();
   router.use(attachAuthContext, requireAuth);
+  registerSupportToKanbanRoute(router);
 
   router.get("/tickets", (req, res) => {
     res.json({ tickets: listTicketsForRequester("user", req.user!.id) });

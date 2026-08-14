@@ -13,6 +13,8 @@ const NEVER_AUTO_APPROVE = new Set([
   "git_push",
   "git_clone",
   "github_pr_create",
+  "github_release_create",
+  "github_release_publish",
 ]);
 
 export interface ConfirmPayload {

@@ -117,6 +117,22 @@ import {
   resolveGithubRemoteFromUrl,
 } from "./coding/github-pr.js";
 import {
+  createGithubRelease,
+  listGithubReleases,
+  prepareGithubRelease,
+  publishGithubRelease,
+  type GithubReleaseAssetInput,
+} from "./coding/github-release.js";
+import {
+  insertReleaseSubmission,
+  listReleaseSubmissions,
+  markReleaseSubmissionFailed,
+  releaseSubmissionMetricsSummary,
+  updateReleaseSubmissionFromGithub,
+} from "./coding/release-submissions.js";
+import { promoteSupportTicketToCard } from "./support-to-kanban.js";
+import { assertDeployAllowed } from "./authority/deploy-authority.js";
+import {
   parseGithubHttpsRemote,
   resolveCodingGithubAccessToken,
 } from "./coding/git-host-auth.js";
@@ -148,7 +164,10 @@ import {
 import { codebaseSearch } from "./coding/codebase-search.js";
 import { readDiagnostics, verifyTypeScriptAfterWrite } from "./coding/read-diagnostics.js";
 import { logToolAudit } from "./coding/tool-audit.js";
-import { isCodingAuthorityError } from "./coding/coding-quota.js";
+import {
+  assertCodingKillSwitch,
+  isCodingAuthorityError,
+} from "./coding/coding-quota.js";
 import {
   createNotification,
   listNotificationsForAgent,
@@ -273,6 +292,29 @@ function pluginExecCtx(ctx: ToolExecContext): PluginToolExecContext {
     activeSubtaskCardId: ctx.activeSubtaskCardId,
     activeTaskCardId: ctx.activeTaskCardId,
   };
+}
+
+function parseReleaseAssets(raw: unknown): GithubReleaseAssetInput[] {
+  if (!Array.isArray(raw)) return [];
+  const assets: GithubReleaseAssetInput[] = [];
+  for (const item of raw.slice(0, 5)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const name = String(row.name ?? "").trim();
+    const contentBase64 = String(
+      row.contentBase64 ?? row.content_base64 ?? ""
+    ).trim();
+    if (!name || !contentBase64) continue;
+    assets.push({
+      name,
+      contentBase64,
+      contentType:
+        row.contentType != null || row.content_type != null
+          ? String(row.contentType ?? row.content_type)
+          : undefined,
+    });
+  }
+  return assets;
 }
 
 function kernelOperationContext(ctx: ToolExecContext): OperationContext {
@@ -2781,6 +2823,277 @@ export async function executeTool(
         });
         throw err;
       }
+    }
+
+    case "github_release_prepare": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      assertCodingKillSwitch(ctx.tenantId);
+      const remoteUrl = gitRemoteHttpsUrl({
+        ...codingFsOpts(ctx),
+        remote: args.remote ? String(args.remote) : "origin",
+      });
+      const remote = resolveGithubRemoteFromUrl(remoteUrl);
+      const assets = parseReleaseAssets(args.assets);
+      const staged = prepareGithubRelease({
+        owner: remote.owner,
+        repo: remote.repo,
+        tag: String(args.tag ?? ""),
+        name: args.name != null ? String(args.name) : undefined,
+        body: args.body != null ? String(args.body) : undefined,
+        targetCommitish:
+          args.targetCommitish != null
+            ? String(args.targetCommitish)
+            : undefined,
+        draft: args.draft !== false,
+        prerelease: args.prerelease === true,
+        assets,
+      });
+      const row = insertReleaseSubmission(ctx.db, {
+        owner: staged.owner,
+        repo: staged.repo,
+        tag: staged.tag,
+        title: staged.name,
+        status: "staged",
+        stagedPayload: staged,
+        agentId: ctx.activeAgentId ?? null,
+        userId: ctx.userId,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "github_release_prepare",
+        result: "ok",
+      });
+      return { ...staged, submissionId: row.id };
+    }
+
+    case "github_release_create": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      assertCodingKillSwitch(ctx.tenantId);
+      assertDeployAllowed({
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        agentId: ctx.activeAgentId,
+        action: "github_release_create",
+      });
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      const remoteUrl = gitRemoteHttpsUrl({
+        ...codingFsOpts(ctx),
+        remote: args.remote ? String(args.remote) : "origin",
+      });
+      const remote = resolveGithubRemoteFromUrl(remoteUrl);
+      const assets = parseReleaseAssets(args.assets);
+      const draft = args.draft !== false;
+      const stagedRow = insertReleaseSubmission(ctx.db, {
+        owner: remote.owner,
+        repo: remote.repo,
+        tag: String(args.tag ?? ""),
+        title: args.name != null ? String(args.name) : String(args.tag ?? ""),
+        status: "staged",
+        stagedPayload: {
+          tag: args.tag,
+          name: args.name,
+          body: args.body,
+          draft,
+        },
+        agentId: ctx.activeAgentId ?? null,
+        userId: ctx.userId,
+      });
+      try {
+        const release = await createGithubRelease({
+          accessToken,
+          owner: remote.owner,
+          repo: remote.repo,
+          tag: String(args.tag ?? ""),
+          name: args.name != null ? String(args.name) : undefined,
+          body: args.body != null ? String(args.body) : undefined,
+          targetCommitish:
+            args.targetCommitish != null
+              ? String(args.targetCommitish)
+              : undefined,
+          draft,
+          prerelease: args.prerelease === true,
+          assets,
+        });
+        const updated = updateReleaseSubmissionFromGithub(
+          ctx.db,
+          stagedRow.id,
+          release
+        );
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: release.draft
+            ? `Draft release ${release.tag} staged`
+            : `Release ${release.tag} published`,
+          body: release.name.slice(0, 200),
+          link: release.htmlUrl,
+          resourceKind: "github_release",
+          resourceId: String(release.id),
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_release_create",
+          result: "ok",
+        });
+        return { ...release, submissionId: updated.id, submission: updated };
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        markReleaseSubmissionFailed(ctx.db, stagedRow.id, detail);
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "Release create failed",
+          body: detail.slice(0, 500),
+          link: "/releases",
+        });
+        throw err;
+      }
+    }
+
+    case "github_release_publish": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      assertCodingKillSwitch(ctx.tenantId);
+      assertDeployAllowed({
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        agentId: ctx.activeAgentId,
+        action: "github_release_publish",
+      });
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      const remoteUrl = gitRemoteHttpsUrl({
+        ...codingFsOpts(ctx),
+        remote: args.remote ? String(args.remote) : "origin",
+      });
+      const remote = resolveGithubRemoteFromUrl(remoteUrl);
+      const releaseId = Number(args.releaseId ?? args.release_id);
+      try {
+        const release = await publishGithubRelease({
+          accessToken,
+          owner: remote.owner,
+          repo: remote.repo,
+          releaseId,
+        });
+        let submissionId =
+          args.submissionId != null ? String(args.submissionId) : "";
+        if (!submissionId) {
+          const match = listReleaseSubmissions(ctx.db, { limit: 50 }).find(
+            (r) => r.github_release_id === release.id
+          );
+          submissionId = match?.id ?? "";
+        }
+        const updated = submissionId
+          ? updateReleaseSubmissionFromGithub(
+              ctx.db,
+              submissionId,
+              release,
+              "published"
+            )
+          : insertReleaseSubmission(ctx.db, {
+              owner: remote.owner,
+              repo: remote.repo,
+              tag: release.tag,
+              title: release.name,
+              status: "published",
+              githubReleaseId: release.id,
+              htmlUrl: release.htmlUrl,
+              downloadCount: release.downloadCount,
+              metrics: { assets: release.assets },
+              agentId: ctx.activeAgentId ?? null,
+              userId: ctx.userId,
+            });
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: `Release ${release.tag} published`,
+          body: release.name.slice(0, 200),
+          link: release.htmlUrl,
+          resourceKind: "github_release",
+          resourceId: String(release.id),
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_release_publish",
+          result: "ok",
+        });
+        return { ...release, submissionId: updated.id, submission: updated };
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "Release publish failed",
+          body: detail.slice(0, 500),
+          link: "/releases",
+        });
+        throw err;
+      }
+    }
+
+    case "github_release_list": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      assertCodingKillSwitch(ctx.tenantId);
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      const remoteUrl = gitRemoteHttpsUrl({
+        ...codingFsOpts(ctx),
+        remote: args.remote ? String(args.remote) : "origin",
+      });
+      const remote = resolveGithubRemoteFromUrl(remoteUrl);
+      const releases = await listGithubReleases({
+        accessToken,
+        owner: remote.owner,
+        repo: remote.repo,
+        perPage: args.perPage != null ? Number(args.perPage) : 10,
+      });
+      const submissions = listReleaseSubmissions(ctx.db, { limit: 50 });
+      return {
+        owner: remote.owner,
+        repo: remote.repo,
+        releases,
+        submissions,
+        metrics: releaseSubmissionMetricsSummary(submissions),
+      };
+    }
+
+    case "promote_support_to_card": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      const ticketId = String(args.ticketId ?? args.ticket_id ?? "").trim();
+      const result = promoteSupportTicketToCard({
+        tenantDb: ctx.db,
+        hubDb: getHostUsersDb(),
+        ticketId,
+        userId: ctx.userId,
+        agentId: ctx.activeAgentId ?? null,
+        title: args.title != null ? String(args.title) : undefined,
+        prompt: args.prompt != null ? String(args.prompt) : undefined,
+      });
+      createNotification({
+        recipientKind: "user",
+        recipientId: ctx.userId,
+        recipientTenantId: ctx.tenantId ?? null,
+        category: "support",
+        title: "Support follow-up card created",
+        body: result.title.slice(0, 200),
+        link: "/tasks",
+        resourceKind: "task_card",
+        resourceId: result.cardId,
+      });
+      logToolAudit(ctx.db, {
+        ...auditCtx(ctx),
+        action: "promote_support_to_card",
+        result: "ok",
+      });
+      return result;
     }
 
     case "explore_codebase": {

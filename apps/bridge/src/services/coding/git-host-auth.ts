@@ -87,7 +87,7 @@ export async function resolveCodingGithubAccessToken(
     if (status === 400) {
       throw Object.assign(
         new Error(
-          "Connect GitHub in Vault → Integrations before clone, push, or opening a pull request"
+          "Connect GitHub in Vault → Integrations before clone, push, PR, or release submit"
         ),
         { status: 400 }
       );
