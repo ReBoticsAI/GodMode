@@ -84,13 +84,16 @@ export function McpTab({
   };
 
   const hostLabel = isCursorCloud
-    ? "Pass workspace MCP to SDK"
+    ? "Pass workspace MCP"
     : "Host workspace MCP in Bridge";
   const hostHelp = isCursorCloud ? (
     <>
-      Inline <span className="font-mono">mcpServers</span> (cap 8). Default on
-      for local installs; off on SaaS unless enabled. Ambient project MCP may
-      still load via SDK settingSources.
+      Cap 8 servers from{" "}
+      <span className="font-mono">.cursor/mcp.json</span>. On sandboxed SaaS,
+      Bridge hosts them as callable tools (avoids SDK Auto-review blocks). Local
+      installs may use SDK inline <span className="font-mono">mcpServers</span>.
+      Default on for local installs; off on SaaS unless enabled. Ambient project
+      MCP may still load via SDK settingSources.
     </>
   ) : (
     <>

@@ -297,13 +297,11 @@ With a coding root that contains `.cursor/mcp.json` (`mcpServers` map):
 1. Open Agents → Pipeline → **MCP** node (or `GET /api/ai/mcp`).
 2. Server names and transports list; secrets in `env` / `headers` must not appear.
 3. Assembled prompt includes `<godmode_mcp>` when the MCP section is enabled; guidance must say enable GodMode MCP, not reload an external IDE.
-4. On `cursor_cloud`: toggle **Pass workspace MCP to SDK** and per-server enable/disable; Backend → **Coding workspace** sets the coding root (parity with CLI cwd).
-5. On SaaS, `GET /api/ai/mcp` reports `mcpFromWorkspace: false` and `execution: "discovery-only"` until the switch is enabled. The Pipeline switch must match that resolved value (not force ON).
-6. After enabling: `execution` is `sdk-inline` (`cursor_cloud`) or `bridge-host` (local/provider). Ask chat to **call** a listed tool; do not accept "reload IDE" as the product path.
+4. On `cursor_cloud`: toggle **Pass workspace MCP** and per-server enable/disable; Backend → **Coding workspace** sets the coding root (parity with CLI cwd).
+5. On SaaS, `GET /api/ai/mcp` reports `mcpFromWorkspace: false` until the switch is enabled (`execution` may be `discovery-only` or `sdk-project` when project settingSources are present). The Pipeline switch must match that resolved value (not force ON).
+6. After enabling: `execution` is `bridge-host` on sandboxed SaaS `cursor_cloud` (Bridge customTools; stdio/HTTP), `sdk-inline` on non-sandbox `cursor_cloud`, or `bridge-host` for local/provider. Ask chat to **call** a listed tool; do not accept "reload IDE" as the product path.
 7. Chat still works if `mcp.json` is missing or invalid (soft-fail).
 8. Automations → Hooks are **GodMode** automations only (not Cursor IDE `hooks.json`). Cursor hooks discovery was removed from Page Context.
-
-Cloud dogfood still needed after deploy: enable MCP on a SaaS agent with `hello-mcp` (or http MCP), confirm a tool call from Intelligence chat, and note stdio under `CURSOR_SDK_SANDBOX` if applicable.
 
 ## Blind eval (#71)
 

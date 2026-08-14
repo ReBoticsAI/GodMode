@@ -90,14 +90,42 @@ describe("mcp tool naming", () => {
 });
 
 describe("resolveBridgeMcpHostEnabled", () => {
-  it("is off for cursor_cloud and respects SaaS default", () => {
+  it("hosts cursor_cloud only when MCP gated on and SDK sandbox is on", () => {
+    expect(
+      resolveBridgeMcpHostEnabled({
+        backend: "cursor_cloud",
+        mcpFromWorkspace: true,
+        isSaas: true,
+        sdkSandboxEnabled: true,
+      })
+    ).toBe(true);
     expect(
       resolveBridgeMcpHostEnabled({
         backend: "cursor_cloud",
         mcpFromWorkspace: true,
         isSaas: false,
+        sdkSandboxEnabled: false,
       })
     ).toBe(false);
+    expect(
+      resolveBridgeMcpHostEnabled({
+        backend: "cursor_cloud",
+        mcpFromWorkspace: false,
+        isSaas: true,
+        sdkSandboxEnabled: true,
+      })
+    ).toBe(false);
+    expect(
+      resolveBridgeMcpHostEnabled({
+        backend: "cursor",
+        mcpFromWorkspace: true,
+        isSaas: false,
+        sdkSandboxEnabled: true,
+      })
+    ).toBe(false);
+  });
+
+  it("respects SaaS default for non-SDK backends", () => {
     expect(
       resolveBridgeMcpHostEnabled({
         backend: "local",
