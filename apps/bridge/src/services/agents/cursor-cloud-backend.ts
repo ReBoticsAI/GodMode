@@ -17,7 +17,10 @@ import {
   resolveMcpFromWorkspace,
   type CursorSdkMcpServers,
 } from "../coding/cursor-mcp-config.js";
-import { resolveBridgeMcpHostEnabled } from "../coding/mcp-host.js";
+import {
+  isBridgeMcpToolName,
+  resolveBridgeMcpHostEnabled,
+} from "../coding/mcp-host.js";
 import { ensureTenantCursorSandboxJson } from "../coding/cursor-sandbox-policy.js";
 import { resolveCodingRoot } from "../coding/fs-tools.js";
 import {
@@ -156,7 +159,10 @@ function filterSchemas(
   if (!allow?.length) return all;
   if (allow.includes("*")) return all;
   const set = new Set(allow);
-  return all.filter((t) => set.has(t.function.name));
+  // Bridge MCP tools sit outside toolAllow (same as SDK inline MCP).
+  return all.filter(
+    (t) => set.has(t.function.name) || isBridgeMcpToolName(t.function.name)
+  );
 }
 
 function flattenTextContent(content: string): string {
@@ -456,7 +462,8 @@ export function buildCursorSdkAgentOptions(args: {
     local: buildCursorLocalCreateOptions(args.cwd, {
       sandboxEnabled: args.sandboxEnabled,
     }),
-    ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
+    // Allow `{}` so Bridge-host mode can suppress ambient project MCP.
+    ...(args.mcpServers !== undefined ? { mcpServers: args.mcpServers } : {}),
   };
 }
 
@@ -711,15 +718,18 @@ export class CursorCloudBackend implements AgentBackend {
       isSaas: config.isSaas,
       sdkSandboxEnabled: sandboxEnabled,
     });
-    const mcpServers =
-      mcpEnabled && !bridgeHostsMcp
+    // Bridge host: empty mcpServers overrides project ambient MCP (which still
+    // loads via settingSources and fails Auto-review). Tools are customTools.
+    const mcpServers: CursorSdkMcpServers | undefined = bridgeHostsMcp
+      ? {}
+      : mcpEnabled
         ? loadCursorMcpServersForSdk(cwd, { disabled: mcpDisabled })
         : undefined;
-    const mcpKey = cursorMcpServersFingerprint(
+    const mcpKey = `${cursorMcpServersFingerprint(
       cwd,
       mcpEnabled,
       mcpDisabled
-    );
+    )}|${bridgeHostsMcp ? "bridge" : "sdk"}`;
     if (sandboxEnabled) {
       ensureTenantCursorSandboxJson(cwd);
     }
@@ -755,7 +765,7 @@ export class CursorCloudBackend implements AgentBackend {
       const run = await sdkAgent.send(prompt, {
         model: modelSelection,
         mode: sdkMode,
-        ...(mcpServers ? { mcpServers } : {}),
+        ...(mcpServers !== undefined ? { mcpServers } : {}),
         local: { customTools },
       });
 

@@ -2436,10 +2436,13 @@ export function getToolSchemasForLlm(
 }> {
   const visible = visibleTools(db, agentId);
   const mcpDefs = agentId ? getBridgeMcpToolDefsForAgent(agentId) : [];
-  // MCP host tools are appended when the Bridge host session is active for
-  // this agent (enabled via mcpFromWorkspace). They bypass personal default
-  // allowlists the same way SDK inline MCP sits outside GodMode toolAllow.
-  const withMcp = [...visible, ...mcpDefs.filter((m) => !visible.some((v) => v.name === m.name))];
+  // MCP host tools first so they stay visible under large toolAllow surfaces.
+  // They bypass personal default allowlists the same way SDK inline MCP sits
+  // outside GodMode toolAllow.
+  const withMcp = [
+    ...mcpDefs,
+    ...visible.filter((v) => !mcpDefs.some((m) => m.name === v.name)),
+  ];
   const schemas = withMcp.map((t) => ({
     type: "function" as const,
     function: {
@@ -2461,8 +2464,8 @@ export function getToolsIndexText(db?: AppDatabase, agentId?: string): string {
   const visible = visibleTools(db, agentId);
   const mcpDefs = agentId ? getBridgeMcpToolDefsForAgent(agentId) : [];
   const all = [
-    ...visible,
-    ...mcpDefs.filter((m) => !visible.some((v) => v.name === m.name)),
+    ...mcpDefs,
+    ...visible.filter((v) => !mcpDefs.some((m) => m.name === v.name)),
   ];
   const autoRead = all.filter((t) => t.mode === "auto" && !t.write);
   const autoWrite = all.filter((t) => t.mode === "auto" && t.write);

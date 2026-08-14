@@ -288,13 +288,29 @@ function renderPlatform(ctx: PlatformContext | undefined): string {
 
 function renderMcpSection(ctx: PlatformContext | undefined): string {
   if (!ctx?.mcpDiscovery?.summary) return "";
-  return [
+  const bridgeHosted = /hosted by Bridge MCP/i.test(ctx.mcpDiscovery.summary);
+  const serverNames = (ctx.mcpDiscovery.servers ?? [])
+    .map((s) => s.name)
+    .filter(Boolean);
+  const example =
+    serverNames[0] != null ? `mcp__${serverNames[0]}__<tool>` : "mcp__<server>__<tool>";
+  const lines = [
     "Project MCP configuration (from coding-root `.cursor/mcp.json`):",
     ctx.mcpDiscovery.summary,
     "GodMode native tools are separate from MCP.",
-    "To call listed MCP tools from GodMode Intelligence chat: enable Pass workspace MCP (Agents → Pipeline → MCP). SaaS defaults that switch off until enabled. On sandboxed SaaS, Bridge hosts MCP as callable tools; local cursor_cloud may use SDK inline mcpServers.",
-    "Do not tell the USER to reload an external IDE for GodMode-hosted MCP; enable the GodMode Pipeline toggle and call the tools here.",
-  ].join("\n");
+    "To call listed MCP tools from GodMode Intelligence chat: enable Pass workspace MCP (Agents → Pipeline → MCP). SaaS defaults that switch off until enabled.",
+  ];
+  if (bridgeHosted) {
+    lines.push(
+      `Bridge hosts these servers as GodMode tools named mcp__<server>__<tool> (example: ${example}). Call those tools directly. Do not use Cursor ambient MCP, Auto-review prompts, or ask the USER to reload an IDE.`
+    );
+  } else {
+    lines.push(
+      "On sandboxed SaaS, Bridge hosts MCP as callable tools after enable; local cursor_cloud may use SDK inline mcpServers.",
+      "Do not tell the USER to reload an external IDE for GodMode-hosted MCP; enable the GodMode Pipeline toggle and call the tools here."
+    );
+  }
+  return lines.join("\n");
 }
 
 /** Compact department context profile for a `dept-<id>` agent, else "". */

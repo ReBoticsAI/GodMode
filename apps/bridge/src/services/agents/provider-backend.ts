@@ -14,6 +14,7 @@ import {
   budgetAndScrubToolResult,
   scrubSensitiveToolArgs,
 } from "../secret-scrub.js";
+import { isBridgeMcpToolName } from "../coding/mcp-host.js";
 
 function parseToolArgs(raw: string): Record<string, unknown> {
   try {
@@ -43,7 +44,9 @@ function filterSchemas(
   if (!allow?.length) return all;
   if (allow.includes("*")) return all;
   const set = new Set(allow);
-  return all.filter((t) => set.has(t.function.name));
+  return all.filter(
+    (t) => set.has(t.function.name) || isBridgeMcpToolName(t.function.name)
+  );
 }
 
 async function openAiCompletion(
