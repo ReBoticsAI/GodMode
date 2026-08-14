@@ -20,4 +20,4 @@ See [[shared]].
 
 The **Marketplace** lists published packs you can install: integrations, agent templates, workflow packs, and more. Community listings support user-to-user checkout (sellers keep 90%).
 
-See [[marketplace]] and [[plugin-pipeline]].
+See [[marketplace]] and [[plugin-pipeline]]. Official connector quality bar: [OFFICIAL_CONNECTORS.md](../OFFICIAL_CONNECTORS.md).

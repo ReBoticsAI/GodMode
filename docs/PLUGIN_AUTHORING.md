@@ -107,6 +107,10 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   register (`api.objectTypes.register`) or call via `api.kernel` (#303). Catalog
   may also set `recordNames`. Manifest `objectTypes` names are collected into
   the records grant at install. Official/Community deny tools/records by default.
+- **Official connectors** (Vault Connect + Official catalog plugins that talk to
+  external hosts) must also meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md):
+  auth, refresh, scopes, webhooks when inbound, rate-limit / failure UX,
+  teardown, Cloud pins, and docs. GitHub is the reference.
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
