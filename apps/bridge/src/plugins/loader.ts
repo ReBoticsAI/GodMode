@@ -10,6 +10,8 @@ import {
 } from "@godmode/plugin-api";
 import { getCloudDb } from "../core-db.js";
 import { pluginRuntime } from "./runtime.js";
+import { pluginRuntimeIsolationForTrustTier } from "./plugin-runtime-isolation.js";
+import { readCapabilityGrants } from "../services/plugin-capabilities.js";
 import { registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
 import {
   listObjectTypes,
@@ -57,6 +59,11 @@ function resolveBridgeEntry(pluginRoot: string, entry: string): string {
   throw new Error(`Plugin bridge entry not found: ${entry} in ${pluginRoot}`);
 }
 
+/**
+ * In-process ESM import of the plugin bridge entry.
+ * Community child-process isolation (#559) must branch in `loadPluginFromRoot`
+ * once `pluginRuntimeIsolationForTrustTier("community")` returns `child-process`.
+ */
 async function importBridgeRegister(
   entryPath: string,
   cacheBust?: boolean
@@ -91,6 +98,12 @@ export async function loadPluginFromRoot(
 ): Promise<{ pluginId: string; pluginRoot: string; reloaded: boolean }> {
   const manifest = readGodmodePluginManifest(pluginRoot);
   assertEngineCompatible(manifest);
+  const trustTier = readCapabilityGrants(pluginRoot)?.trustTier ?? "operator";
+  if (pluginRuntimeIsolationForTrustTier(trustTier) === "child-process") {
+    throw new Error(
+      `Child-process plugin runtime is not implemented for ${manifest.id} (${trustTier})`
+    );
+  }
   const already = pluginRuntime.hasPlugin(manifest.id);
   const shouldReload = already && opts?.reload !== false;
   if (already && !shouldReload) {

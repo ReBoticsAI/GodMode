@@ -72,6 +72,27 @@ describe("plugin capability grants (#290 / #303)", () => {
     ).toThrow(/deny-by-default/);
   });
 
+  it("uses the same deny-by-default grant modes for Community and Official", () => {
+    const official = buildCapabilityGrants({
+      trustTier: "official",
+      declaredHosts: [],
+      declaredTools: [],
+      declaredRecords: [],
+    });
+    const community = buildCapabilityGrants({
+      trustTier: "community",
+      declaredHosts: [],
+      declaredTools: [],
+      declaredRecords: [],
+    });
+    expect(community.network).toEqual(official.network);
+    expect(community.tools).toEqual(official.tools);
+    expect(community.records).toEqual(official.records);
+    expect(official.network.mode).toBe("deny");
+    expect(community.trustTier).toBe("community");
+    expect(official.trustTier).toBe("official");
+  });
+
   it("allowlists only granted hosts for Official/Community", () => {
     const grants = buildCapabilityGrants({
       trustTier: "community",

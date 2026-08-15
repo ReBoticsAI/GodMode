@@ -2,7 +2,7 @@
  * Plugin runtime capability grants (#290 network, #303 tools/records).
  * Deny-by-default for Official/Community installs; Local/operator unrestricted.
  * Distinct from coding jail (#112). Raw in-process fetch remains a residual risk until
- * a true plugin process sandbox exists.
+ * the Community child-process sandbox lands (docs/PLUGIN_ISOLATION.md, #559).
  */
 import fs from "node:fs";
 import path from "node:path";

@@ -8,7 +8,8 @@ This document is the written bar for [#434](https://github.com/ReBoticsAI/GodMod
 Related: Marketplace Official catalog ([MARKETPLACE.md](MARKETPLACE.md),
 [#380](https://github.com/ReBoticsAI/GodMode/issues/380)), capability grants
 ([SECURITY.md](SECURITY.md) trust tiers), and Community process sandbox design
-([#314](https://github.com/ReBoticsAI/GodMode/issues/314)).
+([PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md),
+[#314](https://github.com/ReBoticsAI/GodMode/issues/314)).
 
 **Not this document:** the local hardware/federation process under `apps/connector`
 ([features/connector.md](features/connector.md)). That is a different product surface.
@@ -103,36 +104,17 @@ The Official GitHub Marketplace plugin adds vendor CLI helpers; it does not repl
 
 ## Capability grants and sandbox expectations (#314)
 
-### What ships today (keep forever)
+Official Marketplace plugins use the same **deny-by-default grants** as Community
+(#290 / #303). Grants are inner policy forever. Hard isolation for untrusted
+Community installs is a child process (message-only host API), not this quality
+bar. Design, residual threats, cost/ops, and the runner follow-up:
 
-- **Intake CI** pins and verifies Community (and Official) listings before they hit the shelf.
-- **Buyer install pins** stop floating `main` after intake.
-- **In-process capability grants** deny network / tools / records unless named at install.
-- Plugins still **load inside the Bridge Node process**. Grants are least privilege, not a strong sandbox.
+[PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md)
+([#314](https://github.com/ReBoticsAI/GodMode/issues/314) design,
+[#559](https://github.com/ReBoticsAI/GodMode/issues/559) implementation).
 
-### Threat model (grants vs process isolation)
-
-| Attacker goal | Grants stop? | Process/container sandbox would add |
-|---------------|--------------|-------------------------------------|
-| Call undeclared `externalFetch` host | Yes (allowlist) | Defense in depth |
-| Register undeclared tools / ObjectTypes | Yes | Defense in depth |
-| Abuse allowed APIs / raw in-process `fetch` / host FS via same process | No (residual) | Yes (isolate plugin runtime) |
-| Escape coding jail during agent builds | N/A (different surface: [#112](https://github.com/ReBoticsAI/GodMode/issues/112) / [#172](https://github.com/ReBoticsAI/GodMode/issues/172)) | Different job type |
-
-### Recommended v1 isolation level for #314
-
-**Design recommendation (not implemented in this slice):** start with a **child process** (or worker thread with strict message API) for untrusted **Community** installs on Cloud, keeping the same grant file as the policy engine inside the sandbox. Defer Firecracker/VM-grade plugin isolation until coding VM work ([#172](https://github.com/ReBoticsAI/GodMode/issues/172)) proves ops cost.
-
-Official connectors remain ReBotics-curated and still use grants, but Community is the priority for hard isolation because sellers are untrusted.
-
-### How grants compose with a future sandbox
-
-1. Install still writes `godmode.capabilities.json` from catalog + manifest.
-2. Sandboxed runtime may only call host APIs the Bridge exposes over IPC.
-3. `host.externalFetch`, tool register, and kernel access stay grant-gated inside the sandbox.
-4. Uninstall / last-tenant revoke still deletes grants; kill switches still apply.
-
-Follow-up implementation work stays on [#314](https://github.com/ReBoticsAI/GodMode/issues/314). This section satisfies the design-first acceptance there for the Official connector quality bar.
+Official connectors remain ReBotics-curated and stay **in-process** until that
+Community runner is proven. Do not treat this document as the plugin sandbox spec.
 
 ## Marketplace Official tab (#380)
 
