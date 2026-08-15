@@ -51,6 +51,10 @@ import {
   updateRecord,
 } from "../kernel/record-api.js";
 import { getTenantDb } from "../tenant-registry.js";
+import {
+  getPluginChild,
+  unregisterPluginChild,
+} from "./plugin-child-registry.js";
 
 type HookHandler = (ctx: PluginBootContext & PluginTenantContext) => void | Promise<void>;
 
@@ -181,6 +185,7 @@ export class PluginRuntime {
    * or swapped via {@link syncPluginRoutes}.
    */
   unregister(pluginId: string): boolean {
+    unregisterPluginChild(pluginId)?.kill();
     const before = this.loaded.length;
     const affectedPaths = this.routers
       .filter((entry) => entry.pluginId === pluginId)
@@ -214,6 +219,70 @@ export class PluginRuntime {
       this.syncPluginRoutes(undefined, affectedPaths);
     }
     return this.loaded.length < before;
+  }
+
+  markChildLoaded(manifest: GodmodePluginManifest, pluginRoot: string): void {
+    this.loaded.splice(
+      0,
+      this.loaded.length,
+      ...this.loaded.filter((p) => p.manifest.id !== manifest.id)
+    );
+    const api = this.createApi(manifest, pluginRoot);
+    this.loaded.push({ manifest, pluginRoot, api });
+  }
+
+  registerChildTool(
+    pluginId: string,
+    tool: Omit<PluginToolDef, "handler" | "pluginId">
+  ): void {
+    for (let i = this.tools.length - 1; i >= 0; i--) {
+      if (this.tools[i].pluginId === pluginId && this.tools[i].name === tool.name) {
+        this.tools.splice(i, 1);
+      }
+    }
+    this.tools.push({
+      ...tool,
+      pluginId,
+      handler: async (args, ctx) => {
+        const child = getPluginChild(pluginId);
+        if (!child) throw new Error(`Community plugin child is not running: ${pluginId}`);
+        return child.call("tools.call", {
+          name: tool.name,
+          args,
+          ctx: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            operatorTenantId: ctx.operatorTenantId,
+            activeAgentId: ctx.activeAgentId,
+            activeSubtaskCardId: ctx.activeSubtaskCardId,
+            activeTaskCardId: ctx.activeTaskCardId,
+          },
+        });
+      },
+    });
+  }
+
+  attachChildHook(pluginId: string, name: string): void {
+    const hook = name as PluginHookName;
+    const list = this.hooks.get(hook) ?? [];
+    if (list.some((e) => e.pluginId === pluginId)) return;
+    list.push({
+      pluginId,
+      handler: async (ctx) => {
+        const child = getPluginChild(pluginId);
+        if (!child) return;
+        await child.call("hooks.emit", {
+          name: hook,
+          ctx: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            operatorTenantId: ctx.operatorTenantId,
+            activeAgentId: ctx.activeAgentId,
+          },
+        });
+      },
+    });
+    this.hooks.set(hook, list);
   }
 
   hasPlugin(id: string): boolean {
