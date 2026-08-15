@@ -121,6 +121,29 @@ export function gitRemoteHttpsUrl(
 }
 
 /**
+ * Point a remote at a github.com HTTPS URL (add or set-url). Used after
+ * github_repo_create so git_push can publish the new repo.
+ */
+export function setGithubHttpsRemote(
+  opts: GitToolOpts & { url: string; remote?: string }
+): { remote: string; url: string; action: "added" | "updated" } {
+  const codingRoot = resolveCodingRoot(opts);
+  assertCodingKillSwitch(opts.tenantId ?? undefined);
+  const parsed = parseGithubHttpsRemote(String(opts.url ?? ""));
+  if (!parsed) {
+    throw new Error("Remote must be an https://github.com/owner/repo URL");
+  }
+  const remote = assertSafeRemote(String(opts.remote ?? "origin"));
+  const existing = remoteGetUrl(codingRoot, remote);
+  if (existing) {
+    runGit(codingRoot, ["remote", "set-url", remote, parsed.httpsUrl]);
+    return { remote, url: parsed.httpsUrl, action: "updated" };
+  }
+  runGit(codingRoot, ["remote", "add", remote, parsed.httpsUrl]);
+  return { remote, url: parsed.httpsUrl, action: "added" };
+}
+
+/**
  * Resolve a relative coding workspace under the tenant/local coding base
  * (ignores the current agent workspace override). Path must exist and be a
  * git work tree. Returns the relative path to store on agent.config.workspace.
@@ -423,6 +446,23 @@ export function previewGitToolDiff(
         previewDiff: `Clone ${gh.httpsUrl} → ${directory}\nAuth: Vault GitHub Connect`,
       };
     }
+    if (toolName === "github_repo_create") {
+      const name = String(args.name ?? "").trim() || "(name required)";
+      const owner = String(args.owner ?? "").trim() || "(connected GitHub user)";
+      const description = String(args.description ?? "").trim();
+      return {
+        previewDiff: [
+          `Create public GitHub repository: ${owner}/${name}`,
+          description ? `Description: ${description}` : "Description: (none)",
+          "Visibility: public",
+          "Does not delete repositories",
+          "Auth: Vault GitHub Connect (Personal Vault)",
+          args.setRemote === false
+            ? "Will not change git remotes"
+            : "Will set origin to the new clone URL",
+        ].join("\n"),
+      };
+    }
     if (toolName === "github_pr_create") {
       const status = gitStatus(opts ?? {});
       const title = String(args.title ?? "").trim() || "(untitled)";
@@ -543,8 +583,8 @@ export async function gitPush(
     const output = cap((res.stdout + res.stderr).trim(), LOG_CAP);
     if (res.timedOut || (res.exitCode ?? 1) !== 0) {
       const hint = githubRemote
-        ? " Connect GitHub in Vault → Integrations, or use an HTTPS remote with credentials already on this host."
-        : " Use an HTTPS remote with credentials already on this host, or connect a git host.";
+        ? " Connect GitHub in Personal Vault → Integrations."
+        : " Use an HTTPS remote with a configured git host.";
       throw new Error(
         res.timedOut
           ? "git push timed out"
@@ -586,7 +626,7 @@ export async function gitClone(
   ).trim();
   if (!token) {
     throw new Error(
-      "Connect GitHub in Vault → Integrations before cloning a github.com repo"
+      "Connect GitHub in Personal Vault → Integrations before cloning a github.com repo"
     );
   }
   const defaultDir = parsed.repo;
@@ -624,7 +664,7 @@ export async function gitClone(
       throw new Error(
         res.timedOut
           ? "git clone timed out"
-          : `git clone failed: ${output || "unknown"}. Connect GitHub in Vault → Integrations and retry.`
+          : `git clone failed: ${output || "unknown"}. Connect GitHub in Personal Vault → Integrations and retry.`
       );
     }
     return {

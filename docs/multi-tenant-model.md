@@ -54,8 +54,9 @@ One SQLite file per signed-up account (created on signup / first workspace).
 | Table group | Purpose |
 |-------------|---------|
 | `ai_secrets` (`owner_kind=platform`) | **Platform Vault** Connect secrets (Cursor, LLM keys, Exa, etc.), shared across that account’s workspaces |
+| `ai_secrets` (`owner_kind=user`, GitHub Connect) | **Personal Vault** GitHub Connect (`github-projects-oauth`), shared across that account’s workspaces |
 
-Personal Vault (`owner_kind=user`) and Agent Vault remain workspace-scoped today; moving personal chrome / Intelligence / Digital You onto the User DB is a follow-up.
+Other Personal Vault free-form secrets and Agent Vault remain workspace-scoped today.
 
 ### Workspace database (`tenants/<uuid>.sqlite`)
 
@@ -66,7 +67,7 @@ One SQLite file per workspace. Physical file selection provides isolation; most 
 | `structure_nodes` | Navigation structure and generic Record page metadata |
 | `ai_agents`, `ai_chats`, `ai_messages`, `ai_memories`, … | AI workspace |
 | `holdings_*` | Financial connections |
-| Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (wiki SoR lives on Workspace; Platform Vault Connect keys live on the User DB) |
+| Wiki, kanban, calendar, Personal/Agent vault tables | Productivity (wiki SoR lives on Workspace; Platform Vault Connect keys and Personal Vault GitHub Connect live on the User DB) |
 | `hooks`, `hook_runs` | Automations hooks SoR (migrated from Cloud by `owner_tenant_id`) |
 | `platform_events` | PlatformEvent trigger log SoR (`tenant_id` required; not the outbox `events` table) |
 | `ai_secrets` workspace override | Optional project-specific Connect keys (`owner_kind=platform`) |

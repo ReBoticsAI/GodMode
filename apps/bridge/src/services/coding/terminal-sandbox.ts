@@ -123,6 +123,41 @@ function pushRoBindTry(args: string[], hostPath: string): void {
   }
 }
 
+const ROOT_FS_DIRS = new Set(["/", "/etc", "/usr", "/run", "/var", "/root", "/home"]);
+
+/**
+ * Host paths that tenant jails must not see: platform GitHub App PEM, gitconfig
+ * credential helpers, and Cloud secret mounts.
+ */
+export function hostSecretHidePaths(): { dirs: string[]; files: string[] } {
+  const dirs = new Set<string>(["/run/godmode-secrets"]);
+  const files = new Set<string>(["/etc/gitconfig"]);
+  const pem = config.githubApp.privateKeyPath.trim();
+  if (pem) {
+    files.add(pem);
+    const dir = path.dirname(pem);
+    if (dir && !ROOT_FS_DIRS.has(dir)) {
+      dirs.add(dir);
+    }
+  }
+  return { dirs: [...dirs], files: [...files] };
+}
+
+function pushHostSecretHides(
+  args: string[],
+  extra?: { dirs?: string[]; files?: string[] }
+): void {
+  const hides = hostSecretHidePaths();
+  for (const dir of [...hides.dirs, ...(extra?.dirs ?? [])]) {
+    if (!dir.trim()) continue;
+    args.push("--tmpfs", dir);
+  }
+  for (const file of [...hides.files, ...(extra?.files ?? [])]) {
+    if (!file.trim()) continue;
+    args.push("--ro-bind-try", "/dev/null", file);
+  }
+}
+
 /**
  * Build bwrap argv (without the leading `bwrap` binary name).
  * Mounts codingRoot at the same host path (rw) so relative tooling stays sane.
@@ -145,6 +180,8 @@ export function buildBubblewrapArgs(opts: {
   hostEgressDir?: string;
   /** Pre-wrapped allowlist command (bridge + user cmd); if omitted, wraps here. */
   wrappedCommand?: string;
+  /** Extra host paths to hide (tests / additional host secrets). */
+  secretHidePaths?: { dirs?: string[]; files?: string[] };
 }): string[] {
   const codingRoot = path.resolve(opts.codingRoot);
   const cwd = path.resolve(opts.cwd);
@@ -249,6 +286,8 @@ export function buildBubblewrapArgs(opts: {
       });
   }
 
+  pushHostSecretHides(args, opts.secretHidePaths);
+
   args.push("--", "/bin/sh", "-c", command);
   return args;
 }
@@ -282,6 +321,7 @@ const DROP_ENV_PREFIXES = [
   "RESEND_",
   "OPENAI_API",
   "ANTHROPIC_",
+  "GITHUB_APP_",
 ];
 
 /** Host env for unsandboxed local runs: drop obvious credential/docker vars. */

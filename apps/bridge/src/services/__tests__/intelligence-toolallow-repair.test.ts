@@ -108,6 +108,7 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
       "remember",
     ]);
     expect(merged).toContain("git_clone");
+    expect(merged).toContain("github_repo_create");
     expect(merged).toContain("github_pr_create");
     expect(merged).toContain("github_release_create");
     expect(merged).toContain("promote_support_to_card");
@@ -133,6 +134,7 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
 
     const allow = getAgent(db, "intelligence")?.toolAllow ?? [];
     expect(allow).toContain("git_clone");
+    expect(allow).toContain("github_repo_create");
     expect(allow).toContain("github_pr_create");
     expect(allow).toContain("github_release_create");
     expect(allow).toContain("git_push");
@@ -152,6 +154,7 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
     const defaults = personalIntelligenceToolNames();
     expect(allow.sort()).toEqual([...defaults].sort());
     expect(allow).toContain("git_clone");
+    expect(allow).toContain("github_repo_create");
     expect(allow).toContain("github_pr_create");
   });
 });

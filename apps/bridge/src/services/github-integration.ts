@@ -3,13 +3,15 @@
  * Prefers GitHub App user-to-server + installation id; falls back to classic OAuth.
  */
 import type { AppDatabase } from "../db.js";
+import { getCloudDb } from "../core-db.js";
+import { getTenantDb } from "../tenant-registry.js";
+import { getUserDb } from "../user-registry.js";
 import {
   getSecretValue,
-  listSecrets,
+  resolveVaultAccountUserId,
 } from "./agents/agents-db.js";
 import { encryptSecret } from "./holdings/crypto-box.js";
 import { config } from "../config.js";
-import { getUserOwnerTenantDb } from "./user-scope.js";
 import {
   buildGithubAppInstallUrl,
   createInstallationAccessToken,
@@ -47,16 +49,7 @@ export function githubIntegrationOauthConfigured(): boolean {
   }
 }
 
-export function readGithubProjectsToken(db: AppDatabase): GithubProjectsToken | null {
-  const byId = getSecretValue(db, GITHUB_PROJECTS_SECRET_ID);
-  const raw =
-    byId ??
-    (() => {
-      const named = listSecrets(db, { kind: "user" }).find(
-        (s) => s.name === GITHUB_PROJECTS_SECRET_NAME
-      );
-      return named ? getSecretValue(db, named.id) : null;
-    })();
+function parseGithubProjectsToken(raw: string | null): GithubProjectsToken | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as GithubProjectsToken;
@@ -67,7 +60,20 @@ export function readGithubProjectsToken(db: AppDatabase): GithubProjectsToken | 
   }
 }
 
-export function upsertGithubProjectsToken(
+function readGithubProjectsTokenFromDb(db: AppDatabase): GithubProjectsToken | null {
+  const byId = getSecretValue(db, GITHUB_PROJECTS_SECRET_ID);
+  if (byId) return parseGithubProjectsToken(byId);
+  const named = db
+    .prepare(
+      `SELECT id FROM ai_secrets
+        WHERE owner_kind = 'user' AND agent_id IS NULL AND LOWER(name) = LOWER(?)
+        LIMIT 1`
+    )
+    .get(GITHUB_PROJECTS_SECRET_NAME) as { id: string } | undefined;
+  return named ? parseGithubProjectsToken(getSecretValue(db, named.id)) : null;
+}
+
+function writeGithubProjectsTokenToDb(
   db: AppDatabase,
   token: GithubProjectsToken
 ): void {
@@ -85,7 +91,7 @@ export function upsertGithubProjectsToken(
   );
 }
 
-export function clearGithubProjectsToken(db: AppDatabase): void {
+function deleteGithubProjectsTokenFromDb(db: AppDatabase): void {
   db.prepare(
     `DELETE FROM ai_secrets
       WHERE owner_kind = 'user' AND agent_id IS NULL
@@ -93,7 +99,91 @@ export function clearGithubProjectsToken(db: AppDatabase): void {
   ).run(GITHUB_PROJECTS_SECRET_ID, GITHUB_PROJECTS_SECRET_NAME);
 }
 
-export function githubProjectsStatus(db: AppDatabase): {
+function ownedWorkspaceIds(userId: string): string[] {
+  try {
+    const rows = getCloudDb()
+      .prepare(
+        `SELECT id FROM tenants
+         WHERE owner_user_id = ? AND is_operator = 0
+         ORDER BY updated_at DESC`
+      )
+      .all(userId) as Array<{ id: string }>;
+    return rows.map((r) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Copy GitHub Connect from an owned workspace SQLite file onto the User DB.
+ * Idempotent; never crosses accounts. Fixes Connect that landed on a tenant
+ * before Personal Vault GitHub was account-scoped.
+ */
+export function migrateGithubConnectToUserVault(userId: string): GithubProjectsToken | null {
+  const userDb = getUserDb(userId);
+  const existing = readGithubProjectsTokenFromDb(userDb);
+  if (existing) return existing;
+
+  for (const tenantId of ownedWorkspaceIds(userId)) {
+    let workspaceDb: AppDatabase;
+    try {
+      workspaceDb = getTenantDb(tenantId);
+    } catch {
+      continue;
+    }
+    const token = readGithubProjectsTokenFromDb(workspaceDb);
+    if (!token) continue;
+    writeGithubProjectsTokenToDb(userDb, token);
+    return token;
+  }
+  return null;
+}
+
+export function readGithubProjectsToken(
+  db: AppDatabase,
+  userId?: string | null
+): GithubProjectsToken | null {
+  const accountId = resolveVaultAccountUserId(db, userId);
+  if (accountId) {
+    migrateGithubConnectToUserVault(accountId);
+    const fromUser = readGithubProjectsTokenFromDb(getUserDb(accountId));
+    if (fromUser) return fromUser;
+  }
+  return readGithubProjectsTokenFromDb(db);
+}
+
+export function upsertGithubProjectsToken(
+  db: AppDatabase,
+  token: GithubProjectsToken,
+  userId?: string | null
+): void {
+  const accountId = resolveVaultAccountUserId(db, userId);
+  writeGithubProjectsTokenToDb(accountId ? getUserDb(accountId) : db, token);
+}
+
+export function clearGithubProjectsToken(
+  db: AppDatabase,
+  userId?: string | null
+): void {
+  const accountId = resolveVaultAccountUserId(db, userId);
+  if (accountId) {
+    deleteGithubProjectsTokenFromDb(getUserDb(accountId));
+    for (const tenantId of ownedWorkspaceIds(accountId)) {
+      try {
+        deleteGithubProjectsTokenFromDb(getTenantDb(tenantId));
+      } catch {
+        /* workspace file may be missing */
+      }
+    }
+    return;
+  }
+  deleteGithubProjectsTokenFromDb(db);
+}
+
+export function githubProjectsStatus(
+  db: AppDatabase,
+  userId?: string | null
+): {
   connected: boolean;
   login: string | null;
   configured: boolean;
@@ -101,7 +191,7 @@ export function githubProjectsStatus(db: AppDatabase): {
   installationId: number | null;
   installUrl: string | null;
 } {
-  const token = readGithubProjectsToken(db);
+  const token = readGithubProjectsToken(db, userId);
   const app = githubAppConfigured();
   return {
     configured: githubIntegrationOauthConfigured(),
@@ -113,9 +203,9 @@ export function githubProjectsStatus(db: AppDatabase): {
   };
 }
 
-/** Owner-tenant DB helper for routes that only have userId. */
+/** Account User DB for GitHub Connect (shared across that user's workspaces). */
 export function ownerDbForUser(userId: string): AppDatabase {
-  return getUserOwnerTenantDb(userId);
+  return getUserDb(userId);
 }
 
 /**
@@ -129,7 +219,7 @@ export async function resolveGithubProjectsAccessToken(
   const stored = readGithubProjectsToken(db);
   if (!stored) {
     throw Object.assign(
-      new Error("Connect GitHub in Vault → Integrations before linking a Project"),
+      new Error("Connect GitHub in Personal Vault → Integrations before linking a Project"),
       { status: 400 }
     );
   }
@@ -155,7 +245,7 @@ export async function resolveGithubProjectsAccessToken(
     return token;
   }
   throw Object.assign(
-    new Error("Connect GitHub in Vault → Integrations before linking a Project"),
+    new Error("Connect GitHub in Personal Vault → Integrations before linking a Project"),
     { status: 400 }
   );
 }

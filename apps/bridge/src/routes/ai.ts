@@ -112,6 +112,7 @@ import {
   resolveVaultOwnerInput,
   resolveSecretByName,
 } from "../services/agents/agents-db.js";
+import { migrateGithubConnectToUserVault } from "../services/github-integration.js";
 import {
   listAgentAccounts,
   createAgentApiKeyAccount,
@@ -1101,7 +1102,10 @@ export function createAiRouter(
       });
       return;
     }
-    const secrets = listSecrets(tdb(req), owner).filter(
+    if (owner.kind === "user" && req.user?.id) {
+      migrateGithubConnectToUserVault(req.user.id);
+    }
+    const secrets = listSecrets(tdb(req), owner, req.user?.id).filter(
       (s) =>
         s.id !== "cursor-api-key" &&
         !s.id.startsWith("cursor-api-key__agent__") &&

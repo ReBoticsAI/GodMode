@@ -39,14 +39,20 @@ import {
 } from "../../services/ai-adapters.js";
 import {
   createSecret,
-  deleteSecret,
-  getSecretRow,
+  deleteSecretInAccountScope,
+  getSecretRowInAccountScope,
   listSecrets,
   parseVaultOwnerKind,
   resolveVaultOwnerInput,
   type VaultOwner,
   type VaultOwnerKind,
 } from "../../services/agents/agents-db.js";
+import {
+  clearGithubProjectsToken,
+  GITHUB_PROJECTS_SECRET_ID,
+  GITHUB_PROJECTS_SECRET_NAME,
+  migrateGithubConnectToUserVault,
+} from "../../services/github-integration.js";
 import {
   createAgentApiKeyAccount,
   getAgentAccount,
@@ -1159,7 +1165,10 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
       owner_kind: ownerKindRaw,
       agent_id: ctx.agentId,
     });
-    const rows = listSecrets(db, owner).filter(
+    if (owner.kind === "user" && ctx.userId) {
+      migrateGithubConnectToUserVault(ctx.userId);
+    }
+    const rows = listSecrets(db, owner, ctx.userId).filter(
       (secret) => !isManagedPlatformSecret(secret)
     );
     const result = page(rows, query);
@@ -1171,7 +1180,7 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
   },
   get(db, def, id, ctx) {
     ownerOnly(ctx);
-    const row = getSecretRow(db, id);
+    const row = getSecretRowInAccountScope(db, id, ctx.userId);
     if (!row || isManagedPlatformSecret(row)) return null;
     if (ctx.agentId) {
       if (row.owner_kind !== "agent" || row.agent_id !== ctx.agentId) return null;
@@ -1182,7 +1191,7 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
       row.owner_kind === "agent"
         ? { kind: "agent", agentId: row.agent_id! }
         : { kind: row.owner_kind as Exclude<VaultOwnerKind, "agent"> };
-    const listed = listSecrets(db, owner).find((secret) => secret.id === id);
+    const listed = listSecrets(db, owner, ctx.userId).find((secret) => secret.id === id);
     return listed ? vaultSecretRecord(def, listed) : null;
   },
   create(db, def, data, ctx) {
@@ -1256,13 +1265,13 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     const owner = vaultOwnerScope(ctx, data);
     const created = createSecret(db, name, requiredText(data, "value"), owner);
-    const listed = listSecrets(db, owner).find((secret) => secret.id === created.id);
+    const listed = listSecrets(db, owner, ctx.userId).find((secret) => secret.id === created.id);
     if (!listed) throw httpError(500, "Created Vault secret could not be loaded");
     return vaultSecretRecord(def, listed);
   },
   delete(db, _def, id, ctx) {
     ownerOnly(ctx);
-    const row = getSecretRow(db, id);
+    const row = getSecretRowInAccountScope(db, id, ctx.userId);
     if (!row || isManagedPlatformSecret(row)) {
       throw httpError(404, "Vault secret not found");
     }
@@ -1273,7 +1282,17 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     } else if (row.owner_kind === "agent") {
       throw httpError(404, "Vault secret not found");
     }
-    if (!deleteSecret(db, id)) throw httpError(404, "Vault secret not found");
+    const githubConnect =
+      row.owner_kind === "user" &&
+      (row.id === GITHUB_PROJECTS_SECRET_ID ||
+        row.name.toLowerCase() === GITHUB_PROJECTS_SECRET_NAME);
+    if (githubConnect) {
+      clearGithubProjectsToken(db, ctx.userId);
+      return;
+    }
+    if (!deleteSecretInAccountScope(db, id, ctx.userId)) {
+      throw httpError(404, "Vault secret not found");
+    }
   },
 };
 

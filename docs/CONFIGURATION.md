@@ -145,6 +145,9 @@ Configure these on the GitHub App (github.com → App settings → Permissions),
 | Issues | Read and write | Support / issue flows |
 | Pull requests | Read and write | `github_pr_create` |
 | Projects (repo + org as needed) | Write | Tasks ↔ Projects sync |
+| Workflows | Read and write | Push `.github/workflows` files (plugin verify CI) |
+| Actions | Read | Read workflow run URLs (`ciRunUrl`) |
+| Administration | Read and write | `github_repo_create` (GitHub does not offer create-without-delete). GodMode never exposes a delete-repo tool. |
 
 After a permission upgrade, users reconnect from Vault → Integrations (or open the install URL and accept). Classic OAuth `scope=` is ignored when App auth is configured.
 
@@ -165,6 +168,9 @@ Webhook URL: `{AUTH_PUBLIC_URL}/api/integrations/github/webhook` (subscribe to P
 | Issues | Read and write | Core Support / issue flows |
 | Pull requests | Read and write | `github_pr_create` |
 | Projects (org/user as needed) | Write | Tasks ↔ GitHub Projects sync |
+| Workflows | Read and write | Push `.github/workflows` files (plugin verify CI) |
+| Actions | Read | Read workflow run URLs (`ciRunUrl`) |
+| Administration | Read and write | `github_repo_create` (GitHub does not offer create-without-delete). GodMode never exposes a delete-repo tool. |
 
 After changing App permissions, each installation must **accept** the new permissions. Users reconnect from Vault → Integrations (Reconnect / update permissions).
 

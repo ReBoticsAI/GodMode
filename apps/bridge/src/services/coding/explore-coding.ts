@@ -23,6 +23,7 @@ const EXPLORE_BLOCKED = new Set([
   "git_commit",
   "git_push",
   "git_clone",
+  "github_repo_create",
   "github_pr_create",
   "github_release_prepare",
   "github_release_create",
