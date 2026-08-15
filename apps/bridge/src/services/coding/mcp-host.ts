@@ -333,6 +333,22 @@ function toolsToAiDefs(tools: McpHostTool[]): BridgeMcpAiToolDef[] {
 
 const agentStates = new Map<string, AgentMcpState>();
 
+/**
+ * Confirm mode for a Bridge-hosted MCP tool.
+ * Honors MCP `annotations.readOnlyHint` (auto when true). Unknown / unhosted
+ * Bridge MCP names default to confirm.
+ */
+export function getBridgeMcpToolMode(
+  name: string
+): "auto" | "confirm" | null {
+  if (!isBridgeMcpToolName(name)) return null;
+  for (const state of agentStates.values()) {
+    const tool = state.tools.find((t) => t.qualifiedName === name);
+    if (tool) return tool.readOnly ? "auto" : "confirm";
+  }
+  return "confirm";
+}
+
 async function disposeAgentState(agentId: string): Promise<void> {
   const state = agentStates.get(agentId);
   if (!state) return;

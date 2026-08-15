@@ -29,6 +29,7 @@ import {
 import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
 import {
   executeBridgeMcpTool,
+  getBridgeMcpToolMode,
   isBridgeMcpToolName,
 } from "./coding/mcp-host.js";
 import type { LlmManager } from "./llm-manager.js";
@@ -922,9 +923,8 @@ async function executeStaticKernelAlias(
 function toolMode(name: string): "auto" | "confirm" | null {
   const core = AI_TOOL_REGISTRY.find((t) => t.name === name);
   if (core) return core.mode;
-  // MCP tools require confirm unless the model already got a readOnlyHint
-  // schema (auto). requiresConfirmation only has the name, so default confirm.
-  if (isBridgeMcpToolName(name)) return "confirm";
+  // Bridge MCP: honor annotations.readOnlyHint via host session (auto vs confirm).
+  if (isBridgeMcpToolName(name)) return getBridgeMcpToolMode(name) ?? "confirm";
   if (isKernelToolName(name)) {
     if (
       name.startsWith("create_") ||
