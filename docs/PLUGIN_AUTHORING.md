@@ -109,6 +109,10 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   register (`api.objectTypes.register`) or call via `api.kernel` (#303). Catalog
   may also set `recordNames`. Manifest `objectTypes` names are collected into
   the records grant at install. Official/Community deny tools/records by default.
+- **Runtime isolation:** Official/Community still load in-process today.
+  Community Cloud installs are designed to move to a child process
+  ([PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md)). Call `api.host.externalFetch`
+  rather than raw `fetch` either way.
 - **Official connectors** (Vault Connect + Official catalog plugins that talk to
   external hosts) must also meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md):
   auth, refresh, scopes, webhooks when inbound, rate-limit / failure UX,

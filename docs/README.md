@@ -20,6 +20,7 @@ Documentation for installing, using, and extending GodMode.
 | [AGENT_MEMORY.md](AGENT_MEMORY.md) | Working / semantic / episodic / procedural memory and embeddings |
 | [MARKETPLACE.md](MARKETPLACE.md) | Official/paid catalog, seller payouts, install UX |
 | [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md) | Official connector quality bar (auth, webhooks, grants, teardown) |
+| [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) | Community plugin runtime sandbox design (grants vs child process) |
 | [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md) | Marketplace Terms (chargebacks, fees, digital goods) |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |

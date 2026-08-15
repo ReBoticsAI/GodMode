@@ -89,7 +89,7 @@ Layers 1–3 (plus shared PTY #162) and `cursor_cloud` SDK sandbox (#171) are a 
 
 | Local plugin path registration | Tenant RCE via arbitrary folders | Blocked on SaaS unless `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS` |
 | Marketplace Official/Community plugin install | Floating `main` pulls or digest drift after intake verify | **Buyer pin (#177):** install requires immutable `pluginRef` (tag or commit); optional `pluginDigest` must match `HEAD`. No `git pull` to latest. Local folder installs remain operator-trusted. **Capability grants (#290 / #303):** network, tools, and records deny-by-default unless catalog/manifest names granted |
-| Installed plugin code in Bridge process | Malicious plugin APIs against tenant data after install | Distinct from coding jail (#112) and from Marketplace intake CI. Network egress via `host.externalFetch` and tool/record registration/kernel access are deny-by-default for Official/Community (#290 / #303). Kill switches (#96). True plugin process/container sandbox remains design-tracked on #314 (grants stay the inner policy forever). Official connector expectations: [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md) |
+| Installed plugin code in Bridge process | Malicious plugin APIs against tenant data after install | Distinct from coding jail (#112) and from Marketplace intake CI. Network egress via `host.externalFetch` and tool/record registration/kernel access are deny-by-default for Official/Community (#290 / #303). Kill switches (#96). Plugin process sandbox design: [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) (#314). Community child-process runner: #559. Grants stay the inner policy forever. Official connector quality bar: [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md) |
 | Federation API token | Remote command injection if token leaks | Rotate tokens; restrict network access |
 | First signup admin | Race on internet-exposed fresh installs | Use invite codes, paywall, or pre-seed `INITIAL_ADMINS` |
 | Plugin bundles (`/api/plugins/*/web.js`) | Proprietary JS exposure | Requires authenticated tenant + installed plugin |
@@ -190,10 +190,12 @@ boundaries distinct:
 | **Kill switches (#96)** | Deploy/spend/send/agent emergency stops | Fine-grained plugin capability grants (use #290 / #303 + uninstall) |
 
 Extending CI smoke or Copilot review on intake is encouraged and still not
-sufficient alone. A true plugin-per-process/container sandbox remains optional
-and expensive. Design note (threat model, recommended child-process v1 for
-Community, grant composition): [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md)
-(#314). Official Connect + Marketplace connectors must also meet that quality bar
+sufficient alone. A true plugin-per-process sandbox remains optional and
+expensive. Design note (threat model, recommended child-process v1 for
+Community, grant composition, residual `fetch` / `getPluginHost()`):
+[PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) (#314). Implementation:
+[#559](https://github.com/ReBoticsAI/GodMode/issues/559). Official Connect +
+Marketplace connectors must also meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md)
 (#434).
 
 ### Trust tiers (#290 / #303)
