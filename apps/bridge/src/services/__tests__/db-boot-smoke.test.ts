@@ -13,6 +13,13 @@ assert.deepEqual(
   TENANT_BOOT_MIGRATIONS.map(({ version, name }) => ({ version, name }))
 );
 assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+assert.equal(
+  (
+    db.prepare("PRAGMA table_info(ai_chats)").all() as Array<{ name: string }>
+  ).some((col) => col.name === "turn_state_json"),
+  true,
+  "ai_chats.turn_state_json must exist after tenant boot"
+);
 
 const tradingTables = db
   .prepare(
@@ -28,6 +35,13 @@ assert.deepEqual(
   tradingTables,
   [],
   "vanilla OSS tenant boot must not create trading plugin tables"
+);
+assert.equal(
+  (
+    db.prepare("PRAGMA table_info(ai_chats)").all() as Array<{ name: string }>
+  ).some((col) => col.name === "turn_state_json"),
+  true,
+  "ai_chats.turn_state_json must exist after tenant boot"
 );
 
 const firstSchemaCount = (
