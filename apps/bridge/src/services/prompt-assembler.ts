@@ -308,8 +308,9 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
     );
   } else {
     lines.push(
-      "On sandboxed SaaS, Bridge hosts MCP as callable tools after enable; local cursor_cloud may use SDK inline mcpServers.",
-      "Do not tell the USER to reload an external IDE for GodMode-hosted MCP; enable the GodMode Pipeline toggle and call the tools here."
+      "Pass workspace MCP is OFF for this agent. Listed servers are discovery-only until enabled.",
+      "Do not call Cursor ambient MCP, Auto-review prompts, Shell/stdio smuggling of `.cursor/*-mcp-server.js`, or ask the USER to reload an IDE.",
+      "Tell the USER to enable Pass workspace MCP on Agents → Pipeline → MCP, then retry the MCP tool call in this chat."
     );
   }
   return lines.join("\n");

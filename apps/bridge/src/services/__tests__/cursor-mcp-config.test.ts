@@ -286,7 +286,10 @@ describe("prompt-assembler MCP line", () => {
       "github (stdio) cmd:npx | discovery only (not executed by Bridge)"
     );
     expect(assembled.systemPrompt).toContain(
-      "Do not tell the USER to reload an external IDE"
+      "Pass workspace MCP is OFF for this agent"
+    );
+    expect(assembled.systemPrompt).toContain(
+      "enable Pass workspace MCP on Agents → Pipeline → MCP"
     );
     expect(assembled.systemPrompt).toContain("Route: /intelligence");
   });
