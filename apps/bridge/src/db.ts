@@ -296,7 +296,13 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 22, name: "wiki_workspace_schema_v1", up: migrateWikiWorkspaceSchema },
   { version: 23, name: "hooks_workspace_schema_v1", up: migrateHooksWorkspaceSchema },
   { version: 24, name: "platform_events_workspace_schema_v1", up: migratePlatformEventsWorkspaceSchema },
+  { version: 25, name: "ai_chats_turn_state_v1", up: migrateAiChatsTurnStateSchema },
 ] as const;
+
+function migrateAiChatsTurnStateSchema(db: Database.Database): void {
+  if (!tableExists(db, "ai_chats")) return;
+  addColumn(db, "ai_chats", "turn_state_json", "TEXT");
+}
 
 function migrateWikiWorkspaceSchema(db: Database.Database): void {
   ensureWikiWorkspaceSchema(db);

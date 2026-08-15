@@ -646,9 +646,11 @@ export function IntelligencePanel() {
 
   const recoverAfterBridgeDrop = useCallback(
     async (chatId: string) => {
-      const delays = [0, 800, 2000, 4000, 8000, 8000, 8000];
-      for (const ms of delays) {
-        if (ms) await new Promise((resolve) => setTimeout(resolve, ms));
+      const deadline = Date.now() + 120_000;
+      let delayMs = 0;
+      while (Date.now() < deadline) {
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs = Math.min(Math.max(delayMs, 400) * 2, 8000);
         if (activeChatIdRef.current !== chatId) return;
         try {
           const [stored, chat] = await Promise.all([
@@ -697,7 +699,7 @@ export function IntelligencePanel() {
           busyRef.current = false;
           return;
         } catch {
-          /* keep polling */
+          /* Bridge is still coming up. Keep polling until the deadline. */
         }
       }
       if (activeChatIdRef.current === chatId) {
