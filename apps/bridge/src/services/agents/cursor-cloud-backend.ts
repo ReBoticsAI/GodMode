@@ -421,7 +421,14 @@ export function cursorSdkSandboxFingerprint(enabled: boolean): string {
 /** Local Agent.create / resume options derived from coding root (exported for tests). */
 export function buildCursorLocalCreateOptions(
   cwd: string,
-  opts?: { sandboxEnabled?: boolean }
+  opts?: {
+    sandboxEnabled?: boolean;
+    /**
+     * When Bridge hosts MCP, omit project settingSources so ambient
+     * `.cursor/mcp.json` does not load under Auto-review.
+     */
+    suppressProjectSettingSources?: boolean;
+  }
 ): {
   cwd: string;
   sandboxOptions: { enabled: boolean };
@@ -431,7 +438,9 @@ export function buildCursorLocalCreateOptions(
   return {
     cwd,
     sandboxOptions: { enabled: sandboxEnabled },
-    settingSources: resolveCursorSettingSources(cwd),
+    settingSources: opts?.suppressProjectSettingSources
+      ? []
+      : resolveCursorSettingSources(cwd),
   };
 }
 
@@ -444,6 +453,8 @@ export function buildCursorSdkAgentOptions(args: {
   agentId?: string;
   mcpServers?: CursorSdkMcpServers;
   sandboxEnabled?: boolean;
+  /** Omit project settingSources (Bridge-host MCP path). */
+  suppressProjectSettingSources?: boolean;
 }): {
   apiKey: string;
   agentId?: string;
@@ -461,6 +472,7 @@ export function buildCursorSdkAgentOptions(args: {
     mode: args.mode,
     local: buildCursorLocalCreateOptions(args.cwd, {
       sandboxEnabled: args.sandboxEnabled,
+      suppressProjectSettingSources: args.suppressProjectSettingSources,
     }),
     // Allow `{}` so Bridge-host mode can suppress ambient project MCP.
     ...(args.mcpServers !== undefined ? { mcpServers: args.mcpServers } : {}),
@@ -486,6 +498,7 @@ export async function resolveCursorSdkAgent(args: {
   mode: "agent" | "plan";
   mcpServers?: CursorSdkMcpServers;
   sandboxEnabled?: boolean;
+  suppressProjectSettingSources?: boolean;
   /**
    * Skip in-memory reuse; create a new SDK agent with a new Cursor agent id.
    * Used after a stale AuthenticationError so the same API key gets a fresh session.
@@ -525,6 +538,7 @@ export async function resolveCursorSdkAgent(args: {
     cwd: args.cwd,
     mcpServers: args.mcpServers,
     sandboxEnabled: args.sandboxEnabled,
+    suppressProjectSettingSources: args.suppressProjectSettingSources,
   });
 
   let sdk = args.sdk;
@@ -718,8 +732,9 @@ export class CursorCloudBackend implements AgentBackend {
       isSaas: config.isSaas,
       sdkSandboxEnabled: sandboxEnabled,
     });
-    // Bridge host: empty mcpServers overrides project ambient MCP (which still
-    // loads via settingSources and fails Auto-review). Tools are customTools.
+    // Bridge host: empty mcpServers + no project settingSources so ambient
+    // `.cursor/mcp.json` cannot Auto-review-block. Tools are customTools.
+    // GodMode Knowledge/rules sections still cover agent guidance.
     const mcpServers: CursorSdkMcpServers | undefined = bridgeHostsMcp
       ? {}
       : mcpEnabled
@@ -730,6 +745,7 @@ export class CursorCloudBackend implements AgentBackend {
       mcpEnabled,
       mcpDisabled
     )}|${bridgeHostsMcp ? "bridge" : "sdk"}`;
+    const effectiveSettingSources = bridgeHostsMcp ? [] : settingSources;
     if (sandboxEnabled) {
       ensureTenantCursorSandboxJson(cwd);
     }
@@ -737,7 +753,7 @@ export class CursorCloudBackend implements AgentBackend {
       modelId,
       systemHash(sys),
       paramsHash,
-      cursorSettingSourcesFingerprint(settingSources),
+      cursorSettingSourcesFingerprint(effectiveSettingSources),
       sdkMode,
       mcpKey,
       cursorSdkSandboxFingerprint(sandboxEnabled)
@@ -754,6 +770,7 @@ export class CursorCloudBackend implements AgentBackend {
         mode: sdkMode,
         mcpServers,
         sandboxEnabled,
+        suppressProjectSettingSources: bridgeHostsMcp,
         forceFresh,
       });
       const prompt = buildPrompt(req, {

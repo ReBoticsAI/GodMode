@@ -77,6 +77,21 @@ describe("buildCursorLocalCreateOptions", () => {
     });
   });
 
+  it("omits project settingSources when Bridge hosts MCP", () => {
+    const cwd = tempDir();
+    mkdirSync(join(cwd, ".cursor"));
+    expect(
+      buildCursorLocalCreateOptions(cwd, {
+        sandboxEnabled: false,
+        suppressProjectSettingSources: true,
+      })
+    ).toEqual({
+      cwd,
+      sandboxOptions: { enabled: false },
+      settingSources: [],
+    });
+  });
+
   it("enables sandboxOptions when requested", () => {
     const cwd = tempDir();
     expect(buildCursorLocalCreateOptions(cwd, { sandboxEnabled: true })).toEqual({
