@@ -10,6 +10,7 @@ import {
 } from "@godmode/plugin-api";
 import { getCloudDb } from "../core-db.js";
 import { pluginRuntime } from "./runtime.js";
+import { loadCommunityPluginInChild } from "./plugin-child-host.js";
 import { pluginRuntimeIsolationForTrustTier } from "./plugin-runtime-isolation.js";
 import { readCapabilityGrants } from "../services/plugin-capabilities.js";
 import { registerPluginObjectTypes } from "../kernel/plugin-object-types.js";
@@ -47,7 +48,7 @@ export function discoverPluginRoots(): string[] {
   return out;
 }
 
-function resolveBridgeEntry(pluginRoot: string, entry: string): string {
+export function resolvePluginBridgeEntry(pluginRoot: string, entry: string): string {
   const candidates = [
     path.join(pluginRoot, entry),
     path.join(pluginRoot, entry.replace(/\.js$/, ".ts")),
@@ -61,8 +62,7 @@ function resolveBridgeEntry(pluginRoot: string, entry: string): string {
 
 /**
  * In-process ESM import of the plugin bridge entry.
- * Community child-process isolation (#559) must branch in `loadPluginFromRoot`
- * once `pluginRuntimeIsolationForTrustTier("community")` returns `child-process`.
+ * Community installs use `loadCommunityPluginInChild` instead of this path.
  */
 async function importBridgeRegister(
   entryPath: string,
@@ -99,11 +99,7 @@ export async function loadPluginFromRoot(
   const manifest = readGodmodePluginManifest(pluginRoot);
   assertEngineCompatible(manifest);
   const trustTier = readCapabilityGrants(pluginRoot)?.trustTier ?? "operator";
-  if (pluginRuntimeIsolationForTrustTier(trustTier) === "child-process") {
-    throw new Error(
-      `Child-process plugin runtime is not implemented for ${manifest.id} (${trustTier})`
-    );
-  }
+  const isolation = pluginRuntimeIsolationForTrustTier(trustTier);
   const already = pluginRuntime.hasPlugin(manifest.id);
   const shouldReload = already && opts?.reload !== false;
   if (already && !shouldReload) {
@@ -125,12 +121,17 @@ export async function loadPluginFromRoot(
   }
 
   try {
-    const entryPath = resolveBridgeEntry(pluginRoot, manifest.bridge.entry);
-    const registerFn = await importBridgeRegister(entryPath, already);
-    if (already) {
-      pluginRuntime.unregister(manifest.id);
+    const entryPath = resolvePluginBridgeEntry(pluginRoot, manifest.bridge.entry);
+    if (isolation === "child-process") {
+      if (already) pluginRuntime.unregister(manifest.id);
+      await loadCommunityPluginInChild({ manifest, pluginRoot, entryPath });
+    } else {
+      const registerFn = await importBridgeRegister(entryPath, already);
+      if (already) {
+        pluginRuntime.unregister(manifest.id);
+      }
+      await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
     }
-    await Promise.resolve(pluginRuntime.register(manifest, pluginRoot, registerFn));
     if (pluginRuntime.hasApp()) {
       pluginRuntime.syncPluginRoutes(manifest.id);
     }

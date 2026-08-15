@@ -1,0 +1,17 @@
+{
+  "id": "community-sandbox",
+  "version": "1.0.0",
+  "name": "Community sandbox fixture",
+  "engine": "^0.1.0",
+  "bridge": {
+    "entry": "src/bridge/index.ts"
+  },
+  "capabilities": {
+    "network": {
+      "hosts": ["127.0.0.1"]
+    },
+    "tools": {
+      "names": ["sandbox_ping"]
+    }
+  }
+}

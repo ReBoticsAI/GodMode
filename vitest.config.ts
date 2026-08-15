@@ -9,6 +9,7 @@ export default defineConfig({
       "apps/bridge/src/kernel/__tests__/**/*.test.ts",
       "apps/bridge/src/plugins/__tests__/route-hot-reload.test.ts",
       "apps/bridge/src/plugins/__tests__/plugin-runtime-isolation.test.ts",
+      "apps/bridge/src/plugins/__tests__/plugin-child-sandbox.test.ts",
       "apps/bridge/src/services/__tests__/plugin-pipeline.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",

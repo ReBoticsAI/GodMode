@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "trustTier": "community",
+  "network": {
+    "mode": "allowlist",
+    "hosts": ["127.0.0.1"]
+  },
+  "tools": {
+    "mode": "allowlist",
+    "names": ["sandbox_ping"]
+  },
+  "records": {
+    "mode": "deny",
+    "names": []
+  },
+  "grantedAt": "2026-01-01T00:00:00.000Z"
+}

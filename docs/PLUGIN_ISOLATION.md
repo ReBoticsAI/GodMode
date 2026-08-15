@@ -1,12 +1,12 @@
 # Plugin runtime isolation
 
-Installed Marketplace plugins load inside the **Bridge Node process** today.
 Capability grants (#290 / #303) are least privilege on `host.externalFetch`,
-tool registration, and kernel/ObjectType access. They are **not** a sandbox.
+tool registration, and kernel/ObjectType access. They are **not** a sandbox by
+themselves. Community marketplace installs additionally run in a Bridge-supervised
+child process (#559). Official / local / operator plugins stay in-process.
 
-This is the design note for [#314](https://github.com/ReBoticsAI/GodMode/issues/314).
-Implementation of the Community child-process runner is
-[#559](https://github.com/ReBoticsAI/GodMode/issues/559).
+This is the design note for [#314](https://github.com/ReBoticsAI/GodMode/issues/314)
+and the Community runner in [#559](https://github.com/ReBoticsAI/GodMode/issues/559).
 
 **Not this document:** coding-job isolation (Layers 1–4, bubblewrap terminal,
 Cursor SDK sandbox, ephemeral Docker builds). That surface is [SECURITY.md](SECURITY.md)
@@ -20,12 +20,16 @@ Do not reuse the coding jail as the plugin runtime.
 - **In-process capability grants** deny network, tools, and records unless named at install (`godmode.capabilities.json`).
 - Official and Community use the **same deny-by-default grant modes**. Local / operator paths stay unrestricted.
 - Marketplace trees missing a grants file **fail closed** (deny).
-- Plugins still **`import()` into Bridge**. Grants do not stop raw `fetch`, Node `fs` / `child_process`, shared heap, or `getPluginHost()`.
+- **Community** (`trustTier === "community"`) loads in a **child process**. Bridge talks JSON-RPC and re-checks grants on every host/tool/kernel call. The child never gets a live SQLite handle or the Bridge Express `app`.
+- **Official / local / operator** still **`import()` into Bridge**. Grants do not stop raw `fetch`, Node `fs` / `child_process`, shared heap, or `getPluginHost()` on those tiers.
+- Unexpected Community child exit surfaces Attention (`plugin_loop`) and drops the loaded plugin. Bridge stays up. Unregister and hot-reload kill then respawn the child. Spawn failure fails closed (no in-process fallback).
+- Plugin `web.js` is still served by Bridge. Browser bundles are not this sandbox.
 
-Loader: `apps/bridge/src/plugins/loader.ts` (`importBridgeRegister`).
+Loader: `apps/bridge/src/plugins/loader.ts` (`importBridgeRegister` for in-process;
+`loadCommunityPluginInChild` for Community).
 Policy: `apps/bridge/src/services/plugin-capabilities.ts`.
-Contract for the future split: `apps/bridge/src/plugins/plugin-runtime-isolation.ts`
-(every trust tier is `in-process` until #559 lands).
+Isolation split: `apps/bridge/src/plugins/plugin-runtime-isolation.ts`.
+Supervisor: `apps/bridge/src/plugins/plugin-child-host.ts`.
 
 ## Threat model (grants vs process isolation)
 
@@ -61,7 +65,7 @@ must meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md).
 2. The child may only call host APIs the Bridge exposes over IPC (`GodModePluginApi` / `PluginHostServices`). No shared `getPluginHost()`.
 3. `host.externalFetch`, `api.tools.register`, and kernel / ObjectType access stay grant-gated **inside** that IPC boundary.
 4. Last-tenant uninstall still deletes grants. Kill switches still apply.
-5. Closing residual `fetch` / `fs` only happens once Community plugin JS is out of process.
+5. Residual `fetch` / `fs` in Community plugin JS is out of the Bridge process. Grants still wrap the IPC host APIs.
 
 Do not change the grant file format for v1.
 
@@ -77,7 +81,6 @@ Do not change the grant file format for v1.
 
 ## Non-goals
 
-- Implementing the runner in the #314 design slice (that is #559)
 - Sandboxing Official plugins in v1
 - Docker, bubblewrap, or Firecracker for plugin `register()`
 - Treating coding Layers 1–4 as plugin isolation
@@ -86,6 +89,5 @@ Do not change the grant file format for v1.
 
 ## Follow-up
 
-[#559](https://github.com/ReBoticsAI/GodMode/issues/559): spawn on activate, IPC
-proxy, kill on unregister, grants remain inner policy, Official in-process until
-proven.
+Official remains in-process until this Community runner is proven in production.
+Coding VM work stays on [#172](https://github.com/ReBoticsAI/GodMode/issues/172).

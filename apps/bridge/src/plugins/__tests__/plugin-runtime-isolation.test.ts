@@ -3,18 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { pluginRuntimeIsolationForTrustTier } from "../plugin-runtime-isolation.js";
-import type { PluginTrustTier } from "../../services/plugin-capabilities.js";
-
-const TIERS: PluginTrustTier[] = ["official", "community", "local", "operator"];
 
 describe("plugin runtime isolation (#314 / #559)", () => {
-  it("keeps every trust tier in-process until the Community runner lands", () => {
-    for (const tier of TIERS) {
-      expect(pluginRuntimeIsolationForTrustTier(tier)).toBe("in-process");
-    }
+  it("runs Community in a child process and keeps other tiers in-process", () => {
+    expect(pluginRuntimeIsolationForTrustTier("community")).toBe("child-process");
+    expect(pluginRuntimeIsolationForTrustTier("official")).toBe("in-process");
+    expect(pluginRuntimeIsolationForTrustTier("local")).toBe("in-process");
+    expect(pluginRuntimeIsolationForTrustTier("operator")).toBe("in-process");
   });
 
-  it("still loads plugins via in-process import() in loader.ts", () => {
+  it("loads Community via the child supervisor and others via import()", () => {
     const loaderPath = path.join(
       path.dirname(fileURLToPath(import.meta.url)),
       "..",
@@ -24,6 +22,7 @@ describe("plugin runtime isolation (#314 / #559)", () => {
     expect(src).toContain("async function importBridgeRegister");
     expect(src).toMatch(/await import\(url\)/);
     expect(src).toContain("pluginRuntimeIsolationForTrustTier");
-    expect(src).not.toMatch(/child_process|fork\(/);
+    expect(src).toContain("loadCommunityPluginInChild");
+    expect(src).toMatch(/isolation === "child-process"/);
   });
 });
