@@ -74,6 +74,14 @@ describe("production core ObjectType bootstrap", () => {
     expect(content?.fieldType).toBe("JSON");
   });
 
+  it("declares ChatSession.turn_state as JSON so interrupted turns persist", () => {
+    registerCoreObjectTypes();
+    const chatSession = listObjectTypes().find((def) => def.name === "ChatSession");
+    expect(chatSession).toBeTruthy();
+    const turnState = chatSession?.fields.find((field) => field.name === "turn_state");
+    expect(turnState?.fieldType).toBe("JSON");
+  });
+
   it("uses the database handle selected by declared ownership", () => {
     const selectedCore = new Database(":memory:");
     selectedCore.exec(`

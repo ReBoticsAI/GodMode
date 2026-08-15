@@ -619,6 +619,26 @@ server.listen(config.port, config.host, () => {
     app,
     broadcast,
   });
+  void (async () => {
+    try {
+      const { resumeInterruptedChatTurns } = await import(
+        "./services/chat-turn-state.js"
+      );
+      const result = await resumeInterruptedChatTurns({
+        tenants: tenantDatabases(),
+      });
+      if (result.resumed || result.failedClosed) {
+        console.log(
+          `[chat-turn] boot resume resumed=${result.resumed} failedClosed=${result.failedClosed}`
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[chat-turn] boot resume failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  })();
 });
 
 function gracefulShutdown() {

@@ -326,8 +326,7 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
             );
           },
           abortSignal: abortController.signal,
-          isClosed: () =>
-            ws.readyState !== WebSocket.OPEN || abortController.signal.aborted,
+          isClosed: () => ws.readyState !== WebSocket.OPEN,
         };
 
         try {

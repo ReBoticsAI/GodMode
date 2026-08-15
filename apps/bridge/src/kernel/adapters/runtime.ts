@@ -421,7 +421,7 @@ function chatRow(
 ): Record<string, unknown> | undefined {
   return db
     .prepare(
-      `SELECT id, title, user_id, created_at, updated_at
+      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
        FROM ai_chats
        WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     )
@@ -523,10 +523,10 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     const userId = requiredUser(ctx);
     const rows = db
       .prepare(
-        `SELECT id, title, user_id, created_at, updated_at
-         FROM ai_chats
-         WHERE user_id IS NULL OR user_id = ?
-         ORDER BY updated_at DESC`
+      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
+       FROM ai_chats
+       WHERE user_id IS NULL OR user_id = ?
+       ORDER BY updated_at DESC`
       )
       .all(userId) as Array<Record<string, unknown>>;
     const result = page(rows, query);
@@ -535,6 +535,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
       records: result.rows.map((row) =>
         record(def, String(row.id), {
           title: row.title,
+          turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
         })
@@ -547,6 +548,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     return row
       ? record(def, id, {
           title: row.title,
+          turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
         })
@@ -3104,7 +3106,7 @@ export const runtimeAdapterRegistrations = [
     adapterId: "chat_session_runtime",
     database: "tenant",
     operations: ["list", "get", "create", "delete"],
-    fields: ["id", "title", "created_at", "updated_at"],
+    fields: ["id", "title", "turn_state", "created_at", "updated_at"],
     // Chat turn streaming remains on the authorized SSE protocol endpoint and
     // is not declared as a Record action.
     actions: CHAT_SESSION_ACTIONS,

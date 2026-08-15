@@ -32,6 +32,8 @@ export type AiChatTurnBody = {
   autoAcceptTools?: boolean;
   chatMode?: IntelligenceChatMode;
   toolAutonomy?: CodeAutonomyLevel;
+  /** Continue an interrupted turn without inserting another user ChatMessage. */
+  resumeInterrupted?: boolean;
 };
 
 export type AiChatAuthContext = {
@@ -93,6 +95,10 @@ let handlers: AiChatTurnHandlers | null = null;
 
 export function setAiChatTurnHandlers(h: AiChatTurnHandlers): void {
   handlers = h;
+}
+
+export function clearAiChatTurnHandlersForTests(): void {
+  handlers = null;
 }
 
 export function getAiChatTurnHandlers(): AiChatTurnHandlers {

@@ -30,6 +30,7 @@ function definition(name: string, adapterId: string): ObjectTypeDef {
     fields: [
       { name: "id", label: "id", fieldType: "Data" },
       { name: "title", label: "title", fieldType: "Data" },
+      { name: "turn_state", label: "turn_state", fieldType: "JSON" },
       { name: "chat_id", label: "chat_id", fieldType: "Data" },
       { name: "role", label: "role", fieldType: "Data" },
       { name: "content", label: "content", fieldType: "JSON" },
@@ -129,6 +130,7 @@ describe("runtime ObjectType actions", () => {
     db.exec(`
       CREATE TABLE ai_chats (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, user_id TEXT,
+        turn_state_json TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       );
       CREATE TABLE ai_messages (
@@ -281,6 +283,33 @@ describe("runtime ObjectType actions", () => {
         owner
       )
     ).toBeNull();
+  });
+
+  it("round-trips ChatSession turn_state JSON", () => {
+    db.prepare(
+      `INSERT INTO ai_chats (id, title, user_id, turn_state_json, created_at, updated_at)
+       VALUES ('chat-turn', 'Turn', 'user-a', ?, '1', '1')`
+    ).run(
+      JSON.stringify({
+        status: "running",
+        userMessageId: "msg-1",
+        agentId: "intelligence",
+        userId: "user-a",
+        generation: "g1",
+        checkpoint: [{ name: "edit_file" }],
+      })
+    );
+    const def = definition("ChatSession", "chat_session_runtime");
+    const got = chatSessionRuntimeAdapter.get!(db, def, "chat-turn", owner);
+    expect(got?.data.turn_state).toMatchObject({
+      status: "running",
+      userMessageId: "msg-1",
+      checkpoint: [{ name: "edit_file" }],
+    });
+    const listed = chatSessionRuntimeAdapter.list!(db, def, {}, owner);
+    expect(listed.records.find((row) => row.id === "chat-turn")?.data.turn_state).toMatchObject({
+      status: "running",
+    });
   });
 
   it("persists streamed chat messages through owner-scoped CRUD", () => {
