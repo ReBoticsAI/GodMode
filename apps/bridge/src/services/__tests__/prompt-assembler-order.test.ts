@@ -109,7 +109,10 @@ describe("prompt-assembler Cursor heading order", () => {
     expect(systemPrompt).toContain("github (stdio)");
     expect(systemPrompt).toContain("Route: /intelligence");
     expect(systemPrompt).toContain("Agents → Pipeline → MCP");
-    expect(systemPrompt).toContain("Do not tell the USER to reload an external IDE");
+    expect(systemPrompt).toContain("Pass workspace MCP is OFF for this agent");
+    expect(systemPrompt).toContain(
+      "enable Pass workspace MCP on Agents → Pipeline → MCP"
+    );
     expect(systemPrompt).not.toMatch(/MCP: github/);
   });
 });
