@@ -26,6 +26,8 @@ Same tools work in the monorepo and on Docker hub/client:
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`). For native/`npm ci` deps when Layer 4 is enabled, use `run_ephemeral_build` (host build supervisor; Docker socket never on Bridge).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes. Failures return a class (`manifest`, `build`, `isolation`, `install`) and surface in Attention.
 
+Plugins hot-reload in process. Bridge **Core** (`apps/bridge`) does not: local `tsx watch` kills the process on a Core save. Intelligence turns persist `turn_state` on the chat and auto-continue once after the new process listens. Do not replay completed file or git tools. If resume itself crashes, the next boot fail-closes that turn instead of looping.
+
 ### SaaS coding isolation (#112 / #178)
 
 On SaaS (`INSTALLATION_SURFACE=saas`), coding UI and agent coding tools are **on by

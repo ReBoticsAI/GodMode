@@ -44,6 +44,7 @@ const FIELD_TYPES: Record<string, FieldSpec> = {
   config: ["config", "JSON"],
   assembled: ["assembled", "JSON"],
   scopes: ["scopes", "JSON"],
+  turn_state: ["turn_state", "JSON"],
 };
 
 const WRITABLE: Record<string, string[]> = {

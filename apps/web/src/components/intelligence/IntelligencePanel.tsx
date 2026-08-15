@@ -49,6 +49,7 @@ import {
   deleteAiChat,
   fetchAiAgent,
   fetchAiChats,
+  fetchAiChat,
   fetchAiMessages,
   fetchAiQueue,
   fetchChatSession,
@@ -643,6 +644,70 @@ export function IntelligencePanel() {
     []
   );
 
+  const recoverAfterBridgeDrop = useCallback(
+    async (chatId: string) => {
+      const delays = [0, 800, 2000, 4000, 8000, 8000, 8000];
+      for (const ms of delays) {
+        if (ms) await new Promise((resolve) => setTimeout(resolve, ms));
+        if (activeChatIdRef.current !== chatId) return;
+        try {
+          const [stored, chat] = await Promise.all([
+            fetchAiMessages(chatId),
+            fetchAiChat(chatId),
+          ]);
+          const status = chat.turn_state?.status;
+          const hasAssistant = stored.some((m) => m.role === "assistant");
+          if (status === "resuming" || status === "running") {
+            setBusy(true);
+            busyRef.current = true;
+            setErrorMsg(null);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.role === "assistant" &&
+                (m.streaming || m.text?.startsWith("⚠️"))
+                  ? {
+                      ...m,
+                      streaming: true,
+                      statusText: "Bridge restarted. Continuing this turn.",
+                      text: m.text?.startsWith("⚠️") ? "" : m.text,
+                    }
+                  : m
+              )
+            );
+            continue;
+          }
+          if (hasAssistant) {
+            await loadChat(chatId);
+            setErrorMsg(null);
+            setBusy(false);
+            busyRef.current = false;
+            return;
+          }
+          if (status === "interrupted_failed") {
+            await loadChat(chatId);
+            setErrorMsg(
+              "This turn did not recover after a Bridge restart. Send again if needed."
+            );
+            setBusy(false);
+            busyRef.current = false;
+            return;
+          }
+          // Idle with no assistant: user Stop or a finished error. Do not poll.
+          setBusy(false);
+          busyRef.current = false;
+          return;
+        } catch {
+          /* keep polling */
+        }
+      }
+      if (activeChatIdRef.current === chatId) {
+        setBusy(false);
+        busyRef.current = false;
+      }
+    },
+    [loadChat]
+  );
+
   useEffect(() => {
     if (pendingChatId) {
       void loadChat(pendingChatId);
@@ -1085,6 +1150,8 @@ export function IntelligencePanel() {
           setBusy(false);
           busyRef.current = false;
           abortRef.current = null;
+          const chatId = activeChatIdRef.current;
+          if (chatId) void recoverAfterBridgeDrop(chatId);
         },
         onToolConfirmRequired: (payload) => {
           builder.onToolConfirmRequired(payload.toolCallId, {

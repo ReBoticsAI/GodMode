@@ -548,11 +548,18 @@ export interface AiInspect {
   } | null;
 }
 
+export interface AiChatTurnState {
+  status: "idle" | "running" | "resuming" | "interrupted_failed";
+  userMessageId?: string;
+  agentId?: string;
+}
+
 export interface AiChat {
   id: string;
   title: string;
   created_at: string;
   updated_at: string;
+  turn_state?: AiChatTurnState | null;
 }
 
 export interface AiStoredMessage {
@@ -1011,6 +1018,8 @@ export const deleteAiChat = (id: string) =>
   deleteDto("ChatSession", id);
 export const fetchAiMessages = (chatId: string) =>
   api<AiStoredMessage[]>(`/ai/chats/${chatId}/messages`);
+export const fetchAiChat = (chatId: string) =>
+  api<AiChat>(`/ai/chats/${chatId}`);
 
 export interface SharedChatSession {
   id: string;

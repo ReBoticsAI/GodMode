@@ -50,7 +50,7 @@ Picker model id selects a Cursor family harness (see [LOCAL_LLM.md](./LOCAL_LLM.
 | `/grok/i` | `cursor-grok` |
 | other Cursor ids | `cursor` (fallback) |
 
-Changing the picker model updates `send({ model, mode })` on an existing in-memory handle. After Bridge restart, `cursor_cloud` calls `Agent.resume("godmode-<chatId>")` before `Agent.create`, so native SDK conversation (including tool turns) survives when the local agent store still has the agent. The rolling transcript appendix is a **fallback** only when create is used (new chat or resume miss). It is skipped when resume or an in-memory handle continues the conversation.
+Changing the picker model updates `send({ model, mode })` on an existing in-memory handle. Bridge does **not** cold-call Cursor `Agent.resume` after a process restart: the SDK in-memory store is gone. Continuity is GodMode's chat transcript plus disk side effects. After a Core Bridge file save, `tsx watch` restarts the process; GodMode persists `ChatSession.turn_state` and auto-continues the interrupted turn once (fresh `Agent.create` plus a transcript appendix that says not to redo completed file or git work). The rolling transcript appendix is skipped only while the same in-memory SDK handle is reused.
 
 GodMode identity stays in `<!-- godmode-system -->` injection: `@cursor/sdk` `AgentOptions` has no system/instructions field for the main agent, so injection remains the highest-fidelity channel (decision: keep injection; do not wait for a native system API). Project rules continue via `settingSources: ["project"]` when `.cursor/` exists (not a Knowledge mirror). Never enables `user` / `team` / `all` setting sources on Bridge/SaaS.
 
@@ -100,7 +100,7 @@ Blind IDE vs GodMode scoring prompts live in [CURSOR_PARITY_EVAL.md](./CURSOR_PA
 
 `cursor_cloud` delivers this assembled text via `<!-- godmode-system -->` injection into the user prompt. That is intentional: the SDK has no main-agent system-role field, so injection is the durable contract (not a temporary workaround awaiting replacement). Saved prompt-flow configs migrate section **order** to this layout while preserving each section's enabled flag.
 
-Per turn, `cursor_cloud` also injects `<!-- godmode-reminders -->` (mode, optional abort note, coding workspace). When history compaction drops earlier turns, Bridge appends a short `<godmode_compaction>` scratchpad to the system prompt (and still enqueues episodic distill). If the in-memory SDK agent is recreated because model/mode/MCP/system fingerprint changed, the rolling transcript appendix is included again even when `Agent.resume` succeeds.
+Per turn, `cursor_cloud` also injects `<!-- godmode-reminders -->` (mode, optional abort note, coding workspace). When history compaction drops earlier turns, Bridge appends a short `<godmode_compaction>` scratchpad to the system prompt (and still enqueues episodic distill). If the in-memory SDK agent is recreated because model/mode/MCP/system fingerprint changed, the rolling transcript appendix is included again.
 
 Intelligence chat mode maps to the SDK as follows:
 

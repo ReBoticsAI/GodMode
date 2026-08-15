@@ -194,6 +194,14 @@ import {
   formatActiveWorkHostContext,
 } from "../services/active-work-run-card.js";
 import {
+  appendChatTurnCheckpoint,
+  checkpointFromToolResult,
+  markChatTurnIdle,
+  markChatTurnRunning,
+  shouldKeepInterruptedTurnRunning,
+  readChatTurnState,
+} from "../services/chat-turn-state.js";
+import {
   setAiChatTurnHandlers,
 } from "../services/ai-chat-turn.js";
 
@@ -1330,13 +1338,27 @@ export function createAiRouter(
     // session's home DB when this chat was promoted to a collaborative session.
     const { db: chatDb } = resolveChatWorkScope(req, req.params.id);
     const row = chatDb
-      .prepare(`SELECT id, title, created_at, updated_at FROM ai_chats WHERE id = ?`)
-      .get(req.params.id);
+      .prepare(
+        `SELECT id, title, created_at, updated_at, turn_state_json FROM ai_chats WHERE id = ?`
+      )
+      .get(req.params.id) as {
+      id: string;
+      title: string;
+      created_at: string;
+      updated_at: string;
+      turn_state_json?: string | null;
+    } | undefined;
     if (!row) {
       res.status(404).json({ error: "Chat not found" });
       return;
     }
-    res.json(row);
+    res.json({
+      id: row.id,
+      title: row.title,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      turn_state: readChatTurnState(chatDb, row.id),
+    });
   });
 
   router.get("/chats/:id/messages", (req, res) => {
@@ -1526,29 +1548,46 @@ export function createAiRouter(
     let activeChatId = chatId;
     let userMsgId: string;
     try {
-      if (!activeChatId) {
-        const title =
-          summarizeRunCardTitle(message.trim()) ||
-          message.trim().slice(0, 72) ||
-          "New chat";
-        activeChatId = createRecord(
+      if (body.resumeInterrupted) {
+        if (!activeChatId) {
+          return { ok: false, status: 400, body: { error: "chatId required to resume" } };
+        }
+        const turn = readChatTurnState(workDb, activeChatId);
+        if (!turn?.userMessageId) {
+          return { ok: false, status: 409, body: { error: "No interrupted turn to resume" } };
+        }
+        userMsgId = turn.userMessageId;
+      } else {
+        if (!activeChatId) {
+          const title =
+            summarizeRunCardTitle(message.trim()) ||
+            message.trim().slice(0, 72) ||
+            "New chat";
+          activeChatId = createRecord(
+            workDb,
+            "ChatSession",
+            { title },
+            chatKernelContext
+          ).id;
+        }
+
+        userMsgId = createRecord(
           workDb,
-          "ChatSession",
-          { title },
+          "ChatMessage",
+          {
+            chat_id: activeChatId,
+            role: "user",
+            content: { text: message, images },
+          },
           chatKernelContext
         ).id;
       }
-
-      userMsgId = createRecord(
-        workDb,
-        "ChatMessage",
-        {
-          chat_id: activeChatId,
-          role: "user",
-          content: { text: message, images },
-        },
-        chatKernelContext
-      ).id;
+      markChatTurnRunning(workDb, {
+        chatId: activeChatId,
+        userMessageId: userMsgId,
+        agentId: resolvedAgentId,
+        userId: auth.user.id,
+      });
     } catch (err) {
       if (err instanceof KernelError) {
         return { ok: false, status: err.status, body: { error: err.message } };
@@ -1556,19 +1595,21 @@ export function createAiRouter(
       throw err;
     }
 
-    broadcastAgentEvent(
-      resolvedAgentId,
-      "chat_message",
-      {
-        chatId: activeChatId,
-        messageId: userMsgId,
-        role: "user",
-        agentId: resolvedAgentId,
-        shared: !scope.owned,
-        sharedSession: Boolean(work.session),
-      },
-      work.tenantId
-    );
+    if (!body.resumeInterrupted) {
+      broadcastAgentEvent(
+        resolvedAgentId,
+        "chat_message",
+        {
+          chatId: activeChatId,
+          messageId: userMsgId,
+          role: "user",
+          agentId: resolvedAgentId,
+          shared: !scope.owned,
+          sharedSession: Boolean(work.session),
+        },
+        work.tenantId
+      );
+    }
 
     return {
       ok: true,
@@ -1758,6 +1799,7 @@ export function createAiRouter(
       send("error", {
         error: prepMessage || "Chat prep failed before the model started.",
       });
+      markChatTurnIdle(workDb, activeChatId);
       if (activeWorkCardId) {
         try {
           completeActiveWorkRunCard({
@@ -2078,6 +2120,15 @@ export function createAiRouter(
           onToolResult: (name, result, toolCallId, isError) => {
             partToolResult(result, toolCallId, isError);
             send("tool_result", { toolCallId, name, result, isError });
+            try {
+              appendChatTurnCheckpoint(
+                workDb,
+                activeChatId,
+                checkpointFromToolResult(name, result, isError)
+              );
+            } catch {
+              /* checkpoint is best-effort */
+            }
           },
           onTerminalOutput: (toolCallId, chunk) => {
             send("terminal_output", { toolCallId, ...chunk });
@@ -2246,6 +2297,7 @@ export function createAiRouter(
         contextWindow: llm.getStatus().ctxSize,
         messageId: assistantMsgId,
       });
+      markChatTurnIdle(workDb, activeChatId);
 
       if (activeWorkCardId) {
         try {
@@ -2261,18 +2313,24 @@ export function createAiRouter(
       }
     } catch (err) {
       const aborted = (err as Error).name === "AbortError";
+      const keepRunning = shouldKeepInterruptedTurnRunning({
+        aborted,
+        transportClosed: transport.isClosed(),
+      });
       if (!aborted) {
         send("error", {
           error: err instanceof Error ? err.message : String(err),
         });
       } else if (!transport.isClosed()) {
-        // Client still connected but the turn was aborted (Stop, or a
-        // spurious close). Prefer an explicit SSE error over a silent end.
+        // Client still connected but the turn was aborted (Stop).
         send("error", {
           error: "Chat turn was cancelled before it finished.",
         });
       }
-      if (activeWorkCardId) {
+      if (!keepRunning) {
+        markChatTurnIdle(workDb, activeChatId);
+      }
+      if (activeWorkCardId && !keepRunning) {
         try {
           completeActiveWorkRunCard({
             db: workDb,
