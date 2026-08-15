@@ -56,6 +56,23 @@ describe("buildBubblewrapArgs", () => {
     expect(args.slice(-3)).toEqual(["/bin/sh", "-c", "echo ok"]);
   });
 
+  it("hides host GitHub App secret mounts from the jail", () => {
+    const root = tempDir("gm-bwrap-hide-");
+    const args = buildBubblewrapArgs({
+      codingRoot: root,
+      cwd: root,
+      command: "true",
+      net: "none",
+    });
+    expect(args).toContain("/run/godmode-secrets");
+    const secretDirIdx = args.indexOf("/run/godmode-secrets");
+    expect(args[secretDirIdx - 1]).toBe("--tmpfs");
+    expect(args).toContain("/etc/gitconfig");
+    const hideFileIdx = args.indexOf("/etc/gitconfig");
+    expect(args[hideFileIdx - 2]).toBe("--ro-bind-try");
+    expect(args[hideFileIdx - 1]).toBe("/dev/null");
+  });
+
   it("omits --unshare-net when net=shared", () => {
     const root = tempDir("gm-bwrap-net-");
     const args = buildBubblewrapArgs({
@@ -144,6 +161,21 @@ describe("scrubTerminalEnv", () => {
     expect(scrubbed.DOCKER_HOST).toBeUndefined();
     expect(scrubbed.AWS_SECRET_ACCESS_KEY).toBeUndefined();
     expect(scrubbed.MY_PASSWORD).toBeUndefined();
+  });
+
+  it("drops host GitHub App env so tenant shells cannot mint platform JWTs", () => {
+    const scrubbed = scrubTerminalEnv({
+      PATH: "/usr/bin",
+      GITHUB_APP_ID: "123456",
+      GITHUB_APP_CLIENT_ID: "Iv1.abc",
+      GITHUB_APP_PRIVATE_KEY_PATH: "/run/godmode-secrets/github-app.pem",
+      HOME: "/home/godmode",
+    });
+    expect(scrubbed.PATH).toBe("/usr/bin");
+    expect(scrubbed.HOME).toBe("/home/godmode");
+    expect(scrubbed.GITHUB_APP_ID).toBeUndefined();
+    expect(scrubbed.GITHUB_APP_CLIENT_ID).toBeUndefined();
+    expect(scrubbed.GITHUB_APP_PRIVATE_KEY_PATH).toBeUndefined();
   });
 });
 

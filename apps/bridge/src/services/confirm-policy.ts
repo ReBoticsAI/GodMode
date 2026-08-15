@@ -12,6 +12,7 @@ const NEVER_AUTO_APPROVE = new Set([
   "deploy_playbook",
   "git_push",
   "git_clone",
+  "github_repo_create",
   "github_pr_create",
   "github_release_create",
   "github_release_publish",

@@ -1229,6 +1229,35 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "github_repo_create",
+    description:
+      "Create a new public GitHub repository using Personal Vault GitHub Connect (the connected user, not the host App). Always requires confirmation, including full autonomy. Never deletes repositories. Refuses the platform GitHub account. Optional owner is an org login; omit to create under the connected user. After create, sets origin on the coding workspace unless setRemote is false. Then git_push / github_pr_create.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Repository name (letters, numbers, dots, underscores, hyphens)",
+        },
+        description: { type: "string" },
+        owner: {
+          type: "string",
+          description:
+            "Optional organization login. Omit to create under the connected GitHub user. Cannot be the platform account.",
+        },
+        setRemote: {
+          type: "boolean",
+          description:
+            "Set the coding workspace origin remote to the new clone URL (default true)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
     name: "github_pr_create",
     description:
       "Open a GitHub pull request for the coding-root remote using Vault GitHub Connect. Always requires confirmation. Strip Cursor Co-authored-by / Made-with trailers from title and body. Prefer after git_push.",
@@ -2155,6 +2184,7 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "git_commit",
   "git_push",
   "git_clone",
+  "github_repo_create",
   "github_pr_create",
   "github_release_prepare",
   "github_release_create",
@@ -2196,6 +2226,7 @@ const CODING_WRITE_TOOLS = new Set([
   "git_commit",
   "git_push",
   "git_clone",
+  "github_repo_create",
   "github_pr_create",
   "github_release_prepare",
   "github_release_create",

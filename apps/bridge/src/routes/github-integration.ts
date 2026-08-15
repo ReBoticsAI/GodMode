@@ -13,7 +13,7 @@ import {
   githubProjectsStatus,
   upsertGithubProjectsToken,
 } from "../services/github-integration.js";
-import { getUserOwnerTenantDb } from "../services/user-scope.js";
+import { getUserDb } from "../user-registry.js";
 
 /** Short-lived OAuth state → userId */
 const pendingStates = new Map<
@@ -37,8 +37,8 @@ export function createGithubIntegrationRouter(): Router {
     requireAuth,
     resolveTenant,
     (req, res) => {
-      const db = getUserOwnerTenantDb(req.user!.id);
-      res.json(githubProjectsStatus(db));
+      const db = getUserDb(req.user!.id);
+      res.json(githubProjectsStatus(db, req.user!.id));
     }
   );
 
@@ -70,8 +70,8 @@ export function createGithubIntegrationRouter(): Router {
     requireAuth,
     resolveTenant,
     (req, res) => {
-      const db = getUserOwnerTenantDb(req.user!.id);
-      clearGithubProjectsToken(db);
+      const db = getUserDb(req.user!.id);
+      clearGithubProjectsToken(db, req.user!.id);
       res.json({ ok: true });
     }
   );
@@ -97,8 +97,8 @@ export function createGithubIntegrationRouter(): Router {
       if (Number.isFinite(fromQuery) && fromQuery > 0) {
         token.installationId = fromQuery;
       }
-      const db = getUserOwnerTenantDb(pending.userId);
-      upsertGithubProjectsToken(db, token);
+      const db = getUserDb(pending.userId);
+      upsertGithubProjectsToken(db, token, pending.userId);
       res.redirect(`${webBase}/vault?tab=integrations&github=connected`);
     } catch (err) {
       console.error("[github-integration] callback", err);

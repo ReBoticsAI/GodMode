@@ -39,7 +39,7 @@ Doctrine: do **not** pool consumer subscription tokens across different Cloud us
 
 #### GitHub
 
-The **Connect GitHub** card installs and authorizes the GitHub App used for Projects sync (and Cloud sign-in when configured).
+The **Connect GitHub** card installs and authorizes the GitHub App used for Projects sync, git clone/push/PR, and Cloud sign-in when configured. The token is stored on that account’s User database (`owner_kind=user`) and is shared across that user’s workspaces. Intelligence uses this Connect token, not the host platform GitHub App.
 
 ### Wallets & Accounts
 

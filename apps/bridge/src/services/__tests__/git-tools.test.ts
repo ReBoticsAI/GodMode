@@ -15,6 +15,7 @@ import {
   gitStatus,
   previewGitToolDiff,
   resolveRelativeCodingWorkspace,
+  setGithubHttpsRemote,
   stripCursorCommitAttribution,
 } from "../coding/git-tools.js";
 
@@ -123,6 +124,31 @@ describe("git-tools (#443)", () => {
     gitAdd({ root, paths: ["a.txt"] });
     const preview = previewGitToolDiff("git_commit", { message: "x" }, { root });
     expect(preview.previewDiff).toMatch(/preview|a\.txt/i);
+  });
+
+  it("setGithubHttpsRemote adds or updates origin", () => {
+    const root = initRepo();
+    const added = setGithubHttpsRemote({
+      root,
+      url: "https://github.com/alice/community-ping",
+    });
+    expect(added.action).toBe("added");
+    expect(gitRemoteHttpsUrl({ root })).toMatch(/github\.com\/alice\/community-ping/i);
+    const updated = setGithubHttpsRemote({
+      root,
+      url: "https://github.com/alice/other.git",
+    });
+    expect(updated.action).toBe("updated");
+    expect(gitRemoteHttpsUrl({ root })).toMatch(/github\.com\/alice\/other/i);
+  });
+
+  it("previewGitToolDiff describes github_repo_create", () => {
+    const preview = previewGitToolDiff("github_repo_create", {
+      name: "community-ping",
+      description: "ping",
+    });
+    expect(preview.previewDiff).toMatch(/community-ping/);
+    expect(preview.previewDiff).toMatch(/Does not delete/i);
   });
 
   it("strips Cursor Cloud co-author trailers from commit messages", () => {

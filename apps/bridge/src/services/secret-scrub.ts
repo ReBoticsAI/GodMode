@@ -8,6 +8,7 @@ import type { AppDatabase } from "../db.js";
 import {
   listSecrets,
   getSecretValue,
+  getSecretValueInAccountScope,
   type VaultOwner,
 } from "./agents/agents-db.js";
 import { decryptSecret } from "./holdings/crypto-box.js";
@@ -61,14 +62,14 @@ export function collectAgentSecretPlaintexts(
     entries.push({ ref, value });
   };
 
-  const owners: VaultOwner[] = [{ kind: "platform" }];
+  const owners: VaultOwner[] = [{ kind: "platform" }, { kind: "user" }];
   if (agentId) {
     owners.push({ kind: "agent", agentId });
   }
 
   for (const owner of owners) {
     for (const item of listSecrets(db, owner)) {
-      const plain = getSecretValue(db, item.id);
+      const plain = getSecretValueInAccountScope(db, item.id) ?? getSecretValue(db, item.id);
       push(item.name || item.id, plain);
     }
   }

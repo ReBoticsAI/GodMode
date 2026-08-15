@@ -90,6 +90,7 @@ import {
 } from "./platform-scope.js";
 import { getAssignment } from "./ai-agent-assignments.js";
 import { getUserOwnerTenantDb, getUserOwnerTenantId } from "./user-scope.js";
+import { getUserDb } from "../user-registry.js";
 import { ensureUserProject, ensureAgentProject } from "./user-productivity.js";
 import {
   readFile as fsReadFile,
@@ -117,11 +118,13 @@ import {
   gitRemoteHttpsUrl,
   gitStatus,
   resolveRelativeCodingWorkspace,
+  setGithubHttpsRemote,
 } from "./coding/git-tools.js";
 import {
   createGithubPullRequest,
   resolveGithubRemoteFromUrl,
 } from "./coding/github-pr.js";
+import { createGithubRepository } from "./coding/github-repo-create.js";
 import {
   createGithubRelease,
   formatGithubReleasePermissionError,
@@ -2732,17 +2735,14 @@ export async function executeTool(
     case "git_push": {
       let githubAccessToken: string | null = null;
       const remoteName = args.remote ? String(args.remote) : "origin";
-      try {
-        const remoteUrl = gitRemoteHttpsUrl({
-          ...codingFsOpts(ctx),
-          remote: remoteName,
-        });
-        if (parseGithubHttpsRemote(remoteUrl) && ctx.userId) {
-          const ownerDb = getUserOwnerTenantDb(ctx.userId);
-          githubAccessToken = await resolveCodingGithubAccessToken(ownerDb);
-        }
-      } catch {
-        /* host credentials fallback for non-Connect or missing remote */
+      const remoteUrl = gitRemoteHttpsUrl({
+        ...codingFsOpts(ctx),
+        remote: remoteName,
+      });
+      if (parseGithubHttpsRemote(remoteUrl) && ctx.userId) {
+        githubAccessToken = await resolveCodingGithubAccessToken(
+          getUserDb(ctx.userId)
+        );
       }
       try {
         const res = await gitPush({
@@ -2777,7 +2777,7 @@ export async function executeTool(
 
     case "git_clone": {
       if (!ctx.userId) throw new Error("Authenticated user required");
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const ownerDb = getUserDb(ctx.userId);
       const githubAccessToken = await resolveCodingGithubAccessToken(ownerDb);
       try {
         const res = await gitClone({
@@ -2824,9 +2824,88 @@ export async function executeTool(
       }
     }
 
+    case "github_repo_create": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      const ownerDb = getUserDb(ctx.userId);
+      const accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      try {
+        const created = await createGithubRepository({
+          accessToken,
+          name: String(args.name ?? ""),
+          description:
+            args.description != null ? String(args.description) : undefined,
+          owner: args.owner != null ? String(args.owner) : undefined,
+        });
+        let remote: { remote: string; url: string; action: "added" | "updated" } | null =
+          null;
+        if (args.setRemote !== false) {
+          try {
+            remote = setGithubHttpsRemote({
+              ...codingFsOpts(ctx),
+              url: created.cloneUrl,
+              remote: "origin",
+            });
+          } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            logToolAudit(ctx.db, {
+              ...auditCtx(ctx),
+              action: "github_repo_create",
+              result: "ok",
+            });
+            return {
+              ...created,
+              remoteSet: false,
+              remoteError: detail,
+              next: `Repository created at ${created.htmlUrl}. Set origin to ${created.cloneUrl}, then git_push.`,
+            };
+          }
+        }
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: `Repository ${created.fullName} created`,
+          body: created.htmlUrl.slice(0, 200),
+          link: created.htmlUrl,
+          resourceKind: "github_repo",
+          resourceId: created.fullName,
+        });
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_repo_create",
+          result: "ok",
+        });
+        return {
+          ...created,
+          remoteSet: Boolean(remote),
+          remote: remote?.remote ?? null,
+          remoteAction: remote?.action ?? null,
+          next: remote
+            ? `Origin ${remote.action} to ${created.cloneUrl}. Commit if needed, then git_push.`
+            : `Repository created at ${created.htmlUrl}. git_push when origin points at it.`,
+        };
+      } catch (err) {
+        const raw = err instanceof Error ? err.message : String(err);
+        const detail = isGithubIntegrationPermissionError(raw)
+          ? `${raw}. Reconnect GitHub in Personal Vault → Integrations and accept Administration plus Contents on your personal install (not the platform org).`
+          : raw;
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "GitHub repository create failed",
+          body: detail.slice(0, 500),
+          link: "/vault?tab=integrations",
+        });
+        throw new Error(detail);
+      }
+    }
+
     case "github_pr_create": {
       if (!ctx.userId) throw new Error("Authenticated user required");
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const ownerDb = getUserDb(ctx.userId);
       const accessToken = await resolveCodingGithubAccessToken(ownerDb);
       const status = gitStatus(codingFsOpts(ctx));
       const remoteUrl = gitRemoteHttpsUrl({
@@ -2928,7 +3007,7 @@ export async function executeTool(
         agentId: ctx.activeAgentId,
         action: "github_release_create",
       });
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const ownerDb = getUserDb(ctx.userId);
       const accessToken = await resolveCodingGithubAccessToken(ownerDb);
       const remoteUrl = gitRemoteHttpsUrl({
         ...codingFsOpts(ctx),
@@ -3022,7 +3101,7 @@ export async function executeTool(
         agentId: ctx.activeAgentId,
         action: "github_release_publish",
       });
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const ownerDb = getUserDb(ctx.userId);
       const accessToken = await resolveCodingGithubAccessToken(ownerDb);
       const remoteUrl = gitRemoteHttpsUrl({
         ...codingFsOpts(ctx),
@@ -3105,7 +3184,7 @@ export async function executeTool(
     case "github_release_list": {
       if (!ctx.userId) throw new Error("Authenticated user required");
       assertCodingKillSwitch(ctx.tenantId);
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      const ownerDb = getUserDb(ctx.userId);
       const accessToken = await resolveCodingGithubAccessToken(ownerDb);
       const remoteUrl = gitRemoteHttpsUrl({
         ...codingFsOpts(ctx),

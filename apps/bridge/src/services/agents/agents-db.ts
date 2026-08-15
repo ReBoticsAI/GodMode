@@ -829,6 +829,29 @@ function toListItem(r: AiSecretRow): VaultSecretListItem {
   };
 }
 
+function mergeAccountVaultSecrets(
+  items: VaultSecretListItem[],
+  accountId: string,
+  ownerKind: "platform" | "user"
+): VaultSecretListItem[] {
+  ensureUserDb(accountId);
+  const userRows = getUserDb(accountId)
+    .prepare(
+      `SELECT id, name, value, agent_id, owner_kind, created_at FROM ai_secrets
+       WHERE owner_kind = ? AND agent_id IS NULL
+       ORDER BY name`
+    )
+    .all(ownerKind) as AiSecretRow[];
+  const seen = new Set(items.map((i) => i.name.toLowerCase()));
+  for (const row of userRows) {
+    if (seen.has(row.name.toLowerCase())) continue;
+    items.push(toListItem(row));
+    seen.add(row.name.toLowerCase());
+  }
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  return items;
+}
+
 /** List secrets for one Vault owner (platform, user, or a single agent). */
 export function listSecrets(
   db: AppDatabase,
@@ -848,26 +871,14 @@ export function listSecrets(
     )
     .all(...clause.params) as AiSecretRow[];
   const items = rows.map(toListItem);
-  if (resolved.kind !== "platform") return items;
+  if (resolved.kind === "agent") return items;
 
   const accountId = resolveVaultAccountUserId(db, userId);
   if (!accountId) return items;
   try {
-    ensureUserDb(accountId);
-    const userRows = getUserDb(accountId)
-      .prepare(
-        `SELECT id, name, value, agent_id, owner_kind, created_at FROM ai_secrets
-         WHERE owner_kind = 'platform' AND agent_id IS NULL
-         ORDER BY name`
-      )
-      .all() as AiSecretRow[];
-    const seen = new Set(items.map((i) => i.name.toLowerCase()));
-    for (const row of userRows) {
-      if (seen.has(row.name.toLowerCase())) continue;
-      items.push(toListItem(row));
-      seen.add(row.name.toLowerCase());
+    if (resolved.kind === "platform" || resolved.kind === "user") {
+      return mergeAccountVaultSecrets(items, accountId, resolved.kind);
     }
-    items.sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     /* User DB optional until first ensure */
   }
@@ -888,6 +899,33 @@ export function getSecretRow(
 
 export function getSecretValue(db: AppDatabase, id: string): string | null {
   const row = getSecretRow(db, id);
+  if (!row) return null;
+  return tryReadSecretPlain(row.value);
+}
+
+/** Workspace row first, then that account's User DB (Personal / Platform Vault). */
+export function getSecretRowInAccountScope(
+  db: AppDatabase,
+  id: string,
+  userId?: string | null
+): AiSecretRow | null {
+  const local = getSecretRow(db, id);
+  if (local) return local;
+  const accountId = resolveVaultAccountUserId(db, userId);
+  if (!accountId) return null;
+  try {
+    return getSecretRow(getUserDb(accountId), id);
+  } catch {
+    return null;
+  }
+}
+
+export function getSecretValueInAccountScope(
+  db: AppDatabase,
+  id: string,
+  userId?: string | null
+): string | null {
+  const row = getSecretRowInAccountScope(db, id, userId);
   if (!row) return null;
   return tryReadSecretPlain(row.value);
 }
@@ -1349,4 +1387,19 @@ export function deleteSecret(
       .prepare(`DELETE FROM ai_secrets WHERE id = ? AND ${clause.sql}`)
       .run(id, ...clause.params).changes > 0
   );
+}
+
+export function deleteSecretInAccountScope(
+  db: AppDatabase,
+  id: string,
+  userId?: string | null
+): boolean {
+  if (deleteSecret(db, id)) return true;
+  const accountId = resolveVaultAccountUserId(db, userId);
+  if (!accountId) return false;
+  try {
+    return deleteSecret(getUserDb(accountId), id);
+  } catch {
+    return false;
+  }
 }
