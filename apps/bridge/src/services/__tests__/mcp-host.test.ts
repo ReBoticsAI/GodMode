@@ -73,13 +73,14 @@ function writeMcpJson(root: string, body: unknown): void {
 describe("mcp tool naming", () => {
   it("builds and parses exposed names", () => {
     const name = mcpExposedToolName("my-server", "do_thing");
-    expect(name).toBe("mcp__my-server__do_thing");
+    expect(name).toBe("gm_mcp__my-server__do_thing");
     expect(isBridgeMcpToolName(name)).toBe(true);
     expect(parseBridgeMcpToolName(name)).toEqual({
       serverKey: "my-server",
       toolKey: "do_thing",
     });
     expect(isBridgeMcpToolName("read_file")).toBe(false);
+    expect(isBridgeMcpToolName("mcp__tiny__echo")).toBe(false);
   });
 
   it("parses vault refs", () => {
@@ -167,13 +168,13 @@ describe("ensureBridgeMcpHost stdio", () => {
       expect.objectContaining({ name: "tiny", ok: true, toolCount: 1 }),
     ]);
     const schemas = getBridgeMcpToolSchemasForAgent("agent-a");
-    expect(schemas.map((s) => s.function.name)).toContain("mcp__tiny__echo");
+    expect(schemas.map((s) => s.function.name)).toContain("gm_mcp__tiny__echo");
 
     const llm = getToolSchemasForLlm(undefined, "agent-a");
-    expect(llm.some((s) => s.function.name === "mcp__tiny__echo")).toBe(true);
+    expect(llm.some((s) => s.function.name === "gm_mcp__tiny__echo")).toBe(true);
 
     const result = (await executeBridgeMcpTool(
-      "mcp__tiny__echo",
+      "gm_mcp__tiny__echo",
       { text: "hi" },
       { agentId: "agent-a", tenantId: "tenant-a" }
     )) as { content?: Array<{ type: string; text?: string }> };
@@ -182,7 +183,7 @@ describe("ensureBridgeMcpHost stdio", () => {
 
     await expect(
       executeBridgeMcpTool(
-        "mcp__tiny__echo",
+        "gm_mcp__tiny__echo",
         { text: "nope" },
         { agentId: "agent-a", tenantId: "tenant-b" }
       )

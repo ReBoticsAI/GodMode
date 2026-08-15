@@ -33,7 +33,7 @@ export type BridgeMcpAiToolDef = {
   write?: boolean;
 };
 
-export const MCP_TOOL_PREFIX = "mcp__";
+export const MCP_TOOL_PREFIX = "gm_mcp__";
 const CONNECT_TIMEOUT_MS = 15_000;
 
 export type BridgeMcpServerStatus = {
@@ -75,7 +75,10 @@ function normalizeTenantId(tenantId?: string | null): string {
   return t || "__local__";
 }
 
-/** Exposed LLM tool name: `mcp__<server>__<tool>`. */
+/**
+ * Exposed LLM tool name: `gm_mcp__<server>__<tool>`.
+ * Avoids the Cursor-reserved `mcp__` / ambient MCP Auto-review path.
+ */
 export function mcpExposedToolName(serverName: string, toolName: string): string {
   return `${MCP_TOOL_PREFIX}${serverName}__${toolName}`;
 }
