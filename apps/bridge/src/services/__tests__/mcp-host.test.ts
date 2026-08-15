@@ -10,6 +10,8 @@ import { getToolSchemasForLlm } from "../ai-tools-registry.js";
 import {
   ensureBridgeMcpHost,
   executeBridgeMcpTool,
+  getBridgeMcpToolDefsForAgent,
+  getBridgeMcpToolMode,
   getBridgeMcpToolSchemasForAgent,
   isBridgeMcpToolName,
   mcpExposedToolName,
@@ -18,6 +20,7 @@ import {
   resetBridgeMcpHostForTests,
   resolveBridgeMcpHostEnabled,
 } from "../coding/mcp-host.js";
+import { requiresConfirmation } from "../ai-tool-executor.js";
 
 const temps: string[] = [];
 const repoRoot = join(
@@ -169,6 +172,12 @@ describe("ensureBridgeMcpHost stdio", () => {
     ]);
     const schemas = getBridgeMcpToolSchemasForAgent("agent-a");
     expect(schemas.map((s) => s.function.name)).toContain("gm_mcp__tiny__echo");
+
+    expect(getBridgeMcpToolMode("gm_mcp__tiny__echo")).toBe("auto");
+    expect(requiresConfirmation("gm_mcp__tiny__echo")).toBe(false);
+    expect(getBridgeMcpToolDefsForAgent("agent-a")[0]?.mode).toBe("auto");
+    expect(getBridgeMcpToolMode("gm_mcp__missing__tool")).toBe("confirm");
+    expect(requiresConfirmation("gm_mcp__missing__tool")).toBe(true);
 
     const llm = getToolSchemasForLlm(undefined, "agent-a");
     expect(llm.some((s) => s.function.name === "gm_mcp__tiny__echo")).toBe(true);

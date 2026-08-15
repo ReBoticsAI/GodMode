@@ -12,6 +12,7 @@ server.tool(
   "echo",
   "Echo text back",
   { text: z.string() },
+  { readOnlyHint: true },
   async ({ text }) => ({
     content: [{ type: "text", text: `echo:${text}` }],
   })
