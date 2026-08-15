@@ -85,7 +85,7 @@ For **`cursor_cloud`**, project MCP is available in two ways:
 1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK loads `.cursor/mcp.json`).
 2. **Inline** `mcpServers` from the same file when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
 
-For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same `.cursor/mcp.json` is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`.
+For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same `.cursor/mcp.json` is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review).
 
 ### Auth / secrets
 

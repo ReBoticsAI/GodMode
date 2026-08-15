@@ -293,7 +293,9 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
     .map((s) => s.name)
     .filter(Boolean);
   const example =
-    serverNames[0] != null ? `mcp__${serverNames[0]}__<tool>` : "mcp__<server>__<tool>";
+    serverNames[0] != null
+      ? `gm_mcp__${serverNames[0]}__<tool>`
+      : "gm_mcp__<server>__<tool>";
   const lines = [
     "Project MCP configuration (from coding-root `.cursor/mcp.json`):",
     ctx.mcpDiscovery.summary,
@@ -302,7 +304,7 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
   ];
   if (bridgeHosted) {
     lines.push(
-      `Bridge hosts these servers as GodMode tools named mcp__<server>__<tool> (example: ${example}). Call those tools directly. Do not use Cursor ambient MCP, Auto-review prompts, or ask the USER to reload an IDE.`
+      `Bridge hosts these servers as GodMode tools named gm_mcp__<server>__<tool> (example: ${example}). Call those tools directly. Do not use Cursor ambient MCP, Auto-review prompts, or ask the USER to reload an IDE.`
     );
   } else {
     lines.push(
