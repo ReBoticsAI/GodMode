@@ -6,6 +6,7 @@ import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { backfillWelcomeWikiPages } from "./services/welcome-wiki.js";
 import {
   addCol,
+  columnExists,
   runMigrations,
   tableExists,
   type Migration,
@@ -328,6 +329,8 @@ export function initCoreDb(): CoreDatabase {
     );
     CREATE INDEX IF NOT EXISTS marketplace_listings_status_idx
       ON marketplace_listings(status, visibility, created_at DESC);
+    CREATE INDEX IF NOT EXISTS marketplace_listings_seller_status_idx
+      ON marketplace_listings(seller_user_id, status, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS marketplace_purchases (
       id TEXT PRIMARY KEY,
@@ -694,6 +697,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     up: ensureHooksGateAction,
     foreignKeysOff: true,
   },
+  {
+    version: 15,
+    name: "core_marketplace_listing_indexes_v1",
+    up: ensureMarketplaceListingIndexes,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -985,6 +993,43 @@ function ensureMarketplaceCommerceSchema(db: CoreDatabase): void {
   addCol(db, "marketplace_seller_accounts", "verified_seller", "INTEGER NOT NULL DEFAULT 0");
   // Admin revoke/freeze for earned Community tiers (#313).
   addCol(db, "marketplace_seller_accounts", "verified_frozen", "INTEGER NOT NULL DEFAULT 0");
+}
+
+/**
+ * Seller dashboard + public browse hit marketplace_listings by seller_user_id.
+ * Duplicate catalog claims from GET /my/listings used to multiply rows and
+ * stall the event loop (Cloudflare HTML 502).
+ */
+function ensureMarketplaceListingIndexes(db: CoreDatabase): void {
+  if (!tableExists(db, "marketplace_listings")) return;
+  addCol(db, "marketplace_listings", "status", "TEXT NOT NULL DEFAULT 'active'");
+  addCol(db, "marketplace_listings", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  if (columnExists(db, "marketplace_listings", "created_at")) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS marketplace_listings_seller_status_idx
+        ON marketplace_listings(seller_user_id, status, created_at DESC);
+    `);
+  } else {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS marketplace_listings_seller_status_idx
+        ON marketplace_listings(seller_user_id, status);
+    `);
+  }
+  if (!columnExists(db, "marketplace_listings", "catalog_entry_id")) return;
+  db.exec(`
+    DELETE FROM marketplace_listings
+    WHERE catalog_entry_id IS NOT NULL
+      AND status != 'archived'
+      AND rowid NOT IN (
+        SELECT MIN(rowid)
+        FROM marketplace_listings
+        WHERE catalog_entry_id IS NOT NULL AND status != 'archived'
+        GROUP BY seller_user_id, catalog_entry_id
+      );
+    CREATE UNIQUE INDEX IF NOT EXISTS marketplace_listings_seller_catalog_uidx
+      ON marketplace_listings(seller_user_id, catalog_entry_id)
+      WHERE catalog_entry_id IS NOT NULL AND status != 'archived';
+  `);
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {

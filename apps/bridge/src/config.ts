@@ -593,6 +593,8 @@ export const config = {
           )
         : ""),
     cacheTtlMs: Number(process.env.MARKETPLACE_CACHE_TTL_MS ?? 300_000),
+    /** GitHub/raw catalog GET budget. Misses must fail closed before the proxy 502s. */
+    catalogFetchTimeoutMs: Number(process.env.MARKETPLACE_CATALOG_FETCH_TIMEOUT_MS ?? 4000),
     pluginsDir: path.join(appData, "marketplace-plugins"),
     /** Marketplace ToS version buyers/sellers must accept. */
     tosVersion: (process.env.MARKETPLACE_TOS_VERSION ?? "1").trim() || "1",

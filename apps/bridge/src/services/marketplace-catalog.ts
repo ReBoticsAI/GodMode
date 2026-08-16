@@ -110,6 +110,12 @@ interface CatalogCache {
 }
 
 const catalogCache = new Map<string, CatalogCache>();
+const catalogInflight = new Map<string, Promise<CatalogIndex>>();
+
+export function resetMarketplaceCatalogCacheForTests(): void {
+  catalogCache.clear();
+  catalogInflight.clear();
+}
 
 export function ensureCatalogTables(core: CoreDatabase): void {
   core.exec(`
@@ -144,34 +150,78 @@ function resolveCatalogUrl(customUrl?: string): string {
   return config.marketplace.officialUrl;
 }
 
-async function fetchCatalogIndex(url: string): Promise<CatalogIndex> {
+function catalogFetchTimeoutMs(): number {
+  const n = Number(config.marketplace.catalogFetchTimeoutMs);
+  return Number.isFinite(n) && n > 0 ? n : 4000;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof Error && err.name === "AbortError") ||
+    (typeof err === "object" && err !== null && (err as { name?: string }).name === "AbortError")
+  );
+}
+
+export async function fetchCatalogIndex(url: string): Promise<CatalogIndex> {
   const cached = catalogCache.get(url);
   if (cached && Date.now() - cached.fetchedAt < config.marketplace.cacheTtlMs) {
     return cached.index;
   }
 
-  if (url.startsWith("file://")) {
-    const filePath = url.slice("file://".length);
-    const raw = fs.readFileSync(filePath, "utf8");
-    const index = JSON.parse(raw) as CatalogIndex;
-    catalogCache.set(url, { url, fetchedAt: Date.now(), etag: null, index });
-    return index;
-  }
+  const inflight = catalogInflight.get(url);
+  if (inflight) return inflight;
 
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (cached?.etag) headers["If-None-Match"] = cached.etag;
-
-  const res = await fetch(url, { headers });
-  if (res.status === 304 && cached) return cached.index;
-  if (!res.ok) throw new Error(`Catalog fetch failed (${res.status}): ${url}`);
-  const index = (await res.json()) as CatalogIndex;
-  catalogCache.set(url, {
-    url,
-    fetchedAt: Date.now(),
-    etag: res.headers.get("etag"),
-    index,
+  const pending = loadCatalogIndex(url).finally(() => {
+    catalogInflight.delete(url);
   });
-  return index;
+  catalogInflight.set(url, pending);
+  return pending;
+}
+
+async function loadCatalogIndex(url: string): Promise<CatalogIndex> {
+  const cached = catalogCache.get(url);
+  try {
+    if (url.startsWith("file://")) {
+      const filePath = url.slice("file://".length);
+      const raw = fs.readFileSync(filePath, "utf8");
+      const index = JSON.parse(raw) as CatalogIndex;
+      catalogCache.set(url, { url, fetchedAt: Date.now(), etag: null, index });
+      return index;
+    }
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (cached?.etag) headers["If-None-Match"] = cached.etag;
+
+    const res = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(catalogFetchTimeoutMs()),
+    });
+    if (res.status === 304 && cached) {
+      catalogCache.set(url, { ...cached, fetchedAt: Date.now() });
+      return cached.index;
+    }
+    if (!res.ok) throw new Error(`Catalog fetch failed (${res.status}): ${url}`);
+    const index = (await res.json()) as CatalogIndex;
+    catalogCache.set(url, {
+      url,
+      fetchedAt: Date.now(),
+      etag: res.headers.get("etag"),
+      index,
+    });
+    return index;
+  } catch (err) {
+    if (cached) {
+      console.warn(
+        `[catalog] using stale cache for ${url}:`,
+        isAbortError(err) ? "timed out" : err instanceof Error ? err.message : err
+      );
+      return cached.index;
+    }
+    if (isAbortError(err)) {
+      throw new Error(`Catalog fetch timed out: ${url}`);
+    }
+    throw err;
+  }
 }
 
 function entryBaseUrl(index: CatalogIndex, catalogUrl: string): string {
