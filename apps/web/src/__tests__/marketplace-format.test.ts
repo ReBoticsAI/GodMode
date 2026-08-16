@@ -7,6 +7,7 @@ import {
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
+  userFacingErrorMessage,
 } from "@/lib/marketplace-format";
 
 describe("formatMarketplaceCents", () => {
@@ -46,6 +47,17 @@ describe("Local tab on SaaS", () => {
     expect(installedEmptyHint(true)).toMatch(/Official or Community/);
     expect(installedEmptyHint(true)).not.toMatch(/Local/);
     expect(installedEmptyHint(false)).toMatch(/Official or Local/);
+  });
+});
+
+describe("userFacingErrorMessage", () => {
+  it("uses a fallback when the error message is empty", () => {
+    expect(userFacingErrorMessage(new Error(""), "Publish failed")).toBe("Publish failed");
+    expect(userFacingErrorMessage(new Error("   "), "Publish failed")).toBe("Publish failed");
+    expect(userFacingErrorMessage({}, "Publish failed")).toBe("Publish failed");
+    expect(userFacingErrorMessage(new Error("Accept ToS first"), "Publish failed")).toBe(
+      "Accept ToS first"
+    );
   });
 });
 

@@ -67,6 +67,11 @@ export class ApiError extends Error {
   }
 }
 
+function nonEmptyErrorText(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return fallback;
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const tenantId = getActiveTenantId();
   const { headers: callerHeaders, ...rest } = options ?? {};
@@ -92,8 +97,12 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     if (res.status === 401) clearSessionToken();
-    const payload = await res.json().catch(() => ({ error: res.statusText }));
-    const error = (payload as { error?: unknown }).error;
+    const fallback = res.statusText.trim() || `Request failed (${res.status})`;
+    const payload = await res.json().catch(() => null);
+    const error =
+      payload && typeof payload === "object"
+        ? (payload as { error?: unknown }).error
+        : undefined;
     if (error && typeof error === "object") {
       const structured = error as {
         code?: string;
@@ -101,16 +110,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
         details?: unknown;
         retryable?: boolean;
       };
-      throw new ApiError(res.status, structured.message ?? res.statusText, {
+      throw new ApiError(res.status, nonEmptyErrorText(structured.message, fallback), {
         code: structured.code,
         details: structured.details,
         retryable: structured.retryable,
       });
     }
-    throw new ApiError(
-      res.status,
-      typeof error === "string" ? error : res.statusText
-    );
+    throw new ApiError(res.status, nonEmptyErrorText(error, fallback));
   }
   return (await res.json()) as T;
 }
@@ -169,9 +175,14 @@ async function actionDto<T>(
   ) {
     const run = await waitForOperationRun(result.operationRunId);
     if (run.status === "failed") {
-      throw new ApiError(500, run.errorMessage ?? "Kernel action failed", {
-        code: run.errorCode,
-      });
+      throw new ApiError(
+        500,
+        (typeof run.errorMessage === "string" && run.errorMessage.trim()) ||
+          "Kernel action failed",
+        {
+          code: run.errorCode,
+        }
+      );
     }
     return run.result as T;
   }
@@ -6543,6 +6554,7 @@ export function fetchMarketplaceCommerceConfig() {
   return actionDto<{
     tosVersion: string;
     platformFeeBps: number;
+    tosAccepted?: boolean;
     providers: { stripe: boolean; paypal: boolean; crypto: boolean };
     cryptoTreasuryAddress: string | null;
     cryptoChainId: number;

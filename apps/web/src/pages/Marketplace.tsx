@@ -40,6 +40,7 @@ import {
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
+  userFacingErrorMessage,
   CLONE_PACK_KINDS,
   type PublishFamily,
 } from "@/lib/marketplace-format";
@@ -400,11 +401,34 @@ export default function MarketplacePage() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    const emptyUnofficial = {
+      sources: [] as Array<{ id: string; name: string; url: string; created_at: string }>,
+      entries: [] as CatalogEntry[],
+      discovered: [] as DiscoveredPlugin[],
+      localPaths: [] as string[],
+    };
     try {
+      const showLocal = marketplaceShowsLocalTab(saas);
       const [off, local, inst, community, communityCat, mine, ents, inf] = await Promise.all([
-        fetchOfficialCatalog(),
-        fetchUnofficialCatalog(),
-        fetchInstalledCatalog(),
+        fetchOfficialCatalog().catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Failed to load Official catalog"));
+          return { entries: [] as CatalogEntry[] };
+        }),
+        showLocal
+          ? fetchUnofficialCatalog().catch((err) => {
+              toast.error(userFacingErrorMessage(err, "Failed to load Local catalog"));
+              return emptyUnofficial;
+            })
+          : Promise.resolve(emptyUnofficial),
+        fetchInstalledCatalog().catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Failed to load installed plugins"));
+          return {
+            catalogInstalls: [] as Array<Record<string, unknown>>,
+            plugins: [] as TenantPluginRow[],
+            available: [] as DiscoveredPlugin[],
+            discovered: [] as DiscoveredPlugin[],
+          };
+        }),
         fetchMarketplaceListings({ sellerKind: "user" }).catch(() => ({ listings: [] })),
         fetchCommunityCatalog().catch(() => ({ catalogUrl: "", entries: [] as CatalogEntry[] })),
         fetchMyMarketplaceListings().catch(() => ({
@@ -429,14 +453,14 @@ export default function MarketplacePage() {
       setGithubLogin(mine.githubLogin ?? null);
       setEntitlements(ents.entitlements);
       setInferenceEndpoints(inf.endpoints);
-      const ids = new Set(inst.plugins.map((p) => p.plugin_id));
+      const ids = new Set((inst.plugins ?? []).map((p) => p.plugin_id));
       setInstalledIds(ids);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load marketplace");
+      toast.error(userFacingErrorMessage(err, "Failed to load marketplace"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [saas]);
 
   useEffect(() => {
     void reload();
@@ -444,6 +468,7 @@ export default function MarketplacePage() {
       .then((cfg) => {
         setTosVersion(cfg.tosVersion);
         setPlatformFeeBps(cfg.platformFeeBps);
+        setTosAccepted(Boolean(cfg.tosAccepted));
       })
       .catch(() => undefined);
   }, [reload]);
@@ -564,7 +589,7 @@ export default function MarketplacePage() {
       }
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Install failed");
+      toast.error(userFacingErrorMessage(err, "Install failed"));
     } finally {
       setInstallingId(null);
     }
@@ -603,7 +628,7 @@ export default function MarketplacePage() {
       }
       toast.success("Order ready");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Checkout failed");
+      toast.error(userFacingErrorMessage(err, "Checkout failed"));
     } finally {
       setBuyingId(null);
     }
@@ -643,7 +668,7 @@ export default function MarketplacePage() {
       }
       toast.success("Order ready");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Checkout failed");
+      toast.error(userFacingErrorMessage(err, "Checkout failed"));
     } finally {
       setBuyingId(null);
     }
@@ -660,7 +685,7 @@ export default function MarketplacePage() {
       );
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Acquire failed");
+      toast.error(userFacingErrorMessage(err, "Acquire failed"));
     } finally {
       setAcquiringId(null);
     }
@@ -674,7 +699,7 @@ export default function MarketplacePage() {
       setCryptoPrompt(null);
       setCryptoTxHash("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not confirm payment");
+      toast.error(userFacingErrorMessage(err, "Could not confirm payment"));
     }
   };
 
@@ -685,7 +710,7 @@ export default function MarketplacePage() {
       setTosAccepted(true);
       toast.success(`Accepted Marketplace ToS v${result.tosVersion}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "ToS acceptance failed");
+      toast.error(userFacingErrorMessage(err, "ToS acceptance failed"));
     }
   };
 
@@ -739,7 +764,7 @@ export default function MarketplacePage() {
       setPublishCatalogEntryId("");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Publish failed");
+      toast.error(userFacingErrorMessage(err, "Publish failed"));
     } finally {
       setPublishing(false);
     }
@@ -751,7 +776,7 @@ export default function MarketplacePage() {
       toast.success("Listing archived");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Archive failed");
+      toast.error(userFacingErrorMessage(err, "Archive failed"));
     }
   };
 
@@ -764,7 +789,7 @@ export default function MarketplacePage() {
       setLocalPath("");
       reloadAfterPluginChange(result.built);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add local plugin");
+      toast.error(userFacingErrorMessage(err, "Failed to add local plugin"));
     } finally {
       setAddingLocal(false);
     }
@@ -777,7 +802,7 @@ export default function MarketplacePage() {
       toast.success("Plugin installed for this workspace");
       reloadAfterPluginChange();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Install failed");
+      toast.error(userFacingErrorMessage(err, "Install failed"));
     } finally {
       setBusyPluginId(null);
     }
@@ -790,7 +815,7 @@ export default function MarketplacePage() {
       toast.success("Plugin uninstalled from this workspace");
       reloadAfterPluginChange();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Uninstall failed");
+      toast.error(userFacingErrorMessage(err, "Uninstall failed"));
     } finally {
       setBusyPluginId(null);
     }
@@ -803,7 +828,7 @@ export default function MarketplacePage() {
       toast.success("Removed local plugin path");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove path");
+      toast.error(userFacingErrorMessage(err, "Failed to remove path"));
     } finally {
       setBusyPluginId(null);
     }
@@ -818,7 +843,7 @@ export default function MarketplacePage() {
       await reload();
       toast.success("Catalog source added");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add source");
+      toast.error(userFacingErrorMessage(err, "Failed to add source"));
     }
   };
 
