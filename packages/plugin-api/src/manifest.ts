@@ -219,9 +219,15 @@ function parseNamedCapabilityList(
   pathLabel: string
 ): string[] | undefined {
   if (raw === undefined) return undefined;
+  if (Array.isArray(raw)) {
+    const names = raw.filter(
+      (n): n is string => typeof n === "string" && n.trim().length > 0
+    );
+    return names.length ? names : undefined;
+  }
   if (!raw || typeof raw !== "object") {
     throw new Error(
-      `Invalid plugin manifest (${pluginId}): ${pathLabel} must be an object`
+      `Invalid plugin manifest (${pluginId}): ${pathLabel} must be an object or string array`
     );
   }
   const obj = raw as Record<string, unknown>;

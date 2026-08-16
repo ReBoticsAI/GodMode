@@ -280,13 +280,26 @@ export async function fetchUnofficialCatalog(
   return merged;
 }
 
+function catalogSourceName(url: string, fallback = "custom"): string {
+  const src = url.toLowerCase();
+  if (src.includes("/catalog/community")) return "Community";
+  if (src.includes("/catalog/unofficial")) return "Unofficial";
+  if (src.includes("/catalog/official") || src.includes("commerce/catalog/official")) {
+    return "Official";
+  }
+  return fallback;
+}
+
 export async function findCatalogEntry(
   entryId: string,
   opts?: { sourceCatalog?: string; userId?: string }
 ): Promise<{ entry: CatalogEntry; index: CatalogIndex; catalogUrl: string } | null> {
   const catalogs: Array<{ url: string; name: string }> = [];
   if (opts?.sourceCatalog) {
-    catalogs.push({ url: opts.sourceCatalog, name: "custom" });
+    catalogs.push({
+      url: opts.sourceCatalog,
+      name: catalogSourceName(opts.sourceCatalog),
+    });
   } else {
     catalogs.push({ url: resolveCatalogUrl(), name: "Official" });
     catalogs.push({ url: resolveCommunityCatalogUrl(), name: "Community" });

@@ -97,6 +97,14 @@ describe("plugin ObjectType manifests", () => {
       "StructureNode",
     ]);
 
+    const shorthand = parseGodmodePluginManifest({
+      id: "cap-shorthand",
+      name: "Cap Shorthand",
+      version: "1.0.0",
+      capabilities: { tools: ["workspace_pulse_ping"] },
+    });
+    expect(shorthand.capabilities?.tools?.names).toEqual(["workspace_pulse_ping"]);
+
     expect(() =>
       parseGodmodePluginManifest({
         id: "bad-tools",
