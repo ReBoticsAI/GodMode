@@ -94,3 +94,41 @@ export function communityCheckoutBody(opts: {
     cancelUrl: opts.cancelUrl,
   };
 }
+
+function firstNonemptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+/**
+ * Map commerce_config (camelCase) or a seller-account row (snake_case) to Sell/Vault
+ * payout UI state. Does not call Stripe.
+ */
+export function sellerPayoutStatusFromAccount(row: object): {
+  stripeConnectId: string;
+  paypalMerchantId: string;
+  metamaskAddress: string;
+  payoutReady: boolean;
+} {
+  const rec = row as Record<string, unknown>;
+  const stripeConnectId = firstNonemptyString(
+    rec.stripeConnectAccountId,
+    rec.stripe_connect_account_id
+  );
+  const paypalMerchantId = firstNonemptyString(rec.paypalMerchantId, rec.paypal_merchant_id);
+  const metamaskAddress = firstNonemptyString(rec.metamaskAddress, rec.metamask_address);
+  const onboardingStatus = firstNonemptyString(rec.onboardingStatus, rec.onboarding_status);
+  const payoutsEnabled =
+    rec.stripePayoutsEnabled === true ||
+    rec.stripePayoutsEnabled === 1 ||
+    rec.stripe_payouts_enabled === true ||
+    rec.stripe_payouts_enabled === 1;
+  const payoutReady =
+    rec.payoutReady === true ||
+    onboardingStatus === "ready" ||
+    payoutsEnabled ||
+    Boolean(stripeConnectId || paypalMerchantId || metamaskAddress);
+  return { stripeConnectId, paypalMerchantId, metamaskAddress, payoutReady };
+}

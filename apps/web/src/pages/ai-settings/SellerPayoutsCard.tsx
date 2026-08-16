@@ -9,6 +9,7 @@ import {
   refreshMarketplaceStripeConnect,
   startMarketplaceStripeConnect,
 } from "@/api";
+import { sellerPayoutStatusFromAccount } from "@/lib/marketplace-format";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,21 +34,6 @@ export type SellerPayoutsCardProps = {
   refreshUrl: string;
   onStatusChange?: (status: SellerPayoutsStatus) => void;
 };
-
-function applyConnectRow(row: Record<string, unknown>): {
-  stripeConnectId: string;
-  payoutReady: boolean;
-} {
-  const stripeConnectId = String(row.stripe_connect_account_id ?? "");
-  const ready =
-    row.onboarding_status === "ready" ||
-    row.stripe_payouts_enabled === true ||
-    row.stripe_payouts_enabled === 1;
-  return {
-    stripeConnectId,
-    payoutReady: Boolean(ready) || Boolean(stripeConnectId),
-  };
-}
 
 /**
  * Marketplace seller Stripe Connect + advanced payout fields.
@@ -88,19 +74,17 @@ export function SellerPayoutsCard({
       .then((cfg) => {
         setPlatformFeeBps(cfg.platformFeeBps);
         if (cfg.tosAccepted) setTosAccepted(true);
+        const applied = sellerPayoutStatusFromAccount(cfg);
+        setStripeConnectId(applied.stripeConnectId);
+        setPaypalMerchantId(applied.paypalMerchantId);
+        setMetamaskAddress(applied.metamaskAddress);
+        setPayoutReady(applied.payoutReady);
+        notify({
+          ...applied,
+          tosAccepted: Boolean(cfg.tosAccepted),
+        });
       })
       .catch(() => undefined);
-    void (async () => {
-      try {
-        const row = await refreshMarketplaceStripeConnect();
-        const applied = applyConnectRow(row);
-        setStripeConnectId(applied.stripeConnectId);
-        setPayoutReady(applied.payoutReady);
-        notify(applied);
-      } catch {
-        // No seller account yet is fine; leave empty until Connect.
-      }
-    })();
   }, []);
 
   useEffect(() => {
@@ -110,8 +94,10 @@ export function SellerPayoutsCard({
     void (async () => {
       try {
         const row = await refreshMarketplaceStripeConnect();
-        const applied = applyConnectRow(row);
+        const applied = sellerPayoutStatusFromAccount(row);
         setStripeConnectId(applied.stripeConnectId);
+        setPaypalMerchantId(applied.paypalMerchantId);
+        setMetamaskAddress(applied.metamaskAddress);
         setPayoutReady(applied.payoutReady);
         notify(applied);
         if (

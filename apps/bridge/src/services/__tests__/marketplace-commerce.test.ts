@@ -4,6 +4,7 @@ import {
   acceptMarketplaceTos,
   assertCanAcquireListing,
   createMarketplaceOrder,
+  getSellerPayoutSnapshot,
   isMarketplaceBanned,
   markOrderDisputedAndBanBuyer,
   markOrderPaid,
@@ -105,6 +106,32 @@ describe("marketplace commerce", () => {
     expect(platformFeeCents(1000, "user")).toBe(100);
     expect(platformFeeCents(999, "user")).toBe(100);
     expect(platformFeeCents(1000, "official")).toBe(0);
+  });
+
+  it("reads payout snapshot without ToS or creating a seller row", () => {
+    expect(getSellerPayoutSnapshot(core as never, "seller")).toEqual({
+      stripeConnectAccountId: null,
+      paypalMerchantId: null,
+      metamaskAddress: null,
+      onboardingStatus: null,
+      payoutReady: false,
+      stripePayoutsEnabled: false,
+    });
+
+    core
+      .prepare(
+        `INSERT INTO marketplace_seller_accounts
+           (id, user_id, stripe_connect_account_id, onboarding_status)
+         VALUES ('sa-1', 'seller', 'acct_abc', 'pending')`
+      )
+      .run();
+
+    expect(getSellerPayoutSnapshot(core as never, "seller")).toMatchObject({
+      stripeConnectAccountId: "acct_abc",
+      payoutReady: true,
+      stripePayoutsEnabled: false,
+      onboardingStatus: "pending",
+    });
   });
 
   it("requires ToS before creating a paid order", () => {

@@ -19,7 +19,6 @@ import {
   fetchInferenceEndpoints,
   installCatalogEntry,
   installWorkspacePlugin,
-  refreshMarketplaceStripeConnect,
   registerLocalPlugin,
   removeCatalogSource,
   removeLocalPlugin,
@@ -40,6 +39,7 @@ import {
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
+  sellerPayoutStatusFromAccount,
   userFacingErrorMessage,
   CLONE_PACK_KINDS,
   type PublishFamily,
@@ -469,31 +469,10 @@ export default function MarketplacePage() {
         setTosVersion(cfg.tosVersion);
         setPlatformFeeBps(cfg.platformFeeBps);
         setTosAccepted(Boolean(cfg.tosAccepted));
+        setPayoutReady(sellerPayoutStatusFromAccount(cfg).payoutReady);
       })
       .catch(() => undefined);
   }, [reload]);
-
-  // Hydrate seller payout readiness for paid publish gating (Connect lives in Vault).
-  useEffect(() => {
-    if (tab !== "seller") return;
-    let cancelled = false;
-    void refreshMarketplaceStripeConnect()
-      .then((row) => {
-        if (cancelled) return;
-        const acct = String(row.stripe_connect_account_id ?? "");
-        const ready =
-          row.onboarding_status === "ready" ||
-          row.stripe_payouts_enabled === true ||
-          row.stripe_payouts_enabled === 1;
-        setPayoutReady(Boolean(ready) || Boolean(acct));
-      })
-      .catch(() => {
-        if (!cancelled) setPayoutReady(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab]);
 
   useEffect(() => {
     const paid = searchParams.get("paid");

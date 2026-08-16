@@ -731,3 +731,53 @@ export function getPublicCommerceConfig(): {
     cryptoAsset: config.marketplace.payments.cryptoAsset,
   };
 }
+
+function nonemptyText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export type SellerPayoutSnapshot = {
+  stripeConnectAccountId: string | null;
+  paypalMerchantId: string | null;
+  metamaskAddress: string | null;
+  onboardingStatus: string | null;
+  payoutReady: boolean;
+  stripePayoutsEnabled: boolean;
+};
+
+/**
+ * Stored seller payout methods for Sell / Vault hydration.
+ * Read-only: does not call Stripe, create a seller row, or require ToS.
+ */
+export function getSellerPayoutSnapshot(
+  core: CoreDatabase,
+  userId: string
+): SellerPayoutSnapshot {
+  const row = core
+    .prepare(
+      `SELECT stripe_connect_account_id, paypal_merchant_id, metamask_address, onboarding_status
+       FROM marketplace_seller_accounts WHERE user_id=?`
+    )
+    .get(userId) as
+    | {
+        stripe_connect_account_id: string | null;
+        paypal_merchant_id: string | null;
+        metamask_address: string | null;
+        onboarding_status: string | null;
+      }
+    | undefined;
+  const stripeConnectAccountId = nonemptyText(row?.stripe_connect_account_id);
+  const paypalMerchantId = nonemptyText(row?.paypal_merchant_id);
+  const metamaskAddress = nonemptyText(row?.metamask_address);
+  const onboardingStatus = nonemptyText(row?.onboarding_status);
+  return {
+    stripeConnectAccountId,
+    paypalMerchantId,
+    metamaskAddress,
+    onboardingStatus,
+    payoutReady: Boolean(stripeConnectAccountId || paypalMerchantId || metamaskAddress),
+    stripePayoutsEnabled: onboardingStatus === "ready",
+  };
+}

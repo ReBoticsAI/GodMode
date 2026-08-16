@@ -7,6 +7,7 @@ import {
   catalogSourceAdapter,
   financeConnectionAdapter,
   marketplaceListingAdapter,
+  marketplaceSellerAccountAdapter,
   peerConnectionAdapter,
   platformActionAdapterRegistrations,
 } from "../adapters/platform-actions.js";
@@ -420,6 +421,36 @@ describe("platform action adapters", () => {
       adminCtx
     ) as { data: Record<string, unknown> };
     expect(approved.data).toMatchObject({ status: "active", visibility: "public" });
+  });
+
+  it("commerce_config returns stored payout snapshot without ToS", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE marketplace_tos_acceptances (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, tos_version TEXT NOT NULL,
+        accepted_at TEXT DEFAULT (datetime('now')), UNIQUE (user_id, tos_version)
+      );
+      CREATE TABLE marketplace_seller_accounts (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
+        stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
+        payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+        tos_accepted_version TEXT, tos_accepted_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
+      INSERT INTO marketplace_seller_accounts (id, user_id, stripe_connect_account_id, onboarding_status)
+      VALUES ('sa-1', 'user-a', 'acct_sell', 'pending');
+    `);
+    const def = definition("MarketplaceSellerAccount", ["id"]);
+    const cfg = marketplaceSellerAccountAdapter.actions!.commerce_config(
+      db,
+      def,
+      "",
+      {},
+      context(db)
+    ) as Record<string, unknown>;
+    expect(cfg.tosAccepted).toBe(false);
+    expect(cfg.payoutReady).toBe(true);
+    expect(cfg.stripeConnectAccountId).toBe("acct_sell");
   });
 
   it("validates peer invitation input instead of returning 501", () => {
