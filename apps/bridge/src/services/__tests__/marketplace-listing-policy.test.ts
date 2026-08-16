@@ -9,14 +9,14 @@ import {
 
 describe("sellerOwnsCatalogEntry", () => {
   it("matches GitHub login to catalog author and pluginRepo", () => {
-    expect(sellerOwnsCatalogEntry({ author: "DaneSchell" }, "daneschell")).toBe(true);
+    expect(sellerOwnsCatalogEntry({ author: "alice" }, "Alice")).toBe(true);
     expect(
       sellerOwnsCatalogEntry(
-        { author: "Dane Schell", pluginRepo: "https://github.com/DaneSchell/godmode-workspace-pulse" },
-        "DaneSchell"
+        { author: "Alice Example", pluginRepo: "https://github.com/alice/example-plugin" },
+        "alice"
       )
     ).toBe(true);
-    expect(sellerOwnsCatalogEntry({ author: "other" }, "DaneSchell")).toBe(false);
+    expect(sellerOwnsCatalogEntry({ author: "other" }, "alice")).toBe(false);
   });
 });
 
