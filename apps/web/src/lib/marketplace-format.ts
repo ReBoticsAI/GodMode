@@ -1,3 +1,37 @@
+export type MarketplaceTab = "official" | "local" | "community" | "installed" | "seller";
+
+const MARKETPLACE_TABS: MarketplaceTab[] = [
+  "official",
+  "local",
+  "community",
+  "installed",
+  "seller",
+];
+
+/** Local folder registration and unofficial catalogs are self-host / hub only. */
+export function marketplaceShowsLocalTab(saas: boolean | null): boolean {
+  return saas === false;
+}
+
+export function normalizeMarketplaceTab(
+  raw: string | null,
+  opts?: { saas?: boolean | null }
+): MarketplaceTab {
+  const tab = raw === "unofficial" ? "local" : raw;
+  if (opts?.saas === true && tab === "local") return "community";
+  if (MARKETPLACE_TABS.includes(tab as MarketplaceTab)) {
+    return tab as MarketplaceTab;
+  }
+  return "official";
+}
+
+export function installedEmptyHint(saas: boolean): string {
+  if (saas) {
+    return "No plugins installed on this workspace. Use Official or Community to add one.";
+  }
+  return "No plugins installed on this workspace. Use Official or Local to add one.";
+}
+
 /** Format USD cents for Marketplace cards (Official + Community). */
 export function formatMarketplaceCents(cents: number | null | undefined): string {
   const n = Number(cents ?? 0);

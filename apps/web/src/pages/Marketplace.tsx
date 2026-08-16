@@ -33,6 +33,9 @@ import {
 import {
   communityCheckoutBody,
   formatMarketplaceCents,
+  installedEmptyHint,
+  marketplaceShowsLocalTab,
+  normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
 } from "@/lib/marketplace-format";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -66,20 +69,6 @@ const LISTING_KINDS = [
   "dataset",
   "bundle",
 ] as const;
-
-function normalizeMarketplaceTab(raw: string | null): string {
-  if (raw === "unofficial") return "local";
-  if (
-    raw === "official" ||
-    raw === "local" ||
-    raw === "community" ||
-    raw === "installed" ||
-    raw === "seller"
-  ) {
-    return raw;
-  }
-  return "official";
-}
 
 function reloadAfterPluginChange(built?: boolean) {
   if (built) {
@@ -353,7 +342,8 @@ export default function MarketplacePage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [addingLocal, setAddingLocal] = useState(false);
-  const [saas, setSaas] = useState(false);
+  const [saas, setSaas] = useState<boolean | null>(null);
+  const showLocalTab = marketplaceShowsLocalTab(saas);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [acquiringId, setAcquiringId] = useState<string | null>(null);
   const [cryptoPrompt, setCryptoPrompt] = useState<{
@@ -474,19 +464,24 @@ export default function MarketplacePage() {
   }, [searchParams, setSearchParams, reload]);
 
   useEffect(() => {
+    if (saas === null) return;
     const raw = searchParams.get("tab");
-    if (raw === "unofficial") {
+    const nextTab = normalizeMarketplaceTab(raw ?? tab, { saas });
+    if (nextTab === tab && raw === nextTab) return;
+    if (raw === "unofficial" || (saas && (raw === "local" || tab === "local"))) {
       const next = new URLSearchParams(searchParams);
-      next.set("tab", "local");
+      next.set("tab", nextTab);
       setSearchParams(next, { replace: true });
-      setTab("local");
     }
-  }, [searchParams, setSearchParams]);
+    if (tab !== nextTab) setTab(nextTab);
+  }, [saas, searchParams, setSearchParams, tab]);
 
   const handleTabChange = (value: string) => {
-    setTab(value);
+    const nextTab = normalizeMarketplaceTab(value, { saas });
+    if (nextTab === "local" && !showLocalTab) return;
+    setTab(nextTab);
     const next = new URLSearchParams(searchParams);
-    next.set("tab", value);
+    next.set("tab", nextTab);
     setSearchParams(next, { replace: true });
   };
 
@@ -829,10 +824,10 @@ export default function MarketplacePage() {
         </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={handleTabChange}>
+      <Tabs value={tab === "local" && !showLocalTab ? "official" : tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="official">Official</TabsTrigger>
-          <TabsTrigger value="local">Local</TabsTrigger>
+          {showLocalTab ? <TabsTrigger value="local">Local</TabsTrigger> : null}
           <TabsTrigger value="community">Community</TabsTrigger>
           <TabsTrigger value="installed">Installed</TabsTrigger>
           <TabsTrigger value="seller">Sell</TabsTrigger>
@@ -843,7 +838,7 @@ export default function MarketplacePage() {
             <p className="text-sm text-muted-foreground">Loading official catalog…</p>
           ) : officialFiltered.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {officialCatalogEmptyMessage(saas)}
+              {officialCatalogEmptyMessage(saas === true)}
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -862,21 +857,8 @@ export default function MarketplacePage() {
           )}
         </TabsContent>
 
+        {showLocalTab ? (
         <TabsContent value="local" className="mt-4 space-y-6">
-          {saas ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Local plugins on Cloud</CardTitle>
-                <CardDescription>
-                  Arbitrary local folder registration is disabled on GodMode Cloud for
-                  security. Intelligence can still scaffold, build, and install a plugin
-                  inside this workspace coding root. Official and Community catalogs remain
-                  the other Cloud install path.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          ) : (
-            <>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Add local plugin folder</CardTitle>
@@ -988,8 +970,6 @@ export default function MarketplacePage() {
               <code className="text-xs">pluginLocalPath</code> entries.
             </p>
           ) : null}
-            </>
-          )}
 
           {localFiltered.length > 0 ? (
             <div className="space-y-2">
@@ -1010,6 +990,7 @@ export default function MarketplacePage() {
             </div>
           ) : null}
         </TabsContent>
+        ) : null}
 
         <TabsContent value="community" className="mt-4 space-y-6">
           <p className="text-sm text-muted-foreground">
@@ -1092,14 +1073,15 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Workspace plugins</CardTitle>
               <CardDescription>
-                Domain packs enabled for this workspace. Uninstall removes sidebar structure and
-                tenant hooks; local folders stay registered until you remove the path.
+                {showLocalTab
+                  ? "Domain packs enabled for this workspace. Uninstall removes sidebar structure and tenant hooks; local folders stay registered until you remove the path."
+                  : "Domain packs enabled for this workspace. Uninstall removes sidebar structure and tenant hooks."}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {tenantPlugins.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No plugins installed on this workspace. Use Official or Local to add one.
+                  {installedEmptyHint(!showLocalTab)}
                 </p>
               ) : (
                 <ul className="space-y-2">
