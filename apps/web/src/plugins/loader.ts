@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { api, withActiveTenantQuery } from "@/api";
 import { webPluginRuntime } from "./runtime.js";
 
 interface PluginManifestLoaded {
@@ -69,9 +69,10 @@ async function dynamicImportModule(url: string): Promise<unknown> {
 
 function cacheBustedBundleUrl(id: string, meta: PluginManifestLoaded): string {
   const base = meta.webBundle ?? `/api/plugins/${id}/web.js`;
-  const sep = base.includes("?") ? "&" : "?";
+  const withTenant = withActiveTenantQuery(base);
+  const sep = withTenant.includes("?") ? "&" : "?";
   const rev = meta.webRevision || meta.version;
-  return `${base}${sep}v=${encodeURIComponent(rev)}`;
+  return `${withTenant}${sep}v=${encodeURIComponent(rev)}`;
 }
 
 function activationKey(meta: PluginManifestLoaded): string {
@@ -144,10 +145,14 @@ export async function loadWebPlugins(opts?: {
       }
     >("/plugins/manifest");
     loaded = data.loaded;
-    await applyPluginImportMap({
-      ...(data.sharedImports ?? {}),
-      ...(data.packageImports ?? {}),
-    });
+    await applyPluginImportMap(
+      Object.fromEntries(
+        Object.entries({
+          ...(data.sharedImports ?? {}),
+          ...(data.packageImports ?? {}),
+        }).map(([key, url]) => [key, withActiveTenantQuery(url)])
+      )
+    );
   } catch {
     /* bridge not up yet or not signed in */
   }
