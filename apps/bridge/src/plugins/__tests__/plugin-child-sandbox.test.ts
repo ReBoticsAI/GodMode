@@ -1,18 +1,22 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { Router } from "express";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setPluginHost } from "@godmode/plugin-host";
+import { config } from "../../config.js";
 import { pluginRuntime } from "../runtime.js";
 import { loadPluginFromRoot } from "../loader.js";
 import {
   communityPluginChildPid,
   setPluginChildFailureNotify,
 } from "../plugin-child-host.js";
+import { evictTenantDb, getTenantDb } from "../../tenant-registry.js";
 
 const PLUGIN_ID = "community-sandbox";
 const fixtureRoot = path.join(
@@ -20,6 +24,8 @@ const fixtureRoot = path.join(
   "fixtures",
   "community-sandbox"
 );
+const previousTenantsDir = config.tenantsDir;
+const tenantTemps: string[] = [];
 
 function pidAlive(pid: number): boolean {
   try {
@@ -89,6 +95,11 @@ describe("Community plugin child-process sandbox (#559)", { timeout: 30_000 }, (
   afterEach(() => {
     pluginRuntime.unregister(PLUGIN_ID);
     setPluginChildFailureNotify(null);
+    evictTenantDb("tenant-a");
+    config.tenantsDir = previousTenantsDir;
+    while (tenantTemps.length) {
+      fs.rmSync(tenantTemps.pop()!, { recursive: true, force: true });
+    }
   });
 
   it("spawns a child, round-trips a tool, and denies undeclared hosts", async () => {
@@ -187,5 +198,43 @@ describe("Community plugin child-process sandbox (#559)", { timeout: 30_000 }, (
     expect(second).toBeTypeOf("number");
     expect(second).not.toBe(first);
     await waitFor(() => !pidAlive(first!));
+  });
+
+  it("seeds structure_nodes over IPC and denies other SQL", async () => {
+    const tenantsDir = fs.mkdtempSync(path.join(os.tmpdir(), "gm-child-struct-"));
+    tenantTemps.push(tenantsDir);
+    config.tenantsDir = tenantsDir;
+    getTenantDb("tenant-a");
+
+    await loadPluginFromRoot(fixtureRoot);
+    await pluginRuntime.installPluginForTenant(PLUGIN_ID, "tenant-a");
+
+    const rows = getTenantDb("tenant-a")
+      .prepare(
+        "SELECT id, parent_id, label FROM structure_nodes WHERE id LIKE 'workspace-pulse%' ORDER BY id"
+      )
+      .all() as Array<{ id: string; parent_id: string | null; label: string }>;
+    expect(rows).toEqual([
+      { id: "workspace-pulse", parent_id: null, label: "Workspace Pulse" },
+      {
+        id: "workspace-pulse-health",
+        parent_id: "workspace-pulse",
+        label: "Health",
+      },
+      {
+        id: "workspace-pulse-pulse",
+        parent_id: "workspace-pulse-health",
+        label: "Pulse",
+      },
+    ]);
+
+    const def = pluginRuntime.getToolHandler("sandbox_ping");
+    const ctx = pluginRuntime.buildToolContext({ tenantId: "tenant-a" });
+    await expect(
+      def!.handler!(
+        { sql: "SELECT * FROM structure_nodes", params: [] },
+        ctx
+      )
+    ).rejects.toThrow(/structure_nodes|INSERT OR IGNORE/i);
   });
 });

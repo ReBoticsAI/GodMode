@@ -53,6 +53,23 @@ const hookHandlers = new Map<
 >();
 const toolHandlers = new Map<string, PluginToolDef["handler"]>();
 
+/** Serial host RPCs so parent INSERT OR IGNORE order is preserved (FK parents first). */
+let hostQueue: Promise<unknown> = Promise.resolve();
+const pendingHostWork: Promise<unknown>[] = [];
+
+function enqueueHost(work: () => Promise<unknown>): void {
+  hostQueue = hostQueue.then(work);
+  pendingHostWork.push(hostQueue);
+}
+
+async function flushHostWork(): Promise<void> {
+  try {
+    await Promise.all(pendingHostWork.splice(0, pendingHostWork.length));
+  } finally {
+    hostQueue = Promise.resolve();
+  }
+}
+
 let httpApp: Express | null = null;
 let httpPort: number | null = null;
 let httpReady: Promise<number> | null = null;
@@ -93,7 +110,14 @@ const peer = new RpcPeer(sendParent, async (method, params) => {
       ...(typeof p.ctx === "object" && p.ctx ? p.ctx : {}),
       host: childHost,
     } as PluginBootContext & PluginTenantContext;
-    return handler(p.args as Record<string, unknown>, ctx);
+    try {
+      const result = await handler(p.args as Record<string, unknown>, ctx);
+      await flushHostWork();
+      return result;
+    } catch (err) {
+      await flushHostWork().catch(() => undefined);
+      throw err;
+    }
   }
   if (method === "hooks.emit") {
     const name = p.name as PluginHookName;
@@ -102,8 +126,14 @@ const peer = new RpcPeer(sendParent, async (method, params) => {
       ...(typeof p.ctx === "object" && p.ctx ? p.ctx : {}),
       host: childHost,
     } as PluginBootContext & PluginTenantContext;
-    for (const handler of handlers) {
-      await handler(ctx);
+    try {
+      for (const handler of handlers) {
+        await handler(ctx);
+      }
+      await flushHostWork();
+    } catch (err) {
+      await flushHostWork().catch(() => undefined);
+      throw err;
     }
     return { ok: true };
   }
@@ -116,8 +146,46 @@ const peer = new RpcPeer(sendParent, async (method, params) => {
 
 process.on("message", (raw) => peer.handle(raw));
 
+function structureSeedDb(tenantId: string) {
+  return {
+    prepare(sql: string) {
+      return {
+        run(...params: unknown[]) {
+          enqueueHost(() =>
+            peer.call("structure.insertIgnore", { tenantId, sql, params })
+          );
+          return { changes: 1 };
+        },
+        get() {
+          denied("host.getTenantDb.get");
+        },
+        all() {
+          denied("host.getTenantDb.all");
+        },
+        iterate() {
+          denied("host.getTenantDb.iterate");
+        },
+      };
+    },
+    exec() {
+      denied("host.getTenantDb.exec");
+    },
+    pragma() {
+      denied("host.getTenantDb.pragma");
+    },
+    transaction() {
+      denied("host.getTenantDb.transaction");
+    },
+  };
+}
+
 const childHost: PluginHostServices = {
-  getTenantDb: () => denied("host.getTenantDb"),
+  getTenantDb(tenantId: string) {
+    if (!tenantId.trim()) {
+      throw new Error("host.getTenantDb requires tenantId");
+    }
+    return structureSeedDb(tenantId);
+  },
   getReqTenantDb: () => denied("host.getReqTenantDb"),
   createPluginRouter: () => Router(),
   getTimeseriesStore: () => denied("host.getTimeseriesStore"),

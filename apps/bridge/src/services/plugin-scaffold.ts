@@ -113,6 +113,8 @@ export const register: GodModePluginRegister = (api) => {
   const deptLabel = ${JSON.stringify(displayName)};
 
   api.hooks.on("tenant:install", async ({ tenantId, host }) => {
+    // Community child process: host.getTenantDb is a structure-seed stub, not live SQLite.
+    // Only INSERT OR IGNORE INTO structure_nodes is forwarded over IPC.
     const db = host.getTenantDb(tenantId);
     db.prepare(
       \`INSERT OR IGNORE INTO structure_nodes
@@ -172,7 +174,7 @@ function WelcomePage() {
         <EmptyHeader>
           <EmptyTitle>Nothing here yet</EmptyTitle>
           <EmptyDescription>
-            Seed Structure pages in tenant:install and prefer host record-list for CRUD. Do not ship decorative Buttons.
+            Seed Structure pages in tenant:install (INSERT OR IGNORE structure_nodes, or api.kernel.create when StructureNode is granted). Prefer host record-list for CRUD. Do not ship decorative Buttons.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>

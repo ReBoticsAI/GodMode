@@ -28,6 +28,7 @@ import {
 } from "../services/plugin-capabilities.js";
 import { notifyPluginLoopFailure } from "../services/plugin-loop-error.js";
 import type { CoreDatabase } from "../core-db.js";
+import { applyCommunityStructureInsert } from "./community-structure-seed.js";
 import { pluginRuntime } from "./runtime.js";
 import {
   RpcPeer,
@@ -306,6 +307,19 @@ export async function loadCommunityPluginInChild(opts: {
         typeof p.userId === "string" ? p.userId : undefined
       );
       return { ok: true };
+    }
+    if (method === "structure.insertIgnore") {
+      const tenantId = String(p.tenantId ?? "").trim();
+      if (!tenantId) {
+        throw new Error("structure.insertIgnore requires tenantId");
+      }
+      const sql = String(p.sql ?? "");
+      const params = Array.isArray(p.params) ? p.params : [];
+      return applyCommunityStructureInsert(
+        getTenantDb(tenantId) as AppDatabase,
+        sql,
+        params
+      );
     }
     throw new Error(`Unknown parent RPC: ${method}`);
   });
