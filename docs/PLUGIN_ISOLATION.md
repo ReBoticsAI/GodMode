@@ -20,7 +20,7 @@ Do not reuse the coding jail as the plugin runtime.
 - **In-process capability grants** deny network, tools, and records unless named at install (`godmode.capabilities.json`).
 - Official and Community use the **same deny-by-default grant modes**. Local / operator paths stay unrestricted.
 - Marketplace trees missing a grants file **fail closed** (deny).
-- **Community** (`trustTier === "community"`) loads in a **child process**. Bridge talks JSON-RPC and re-checks grants on every host/tool/kernel call. The child never gets a live SQLite handle or the Bridge Express `app`.
+- **Community** (`trustTier === "community"`) loads in a **child process**. Bridge talks JSON-RPC and re-checks grants on every host/tool/kernel call. The child never gets a live SQLite handle or the Bridge Express `app`. `host.getTenantDb` in the child is a structure-seed stub: only `INSERT OR IGNORE INTO structure_nodes` is forwarded to the parent tenant DB (parameterized, column allowlist). Other SQL is denied. Prefer `api.kernel.create("StructureNode", ...)` when the records grant includes `StructureNode`, or declarative manifest `records`.
 - **Official / local / operator** still **`import()` into Bridge**. Grants do not stop raw `fetch`, Node `fs` / `child_process`, shared heap, or `getPluginHost()` on those tiers.
 - Unexpected Community child exit surfaces Attention (`plugin_loop`) and drops the loaded plugin. Bridge stays up. Unregister and hot-reload kill then respawn the child. Spawn failure fails closed (no in-process fallback).
 - Plugin `web.js` is still served by Bridge. Browser bundles are not this sandbox.
@@ -63,7 +63,7 @@ must meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md).
 
 1. Install still writes `godmode.capabilities.json` from catalog + manifest.
 2. The child may only call host APIs the Bridge exposes over IPC (`GodModePluginApi` / `PluginHostServices`). No shared `getPluginHost()`.
-3. `host.externalFetch`, `api.tools.register`, and kernel / ObjectType access stay grant-gated **inside** that IPC boundary.
+3. `host.externalFetch`, `api.tools.register`, kernel / ObjectType access, and Community structure-node seeds stay grant-gated or shape-checked **inside** that IPC boundary.
 4. Last-tenant uninstall still deletes grants. Kill switches still apply.
 5. Residual `fetch` / `fs` in Community plugin JS is out of the Bridge process. Grants still wrap the IPC host APIs.
 

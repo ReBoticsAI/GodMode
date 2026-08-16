@@ -60,7 +60,7 @@ export function getHarnessLateBlock(): string {
     "When the USER asks for integration with an external API, hardware, C++, new HTTP routes, Bridge tools, or any **durable platform behavior**:",
     "1. Do NOT only call create_department/create_division for functional domains.",
     "2. FIRST call use_skill('plugin-authoring') and scaffold_plugin with a kebab-case id.",
-    "3. Seed org structure inside the plugin via tenant:install (departments, divisions, pages), then build_plugin + install_plugin (runtime load - no Bridge restart for tools).",
+    "3. Seed org structure inside the plugin via tenant:install (departments, divisions, pages; Community has no live SQLite, only INSERT OR IGNORE structure_nodes over IPC), then build_plugin + install_plugin (runtime load - no Bridge restart for tools).",
     "4. Use bare create_department only for non-functional org labels when no integration/API/hardware is implied.",
     "Implement the integration code yourself with read_file/grep/edit_file/run_terminal - you are the coding agent.",
     "</plugin_first_policy>",

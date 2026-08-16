@@ -165,6 +165,9 @@ export const register: GodModePluginRegister = (api) => {
   ]);
 
   api.hooks.on("tenant:install", async ({ tenantId, host }) => {
+    // Official/local: live tenant SQLite. Community: structure-seed stub only
+    // (INSERT OR IGNORE INTO structure_nodes over IPC). Prefer manifest records
+    // or api.kernel.create("StructureNode", data, ctx) when StructureNode is granted.
     const db = host.getTenantDb(tenantId);
     // Run reviewed migrations or seed service-backed state.
   });
@@ -218,7 +221,7 @@ Injected at boot via `api.host`:
 
 | Method | Purpose |
 |--------|---------|
-| `getTenantDb(tenantId)` | Tenant-scoped SQLite |
+| `getTenantDb(tenantId)` | Tenant-scoped SQLite in-process. Community child: INSERT OR IGNORE INTO structure_nodes only (no live handle) |
 | `getReqTenantDb(req)` | SQLite from authenticated request |
 | `createPluginRouter()` | Express router with tenant middleware |
 | `mountPluginRoute(pluginId, path, router)` | Slot-based HTTP mount (hot-reload safe) |

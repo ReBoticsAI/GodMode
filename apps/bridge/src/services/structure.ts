@@ -430,6 +430,52 @@ export function setNodeAgent(
   ).run(normalized || null, nodeId);
 }
 
+/** Idempotent plugin tenant:install seed. Exact ids (no parent-id prefix rewrite). */
+export function insertIgnoreStructureNode(
+  db: AppDatabase,
+  row: {
+    id: string;
+    parentId: string | null;
+    label: string;
+    icon: string;
+    segment: string;
+    kind: string;
+    objectType?: string | null;
+    rightSidebar?: string | null;
+    agentId?: string | null;
+    builtIn?: number;
+    sortOrder?: number;
+    tabsJson?: string | null;
+  }
+): { ignored: boolean } {
+  const id = String(row.id ?? "").trim();
+  if (!id) throw new StructureError(400, "id required");
+  const label = String(row.label ?? "").trim();
+  if (!label) throw new StructureError(400, "label required");
+  const icon = String(row.icon ?? "").trim() || "folder";
+  const info = db
+    .prepare(
+      `INSERT OR IGNORE INTO structure_nodes
+         (id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order, tabs_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      row.parentId,
+      label,
+      icon,
+      String(row.segment ?? ""),
+      String(row.kind ?? "placeholder").trim() || "placeholder",
+      row.objectType ?? null,
+      row.rightSidebar ?? null,
+      row.agentId ?? null,
+      row.builtIn ?? 0,
+      row.sortOrder ?? 0,
+      row.tabsJson ?? null
+    );
+  return { ignored: info.changes === 0 };
+}
+
 export function upsertNode(
   db: AppDatabase,
   row: {
