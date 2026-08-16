@@ -94,6 +94,8 @@ import {
   acquireCloneListing,
   archiveMarketplaceListing,
   publishMarketplaceListing,
+  listListingsAwaitingReview,
+  reviewMarketplaceListing,
 } from "../../services/marketplace-listings.js";
 import {
   acceptMarketplaceTos,
@@ -919,6 +921,11 @@ export const catalogInstallAdapter: RecordAdapter = {
 
 function visibleListings(core: AppDatabase, ctx: OperationContext) {
   const userId = requireUser(ctx);
+  if (ctx.isAdmin) {
+    return core
+      .prepare(`SELECT * FROM marketplace_listings ORDER BY created_at DESC`)
+      .all() as Array<Record<string, unknown>>;
+  }
   return core
     .prepare(
       `SELECT * FROM marketplace_listings
@@ -1033,6 +1040,26 @@ export const marketplaceListingAdapter: RecordAdapter = {
           listingId: id,
           sellerUserId: requireUser(ctx),
           sellerTenantId: requireTenant(ctx),
+        })
+      );
+    },
+    list_review(_db, def, _id, _input, ctx) {
+      if (!ctx.isAdmin) throw httpError(403, "Platform administrator required");
+      return {
+        listings: listListingsAwaitingReview(ctx.data!.cloudDb).map((row) => record(def, row).data),
+      };
+    },
+    review(_db, def, id, input, ctx) {
+      if (!ctx.isAdmin) throw httpError(403, "Platform administrator required");
+      const action = requiredText(input, "action");
+      if (action !== "approve" && action !== "reject") {
+        throw httpError(400, "action must be approve or reject");
+      }
+      return record(
+        def,
+        reviewMarketplaceListing(ctx.data!.cloudDb, {
+          listingId: id,
+          action,
         })
       );
     },
@@ -2159,6 +2186,14 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
     action("archive", {
       effect: "destructive",
       confirmation: { required: true },
+    }),
+    action("list_review", {
+      target: "collection",
+    }),
+    action("review", {
+      effect: "external",
+      confirmation: { required: true },
+      inputSchema: objectSchema({ action: { enum: ["approve", "reject"] } }, ["action"]),
     }),
     action("export_portable", {
       target: "collection",

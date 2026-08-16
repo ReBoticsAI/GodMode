@@ -32,6 +32,28 @@ export function installedEmptyHint(saas: boolean): string {
   return "No plugins installed on this workspace. Use Official or Local to add one.";
 }
 
+export const CLONE_PACK_KINDS = [
+  "skill",
+  "agent",
+  "page",
+  "workflow",
+  "artifact",
+  "rule",
+  "knowledge",
+  "dataset",
+  "bundle",
+] as const;
+
+export type PublishFamily = "plugin" | "clone" | "live" | "inference";
+
+export function listingStatusLabel(status: string): string {
+  if (status === "in_review") return "In review";
+  if (status === "draft") return "Draft";
+  if (status === "archived") return "Archived";
+  if (status === "active") return "Listed";
+  return status;
+}
+
 /** Format USD cents for Marketplace cards (Official + Community). */
 export function formatMarketplaceCents(cents: number | null | undefined): string {
   const n = Number(cents ?? 0);

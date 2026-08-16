@@ -13,6 +13,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/plugin-pipeline.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
+      "apps/bridge/src/services/__tests__/marketplace-listing-policy.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-plugin-pin.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-official-catalog-pins.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-catalog-tenant.test.ts",

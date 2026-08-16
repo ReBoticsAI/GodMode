@@ -16,6 +16,7 @@ import { migrateHubTablesFromCore } from "./host-users-db.js";
 export type MembershipRole = "viewer" | "editor" | "owner";
 export type ShareGrantRole = "viewer" | "editor" | "owner";
 export type MarketplaceListingKind =
+  | "plugin"
   | "agent"
   | "department"
   | "division"

@@ -71,7 +71,7 @@ export function createMarketplaceCatalogRouter(): Router {
 
   router.get("/community", async (_req, res) => {
     try {
-      const { url, entries } = await fetchCommunityCatalog();
+      const { url, entries } = await fetchCommunityCatalog(getCloudDb());
       res.json({ catalogUrl: url, entries });
     } catch (err) {
       res.status(502).json({

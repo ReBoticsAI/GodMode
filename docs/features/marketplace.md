@@ -18,9 +18,9 @@ Marketplace is how you **connect** specialty packs into GodMode without forking 
 |-----|------|
 | Official | Curated ReBotics catalog (free + paid). Paid revenue is 100% to the platform. |
 | Local | Local plugin folders and third-party indexes (typically free). Self-host / desktop; not available as arbitrary folders on Cloud. |
-| Community | User listings. Sellers keep 90%; platform takes 10%. |
+| Community | User listings and catalog plugins. Sellers keep 90%; platform takes 10%. |
 | Installed | Workspace plugins and install history. |
-| Sell | Accept ToS, connect payouts (dual-home with Vault), publish and manage listings. |
+| Sell | Seller dashboard: ToS, payouts, publish wizard, My listings. |
 
 ## Product rules
 

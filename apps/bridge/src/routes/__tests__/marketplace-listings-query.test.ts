@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { buildPublicListingsSql, LISTING_COLS } from "../../routes/marketplace.js";
 
 describe("buildPublicListingsSql", () => {
+  it("excludes plugin listings from public browse (catalog shelf is the buyer path)", () => {
+    const { sql } = buildPublicListingsSql({});
+    expect(sql).toMatch(/ml\.kind != 'plugin'/);
+    expect(sql).toMatch(/ml\.status='active'/);
+  });
+
   it("includes commerce columns in LISTING_COLS", () => {
     expect(LISTING_COLS).toContain("price_cents");
     expect(LISTING_COLS).toContain("currency");
@@ -14,6 +20,7 @@ describe("buildPublicListingsSql", () => {
     const { sql } = buildPublicListingsSql({});
     expect(sql).toContain("verified_publisher");
     expect(sql).toContain("verified_tier");
+    expect(sql).toContain("payout_ready");
     expect(sql).toContain("marketplace_seller_accounts");
     expect(sql).toMatch(/ml\.seller_kind=\?/);
   });
