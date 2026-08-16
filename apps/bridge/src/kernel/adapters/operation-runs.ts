@@ -5,7 +5,7 @@ function predicate(ctx: Parameters<NonNullable<RecordAdapter["list"]>>[3]): {
   sql: string;
   params: unknown[];
 } {
-  if (ctx.source === "system" || ctx.role === "intelligence") {
+  if (ctx.source === "system") {
     return { sql: "1=1", params: [] };
   }
   if (!ctx.tenantId) return { sql: "0=1", params: [] };
@@ -31,9 +31,8 @@ export const operationRunAdapter: RecordAdapter = {
   id: "operation_run_service",
   policy: {
     authorize(_operation, _def, ctx, record) {
-      if (!record || ctx.source === "system" || ctx.role === "intelligence") {
-        return true;
-      }
+      if (ctx.source === "system") return true;
+      if (!record) return true;
       return (
         !ctx.tenantId ||
         record.data.tenant_id == null ||

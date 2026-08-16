@@ -15,6 +15,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-plugin-pin.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-official-catalog-pins.test.ts",
+      "apps/bridge/src/services/__tests__/marketplace-catalog-tenant.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-verified-publisher.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-verified-seller.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-stripe-connect.test.ts",
