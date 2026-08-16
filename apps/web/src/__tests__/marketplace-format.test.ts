@@ -7,6 +7,7 @@ import {
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
+  sellerPayoutStatusFromAccount,
   userFacingErrorMessage,
 } from "@/lib/marketplace-format";
 
@@ -66,6 +67,40 @@ describe("listingStatusLabel", () => {
     expect(listingStatusLabel("active")).toBe("Listed");
     expect(listingStatusLabel("in_review")).toBe("In review");
     expect(listingStatusLabel("draft")).toBe("Draft");
+  });
+});
+
+describe("sellerPayoutStatusFromAccount", () => {
+  it("hydrates Sell gating from commerce_config without Stripe refresh", () => {
+    expect(sellerPayoutStatusFromAccount({ payoutReady: false })).toEqual({
+      stripeConnectId: "",
+      paypalMerchantId: "",
+      metamaskAddress: "",
+      payoutReady: false,
+    });
+    expect(
+      sellerPayoutStatusFromAccount({
+        stripeConnectAccountId: "acct_live",
+        payoutReady: true,
+        onboardingStatus: "pending",
+      })
+    ).toMatchObject({
+      stripeConnectId: "acct_live",
+      payoutReady: true,
+    });
+  });
+
+  it("maps a Stripe refresh row after Connect return", () => {
+    expect(
+      sellerPayoutStatusFromAccount({
+        stripe_connect_account_id: "acct_return",
+        onboarding_status: "ready",
+        stripe_payouts_enabled: true,
+      })
+    ).toMatchObject({
+      stripeConnectId: "acct_return",
+      payoutReady: true,
+    });
   });
 });
 

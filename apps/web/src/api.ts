@@ -6555,6 +6555,12 @@ export function fetchMarketplaceCommerceConfig() {
     tosVersion: string;
     platformFeeBps: number;
     tosAccepted?: boolean;
+    stripeConnectAccountId?: string | null;
+    paypalMerchantId?: string | null;
+    metamaskAddress?: string | null;
+    onboardingStatus?: string | null;
+    payoutReady?: boolean;
+    stripePayoutsEnabled?: boolean;
     providers: { stripe: boolean; paypal: boolean; crypto: boolean };
     cryptoTreasuryAddress: string | null;
     cryptoChainId: number;
