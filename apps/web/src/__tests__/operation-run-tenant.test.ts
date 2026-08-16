@@ -23,6 +23,13 @@ describe("Marketplace OperationRun tenant poll (#567)", () => {
     ).toBe("/records/OperationRun/run-1?tenantId=workspace-a");
   });
 
+  it("appends tenantId on plugin web bundles because dynamic import cannot send X-Tenant-Id", () => {
+    localStorage.setItem(TENANT_STORAGE_KEY, "workspace-a");
+    expect(withActiveTenantQuery("/api/plugins/workspace-pulse/web.js")).toBe(
+      "/api/plugins/workspace-pulse/web.js?tenantId=workspace-a"
+    );
+  });
+
   it("stops polling OperationRun 404s instead of spinning forever", async () => {
     localStorage.setItem(TENANT_STORAGE_KEY, "workspace-a");
     fetchMock.mockResolvedValue(

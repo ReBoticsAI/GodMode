@@ -702,6 +702,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_listing_indexes_v1",
     up: ensureMarketplaceListingIndexes,
   },
+  {
+    version: 16,
+    name: "core_marketplace_seller_verified_columns_v1",
+    up: ensureMarketplaceSellerVerifiedColumns,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -1030,6 +1035,17 @@ function ensureMarketplaceListingIndexes(db: CoreDatabase): void {
       ON marketplace_listings(seller_user_id, catalog_entry_id)
       WHERE catalog_entry_id IS NOT NULL AND status != 'archived';
   `);
+}
+
+/**
+ * verified_seller / verified_frozen were appended to migration 11 after some
+ * Cloud DBs had already recorded that version. Listings SQL then 500'd with
+ * "no such column: sa.verified_frozen".
+ */
+function ensureMarketplaceSellerVerifiedColumns(db: CoreDatabase): void {
+  if (!tableExists(db, "marketplace_seller_accounts")) return;
+  addCol(db, "marketplace_seller_accounts", "verified_seller", "INTEGER NOT NULL DEFAULT 0");
+  addCol(db, "marketplace_seller_accounts", "verified_frozen", "INTEGER NOT NULL DEFAULT 0");
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {
