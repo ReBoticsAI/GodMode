@@ -16,6 +16,7 @@ import {
   fetchCommunityCatalog,
   fetchUnofficialCatalog,
   fetchBridgeHealth,
+  fetchInferenceEndpoints,
   installCatalogEntry,
   installWorkspacePlugin,
   refreshMarketplaceStripeConnect,
@@ -26,6 +27,7 @@ import {
   uninstallWorkspacePlugin,
   type CatalogEntry,
   type DiscoveredPlugin,
+  type InferenceEndpoint,
   type MarketplaceEntitlement,
   type MarketplaceListing,
   type TenantPluginRow,
@@ -34,13 +36,27 @@ import {
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
+  listingStatusLabel,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
+  CLONE_PACK_KINDS,
+  type PublishFamily,
 } from "@/lib/marketplace-format";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Card,
   CardContent,
@@ -58,17 +74,7 @@ import { FolderOpenIcon, StoreIcon, Trash2Icon } from "lucide-react";
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
 
-const LISTING_KINDS = [
-  "skill",
-  "agent",
-  "page",
-  "workflow",
-  "artifact",
-  "rule",
-  "knowledge",
-  "dataset",
-  "bundle",
-] as const;
+const LISTING_KINDS = CLONE_PACK_KINDS;
 
 function reloadAfterPluginChange(built?: boolean) {
   if (built) {
@@ -363,14 +369,26 @@ export default function MarketplacePage() {
   const [publishTitle, setPublishTitle] = useState("");
   const [publishDescription, setPublishDescription] = useState("");
   const [publishPriceDollars, setPublishPriceDollars] = useState("0");
-  const [publishDelivery, setPublishDelivery] = useState<"clone" | "live">("clone");
   const [publishResourceId, setPublishResourceId] = useState("");
+  const [publishFamily, setPublishFamily] = useState<PublishFamily>("plugin");
+  const [publishCatalogEntryId, setPublishCatalogEntryId] = useState("");
+  const [catalogOrphans, setCatalogOrphans] = useState<
+    Array<{ id: string; title: string; author: string; priceCents: number }>
+  >([]);
+  const [githubLogin, setGithubLogin] = useState<string | null>(null);
+  const [inferenceEndpoints, setInferenceEndpoints] = useState<InferenceEndpoint[]>([]);
 
   useEffect(() => {
     void fetchBridgeHealth()
       .then((h) => setSaas(Boolean(h.saas)))
       .catch(() => setSaas(false));
   }, []);
+
+  useEffect(() => {
+    if (saas === true && publishFamily === "inference") {
+      setPublishFamily("plugin");
+    }
+  }, [saas, publishFamily]);
 
   const ownedListingIds = useMemo(() => {
     const ids = new Set<string>();
@@ -383,14 +401,19 @@ export default function MarketplacePage() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [off, local, inst, community, communityCat, mine, ents] = await Promise.all([
+      const [off, local, inst, community, communityCat, mine, ents, inf] = await Promise.all([
         fetchOfficialCatalog(),
         fetchUnofficialCatalog(),
         fetchInstalledCatalog(),
         fetchMarketplaceListings({ sellerKind: "user" }).catch(() => ({ listings: [] })),
         fetchCommunityCatalog().catch(() => ({ catalogUrl: "", entries: [] as CatalogEntry[] })),
-        fetchMyMarketplaceListings().catch(() => ({ listings: [] })),
+        fetchMyMarketplaceListings().catch(() => ({
+          listings: [] as MarketplaceListing[],
+          catalogOrphans: [],
+          githubLogin: null,
+        })),
         fetchMarketplaceEntitlements().catch(() => ({ entitlements: [] })),
+        fetchInferenceEndpoints().catch(() => ({ endpoints: [] as InferenceEndpoint[] })),
       ]);
       setOfficial(off.entries);
       setLocalCatalog(local.entries);
@@ -402,7 +425,10 @@ export default function MarketplacePage() {
       setCommunityListings(community.listings);
       setCommunityCatalog(communityCat.entries);
       setMyListings(mine.listings);
+      setCatalogOrphans(mine.catalogOrphans ?? []);
+      setGithubLogin(mine.githubLogin ?? null);
       setEntitlements(ents.entitlements);
+      setInferenceEndpoints(inf.endpoints);
       const ids = new Set(inst.plugins.map((p) => p.plugin_id));
       setInstalledIds(ids);
     } catch (err) {
@@ -664,33 +690,54 @@ export default function MarketplacePage() {
   };
 
   const publishPriceCents = Math.round(Number(publishPriceDollars || "0") * 100);
-  const canPublishPaid = publishPriceCents <= 0 || payoutReady;
-  const canPublish =
-    tosAccepted &&
-    canPublishPaid &&
-    publishTitle.trim().length > 0 &&
-    publishResourceId.trim().length > 0;
+  const canPublishPaid =
+    publishPriceCents <= 0 || payoutReady || publishFamily === "plugin";
+  const canPublish = (() => {
+    if (!tosAccepted) return false;
+    if (!canPublishPaid && publishFamily !== "plugin") return false;
+    if (!publishTitle.trim()) return false;
+    if (publishFamily === "plugin") return Boolean(publishCatalogEntryId.trim());
+    if (publishFamily === "inference") return Boolean(publishResourceId.trim());
+    return Boolean(publishResourceId.trim());
+  })();
 
   const handlePublish = async () => {
     if (!canPublish) return;
     setPublishing(true);
     try {
+      const kind =
+        publishFamily === "plugin"
+          ? "plugin"
+          : publishFamily === "inference"
+            ? "inference"
+            : publishKind;
+      const delivery =
+        publishFamily === "live" ? "live" : publishFamily === "inference" ? "live" : "clone";
       await createMarketplaceListing({
-        kind: publishKind,
+        kind,
         title: publishTitle.trim(),
         description: publishDescription.trim() || undefined,
         priceCents: publishPriceCents,
-        deliveryMode: publishDelivery,
-        resourceId: publishResourceId.trim() || undefined,
+        deliveryMode: delivery,
+        resourceId:
+          publishFamily === "plugin" ? undefined : publishResourceId.trim() || undefined,
+        catalogEntryId:
+          publishFamily === "plugin" ? publishCatalogEntryId.trim() : undefined,
+        inferenceEndpointId:
+          publishFamily === "inference" ? publishResourceId.trim() : undefined,
         sellerKind: "user",
       });
-      toast.success("Listing published");
+      toast.success(
+        publishFamily === "plugin"
+          ? "Plugin listing saved"
+          : "Listing submitted for review"
+      );
       setPublishTitle("");
       setPublishDescription("");
       setPublishPriceDollars("0");
       setPublishResourceId("");
+      setPublishCatalogEntryId("");
       await reload();
-      handleTabChange("community");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Publish failed");
     } finally {
@@ -1011,7 +1058,18 @@ export default function MarketplacePage() {
                     installing={installingId === entry.id}
                     buying={buyingId === entry.id}
                     onInstall={() => void handleInstall(entry)}
-                    onBuy={(provider) => void handleBuy(entry, provider)}
+                    onBuy={(provider) => {
+                      if (!entry.listingId) {
+                        toast.error(
+                          "This plugin has no seller listing yet. The author must claim it on Sell."
+                        );
+                        return;
+                      }
+                      const listing = {
+                        id: entry.listingId,
+                      } as MarketplaceListing;
+                      void handleCommunityBuy(listing, provider);
+                    }}
                   />
                 ))}
               </div>
@@ -1190,108 +1248,204 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Publish listing</CardTitle>
               <CardDescription>
-                List a skill, agent, page, or other portable entity for Community. Free listings need
-                ToS only; paid listings need a connected payout ({feePercent}% platform fee).
+                One listing for every Community item. Plugins need catalog CI. Clone and live packs
+                go to review. Paid sales use your connected payout ({feePercent}% platform fee).
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {!tosAccepted ? (
-                <p className="text-sm text-amber-700 sm:col-span-2">
-                  Accept Marketplace ToS before publishing.
-                </p>
-              ) : null}
-              {publishPriceCents > 0 && !payoutReady ? (
-                <p className="text-sm text-amber-700 sm:col-span-2">
-                  Connect a payout method before publishing a paid listing.
-                </p>
-              ) : null}
-              <div className="space-y-1">
-                <Label htmlFor="publish-kind">Kind</Label>
-                <select
-                  id="publish-kind"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={publishKind}
-                  onChange={(e) => setPublishKind(e.target.value)}
+            <CardContent>
+              <FieldGroup>
+                {!tosAccepted ? (
+                  <Alert>
+                    <AlertTitle>Marketplace ToS</AlertTitle>
+                    <AlertDescription>Accept Marketplace ToS before publishing.</AlertDescription>
+                  </Alert>
+                ) : null}
+                {publishPriceCents > 0 && !payoutReady && publishFamily !== "plugin" ? (
+                  <Alert>
+                    <AlertTitle>Payout required</AlertTitle>
+                    <AlertDescription>
+                      Connect a payout method before publishing a paid listing.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <Field>
+                  <FieldLabel>Listing type</FieldLabel>
+                  <ToggleGroup
+                    value={[publishFamily]}
+                    onValueChange={(next) => {
+                      const value = Array.isArray(next) ? next[0] : next;
+                      if (
+                        value === "plugin" ||
+                        value === "clone" ||
+                        value === "live" ||
+                        value === "inference"
+                      ) {
+                        setPublishFamily(value);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="flex-wrap"
+                  >
+                    <ToggleGroupItem value="plugin">Plugin</ToggleGroupItem>
+                    <ToggleGroupItem value="clone">Clone pack</ToggleGroupItem>
+                    <ToggleGroupItem value="live">Live share</ToggleGroupItem>
+                    {saas === true ? null : (
+                      <ToggleGroupItem value="inference">Inference</ToggleGroupItem>
+                    )}
+                  </ToggleGroup>
+                  <FieldDescription>
+                    {publishFamily === "plugin"
+                      ? "Attach a Community catalog entry after intake CI. GitHub Connect must match the catalog author."
+                      : publishFamily === "live"
+                        ? "Buyer gets live access on this host (paid Shared), not a copy."
+                        : publishFamily === "inference"
+                          ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
+                          : "Buyer imports a copy. Listings wait in review before they are public."}
+                  </FieldDescription>
+                </Field>
+
+                {publishFamily === "plugin" ? (
+                  <Field>
+                    <FieldLabel htmlFor="publish-catalog-id">Catalog entry id</FieldLabel>
+                    <Input
+                      id="publish-catalog-id"
+                      value={publishCatalogEntryId}
+                      onChange={(e) => setPublishCatalogEntryId(e.target.value)}
+                      placeholder="workspace-pulse"
+                    />
+                    <FieldDescription>
+                      {githubLogin
+                        ? `Connected GitHub: ${githubLogin}`
+                        : "Connect GitHub in Personal Vault so catalog plugins can be claimed automatically."}
+                    </FieldDescription>
+                  </Field>
+                ) : null}
+
+                {publishFamily === "clone" || publishFamily === "live" ? (
+                  <>
+                    <Field>
+                      <FieldLabel>Kind</FieldLabel>
+                      <Select value={publishKind} onValueChange={(v) => setPublishKind(String(v))}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {LISTING_KINDS.map((k) => (
+                              <SelectItem key={k} value={k}>
+                                {k}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="publish-resource">Source resource id</FieldLabel>
+                      <Input
+                        id="publish-resource"
+                        value={publishResourceId}
+                        onChange={(e) => setPublishResourceId(e.target.value)}
+                        placeholder="Workspace entity id"
+                      />
+                    </Field>
+                  </>
+                ) : null}
+
+                {publishFamily === "inference" ? (
+                  <Field>
+                    <FieldLabel>Inference endpoint</FieldLabel>
+                    {inferenceEndpoints.length === 0 ? (
+                      <FieldDescription>No inference endpoints on this workspace.</FieldDescription>
+                    ) : (
+                      <Select
+                        value={publishResourceId}
+                        onValueChange={(v) => setPublishResourceId(String(v))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Choose endpoint" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {inferenceEndpoints.map((ep) => (
+                              <SelectItem key={ep.id} value={ep.id}>
+                                {ep.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </Field>
+                ) : null}
+
+                <Field>
+                  <FieldLabel htmlFor="publish-title">Title</FieldLabel>
+                  <Input
+                    id="publish-title"
+                    value={publishTitle}
+                    onChange={(e) => setPublishTitle(e.target.value)}
+                    placeholder="Listing title"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="publish-desc">Description</FieldLabel>
+                  <Input
+                    id="publish-desc"
+                    value={publishDescription}
+                    onChange={(e) => setPublishDescription(e.target.value)}
+                    placeholder="What buyers get"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="publish-price">Price (USD)</FieldLabel>
+                  <Input
+                    id="publish-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={publishPriceDollars}
+                    onChange={(e) => setPublishPriceDollars(e.target.value)}
+                  />
+                </Field>
+                <Button
+                  className="w-fit"
+                  disabled={!canPublish || publishing}
+                  onClick={() => void handlePublish()}
                 >
-                  {LISTING_KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="publish-delivery">Delivery</Label>
-                <select
-                  id="publish-delivery"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={publishDelivery}
-                  onChange={(e) =>
-                    setPublishDelivery(e.target.value === "live" ? "live" : "clone")
-                  }
-                >
-                  <option value="clone">clone (import copy)</option>
-                  <option value="live">live (shared entitlement)</option>
-                </select>
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="publish-title">Title</Label>
-                <Input
-                  id="publish-title"
-                  value={publishTitle}
-                  onChange={(e) => setPublishTitle(e.target.value)}
-                  placeholder="My skill pack"
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="publish-desc">Description</Label>
-                <Input
-                  id="publish-desc"
-                  value={publishDescription}
-                  onChange={(e) => setPublishDescription(e.target.value)}
-                  placeholder="What buyers get"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="publish-price">Price (USD)</Label>
-                <Input
-                  id="publish-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={publishPriceDollars}
-                  onChange={(e) => setPublishPriceDollars(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="publish-resource">Source resource id</Label>
-                <Input
-                  id="publish-resource"
-                  value={publishResourceId}
-                  onChange={(e) => setPublishResourceId(e.target.value)}
-                  placeholder="Entity id to clone or share"
-                />
-              </div>
-              <Button
-                className="w-fit"
-                disabled={!canPublish || publishing}
-                onClick={() => void handlePublish()}
-              >
-                {publishing ? "Publishing…" : "Publish to Community"}
-              </Button>
+                  {publishing
+                    ? "Publishing…"
+                    : publishFamily === "plugin"
+                      ? "Save plugin listing"
+                      : "Submit for review"}
+                </Button>
+              </FieldGroup>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle className="text-base">My listings</CardTitle>
-              <CardDescription>Active listings you published. Archive removes them from Community.</CardDescription>
+              <CardDescription>
+                Catalog plugins and Sell listings you own. Archive removes them from Community.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-3">
+              {catalogOrphans.length > 0 ? (
+                <Alert>
+                  <AlertTitle>Unclaimed catalog plugins</AlertTitle>
+                  <AlertDescription>
+                    Accept ToS, then refresh to claim:{" "}
+                    {catalogOrphans.map((o) => o.title).join(", ")}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
               {myListings.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No active listings yet.</p>
+                <p className="text-sm text-muted-foreground">No listings yet.</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="flex flex-col gap-2">
                   {myListings.map((listing) => (
                     <li
                       key={listing.id}
@@ -1302,16 +1456,35 @@ export default function MarketplacePage() {
                         <span className="text-muted-foreground">
                           {" "}
                           · {listing.kind} · {listing.delivery_mode ?? "clone"} ·{" "}
-                          {formatMarketplaceCents(listing.price_cents)} · {listing.status}
+                          {formatMarketplaceCents(listing.price_cents)}
                         </span>
+                        <Badge variant="outline" className="ml-2">
+                          {listingStatusLabel(listing.status)}
+                        </Badge>
+                        {listing.catalog_entry_id ? (
+                          <Badge variant="secondary" className="ml-1">
+                            catalog
+                          </Badge>
+                        ) : null}
+                        {Boolean(listing.payout_ready) ? (
+                          <Badge variant="outline" className="ml-1">
+                            payout ready
+                          </Badge>
+                        ) : Number(listing.price_cents ?? 0) > 0 ? (
+                          <Badge variant="outline" className="ml-1">
+                            payout needed
+                          </Badge>
+                        ) : null}
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleArchive(listing.id)}
-                      >
-                        Archive
-                      </Button>
+                      {listing.status === "archived" ? null : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleArchive(listing.id)}
+                        >
+                          Archive
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>

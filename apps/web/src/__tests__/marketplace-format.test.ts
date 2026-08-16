@@ -3,6 +3,7 @@ import {
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
+  listingStatusLabel,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -45,6 +46,14 @@ describe("Local tab on SaaS", () => {
     expect(installedEmptyHint(true)).toMatch(/Official or Community/);
     expect(installedEmptyHint(true)).not.toMatch(/Local/);
     expect(installedEmptyHint(false)).toMatch(/Official or Local/);
+  });
+});
+
+describe("listingStatusLabel", () => {
+  it("maps listing statuses for the seller dashboard", () => {
+    expect(listingStatusLabel("active")).toBe("Listed");
+    expect(listingStatusLabel("in_review")).toBe("In review");
+    expect(listingStatusLabel("draft")).toBe("Draft");
   });
 });
 

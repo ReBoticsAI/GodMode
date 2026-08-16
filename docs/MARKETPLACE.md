@@ -10,13 +10,14 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 |-----|------|
 | **Official** | ReBotics-curated catalog only (free + paid). Paid revenue is **100%** to the platform. Not a public seller path. |
 | **Local** | Self-host and hub only: local plugin folders and third-party catalog URLs (typically free). Hidden on GodMode Cloud. HTTP paths remain `/marketplace/catalog/unofficial` on those hosts. |
-| **Community** | **User seller path**: gated Community catalog + in-app user listings (`seller_kind = user`). Checkout uses `listingId` for Sell listings. |
-| **Installed** | Workspace plugins + install history. |
-| **Sell** | Accept ToS, connect payouts, **publish** Community listings, and manage **my listings**. |
+| **Community** | Buyer shelf: catalog plugins plus public listings. Checkout always uses `listingId`. |
+| **Installed** | Workspace plugins + install history (buyer). |
+| **Sell** | Seller dashboard: ToS, payouts, publish wizard, My listings (including catalog plugins). |
 
 ## Product rules
 
-- **One seller path** — public sellers use **Community** (Sell tab and/or `catalog/community/` PRs). Official is ReBotics-only.
+- **One seller path** — public sellers use **Community**. Official is ReBotics-only.
+- **One listing record** — every Community item (plugin, clone pack, live share, inference) has a `marketplace_listings` row. Catalog JSON is the plugin install artifact attached via `catalog_entry_id` / `listingId`.
 - **No credits** — purchases are USD (or crypto) via Stripe, PayPal, or MetaMask-compatible checkout.
 - **Official items** — merchant of record is ReBotics/GodMode; **100%** of Official revenue to the platform.
 - **Community (user) listings** — sellers connect Stripe Connect, PayPal, and/or MetaMask; platform takes **10%**.
@@ -140,12 +141,18 @@ the grants file; kill switches (#96) remain the emergency stop.
 
 ## Community (user-to-user)
 
-1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish with kind, title, price, delivery (`clone` or `live`), and source resource id.
-2. For **plugins** that need CI + pins: also PR into GodMode-Marketplace `catalog/community/index.json`.
-3. Buyer: **Community** → browse community catalog + public `seller_kind=user` listings → free **Acquire** / install, or paid checkout, then acquire.
-4. After a successful acquire, matching paid orders move to `delivered`.
+Every Community sale is a listing (`seller_kind=user`). Catalog PRs remain the plugin CI transport. They do not replace the listing.
 
-Public browse listings: `GET /api/marketplace/listings?seller_kind=user`. Community catalog: `GET /api/marketplace/catalog/community`.
+1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish.
+2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (CI + pin). Claim the catalog entry on Sell (GitHub Connect login must match catalog author or `pluginRepo` owner). Paid plugin checkout uses `listingId` and Stripe Connect (10% / 90%), not Official catalog checkout.
+3. **Clone packs** (skill, agent, page, workflow, and similar): snapshot into the buyer workspace. Listings start **in review** (private). Admin Marketplace approve makes them public.
+4. **Live share:** paid Shared grant on this host (`share_grant` + entitlement). Same machine or GodMode Cloud tenants on the VPS. Not a copy, and not a home GPU.
+5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace.
+6. Buyer: **Community** → catalog plugins and public listings → free acquire/install, or paid checkout then acquire/install.
+
+Public browse listings: `GET /api/marketplace/listings?seller_kind=user` (status=active, visibility=public). Community catalog: `GET /api/marketplace/catalog/community` (entries include `listingId` when claimed).
+
+Attaching a home llama-server to Cloud Intelligence is not Marketplace. That follow-up is #576.
 
 ## Seller payouts (Stripe Connect)
 
@@ -176,9 +183,11 @@ Payment provider webhooks and the public Official JSON feed are **protocol excep
 
 ## Sell tab
 
-**Marketplace → Sell**: accept ToS, dual-home seller Stripe Connect (Vault is the
-connect home), publish via kernel `MarketplaceListing.publish` with `price_cents`,
-then manage **My listings** (archive).
+**Marketplace → Sell** is the seller dashboard: ToS, Stripe Connect (Vault is the
+connect home), kind-specific publish (plugin, clone, live, inference), and **My listings**
+(draft, in review, listed, archived). Catalog plugins appear here once claimed.
+
+Admin → Marketplace has the review queue for non-plugin listings.
 
 ## Local catalogs
 

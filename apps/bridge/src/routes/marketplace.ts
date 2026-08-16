@@ -30,6 +30,10 @@ import {
   acquireCloneListing,
   publishMarketplaceListing,
 } from "../services/marketplace-listings.js";
+import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
+import { sellerOwnsCatalogEntry } from "../services/marketplace-listing-policy.js";
+import { githubProjectsStatus } from "../services/github-integration.js";
+import { getUserDb } from "../user-registry.js";
 import { COMMUNITY_VERIFIED_TIER_SQL } from "../services/marketplace-commerce.js";
 
 export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
@@ -45,7 +49,10 @@ export const LISTING_COLS_JOINED = `ml.id, ml.seller_user_id, ml.seller_tenant_i
   ml.price_period, ml.meter_unit, ml.meter_rate, ml.license, ml.inference_endpoint_id,
   ml.created_at, ml.updated_at,
   (${COMMUNITY_VERIFIED_TIER_SQL}) AS verified_tier,
-  CASE WHEN (${COMMUNITY_VERIFIED_TIER_SQL}) > 0 THEN 1 ELSE 0 END AS verified_publisher`;
+  CASE WHEN (${COMMUNITY_VERIFIED_TIER_SQL}) > 0 THEN 1 ELSE 0 END AS verified_publisher,
+  CASE WHEN sa.stripe_connect_account_id IS NOT NULL
+    OR sa.paypal_merchant_id IS NOT NULL
+    OR sa.metamask_address IS NOT NULL THEN 1 ELSE 0 END AS payout_ready`;
 
 /** Build the public Community browse query. Defaults to seller_kind=user. */
 export function buildPublicListingsSql(opts: {
@@ -55,7 +62,7 @@ export function buildPublicListingsSql(opts: {
   let sql = `SELECT ${LISTING_COLS_JOINED}
              FROM marketplace_listings ml
              LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
-             WHERE ml.status='active' AND ml.visibility='public'`;
+             WHERE ml.status='active' AND ml.visibility='public' AND ml.kind != 'plugin'`;
   const params: unknown[] = [];
   const sellerKind = opts.sellerKind?.trim() || "user";
   if (sellerKind !== "all") {
@@ -133,18 +140,66 @@ export function createMarketplaceRouter(): Router {
     res.json({ listings: rows });
   });
 
-  router.get("/my/listings", (req, res) => {
+  router.get("/my/listings", async (req, res) => {
     const core = getCloudDb();
+    const userId = req.user!.id;
+    const catalogOrphans: Array<{
+      id: string;
+      title: string;
+      author: string;
+      priceCents: number;
+    }> = [];
+    let githubLogin: string | null = null;
+    try {
+      githubLogin = githubProjectsStatus(getUserDb(userId), userId).login;
+      const { entries } = await fetchCommunityCatalog(core);
+      const claimed = new Set(
+        (
+          core
+            .prepare(
+              `SELECT catalog_entry_id FROM marketplace_listings
+               WHERE seller_user_id=? AND catalog_entry_id IS NOT NULL AND status != 'archived'`
+            )
+            .all(userId) as Array<{ catalog_entry_id: string }>
+        ).map((r) => r.catalog_entry_id)
+      );
+      const tenantDb = getReqTenantDb(req);
+      for (const entry of entries) {
+        if (claimed.has(entry.id)) continue;
+        if (!sellerOwnsCatalogEntry(entry, githubLogin)) continue;
+        try {
+          publishMarketplaceListing(core, tenantDb, {
+            sellerUserId: userId,
+            sellerTenantId: req.tenantId!,
+            kind: "plugin",
+            catalogEntryId: entry.id,
+            title: entry.title,
+            description: entry.description,
+            priceCents: Number(entry.priceCents ?? 0),
+            sellerKind: "user",
+          });
+        } catch {
+          catalogOrphans.push({
+            id: entry.id,
+            title: entry.title,
+            author: entry.author,
+            priceCents: Number(entry.priceCents ?? 0),
+          });
+        }
+      }
+    } catch {
+      /* Community catalog is optional for the seller dashboard */
+    }
     const rows = core
       .prepare(
         `SELECT ${LISTING_COLS_JOINED}
          FROM marketplace_listings ml
          LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
-         WHERE ml.seller_user_id=? AND ml.status='active'
+         WHERE ml.seller_user_id=?
          ORDER BY ml.created_at DESC`
       )
-      .all(req.user!.id) as Array<Record<string, unknown>>;
-    res.json({ listings: rows });
+      .all(userId) as Array<Record<string, unknown>>;
+    res.json({ listings: rows, catalogOrphans, githubLogin });
   });
 
   router.get("/entitlements", (req, res) => {

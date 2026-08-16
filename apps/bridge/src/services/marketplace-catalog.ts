@@ -20,7 +20,17 @@ import {
 } from "./plugin-lifecycle.js";
 import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
+  attachListingIdToCatalogEntry,
+  communityPluginInstallBlock,
+  isCommunityCatalogSource,
+} from "./marketplace-listing-policy.js";
+import {
+  findListingByCatalogEntryId,
+  listingIdMapForCatalogEntries,
+} from "./marketplace-listings.js";
+import {
   hasPaidEntitlementForCatalogEntry,
+  hasPaidEntitlementForListing,
   MarketplaceCommerceError,
 } from "./marketplace-commerce.js";
 import {
@@ -211,16 +221,24 @@ function resolveCommunityCatalogUrl(customUrl?: string): string {
 }
 
 /** Community gated catalog (user sellers). Separate from in-app DB listings. */
-export async function fetchCommunityCatalog(): Promise<{ url: string; entries: CatalogEntry[] }> {
+export async function fetchCommunityCatalog(
+  core?: CoreDatabase
+): Promise<{ url: string; entries: CatalogEntry[] }> {
   const url = resolveCommunityCatalogUrl();
   const index = await fetchCatalogIndex(url);
-  const entries = index.entries.map((e) => ({
+  let entries = index.entries.map((e) => ({
     ...e,
     sourceCatalog: url,
     sourceName: "Community",
-    // Community Verified comes from seller account / tiers, not Official default.
     verifiedPublisher: e.verifiedPublisher === true,
   }));
+  if (core) {
+    const map = listingIdMapForCatalogEntries(
+      core,
+      entries.map((e) => e.id)
+    );
+    entries = entries.map((e) => attachListingIdToCatalogEntry(e, map));
+  }
   return { url, entries };
 }
 
@@ -749,7 +767,39 @@ export async function installCatalogEntry(
       .get(entry.id) as { price_cents: number } | undefined;
     priceCents = Number(priced?.price_cents ?? 0);
   }
-  if (priceCents > 0) {
+  const community = isCommunityCatalogSource(opts.sourceCatalog ?? catalogUrl);
+  if (community) {
+    const listing =
+      (entry.listingId
+        ? (core
+            .prepare(`SELECT id, status FROM marketplace_listings WHERE id=?`)
+            .get(entry.listingId) as { id: string; status: string } | undefined)
+        : undefined) ??
+      (findListingByCatalogEntryId(core, entry.id) as
+        | { id: string; status: string }
+        | undefined);
+    const block = communityPluginInstallBlock({
+      priceCents,
+      listingId: listing?.id,
+      listingStatus: listing?.status,
+    });
+    if (block) {
+      throw new MarketplaceCommerceError(block, 400);
+    }
+    if (
+      priceCents > 0 &&
+      listing &&
+      !hasPaidEntitlementForListing(core, {
+        userId: opts.userId,
+        listingId: listing.id,
+      })
+    ) {
+      throw new MarketplaceCommerceError(
+        "Payment required before installing this Community plugin. Complete checkout on the listing first.",
+        402
+      );
+    }
+  } else if (priceCents > 0) {
     if (
       !hasPaidEntitlementForCatalogEntry(core, {
         userId: opts.userId,

@@ -7,6 +7,7 @@ import type {
 } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { exportEntity, importEntity, type PortableBundle } from "./portability.js";
+import { config } from "../config.js";
 import {
   assertCanAcquireListing,
   assertMarketplaceTosAccepted,
@@ -14,6 +15,10 @@ import {
   ensureSellerAccount,
   markPaidOrdersDeliveredForListing,
 } from "./marketplace-commerce.js";
+import {
+  PLUGIN_LISTING_KIND,
+  resolveListingPublishState,
+} from "./marketplace-listing-policy.js";
 
 export interface PublishMarketplaceListingInput {
   sellerUserId: string;
@@ -47,13 +52,15 @@ export function publishMarketplaceListing(
   assertMarketplaceTosAccepted(core, input.sellerUserId);
 
   const sellerKind = input.sellerKind ?? "user";
+  let payoutReady = false;
   if (sellerKind === "user") {
     const acct = ensureSellerAccount(core, input.sellerUserId);
-    const ready =
+    payoutReady = Boolean(
       acct.stripe_connect_account_id ||
-      acct.paypal_merchant_id ||
-      acct.metamask_address;
-    if (Number(input.priceCents ?? 0) > 0 && !ready) {
+        acct.paypal_merchant_id ||
+        acct.metamask_address
+    );
+    if (Number(input.priceCents ?? 0) > 0 && !payoutReady && input.kind !== PLUGIN_LISTING_KIND) {
       throw Object.assign(
         new Error("Connect Stripe, PayPal, or MetaMask before publishing a paid listing"),
         { status: 400 }
@@ -61,13 +68,30 @@ export function publishMarketplaceListing(
     }
   }
 
-  const delivery = input.deliveryMode ?? "clone";
+  const publishState = resolveListingPublishState({
+    kind: input.kind,
+    catalogEntryId: input.catalogEntryId,
+    priceCents: input.priceCents,
+    payoutReady,
+    isSaas: config.isSaas,
+  });
+  if (publishState.error) {
+    throw Object.assign(new Error(publishState.error), { status: 400 });
+  }
+
+  const delivery =
+    input.kind === PLUGIN_LISTING_KIND ? "clone" : (input.deliveryMode ?? "clone");
   const pricing = input.pricingModel ?? "one_time";
   let bundleJson = "{}";
   let title = input.title ?? input.kind;
   let endpointId = input.inferenceEndpointId ?? null;
+  let resourceId = input.resourceId ?? endpointId ?? "";
 
-  if (input.kind === "inference") {
+  if (input.kind === PLUGIN_LISTING_KIND) {
+    const catalogId = String(input.catalogEntryId ?? "").trim();
+    resourceId = catalogId;
+    title = input.title ?? catalogId;
+  } else if (input.kind === "inference") {
     endpointId ??= input.resourceId ?? null;
     if (!endpointId) throw new Error("inferenceEndpointId required for inference listings");
     const endpoint = core
@@ -80,16 +104,21 @@ export function publishMarketplaceListing(
       | undefined;
     if (!endpoint) throw Object.assign(new Error("Inference endpoint not found"), { status: 404 });
     title = input.title ?? endpoint.name;
+    resourceId = endpointId;
   } else if (input.kind === "bundle") {
     if (!input.bundleChildren?.length) throw new Error("bundleChildren required for bundle listings");
     bundleJson = JSON.stringify({ title, children: input.bundleChildren });
+    resourceId = input.resourceId ?? uuidv4();
   } else if (delivery === "clone") {
     if (!input.resourceId) throw new Error("resourceId required for clone listings");
     const bundle = exportEntity(tenantDb, input.kind, input.resourceId);
     title = input.title ?? bundle.title;
     bundleJson = JSON.stringify(bundle);
+    resourceId = input.resourceId;
   } else if (!input.resourceId) {
     throw new Error("resourceId required for live listings");
+  } else {
+    resourceId = input.resourceId;
   }
 
   const priceCents = Math.max(0, Math.floor(Number(input.priceCents ?? 0)));
@@ -100,13 +129,13 @@ export function publishMarketplaceListing(
         price_credits, price_cents, currency, seller_kind, catalog_entry_id,
         bundle_json, visibility, status, delivery_mode, pricing_model,
         price_period, meter_unit, meter_rate, license, inference_endpoint_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'public', 'active', ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.sellerUserId,
     input.sellerTenantId,
     input.kind,
-    input.resourceId ?? endpointId ?? id,
+    resourceId,
     title,
     input.description ?? null,
     priceCents,
@@ -114,6 +143,8 @@ export function publishMarketplaceListing(
     sellerKind,
     input.catalogEntryId ?? null,
     bundleJson,
+    publishState.visibility,
+    publishState.status,
     delivery,
     pricing,
     input.pricePeriod ?? null,
@@ -136,7 +167,7 @@ export function archiveMarketplaceListing(
     .prepare(
       `UPDATE marketplace_listings
        SET status='archived', updated_at=datetime('now')
-       WHERE id=? AND seller_user_id=? AND seller_tenant_id=? AND status='active'`
+       WHERE id=? AND seller_user_id=? AND seller_tenant_id=? AND status IN ('active','in_review','draft')`
     )
     .run(input.listingId, input.sellerUserId, input.sellerTenantId);
   if (!changed.changes) {
@@ -146,6 +177,83 @@ export function archiveMarketplaceListing(
     string,
     unknown
   >;
+}
+
+export function findListingByCatalogEntryId(
+  core: CoreDatabase,
+  catalogEntryId: string
+): Record<string, unknown> | undefined {
+  return core
+    .prepare(
+      `SELECT * FROM marketplace_listings
+       WHERE catalog_entry_id=? AND status != 'archived'
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(catalogEntryId) as Record<string, unknown> | undefined;
+}
+
+export function listingIdMapForCatalogEntries(
+  core: CoreDatabase,
+  catalogEntryIds: string[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (catalogEntryIds.length === 0) return map;
+  const placeholders = catalogEntryIds.map(() => "?").join(",");
+  const rows = core
+    .prepare(
+      `SELECT id, catalog_entry_id, status FROM marketplace_listings
+       WHERE catalog_entry_id IN (${placeholders}) AND status != 'archived'`
+    )
+    .all(...catalogEntryIds) as Array<{ id: string; catalog_entry_id: string; status: string }>;
+  for (const row of rows) {
+    if (!map.has(row.catalog_entry_id)) map.set(row.catalog_entry_id, row.id);
+  }
+  return map;
+}
+
+export function reviewMarketplaceListing(
+  core: CoreDatabase,
+  input: { listingId: string; action: "approve" | "reject" }
+): Record<string, unknown> {
+  const listing = core
+    .prepare(`SELECT * FROM marketplace_listings WHERE id=?`)
+    .get(input.listingId) as Record<string, unknown> | undefined;
+  if (!listing) throw Object.assign(new Error("Listing not found"), { status: 404 });
+  if (String(listing.status) !== "in_review") {
+    throw Object.assign(new Error("Listing is not awaiting review"), { status: 400 });
+  }
+  if (input.action === "reject") {
+    core
+      .prepare(
+        `UPDATE marketplace_listings
+         SET status='archived', visibility='private', updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(input.listingId);
+  } else {
+    core
+      .prepare(
+        `UPDATE marketplace_listings
+         SET status='active', visibility='public', updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(input.listingId);
+  }
+  return core.prepare("SELECT * FROM marketplace_listings WHERE id=?").get(input.listingId) as Record<
+    string,
+    unknown
+  >;
+}
+
+export function listListingsAwaitingReview(core: CoreDatabase): Array<Record<string, unknown>> {
+  return core
+    .prepare(
+      `SELECT * FROM marketplace_listings
+       WHERE status='in_review'
+       ORDER BY created_at ASC
+       LIMIT 200`
+    )
+    .all() as Array<Record<string, unknown>>;
 }
 
 export function acquireCloneListing(

@@ -311,7 +311,7 @@ describe("platform action adapters", () => {
     expect(listing.data).toMatchObject({
       seller_user_id: "user-a",
       seller_tenant_id: "tenant-a",
-      status: "active",
+      status: "in_review",
     });
     const archived = marketplaceListingAdapter.actions!.archive(
       db,

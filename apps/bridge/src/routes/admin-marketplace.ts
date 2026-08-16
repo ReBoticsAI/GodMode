@@ -22,6 +22,10 @@ import {
   setSellerVerified,
   setSellerVerifiedFrozen,
 } from "../services/marketplace-commerce.js";
+import {
+  listListingsAwaitingReview,
+  reviewMarketplaceListing,
+} from "../services/marketplace-listings.js";
 
 const backupDownloadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -282,6 +286,30 @@ export function createAdminMarketplaceRouter(): Router {
       } else {
         res.end();
       }
+    }
+  });
+
+  router.get("/listings/review", (_req, res) => {
+    res.json({ listings: listListingsAwaitingReview(getCloudDb()) });
+  });
+
+  router.post("/listings/:id/review", (req, res) => {
+    try {
+      const action = String(req.body?.action ?? "").trim();
+      if (action !== "approve" && action !== "reject") {
+        res.status(400).json({ error: "action must be approve or reject" });
+        return;
+      }
+      const listing = reviewMarketplaceListing(getCloudDb(), {
+        listingId: req.params.id,
+        action,
+      });
+      res.json({ listing });
+    } catch (err) {
+      const status = Number((err as { status?: number }).status) || 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Review failed",
+      });
     }
   });
 

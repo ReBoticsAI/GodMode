@@ -5104,6 +5104,23 @@ export function setAdminMarketplaceSellerFrozen(body: {
   });
 }
 
+export function fetchAdminMarketplaceReviewQueue() {
+  return api<{ listings: MarketplaceListing[] }>("/admin/marketplace/listings/review");
+}
+
+export function reviewAdminMarketplaceListing(
+  listingId: string,
+  action: "approve" | "reject"
+) {
+  return api<{ listing: MarketplaceListing }>(
+    `/admin/marketplace/listings/${encodeURIComponent(listingId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }
+  );
+}
+
 export type AdminRequestLogRow = {
   id: string;
   level: string;
@@ -5945,6 +5962,7 @@ export interface MarketplaceListing {
   license?: string | null;
   inference_endpoint_id?: string | null;
   catalog_entry_id?: string | null;
+  payout_ready?: number | boolean;
   /** Community seller verified signal (#311/#313); 1/true when verified_tier > 0. */
   verified_publisher?: number | boolean;
   /** Community earned/admin-resolved tier 0–3 (#313). */
@@ -6438,6 +6456,7 @@ export function createMarketplaceListing(body: {
   meterRate?: number;
   license?: string;
   inferenceEndpointId?: string;
+  catalogEntryId?: string;
   bundleChildren?: unknown[];
 }) {
   return actionDto<{ id: string }>("MarketplaceListing", "publish", {
@@ -6456,6 +6475,7 @@ export function createMarketplaceListing(body: {
     meter_rate: body.meterRate,
     license: body.license,
     inference_endpoint_id: body.inferenceEndpointId,
+    catalog_entry_id: body.catalogEntryId,
     bundle_children: body.bundleChildren,
   }, undefined, true);
 }
@@ -6573,7 +6593,16 @@ export function confirmMarketplaceCryptoPayment(orderId: string, txHash: string)
 }
 
 export function fetchMyMarketplaceListings() {
-  return api<{ listings: MarketplaceListing[] }>("/marketplace/my/listings");
+  return api<{
+    listings: MarketplaceListing[];
+    catalogOrphans?: Array<{
+      id: string;
+      title: string;
+      author: string;
+      priceCents: number;
+    }>;
+    githubLogin?: string | null;
+  }>("/marketplace/my/listings");
 }
 
 export function archiveMarketplaceListing(listingId: string) {
