@@ -1,4 +1,5 @@
 import type { AppDatabase } from "../db.js";
+import { insertIgnoreStructureNode } from "../services/structure.js";
 
 const ALLOWED_COLUMNS = new Set([
   "id",
@@ -161,18 +162,42 @@ export function parseCommunityStructureInsert(
   return { columns, values };
 }
 
+function valueAt(
+  columns: string[],
+  values: unknown[],
+  name: string
+): unknown {
+  const index = columns.indexOf(name);
+  return index >= 0 ? values[index] : undefined;
+}
+
+function optionalString(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  return String(value);
+}
+
 export function applyCommunityStructureInsert(
   db: AppDatabase,
   sql: string,
   params: unknown[]
 ): { ignored: boolean } {
   const { columns, values } = parseCommunityStructureInsert(sql, params);
-  const placeholders = columns.map(() => "?").join(", ");
-  const quoted = columns.map((c) => `"${c}"`).join(", ");
-  const info = db
-    .prepare(
-      `INSERT OR IGNORE INTO structure_nodes (${quoted}) VALUES (${placeholders})`
-    )
-    .run(...values);
-  return { ignored: info.changes === 0 };
+  const parentRaw = valueAt(columns, values, "parent_id");
+  const builtIn = valueAt(columns, values, "built_in");
+  const sortOrder = valueAt(columns, values, "sort_order");
+  return insertIgnoreStructureNode(db, {
+    id: String(valueAt(columns, values, "id") ?? ""),
+    parentId: optionalString(parentRaw),
+    label: String(valueAt(columns, values, "label") ?? ""),
+    icon: String(valueAt(columns, values, "icon") ?? "folder"),
+    segment: String(valueAt(columns, values, "segment") ?? ""),
+    kind: String(valueAt(columns, values, "kind") ?? "placeholder"),
+    objectType: optionalString(valueAt(columns, values, "object_type")),
+    rightSidebar: optionalString(valueAt(columns, values, "right_sidebar")),
+    agentId: optionalString(valueAt(columns, values, "agent_id")),
+    builtIn: typeof builtIn === "number" ? builtIn : Number(builtIn ?? 0) || 0,
+    sortOrder:
+      typeof sortOrder === "number" ? sortOrder : Number(sortOrder ?? 0) || 0,
+    tabsJson: optionalString(valueAt(columns, values, "tabs_json")),
+  });
 }
