@@ -61,6 +61,23 @@ describe("plugin capability grants (#290 / #303)", () => {
     ).toBe("local");
   });
 
+  it("does not treat GodMode-Marketplace Community URLs as Official", () => {
+    const communityUrl =
+      "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/community/index.json";
+    expect(
+      resolvePluginTrustTier({
+        entry: entry({ sourceName: "custom", sourceCatalog: communityUrl }),
+        sourceCatalog: communityUrl,
+      })
+    ).toBe("community");
+    expect(
+      resolvePluginTrustTier({
+        sourceCatalog:
+          "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/official/index.json",
+      })
+    ).toBe("official");
+  });
+
   it("deny-by-default for Official when no hosts declared", () => {
     const grants = buildCapabilityGrants({
       trustTier: "official",

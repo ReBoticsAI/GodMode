@@ -94,15 +94,22 @@ export function resolvePluginTrustTier(opts: {
     return "local";
   }
   const sourceName = String(opts.entry?.sourceName ?? "").toLowerCase();
-  if (sourceName.includes("community")) return "community";
+  if (sourceName.includes("community") || sourceName.includes("unofficial")) {
+    return "community";
+  }
   if (sourceName.includes("official")) return "official";
   const src = String(
     opts.sourceCatalog ?? opts.entry?.sourceCatalog ?? ""
   ).toLowerCase();
   if (
+    src.includes("/catalog/community") ||
+    src.includes("/catalog/unofficial")
+  ) {
+    return "community";
+  }
+  if (
     src.includes("/catalog/official") ||
-    src.includes("commerce/catalog/official") ||
-    src.includes("godmode-marketplace")
+    src.includes("commerce/catalog/official")
   ) {
     return "official";
   }

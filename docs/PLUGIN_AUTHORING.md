@@ -104,7 +104,8 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
   (and/or catalog `networkHosts`) are present. Call `api.host.externalFetch`
   rather than raw `fetch`. Local/operator installs are unrestricted.
 - `capabilities.tools.names` — optional AI tool names the plugin may register
-  via `api.tools.register` (#303). Catalog may also set `toolNames`.
+  via `api.tools.register` (#303). `capabilities.tools: ["ping"]` is accepted as
+  the same grant list. Catalog may also set `toolNames`.
 - `capabilities.records.names` — optional ObjectType names the plugin may
   register (`api.objectTypes.register`) or call via `api.kernel` (#303). Catalog
   may also set `recordNames`. Manifest `objectTypes` names are collected into
