@@ -115,6 +115,8 @@ describe("platform action adapters", () => {
           "acquire_live",
           "publish",
           "archive",
+          "list_review",
+          "review",
           "export_portable",
           "import_portable",
         ],
@@ -321,6 +323,103 @@ describe("platform action adapters", () => {
       ctx
     ) as { data: Record<string, unknown> };
     expect(archived.data.status).toBe("archived");
+  });
+
+  it("lets platform admins review listings they do not own", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      INSERT INTO users (id) VALUES ('user-a'), ('admin');
+      CREATE TABLE marketplace_listings (
+        id TEXT PRIMARY KEY, seller_user_id TEXT NOT NULL, seller_tenant_id TEXT NOT NULL,
+        kind TEXT NOT NULL, resource_id TEXT NOT NULL, title TEXT NOT NULL,
+        description TEXT, price_credits INTEGER NOT NULL DEFAULT 0,
+        price_cents INTEGER NOT NULL DEFAULT 0, currency TEXT DEFAULT 'usd',
+        seller_kind TEXT DEFAULT 'user', catalog_entry_id TEXT,
+        bundle_json TEXT NOT NULL,
+        visibility TEXT NOT NULL, status TEXT NOT NULL, delivery_mode TEXT,
+        pricing_model TEXT, price_period TEXT, meter_unit TEXT, meter_rate REAL,
+        license TEXT, inference_endpoint_id TEXT, created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE marketplace_bans (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, reason TEXT NOT NULL,
+        order_id TEXT, created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE marketplace_tos_acceptances (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, tos_version TEXT NOT NULL,
+        accepted_at TEXT DEFAULT (datetime('now')), UNIQUE (user_id, tos_version)
+      );
+      CREATE TABLE marketplace_seller_accounts (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
+        stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
+        payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+        tos_accepted_version TEXT, tos_accepted_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    acceptMarketplaceTos(db as never, "user-a");
+    const def = definition("MarketplaceListing", [
+      "id",
+      "seller_user_id",
+      "seller_tenant_id",
+      "kind",
+      "resource_id",
+      "title",
+      "delivery_mode",
+      "status",
+      "visibility",
+    ]);
+    const sellerCtx = context(db);
+    const listing = marketplaceListingAdapter.actions!.publish(
+      db,
+      def,
+      "",
+      {
+        kind: "agent",
+        resource_id: "agent-review",
+        title: "Needs Review",
+        delivery_mode: "live",
+      },
+      sellerCtx
+    ) as { id: string; data: Record<string, unknown> };
+    expect(listing.data.status).toBe("in_review");
+
+    const outsiderCtx = context(db, { tenantId: "tenant-b", userId: "user-b" });
+    expect(marketplaceListingAdapter.get!(db, def, listing.id, outsiderCtx)).toBeNull();
+    expect(() =>
+      marketplaceListingAdapter.actions!.list_review(db, def, "", {}, outsiderCtx)
+    ).toThrow(/Platform administrator required/);
+    expect(() =>
+      marketplaceListingAdapter.actions!.review(
+        db,
+        def,
+        listing.id,
+        { action: "approve" },
+        outsiderCtx
+      )
+    ).toThrow(/Platform administrator required/);
+
+    const adminCtx = context(db, { isAdmin: true, userId: "admin", tenantId: "tenant-admin" });
+    expect(marketplaceListingAdapter.get!(db, def, listing.id, adminCtx)).not.toBeNull();
+    const queue = marketplaceListingAdapter.actions!.list_review(
+      db,
+      def,
+      "",
+      {},
+      adminCtx
+    ) as { listings: Array<Record<string, unknown>> };
+    expect(queue.listings).toHaveLength(1);
+    expect(queue.listings[0]?.id).toBe(listing.id);
+
+    const approved = marketplaceListingAdapter.actions!.review(
+      db,
+      def,
+      listing.id,
+      { action: "approve" },
+      adminCtx
+    ) as { data: Record<string, unknown> };
+    expect(approved.data).toMatchObject({ status: "active", visibility: "public" });
   });
 
   it("validates peer invitation input instead of returning 501", () => {

@@ -5105,19 +5105,25 @@ export function setAdminMarketplaceSellerFrozen(body: {
 }
 
 export function fetchAdminMarketplaceReviewQueue() {
-  return api<{ listings: MarketplaceListing[] }>("/admin/marketplace/listings/review");
+  return actionDto<{ listings: MarketplaceListing[] }>(
+    "MarketplaceListing",
+    "list_review",
+    {},
+    undefined,
+    true
+  );
 }
 
 export function reviewAdminMarketplaceListing(
   listingId: string,
   action: "approve" | "reject"
 ) {
-  return api<{ listing: MarketplaceListing }>(
-    `/admin/marketplace/listings/${encodeURIComponent(listingId)}/review`,
-    {
-      method: "POST",
-      body: JSON.stringify({ action }),
-    }
+  return actionDto<{ listing: MarketplaceListing }>(
+    "MarketplaceListing",
+    "review",
+    { action },
+    listingId,
+    true
   );
 }
 
