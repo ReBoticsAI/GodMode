@@ -9,7 +9,7 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 | Tab | Role |
 |-----|------|
 | **Official** | ReBotics-curated catalog only (free + paid). Paid revenue is **100%** to the platform. Not a public seller path. |
-| **Local** | Local plugin folders and third-party catalog URLs (typically free). HTTP paths remain `/marketplace/catalog/unofficial`. |
+| **Local** | Self-host and hub only: local plugin folders and third-party catalog URLs (typically free). Hidden on GodMode Cloud. HTTP paths remain `/marketplace/catalog/unofficial` on those hosts. |
 | **Community** | **User seller path**: gated Community catalog + in-app user listings (`seller_kind = user`). Checkout uses `listingId` for Sell listings. |
 | **Installed** | Workspace plugins + install history. |
 | **Sell** | Accept ToS, connect payouts, **publish** Community listings, and manage **my listings**. |
@@ -182,7 +182,7 @@ then manage **My listings** (archive).
 
 ## Local catalogs
 
-**Marketplace → Local** is for free local folders, `file://` catalogs, and third-party indexes (same schema as Official, typically `priceCents: 0`). It is not the Community user-listing feed.
+**Marketplace → Local** is for free local folders, `file://` catalogs, and third-party indexes on self-host and hub installs (same schema as Official, typically `priceCents: 0`). It is not the Community user-listing feed. GodMode Cloud hides this tab: folder registration is blocked there, and Official plus Community are the install paths. Intelligence can still scaffold and install a plugin in the workspace coding root.
 
 ## Related
 
