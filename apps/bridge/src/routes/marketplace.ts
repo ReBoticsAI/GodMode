@@ -28,13 +28,15 @@ import {
 } from "../services/inference-service.js";
 import {
   acquireCloneListing,
-  publishMarketplaceListing,
+  claimOwnedCommunityCatalogListings,
 } from "../services/marketplace-listings.js";
 import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
-import { sellerOwnsCatalogEntry } from "../services/marketplace-listing-policy.js";
 import { githubProjectsStatus } from "../services/github-integration.js";
 import { getUserDb } from "../user-registry.js";
-import { COMMUNITY_VERIFIED_TIER_SQL } from "../services/marketplace-commerce.js";
+import {
+  COMMUNITY_VERIFIED_TIER_SQL,
+  MARKETPLACE_LISTING_SELLER_JOINS,
+} from "../services/marketplace-commerce.js";
 
 export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
   title, description, price_credits, price_cents, currency, seller_kind,
@@ -61,7 +63,7 @@ export function buildPublicListingsSql(opts: {
 }): { sql: string; params: unknown[] } {
   let sql = `SELECT ${LISTING_COLS_JOINED}
              FROM marketplace_listings ml
-             LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
+             ${MARKETPLACE_LISTING_SELLER_JOINS}
              WHERE ml.status='active' AND ml.visibility='public' AND ml.kind != 'plugin'`;
   const params: unknown[] = [];
   const sellerKind = opts.sellerKind?.trim() || "user";
@@ -75,6 +77,27 @@ export function buildPublicListingsSql(opts: {
   }
   sql += ` ORDER BY ml.created_at DESC LIMIT 100`;
   return { sql, params };
+}
+
+function sellerListingsSql(): string {
+  return `SELECT ${LISTING_COLS_JOINED}
+         FROM marketplace_listings ml
+         ${MARKETPLACE_LISTING_SELLER_JOINS}
+         WHERE ml.seller_user_id=?
+         ORDER BY ml.created_at DESC`;
+}
+
+function sendRouteError(
+  res: Response,
+  err: unknown,
+  fallback: string,
+  status = 500
+): void {
+  const message =
+    err instanceof Error && err.message.trim() ? err.message.trim() : fallback;
+  if (!res.headersSent) {
+    res.status(status).json({ error: message });
+  }
 }
 
 async function proxyMarketplaceToHub(
@@ -121,85 +144,63 @@ export function createMarketplaceRouter(): Router {
   });
 
   router.get("/listings", (req, res) => {
-    const core = getCloudDb();
-    const q =
-      typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
-    const kind =
-      typeof req.query.kind === "string" ? req.query.kind : undefined;
-    const sellerKind =
-      typeof req.query.seller_kind === "string" ? req.query.seller_kind : undefined;
-    const { sql, params } = buildPublicListingsSql({ kind, sellerKind });
-    let rows = core.prepare(sql).all(...params) as Array<Record<string, unknown>>;
-    if (q) {
-      rows = rows.filter(
-        (r) =>
-          String(r.title ?? "").toLowerCase().includes(q) ||
-          String(r.description ?? "").toLowerCase().includes(q)
-      );
+    try {
+      const core = getCloudDb();
+      const q =
+        typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+      const kind =
+        typeof req.query.kind === "string" ? req.query.kind : undefined;
+      const sellerKind =
+        typeof req.query.seller_kind === "string" ? req.query.seller_kind : undefined;
+      const { sql, params } = buildPublicListingsSql({ kind, sellerKind });
+      let rows = core.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+      if (q) {
+        rows = rows.filter(
+          (r) =>
+            String(r.title ?? "").toLowerCase().includes(q) ||
+            String(r.description ?? "").toLowerCase().includes(q)
+        );
+      }
+      res.json({ listings: rows });
+    } catch (err) {
+      sendRouteError(res, err, "Failed to load marketplace listings");
     }
-    res.json({ listings: rows });
   });
 
   router.get("/my/listings", async (req, res) => {
-    const core = getCloudDb();
-    const userId = req.user!.id;
-    const catalogOrphans: Array<{
-      id: string;
-      title: string;
-      author: string;
-      priceCents: number;
-    }> = [];
-    let githubLogin: string | null = null;
     try {
-      githubLogin = githubProjectsStatus(getUserDb(userId), userId).login;
-      const { entries } = await fetchCommunityCatalog(core);
-      const claimed = new Set(
-        (
-          core
-            .prepare(
-              `SELECT catalog_entry_id FROM marketplace_listings
-               WHERE seller_user_id=? AND catalog_entry_id IS NOT NULL AND status != 'archived'`
-            )
-            .all(userId) as Array<{ catalog_entry_id: string }>
-        ).map((r) => r.catalog_entry_id)
-      );
-      const tenantDb = getReqTenantDb(req);
-      for (const entry of entries) {
-        if (claimed.has(entry.id)) continue;
-        if (!sellerOwnsCatalogEntry(entry, githubLogin)) continue;
-        try {
-          publishMarketplaceListing(core, tenantDb, {
-            sellerUserId: userId,
-            sellerTenantId: req.tenantId!,
-            kind: "plugin",
-            catalogEntryId: entry.id,
-            title: entry.title,
-            description: entry.description,
-            priceCents: Number(entry.priceCents ?? 0),
-            sellerKind: "user",
-          });
-        } catch {
-          catalogOrphans.push({
-            id: entry.id,
-            title: entry.title,
-            author: entry.author,
-            priceCents: Number(entry.priceCents ?? 0),
-          });
-        }
+      const core = getCloudDb();
+      const userId = req.user!.id;
+      let githubLogin: string | null = null;
+      try {
+        githubLogin = githubProjectsStatus(getUserDb(userId), userId).login;
+      } catch {
+        githubLogin = null;
       }
-    } catch {
-      /* Community catalog is optional for the seller dashboard */
+      let catalogOrphans: Array<{
+        id: string;
+        title: string;
+        author: string;
+        priceCents: number;
+      }> = [];
+      try {
+        const { entries } = await fetchCommunityCatalog(core);
+        catalogOrphans = claimOwnedCommunityCatalogListings(core, getReqTenantDb(req), {
+          sellerUserId: userId,
+          sellerTenantId: req.tenantId!,
+          githubLogin,
+          entries,
+        });
+      } catch (err) {
+        console.warn("[marketplace] community catalog claim skipped:", err);
+      }
+      const rows = core
+        .prepare(sellerListingsSql())
+        .all(userId) as Array<Record<string, unknown>>;
+      res.json({ listings: rows, catalogOrphans, githubLogin });
+    } catch (err) {
+      sendRouteError(res, err, "Failed to load seller listings");
     }
-    const rows = core
-      .prepare(
-        `SELECT ${LISTING_COLS_JOINED}
-         FROM marketplace_listings ml
-         LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
-         WHERE ml.seller_user_id=?
-         ORDER BY ml.created_at DESC`
-      )
-      .all(userId) as Array<Record<string, unknown>>;
-    res.json({ listings: rows, catalogOrphans, githubLogin });
   });
 
   router.get("/entitlements", (req, res) => {

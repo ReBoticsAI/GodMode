@@ -67,7 +67,7 @@ export function createMarketplaceCatalogRouter(): Router {
         err instanceof Error && err.message.trim()
           ? err.message.trim()
           : "Failed to load official catalog";
-      res.status(502).json({ error: message });
+      res.status(503).json({ error: message });
     }
   });
 
@@ -80,7 +80,7 @@ export function createMarketplaceCatalogRouter(): Router {
         err instanceof Error && err.message.trim()
           ? err.message.trim()
           : "Failed to load community catalog";
-      res.status(502).json({ error: message });
+      res.status(503).json({ error: message });
     }
   });
 
@@ -101,7 +101,7 @@ export function createMarketplaceCatalogRouter(): Router {
         err instanceof Error && err.message.trim()
           ? err.message.trim()
           : "Failed to load unofficial catalog";
-      res.status(502).json({ error: message });
+      res.status(503).json({ error: message });
     }
   });
 
@@ -111,18 +111,26 @@ export function createMarketplaceCatalogRouter(): Router {
   });
 
   router.get("/installed", (req, res) => {
-    const core = getCloudDb();
-    const catalogInstalls = listCatalogInstalls(core, req.tenantId!);
-    const plugins = listInstalledPlugins(core, req.tenantId!);
-    const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
-    const available = discovered.map(({ id, version, name, pluginRoot, loaded }) => ({
-      id,
-      version,
-      name,
-      pluginRoot,
-      loaded,
-    }));
-    res.json({ catalogInstalls, plugins, available, discovered });
+    try {
+      const core = getCloudDb();
+      const catalogInstalls = listCatalogInstalls(core, req.tenantId!);
+      const plugins = listInstalledPlugins(core, req.tenantId!);
+      const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
+      const available = discovered.map(({ id, version, name, pluginRoot, loaded }) => ({
+        id,
+        version,
+        name,
+        pluginRoot,
+        loaded,
+      }));
+      res.json({ catalogInstalls, plugins, available, discovered });
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "Failed to load installed plugins";
+      res.status(500).json({ error: message });
+    }
   });
 
   return router;

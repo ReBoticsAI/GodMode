@@ -156,29 +156,32 @@ export const COMMUNITY_VERIFIED_TIER_THRESHOLDS = {
 export type CommunityVerifiedTier = 0 | 1 | 2 | 3;
 
 /**
- * SQL expression (aliases `ml` listing + `sa` seller account) for resolved
- * Community verified_tier 0–3. Frozen forces 0; else max(earned, admin floor I).
+ * Join `marketplace_listings ml` to seller account + one aggregated gate-passing
+ * count per seller. Use with COMMUNITY_VERIFIED_TIER_SQL (needs aliases sa, vc).
+ * A grouped join stays O(listings); a correlated COUNT per row blocked Cloud.
+ */
+export const MARKETPLACE_LISTING_SELLER_JOINS = `LEFT JOIN marketplace_seller_accounts sa ON sa.user_id = ml.seller_user_id
+  LEFT JOIN (
+    SELECT seller_user_id, COUNT(*) AS gate_passing_cnt
+    FROM marketplace_listings
+    WHERE seller_kind = 'user' AND status = 'active' AND visibility = 'public'
+    GROUP BY seller_user_id
+  ) vc ON vc.seller_user_id = ml.seller_user_id`;
+
+/**
+ * SQL expression (aliases `ml` listing, `sa` seller account, `vc` gate counts)
+ * for resolved Community verified_tier 0–3. Frozen forces 0; else max(earned, admin floor I).
  */
 export const COMMUNITY_VERIFIED_TIER_SQL = `CASE
   WHEN COALESCE(sa.verified_frozen, 0) = 1 THEN 0
-  ELSE (
-    SELECT max(
-      CASE
-        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.III} THEN 3
-        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.II} THEN 2
-        WHEN cnt >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.I} THEN 1
-        ELSE 0
-      END,
-      CASE WHEN COALESCE(sa.verified_seller, 0) = 1 THEN 1 ELSE 0 END
-    )
-    FROM (
-      SELECT COUNT(*) AS cnt
-      FROM marketplace_listings g
-      WHERE g.seller_user_id = ml.seller_user_id
-        AND g.seller_kind = 'user'
-        AND g.status = 'active'
-        AND g.visibility = 'public'
-    )
+  ELSE max(
+    CASE
+      WHEN COALESCE(vc.gate_passing_cnt, 0) >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.III} THEN 3
+      WHEN COALESCE(vc.gate_passing_cnt, 0) >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.II} THEN 2
+      WHEN COALESCE(vc.gate_passing_cnt, 0) >= ${COMMUNITY_VERIFIED_TIER_THRESHOLDS.I} THEN 1
+      ELSE 0
+    END,
+    CASE WHEN COALESCE(sa.verified_seller, 0) = 1 THEN 1 ELSE 0 END
   )
 END`;
 

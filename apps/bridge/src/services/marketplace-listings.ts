@@ -18,6 +18,7 @@ import {
 import {
   PLUGIN_LISTING_KIND,
   resolveListingPublishState,
+  sellerOwnsCatalogEntry,
 } from "./marketplace-listing-policy.js";
 
 export interface PublishMarketplaceListingInput {
@@ -209,6 +210,83 @@ export function listingIdMapForCatalogEntries(
     if (!map.has(row.catalog_entry_id)) map.set(row.catalog_entry_id, row.id);
   }
   return map;
+}
+
+function isUniqueConstraint(err: unknown): boolean {
+  const code = typeof err === "object" && err && "code" in err ? String((err as { code?: string }).code) : "";
+  const msg = err instanceof Error ? err.message : String(err);
+  return /CONSTRAINT/i.test(code) || /UNIQUE constraint failed/i.test(msg);
+}
+
+export type CatalogClaimOrphan = {
+  id: string;
+  title: string;
+  author: string;
+  priceCents: number;
+};
+
+/**
+ * Attach Community catalog plugins this GitHub login owns onto the seller dashboard.
+ * Idempotent: unique (seller, catalog_entry_id) plus skip of already-claimed rows.
+ */
+export function claimOwnedCommunityCatalogListings(
+  core: CoreDatabase,
+  tenantDb: AppDatabase,
+  opts: {
+    sellerUserId: string;
+    sellerTenantId: string;
+    githubLogin: string | null;
+    entries: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      author?: string;
+      pluginRepo?: string;
+      priceCents?: number;
+    }>;
+  }
+): CatalogClaimOrphan[] {
+  const catalogOrphans: CatalogClaimOrphan[] = [];
+  if (!opts.githubLogin || opts.entries.length === 0) return catalogOrphans;
+  const claimed = new Set(
+    (
+      core
+        .prepare(
+          `SELECT catalog_entry_id FROM marketplace_listings
+           WHERE seller_user_id=? AND catalog_entry_id IS NOT NULL AND status != 'archived'`
+        )
+        .all(opts.sellerUserId) as Array<{ catalog_entry_id: string }>
+    ).map((r) => r.catalog_entry_id)
+  );
+  for (const entry of opts.entries) {
+    if (claimed.has(entry.id)) continue;
+    if (!sellerOwnsCatalogEntry(entry, opts.githubLogin)) continue;
+    try {
+      publishMarketplaceListing(core, tenantDb, {
+        sellerUserId: opts.sellerUserId,
+        sellerTenantId: opts.sellerTenantId,
+        kind: "plugin",
+        catalogEntryId: entry.id,
+        title: entry.title,
+        description: entry.description,
+        priceCents: Number(entry.priceCents ?? 0),
+        sellerKind: "user",
+      });
+      claimed.add(entry.id);
+    } catch (err) {
+      if (isUniqueConstraint(err)) {
+        claimed.add(entry.id);
+        continue;
+      }
+      catalogOrphans.push({
+        id: entry.id,
+        title: entry.title,
+        author: String(entry.author ?? ""),
+        priceCents: Number(entry.priceCents ?? 0),
+      });
+    }
+  }
+  return catalogOrphans;
 }
 
 export function reviewMarketplaceListing(

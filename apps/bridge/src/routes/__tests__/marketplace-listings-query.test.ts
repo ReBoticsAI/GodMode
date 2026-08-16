@@ -16,12 +16,15 @@ describe("buildPublicListingsSql", () => {
     expect(LISTING_COLS).toContain("updated_at");
   });
 
-  it("joins seller verified_tier for Community browse", () => {
+  it("joins a grouped seller count instead of a correlated listings subquery", () => {
     const { sql } = buildPublicListingsSql({});
     expect(sql).toContain("verified_publisher");
     expect(sql).toContain("verified_tier");
     expect(sql).toContain("payout_ready");
     expect(sql).toContain("marketplace_seller_accounts");
+    expect(sql).toContain("gate_passing_cnt");
+    expect(sql).toMatch(/GROUP BY seller_user_id/);
+    expect(sql).not.toMatch(/FROM marketplace_listings g/);
     expect(sql).toMatch(/ml\.seller_kind=\?/);
   });
 
