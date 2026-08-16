@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
-import { config } from "../config.js";
+import { config, tenantWorkspaceDir } from "../config.js";
 import { getCloudDb, type CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { importEntity, type PortableBundle } from "./portability.js";
@@ -11,7 +11,7 @@ import {
 } from "../plugins/plugin-install.js";
 import { pluginRuntime } from "../plugins/runtime.js";
 import { bridgeEntryExists, ensurePluginBuilt } from "./plugin-build.js";
-import { readGodmodePluginManifest } from "@godmode/plugin-api";
+import { pluginPathFromEnv, readGodmodePluginManifest } from "@godmode/plugin-api";
 import {
   activatePluginForTenant,
   installPluginForTenant,
@@ -354,6 +354,34 @@ export function extraPluginPathsFromMeta(core: CoreDatabase): string[] {
   }
 }
 
+function isPathInside(root: string, candidate: string): boolean {
+  const base = path.resolve(root);
+  const target = path.resolve(candidate);
+  return target === base || target.startsWith(base + path.sep);
+}
+
+/** Host env plugins, this tenant's workspace, or this tenant's tenant_plugins roots. */
+export function pluginRootVisibleToTenant(
+  core: CoreDatabase,
+  tenantId: string,
+  pluginRoot: string
+): boolean {
+  const resolved = path.resolve(pluginRoot);
+  for (const envPath of pluginPathFromEnv()) {
+    if (isPathInside(envPath, resolved)) return true;
+  }
+  if (isPathInside(tenantWorkspaceDir(tenantId), resolved)) return true;
+  return listInstalledPlugins(core, tenantId).some(
+    (row) => row.plugin_root != null && path.resolve(row.plugin_root) === resolved
+  );
+}
+
+export function extraPluginPathsForTenant(core: CoreDatabase, tenantId: string): string[] {
+  return extraPluginPathsFromMeta(core).filter((pluginRoot) =>
+    pluginRootVisibleToTenant(core, tenantId, pluginRoot)
+  );
+}
+
 export function normalizeLocalPathInput(raw: string): string {
   let p = raw.trim().replace(/^["']|["']$/g, "");
   if (p.startsWith("file://")) {
@@ -392,6 +420,7 @@ export function listDiscoveredPluginsForTenant(
 
   for (const p of listAvailablePlugins()) {
     const resolved = path.resolve(p.pluginRoot);
+    if (!pluginRootVisibleToTenant(core, tenantId, resolved)) continue;
     out.push({
       id: p.id,
       version: p.version,

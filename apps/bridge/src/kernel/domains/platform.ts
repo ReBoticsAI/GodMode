@@ -159,6 +159,7 @@ export const PLATFORM_SPECS: BuiltinSpec[] = [
     module: "platform",
     id: "operation_run_service",
     table: "kernel_operation_runs",
+    database: "tenant",
     defaultSort: "updated_at",
     accessPolicy: "tenant-member",
     fields: ["id", "tenant_id", "actor_id", "object_type", "record_id", "action_name", "status", ["progress", "Float"], ["result_json", "JSON"], "error_code", "error_message", "created_at", "updated_at", "finished_at"],

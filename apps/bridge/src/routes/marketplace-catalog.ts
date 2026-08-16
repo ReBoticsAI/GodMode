@@ -12,12 +12,12 @@ import {
   listCatalogInstalls,
   listCatalogSources,
   listDiscoveredPluginsForTenant,
-  extraPluginPathsFromMeta,
+  extraPluginPathsForTenant,
 } from "../services/marketplace-catalog.js";
 import { buildPublicOfficialCatalog } from "../services/marketplace-official-catalog.js";
 import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
-import { listInstalledPlugins, listAvailablePlugins } from "../plugins/plugin-install.js";
+import { listInstalledPlugins } from "../plugins/plugin-install.js";
 
 export function createMarketplaceCatalogRouter(): Router {
   const router = Router();
@@ -86,7 +86,7 @@ export function createMarketplaceCatalogRouter(): Router {
       const sources = listCatalogSources(core, req.user!.id);
       const entries = await fetchUnofficialCatalog(core, req.user!.id);
       const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
-      const localPaths = extraPluginPathsFromMeta(core);
+      const localPaths = extraPluginPathsForTenant(core, req.tenantId!);
       res.json({ sources, entries, discovered, localPaths });
     } catch (err) {
       res.status(502).json({
@@ -104,8 +104,14 @@ export function createMarketplaceCatalogRouter(): Router {
     const core = getCloudDb();
     const catalogInstalls = listCatalogInstalls(core, req.tenantId!);
     const plugins = listInstalledPlugins(core, req.tenantId!);
-    const available = listAvailablePlugins();
     const discovered = listDiscoveredPluginsForTenant(core, req.tenantId!);
+    const available = discovered.map(({ id, version, name, pluginRoot, loaded }) => ({
+      id,
+      version,
+      name,
+      pluginRoot,
+      loaded,
+    }));
     res.json({ catalogInstalls, plugins, available, discovered });
   });
 

@@ -125,6 +125,21 @@ function declaredDatabase(
   return ctx?.data?.tenantDb ?? db;
 }
 
+/**
+ * Async action receipts (kernel_operation_runs) live on OperationRun's
+ * database (tenant), not the parent ObjectType's database. CatalogInstall is
+ * cloud-scoped; polling GET /records/OperationRun/:id is tenant-scoped.
+ */
+function operationReceiptDatabase(
+  db: AppDatabase,
+  ctx: OperationContext,
+  ownershipDb: AppDatabase
+): AppDatabase {
+  const runDef = getObjectType("OperationRun");
+  if (!runDef) return ownershipDb;
+  return declaredDatabase(db, runDef, ctx);
+}
+
 function auditDatabaseForObject(
   db: AppDatabase,
   objectType: string,
@@ -994,9 +1009,9 @@ async function executeRecordActionImpl(
     throw new KernelError(501, `${objectType} action is not implemented: ${actionName}`);
   }
   requireActionPermission(action, def, ctx);
-  // All kernel receipts, audit rows, and outbox events live with the object
-  // type's authoritative database. A caller tenant transaction cannot cover a
-  // core adapter write.
+  // Adapter writes, audit rows, and outbox events live with the object type's
+  // authoritative database. Async OperationRun receipts live on OperationRun's
+  // database (tenant) so the client can poll GET /records/OperationRun/:id.
   const ownershipDb = declaredDatabase(db, def, ctx);
   const current =
     expectedTarget === "collection"
@@ -1020,6 +1035,11 @@ async function executeRecordActionImpl(
   }
   validateSchema(action.inputSchema, input, `${objectType}.${actionName} input`);
   ensureActionTables(ownershipDb);
+  const receiptDb =
+    action.execution === "async"
+      ? operationReceiptDatabase(db, ctx, ownershipDb)
+      : ownershipDb;
+  if (receiptDb !== ownershipDb) ensureActionTables(receiptDb);
 
   const hash = inputHash(input);
   const idem = action.idempotency;
@@ -1029,7 +1049,7 @@ async function executeRecordActionImpl(
     });
   }
   if (ctx.idempotencyKey) {
-    ownershipDb.prepare(
+    receiptDb.prepare(
       `DELETE FROM kernel_action_idempotency
        WHERE tenant_id=? AND key=? AND actor_id=? AND object_type=?
          AND record_id=? AND action_name=?
@@ -1043,7 +1063,7 @@ async function executeRecordActionImpl(
       id,
       actionName
     );
-    const existing = ownershipDb
+    const existing = receiptDb
       .prepare(
         `SELECT input_hash, status, result_json, error_json
          FROM kernel_action_idempotency
@@ -1112,7 +1132,7 @@ async function executeRecordActionImpl(
       )
     );
     if (action.execution !== "async") {
-      ownershipDb.prepare(
+      receiptDb.prepare(
         `INSERT INTO kernel_action_idempotency
          (tenant_id, key, actor_id, object_type, record_id, action_name,
           input_hash, status, expires_at)
@@ -1145,9 +1165,9 @@ async function executeRecordActionImpl(
   if (action.execution === "async") {
     const operationRunId = randomUUID();
     const accepted = { status: "accepted", operationRunId } as const;
-    ownershipDb.transaction(() => {
+    receiptDb.transaction(() => {
       if (ctx.idempotencyKey) {
-        ownershipDb.prepare(
+        receiptDb.prepare(
           `INSERT INTO kernel_action_idempotency
            (tenant_id, key, actor_id, object_type, record_id, action_name,
             input_hash, status, result_json, expires_at)
@@ -1163,7 +1183,7 @@ async function executeRecordActionImpl(
           JSON.stringify(accepted)
         );
       }
-      ownershipDb.prepare(
+      receiptDb.prepare(
         `INSERT INTO kernel_operation_runs
          (id, tenant_id, actor_id, object_type, record_id, action_name,
           input_json, context_json, idempotency_key, idempotency_ttl_seconds,
