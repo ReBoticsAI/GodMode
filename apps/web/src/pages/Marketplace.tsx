@@ -694,7 +694,7 @@ export default function MarketplacePage() {
     publishPriceCents <= 0 || payoutReady || publishFamily === "plugin";
   const canPublish = (() => {
     if (!tosAccepted) return false;
-    if (!canPublishPaid && publishFamily !== "plugin") return false;
+    if (!canPublishPaid) return false;
     if (!publishTitle.trim()) return false;
     if (publishFamily === "plugin") return Boolean(publishCatalogEntryId.trim());
     if (publishFamily === "inference") return Boolean(publishResourceId.trim());
