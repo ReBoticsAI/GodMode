@@ -63,9 +63,11 @@ export function createMarketplaceCatalogRouter(): Router {
       }
       res.json({ catalogUrl: url, entries: merged });
     } catch (err) {
-      res.status(502).json({
-        error: err instanceof Error ? err.message : "Failed to load official catalog",
-      });
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "Failed to load official catalog";
+      res.status(502).json({ error: message });
     }
   });
 
@@ -74,14 +76,20 @@ export function createMarketplaceCatalogRouter(): Router {
       const { url, entries } = await fetchCommunityCatalog(getCloudDb());
       res.json({ catalogUrl: url, entries });
     } catch (err) {
-      res.status(502).json({
-        error: err instanceof Error ? err.message : "Failed to load community catalog",
-      });
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "Failed to load community catalog";
+      res.status(502).json({ error: message });
     }
   });
 
   router.get("/unofficial", async (req, res) => {
     try {
+      if (config.isSaas && !config.saasAllowLocalPlugins) {
+        res.json({ sources: [], entries: [], discovered: [], localPaths: [] });
+        return;
+      }
       const core = getCloudDb();
       const sources = listCatalogSources(core, req.user!.id);
       const entries = await fetchUnofficialCatalog(core, req.user!.id);
@@ -89,9 +97,11 @@ export function createMarketplaceCatalogRouter(): Router {
       const localPaths = extraPluginPathsForTenant(core, req.tenantId!);
       res.json({ sources, entries, discovered, localPaths });
     } catch (err) {
-      res.status(502).json({
-        error: err instanceof Error ? err.message : "Failed to load unofficial catalog",
-      });
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "Failed to load unofficial catalog";
+      res.status(502).json({ error: message });
     }
   });
 

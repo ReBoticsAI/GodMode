@@ -85,7 +85,10 @@ export function SellerPayoutsCard({
 
   useEffect(() => {
     void fetchMarketplaceCommerceConfig()
-      .then((cfg) => setPlatformFeeBps(cfg.platformFeeBps))
+      .then((cfg) => {
+        setPlatformFeeBps(cfg.platformFeeBps);
+        if (cfg.tosAccepted) setTosAccepted(true);
+      })
       .catch(() => undefined);
     void (async () => {
       try {

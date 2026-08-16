@@ -102,6 +102,7 @@ import {
   ensureSellerAccount,
   getMarketplaceOrder,
   getPublicCommerceConfig,
+  hasAcceptedMarketplaceTos,
   listOrdersForBuyer,
   MarketplaceCommerceError,
   updateSellerPayout,
@@ -1293,8 +1294,11 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
         commerceHttpError(err);
       }
     },
-    commerce_config(_db, _def, _id, _input, _ctx) {
-      return getPublicCommerceConfig();
+    commerce_config(_db, _def, _id, _input, ctx) {
+      return {
+        ...getPublicCommerceConfig(),
+        tosAccepted: hasAcceptedMarketplaceTos(ctx.data!.cloudDb, requireUser(ctx)),
+      };
     },
   },
 };

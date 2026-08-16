@@ -46,6 +46,14 @@ export const CLONE_PACK_KINDS = [
 
 export type PublishFamily = "plugin" | "clone" | "live" | "inference";
 
+export function userFacingErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) {
+    const msg = err.message.trim();
+    if (msg) return msg;
+  }
+  return fallback;
+}
+
 export function listingStatusLabel(status: string): string {
   if (status === "in_review") return "In review";
   if (status === "draft") return "Draft";
