@@ -237,13 +237,25 @@ export async function fetchOperationRun(id: string): Promise<OperationRunClient>
 
 export async function waitForOperationRun(
   id: string,
-  opts: { signal?: AbortSignal; intervalMs?: number } = {}
+  opts: { signal?: AbortSignal; intervalMs?: number; timeoutMs?: number } = {}
 ): Promise<OperationRunClient> {
   const intervalMs = Math.max(opts.intervalMs ?? 750, 100);
+  const timeoutMs = Math.max(opts.timeoutMs ?? 120_000, intervalMs);
+  const started = Date.now();
   for (;;) {
     opts.signal?.throwIfAborted();
-    const run = await fetchOperationRun(id);
-    if (["succeeded", "failed", "cancelled"].includes(run.status)) return run;
+    if (Date.now() - started > timeoutMs) {
+      throw new ApiError(408, `OperationRun timed out: ${id}`);
+    }
+    try {
+      const run = await fetchOperationRun(id);
+      if (["succeeded", "failed", "cancelled"].includes(run.status)) return run;
+    } catch (err) {
+      const notFound =
+        err instanceof ApiError &&
+        (err.status === 404 || err.code === "KERNEL_404");
+      if (!notFound || Date.now() - started > intervalMs) throw err;
+    }
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(resolve, intervalMs);
       opts.signal?.addEventListener(

@@ -8,6 +8,7 @@ import { ensureTenantPluginsStorage } from "../plugin-lifecycle.js";
 import {
   extraPluginPathsForTenant,
   pluginRootVisibleToTenant,
+  preferInstalledPluginRoots,
 } from "../marketplace-catalog.js";
 
 const temps: string[] = [];
@@ -69,5 +70,22 @@ describe("marketplace catalog tenant isolation", () => {
       path.resolve(tenantB),
     ]);
     core.close();
+  });
+
+  it("drops coding-root copies when tenant_plugins already points at the catalog root", () => {
+    const codingRoot = path.join("/data", "tenant-workspaces", "tenant-a", "plugins", "pulse");
+    const catalogRoot = path.join("/data", "marketplace-plugins", "pulse");
+    const rows = preferInstalledPluginRoots(
+      [
+        { id: "workspace-pulse", pluginRoot: codingRoot },
+        { id: "workspace-pulse", pluginRoot: catalogRoot },
+        { id: "other", pluginRoot: path.join("/data", "plugins", "other") },
+      ],
+      [{ plugin_id: "workspace-pulse", plugin_root: catalogRoot }]
+    );
+    expect(rows.map((row) => row.pluginRoot)).toEqual([
+      path.resolve(catalogRoot),
+      path.resolve(path.join("/data", "plugins", "other")),
+    ]);
   });
 });

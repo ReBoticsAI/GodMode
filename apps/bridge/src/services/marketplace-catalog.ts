@@ -395,6 +395,30 @@ export function extraPluginPathsForTenant(core: CoreDatabase, tenantId: string):
   );
 }
 
+/** Keep the tenant_plugins root when the same plugin id also lives under coding-root. */
+export function preferInstalledPluginRoots<T extends { id: string; pluginRoot: string }>(
+  rows: T[],
+  installed: Array<{ plugin_id: string; plugin_root: string | null }>
+): T[] {
+  const installedRootById = new Map<string, string>();
+  for (const row of installed) {
+    if (!row.plugin_root) continue;
+    installedRootById.set(row.plugin_id, path.resolve(row.plugin_root));
+  }
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const installedRoot = installedRootById.get(row.id);
+    if (installedRoot && path.resolve(row.pluginRoot) !== installedRoot) {
+      continue;
+    }
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push({ ...row, pluginRoot: installedRoot ?? path.resolve(row.pluginRoot) });
+  }
+  return out;
+}
+
 export function normalizeLocalPathInput(raw: string): string {
   let p = raw.trim().replace(/^["']|["']$/g, "");
   if (p.startsWith("file://")) {
@@ -444,7 +468,10 @@ export function listDiscoveredPluginsForTenant(
       source: marketplacePaths.has(resolved) ? "marketplace" : "env",
     });
   }
-  return out;
+  return preferInstalledPluginRoots(
+    out,
+    listInstalledPlugins(core, tenantId)
+  );
 }
 
 export async function registerLocalPluginFolder(
