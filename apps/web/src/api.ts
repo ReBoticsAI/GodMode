@@ -29,6 +29,13 @@ function withSessionQuery(path: string, sessionToken: string | null): string {
   return `${path}${sep}session=${encodeURIComponent(sessionToken)}`;
 }
 
+/** Keep OperationRun GET on the workspace tenant even if X-Tenant-Id is dropped. */
+export function withActiveTenantQuery(path: string, tenantId = getActiveTenantId()): string {
+  if (!tenantId || /(?:^|[?&])tenantId=/.test(path)) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}tenantId=${encodeURIComponent(tenantId)}`;
+}
+
 export function getActiveTenantId(): string | null {
   try {
     return readTenantId();
@@ -77,7 +84,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   if (sessionToken && !headers.has("X-Godmode-Session")) {
     headers.set("X-Godmode-Session", sessionToken);
   }
-  const apiPath = withSessionQuery(path, sessionToken);
+  const apiPath = withActiveTenantQuery(withSessionQuery(path, sessionToken));
   const res = await fetch(`${API_BASE}${apiPath}`, {
     credentials: "include",
     headers,

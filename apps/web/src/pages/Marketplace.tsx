@@ -540,9 +540,6 @@ export default function MarketplacePage() {
       }
       if (result.restartRequired) {
         toast.info("Restart Bridge to load the plugin");
-      } else {
-        reloadAfterPluginChange(Boolean(result.built));
-        return;
       }
       await reload();
     } catch (err) {
@@ -1107,26 +1104,35 @@ export default function MarketplacePage() {
               ) : (
                 <ul className="space-y-2">
                   {tenantPlugins.map((row) => {
-                    const meta = discovered.find((p) => p.id === row.plugin_id);
+                    const installRoot = (row.plugin_root ?? "").replace(/\\/g, "/");
+                    const meta = discovered.find((p) => {
+                      if (p.id !== row.plugin_id) return false;
+                      if (!installRoot) return true;
+                      return p.pluginRoot.replace(/\\/g, "/") === installRoot;
+                    });
                     return (
                       <DiscoveredPluginRow
                         key={row.plugin_id}
                         plugin={
-                          meta ?? {
-                            id: row.plugin_id,
-                            name: row.plugin_id,
-                            version: row.version,
-                            pluginRoot: row.plugin_root ?? "",
-                            loaded: false,
-                            installed: true,
-                            source: "marketplace",
-                          }
+                          meta
+                            ? { ...meta, pluginRoot: row.plugin_root || meta.pluginRoot }
+                            : {
+                                id: row.plugin_id,
+                                name: row.plugin_id,
+                                version: row.version,
+                                pluginRoot: row.plugin_root ?? "",
+                                loaded: false,
+                                installed: true,
+                                source: "marketplace",
+                              }
                         }
                         busy={busyPluginId === row.plugin_id}
                         onInstall={() => void handleInstallDiscovered(row.plugin_id)}
                         onUninstall={() => void handleUninstallDiscovered(row.plugin_id)}
                         onRemovePath={
-                          meta?.source === "marketplace" && meta.pluginRoot
+                          meta?.source === "marketplace" &&
+                          meta.pluginRoot &&
+                          !/marketplace-plugins[\\/]/i.test(meta.pluginRoot)
                             ? () => void handleRemoveLocalPath(meta.pluginRoot)
                             : undefined
                         }
