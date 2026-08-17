@@ -290,19 +290,19 @@ With a local (non-`cursor_cloud`) Intelligence agent and a coding root that cont
 4. Use **Import from coding root** for an explicit force refresh of unchanged imports.
 5. Switching the agent to `cursor_cloud` should not re-import those rows for double injection (SDK `settingSources` covers project instructions). Prefer editing Rules in Knowledge for local backends.
 
-## MCP settings (#71 / #135 / #449 / #555 / Cloud dogfood)
+## MCP settings (#71 / #135 / #449 / #555 / #587 / Cloud dogfood)
 
-Callable MCP is a GodMode platform feature (Bridge MCP host), not Cursor-only. Primary config is coding-root `.godmode/mcp.json` (`mcpServers` map). `.cursor/mcp.json` is compatibility I/O when the GodMode file is absent.
+Callable MCP is a GodMode platform feature (Bridge MCP host), not Cursor-only. Primary config is the workspace tenant setting (`ai_settings` key `mcp.servers`), edited on Agents → Pipeline → MCP. Coding-root `.godmode/mcp.json` / `.cursor/mcp.json` can be imported once.
 
-With a coding root that contains `.godmode/mcp.json` or `.cursor/mcp.json`:
+With workspace MCP servers, or a coding root file when the workspace setting is absent:
 
 1. Open Agents → Pipeline → **MCP** node (or `GET /api/ai/mcp`).
-2. Server names and transports list; secrets in `env` / `headers` must not appear.
+2. Server names and transports list; secrets in `env` / `headers` must not appear in summaries.
 3. Assembled prompt includes `<godmode_mcp>` when the MCP section is enabled; guidance must say enable GodMode MCP, not reload an external IDE.
-4. On `cursor_cloud`: toggle **Pass workspace MCP** and per-server enable/disable; Backend → **Coding workspace** sets the coding root (parity with CLI cwd).
+4. On `cursor_cloud`: toggle **Pass workspace MCP** and per-server enable/disable.
 5. On SaaS, `GET /api/ai/mcp` reports `mcpFromWorkspace: false` until the switch is enabled (`execution` may be `discovery-only` or `sdk-project` when project settingSources are present). The Pipeline switch must match that resolved value (not force ON).
 6. After enabling: `execution` is `bridge-host` on sandboxed SaaS `cursor_cloud` (Bridge customTools; stdio/HTTP), `sdk-inline` on non-sandbox `cursor_cloud`, or `bridge-host` for local/provider. Ask chat to **call** a listed tool; do not accept "reload IDE" as the product path.
-7. Chat still works if `mcp.json` is missing or invalid (soft-fail). An invalid `.godmode/mcp.json` does not fall back to `.cursor/mcp.json`.
+7. Chat still works if MCP config is missing or invalid (soft-fail). An invalid `.godmode/mcp.json` does not fall back to `.cursor/mcp.json`. A saved empty workspace list does not fall back to files.
 8. Automations → Hooks are **GodMode** automations only (not Cursor IDE `hooks.json`). Cursor hooks discovery was removed from Page Context.
 
 ## Blind eval (#71)

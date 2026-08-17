@@ -619,6 +619,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "ai-mcp-workspace-servers",
+    methods: ["PUT"],
+    pathPattern: "/api/ai/mcp/servers",
+    rationale:
+      "Tenant MCP server list in ai_settings; workspace setting, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-mcp-workspace-servers-import",
+    methods: ["POST"],
+    pathPattern: "/api/ai/mcp/servers/import",
+    rationale:
+      "One-way import of coding-root MCP JSON into tenant ai_settings; does not write .cursor/.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "ai-workspace-knowledge-import",
     methods: ["POST"],
     pathPattern: "/api/ai/workspace-knowledge/import",

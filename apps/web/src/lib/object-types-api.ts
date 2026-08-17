@@ -242,6 +242,7 @@ export async function waitForOperationRun(
   const intervalMs = Math.max(opts.intervalMs ?? 750, 100);
   const timeoutMs = Math.max(opts.timeoutMs ?? 120_000, intervalMs);
   const started = Date.now();
+  let notFoundRetries = 0;
   for (;;) {
     opts.signal?.throwIfAborted();
     if (Date.now() - started > timeoutMs) {
@@ -254,7 +255,10 @@ export async function waitForOperationRun(
       const notFound =
         err instanceof ApiError &&
         (err.status === 404 || err.code === "KERNEL_404");
-      if (!notFound || Date.now() - started > intervalMs) throw err;
+      // One retry covers create-then-poll races. After that a missing run is gone,
+      // not a reason to spin until the timeout 408.
+      if (!notFound || notFoundRetries >= 1) throw err;
+      notFoundRetries += 1;
     }
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(resolve, intervalMs);

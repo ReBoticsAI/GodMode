@@ -1,8 +1,8 @@
 /**
  * Bridge MCP host for local / provider / hub backends (#449).
- * Spawns or connects workspace MCP servers (`.godmode/mcp.json`, else
- * `.cursor/mcp.json`) and exposes tools to Intelligence. Cursor SDK backends
- * keep their own pass-through path.
+ * Spawns or connects workspace MCP servers (tenant `ai_settings`, else
+ * `.godmode/mcp.json`, else `.cursor/mcp.json`) and exposes tools to
+ * Intelligence. Cursor SDK backends keep their own pass-through path.
  *
  * Sessions are per-agent and include tenantId so SaaS never shares MCP
  * processes across tenants. Auth: static headers/env from mcp.json; values
@@ -22,6 +22,7 @@ import {
   loadCursorMcpServersForSdk,
   resolveMcpFromWorkspace,
   type CursorSdkMcpServerConfig,
+  type McpWorkspaceOverlay,
 } from "./cursor-mcp-config.js";
 
 /** Local shape to avoid circular import with ai-tools-registry. */
@@ -423,6 +424,7 @@ export async function ensureBridgeMcpHost(args: {
   codingRoot: string;
   enabled: boolean;
   disabled?: readonly string[];
+  workspace?: McpWorkspaceOverlay | null;
   resolveVaultSecret?: (name: string) => string | null;
 }): Promise<EnsureBridgeMcpHostResult> {
   const agentId = args.agentId.trim();
@@ -438,7 +440,8 @@ export async function ensureBridgeMcpHost(args: {
   const fingerprint = cursorMcpServersFingerprint(
     args.codingRoot,
     true,
-    args.disabled
+    args.disabled,
+    args.workspace
   );
   const tenantId = normalizeTenantId(args.tenantId);
   const existing = agentStates.get(agentId);
@@ -460,6 +463,7 @@ export async function ensureBridgeMcpHost(args: {
   const serversCfg =
     loadCursorMcpServersForSdk(args.codingRoot, {
       disabled: args.disabled,
+      workspace: args.workspace,
     }) ?? {};
 
   const connected: ConnectedServer[] = [];

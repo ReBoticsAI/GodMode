@@ -12,9 +12,9 @@ This is the `cursor_cloud` backend (`@cursor/sdk`). It is **not** the `cursor` C
 |------|------------------|
 | Workspace / project instructions | Knowledge → **Rules** (and Skills). Create/edit there. |
 | Event and schedule automations | Agents → Automations → **Hooks** (SQLite + Bridge dispatcher) |
-| MCP servers | Agents → Pipeline → **MCP** node (list, enable/disable, Bridge host). Config file: coding-root `.godmode/mcp.json`. |
+| MCP servers | Agents → Pipeline → **MCP** node (workspace list in the tenant DB, enable/disable, Bridge host). Optional import from `.godmode/mcp.json` / `.cursor/mcp.json`. |
 
-Coding-root `.godmode/mcp.json` is the **primary** MCP `mcpServers` file (same schema as Cursor). `.cursor/*` (rules, skills, `mcp.json`, `AGENTS.md`) remains an **optional one-way import / discovery** source for repos that already use Cursor. GodMode does **not** write back to `.cursor` in v1. When both MCP files exist, `.godmode/mcp.json` wins in full (no per-server merge). An invalid GodMode file is a soft-fail and does not fall back to Cursor.
+MCP server definitions live in the **workspace tenant database** (Agents → Pipeline → MCP). Coding-root `.godmode/mcp.json` and `.cursor/mcp.json` are a **one-way import** when the workspace list has never been saved. GodMode does **not** write back to `.cursor`. When the workspace setting exists, including an empty list, files are not used. An invalid GodMode file is a soft-fail and does not fall back to Cursor.
 
 **Automations Hooks ≠ Cursor IDE `hooks.json`.** Different executors. Bridge does not advertise or run Cursor hooks from disk; manage automations only in GodMode UI.
 
@@ -83,9 +83,9 @@ When the coding root has `.godmode/mcp.json` (or `.cursor/mcp.json` if the GodMo
 For **`cursor_cloud`**, project MCP is available in two ways:
 
 1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK still loads `.cursor/mcp.json` for Cursor project MCP).
-2. **Inline** `mcpServers` from `.godmode/mcp.json` (else `.cursor/mcp.json`) when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
+2. **Workspace / inline** `mcpServers` from the tenant setting (else `.godmode/mcp.json`, else `.cursor/mcp.json`) when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle, CRUD, and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
 
-For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same GodMode (or Cursor fallback) file is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review).
+For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same workspace (or file fallback) list is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review). Stdio MCP is not yet in the coding-terminal bubblewrap sandbox; SaaS stays opt-in until that lands (#588).
 
 ### Auth / secrets
 

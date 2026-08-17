@@ -150,6 +150,46 @@ describe("collectCursorMcpDiscovery", () => {
     expect(collectCursorMcpDiscovery(root)).toBeNull();
     expect(loadCursorMcpServersForSdk(root)).toBeUndefined();
   });
+
+  it("prefers tenant workspace settings over files", () => {
+    const root = tempRoot();
+    writeGodmodeMcpJson(root, {
+      mcpServers: { fromFile: { command: "python" } },
+    });
+    const disc = collectCursorMcpDiscovery(root, {
+      workspace: {
+        present: true,
+        servers: { fromDb: { command: "node" } },
+      },
+    });
+    expect(disc?.sourceKind).toBe("workspace");
+    expect(disc?.servers.map((s) => s.name)).toEqual(["fromDb"]);
+    expect(
+      loadCursorMcpServersForSdk(root, {
+        workspace: {
+          present: true,
+          servers: { fromDb: { command: "node" } },
+        },
+      })
+    ).toEqual({ fromDb: { type: "stdio", command: "node" } });
+  });
+
+  it("does not fall back to files when workspace settings are empty", () => {
+    const root = tempRoot();
+    writeGodmodeMcpJson(root, {
+      mcpServers: { keep: { command: "node" } },
+    });
+    expect(
+      collectCursorMcpDiscovery(root, {
+        workspace: { present: true, servers: {} },
+      })
+    ).toBeNull();
+    expect(
+      loadCursorMcpServersForSdk(root, {
+        workspace: { present: true, servers: {} },
+      })
+    ).toBeUndefined();
+  });
 });
 
 describe("loadCursorMcpServersForSdk", () => {

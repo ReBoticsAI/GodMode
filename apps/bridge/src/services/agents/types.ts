@@ -85,9 +85,9 @@ export interface AgentCursorCloudConfig {
   modelParams?: Record<string, unknown>;
   workspace?: string;
   /**
-   * Pass coding-root MCP config (`.godmode/mcp.json`, else `.cursor/mcp.json`)
-   * as inline SDK `mcpServers` (cursor_cloud) or as Bridge MCP host tools
-   * (local/provider/cli/…).
+   * Pass workspace MCP (tenant settings, else `.godmode/mcp.json`, else
+   * `.cursor/mcp.json`) as inline SDK `mcpServers` (cursor_cloud) or as
+   * Bridge MCP host tools (local/provider/cli/…).
    * Default: on for non-SaaS, off on SaaS. Project MCP may still load ambiently via
    * `local.settingSources: ["project"]` when `.cursor/` exists (SDK only).
    */

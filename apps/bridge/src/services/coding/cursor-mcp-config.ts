@@ -26,6 +26,18 @@ export type McpDiscoveryExecution =
   | "sdk-inline"
   | "bridge-host";
 
+/** Tenant DB overlay. When `present`, file fallback is skipped. */
+export type McpWorkspaceOverlay = {
+  present: boolean;
+  servers: Record<string, unknown>;
+};
+
+export type McpLoadOpts = {
+  disabled?: readonly string[];
+  execution?: McpDiscoveryExecution;
+  workspace?: McpWorkspaceOverlay | null;
+};
+
 /** SDK-compatible MCP server config (stdio or http/sse). */
 export type CursorSdkMcpServerConfig =
   | {
@@ -111,6 +123,18 @@ function parseServerEntry(
   const transport = inferTransport(cfg);
   const detail = safeDetail(cfg, transport);
   return detail ? { name: id, transport, detail } : { name: id, transport };
+}
+
+export function parseMcpServerConfig(
+  name: string,
+  raw: unknown
+): CursorSdkMcpServerConfig | null {
+  return parseSdkServerEntry(name, raw);
+}
+
+export function isValidMcpServerName(name: string): boolean {
+  const id = name.trim();
+  return /^[a-zA-Z][a-zA-Z0-9._-]{0,62}$/.test(id) && !id.includes("__");
 }
 
 function stringRecord(raw: unknown): Record<string, string> | undefined {
@@ -246,15 +270,25 @@ function parseMcpServersFile(filePath: string): ParsedMcpFile {
 }
 
 /**
- * Load workspace MCP servers. Prefers `.godmode/mcp.json`. Falls back to
- * `.cursor/mcp.json` only when the GodMode file is absent. An invalid
+ * Load MCP servers. Tenant workspace setting wins when present (including
+ * empty). Otherwise `.godmode/mcp.json`, else `.cursor/mcp.json`. An invalid
  * GodMode file is a soft-fail (no Cursor fallback).
  */
-function readMcpServersObject(codingRoot: string): {
+function readMcpServersObject(
+  codingRoot: string,
+  workspace?: McpWorkspaceOverlay | null
+): {
   filePath: string;
   servers: Record<string, unknown>;
   sourceKind: McpConfigSourceKind;
 } | null {
+  if (workspace?.present) {
+    return {
+      filePath: "workspace:ai_settings:mcp.servers",
+      servers: workspace.servers,
+      sourceKind: "workspace",
+    };
+  }
   if (!codingRoot?.trim()) return null;
   const root = path.resolve(codingRoot);
   const nativePath = path.join(root, GODMODE_MCP_RELATIVE_PATH);
@@ -336,9 +370,9 @@ export function resolveMcpDiscoveryExecution(args: {
  */
 export function loadCursorMcpServersForSdk(
   codingRoot: string,
-  opts?: { disabled?: readonly string[] }
+  opts?: McpLoadOpts
 ): CursorSdkMcpServers | undefined {
-  const loaded = readMcpServersObject(codingRoot);
+  const loaded = readMcpServersObject(codingRoot, opts?.workspace);
   if (!loaded) return undefined;
 
   const disabled = new Set(
@@ -359,16 +393,24 @@ export function loadCursorMcpServersForSdk(
 export function cursorMcpServersFingerprint(
   codingRoot: string,
   enabled: boolean,
-  disabled?: readonly string[]
+  disabled?: readonly string[],
+  workspace?: McpWorkspaceOverlay | null
 ): string {
   if (!enabled) return "";
-  const loaded = readMcpServersObject(codingRoot);
+  const loaded = readMcpServersObject(codingRoot, workspace);
   if (!loaded) return "on";
-  let mtime = "0";
-  try {
-    mtime = String(fs.statSync(loaded.filePath).mtimeMs);
-  } catch {
-    /* ignore */
+  let stamp = "0";
+  if (loaded.sourceKind === "workspace") {
+    stamp = createHash("sha256")
+      .update(JSON.stringify(loaded.servers))
+      .digest("hex")
+      .slice(0, 16);
+  } else {
+    try {
+      stamp = String(fs.statSync(loaded.filePath).mtimeMs);
+    } catch {
+      /* ignore */
+    }
   }
   const names = Object.keys(loaded.servers).sort().join(",");
   const skip = [...(disabled ?? [])]
@@ -377,7 +419,7 @@ export function cursorMcpServersFingerprint(
     .sort()
     .join(",");
   return createHash("sha256")
-    .update(`${loaded.sourceKind}|${mtime}|${names}|skip:${skip}`)
+    .update(`${loaded.sourceKind}|${stamp}|${names}|skip:${skip}`)
     .digest("hex")
     .slice(0, 12);
 }
@@ -389,9 +431,9 @@ export function cursorMcpServersFingerprint(
  */
 export function collectCursorMcpDiscovery(
   codingRoot: string,
-  opts?: { execution?: McpDiscoveryExecution }
+  opts?: McpLoadOpts
 ): McpWorkspaceDiscovery | null {
-  const loaded = readMcpServersObject(codingRoot);
+  const loaded = readMcpServersObject(codingRoot, opts?.workspace);
   if (!loaded) return null;
 
   const servers: McpServerDiscovery[] = [];
@@ -427,6 +469,7 @@ export function enrichPlatformContextWithMcp(
   opts?: FsRootOpts & {
     workspace?: string | null;
     execution?: McpDiscoveryExecution;
+    mcpWorkspace?: McpWorkspaceOverlay | null;
   }
 ): PlatformContext | undefined {
   const root = resolveCodingRoot({
@@ -435,6 +478,7 @@ export function enrichPlatformContextWithMcp(
   });
   const discovery = collectCursorMcpDiscovery(root, {
     execution: opts?.execution,
+    workspace: opts?.mcpWorkspace,
   });
   if (!discovery) return ctx;
   return { ...(ctx ?? {}), mcpDiscovery: discovery };

@@ -151,14 +151,24 @@ import { createCodingWorkspaceRouter } from "./coding-workspace.js";
 import {
   collectCursorMcpDiscovery,
   enrichPlatformContextWithMcp,
+  isValidMcpServerName,
+  loadCursorMcpServersForSdk,
+  MAX_SDK_MCP_SERVERS,
+  parseMcpServerConfig,
   resolveMcpDiscoveryExecution,
   resolveMcpFromWorkspace,
+  type CursorSdkMcpServerConfig,
 } from "../services/coding/cursor-mcp-config.js";
 import {
   ensureBridgeMcpHost,
   getBridgeMcpStatusesForAgent,
+  parseVaultSecretRef,
   resolveBridgeMcpHostEnabled,
 } from "../services/coding/mcp-host.js";
+import {
+  getWorkspaceMcpOverlay,
+  setWorkspaceMcpServers,
+} from "../services/coding/mcp-workspace-store.js";
 import { resolveCursorSettingSources } from "../services/agents/cursor-cloud-backend.js";
 import {
   syncCursorWorkspaceKnowledge,
@@ -288,6 +298,7 @@ async function ensureMcpHostBeforeRun(opts: {
     codingRoot: root,
     enabled,
     disabled,
+    workspace: getWorkspaceMcpOverlay(opts.db),
     resolveVaultSecret: (name) =>
       resolveSecretByName(opts.db, name, opts.agent.id),
   });
@@ -334,6 +345,70 @@ function parseThinking(content: string): { thinking: string | null; answer: stri
     return { thinking, answer };
   }
   return { thinking: null, answer: working };
+}
+
+function isPlainStringRecord(raw: unknown): raw is Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  return Object.values(raw).every((v) => typeof v === "string");
+}
+
+function redactSecretRecord(
+  record?: Record<string, string>
+): Record<string, string> | undefined {
+  if (!record) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    out[key] = parseVaultSecretRef(value) ? value : "***";
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function redactMcpDefinition(cfg: CursorSdkMcpServerConfig): Record<string, unknown> {
+  if ("command" in cfg && cfg.command) {
+    const env = redactSecretRecord(cfg.env);
+    return {
+      type: "stdio",
+      command: cfg.command,
+      ...(cfg.args?.length ? { args: cfg.args } : {}),
+      ...(cfg.cwd ? { cwd: cfg.cwd } : {}),
+      ...(env ? { env } : {}),
+    };
+  }
+  if ("url" in cfg && cfg.url) {
+    const headers = redactSecretRecord(cfg.headers);
+    return {
+      type: cfg.type ?? "http",
+      url: cfg.url,
+      ...(headers ? { headers } : {}),
+    };
+  }
+  return {};
+}
+
+function parseMcpServersPut(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Expected { mcpServers: { ... } }");
+  }
+  const raw = (body as { mcpServers?: unknown }).mcpServers;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("mcpServers must be an object");
+  }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > MAX_SDK_MCP_SERVERS) {
+    throw new Error(`At most ${MAX_SDK_MCP_SERVERS} MCP servers`);
+  }
+  const servers: Record<string, unknown> = {};
+  for (const [name, cfg] of entries) {
+    if (!isValidMcpServerName(name)) {
+      throw new Error(`Invalid MCP server name: ${name}`);
+    }
+    const parsed = parseMcpServerConfig(name, cfg);
+    if (!parsed) {
+      throw new Error(`Invalid MCP server config: ${name}`);
+    }
+    servers[name] = parsed;
+  }
+  return servers;
 }
 
 export interface AiRouterDeps {
@@ -689,6 +764,7 @@ export function createAiRouter(
           tenantId: req.tenantId,
           workspace: agentWorkspace,
         }),
+        mcpWorkspace: getWorkspaceMcpOverlay(tdb(req)),
       }
     );
     const assembled = assemblePrompt(tdb(req), {
@@ -854,15 +930,24 @@ export function createAiRouter(
         codingRoot: root,
         enabled: true,
         disabled,
+        workspace: getWorkspaceMcpOverlay(tdb(req)),
         resolveVaultSecret: (name) =>
           resolveSecretByName(tdb(req), name, agent.id),
       });
     }
+    const mcpWorkspace = getWorkspaceMcpOverlay(tdb(req));
     const discovery = collectCursorMcpDiscovery(root, {
       execution: mcpExecutionForAgent(agent, {
         tenantId: req.tenantId,
         workspace: agentWorkspace,
       }),
+      workspace: mcpWorkspace,
+    });
+    const definitions = loadCursorMcpServersForSdk(root, {
+      workspace: mcpWorkspace,
+    });
+    const fileServers = loadCursorMcpServersForSdk(root, {
+      workspace: { present: false, servers: {} },
     });
     const settingSources = resolveCursorSettingSources(root);
     const hostStatuses = agent
@@ -892,6 +977,8 @@ export function createAiRouter(
           : "bridge",
       backend: agent?.backend ?? null,
       settingSources,
+      workspaceConfigured: mcpWorkspace.present,
+      fileImportAvailable: Boolean(fileServers && Object.keys(fileServers).length),
       projectInstructions:
         agent?.backend === "cursor_cloud"
           ? settingSources.includes("project")
@@ -908,7 +995,78 @@ export function createAiRouter(
           hostError: host?.error ?? null,
         };
       }),
+      definitions: Object.fromEntries(
+        Object.entries(definitions ?? {}).map(([name, cfg]) => [
+          name,
+          redactMcpDefinition(cfg),
+        ])
+      ),
     });
+  });
+
+  router.put("/mcp/servers", (req, res) => {
+    try {
+      const incoming = parseMcpServersPut(req.body);
+      const current = getWorkspaceMcpOverlay(tdb(req)).servers;
+      const merged: Record<string, unknown> = {};
+      for (const [name, cfg] of Object.entries(incoming)) {
+        const parsed = parseMcpServerConfig(name, cfg);
+        if (!parsed) throw new Error(`Invalid MCP server config: ${name}`);
+        const prev = current[name];
+        const prevObj =
+          prev && typeof prev === "object" && !Array.isArray(prev)
+            ? (prev as Record<string, unknown>)
+            : null;
+        if ("command" in parsed && parsed.command) {
+          const env =
+            parsed.env && Object.keys(parsed.env).length
+              ? parsed.env
+              : prevObj && isPlainStringRecord(prevObj.env)
+                ? prevObj.env
+                : parsed.env;
+          merged[name] = { ...parsed, ...(env ? { env } : {}) };
+        } else if ("url" in parsed && parsed.url) {
+          const headers =
+            parsed.headers && Object.keys(parsed.headers).length
+              ? parsed.headers
+              : prevObj && isPlainStringRecord(prevObj.headers)
+                ? prevObj.headers
+                : parsed.headers;
+          merged[name] = { ...parsed, ...(headers ? { headers } : {}) };
+        } else {
+          merged[name] = parsed;
+        }
+      }
+      setWorkspaceMcpServers(tdb(req), merged);
+      res.json({ ok: true, count: Object.keys(merged).length });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Invalid MCP servers",
+      });
+    }
+  });
+
+  router.post("/mcp/servers/import", (req, res) => {
+    const agentId = agentIdFromRequest(req);
+    const agent = getAgent(tdb(req), agentId);
+    const cfg = (agent?.config ?? {}) as { workspace?: unknown };
+    const agentWorkspace =
+      typeof cfg.workspace === "string" ? cfg.workspace : undefined;
+    const root = resolveCodingRoot({
+      tenantId: req.tenantId,
+      root: agentWorkspace?.trim() || undefined,
+    });
+    const fileServers = loadCursorMcpServersForSdk(root, {
+      workspace: { present: false, servers: {} },
+    });
+    if (!fileServers || Object.keys(fileServers).length === 0) {
+      res.status(400).json({
+        error: "No coding-root MCP file to import",
+      });
+      return;
+    }
+    setWorkspaceMcpServers(tdb(req), fileServers);
+    res.json({ ok: true, count: Object.keys(fileServers).length });
   });
 
   router.get("/skills/:id", (req, res) => {
@@ -1844,6 +2002,7 @@ export function createAiRouter(
           tenantId: auth.tenantId,
           workspace: agentWorkspace,
         }),
+        mcpWorkspace: getWorkspaceMcpOverlay(engineDb),
       }
     );
     const assembled = assemblePrompt(engineDb, {
