@@ -377,7 +377,7 @@ export function cursorMcpServersFingerprint(
     .sort()
     .join(",");
   return createHash("sha256")
-    .update(`${mtime}|${names}|skip:${skip}`)
+    .update(`${loaded.sourceKind}|${mtime}|${names}|skip:${skip}`)
     .digest("hex")
     .slice(0, 12);
 }
