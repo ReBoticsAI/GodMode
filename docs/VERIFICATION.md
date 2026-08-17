@@ -302,8 +302,9 @@ With workspace MCP servers, or a coding root file when the workspace setting is 
 4. On `cursor_cloud`: toggle **Pass workspace MCP** and per-server enable/disable.
 5. On SaaS, `GET /api/ai/mcp` reports `mcpFromWorkspace: false` until the switch is enabled (`execution` may be `discovery-only` or `sdk-project` when project settingSources are present). The Pipeline switch must match that resolved value (not force ON).
 6. After enabling: `execution` is `bridge-host` on sandboxed SaaS `cursor_cloud` (Bridge customTools; stdio/HTTP), `sdk-inline` on non-sandbox `cursor_cloud`, or `bridge-host` for local/provider. Ask chat to **call** a listed tool; do not accept "reload IDE" as the product path.
-7. Chat still works if MCP config is missing or invalid (soft-fail). An invalid `.godmode/mcp.json` does not fall back to `.cursor/mcp.json`. A saved empty workspace list does not fall back to files.
-8. Automations → Hooks are **GodMode** automations only (not Cursor IDE `hooks.json`). Cursor hooks discovery was removed from Page Context.
+7. On hub/SaaS Linux, opted-in **stdio** MCP runs inside the Layer 3 bubblewrap jail (`CODING_TERMINAL_SANDBOX=required`). Connect records `ok: false` if bubblewrap is missing. HTTP/SSE tools still connect outbound from Bridge. The SaaS Pipeline switch still defaults off.
+8. Chat still works if MCP config is missing or invalid (soft-fail). An invalid `.godmode/mcp.json` does not fall back to `.cursor/mcp.json`. A saved empty workspace list does not fall back to files.
+9. Automations → Hooks are **GodMode** automations only (not Cursor IDE `hooks.json`). Cursor hooks discovery was removed from Page Context.
 
 ## Blind eval (#71)
 

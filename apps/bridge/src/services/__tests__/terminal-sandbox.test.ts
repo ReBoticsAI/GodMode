@@ -56,6 +56,29 @@ describe("buildBubblewrapArgs", () => {
     expect(args.slice(-3)).toEqual(["/bin/sh", "-c", "echo ok"]);
   });
 
+  it("sets jailEnv after clearenv so MCP vault secrets reach the child", () => {
+    const root = tempDir("gm-bwrap-jailenv-");
+    const args = buildBubblewrapArgs({
+      codingRoot: root,
+      cwd: root,
+      command: "true",
+      net: "none",
+      jailEnv: {
+        API_TOKEN: "secret-token",
+        PATH: "/evil",
+        HOME: "/evil-home",
+      },
+    });
+    const tokenIdx = args.indexOf("API_TOKEN");
+    expect(tokenIdx).toBeGreaterThan(-1);
+    expect(args[tokenIdx - 1]).toBe("--setenv");
+    expect(args[tokenIdx + 1]).toBe("secret-token");
+    expect(args.indexOf("/evil")).toBe(-1);
+    expect(args.indexOf("/evil-home")).toBe(-1);
+    const pathIdx = args.indexOf("PATH");
+    expect(args[pathIdx + 1]).toBe("/usr/local/bin:/usr/bin:/bin");
+  });
+
   it("hides host GitHub App secret mounts from the jail", () => {
     const root = tempDir("gm-bwrap-hide-");
     const args = buildBubblewrapArgs({

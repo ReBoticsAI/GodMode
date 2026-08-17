@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { getToolSchemasForLlm } from "../ai-tools-registry.js";
 import {
+  buildMcpStdioJailSpawn,
   ensureBridgeMcpHost,
   executeBridgeMcpTool,
   getBridgeMcpToolDefsForAgent,
@@ -19,18 +20,12 @@ import {
   parseVaultSecretRef,
   resetBridgeMcpHostForTests,
   resolveBridgeMcpHostEnabled,
+  resolveMcpStdioCwd,
+  resolveMcpStdioSpawn,
 } from "../coding/mcp-host.js";
 import { requiresConfirmation } from "../ai-tool-executor.js";
 
 const temps: string[] = [];
-const repoRoot = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
-  "..",
-  ".."
-);
 const fixtureServer = join(
   dirname(fileURLToPath(import.meta.url)),
   "fixtures",
@@ -41,13 +36,11 @@ function tinyStdioServer(): {
   type: "stdio";
   command: string;
   args: string[];
-  cwd: string;
 } {
   return {
     type: "stdio",
     command: process.execPath,
     args: [fixtureServer],
-    cwd: repoRoot,
   };
 }
 
@@ -261,4 +254,52 @@ describe("ensureBridgeMcpHost stdio", () => {
     });
     expect(ok.statuses[0]?.ok).toBe(true);
   }, 60_000);
+});
+
+describe("MCP stdio Layer 3 spawn (#588)", () => {
+  it("rejects cwd outside the coding root", () => {
+    const root = tempRoot();
+    expect(() => resolveMcpStdioCwd(root, join(root, "..", "other"))).toThrow(
+      /escapes coding root/i
+    );
+  });
+
+  it("keeps unsandboxed spawn as the server command", () => {
+    const root = tempRoot();
+    const spawn = resolveMcpStdioSpawn({
+      command: process.execPath,
+      args: [fixtureServer],
+      codingRoot: root,
+      envResolved: { DEMO: "1" },
+    });
+    expect(spawn.sandboxed).toBe(false);
+    expect(spawn.command).toBe(process.execPath);
+    expect(spawn.args).toEqual([fixtureServer]);
+    expect(spawn.env?.DEMO).toBe("1");
+    expect(spawn.cwd).toBe(root);
+  });
+
+  it("wraps stdio as bwrap with jailEnv and coding-root bind", () => {
+    const root = tempRoot();
+    const spawn = buildMcpStdioJailSpawn({
+      command: "/usr/bin/node",
+      args: [fixtureServer],
+      codingRoot: root,
+      cwd: root,
+      envResolved: { MCP_TOKEN: "from-vault" },
+      net: "none",
+    });
+    expect(spawn.sandboxed).toBe(true);
+    expect(spawn.command).toBe("bwrap");
+    expect(spawn.args).toContain("--unshare-pid");
+    expect(spawn.args).toContain("--unshare-net");
+    expect(spawn.args).toContain("--bind");
+    expect(spawn.args).toContain(root);
+    const tokenIdx = spawn.args?.indexOf("MCP_TOKEN") ?? -1;
+    expect(tokenIdx).toBeGreaterThan(-1);
+    expect(spawn.args?.[tokenIdx - 1]).toBe("--setenv");
+    expect(spawn.args?.[tokenIdx + 1]).toBe("from-vault");
+    expect(spawn.args?.slice(-3, -1)).toEqual(["/bin/sh", "-c"]);
+    expect(spawn.args?.at(-1)).toContain("/usr/bin/node");
+  });
 });

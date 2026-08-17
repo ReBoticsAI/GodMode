@@ -5,7 +5,9 @@
  * Intelligence. Cursor SDK backends keep their own pass-through path.
  *
  * Sessions are per-agent and include tenantId so SaaS never shares MCP
- * processes across tenants. Auth: static headers/env from mcp.json; values
+ * processes across tenants. Stdio spawns use the Layer 3 bubblewrap jail when
+ * `CODING_TERMINAL_SANDBOX=required` (same fail-closed bar as coding terminal).
+ * Auth: static headers/env from workspace settings; values
  * prefixed with `vault:` or `{{vault:…}}` resolve via the supplied Vault callback.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -16,6 +18,7 @@ import {
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import path from "node:path";
 import {
   MAX_SDK_MCP_SERVERS,
   cursorMcpServersFingerprint,
@@ -24,6 +27,19 @@ import {
   type CursorSdkMcpServerConfig,
   type McpWorkspaceOverlay,
 } from "./cursor-mcp-config.js";
+import { shellQuoteArgv } from "./sandboxed-process.js";
+import {
+  startTerminalEgressProxy,
+  type TerminalEgressProxyHandle,
+} from "./terminal-egress-proxy.js";
+import {
+  assertSandboxReadyForTerminal,
+  buildBubblewrapArgs,
+  codingTerminalEgressHosts,
+  codingTerminalNetPolicy,
+  requiresTerminalSandbox,
+  type CodingTerminalNet,
+} from "./terminal-sandbox.js";
 
 /** Local shape to avoid circular import with ai-tools-registry. */
 export type BridgeMcpAiToolDef = {
@@ -70,6 +86,7 @@ type AgentMcpState = {
   tools: McpHostTool[];
   toolIndex: Map<string, { server: ConnectedServer; toolName: string }>;
   statuses: BridgeMcpServerStatus[];
+  egressProxy: TerminalEgressProxyHandle | null;
 };
 
 function normalizeTenantId(tenantId?: string | null): string {
@@ -176,6 +193,113 @@ export function resolveMcpVaultRefs(
   return out;
 }
 
+export function resolveMcpStdioCwd(
+  codingRoot: string,
+  cfgCwd?: string | null
+): string {
+  const root = path.resolve(codingRoot);
+  const raw = cfgCwd?.trim();
+  const cwd = raw
+    ? path.isAbsolute(raw)
+      ? path.resolve(raw)
+      : path.resolve(root, raw)
+    : root;
+  const rel = path.relative(root, cwd);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("MCP stdio cwd escapes coding root");
+  }
+  return cwd;
+}
+
+export type McpStdioSpawnPlan = {
+  command: string;
+  args?: string[];
+  cwd: string;
+  env?: Record<string, string>;
+  sandboxed: boolean;
+};
+
+export type McpStdioJailProxy = {
+  proxyUrl: string;
+  jailSocketPath: string;
+  hostEgressDir: string;
+};
+
+/** Build bwrap argv for stdio MCP. Does not probe bubblewrap. */
+export function buildMcpStdioJailSpawn(opts: {
+  command: string;
+  args?: string[];
+  codingRoot: string;
+  cwd: string;
+  envResolved?: Record<string, string>;
+  net?: CodingTerminalNet;
+  proxy?: McpStdioJailProxy | null;
+}): McpStdioSpawnPlan {
+  const net = codingTerminalNetPolicy({ net: opts.net });
+  if (net === "allowlist" && !opts.proxy) {
+    throw new Error(
+      "MCP stdio allowlist net requires the Bridge UDS egress proxy"
+    );
+  }
+  const quoted = shellQuoteArgv([opts.command, ...(opts.args ?? [])]);
+  const args = buildBubblewrapArgs({
+    codingRoot: opts.codingRoot,
+    cwd: opts.cwd,
+    net,
+    command: quoted,
+    jailEnv: opts.envResolved,
+    proxyUrl: opts.proxy?.proxyUrl,
+    jailSocketPath: opts.proxy?.jailSocketPath,
+    hostEgressDir: opts.proxy?.hostEgressDir,
+  });
+  return {
+    command: "bwrap",
+    args,
+    cwd: path.resolve(opts.codingRoot),
+    sandboxed: true,
+  };
+}
+
+export function resolveMcpStdioSpawn(opts: {
+  command: string;
+  args?: string[];
+  cfgCwd?: string | null;
+  codingRoot: string;
+  envResolved?: Record<string, string>;
+  net?: CodingTerminalNet;
+  proxy?: McpStdioJailProxy | null;
+}): McpStdioSpawnPlan {
+  const cwd = resolveMcpStdioCwd(opts.codingRoot, opts.cfgCwd);
+  if (requiresTerminalSandbox()) {
+    assertSandboxReadyForTerminal();
+    return buildMcpStdioJailSpawn({
+      command: opts.command,
+      args: opts.args,
+      codingRoot: opts.codingRoot,
+      cwd,
+      envResolved: opts.envResolved,
+      net: opts.net,
+      proxy: opts.proxy,
+    });
+  }
+  const defaults = getDefaultEnvironment();
+  const bridgeNodeModules = `${process.cwd()}${process.platform === "win32" ? "\\" : "/"}node_modules`;
+  const nodePath = [bridgeNodeModules, defaults.NODE_PATH, process.env.NODE_PATH]
+    .filter(Boolean)
+    .join(process.platform === "win32" ? ";" : ":");
+  return {
+    command: opts.command,
+    args: opts.args,
+    cwd,
+    env: {
+      ...defaults,
+      ...(opts.envResolved ?? {}),
+      NODE_PATH: nodePath,
+    },
+    sandboxed: false,
+  };
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(
@@ -199,26 +323,22 @@ async function connectStdio(
   name: string,
   cfg: Extract<CursorSdkMcpServerConfig, { command: string }>,
   envResolved: Record<string, string> | undefined,
-  codingRoot: string
+  codingRoot: string,
+  proxy?: McpStdioJailProxy | null
 ): Promise<{ client: Client; transport: Transport }> {
-  // Merge defaults always so custom env (e.g. vault tokens) does not drop PATH.
-  // Prefer coding-root as cwd so relative server paths resolve; keep Bridge
-  // node_modules on NODE_PATH so `node --import tsx` still resolves.
-  const defaults = getDefaultEnvironment();
-  const bridgeNodeModules = `${process.cwd()}${process.platform === "win32" ? "\\" : "/"}node_modules`;
-  const nodePath = [bridgeNodeModules, defaults.NODE_PATH, process.env.NODE_PATH]
-    .filter(Boolean)
-    .join(process.platform === "win32" ? ";" : ":");
-  const env = {
-    ...defaults,
-    ...(envResolved ?? {}),
-    NODE_PATH: nodePath,
-  };
-  const transport = new StdioClientTransport({
+  const spawn = resolveMcpStdioSpawn({
     command: cfg.command,
     args: cfg.args,
-    env,
-    cwd: cfg.cwd?.trim() || codingRoot,
+    cfgCwd: cfg.cwd,
+    codingRoot,
+    envResolved,
+    proxy,
+  });
+  const transport = new StdioClientTransport({
+    command: spawn.command,
+    args: spawn.args,
+    env: spawn.env,
+    cwd: spawn.cwd,
     stderr: "pipe",
   });
   const client = new Client({
@@ -367,13 +487,21 @@ async function disposeAgentState(agentId: string): Promise<void> {
       /* ignore */
     }
   }
+  if (state.egressProxy) {
+    try {
+      await state.egressProxy.close();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function connectOne(
   name: string,
   cfg: CursorSdkMcpServerConfig,
   codingRoot: string,
-  resolveVaultSecret?: (name: string) => string | null
+  resolveVaultSecret?: (name: string) => string | null,
+  proxy?: McpStdioJailProxy | null
 ): Promise<ConnectedServer> {
   if ("command" in cfg && cfg.command) {
     const env = resolveMcpVaultRefs(cfg.env, resolveVaultSecret);
@@ -381,7 +509,8 @@ async function connectOne(
       name,
       cfg,
       env,
-      codingRoot
+      codingRoot,
+      proxy
     );
     const tools = await listServerTools(name, client);
     return { name, client, transport, tools };
@@ -475,6 +604,30 @@ export async function ensureBridgeMcpHost(args: {
   >();
 
   const names = Object.keys(serversCfg).sort((a, b) => a.localeCompare(b));
+  const needsStdio = names.some((name) => {
+    const cfg = serversCfg[name];
+    return Boolean(cfg && "command" in cfg && cfg.command);
+  });
+
+  let egressProxy: TerminalEgressProxyHandle | null = null;
+  if (
+    needsStdio &&
+    requiresTerminalSandbox() &&
+    codingTerminalNetPolicy() === "allowlist"
+  ) {
+    egressProxy = await startTerminalEgressProxy({
+      codingRoot: args.codingRoot,
+      allowlist: codingTerminalEgressHosts(),
+    });
+  }
+  const stdioProxy: McpStdioJailProxy | null = egressProxy
+    ? {
+        proxyUrl: egressProxy.jailProxyUrl,
+        jailSocketPath: egressProxy.jailSocketPath,
+        hostEgressDir: egressProxy.hostEgressDir,
+      }
+    : null;
+
   for (const name of names.slice(0, MAX_SDK_MCP_SERVERS)) {
     const cfg = serversCfg[name];
     if (!cfg) continue;
@@ -483,7 +636,8 @@ export async function ensureBridgeMcpHost(args: {
         name,
         cfg,
         args.codingRoot,
-        args.resolveVaultSecret
+        args.resolveVaultSecret,
+        stdioProxy
       );
       connected.push(srv);
       for (const t of srv.tools) {
@@ -520,6 +674,7 @@ export async function ensureBridgeMcpHost(args: {
     tools,
     toolIndex,
     statuses,
+    egressProxy,
   });
 
   return {

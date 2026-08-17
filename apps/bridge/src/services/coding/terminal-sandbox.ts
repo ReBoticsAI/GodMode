@@ -182,6 +182,11 @@ export function buildBubblewrapArgs(opts: {
   wrappedCommand?: string;
   /** Extra host paths to hide (tests / additional host secrets). */
   secretHidePaths?: { dirs?: string[]; files?: string[] };
+  /**
+   * Env inside the jail after `--clearenv`. Outer `spawn({ env })` does not
+   * reach the child. Skip PATH/HOME and allowlist proxy keys.
+   */
+  jailEnv?: Record<string, string>;
 }): string[] {
   const codingRoot = path.resolve(opts.codingRoot);
   const cwd = path.resolve(opts.cwd);
@@ -261,6 +266,8 @@ export function buildBubblewrapArgs(opts: {
     process.env.TERM || "xterm-256color"
   );
 
+  pushJailEnv(args, opts.jailEnv, net);
+
   let command = opts.command;
   if (net === "allowlist" && opts.proxyUrl && opts.jailSocketPath) {
     const proxyUrl = opts.proxyUrl.trim();
@@ -290,6 +297,35 @@ export function buildBubblewrapArgs(opts: {
 
   args.push("--", "/bin/sh", "-c", command);
   return args;
+}
+
+const JAIL_ENV_RESERVED = new Set([
+  "PATH",
+  "HOME",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "npm_config_proxy",
+  "npm_config_https_proxy",
+  "NO_PROXY",
+  "no_proxy",
+]);
+
+function pushJailEnv(
+  args: string[],
+  jailEnv: Record<string, string> | undefined,
+  net: CodingTerminalNet
+): void {
+  if (!jailEnv) return;
+  for (const [key, value] of Object.entries(jailEnv)) {
+    if (!key.trim() || value == null) continue;
+    if (key === "PATH" || key === "HOME") continue;
+    if (net === "allowlist" && JAIL_ENV_RESERVED.has(key)) continue;
+    args.push("--setenv", key, String(value));
+  }
 }
 
 /**
