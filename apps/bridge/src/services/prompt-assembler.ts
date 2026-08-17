@@ -298,7 +298,9 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
       : "gm_mcp__<server>__<tool>";
   const sourceKind = ctx.mcpDiscovery.sourceKind;
   const sourceLine =
-    sourceKind === "cursor"
+    sourceKind === "workspace"
+      ? "Project MCP configuration (from this workspace GodMode settings):"
+      : sourceKind === "cursor"
       ? "Project MCP configuration (from coding-root `.cursor/mcp.json`, Cursor compatibility):"
       : "Project MCP configuration (from coding-root `.godmode/mcp.json`):";
   const lines = [

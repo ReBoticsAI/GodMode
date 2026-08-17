@@ -856,7 +856,7 @@ export interface AiMcpStatus {
   workspace: string;
   sourcePath: string | null;
   /** `.godmode/mcp.json` (primary) or `.cursor/mcp.json` (compatibility). */
-  sourceKind?: "godmode" | "cursor" | null;
+  sourceKind?: "workspace" | "godmode" | "cursor" | null;
   summary: string | null;
   mcpFromWorkspace: boolean;
   /** discovery-only | sdk-inline | sdk-project | bridge-host */
@@ -864,13 +864,35 @@ export interface AiMcpStatus {
   host?: "sdk" | "bridge";
   backend: string | null;
   settingSources: string[];
+  workspaceConfigured?: boolean;
+  fileImportAvailable?: boolean;
   projectInstructions: "sdk" | "knowledge" | "none";
   servers: AiMcpServerStatus[];
+  definitions?: Record<string, Record<string, unknown>>;
 }
 
 export const fetchAiMcp = (agentId?: string) => {
   const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
   return api<AiMcpStatus>(`/ai/mcp${qs}`);
+};
+
+export const putAiMcpServers = (
+  mcpServers: Record<string, unknown>,
+  agentId?: string
+) => {
+  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+  return api<{ ok: boolean; count: number }>(`/ai/mcp/servers${qs}`, {
+    method: "PUT",
+    body: JSON.stringify({ mcpServers }),
+  });
+};
+
+export const importAiMcpServers = (agentId?: string) => {
+  const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+  return api<{ ok: boolean; count: number }>(`/ai/mcp/servers/import${qs}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 };
 
 export const fetchAiArtifacts = (agentId?: string, limit?: number) => {

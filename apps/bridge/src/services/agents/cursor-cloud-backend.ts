@@ -17,6 +17,7 @@ import {
   resolveMcpFromWorkspace,
   type CursorSdkMcpServers,
 } from "../coding/cursor-mcp-config.js";
+import { getWorkspaceMcpOverlay } from "../coding/mcp-workspace-store.js";
 import {
   isBridgeMcpToolName,
   resolveBridgeMcpHostEnabled,
@@ -722,6 +723,7 @@ export class CursorCloudBackend implements AgentBackend {
     const mcpDisabled = Array.isArray(cfg.mcpDisabledServers)
       ? cfg.mcpDisabledServers.filter((n): n is string => typeof n === "string")
       : undefined;
+    const mcpWorkspace = getWorkspaceMcpOverlay(this.db);
     const sdkMode = toSdkAgentMode(chatMode);
     const sandboxEnabled = cursorSdkSandboxEnabled();
     // Sandboxed SaaS: Bridge hosts MCP as customTools (Auto-review safe).
@@ -738,12 +740,16 @@ export class CursorCloudBackend implements AgentBackend {
     const mcpServers: CursorSdkMcpServers | undefined = bridgeHostsMcp
       ? {}
       : mcpEnabled
-        ? loadCursorMcpServersForSdk(cwd, { disabled: mcpDisabled })
+        ? loadCursorMcpServersForSdk(cwd, {
+            disabled: mcpDisabled,
+            workspace: mcpWorkspace,
+          })
         : undefined;
     const mcpKey = `${cursorMcpServersFingerprint(
       cwd,
       mcpEnabled,
-      mcpDisabled
+      mcpDisabled,
+      mcpWorkspace
     )}|${bridgeHostsMcp ? "bridge" : "sdk"}`;
     const effectiveSettingSources = bridgeHostsMcp ? [] : settingSources;
     if (sandboxEnabled) {

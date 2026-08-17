@@ -6,8 +6,8 @@ export interface GitWorkspaceSnapshot {
   summary: string;
 }
 
-/** Which coding-root MCP file was loaded. */
-export type McpConfigSourceKind = "godmode" | "cursor";
+/** Which MCP source was loaded. */
+export type McpConfigSourceKind = "workspace" | "godmode" | "cursor";
 
 /** Read-only summary of coding-root MCP config (no secrets, no execution). */
 export interface McpServerDiscovery {
@@ -21,7 +21,7 @@ export interface McpWorkspaceDiscovery {
   servers: McpServerDiscovery[];
   summary: string;
   sourcePath?: string;
-  /** `.godmode/mcp.json` (primary) or `.cursor/mcp.json` (compatibility). */
+  /** Workspace DB, `.godmode/mcp.json`, or `.cursor/mcp.json`. */
   sourceKind?: McpConfigSourceKind;
 }
 
