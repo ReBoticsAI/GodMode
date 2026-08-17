@@ -10,6 +10,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -24,12 +31,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  fetchPublisherConnectors,
   fetchReleaseSubmissions,
   refreshReleaseSubmission,
+  type PublisherConnector,
   type ReleaseSubmission,
   type ReleaseSubmissionMetrics,
 } from "@/api";
-import { CODING_PATH, VAULT_PATH } from "@/lib/navigation";
+import { CODING_PATH, MARKETPLACE_PATH, VAULT_PATH } from "@/lib/navigation";
 import { toast } from "sonner";
 
 const STATUS_VARIANT: Record<
@@ -54,19 +63,25 @@ function isContentsPermissionFailure(error: string | null | undefined): boolean 
 export default function ReleaseSubmissionsPage() {
   const [rows, setRows] = useState<ReleaseSubmission[]>([]);
   const [metrics, setMetrics] = useState<ReleaseSubmissionMetrics | null>(null);
+  const [connectors, setConnectors] = useState<PublisherConnector[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetchReleaseSubmissions();
+      const [res, catalog] = await Promise.all([
+        fetchReleaseSubmissions(),
+        fetchPublisherConnectors(),
+      ]);
       setRows(res.submissions);
       setMetrics(res.metrics);
+      setConnectors(catalog.connectors);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load releases");
       setRows([]);
       setMetrics(null);
+      setConnectors([]);
     } finally {
       setLoading(false);
     }
@@ -93,7 +108,7 @@ export default function ReleaseSubmissionsPage() {
     <Page>
       <PageHeader
         title="Release submissions"
-        description="Ship-from-GodMode status for GitHub Releases. Connect GitHub in Vault, then use github_release_prepare / create (draft) / publish from Coding."
+        description="Ship-from-GodMode status for GitHub Releases. Connect GitHub in Vault, then use github_release_prepare / create (draft) / publish from Coding. Other stores and channels install as plugins."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" render={<Link to={`${VAULT_PATH}?tab=integrations`} />}>
@@ -114,6 +129,53 @@ export default function ReleaseSubmissionsPage() {
           </div>
         }
       />
+
+      {connectors.length > 0 ? (
+        <Card size="sm" className="mb-4">
+          <CardHeader>
+            <CardTitle>Publisher connectors</CardTitle>
+            <CardDescription>
+              Install from this catalog. GitHub Releases is Core. Further networks
+              ship as Marketplace or Intelligence-built plugins.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {connectors.map((c) => (
+              <div
+                key={c.id}
+                className="flex flex-col gap-1 rounded-lg bg-muted/40 px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{c.title}</span>
+                  <Badge variant="outline">{c.kind}</Badge>
+                  <Badge variant="secondary">{c.source}</Badge>
+                  {c.pagePath ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto"
+                      render={<Link to={c.pagePath} />}
+                    >
+                      Open
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto"
+                      render={<Link to={MARKETPLACE_PATH} />}
+                    >
+                      Marketplace
+                    </Button>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-xs">{c.description}</p>
+                <p className="text-muted-foreground text-xs">{c.installHint}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {metrics ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

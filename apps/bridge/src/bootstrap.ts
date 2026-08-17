@@ -44,6 +44,8 @@ import { createBankRouter } from "./routes/bank.js";
 import { createIntegrationsRouter } from "./routes/integrations.js";
 import { createGithubIntegrationRouter } from "./routes/github-integration.js";
 import { createReleaseSubmissionsRouter } from "./routes/release-submissions.js";
+import { createPublisherConnectorsRouter } from "./routes/publisher-connectors.js";
+import { seedCorePublisherConnectors } from "./services/publisher-connectors.js";
 import { githubAppWebhookHandler } from "./services/github-app-webhook.js";
 import { createAdminBillingRouter } from "./routes/admin-billing.js";
 import { createAdminSaasRouter } from "./routes/admin-saas.js";
@@ -167,6 +169,7 @@ for (const err of pluginLoad.errors) {
 const bus = new EventEmitter();
 setKernelEventBus(bus);
 pluginRuntime.configure({ operatorTenantId, bus });
+seedCorePublisherConnectors();
 await executeCollectionAction(
   db,
   "CatalogInstall",
@@ -453,6 +456,7 @@ if (!config.isHub) {
 // GitHub Projects OAuth (Vault → Integrations) is required on hub/SaaS too.
 app.use("/api/integrations/github", createGithubIntegrationRouter());
 app.use("/api/release-submissions", createReleaseSubmissionsRouter());
+app.use("/api/publisher-connectors", createPublisherConnectorsRouter());
 if (config.isHub) {
   app.use("/api/admin/billing", createAdminBillingRouter());
   app.use("/api/admin/authority", createAdminAuthorityRouter());

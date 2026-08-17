@@ -22,17 +22,18 @@ Nested clones: `git_clone` sets coding workspace to the clone folder. Use `codin
 ## What this is not
 
 - Admin → Updates (consumer install poller) is separate.
-- npm, Chrome Web Store, Play, App Store consoles belong under the publisher/store connector pattern (#446), not this Near proof.
+- npm, Chrome Web Store, Play, App Store consoles belong under the publisher/store connector pattern ([publisher-store-connector-pattern](publisher-store-connector-pattern.md)), not this Near proof.
 - Full Attention approve UX remains on #418; confirm dialogs + notifications cover the gate today.
 
-## Connector pattern handoff (#446)
+## Connector pattern (#446)
 
-Reusable shape proven here:
+Reusable catalog shape:
 
 1. Auth: OAuth or vendor CLI secret into Vault (fixed secret id or Connect card).
 2. Tools: prepare (stage) → submit (confirm + never auto-approve) → list/metrics.
 3. Authority: kill switches + irreversible confirm policy.
 4. Page: status/metrics surface distinct from unrelated Admin views.
-5. Inbound: Support (or similar) → Kanban card for follow-up ship work.
+5. Catalog: `api.publisherConnectors.register` so `list_publisher_connectors` can install rather than browse.
 
-Further store/network targets should install as Marketplace or Intelligence-built plugins that follow this pattern, not grow core identity.
+GitHub Releases is the Core store row (`github-releases`). Further store/network targets register as Marketplace or Intelligence-built plugins. See [publisher-store-connector-pattern](publisher-store-connector-pattern.md).
+

@@ -15,6 +15,7 @@ import type {
   PluginHostServices,
   PluginTenantContext,
   PluginToolDef,
+  PublisherConnectorDef,
 } from "@godmode/plugin-api";
 import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
 import {
@@ -291,6 +292,11 @@ const api: GodModePluginApi = {
   pageKinds: {
     register(kinds: string[]) {
       track(peer.call("pageKinds.register", { kinds }));
+    },
+  },
+  publisherConnectors: {
+    register(connectors: PublisherConnectorDef[]) {
+      track(peer.call("publisherConnectors.register", { connectors }));
     },
   },
   objectTypes: {

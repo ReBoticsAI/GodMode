@@ -18,7 +18,12 @@ import type {
   PluginToolDef,
   PluginRecordAdapter,
   PluginRecordContext,
+  PublisherConnectorDef,
 } from "@godmode/plugin-api";
+import {
+  registerPublisherConnector,
+  unregisterPublisherConnectors,
+} from "../services/publisher-connectors.js";
 import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
 import { getPluginHost } from "@godmode/plugin-host";
 import { registerPageKinds } from "../kernel/kind-registry.js";
@@ -198,6 +203,7 @@ export class PluginRuntime {
     for (let i = this.tools.length - 1; i >= 0; i--) {
       if (this.tools[i].pluginId === pluginId) this.tools.splice(i, 1);
     }
+    unregisterPublisherConnectors(pluginId);
     for (let i = this.routers.length - 1; i >= 0; i--) {
       if (this.routers[i].pluginId === pluginId) this.routers.splice(i, 1);
     }
@@ -547,6 +553,13 @@ export class PluginRuntime {
       pageKinds: {
         register(kinds: string[]) {
           registerPageKinds(kinds);
+        },
+      },
+      publisherConnectors: {
+        register(connectors: PublisherConnectorDef[]) {
+          for (const connector of connectors) {
+            registerPublisherConnector(connector, { pluginId });
+          }
         },
       },
       objectTypes: {

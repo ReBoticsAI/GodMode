@@ -41,6 +41,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.
 - [Coding stage](features/coding-stage.md) - Files, git status/diff, terminal, and agent git tools on the coding root.
 - [Release submissions](features/release-submission.md) - GitHub Releases Near proof: Vault Connect, draft submit, status page, Support → Kanban.
+- [Publisher / store connectors](features/publisher-store-connector-pattern.md) - Catalog pattern so Intelligence installs store/channel consoles as plugins, not Core identity.
 - [Calendar](features/calendar.md) - Personal events and activity feed; agents have Chat calendar tabs too.
 - [Notifications](features/notifications.md) - Platform alerts, including signed-release availability.
 - [Vault](features/vault.md) - User connect hub: Integrations, Wallets & Accounts, Marketplace, and secrets (Platform Vault and Storage live under Settings).
