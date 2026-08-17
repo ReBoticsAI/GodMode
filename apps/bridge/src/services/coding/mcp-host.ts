@@ -1,7 +1,8 @@
 /**
  * Bridge MCP host for local / provider / hub backends (#449).
- * Spawns or connects workspace `.cursor/mcp.json` servers and exposes tools
- * to Intelligence. Cursor SDK backends keep their own pass-through path.
+ * Spawns or connects workspace MCP servers (`.godmode/mcp.json`, else
+ * `.cursor/mcp.json`) and exposes tools to Intelligence. Cursor SDK backends
+ * keep their own pass-through path.
  *
  * Sessions are per-agent and include tenantId so SaaS never shares MCP
  * processes across tenants. Auth: static headers/env from mcp.json; values

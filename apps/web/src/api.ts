@@ -855,6 +855,8 @@ export interface AiMcpServerStatus {
 export interface AiMcpStatus {
   workspace: string;
   sourcePath: string | null;
+  /** `.godmode/mcp.json` (primary) or `.cursor/mcp.json` (compatibility). */
+  sourceKind?: "godmode" | "cursor" | null;
   summary: string | null;
   mcpFromWorkspace: boolean;
   /** discovery-only | sdk-inline | sdk-project | bridge-host */

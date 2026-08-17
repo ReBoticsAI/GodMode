@@ -296,8 +296,13 @@ function renderMcpSection(ctx: PlatformContext | undefined): string {
     serverNames[0] != null
       ? `gm_mcp__${serverNames[0]}__<tool>`
       : "gm_mcp__<server>__<tool>";
+  const sourceKind = ctx.mcpDiscovery.sourceKind;
+  const sourceLine =
+    sourceKind === "cursor"
+      ? "Project MCP configuration (from coding-root `.cursor/mcp.json`, Cursor compatibility):"
+      : "Project MCP configuration (from coding-root `.godmode/mcp.json`):";
   const lines = [
-    "Project MCP configuration (from coding-root `.cursor/mcp.json`):",
+    sourceLine,
     ctx.mcpDiscovery.summary,
     "GodMode native tools are separate from MCP.",
     "To call listed MCP tools from GodMode Intelligence chat: enable Pass workspace MCP (Agents → Pipeline → MCP). SaaS defaults that switch off until enabled.",
