@@ -4467,6 +4467,28 @@ export const fetchReleaseSubmissions = (limit = 50) =>
     target: string;
   }>(`/release-submissions?limit=${limit}`);
 
+export type PublisherConnector = {
+  id: string;
+  title: string;
+  description: string;
+  kind: "store" | "channel";
+  source: "core" | "plugin";
+  pluginId?: string;
+  installHint: string;
+  vaultConnect?: string;
+  tools: {
+    prepare?: string;
+    submit: string;
+    publish?: string;
+    list?: string;
+  };
+  pagePath?: string;
+  docsPath?: string;
+};
+
+export const fetchPublisherConnectors = () =>
+  api<{ connectors: PublisherConnector[] }>("/publisher-connectors");
+
 export const refreshReleaseSubmission = (id: string) =>
   api<{ submission: ReleaseSubmission }>(`/release-submissions/${id}/refresh`, {
     method: "POST",

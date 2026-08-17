@@ -1888,6 +1888,13 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "list_publisher_connectors",
+    description:
+      "List publisher/store and channel console connectors. Core GitHub Releases is always present. Plugin consoles appear after Marketplace or install_plugin. Prefer this catalog over adding vendor store or social consoles to Core. Use github_release_* for the Core store proof; install a plugin for further networks.",
+    mode: "auto",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "scaffold_plugin",
     description:
       "Create a plugin under plugins/<id> (active coding root / worktree). Returns pluginRoot + codingPath. Then edit (ObjectTypes, Structure seed, wire primary Button handlers) → build_plugin → install_plugin. Do not ship decorative CTAs or empty department-only Structure. Requires confirmation.",

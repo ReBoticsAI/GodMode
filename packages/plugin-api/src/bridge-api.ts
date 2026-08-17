@@ -1,6 +1,7 @@
 import type { Express, IRouter, RequestHandler } from "express";
 import type { EventEmitter } from "node:events";
 import type { PluginHostServices } from "./host-services.js";
+import type { PublisherConnectorDef } from "./publisher-connectors.js";
 import type {
   ListRecordsResult,
   ObjectTypeDef,
@@ -156,6 +157,14 @@ export interface GodModePluginApi {
   /** Register renderer kind names on Bridge for metadata/tool validation. */
   pageKinds: {
     register(kinds: string[]): void;
+  };
+
+  /**
+   * Declare a publisher/store or channel console so Intelligence can install
+   * it instead of growing vendor consoles in Core (#446).
+   */
+  publisherConnectors: {
+    register(connectors: PublisherConnectorDef[]): void;
   };
 
   objectTypes: {

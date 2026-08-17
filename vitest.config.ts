@@ -54,6 +54,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/confirm-policy-git.test.ts",
       "apps/bridge/src/services/__tests__/github-release.test.ts",
       "apps/bridge/src/services/__tests__/release-submissions.test.ts",
+      "apps/bridge/src/services/__tests__/publisher-connectors.test.ts",
       "apps/bridge/src/services/__tests__/support-to-kanban.test.ts",
       "apps/bridge/src/services/__tests__/coding-hooks.test.ts",
       "apps/bridge/src/services/__tests__/explore-coding.test.ts",

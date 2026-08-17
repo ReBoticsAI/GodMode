@@ -117,7 +117,9 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
 - **Official connectors** (Vault Connect + Official catalog plugins that talk to
   external hosts) must also meet [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md):
   auth, refresh, scopes, webhooks when inbound, rate-limit / failure UX,
-  teardown, Cloud pins, and docs. GitHub is the reference.
+  teardown, Cloud pins, and docs. GitHub is the reference. Publisher/store
+  consoles also register on the [connector catalog](features/publisher-store-connector-pattern.md)
+  (`api.publisherConnectors.register`) so Intelligence can install them.
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Prefer these for CRUD domains. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
@@ -162,6 +164,19 @@ export const register: GodModePluginRegister = (api) => {
 
   api.tools.register([
     { name: "my_tool", description: "…", handler: async (args, ctx) => ({ ok: true }) },
+  ]);
+
+  api.publisherConnectors.register([
+    {
+      id: "my-store",
+      title: "My Store",
+      description: "Draft listing submit + metrics.",
+      kind: "store",
+      source: "plugin",
+      installHint: "Install this pack, then connect in Vault.",
+      tools: { submit: "my_store_submit", list: "my_store_list" },
+      neverAutoApprove: ["my_store_submit"],
+    },
   ]);
 
   api.hooks.on("tenant:install", async ({ tenantId, host }) => {

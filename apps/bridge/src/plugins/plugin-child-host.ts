@@ -7,6 +7,7 @@ import { Router, type RequestHandler } from "express";
 import { getPluginHost } from "@godmode/plugin-host";
 import type { GodmodePluginManifest } from "@godmode/plugin-api";
 import { registerPageKinds } from "../kernel/kind-registry.js";
+import { registerPublisherConnector } from "../services/publisher-connectors.js";
 import {
   createRecord,
   deleteRecord,
@@ -287,6 +288,13 @@ export async function loadCommunityPluginInChild(opts: {
     if (method === "pageKinds.register") {
       const kinds = Array.isArray(p.kinds) ? p.kinds.map(String) : [];
       registerPageKinds(kinds);
+      return { ok: true };
+    }
+    if (method === "publisherConnectors.register") {
+      const connectors = Array.isArray(p.connectors) ? p.connectors : [];
+      for (const connector of connectors) {
+        registerPublisherConnector(connector, { pluginId });
+      }
       return { ok: true };
     }
     if (method === "routes.mount") {

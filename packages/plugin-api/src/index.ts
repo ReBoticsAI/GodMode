@@ -49,3 +49,11 @@ export {
 
 export type { PluginHostServices, TenantDb, PluginSchedulerHost, SystemEventRow, CardAwaitingHost } from "./host-services.js";
 export type { HealthProbeFn, IpcEnqueueFn } from "./host-services.js";
+
+export {
+  parsePublisherConnectorDef,
+  type PublisherConnectorDef,
+  type PublisherConnectorKind,
+  type PublisherConnectorSource,
+  type PublisherConnectorTools,
+} from "./publisher-connectors.js";

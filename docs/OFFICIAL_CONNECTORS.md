@@ -116,6 +116,11 @@ bar. Design, residual threats, cost/ops, and the runner follow-up:
 Official connectors remain ReBotics-curated and stay **in-process** until that
 Community runner is proven. Do not treat this document as the plugin sandbox spec.
 
+Publisher and store **consoles** (GitHub Releases in Core, further networks as
+plugins) use the catalog in
+[publisher-store-connector-pattern.md](features/publisher-store-connector-pattern.md).
+That pattern does not replace this quality bar.
+
 ## Marketplace Official tab (#380)
 
 The Official tab is a real curated catalog (packs + Official plugins), not a stub.

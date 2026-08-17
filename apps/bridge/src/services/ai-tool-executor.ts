@@ -229,6 +229,7 @@ import {
   installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
+import { listPublisherConnectors } from "./publisher-connectors.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
 import {
   assertLivePluginRoot,
@@ -3698,6 +3699,10 @@ export async function executeTool(
         available: listAvailablePlugins(),
         installed: listInstalledPlugins(core, ctx.tenantId),
       };
+    }
+
+    case "list_publisher_connectors": {
+      return { connectors: listPublisherConnectors() };
     }
 
     case "scaffold_plugin": {
