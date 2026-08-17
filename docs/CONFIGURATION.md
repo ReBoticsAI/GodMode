@@ -59,7 +59,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 
 On `INSTALLATION_SURFACE=saas`, coding is **on by default** (#178). Set `PLATFORM_SAAS_ALLOW_CODE_ACCESS=false` to disable Coding UI and agent `codeAccess`. Keep `PLATFORM_SAAS_ALLOW_LOCAL_PLUGINS=false`.
 
-**Layer 3** (already default on hub/client Linux): `CODING_TERMINAL_SANDBOX=required`, `CODING_TERMINAL_NET=none`. For npm/git from the terminal, set `CODING_TERMINAL_NET=allowlist` (optional). Docker Bridge needs `cap_add: [SYS_ADMIN, NET_ADMIN]` and matching `security_opt` so bubblewrap namespaces work (see `deploy/docker-compose.saas-staging.yml`).
+**Layer 3** (already default on hub/client Linux): `CODING_TERMINAL_SANDBOX=required`. Hub/client net default is `CODING_TERMINAL_NET=allowlist` (git via the Bridge CONNECT proxy). Set `none` to lock interactive terminals and stdio MCP to no egress. Docker Bridge needs `cap_add: [SYS_ADMIN, NET_ADMIN]` and matching `security_opt` so bubblewrap namespaces work (see `deploy/docker-compose.saas-staging.yml`). Bridge-hosted stdio MCP reuses these knobs. HTTP/SSE MCP does not spawn a jail.
 
 **Layer 4** for SaaS staging/prod:
 

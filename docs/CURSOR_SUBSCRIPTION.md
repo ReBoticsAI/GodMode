@@ -85,14 +85,14 @@ For **`cursor_cloud`**, project MCP is available in two ways:
 1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK still loads `.cursor/mcp.json` for Cursor project MCP).
 2. **Workspace / inline** `mcpServers` from the tenant setting (else `.godmode/mcp.json`, else `.cursor/mcp.json`) when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle, CRUD, and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
 
-For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same workspace (or file fallback) list is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review). Stdio MCP is not yet in the coding-terminal bubblewrap sandbox; SaaS stays opt-in until that lands (#588).
+For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same workspace (or file fallback) list is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review). Bridge-hosted **stdio** MCP uses the same Layer 3 bubblewrap jail as coding terminal when `CODING_TERMINAL_SANDBOX=required` (hub/SaaS Linux, fail closed). HTTP/SSE is outbound from Bridge and is not a local spawn. SaaS Pass workspace MCP stays **off** by default.
 
 ### Auth / secrets
 
 - Static `env` and `headers` from `mcp.json` are passed to the host (never shown in discovery summaries).
 - Vault-backed values: set an env or header to `vault:secret_name` or `{{vault:secret_name}}`. Bridge resolves from Agent Vault → Workspace platform → Platform Vault (same order as other secrets).
 - Interactive OAuth (SDK `auth` / browser login) is **not** driven by Bridge for the host path yet. Prefer servers that accept a token via env/header, or complete OAuth in Cursor first for SDK backends.
-- On SaaS, leave `mcpFromWorkspace` off unless you intentionally opt in to spawning stdio MCP on the shared host.
+- On SaaS, leave `mcpFromWorkspace` off unless you intentionally opt in. Opted-in stdio MCP is Layer 3 jailed on hub/SaaS Linux. HTTP/SSE still sends headers to the remote URL you configured.
 
 GodMode native tools remain separate from Cursor/Bridge MCP.
 
