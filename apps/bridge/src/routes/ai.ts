@@ -876,6 +876,7 @@ export function createAiRouter(
     res.json({
       workspace: root,
       sourcePath: discovery?.sourcePath ?? null,
+      sourceKind: discovery?.sourceKind ?? null,
       summary: discovery?.summary ?? null,
       mcpFromWorkspace,
       execution,

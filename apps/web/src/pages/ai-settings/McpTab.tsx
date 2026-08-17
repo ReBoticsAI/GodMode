@@ -88,21 +88,25 @@ export function McpTab({
     : "Host workspace MCP in Bridge";
   const hostHelp = isCursorCloud ? (
     <>
-      Cap 8 servers from{" "}
-      <span className="font-mono">.cursor/mcp.json</span>. On sandboxed SaaS,
-      Bridge hosts them as callable tools (avoids SDK Auto-review blocks). Local
-      installs may use SDK inline <span className="font-mono">mcpServers</span>.
-      Default on for local installs; off on SaaS unless enabled. Ambient project
-      MCP may still load via SDK settingSources.
+      Cap 8 servers from coding-root{" "}
+      <span className="font-mono">.godmode/mcp.json</span> (or{" "}
+      <span className="font-mono">.cursor/mcp.json</span> if that file is
+      absent). On sandboxed SaaS, Bridge hosts them as callable tools (avoids
+      SDK Auto-review blocks). Local installs may use SDK inline{" "}
+      <span className="font-mono">mcpServers</span>. Default on for local
+      installs; off on SaaS unless enabled. Ambient project MCP may still load
+      via SDK settingSources.
     </>
   ) : (
     <>
-      Bridge connects stdio and HTTP/SSE servers from{" "}
-      <span className="font-mono">.cursor/mcp.json</span> and exposes tools to
-      this backend (cap 8). Default on for local installs; off on SaaS unless
-      enabled. Use <span className="font-mono">vault:secret_name</span> in env
-      or headers for Vault-backed values. Interactive OAuth still needs a prior
-      login in Cursor or the MCP app.
+      Bridge connects stdio and HTTP/SSE servers from coding-root{" "}
+      <span className="font-mono">.godmode/mcp.json</span> (or{" "}
+      <span className="font-mono">.cursor/mcp.json</span> if that file is
+      absent) and exposes tools to this backend (cap 8). Default on for local
+      installs; off on SaaS unless enabled. Use{" "}
+      <span className="font-mono">vault:secret_name</span> in env or headers
+      for Vault-backed values. Interactive OAuth still needs a prior login in
+      Cursor or the MCP app.
     </>
   );
 
@@ -112,10 +116,10 @@ export function McpTab({
         <div>
           <p className="text-xs text-muted-foreground">
             Servers discovered from coding-root{" "}
-            <span className="font-mono">.cursor/mcp.json</span>. Manage
-            pass-through or Bridge host here; GodMode Automations Hooks are
-            unrelated. Tenant-owned MCP CRUD (without a disk file) is planned
-            next.
+            <span className="font-mono">.godmode/mcp.json</span>.{" "}
+            <span className="font-mono">.cursor/mcp.json</span> is a one-way
+            fallback for Cursor repos. Manage pass-through or Bridge host here;
+            GodMode Automations Hooks are unrelated.
           </p>
           {status?.sourcePath && (
             <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
@@ -134,6 +138,16 @@ export function McpTab({
               >
                 {executionLabel(status.execution)}
               </Badge>
+              {status.sourceKind === "godmode" && (
+                <Badge variant="outline" className="text-[10px]">
+                  GodMode
+                </Badge>
+              )}
+              {status.sourceKind === "cursor" && (
+                <Badge variant="secondary" className="text-[10px]">
+                  Cursor compatibility
+                </Badge>
+              )}
               {status.execution === "discovery-only" &&
                 (status.servers?.length ?? 0) > 0 && (
                   <span className="text-[10px] text-amber-600 dark:text-amber-400">
@@ -188,7 +202,7 @@ export function McpTab({
           <p className="text-xs text-muted-foreground">
             {loading
               ? "Loading…"
-              : "No servers found. Add them under coding-root .cursor/mcp.json, or set Backend → Coding workspace."}
+              : "No servers found. Add them under coding-root .godmode/mcp.json (or .cursor/mcp.json for Cursor compatibility), or set Backend → Coding workspace."}
           </p>
         ) : (
           status.servers.map((s) => (

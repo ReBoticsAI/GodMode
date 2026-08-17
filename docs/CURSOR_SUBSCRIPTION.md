@@ -12,9 +12,9 @@ This is the `cursor_cloud` backend (`@cursor/sdk`). It is **not** the `cursor` C
 |------|------------------|
 | Workspace / project instructions | Knowledge → **Rules** (and Skills). Create/edit there. |
 | Event and schedule automations | Agents → Automations → **Hooks** (SQLite + Bridge dispatcher) |
-| MCP servers | Agents → Pipeline → **MCP** node (list, enable/disable, SDK pass-through) |
+| MCP servers | Agents → Pipeline → **MCP** node (list, enable/disable, Bridge host). Config file: coding-root `.godmode/mcp.json`. |
 
-Coding-root `.cursor/*` (rules, skills, `mcp.json`, `AGENTS.md`) remains an **optional one-way import / discovery** source for repos that already use Cursor. GodMode does **not** write back to `.cursor` in v1.
+Coding-root `.godmode/mcp.json` is the **primary** MCP `mcpServers` file (same schema as Cursor). `.cursor/*` (rules, skills, `mcp.json`, `AGENTS.md`) remains an **optional one-way import / discovery** source for repos that already use Cursor. GodMode does **not** write back to `.cursor` in v1. When both MCP files exist, `.godmode/mcp.json` wins in full (no per-server merge). An invalid GodMode file is a soft-fail and does not fall back to Cursor.
 
 **Automations Hooks ≠ Cursor IDE `hooks.json`.** Different executors. Bridge does not advertise or run Cursor hooks from disk; manage automations only in GodMode UI.
 
@@ -68,7 +68,7 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 1. Identity: agent profile, user context, base prompt
 2. Early harness: communication, tool-calling policy, search/reading, citations
 3. Environment: platform / page context (git discovery)
-4. MCP / external tools (`<godmode_mcp>` when `.cursor/mcp.json` is present)
+4. MCP / external tools (`<godmode_mcp>` when `.godmode/mcp.json` or `.cursor/mcp.json` is present)
 5. Rules and skills
 6. GodMode-only blocks (labeled): `<godmode_memory>`, `<godmode_wiki>`, `<godmode_capabilities>`, `<godmode_user>`
 7. Tools and @mentions
@@ -76,16 +76,16 @@ GodMode assembles the Intelligence system prompt in a Cursor-like heading order 
 
 Before assembly, Bridge enriches `platformContext` with a compact **git snapshot** of the coding root (`agent.config.workspace` or tenant/repo root): branch, dirty file count, and ahead/behind when an upstream exists. Soft-fails outside a git work tree. Rendered as `Git: Branch: … | clean|dirty: N | ahead X / behind Y` in the Page Context section (visible in `/api/ai/inspect` when a pathname is supplied).
 
-When the coding root has `.cursor/mcp.json`, Bridge also attaches MCP discovery into the dedicated **MCP** prompt section (and the Builder MCP node). Server names and transport are listed; `env` values and `headers` are never included.
+When the coding root has `.godmode/mcp.json` (or `.cursor/mcp.json` if the GodMode file is absent), Bridge also attaches MCP discovery into the dedicated **MCP** prompt section (and the Builder MCP node). Server names and transport are listed; `env` values and `headers` are never included.
 
 `codebase_search` uses the **code** embedding profile when indexed (AST chunks + hybrid grep); otherwise grep-only. See [AGENT_MEMORY.md](./AGENT_MEMORY.md).
 
 For **`cursor_cloud`**, project MCP is available in two ways:
 
-1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK loads `.cursor/mcp.json`).
-2. **Inline** `mcpServers` from the same file when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
+1. **Ambient** via `local.settingSources: ["project"]` when `.cursor/` exists (SDK still loads `.cursor/mcp.json` for Cursor project MCP).
+2. **Inline** `mcpServers` from `.godmode/mcp.json` (else `.cursor/mcp.json`) when `agent.config.mcpFromWorkspace` is enabled (default **on** for non-SaaS, **off** on SaaS). Toggle and per-server enable/disable live on Agents → Pipeline → **MCP**. Inline servers are passed on `Agent.create` / `resume` and each `send` (SDK does not persist inline MCP across resume). Cap: 8 servers. OAuth MCP that needs an interactive login only works if already signed in from the Cursor app.
 
-For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same `.cursor/mcp.json` is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review).
+For **local / provider / CLI / ACP / remote / cursor CLI** backends, the same GodMode (or Cursor fallback) file is hosted by the **Bridge MCP host** when `mcpFromWorkspace` is enabled (same default: on locally, off on SaaS). Bridge connects **stdio** and **HTTP/SSE** transports, lists tools into the agent tool schemas as `gm_mcp__<server>__<tool>`, and dispatches calls through a **tenant-scoped** session (no cross-tenant process sharing). Cap: 8 servers. Per-server disable uses `mcpDisabledServers`. On sandboxed SaaS `cursor_cloud`, the same Bridge-host path is used (SDK reserved `mcp__` / ambient MCP hits Auto-review).
 
 ### Auth / secrets
 

@@ -2,13 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type {
+  McpConfigSourceKind,
   McpServerDiscovery,
   McpWorkspaceDiscovery,
   PlatformContext,
 } from "../../types/platform-context.js";
 import { resolveCodingRoot, type FsRootOpts } from "./fs-tools.js";
 
-export type { McpServerDiscovery, McpWorkspaceDiscovery };
+export type {
+  McpConfigSourceKind,
+  McpServerDiscovery,
+  McpWorkspaceDiscovery,
+};
 
 const SUMMARY_CAP = 500;
 const MAX_SERVERS_IN_SUMMARY = 12;
@@ -202,22 +207,32 @@ function parseSdkServerEntry(
   return null;
 }
 
-function readMcpServersObject(
-  codingRoot: string
-): { filePath: string; servers: Record<string, unknown> } | null {
-  if (!codingRoot?.trim()) return null;
-  const filePath = path.join(path.resolve(codingRoot), ".cursor", "mcp.json");
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    return null;
+/** Primary GodMode MCP config (same `mcpServers` schema as Cursor). */
+export const GODMODE_MCP_RELATIVE_PATH = path.join(".godmode", "mcp.json");
+/** Cursor compatibility I/O. Used only when the GodMode file is absent. */
+export const CURSOR_MCP_RELATIVE_PATH = path.join(".cursor", "mcp.json");
+
+type ParsedMcpFile =
+  | { status: "missing" }
+  | { status: "invalid" }
+  | { status: "ok"; servers: Record<string, unknown> };
+
+function parseMcpServersFile(filePath: string): ParsedMcpFile {
+  try {
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return { status: "missing" };
+    }
+  } catch {
+    return { status: "missing" };
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
-    return null;
+    return { status: "invalid" };
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return null;
+    return { status: "invalid" };
   }
   const serversRaw = (parsed as Record<string, unknown>).mcpServers;
   if (
@@ -225,9 +240,41 @@ function readMcpServersObject(
     serversRaw === null ||
     Array.isArray(serversRaw)
   ) {
-    return null;
+    return { status: "invalid" };
   }
-  return { filePath, servers: serversRaw as Record<string, unknown> };
+  return { status: "ok", servers: serversRaw as Record<string, unknown> };
+}
+
+/**
+ * Load workspace MCP servers. Prefers `.godmode/mcp.json`. Falls back to
+ * `.cursor/mcp.json` only when the GodMode file is absent. An invalid
+ * GodMode file is a soft-fail (no Cursor fallback).
+ */
+function readMcpServersObject(codingRoot: string): {
+  filePath: string;
+  servers: Record<string, unknown>;
+  sourceKind: McpConfigSourceKind;
+} | null {
+  if (!codingRoot?.trim()) return null;
+  const root = path.resolve(codingRoot);
+  const nativePath = path.join(root, GODMODE_MCP_RELATIVE_PATH);
+  const native = parseMcpServersFile(nativePath);
+  if (native.status === "invalid") return null;
+  if (native.status === "ok") {
+    return {
+      filePath: nativePath,
+      servers: native.servers,
+      sourceKind: "godmode",
+    };
+  }
+  const cursorPath = path.join(root, CURSOR_MCP_RELATIVE_PATH);
+  const cursor = parseMcpServersFile(cursorPath);
+  if (cursor.status !== "ok") return null;
+  return {
+    filePath: cursorPath,
+    servers: cursor.servers,
+    sourceKind: "cursor",
+  };
 }
 
 function executionNote(execution: McpDiscoveryExecution): string {
@@ -244,8 +291,8 @@ function executionNote(execution: McpDiscoveryExecution): string {
 }
 
 /**
- * Whether cursor_cloud should pass workspace `.cursor/mcp.json` as inline
- * SDK `mcpServers`. Explicit `mcpFromWorkspace` wins; otherwise default on
+ * Whether cursor_cloud should pass workspace MCP config as inline SDK
+ * `mcpServers`. Explicit `mcpFromWorkspace` wins; otherwise default on
  * for non-SaaS and off on SaaS (stdio MCP on shared hosts is opt-in).
  */
 export function resolveMcpFromWorkspace(
@@ -282,8 +329,9 @@ export function resolveMcpDiscoveryExecution(args: {
 }
 
 /**
- * Parse coding-root `.cursor/mcp.json` into SDK `mcpServers` shape.
- * Soft-fails on missing/invalid entries. Caps server count.
+ * Parse coding-root MCP config into SDK `mcpServers` shape.
+ * Prefers `.godmode/mcp.json`, else `.cursor/mcp.json`. Soft-fails on
+ * missing/invalid entries. Caps server count.
  * `@param opts.disabled` names are omitted (case-sensitive match on server key).
  */
 export function loadCursorMcpServersForSdk(
@@ -329,14 +377,15 @@ export function cursorMcpServersFingerprint(
     .sort()
     .join(",");
   return createHash("sha256")
-    .update(`${mtime}|${names}|skip:${skip}`)
+    .update(`${loaded.sourceKind}|${mtime}|${names}|skip:${skip}`)
     .digest("hex")
     .slice(0, 12);
 }
 
 /**
- * Read coding-root `.cursor/mcp.json` for prompt awareness.
- * Soft-fails on missing/invalid JSON. Never returns env values or headers.
+ * Read coding-root MCP config for prompt awareness.
+ * Prefers `.godmode/mcp.json`, else `.cursor/mcp.json`. Soft-fails on
+ * missing/invalid JSON. Never returns env values or headers.
  */
 export function collectCursorMcpDiscovery(
   codingRoot: string,
@@ -367,6 +416,7 @@ export function collectCursorMcpDiscovery(
   return {
     servers,
     sourcePath: loaded.filePath,
+    sourceKind: loaded.sourceKind,
     summary: truncateSummary(parts.join(" | ")),
   };
 }

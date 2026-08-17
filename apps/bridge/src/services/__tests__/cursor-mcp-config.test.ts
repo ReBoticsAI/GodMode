@@ -1,5 +1,5 @@
 /**
- * Read-only `.cursor/mcp.json` discovery + SDK pass-through helpers (#71).
+ * Workspace MCP discovery: `.godmode/mcp.json` primary, `.cursor/mcp.json` fallback (#555).
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,6 +44,15 @@ function writeMcpJson(root: string, body: unknown): void {
   );
 }
 
+function writeGodmodeMcpJson(root: string, body: unknown): void {
+  mkdirSync(join(root, ".godmode"), { recursive: true });
+  writeFileSync(
+    join(root, ".godmode", "mcp.json"),
+    JSON.stringify(body, null, 2),
+    "utf8"
+  );
+}
+
 describe("collectCursorMcpDiscovery", () => {
   it("returns null when mcp.json is missing", () => {
     expect(collectCursorMcpDiscovery(tempRoot())).toBeNull();
@@ -75,6 +84,8 @@ describe("collectCursorMcpDiscovery", () => {
 
     const disc = collectCursorMcpDiscovery(root);
     expect(disc).not.toBeNull();
+    expect(disc!.sourceKind).toBe("cursor");
+    expect(disc!.sourcePath).toMatch(/[\\/]\.cursor[\\/]mcp\.json$/);
     expect(disc!.servers.map((s) => s.name).sort()).toEqual(["docs", "github"]);
     expect(disc!.servers.find((s) => s.name === "github")?.transport).toBe(
       "stdio"
@@ -110,6 +121,34 @@ describe("collectCursorMcpDiscovery", () => {
     expect(disc?.servers).toEqual([
       { name: "time", transport: "stdio", detail: "cmd:python" },
     ]);
+  });
+
+  it("prefers .godmode/mcp.json over .cursor/mcp.json", () => {
+    const root = tempRoot();
+    writeMcpJson(root, {
+      mcpServers: { cursorOnly: { command: "python" } },
+    });
+    writeGodmodeMcpJson(root, {
+      mcpServers: { native: { command: "node" } },
+    });
+    const disc = collectCursorMcpDiscovery(root);
+    expect(disc?.sourceKind).toBe("godmode");
+    expect(disc?.sourcePath).toMatch(/[\\/]\.godmode[\\/]mcp\.json$/);
+    expect(disc?.servers.map((s) => s.name)).toEqual(["native"]);
+    expect(loadCursorMcpServersForSdk(root)).toEqual({
+      native: { type: "stdio", command: "node" },
+    });
+  });
+
+  it("does not fall back to .cursor when .godmode/mcp.json is invalid", () => {
+    const root = tempRoot();
+    writeMcpJson(root, {
+      mcpServers: { keep: { command: "node" } },
+    });
+    mkdirSync(join(root, ".godmode"), { recursive: true });
+    writeFileSync(join(root, ".godmode", "mcp.json"), "{not-json", "utf8");
+    expect(collectCursorMcpDiscovery(root)).toBeNull();
+    expect(loadCursorMcpServersForSdk(root)).toBeUndefined();
   });
 });
 
@@ -234,6 +273,15 @@ describe("cursorMcpServersFingerprint", () => {
     expect(first).not.toEqual(second);
     expect(cursorMcpServersFingerprint(root, false)).toBe("");
   });
+
+  it("changes when .godmode/mcp.json takes over from .cursor/mcp.json", () => {
+    const root = tempRoot();
+    writeMcpJson(root, { mcpServers: { a: { command: "node" } } });
+    const first = cursorMcpServersFingerprint(root, true);
+    writeGodmodeMcpJson(root, { mcpServers: { a: { command: "node" } } });
+    const second = cursorMcpServersFingerprint(root, true);
+    expect(first).not.toEqual(second);
+  });
 });
 
 describe("enrichPlatformContextWithMcp", () => {
@@ -275,6 +323,7 @@ describe("prompt-assembler MCP line", () => {
         pathname: "/intelligence",
         mcpDiscovery: {
           servers: [{ name: "github", transport: "stdio", detail: "cmd:npx" }],
+          sourceKind: "godmode",
           summary:
             "github (stdio) cmd:npx | discovery only (not executed by Bridge)",
         },
@@ -282,6 +331,9 @@ describe("prompt-assembler MCP line", () => {
       agentId: "intelligence",
     });
     expect(assembled.systemPrompt).toContain("<godmode_mcp>");
+    expect(assembled.systemPrompt).toContain(
+      "from coding-root `.godmode/mcp.json`"
+    );
     expect(assembled.systemPrompt).toContain(
       "github (stdio) cmd:npx | discovery only (not executed by Bridge)"
     );
