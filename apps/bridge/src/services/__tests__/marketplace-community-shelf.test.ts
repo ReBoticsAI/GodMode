@@ -62,7 +62,7 @@ describe("community commerce overlay", () => {
           title: "Community Ping",
           description: "",
           version: "0.1.0",
-          author: "Dane",
+          author: "community-author",
         },
       ],
       [
@@ -73,7 +73,7 @@ describe("community commerce overlay", () => {
           title: "Community Ping",
           description: "",
           version: "0.1.0",
-          author: "Dane",
+          author: "community-author",
           listingId: "lst-cloud",
           listingStatus: "active",
           priceCents: 0,
