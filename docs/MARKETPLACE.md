@@ -22,29 +22,31 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 - **Official items** — merchant of record is ReBotics/GodMode; **100%** of Official revenue to the platform.
 - **Community (user) listings** — sellers connect Stripe Connect, PayPal, and/or MetaMask; platform takes **10%**.
 - **ToS** — see [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md). Chargeback ⇒ permanent Marketplace ban (no buy, no earn).
-- **Surfaces** — SaaS is the commerce authority. Local and private-hub installs pull the curated Official feed (and checkout against SaaS when an item is paid).
+- **Surfaces:** Official and Community catalogs are the same GitHub indexes on Local, Hub, and Cloud. SaaS is the paid checkout authority. Local and private-hub installs pull those catalogs (plus Cloud public listing metadata) and install plugins on this instance. Paid clone and live checkout opens on GodMode Cloud.
 
 ## Official catalog
 
-Default free/OSS Official index:
+Default Official index (every surface):
 
 - `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/official/index.json`
 - Legacy alias (synced): `.../catalog/index.json`
 - Override with `MARKETPLACE_OFFICIAL_URL`
-- Local sibling `../GodMode-Marketplace/catalog/official/index.json` auto-detected in dev
+- Catalog-author file override: `MARKETPLACE_LOCAL_CATALOG_PATH` (no sibling auto-detect)
 
-Community gated index (user sellers):
+Community gated index (every surface):
 
 - `https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/community/index.json`
 - Override with `MARKETPLACE_COMMUNITY_URL`
+- Catalog-author file override: `MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH` (no sibling auto-detect)
 - Bridge: `GET /api/marketplace/catalog/community`
+- Cloud overlay for listing ids and public clone/live cards: `GET /api/marketplace/commerce/catalog/community/public`
 
 On **GodMode Cloud** (`INSTALLATION_SURFACE=saas`), Official entries are curated in `marketplace_official_catalog` (admin API) and served at:
 
 - Authenticated: `GET /api/marketplace/catalog/official`
 - Public (local/private-hub pulls): `GET /api/marketplace/commerce/catalog/official/public`
 
-Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` / `MARKETPLACE_OFFICIAL_URL` so they see ReBotics-selected prices.
+Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` (defaults to the Cloud Official public feed) so they see ReBotics-selected prices. The same default applies to `MARKETPLACE_SAAS_COMMUNITY_URL` for Community listing ids and public clone/live cards. Set either variable to empty to disable that Cloud overlay.
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
 
@@ -141,16 +143,16 @@ the grants file; kill switches (#96) remain the emergency stop.
 
 ## Community (user-to-user)
 
-Every Community sale is a listing (`seller_kind=user`). Catalog PRs remain the plugin CI transport. They do not replace the listing.
+Every Community sale is a listing (`seller_kind=user`). Catalog PRs are the public artifact transport. They do not replace the listing.
 
-1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish.
-2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (CI + pin). Claim the catalog entry on Sell (GitHub Connect login must match catalog author or `pluginRepo` owner). Paid plugin checkout uses `listingId` and Stripe Connect (10% / 90%), not Official catalog checkout.
-3. **Clone packs** (skill, agent, page, workflow, and similar): snapshot into the buyer workspace. Listings start **in review** (private). Admin Marketplace approve makes them public.
+1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish or auto-claim.
+2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
+3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin (Official packs already work this way). Not a plugin runtime. Catalog-backed packs skip admin blob review. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
 4. **Live share:** paid Shared grant on this host (`share_grant` + entitlement). Same machine or GodMode Cloud tenants on the VPS. Not a copy, and not a home GPU.
 5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace.
-6. Buyer: **Community** → catalog plugins and public listings → free acquire/install, or paid checkout then acquire/install.
+6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid checkout then install.
 
-Public browse listings: `GET /api/marketplace/listings?seller_kind=user` (status=active, visibility=public). Community catalog: `GET /api/marketplace/catalog/community` (entries include `listingId` when claimed).
+Public browse listings: `GET /api/marketplace/listings?seller_kind=user` (status=active, visibility=public, excluding catalog-backed copies). Community catalog: `GET /api/marketplace/catalog/community` (entries include `listingId` when claimed).
 
 Attaching a home llama-server to Cloud Intelligence is not Marketplace. That follow-up is #576.
 

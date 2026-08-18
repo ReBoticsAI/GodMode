@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  marketplaceCloudCommunityUrl,
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
@@ -10,6 +11,14 @@ import {
   sellerPayoutStatusFromAccount,
   userFacingErrorMessage,
 } from "@/lib/marketplace-format";
+
+describe("marketplaceCloudCommunityUrl", () => {
+  it("points at the Cloud Community tab", () => {
+    expect(marketplaceCloudCommunityUrl("https://app.godmode.software")).toBe(
+      "https://app.godmode.software/marketplace?tab=community"
+    );
+  });
+});
 
 describe("formatMarketplaceCents", () => {
   it("formats free and paid prices", () => {
@@ -47,7 +56,7 @@ describe("Local tab on SaaS", () => {
   it("points Cloud Installed empty copy at Official or Community", () => {
     expect(installedEmptyHint(true)).toMatch(/Official or Community/);
     expect(installedEmptyHint(true)).not.toMatch(/Local/);
-    expect(installedEmptyHint(false)).toMatch(/Official or Local/);
+    expect(installedEmptyHint(false)).toMatch(/Official, Community, or Local/);
   });
 });
 

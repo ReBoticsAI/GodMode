@@ -437,6 +437,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-community-catalog-public",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/catalog/community/public",
+    rationale:
+      "Unauthenticated Community catalog JSON and public listings for local/hub/desktop pulls; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-commerce-config",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/commerce/config",

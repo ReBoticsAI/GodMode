@@ -26,11 +26,12 @@ import {
   createInferenceEndpoint,
   listInferenceEndpoints,
 } from "../services/inference-service.js";
-import {
-  acquireCloneListing,
-  claimOwnedCommunityCatalogListings,
-} from "../services/marketplace-listings.js";
+import { claimOwnedCommunityCatalogListings } from "../services/marketplace-listings.js";
 import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
+import {
+  fetchRemoteCommunityShelf,
+  mergePublicListings,
+} from "../services/marketplace-community-shelf.js";
 import { githubProjectsStatus } from "../services/github-integration.js";
 import { getUserDb } from "../user-registry.js";
 import {
@@ -64,7 +65,8 @@ export function buildPublicListingsSql(opts: {
   let sql = `SELECT ${LISTING_COLS_JOINED}
              FROM marketplace_listings ml
              ${MARKETPLACE_LISTING_SELLER_JOINS}
-             WHERE ml.status='active' AND ml.visibility='public' AND ml.kind != 'plugin'`;
+             WHERE ml.status='active' AND ml.visibility='public' AND ml.kind != 'plugin'
+               AND NOT (ml.catalog_entry_id IS NOT NULL AND COALESCE(ml.delivery_mode,'clone')='clone')`
   const params: unknown[] = [];
   const sellerKind = opts.sellerKind?.trim() || "user";
   if (sellerKind !== "all") {
@@ -143,7 +145,7 @@ export function createMarketplaceRouter(): Router {
     res.json(getPublicBillingConfig());
   });
 
-  router.get("/listings", (req, res) => {
+  router.get("/listings", async (req, res) => {
     try {
       const core = getCloudDb();
       const q =
@@ -154,12 +156,19 @@ export function createMarketplaceRouter(): Router {
         typeof req.query.seller_kind === "string" ? req.query.seller_kind : undefined;
       const { sql, params } = buildPublicListingsSql({ kind, sellerKind });
       let rows = core.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+      const remote = await fetchRemoteCommunityShelf();
+      if (remote?.listings.length && (sellerKind ?? "user") !== "official") {
+        rows = mergePublicListings(rows, remote.listings);
+      }
       if (q) {
         rows = rows.filter(
           (r) =>
             String(r.title ?? "").toLowerCase().includes(q) ||
             String(r.description ?? "").toLowerCase().includes(q)
         );
+      }
+      if (kind) {
+        rows = rows.filter((r) => String(r.kind ?? "") === kind);
       }
       res.json({ listings: rows });
     } catch (err) {

@@ -36,6 +36,7 @@ import {
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
+  marketplaceCloudCommunityUrl,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -71,6 +72,7 @@ import { toast } from "sonner";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { VAULT_PATH } from "@/lib/navigation";
 import { FolderOpenIcon, StoreIcon, Trash2Icon } from "lucide-react";
+import { MarketplaceTosDialog } from "@/pages/MarketplaceTosDialog";
 
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
@@ -183,6 +185,10 @@ function EntryCard({
   );
 }
 
+function listingIsCloudHosted(listing: MarketplaceListing): boolean {
+  return String(listing.commerce_host ?? "").toLowerCase() === "cloud";
+}
+
 function CommunityListingCard({
   listing,
   owned,
@@ -197,6 +203,7 @@ function CommunityListingCard({
   busy: boolean;
 }) {
   const paid = Number(listing.price_cents ?? 0) > 0;
+  const cloudHosted = listingIsCloudHosted(listing);
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -208,6 +215,7 @@ function CommunityListingCard({
                 <span>
                   {listing.kind} · {listing.delivery_mode ?? "clone"}
                 </span>
+                {cloudHosted ? <Badge variant="outline">GodMode Cloud</Badge> : null}
                 {(() => {
                   const tier = Number(listing.verified_tier ?? 0);
                   const label =
@@ -233,11 +241,18 @@ function CommunityListingCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
           {listing.description?.trim() || "No description"}
         </p>
-        {paid && !owned ? (
+        {cloudHosted ? (
+          <Button
+            size="sm"
+            render={<a href={marketplaceCloudCommunityUrl()} target="_blank" rel="noreferrer" />}
+          >
+            Open on GodMode Cloud
+          </Button>
+        ) : paid && !owned ? (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => onBuy("stripe")} disabled={busy}>
               {busy ? "Starting…" : "Buy (Card)"}
@@ -364,6 +379,8 @@ export default function MarketplacePage() {
   const [tosVersion, setTosVersion] = useState("1");
   const [platformFeeBps, setPlatformFeeBps] = useState(1000);
   const [tosAccepted, setTosAccepted] = useState(false);
+  const [tosDialogOpen, setTosDialogOpen] = useState(false);
+  const [tosAccepting, setTosAccepting] = useState(false);
   const [payoutReady, setPayoutReady] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishKind, setPublishKind] = useState<string>("skill");
@@ -429,8 +446,14 @@ export default function MarketplacePage() {
             discovered: [] as DiscoveredPlugin[],
           };
         }),
-        fetchMarketplaceListings({ sellerKind: "user" }).catch(() => ({ listings: [] })),
-        fetchCommunityCatalog().catch(() => ({ catalogUrl: "", entries: [] as CatalogEntry[] })),
+        fetchMarketplaceListings({ sellerKind: "user" }).catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Failed to load Community listings"));
+          return { listings: [] };
+        }),
+        fetchCommunityCatalog().catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Failed to load Community catalog"));
+          return { catalogUrl: "", entries: [] as CatalogEntry[] };
+        }),
         fetchMyMarketplaceListings().catch(() => ({
           listings: [] as MarketplaceListing[],
           catalogOrphans: [],
@@ -683,24 +706,30 @@ export default function MarketplacePage() {
   };
 
   const handleAcceptTos = async () => {
+    setTosAccepting(true);
     try {
       const result = await acceptMarketplaceTos();
       setTosVersion(result.tosVersion);
       setTosAccepted(true);
+      setTosDialogOpen(false);
       toast.success(`Accepted Marketplace ToS v${result.tosVersion}`);
     } catch (err) {
       toast.error(userFacingErrorMessage(err, "ToS acceptance failed"));
+    } finally {
+      setTosAccepting(false);
     }
   };
 
   const publishPriceCents = Math.round(Number(publishPriceDollars || "0") * 100);
   const canPublishPaid =
-    publishPriceCents <= 0 || payoutReady || publishFamily === "plugin";
+    publishPriceCents <= 0 || payoutReady || publishFamily === "plugin" || publishFamily === "clone";
   const canPublish = (() => {
     if (!tosAccepted) return false;
     if (!canPublishPaid) return false;
     if (!publishTitle.trim()) return false;
-    if (publishFamily === "plugin") return Boolean(publishCatalogEntryId.trim());
+    if (publishFamily === "plugin" || publishFamily === "clone") {
+      return Boolean(publishCatalogEntryId.trim());
+    }
     if (publishFamily === "inference") return Boolean(publishResourceId.trim());
     return Boolean(publishResourceId.trim());
   })();
@@ -724,16 +753,20 @@ export default function MarketplacePage() {
         priceCents: publishPriceCents,
         deliveryMode: delivery,
         resourceId:
-          publishFamily === "plugin" ? undefined : publishResourceId.trim() || undefined,
+          publishFamily === "plugin" || publishFamily === "clone"
+            ? undefined
+            : publishResourceId.trim() || undefined,
         catalogEntryId:
-          publishFamily === "plugin" ? publishCatalogEntryId.trim() : undefined,
+          publishFamily === "plugin" || publishFamily === "clone"
+            ? publishCatalogEntryId.trim()
+            : undefined,
         inferenceEndpointId:
           publishFamily === "inference" ? publishResourceId.trim() : undefined,
         sellerKind: "user",
       });
       toast.success(
-        publishFamily === "plugin"
-          ? "Plugin listing saved"
+        publishFamily === "plugin" || publishFamily === "clone"
+          ? "Listing saved"
           : "Listing submitted for review"
       );
       setPublishTitle("");
@@ -1045,8 +1078,9 @@ export default function MarketplacePage() {
 
         <TabsContent value="community" className="mt-4 space-y-6">
           <p className="text-sm text-muted-foreground">
-            User-to-user marketplace. Gated plugins land in the Community catalog (CI + pins).
-            Portable listings publish from the Sell tab. Official stays ReBotics-only.
+            User-to-user marketplace. Official and Community catalogs are the same GitHub
+            indexes on Local, Hub, and Cloud. Plugins and clone packs install a copy on this
+            instance from a GitHub pin. Live share stays on the seller host.
           </p>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading community catalog…</p>
@@ -1063,6 +1097,10 @@ export default function MarketplacePage() {
                     buying={buyingId === entry.id}
                     onInstall={() => void handleInstall(entry)}
                     onBuy={(provider) => {
+                      if (entry.commerceHost === "cloud") {
+                        window.open(marketplaceCloudCommunityUrl(), "_blank", "noreferrer");
+                        return;
+                      }
                       if (!entry.listingId) {
                         toast.error(
                           "This plugin has no seller listing yet. The author must claim it on Sell."
@@ -1221,10 +1259,27 @@ export default function MarketplacePage() {
                 permanent Marketplace ban (no buying or earning). Current ToS version: {tosVersion}.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button onClick={() => void handleAcceptTos()}>Accept Marketplace ToS</Button>
+            <CardContent className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setTosDialogOpen(true)}>
+                Read Marketplace Terms
+              </Button>
+              {tosAccepted ? (
+                <Badge variant="secondary">Accepted v{tosVersion}</Badge>
+              ) : (
+                <Button type="button" onClick={() => setTosDialogOpen(true)}>
+                  Accept Marketplace ToS
+                </Button>
+              )}
             </CardContent>
           </Card>
+          <MarketplaceTosDialog
+            open={tosDialogOpen}
+            onOpenChange={setTosDialogOpen}
+            version={tosVersion}
+            accepted={tosAccepted}
+            accepting={tosAccepting}
+            onAccept={() => void handleAcceptTos()}
+          />
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1252,8 +1307,9 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Publish listing</CardTitle>
               <CardDescription>
-                One listing for every Community item. Plugins need catalog CI. Clone and live packs
-                go to review. Paid sales use your connected payout ({feePercent}% platform fee).
+                One listing for every Community item. Plugins and clone packs attach a GitHub
+                catalog entry (pin). Live share stays on this host and goes to review. Paid sales
+                use your connected payout ({feePercent}% platform fee).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1264,7 +1320,10 @@ export default function MarketplacePage() {
                     <AlertDescription>Accept Marketplace ToS before publishing.</AlertDescription>
                   </Alert>
                 ) : null}
-                {publishPriceCents > 0 && !payoutReady && publishFamily !== "plugin" ? (
+                {publishPriceCents > 0 &&
+                !payoutReady &&
+                publishFamily !== "plugin" &&
+                publishFamily !== "clone" ? (
                   <Alert>
                     <AlertTitle>Payout required</AlertTitle>
                     <AlertDescription>
@@ -1301,33 +1360,53 @@ export default function MarketplacePage() {
                   </ToggleGroup>
                   <FieldDescription>
                     {publishFamily === "plugin"
-                      ? "Attach a Community catalog entry after intake CI. GitHub Connect must match the catalog author."
+                      ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author."
                       : publishFamily === "live"
                         ? "Buyer gets live access on this host (paid Shared), not a copy."
                         : publishFamily === "inference"
                           ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
-                          : "Buyer imports a copy. Listings wait in review before they are public."}
+                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Private work stays on Local or a private repo."}
                   </FieldDescription>
                 </Field>
 
-                {publishFamily === "plugin" ? (
+                {publishFamily === "plugin" || publishFamily === "clone" ? (
                   <Field>
                     <FieldLabel htmlFor="publish-catalog-id">Catalog entry id</FieldLabel>
                     <Input
                       id="publish-catalog-id"
                       value={publishCatalogEntryId}
                       onChange={(e) => setPublishCatalogEntryId(e.target.value)}
-                      placeholder="workspace-pulse"
+                      placeholder={publishFamily === "clone" ? "my-agent-pack" : "workspace-pulse"}
                     />
                     <FieldDescription>
                       {githubLogin
                         ? `Connected GitHub: ${githubLogin}`
-                        : "Connect GitHub in Personal Vault so catalog plugins can be claimed automatically."}
+                        : "Connect GitHub in Personal Vault so catalog items you own can be claimed automatically."}
                     </FieldDescription>
                   </Field>
                 ) : null}
 
-                {publishFamily === "clone" || publishFamily === "live" ? (
+                {publishFamily === "clone" ? (
+                  <Field>
+                    <FieldLabel>Kind</FieldLabel>
+                    <Select value={publishKind} onValueChange={(v) => setPublishKind(String(v))}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {LISTING_KINDS.map((k) => (
+                            <SelectItem key={k} value={k}>
+                              {k}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                ) : null}
+
+                {publishFamily === "live" ? (
                   <>
                     <Field>
                       <FieldLabel>Kind</FieldLabel>

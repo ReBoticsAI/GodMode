@@ -126,7 +126,7 @@ That pattern does not replace this quality bar.
 The Official tab is a real curated catalog (packs + Official plugins), not a stub.
 On GodMode Cloud it is served from `marketplace_official_catalog` (synced from the
 public free index when admins run sync-from-public). Self-host may use the public
-GitHub raw index or `MARKETPLACE_LOCAL_CATALOG_PATH` / sibling clone for local dev.
+GitHub raw index or `MARKETPLACE_LOCAL_CATALOG_PATH` for catalog-author local files.
 
 Empty Official results on Cloud mean feed/network/admin curation problems, not
 "set a local catalog path." See [features/marketplace.md](features/marketplace.md).

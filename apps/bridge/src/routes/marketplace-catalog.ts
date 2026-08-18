@@ -40,7 +40,14 @@ export function createMarketplaceCatalogRouter(): Router {
       const saasUrl = config.marketplace.saasOfficialCatalogUrl;
       if (saasUrl) {
         try {
-          const remote = await fetch(saasUrl);
+          const remote = await fetch(saasUrl, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(
+              Number(config.marketplace.catalogFetchTimeoutMs) > 0
+                ? Number(config.marketplace.catalogFetchTimeoutMs)
+                : 4000
+            ),
+          });
           if (remote.ok) {
             const json = (await remote.json()) as {
               entries?: Array<{ id: string; priceCents?: number; currency?: string }>;

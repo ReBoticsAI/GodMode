@@ -110,6 +110,45 @@ describe("claimOwnedCommunityCatalogListings", () => {
     expect(rows).toEqual([{ catalog_entry_id: "community-ping" }]);
   });
 
+  it("claims an owned catalog clone pack as a skill listing", () => {
+    const core = openClaimDb();
+    acceptMarketplaceTos(core, "u-alice");
+    const tenantDb = new Database(":memory:") as unknown as AppDatabase;
+    const orphans = claimOwnedCommunityCatalogListings(core, tenantDb, {
+      sellerUserId: "u-alice",
+      sellerTenantId: "t-alice",
+      githubLogin: "alice",
+      entries: [
+        {
+          id: "weekly-review-pack",
+          title: "Weekly review",
+          author: "alice",
+          pluginRepo: "https://github.com/alice/weekly-review-pack",
+          installType: "clone",
+          kind: "skill",
+          priceCents: 0,
+        },
+      ],
+    });
+    expect(orphans).toEqual([]);
+    const row = core
+      .prepare(
+        `SELECT kind, catalog_entry_id, delivery_mode, status FROM marketplace_listings WHERE catalog_entry_id=?`
+      )
+      .get("weekly-review-pack") as {
+      kind: string;
+      catalog_entry_id: string;
+      delivery_mode: string;
+      status: string;
+    };
+    expect(row).toMatchObject({
+      kind: "skill",
+      catalog_entry_id: "weekly-review-pack",
+      delivery_mode: "clone",
+      status: "active",
+    });
+  });
+
   it("does not block seller listings when the seller has not accepted ToS", () => {
     const core = openClaimDb();
     const tenantDb = new Database(":memory:") as unknown as AppDatabase;

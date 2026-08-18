@@ -3,6 +3,7 @@ import {
   attachListingIdToCatalogEntry,
   communityPluginInstallBlock,
   isCommunityCatalogSource,
+  listingKindFromCatalogEntry,
   resolveListingPublishState,
   sellerOwnsCatalogEntry,
 } from "../marketplace-listing-policy.js";
@@ -47,7 +48,14 @@ describe("resolveListingPublishState", () => {
     ).toBe("draft");
   });
 
-  it("sends clone and live kinds to review", () => {
+  it("activates catalog-backed clone packs and sends uncatalogued clone/live to review", () => {
+    expect(
+      resolveListingPublishState({
+        kind: "skill",
+        catalogEntryId: "weekly-review-pack",
+        priceCents: 0,
+      })
+    ).toEqual({ status: "active", visibility: "public" });
     expect(resolveListingPublishState({ kind: "agent" })).toEqual({
       status: "in_review",
       visibility: "private",
@@ -81,6 +89,18 @@ describe("communityPluginInstallBlock", () => {
         listingStatus: "active",
       })
     ).toBeNull();
+    expect(communityPluginInstallBlock({ priceCents: 0 })).toBeNull();
+  });
+});
+
+describe("listingKindFromCatalogEntry", () => {
+  it("maps catalog clone entries to pack kinds and plugins to plugin", () => {
+    expect(
+      listingKindFromCatalogEntry({ installType: "clone", kind: "skill" })
+    ).toBe("skill");
+    expect(listingKindFromCatalogEntry({ installType: "plugin", kind: "plugin" })).toBe(
+      "plugin"
+    );
   });
 });
 

@@ -6030,6 +6030,8 @@ export interface MarketplaceListing {
   verified_publisher?: number | boolean;
   /** Community earned/admin-resolved tier 0–3 (#313). */
   verified_tier?: number;
+  /** Cloud overlay listings on Local/hub (this host is not the commerce authority). */
+  commerce_host?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -6089,6 +6091,8 @@ export interface CatalogEntry {
   priceCents?: number;
   currency?: string;
   listingId?: string;
+  listingStatus?: string;
+  commerceHost?: string;
   /** Official curated publisher identity signal (#309). */
   verifiedPublisher?: boolean;
 }
