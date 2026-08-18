@@ -60,6 +60,23 @@ export function sellerOwnsCatalogEntry(
   );
 }
 
+export function isClonePackKind(kind: string): boolean {
+  return (CLONE_PACK_KINDS as readonly string[]).includes(kind.trim());
+}
+
+/** Catalog installType clone maps to a listing kind (default bundle). */
+export function listingKindFromCatalogEntry(entry: {
+  installType?: string;
+  kind?: string;
+}): string {
+  const install = String(entry.installType ?? "plugin").trim().toLowerCase();
+  if (install === "clone") {
+    const kind = String(entry.kind ?? "bundle").trim();
+    return isClonePackKind(kind) ? kind : "bundle";
+  }
+  return PLUGIN_LISTING_KIND;
+}
+
 export function resolveListingPublishState(opts: {
   kind: string;
   catalogEntryId?: string | null;
@@ -76,12 +93,17 @@ export function resolveListingPublishState(opts: {
         "Inference listings are not available on GodMode Cloud. Metered model access runs on the seller Bridge (self-host or hub).",
     };
   }
-  if (kind === PLUGIN_LISTING_KIND) {
-    if (!String(opts.catalogEntryId ?? "").trim()) {
+  const catalogId = String(opts.catalogEntryId ?? "").trim();
+  const catalogBacked = kind === PLUGIN_LISTING_KIND || (Boolean(catalogId) && isClonePackKind(kind));
+  if (catalogBacked) {
+    if (!catalogId) {
       return {
         status: "draft",
         visibility: "private",
-        error: "Plugin listings require a Community catalog entry id (intake CI + pin).",
+        error:
+          kind === PLUGIN_LISTING_KIND
+            ? "Plugin listings require a Community catalog entry id (intake CI + pin)."
+            : "Clone pack listings require a Community catalog entry id (GitHub bundle pin).",
       };
     }
     const paid = Number(opts.priceCents ?? 0) > 0;
@@ -108,13 +130,12 @@ export function communityPluginInstallBlock(opts: {
 }): string | null {
   const paid = Number(opts.priceCents) > 0;
   const listingId = String(opts.listingId ?? "").trim();
+  if (!paid) return null;
   if (!listingId) {
-    return paid
-      ? "This Community plugin has no seller listing. Paid install requires a listing and checkout."
-      : "This Community plugin has no seller listing. The author must claim it on Marketplace → Sell.";
+    return "This Community catalog item has no seller listing. Paid install requires a listing and checkout.";
   }
   if (opts.listingStatus && opts.listingStatus !== "active") {
-    return "This Community plugin listing is not public yet.";
+    return "This Community catalog listing is not public yet.";
   }
   return null;
 }

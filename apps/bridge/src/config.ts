@@ -41,6 +41,11 @@ const installationSurface = (
 /** Official paid multi-tenant hub (ReBotics SaaS). Self-hosted hubs use `private_hub`. */
 const isSaas = isHub && installationSurface === "saas";
 
+function defaultCloudMarketplacePublicUrl(suffix: string): string {
+  if (process.env.VITEST) return "";
+  return `https://app.godmode.software${suffix}`;
+}
+
 /**
  * SaaS coding gate (#178): unset defaults on for SaaS, off otherwise.
  * Explicit `true` / `false` always win.
@@ -568,30 +573,16 @@ export const config = {
     communityUrl:
       process.env.MARKETPLACE_COMMUNITY_URL ??
       "https://raw.githubusercontent.com/ReBoticsAI/GodMode-Marketplace/main/catalog/community/index.json",
-    /** Local dev: path to Official catalog/official/index.json (sibling GodMode-Marketplace repo). */
-    localCatalogPath:
-      process.env.MARKETPLACE_LOCAL_CATALOG_PATH ??
-      (fs.existsSync(
-        path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "official", "index.json")
-      )
-        ? path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "official", "index.json")
-        : fs.existsSync(path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json"))
-          ? path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "index.json")
-          : ""),
-    /** Local dev: path to Community catalog/community/index.json. */
-    localCommunityCatalogPath:
-      process.env.MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH ??
-      (fs.existsSync(
-        path.join(path.dirname(repoRoot), "GodMode-Marketplace", "catalog", "community", "index.json")
-      )
-        ? path.join(
-            path.dirname(repoRoot),
-            "GodMode-Marketplace",
-            "catalog",
-            "community",
-            "index.json"
-          )
-        : ""),
+    /**
+     * Explicit Official file override for catalog authors. Unset means GitHub
+     * `catalog/official/index.json` (do not auto-detect a sibling clone).
+     */
+    localCatalogPath: (process.env.MARKETPLACE_LOCAL_CATALOG_PATH ?? "").trim(),
+    /**
+     * Explicit Community file override for catalog authors. Unset means GitHub
+     * `catalog/community/index.json` (do not auto-detect a sibling clone).
+     */
+    localCommunityCatalogPath: (process.env.MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH ?? "").trim(),
     cacheTtlMs: Number(process.env.MARKETPLACE_CACHE_TTL_MS ?? 300_000),
     /** GitHub/raw catalog GET budget. Misses must fail closed before the proxy 502s. */
     catalogFetchTimeoutMs: Number(process.env.MARKETPLACE_CATALOG_FETCH_TIMEOUT_MS ?? 4000),
@@ -599,10 +590,23 @@ export const config = {
     /** Marketplace ToS version buyers/sellers must accept. */
     tosVersion: (process.env.MARKETPLACE_TOS_VERSION ?? "1").trim() || "1",
     /**
-     * When set on SaaS, non-SaaS installs should point MARKETPLACE_OFFICIAL_URL here
-     * (public Official catalog JSON). Empty = use GitHub/local defaults above.
+     * Public Official catalog on GodMode Cloud (prices + curated pins).
+     * Local / private-hub / desktop pull this so paid Official matches Cloud.
+     * Set empty to disable the Cloud overlay.
      */
-    saasOfficialCatalogUrl: (process.env.MARKETPLACE_SAAS_OFFICIAL_URL ?? "").trim(),
+    saasOfficialCatalogUrl: (
+      process.env.MARKETPLACE_SAAS_OFFICIAL_URL ??
+      defaultCloudMarketplacePublicUrl("/api/marketplace/commerce/catalog/official/public")
+    ).trim(),
+    /**
+     * Public Community shelf on GodMode Cloud (listing ids, prices, clone/live cards).
+     * Local / private-hub / desktop pull this so Community matches Cloud.
+     * Set empty to disable the Cloud overlay.
+     */
+    saasCommunityCatalogUrl: (
+      process.env.MARKETPLACE_SAAS_COMMUNITY_URL ??
+      defaultCloudMarketplacePublicUrl("/api/marketplace/commerce/catalog/community/public")
+    ).trim(),
     payments: {
       stripeEnabled: Boolean(
         (process.env.STRIPE_SECRET_KEY ?? "").trim() ||

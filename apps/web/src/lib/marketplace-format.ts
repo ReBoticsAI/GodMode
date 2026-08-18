@@ -29,7 +29,7 @@ export function installedEmptyHint(saas: boolean): string {
   if (saas) {
     return "No plugins installed on this workspace. Use Official or Community to add one.";
   }
-  return "No plugins installed on this workspace. Use Official or Local to add one.";
+  return "No plugins installed on this workspace. Use Official, Community, or Local to add one.";
 }
 
 export const CLONE_PACK_KINDS = [
@@ -78,6 +78,14 @@ export function officialCatalogEmptyMessage(saas: boolean): string {
     return "No Official listings found. Check your network, or ask a platform admin to sync the Official catalog.";
   }
   return "No Official listings found. Check your network, or set MARKETPLACE_LOCAL_CATALOG_PATH for local dev.";
+}
+
+export function marketplaceCloudCommunityUrl(
+  origin =
+    (import.meta.env.VITE_CLOUD_APP_ORIGIN as string | undefined)?.replace(/\/$/, "") ||
+    "https://app.godmode.software"
+): string {
+  return `${origin}/marketplace?tab=community`;
 }
 
 /** Checkout body for a Community (user) listing — listingId required. */

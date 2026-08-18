@@ -949,7 +949,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
     return row ? record(def, row) : null;
   },
   actions: {
-    acquire(coreDb, _def, id, _input, ctx) {
+    async acquire(coreDb, _def, id, _input, ctx) {
       try {
         const listing = coreDb
           .prepare(
@@ -958,6 +958,14 @@ export const marketplaceListingAdapter: RecordAdapter = {
           )
           .get(id) as Record<string, unknown> | undefined;
         if (!listing) throw httpError(404, "Listing not found");
+        const catalogEntryId = String(listing.catalog_entry_id ?? "").trim();
+        if (listing.delivery_mode !== "live" && catalogEntryId) {
+          return installCatalogEntry(ctx.data!.cloudDb, ctx.data!.tenantDb, {
+            userId: requireUser(ctx),
+            tenantId: requireTenant(ctx),
+            entryId: catalogEntryId,
+          });
+        }
         if (listing.delivery_mode !== "live") {
           return acquireCloneListing(
             { core: coreDb, buyerTenant: ctx.data!.tenantDb },

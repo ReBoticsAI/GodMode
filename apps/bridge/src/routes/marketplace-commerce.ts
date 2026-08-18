@@ -17,7 +17,12 @@ import {
   handleMarketplacePayPalWebhook,
   handleMarketplaceStripeWebhook,
 } from "../services/marketplace-payments.js";
-import { getPublicCommerceConfig } from "../services/marketplace-commerce.js";
+import {
+  getPublicCommerceConfig,
+  MARKETPLACE_LISTING_SELLER_JOINS,
+  COMMUNITY_VERIFIED_TIER_SQL,
+} from "../services/marketplace-commerce.js";
+import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
 
 function requireSaasCommerce(_req: Request, res: Response): boolean {
   if (!config.isSaas) {
@@ -46,6 +51,45 @@ export function createMarketplaceCommerceRouter(): Router {
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : "Failed to load Official catalog",
+      });
+    }
+  });
+
+  /** Unauthenticated Community catalog + public listings for local/hub/desktop pulls. */
+  router.get("/catalog/community/public", async (_req, res) => {
+    try {
+      const core = getCloudDb();
+      const { url, entries } = await fetchCommunityCatalog(core);
+      const listings = core
+        .prepare(
+          `SELECT ml.id, ml.seller_user_id, ml.kind, ml.resource_id, ml.title, ml.description,
+                  ml.price_cents, ml.currency, ml.seller_kind, ml.catalog_entry_id,
+                  ml.visibility, ml.status, ml.delivery_mode, ml.pricing_model,
+                  ml.price_period, ml.meter_unit, ml.meter_rate, ml.license,
+                  ml.inference_endpoint_id, ml.created_at, ml.updated_at,
+                  (${COMMUNITY_VERIFIED_TIER_SQL}) AS verified_tier,
+                  CASE WHEN (${COMMUNITY_VERIFIED_TIER_SQL}) > 0 THEN 1 ELSE 0 END AS verified_publisher,
+                  CASE WHEN sa.stripe_connect_account_id IS NOT NULL
+                    OR sa.paypal_merchant_id IS NOT NULL
+                    OR sa.metamask_address IS NOT NULL THEN 1 ELSE 0 END AS payout_ready
+           FROM marketplace_listings ml
+           ${MARKETPLACE_LISTING_SELLER_JOINS}
+           WHERE ml.status='active' AND ml.visibility='public' AND ml.kind != 'plugin'
+             AND NOT (ml.catalog_entry_id IS NOT NULL AND COALESCE(ml.delivery_mode,'clone')='clone')
+             AND ml.seller_kind='user'
+           ORDER BY ml.created_at DESC LIMIT 100`
+        )
+        .all() as Array<Record<string, unknown>>;
+      res.json({
+        catalogUrl: url,
+        entries,
+        listings,
+        version: 2,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : "Failed to load Community catalog",
       });
     }
   });

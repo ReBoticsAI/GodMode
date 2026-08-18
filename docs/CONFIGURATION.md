@@ -220,9 +220,10 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 | `GODMODE_PLUGIN_SCAFFOLD_DIR` | `{repo}/plugins` (local) or tenant workspace `plugins/` (hub) | Override target dir for `scaffold_plugin` |
 | `MARKETPLACE_OFFICIAL_URL` | GitHub `catalog/official/index.json` | Official (ReBotics-only) catalog URL |
 | `MARKETPLACE_COMMUNITY_URL` | GitHub `catalog/community/index.json` | Community (user seller) gated catalog URL |
-| `MARKETPLACE_LOCAL_CATALOG_PATH` | sibling `catalog/official/index.json` | Local Official index for dev |
-| `MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH` | sibling `catalog/community/index.json` | Local Community index for dev |
-| `MARKETPLACE_SAAS_OFFICIAL_URL` | empty | Remote SaaS Official catalog for local/private-hub price enrichment |
+| `MARKETPLACE_LOCAL_CATALOG_PATH` | empty | Explicit Official `index.json` file for catalog authors. Unset uses GitHub Official. |
+| `MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH` | empty | Explicit Community `index.json` file for catalog authors. Unset uses GitHub Community. |
+| `MARKETPLACE_SAAS_OFFICIAL_URL` | Cloud Official public feed | Remote SaaS Official catalog for local/private-hub/desktop price overlay. Empty disables. |
+| `MARKETPLACE_SAAS_COMMUNITY_URL` | Cloud Community public feed | Remote SaaS Community catalog + public listings overlay. Empty disables. |
 | `MARKETPLACE_CACHE_TTL_MS` | `300000` | Catalog cache TTL |
 | `MARKETPLACE_TOS_VERSION` | `1` | Marketplace ToS version buyers/sellers must accept |
 | `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |

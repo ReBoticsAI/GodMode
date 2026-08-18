@@ -25,6 +25,10 @@ import {
   isCommunityCatalogSource,
 } from "./marketplace-listing-policy.js";
 import {
+  applyCommunityCommerceOverlay,
+  fetchRemoteCommunityShelf,
+} from "./marketplace-community-shelf.js";
+import {
   findListingByCatalogEntryId,
   listingIdMapForCatalogEntries,
 } from "./marketplace-listings.js";
@@ -87,6 +91,10 @@ export interface CatalogEntry {
   priceCents?: number;
   currency?: string;
   listingId?: string;
+  /** Listing status when joined from this host or the Cloud Community overlay. */
+  listingStatus?: string;
+  /** Set when listing commerce lives on GodMode Cloud rather than this Bridge. */
+  commerceHost?: string;
   /**
    * Curated Official publisher identity signal (#309).
    * Explicit `false` wins; Official serve paths default to `true`.
@@ -142,12 +150,16 @@ export function ensureCatalogTables(core: CoreDatabase): void {
   `);
 }
 
-function resolveCatalogUrl(customUrl?: string): string {
+export function resolveOfficialCatalogUrl(customUrl?: string): string {
   if (customUrl?.trim()) return customUrl.trim();
   if (config.marketplace.localCatalogPath && fs.existsSync(config.marketplace.localCatalogPath)) {
     return `file://${path.resolve(config.marketplace.localCatalogPath)}`;
   }
   return config.marketplace.officialUrl;
+}
+
+function resolveCatalogUrl(customUrl?: string): string {
+  return resolveOfficialCatalogUrl(customUrl);
 }
 
 function catalogFetchTimeoutMs(): number {
@@ -259,7 +271,7 @@ export async function fetchOfficialCatalog(): Promise<{ url: string; entries: Ca
   return { url, entries };
 }
 
-function resolveCommunityCatalogUrl(customUrl?: string): string {
+export function resolveCommunityCatalogUrl(customUrl?: string): string {
   if (customUrl?.trim()) return customUrl.trim();
   if (
     config.marketplace.localCommunityCatalogPath &&
@@ -276,12 +288,16 @@ export async function fetchCommunityCatalog(
 ): Promise<{ url: string; entries: CatalogEntry[] }> {
   const url = resolveCommunityCatalogUrl();
   const index = await fetchCatalogIndex(url);
-  let entries = index.entries.map((e) => ({
+  let entries: CatalogEntry[] = index.entries.map((e) => ({
     ...e,
     sourceCatalog: url,
     sourceName: "Community",
     verifiedPublisher: e.verifiedPublisher === true,
   }));
+  const remote = await fetchRemoteCommunityShelf();
+  if (remote?.entries.length) {
+    entries = applyCommunityCommerceOverlay(entries, remote.entries);
+  }
   if (core) {
     const map = listingIdMapForCatalogEntries(
       core,
@@ -395,12 +411,46 @@ export async function findCatalogEntry(
   return null;
 }
 
+function githubOwnerRepo(pluginRepo: string): { owner: string; repo: string } | null {
+  const path = pluginRepo
+    .trim()
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  const [owner, repo] = path.split("/");
+  if (!owner || !repo) return null;
+  return { owner, repo };
+}
+
+/** Raw GitHub URL for a pinned pack file (Community clone entries with pluginRepo). */
+export function githubRawContentUrl(pluginRepo: string, ref: string, filePath: string): string {
+  const parsed = githubOwnerRepo(pluginRepo);
+  if (!parsed) {
+    throw new Error(`Invalid GitHub pluginRepo: ${pluginRepo}`);
+  }
+  const rel = filePath.replace(/^\//, "");
+  return `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(ref)}/${rel}`;
+}
+
 async function fetchBundleJson(
   entry: CatalogEntry,
   index: CatalogIndex,
   catalogUrl: string
 ): Promise<PortableBundle> {
   if (!entry.bundlePath) throw new Error("Entry missing bundlePath");
+
+  if (entry.pluginRepo?.trim() && entry.installType === "clone") {
+    const policy = resolvePluginPinPolicy({ entry, sourceCatalog: catalogUrl });
+    const pin = assertPluginInstallPin(entry, policy);
+    const bundleUrl = githubRawContentUrl(entry.pluginRepo, pin.ref, entry.bundlePath);
+    const res = await fetch(bundleUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(catalogFetchTimeoutMs()),
+    });
+    if (!res.ok) throw new Error(`Bundle fetch failed (${res.status}): ${bundleUrl}`);
+    return (await res.json()) as PortableBundle;
+  }
+
   const base = entryBaseUrl(index, catalogUrl);
   const bundleUrl = `${base}/${entry.bundlePath.replace(/^\//, "")}`;
 
@@ -412,7 +462,10 @@ async function fetchBundleJson(
     return JSON.parse(fs.readFileSync(resolved, "utf8")) as PortableBundle;
   }
 
-  const res = await fetch(bundleUrl);
+  const res = await fetch(bundleUrl, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(catalogFetchTimeoutMs()),
+  });
   if (!res.ok) throw new Error(`Bundle fetch failed (${res.status}): ${bundleUrl}`);
   return (await res.json()) as PortableBundle;
 }
@@ -827,7 +880,10 @@ export async function installCatalogEntry(
         : undefined) ??
       (findListingByCatalogEntryId(core, entry.id) as
         | { id: string; status: string }
-        | undefined);
+        | undefined) ??
+      (entry.listingId
+        ? { id: entry.listingId, status: entry.listingStatus ?? "active" }
+        : undefined);
     const block = communityPluginInstallBlock({
       priceCents,
       listingId: listing?.id,
@@ -845,7 +901,7 @@ export async function installCatalogEntry(
       })
     ) {
       throw new MarketplaceCommerceError(
-        "Payment required before installing this Community plugin. Complete checkout on the listing first.",
+        "Payment required before installing this Community catalog item. Complete checkout on the listing first.",
         402
       );
     }

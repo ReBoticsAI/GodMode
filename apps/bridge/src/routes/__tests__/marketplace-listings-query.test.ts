@@ -6,6 +6,7 @@ describe("buildPublicListingsSql", () => {
     const { sql } = buildPublicListingsSql({});
     expect(sql).toMatch(/ml\.kind != 'plugin'/);
     expect(sql).toMatch(/ml\.status='active'/);
+    expect(sql).toMatch(/ml\.catalog_entry_id IS NOT NULL/);
   });
 
   it("includes commerce columns in LISTING_COLS", () => {

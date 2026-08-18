@@ -17,6 +17,7 @@ import {
 } from "./marketplace-commerce.js";
 import {
   PLUGIN_LISTING_KIND,
+  listingKindFromCatalogEntry,
   resolveListingPublishState,
   sellerOwnsCatalogEntry,
 } from "./marketplace-listing-policy.js";
@@ -106,6 +107,11 @@ export function publishMarketplaceListing(
     if (!endpoint) throw Object.assign(new Error("Inference endpoint not found"), { status: 404 });
     title = input.title ?? endpoint.name;
     resourceId = endpointId;
+  } else if (delivery === "clone" && String(input.catalogEntryId ?? "").trim()) {
+    const catalogId = String(input.catalogEntryId).trim();
+    resourceId = catalogId;
+    title = input.title ?? catalogId;
+    bundleJson = "{}";
   } else if (input.kind === "bundle") {
     if (!input.bundleChildren?.length) throw new Error("bundleChildren required for bundle listings");
     bundleJson = JSON.stringify({ title, children: input.bundleChildren });
@@ -243,6 +249,8 @@ export function claimOwnedCommunityCatalogListings(
       author?: string;
       pluginRepo?: string;
       priceCents?: number;
+      installType?: string;
+      kind?: string;
     }>;
   }
 ): CatalogClaimOrphan[] {
@@ -265,7 +273,7 @@ export function claimOwnedCommunityCatalogListings(
       publishMarketplaceListing(core, tenantDb, {
         sellerUserId: opts.sellerUserId,
         sellerTenantId: opts.sellerTenantId,
-        kind: "plugin",
+        kind: listingKindFromCatalogEntry(entry) as MarketplaceListingKind,
         catalogEntryId: entry.id,
         title: entry.title,
         description: entry.description,
