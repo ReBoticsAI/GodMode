@@ -6,6 +6,7 @@ import {
 } from "../core-db.js";
 import {
   createMarketplaceOrder,
+  MARKETPLACE_UPSTREAM_PAYMENT_STATUS,
   MarketplaceCommerceError,
   sellerSupportedProviders,
 } from "./marketplace-commerce.js";
@@ -231,7 +232,10 @@ export async function createGuestMarketplaceCheckout(
     stripeConnectAccountId: payout?.stripe_connect_account_id ?? null,
   });
   if (!checkout.url || !checkout.sessionId) {
-    throw new MarketplaceCommerceError("Stripe checkout missing session", 502);
+    throw new MarketplaceCommerceError(
+      "Stripe checkout missing session",
+      MARKETPLACE_UPSTREAM_PAYMENT_STATUS
+    );
   }
   upsertDeliveryGrant(core, {
     stripeSessionId: checkout.sessionId,

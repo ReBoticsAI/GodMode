@@ -16,6 +16,9 @@ export type MarketplaceOrderStatus =
   | "refunded"
   | "canceled";
 
+/** Use 503 (not 502) for upstream payment-provider failures — Cloudflare replaces origin 502 bodies. */
+export const MARKETPLACE_UPSTREAM_PAYMENT_STATUS = 503;
+
 export class MarketplaceCommerceError extends Error {
   status: number;
   constructor(message: string, status = 400) {
