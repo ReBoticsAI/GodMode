@@ -126,6 +126,14 @@ describe("guest checkout protocol exceptions", () => {
     expect(
       PROTOCOL_EXCEPTIONS.some((e) => e.pathPattern === "/api/marketplace/commerce/delivery")
     ).toBe(true);
+    expect(
+      PROTOCOL_EXCEPTIONS.some((e) => e.pathPattern === "/api/marketplace/cloud-checkout")
+    ).toBe(true);
+    expect(
+      PROTOCOL_EXCEPTIONS.some(
+        (e) => e.pathPattern === "/api/marketplace/cloud-checkout/complete"
+      )
+    ).toBe(true);
   });
 });
 

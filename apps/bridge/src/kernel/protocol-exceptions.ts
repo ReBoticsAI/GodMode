@@ -469,6 +469,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-local-cloud-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/cloud-checkout",
+    rationale:
+      "Authenticated Local Bridge proxy to Cloud guest Stripe Checkout; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-cloud-checkout-complete",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/cloud-checkout/complete",
+    rationale:
+      "Authenticated Local delivery after Cloud paid session; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-commerce-config",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/commerce/config",
