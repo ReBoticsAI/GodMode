@@ -445,6 +445,46 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-guest-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/commerce/checkout",
+    rationale:
+      "Unauthenticated Stripe Checkout for Local buyers; Cloud remains commerce authority. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-guest-checkout-status",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/checkout/status",
+    rationale:
+      "Unauthenticated paid-session lookup for Local delivery; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-guest-checkout-delivery",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/delivery",
+    rationale:
+      "Unauthenticated paid delivery payload for Local install after Stripe; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-cloud-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/cloud-checkout",
+    rationale:
+      "Authenticated Local Bridge proxy to Cloud guest Stripe Checkout; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-cloud-checkout-complete",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/cloud-checkout/complete",
+    rationale:
+      "Authenticated Local delivery after Cloud paid session; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-commerce-config",
     methods: ["GET"],
     pathPattern: "/api/marketplace/commerce/commerce/config",

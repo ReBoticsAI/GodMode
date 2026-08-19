@@ -22,7 +22,7 @@ GodMode Marketplace installs packs and plugins from catalogs, and (on GodMode Cl
 - **Official items** — merchant of record is ReBotics/GodMode; **100%** of Official revenue to the platform.
 - **Community (user) listings** — sellers connect Stripe Connect, PayPal, and/or MetaMask; platform takes **10%**.
 - **ToS** — see [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md). Chargeback ⇒ permanent Marketplace ban (no buy, no earn).
-- **Surfaces:** Official and Community catalogs are the same GitHub indexes on Local, Hub, and Cloud. SaaS is the paid checkout authority. Local and private-hub installs pull those catalogs (plus Cloud public listing metadata) and install plugins on this instance. Paid clone and live checkout opens on GodMode Cloud.
+- **Surfaces:** Official and Community catalogs are the same GitHub indexes on Local, Hub, and Cloud. SaaS is the paid checkout authority. Local and private-hub installs pull those catalogs (plus Cloud public listing metadata) and install plugins on this instance. Paid Local Buy starts Cloud Stripe Checkout and returns to this Bridge with `session_id`. Live share stays same-host only.
 
 ## Official catalog
 
@@ -150,7 +150,9 @@ Every Community sale is a listing (`seller_kind=user`). Catalog PRs are the publ
 3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin (Official packs already work this way). Not a plugin runtime. Catalog-backed packs skip admin blob review. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
 4. **Live share:** paid Shared grant on this host (`share_grant` + entitlement). Same machine or GodMode Cloud tenants on the VPS. Not a copy, and not a home GPU.
 5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace.
-6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid checkout then install.
+6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid Stripe checkout then install. Local Buy does not need a GodMode Cloud account. Recovery of a purchase on a new machine (email / Stripe customer / paste `cs_` session) is a follow-up.
+
+Guest checkout return URLs may be `http://127.0.0.1` / `localhost` or `https://*.godmode.software`, and success URLs must include `{CHECKOUT_SESSION_ID}`.
 
 Public browse listings: `GET /api/marketplace/listings?seller_kind=user` (status=active, visibility=public, excluding catalog-backed copies). Community catalog: `GET /api/marketplace/catalog/community` (entries include `listingId` when claimed).
 

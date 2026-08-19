@@ -88,6 +88,14 @@ export function marketplaceCloudCommunityUrl(
   return `${origin}/marketplace?tab=community`;
 }
 
+export function marketplaceCloudSellUrl(
+  origin =
+    (import.meta.env.VITE_CLOUD_APP_ORIGIN as string | undefined)?.replace(/\/$/, "") ||
+    "https://app.godmode.software"
+): string {
+  return `${origin}/marketplace?tab=seller`;
+}
+
 /** Checkout body for a Community (user) listing — listingId required. */
 export function communityCheckoutBody(opts: {
   listingId: string;

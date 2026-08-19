@@ -274,6 +274,21 @@ export function handleMarketplaceStripeWebhook(
       orderId: String(order.id),
       providerRef: sessionId ?? String(order.provider_ref ?? ""),
     });
+    if (sessionId) {
+      const emailObj = obj.customer_details as { email?: string } | undefined;
+      const email =
+        typeof emailObj?.email === "string" ? emailObj.email.trim().toLowerCase() : "";
+      core
+        .prepare(
+          `UPDATE marketplace_delivery_grants
+           SET status='paid',
+               order_id=COALESCE(?, order_id),
+               buyer_email=COALESCE(?, buyer_email),
+               updated_at=datetime('now')
+           WHERE stripe_session_id=?`
+        )
+        .run(String(order.id), email || null, sessionId);
+    }
     return { ok: true, orderId: String(order.id) };
   }
 

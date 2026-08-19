@@ -851,6 +851,8 @@ export async function installCatalogEntry(
     tenantId: string;
     entryId: string;
     sourceCatalog?: string;
+    /** Local Buy (#584): Cloud Stripe session already verified on this Bridge. */
+    paymentVerified?: boolean;
   }
 ): Promise<Record<string, unknown>> {
   ensureCatalogTables(core);
@@ -895,6 +897,7 @@ export async function installCatalogEntry(
     if (
       priceCents > 0 &&
       listing &&
+      !opts.paymentVerified &&
       !hasPaidEntitlementForListing(core, {
         userId: opts.userId,
         listingId: listing.id,
@@ -905,7 +908,7 @@ export async function installCatalogEntry(
         402
       );
     }
-  } else if (priceCents > 0) {
+  } else if (priceCents > 0 && !opts.paymentVerified) {
     if (
       !hasPaidEntitlementForCatalogEntry(core, {
         userId: opts.userId,

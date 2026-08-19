@@ -22,6 +22,8 @@ import {
   registerLocalPlugin,
   removeCatalogSource,
   removeLocalPlugin,
+  startCloudMarketplaceCheckout,
+  completeCloudMarketplaceCheckout,
   startMarketplaceCheckout,
   uninstallWorkspacePlugin,
   type CatalogEntry,
@@ -37,6 +39,7 @@ import {
   installedEmptyHint,
   listingStatusLabel,
   marketplaceCloudCommunityUrl,
+  marketplaceCloudSellUrl,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -195,15 +198,19 @@ function CommunityListingCard({
   onAcquire,
   onBuy,
   busy,
+  guestBuy,
 }: {
   listing: MarketplaceListing;
   owned: boolean;
   onAcquire: () => void;
   onBuy: (provider: "stripe" | "paypal" | "crypto") => void;
   busy: boolean;
+  guestBuy: boolean;
 }) {
   const paid = Number(listing.price_cents ?? 0) > 0;
   const cloudHosted = listingIsCloudHosted(listing);
+  const live = String(listing.delivery_mode ?? "clone").toLowerCase() === "live";
+  const openOnCloud = cloudHosted && live;
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -245,7 +252,7 @@ function CommunityListingCard({
         <p className="text-sm text-muted-foreground">
           {listing.description?.trim() || "No description"}
         </p>
-        {cloudHosted ? (
+        {openOnCloud ? (
           <Button
             size="sm"
             render={<a href={marketplaceCloudCommunityUrl()} target="_blank" rel="noreferrer" />}
@@ -255,14 +262,18 @@ function CommunityListingCard({
         ) : paid && !owned ? (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => onBuy("stripe")} disabled={busy}>
-              {busy ? "Starting…" : "Buy (Card)"}
+              {busy ? "Starting…" : guestBuy ? "Buy on Stripe" : "Buy (Card)"}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => onBuy("paypal")} disabled={busy}>
-              PayPal
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onBuy("crypto")} disabled={busy}>
-              Crypto
-            </Button>
+            {guestBuy ? null : (
+              <>
+                <Button size="sm" variant="outline" onClick={() => onBuy("paypal")} disabled={busy}>
+                  PayPal
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onBuy("crypto")} disabled={busy}>
+                  Crypto
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="ghost" onClick={onAcquire} disabled={busy}>
               Acquire if owned
             </Button>
@@ -500,12 +511,31 @@ export default function MarketplacePage() {
   useEffect(() => {
     const paid = searchParams.get("paid");
     const canceled = searchParams.get("canceled");
-    if (paid === "1") {
-      toast.success("Payment complete — install or acquire your purchase.");
+    const sessionId = searchParams.get("session_id");
+    if (paid === "1" && sessionId && saas !== true) {
       const next = new URLSearchParams(searchParams);
       next.delete("paid");
       next.delete("entry");
       next.delete("listing");
+      next.delete("session_id");
+      setSearchParams(next, { replace: true });
+      void completeCloudMarketplaceCheckout(sessionId)
+        .then(() => {
+          toast.success("Payment complete. Installed on this machine.");
+          void reload();
+        })
+        .catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Paid session could not be delivered"));
+        });
+      return;
+    }
+    if (paid === "1") {
+      toast.success("Payment complete. Install or acquire your purchase.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("paid");
+      next.delete("entry");
+      next.delete("listing");
+      next.delete("session_id");
       setSearchParams(next, { replace: true });
       void reload();
     } else if (canceled === "1") {
@@ -514,7 +544,7 @@ export default function MarketplacePage() {
       next.delete("canceled");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams, reload]);
+  }, [searchParams, setSearchParams, reload, saas]);
 
   useEffect(() => {
     if (saas === null) return;
@@ -642,6 +672,30 @@ export default function MarketplacePage() {
   ) => {
     setBuyingId(listing.id);
     try {
+      if (saas !== true) {
+        if (provider !== "stripe") {
+          toast.error("Local Buy against Cloud uses Stripe. PayPal and crypto stay deferred.");
+          return;
+        }
+        if (!tosAccepted) {
+          setTosDialogOpen(true);
+          toast.message("Accept Marketplace Terms, then buy again.");
+          return;
+        }
+        const origin = window.location.origin;
+        const result = await startCloudMarketplaceCheckout({
+          listingId: listing.id,
+          successUrl: `${origin}/marketplace?paid=1&session_id={CHECKOUT_SESSION_ID}&tab=community`,
+          cancelUrl: `${origin}/marketplace?canceled=1&tab=community`,
+          tosAccepted: true,
+        });
+        if (result.url) {
+          window.location.href = result.url;
+          return;
+        }
+        toast.error("Stripe Checkout did not return a URL");
+        return;
+      }
       await acceptMarketplaceTos();
       setTosAccepted(true);
       const origin = window.location.origin;
@@ -1097,10 +1151,6 @@ export default function MarketplacePage() {
                     buying={buyingId === entry.id}
                     onInstall={() => void handleInstall(entry)}
                     onBuy={(provider) => {
-                      if (entry.commerceHost === "cloud") {
-                        window.open(marketplaceCloudCommunityUrl(), "_blank", "noreferrer");
-                        return;
-                      }
                       if (!entry.listingId) {
                         toast.error(
                           "This plugin has no seller listing yet. The author must claim it on Sell."
@@ -1160,6 +1210,7 @@ export default function MarketplacePage() {
                   listing={listing}
                   owned={ownedListingIds.has(listing.id)}
                   busy={buyingId === listing.id || acquiringId === listing.id}
+                  guestBuy={saas !== true}
                   onAcquire={() => void handleAcquireListing(listing)}
                   onBuy={(provider) => void handleCommunityBuy(listing, provider)}
                 />
@@ -1249,6 +1300,24 @@ export default function MarketplacePage() {
         </TabsContent>
 
         <TabsContent value="seller" className="mt-4 space-y-4">
+          {saas !== true ? (
+            <Alert>
+              <AlertTitle>Paid listings sell on GodMode Cloud</AlertTitle>
+              <AlertDescription>
+                Stripe Connect, catalog claim, and paid checkout live on Cloud. Buyers on this
+                machine pay there and the copy installs here. Open{" "}
+                <a
+                  className="underline underline-offset-4"
+                  href={marketplaceCloudSellUrl()}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Cloud Sell
+                </a>{" "}
+                to connect payouts and publish Community listings.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Marketplace Terms</CardTitle>

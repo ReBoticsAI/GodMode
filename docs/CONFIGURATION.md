@@ -224,6 +224,7 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 | `MARKETPLACE_LOCAL_COMMUNITY_CATALOG_PATH` | empty | Explicit Community `index.json` file for catalog authors. Unset uses GitHub Community. |
 | `MARKETPLACE_SAAS_OFFICIAL_URL` | Cloud Official public feed | Remote SaaS Official catalog for local/private-hub/desktop price overlay. Empty disables. |
 | `MARKETPLACE_SAAS_COMMUNITY_URL` | Cloud Community public feed | Remote SaaS Community catalog + public listings overlay. Empty disables. |
+| `MARKETPLACE_SAAS_CHECKOUT_URL` | Cloud origin | Origin for Local guest Stripe Checkout (`POST /api/marketplace/commerce/checkout`). Defaults to the Cloud Community feed origin. |
 | `MARKETPLACE_CACHE_TTL_MS` | `300000` | Catalog cache TTL |
 | `MARKETPLACE_TOS_VERSION` | `1` | Marketplace ToS version buyers/sellers must accept |
 | `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |

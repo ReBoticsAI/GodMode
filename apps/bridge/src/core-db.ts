@@ -707,6 +707,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_seller_verified_columns_v1",
     up: ensureMarketplaceSellerVerifiedColumns,
   },
+  {
+    version: 17,
+    name: "core_marketplace_guest_delivery_grants_v1",
+    up: ensureMarketplaceGuestDeliveryGrants,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -1046,6 +1051,44 @@ function ensureMarketplaceSellerVerifiedColumns(db: CoreDatabase): void {
   if (!tableExists(db, "marketplace_seller_accounts")) return;
   addCol(db, "marketplace_seller_accounts", "verified_seller", "INTEGER NOT NULL DEFAULT 0");
   addCol(db, "marketplace_seller_accounts", "verified_frozen", "INTEGER NOT NULL DEFAULT 0");
+}
+
+/** Guest Local Buy (#584): session-keyed delivery, no Cloud user required. */
+export const MARKETPLACE_GUEST_USER_ID = "marketplace-guest";
+export const MARKETPLACE_GUEST_TENANT_ID = "marketplace-guest";
+
+function ensureMarketplaceGuestDeliveryGrants(db: CoreDatabase): void {
+  if (tableExists(db, "users")) {
+    db.prepare(
+      `INSERT OR IGNORE INTO users (id, email, display_name)
+       VALUES (?, 'marketplace-guest@godmode.software', 'Marketplace guest')`
+    ).run(MARKETPLACE_GUEST_USER_ID);
+  }
+  if (tableExists(db, "tenants") && tableExists(db, "users")) {
+    addCol(db, "tenants", "slug", "TEXT");
+    db.prepare(
+      `INSERT OR IGNORE INTO tenants (id, name, slug, owner_user_id)
+       VALUES (?, 'Marketplace guest', 'marketplace-guest', ?)`
+    ).run(MARKETPLACE_GUEST_TENANT_ID, MARKETPLACE_GUEST_USER_ID);
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS marketplace_delivery_grants (
+      id TEXT PRIMARY KEY,
+      stripe_session_id TEXT NOT NULL UNIQUE,
+      order_id TEXT,
+      listing_id TEXT,
+      catalog_entry_id TEXT,
+      buyer_email TEXT,
+      delivery_kind TEXT NOT NULL DEFAULT 'plugin',
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_delivery_grants_listing_idx
+      ON marketplace_delivery_grants(listing_id, status);
+    CREATE INDEX IF NOT EXISTS marketplace_delivery_grants_catalog_idx
+      ON marketplace_delivery_grants(catalog_entry_id, status);
+  `);
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {
