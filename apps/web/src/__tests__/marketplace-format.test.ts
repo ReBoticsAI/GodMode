@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   marketplaceCloudCommunityUrl,
+  marketplaceCloudSellUrl,
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
@@ -16,6 +17,14 @@ describe("marketplaceCloudCommunityUrl", () => {
   it("points at the Cloud Community tab", () => {
     expect(marketplaceCloudCommunityUrl("https://app.godmode.software")).toBe(
       "https://app.godmode.software/marketplace?tab=community"
+    );
+  });
+});
+
+describe("marketplaceCloudSellUrl", () => {
+  it("points at the Cloud Sell tab", () => {
+    expect(marketplaceCloudSellUrl("https://app.godmode.software")).toBe(
+      "https://app.godmode.software/marketplace?tab=seller"
     );
   });
 });

@@ -480,10 +480,14 @@ export function createMarketplaceOrder(
     amountCents: number;
     currency?: string;
     provider: MarketplacePaymentProvider;
+    /** Guest Local Buy (#584): Cloud ToS is not a Cloud user row. */
+    skipBuyerTos?: boolean;
   }
 ): Record<string, unknown> {
-  assertNotMarketplaceBanned(core, opts.buyerUserId);
-  assertMarketplaceTosAccepted(core, opts.buyerUserId);
+  if (!opts.skipBuyerTos) {
+    assertNotMarketplaceBanned(core, opts.buyerUserId);
+    assertMarketplaceTosAccepted(core, opts.buyerUserId);
+  }
 
   if (opts.amountCents < 0) {
     throw new MarketplaceCommerceError("Invalid amount");

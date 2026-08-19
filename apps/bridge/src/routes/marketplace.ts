@@ -27,7 +27,12 @@ import {
   listInferenceEndpoints,
 } from "../services/inference-service.js";
 import { claimOwnedCommunityCatalogListings } from "../services/marketplace-listings.js";
-import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
+import { fetchCommunityCatalog, installCatalogEntry } from "../services/marketplace-catalog.js";
+import {
+  fetchCloudGuestCheckoutStatus,
+  fetchCloudGuestDelivery,
+  startCloudGuestCheckout,
+} from "../services/marketplace-cloud-checkout-client.js";
 import {
   fetchRemoteCommunityShelf,
   mergePublicListings,
@@ -37,6 +42,7 @@ import { getUserDb } from "../user-registry.js";
 import {
   COMMUNITY_VERIFIED_TIER_SQL,
   MARKETPLACE_LISTING_SELLER_JOINS,
+  MarketplaceCommerceError,
 } from "../services/marketplace-commerce.js";
 
 export const LISTING_COLS = `id, seller_user_id, seller_tenant_id, kind, resource_id,
@@ -225,6 +231,69 @@ export function createMarketplaceRouter(): Router {
 
   router.get("/inference/endpoints", (req, res) => {
     res.json({ endpoints: listInferenceEndpoints(getCloudDb(), req.user!.id) });
+  });
+
+  router.post("/cloud-checkout", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Use Cloud Stripe checkout on this host" });
+      return;
+    }
+    try {
+      const listingId = String(req.body?.listingId ?? req.body?.listing_id ?? "").trim();
+      const result = await startCloudGuestCheckout({
+        listingId,
+        successUrl: String(req.body?.successUrl ?? req.body?.success_url ?? ""),
+        cancelUrl: String(req.body?.cancelUrl ?? req.body?.cancel_url ?? ""),
+        email: typeof req.body?.email === "string" ? req.body.email : undefined,
+        tosAccepted: req.body?.tosAccepted === true || req.body?.tos_accepted === true,
+      });
+      res.json(result);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Cloud checkout failed", status);
+    }
+  });
+
+  router.post("/cloud-checkout/complete", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Use Cloud Stripe checkout on this host" });
+      return;
+    }
+    const sessionId = String(req.body?.sessionId ?? req.body?.session_id ?? "").trim();
+    if (!sessionId) {
+      res.status(400).json({ error: "sessionId required" });
+      return;
+    }
+    try {
+      const status = await fetchCloudGuestCheckoutStatus(sessionId);
+      if (!status.paid) {
+        res.status(402).json({ error: "Payment is not complete" });
+        return;
+      }
+      const delivery = await fetchCloudGuestDelivery(sessionId);
+      const tenantDb = getReqTenantDb(req);
+      if (delivery.catalogEntryId) {
+        const installed = await installCatalogEntry(getCloudDb(), tenantDb, {
+          userId: req.user!.id,
+          tenantId: req.tenantId!,
+          entryId: delivery.catalogEntryId,
+          paymentVerified: true,
+        });
+        res.json({ ok: true, deliveryKind: delivery.deliveryKind, install: installed });
+        return;
+      }
+      if (delivery.bundle) {
+        const imported = importEntity(tenantDb, delivery.bundle as PortableBundle);
+        res.json({ ok: true, deliveryKind: "clone", import: imported });
+        return;
+      }
+      res.status(409).json({
+        error: "Paid session has no catalog pin or clone snapshot to install on this machine",
+      });
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Cloud delivery failed", status);
+    }
   });
 
   return router;

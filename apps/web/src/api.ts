@@ -6618,6 +6618,34 @@ export function fetchMarketplaceCommerceConfig() {
   }>("MarketplaceSellerAccount", "commerce_config", {});
 }
 
+export function startCloudMarketplaceCheckout(body: {
+  listingId: string;
+  successUrl: string;
+  cancelUrl: string;
+  email?: string;
+  tosAccepted: boolean;
+}) {
+  return api<{ url: string; sessionId: string; orderId: string }>(
+    "/marketplace/cloud-checkout",
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+export function completeCloudMarketplaceCheckout(sessionId: string) {
+  return api<{
+    ok: true;
+    deliveryKind: "plugin" | "clone";
+    install?: Record<string, unknown>;
+    import?: Record<string, unknown>;
+  }>("/marketplace/cloud-checkout/complete", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
 export function startMarketplaceCheckout(body: {
   provider: "stripe" | "paypal" | "crypto";
   listingId?: string;

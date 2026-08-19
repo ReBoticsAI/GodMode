@@ -21,8 +21,15 @@ import {
   getPublicCommerceConfig,
   MARKETPLACE_LISTING_SELLER_JOINS,
   COMMUNITY_VERIFIED_TIER_SQL,
+  MarketplaceCommerceError,
 } from "../services/marketplace-commerce.js";
+import { rateLimit } from "../services/auth/rate-limit.js";
 import { fetchCommunityCatalog } from "../services/marketplace-catalog.js";
+import {
+  createGuestMarketplaceCheckout,
+  guestCheckoutDelivery,
+  guestCheckoutStatus,
+} from "../services/marketplace-guest-checkout.js";
 
 function requireSaasCommerce(_req: Request, res: Response): boolean {
   if (!config.isSaas) {
@@ -35,6 +42,11 @@ function requireSaasCommerce(_req: Request, res: Response): boolean {
 /** Public + webhook routes for Marketplace commerce (protocol exceptions). */
 export function createMarketplaceCommerceRouter(): Router {
   const router = Router();
+  const guestLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    message: "Too many Marketplace checkout requests",
+  });
 
   router.get("/commerce/config", (_req, res) => {
     res.json(getPublicCommerceConfig());
@@ -90,6 +102,62 @@ export function createMarketplaceCommerceRouter(): Router {
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : "Failed to load Community catalog",
+      });
+    }
+  });
+
+  router.post("/checkout", guestLimiter, async (req, res) => {
+    if (!requireSaasCommerce(req, res)) return;
+    try {
+      const listingId = String(req.body?.listingId ?? req.body?.listing_id ?? "").trim();
+      const result = await createGuestMarketplaceCheckout(getCloudDb(), {
+        listingId,
+        successUrl: String(req.body?.successUrl ?? req.body?.success_url ?? ""),
+        cancelUrl: String(req.body?.cancelUrl ?? req.body?.cancel_url ?? ""),
+        buyerEmail: typeof req.body?.email === "string" ? req.body.email : undefined,
+        tosAccepted: req.body?.tosAccepted === true || req.body?.tos_accepted === true,
+      });
+      res.json(result);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      res.status(Number.isFinite(status) ? status : 500).json({
+        error: err instanceof Error ? err.message : "Checkout failed",
+      });
+    }
+  });
+
+  router.get("/checkout/status", guestLimiter, (req, res) => {
+    if (!requireSaasCommerce(req, res)) return;
+    const sessionId =
+      typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
+    if (!sessionId) {
+      res.status(400).json({ error: "session_id required" });
+      return;
+    }
+    try {
+      res.json(guestCheckoutStatus(getCloudDb(), sessionId));
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      res.status(Number.isFinite(status) ? status : 500).json({
+        error: err instanceof Error ? err.message : "Checkout status failed",
+      });
+    }
+  });
+
+  router.get("/delivery", guestLimiter, (req, res) => {
+    if (!requireSaasCommerce(req, res)) return;
+    const sessionId =
+      typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
+    if (!sessionId) {
+      res.status(400).json({ error: "session_id required" });
+      return;
+    }
+    try {
+      res.json(guestCheckoutDelivery(getCloudDb(), sessionId));
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      res.status(Number.isFinite(status) ? status : 500).json({
+        error: err instanceof Error ? err.message : "Delivery lookup failed",
       });
     }
   });
