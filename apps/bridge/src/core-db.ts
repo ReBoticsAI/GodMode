@@ -1065,6 +1065,7 @@ function ensureMarketplaceGuestDeliveryGrants(db: CoreDatabase): void {
     ).run(MARKETPLACE_GUEST_USER_ID);
   }
   if (tableExists(db, "tenants") && tableExists(db, "users")) {
+    addCol(db, "tenants", "slug", "TEXT");
     db.prepare(
       `INSERT OR IGNORE INTO tenants (id, name, slug, owner_user_id)
        VALUES (?, 'Marketplace guest', 'marketplace-guest', ?)`
