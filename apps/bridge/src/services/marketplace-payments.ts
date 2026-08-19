@@ -9,6 +9,7 @@ import {
   markOrderDisputedAndBanBuyer,
   markOrderPaid,
   markOrderProviderRef,
+  MARKETPLACE_UPSTREAM_PAYMENT_STATUS,
   MarketplaceCommerceError,
   assertMarketplaceTosAccepted,
   assertNotMarketplaceBanned,
@@ -16,6 +17,8 @@ import {
   updateSellerPayout,
   type MarketplacePaymentProvider,
 } from "./marketplace-commerce.js";
+
+const upstreamPaymentStatus = MARKETPLACE_UPSTREAM_PAYMENT_STATUS;
 
 function stripeForm(params: Record<string, string>): URLSearchParams {
   const body = new URLSearchParams();
@@ -47,11 +50,11 @@ async function paypalAccessToken(): Promise<string> {
     body: "grant_type=client_credentials",
   });
   if (!res.ok) {
-    throw new MarketplaceCommerceError(`PayPal auth failed (${res.status})`, 502);
+    throw new MarketplaceCommerceError(`PayPal auth failed (${res.status})`, upstreamPaymentStatus);
   }
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) {
-    throw new MarketplaceCommerceError("PayPal auth missing token", 502);
+    throw new MarketplaceCommerceError("PayPal auth missing token", upstreamPaymentStatus);
   }
   return json.access_token;
 }
@@ -139,11 +142,11 @@ export async function startMarketplaceCheckout(
     });
     if (!res.ok) {
       const text = await res.text();
-      throw new MarketplaceCommerceError(`Stripe checkout failed: ${text}`, 502);
+      throw new MarketplaceCommerceError(`Stripe checkout failed: ${text}`, upstreamPaymentStatus);
     }
     const json = (await res.json()) as { id?: string; url?: string };
     if (!json.id || !json.url) {
-      throw new MarketplaceCommerceError("Stripe checkout missing session", 502);
+      throw new MarketplaceCommerceError("Stripe checkout missing session", upstreamPaymentStatus);
     }
     markOrderProviderRef(core, opts.orderId, json.id);
     return { provider: "stripe", url: json.url, sessionId: json.id };
@@ -197,7 +200,7 @@ export async function startMarketplaceCheckout(
     });
     if (!res.ok) {
       const text = await res.text();
-      throw new MarketplaceCommerceError(`PayPal checkout failed: ${text}`, 502);
+      throw new MarketplaceCommerceError(`PayPal checkout failed: ${text}`, upstreamPaymentStatus);
     }
     const json = (await res.json()) as {
       id?: string;
@@ -205,7 +208,10 @@ export async function startMarketplaceCheckout(
     };
     const approve = json.links?.find((l) => l.rel === "approve")?.href;
     if (!json.id || !approve) {
-      throw new MarketplaceCommerceError("PayPal checkout missing approve link", 502);
+      throw new MarketplaceCommerceError(
+        "PayPal checkout missing approve link",
+        upstreamPaymentStatus
+      );
     }
     markOrderProviderRef(core, opts.orderId, json.id);
     return { provider: "paypal", url: approve, paypalOrderId: json.id };
@@ -338,7 +344,7 @@ export async function capturePayPalOrder(
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new MarketplaceCommerceError(`PayPal capture failed: ${text}`, 502);
+    throw new MarketplaceCommerceError(`PayPal capture failed: ${text}`, upstreamPaymentStatus);
   }
   const json = (await res.json()) as {
     id?: string;
@@ -496,14 +502,22 @@ async function stripePost(
   path: string,
   params: Record<string, string>
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: stripeForm(params),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: stripeForm(params),
+    });
+  } catch (err) {
+    throw new MarketplaceCommerceError(
+      `Stripe Connect failed: ${err instanceof Error ? err.message : "network error"}`,
+      upstreamPaymentStatus
+    );
+  }
   const text = await res.text();
   let json: Record<string, unknown> = {};
   try {
@@ -518,15 +532,23 @@ async function stripePost(
       typeof (json.error as { message?: string }).message === "string"
         ? (json.error as { message: string }).message
         : text.slice(0, 200);
-    throw new MarketplaceCommerceError(`Stripe Connect failed: ${msg}`, 502);
+    throw new MarketplaceCommerceError(`Stripe Connect failed: ${msg}`, upstreamPaymentStatus);
   }
   return json;
 }
 
 async function stripeGet(secret: string, path: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    headers: { Authorization: `Bearer ${secret}` },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://api.stripe.com/v1/${path}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+  } catch (err) {
+    throw new MarketplaceCommerceError(
+      `Stripe Connect failed: ${err instanceof Error ? err.message : "network error"}`,
+      upstreamPaymentStatus
+    );
+  }
   const text = await res.text();
   let json: Record<string, unknown> = {};
   try {
@@ -535,7 +557,13 @@ async function stripeGet(secret: string, path: string): Promise<Record<string, u
     /* keep empty */
   }
   if (!res.ok) {
-    throw new MarketplaceCommerceError(`Stripe Connect failed: ${text.slice(0, 200)}`, 502);
+    const msg =
+      typeof json.error === "object" &&
+      json.error &&
+      typeof (json.error as { message?: string }).message === "string"
+        ? (json.error as { message: string }).message
+        : text.slice(0, 200);
+    throw new MarketplaceCommerceError(`Stripe Connect failed: ${msg}`, upstreamPaymentStatus);
   }
   return json;
 }
@@ -581,7 +609,10 @@ export async function startStripeConnectOnboarding(
     });
     accountId = String(created.id ?? "");
     if (!accountId.startsWith("acct_")) {
-      throw new MarketplaceCommerceError("Stripe did not return a Connect account id", 502);
+      throw new MarketplaceCommerceError(
+        "Stripe did not return a Connect account id",
+        upstreamPaymentStatus
+      );
     }
     updateSellerPayout(core, {
       userId: opts.userId,
@@ -597,7 +628,12 @@ export async function startStripeConnectOnboarding(
     type: "account_onboarding",
   });
   const url = String(link.url ?? "");
-  if (!url) throw new MarketplaceCommerceError("Stripe Account Link missing url", 502);
+  if (!url) {
+    throw new MarketplaceCommerceError(
+      "Stripe Account Link missing url",
+      upstreamPaymentStatus
+    );
+  }
 
   return { url, accountId, onboardingStatus: "pending" };
 }
