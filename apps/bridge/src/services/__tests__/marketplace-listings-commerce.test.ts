@@ -173,12 +173,81 @@ describe("publishMarketplaceListing catalog republish upsert", () => {
       catalogEntry: catalog,
       githubLogin: "seller-gh",
       title: "Review pack pro",
-      priceCents: 199,
+      priceCents: 0,
     });
 
     expect(second.id).toBe(first.id);
     expect(
       core.prepare("SELECT COUNT(*) AS c FROM marketplace_listings").get()
     ).toEqual({ c: 1 });
+  });
+
+  it("requires Connect attestation when Stripe Connect is linked", () => {
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET stripe_connect_account_id=?, onboarding_status='complete'
+         WHERE user_id=?`
+      )
+      .run("acct_pub", "seller");
+    const tenantDb = createTenantDb();
+    const catalog = {
+      id: "attest-pack",
+      author: "seller-gh",
+      pluginRepo: "https://github.com/seller-gh/attest-pack",
+    };
+    expect(() =>
+      publishMarketplaceListing(core as never, tenantDb as never, {
+        sellerUserId: "seller",
+        sellerTenantId: "t1",
+        kind: "plugin",
+        catalogEntryId: "attest-pack",
+        catalogEntry: catalog,
+        githubLogin: "seller-gh",
+        title: "Attest pack",
+        priceCents: 0,
+      })
+    ).toThrow(/attestation/);
+
+    const published = publishMarketplaceListing(core as never, tenantDb as never, {
+      sellerUserId: "seller",
+      sellerTenantId: "t1",
+      kind: "plugin",
+      catalogEntryId: "attest-pack",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
+      title: "Attest pack",
+      priceCents: 0,
+      stripeConnectAttestation: true,
+    });
+    expect(published.id).toBeTruthy();
+  });
+
+  it("skips Connect attestation for catalog claim refresh", () => {
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET stripe_connect_account_id=?, onboarding_status='complete'
+         WHERE user_id=?`
+      )
+      .run("acct_claim", "seller");
+    const tenantDb = createTenantDb();
+    const catalog = {
+      id: "claim-pack",
+      author: "seller-gh",
+      pluginRepo: "https://github.com/seller-gh/claim-pack",
+    };
+    const published = publishMarketplaceListing(core as never, tenantDb as never, {
+      sellerUserId: "seller",
+      sellerTenantId: "t1",
+      kind: "plugin",
+      catalogEntryId: "claim-pack",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
+      title: "Claim pack",
+      priceCents: 0,
+      skipStripeConnectAttestation: true,
+    });
+    expect(published.id).toBeTruthy();
   });
 });

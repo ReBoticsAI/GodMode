@@ -12,6 +12,7 @@ import {
   assertCanAcquireListing,
   assertMarketplaceTosAccepted,
   assertNotMarketplaceBanned,
+  assertStripeConnectAttestation,
   ensureSellerAccount,
   markPaidOrdersDeliveredForListing,
 } from "./marketplace-commerce.js";
@@ -49,6 +50,10 @@ export interface PublishMarketplaceListingInput {
   license?: string;
   inferenceEndpointId?: string;
   bundleChildren?: PortableBundle[];
+  /** Required true when seller has Stripe Connect linked (unless skipStripeConnectAttestation). */
+  stripeConnectAttestation?: boolean;
+  /** Catalog claim refresh: no Sell checkbox; skip Connect attestation assert. */
+  skipStripeConnectAttestation?: boolean;
 }
 
 export function publishMarketplaceListing(
@@ -58,6 +63,13 @@ export function publishMarketplaceListing(
 ): Record<string, unknown> {
   assertNotMarketplaceBanned(core, input.sellerUserId);
   assertMarketplaceTosAccepted(core, input.sellerUserId);
+  if (!input.skipStripeConnectAttestation) {
+    assertStripeConnectAttestation(
+      core,
+      input.sellerUserId,
+      input.stripeConnectAttestation
+    );
+  }
 
   const sellerKind = input.sellerKind ?? "user";
   let payoutReady = false;
@@ -398,6 +410,7 @@ export function claimOwnedCommunityCatalogListings(
         priceCents: Number(entry.priceCents ?? 0),
         sellerKind: "user",
         deliveryMode: delivery,
+        skipStripeConnectAttestation: true,
       });
       claimed.add(entry.id);
     } catch (err) {

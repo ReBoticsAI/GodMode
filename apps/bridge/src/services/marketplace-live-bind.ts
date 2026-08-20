@@ -14,6 +14,7 @@ import {
 import {
   assertMarketplaceTosAccepted,
   assertNotMarketplaceBanned,
+  assertStripeConnectAttestation,
   ensureSellerAccount,
 } from "./marketplace-commerce.js";
 import {
@@ -159,10 +160,12 @@ export async function bindLiveListing(
     description?: string;
     priceCents?: number;
     githubLogin?: string | null;
+    stripeConnectAttestation?: boolean;
   }
 ): Promise<Record<string, unknown>> {
   assertNotMarketplaceBanned(core, opts.sellerUserId);
   assertMarketplaceTosAccepted(core, opts.sellerUserId);
+  assertStripeConnectAttestation(core, opts.sellerUserId, opts.stripeConnectAttestation);
 
   const catalogEntryId = String(opts.catalogEntryId ?? "").trim();
   const resourceId = String(opts.resourceId ?? "").trim();

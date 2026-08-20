@@ -33,6 +33,30 @@ export function MarketplaceTosBody({ version }: { version: string }) {
         </ul>
       </div>
       <div>
+        <p className="font-medium text-foreground">Stripe Connect</p>
+        <p className="mt-1">
+          On Community Stripe Connect checkout you are the merchant of record. GodMode takes 10%.
+          You handle listing accuracy, delivery or live access, and buyer disputes on your sales.
+          GodMode may delist or ban for ToS violations or prohibited content. Connect sellers must
+          attest compliance before publishing or binding.
+        </p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Prohibited and restricted</p>
+        <p className="mt-1">
+          No gambling, adult sexual content, weapons or illegal goods, malware, or other clearly
+          illegal activity. Align with Stripe restricted-business rules where Connect applies.
+        </p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Live Share pin</p>
+        <p className="mt-1">
+          Live Share requires a Community catalog pin and a bound resource whose export matches that
+          pin. Drift or a pin bump demotes the listing until you re-bind. Free Shared sidebar stays
+          outside Marketplace.
+        </p>
+      </div>
+      <div>
         <p className="font-medium text-foreground">Digital goods are final</p>
         <p className="mt-1">
           Marketplace items are software. Once payment succeeds and the item is delivered or install

@@ -53,6 +53,7 @@ import {
   type PublishFamily,
 } from "@/lib/marketplace-format";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -419,6 +420,8 @@ export default function MarketplacePage() {
   const [tosDialogOpen, setTosDialogOpen] = useState(false);
   const [tosAccepting, setTosAccepting] = useState(false);
   const [payoutReady, setPayoutReady] = useState(false);
+  const [stripeConnectLinked, setStripeConnectLinked] = useState(false);
+  const [stripeConnectAttested, setStripeConnectAttested] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishKind, setPublishKind] = useState<string>("skill");
   const [publishTitle, setPublishTitle] = useState("");
@@ -467,6 +470,7 @@ export default function MarketplacePage() {
         catalogSubmitInstallType === "plugin" ? catalogSubmitCiRunUrl.trim() || undefined : undefined,
       deliveryMode:
         catalogSubmitInstallType === "clone" ? catalogSubmitDeliveryMode : undefined,
+      stripeConnectAttestation: stripeConnectLinked ? stripeConnectAttested : undefined,
     }),
     [
       catalogSubmitId,
@@ -479,6 +483,8 @@ export default function MarketplacePage() {
       catalogSubmitBundlePath,
       catalogSubmitCiRunUrl,
       catalogSubmitDeliveryMode,
+      stripeConnectLinked,
+      stripeConnectAttested,
     ]
   );
 
@@ -613,6 +619,7 @@ export default function MarketplacePage() {
         setPlatformFeeBps(cfg.platformFeeBps);
         setTosAccepted(Boolean(cfg.tosAccepted));
         setPayoutReady(sellerPayoutStatusFromAccount(cfg).payoutReady);
+        setStripeConnectLinked(Boolean(String(cfg.stripeConnectAccountId ?? "").trim()));
       })
       .catch(() => undefined);
   }, [reload]);
@@ -912,6 +919,7 @@ export default function MarketplacePage() {
   };
 
   const publishPriceCents = Math.round(Number(publishPriceDollars || "0") * 100);
+  const connectAttestationOk = !stripeConnectLinked || stripeConnectAttested;
   const canPublishPaid =
     publishPriceCents <= 0 ||
     payoutReady ||
@@ -920,6 +928,7 @@ export default function MarketplacePage() {
     publishFamily === "live";
   const canPublish = (() => {
     if (!tosAccepted) return false;
+    if (!connectAttestationOk) return false;
     if (!canPublishPaid) return false;
     if (!publishTitle.trim()) return false;
     if (publishFamily === "plugin" || publishFamily === "clone") {
@@ -962,6 +971,7 @@ export default function MarketplacePage() {
           title: publishTitle.trim(),
           description: publishDescription.trim() || undefined,
           priceCents: publishPriceCents,
+          stripeConnectAttestation: stripeConnectLinked ? stripeConnectAttested : undefined,
         });
         toast.success("Live Share bound to catalog pin");
       } else {
@@ -987,6 +997,7 @@ export default function MarketplacePage() {
           inferenceEndpointId:
             publishFamily === "inference" ? publishResourceId.trim() : undefined,
           sellerKind: "user",
+          stripeConnectAttestation: stripeConnectLinked ? stripeConnectAttested : undefined,
         });
         toast.success(
           publishFamily === "inference" ? "Listing submitted for review" : "Listing saved"
@@ -1510,6 +1521,30 @@ export default function MarketplacePage() {
               )}
             </CardContent>
           </Card>
+          {stripeConnectLinked ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Stripe Connect attestation</CardTitle>
+                <CardDescription>
+                  Required while Stripe Connect is linked. Confirms your listings comply with
+                  prohibited and restricted categories in Marketplace ToS v{tosVersion}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Field orientation="horizontal">
+                  <Checkbox
+                    id="stripe-connect-attest"
+                    checked={stripeConnectAttested}
+                    onCheckedChange={(v) => setStripeConnectAttested(v === true)}
+                  />
+                  <FieldLabel htmlFor="stripe-connect-attest" className="font-normal">
+                    I attest my Community listings comply with Marketplace prohibited and restricted
+                    categories (and applicable Stripe restricted-business rules).
+                  </FieldLabel>
+                </Field>
+              </CardContent>
+            </Card>
+          ) : null}
           <MarketplaceTosDialog
             open={tosDialogOpen}
             onOpenChange={setTosDialogOpen}
@@ -1688,7 +1723,7 @@ export default function MarketplacePage() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={catalogSubmitBusy || !tosAccepted}
+                      disabled={catalogSubmitBusy || !tosAccepted || !connectAttestationOk}
                       onClick={() => void handleCatalogSubmitPreview()}
                     >
                       Preview manifest
@@ -1698,6 +1733,7 @@ export default function MarketplacePage() {
                       disabled={
                         catalogSubmitBusy ||
                         !tosAccepted ||
+                        !connectAttestationOk ||
                         !catalogSubmitPreview?.readyToSubmit
                       }
                       onClick={() => void handleCatalogSubmitPr()}

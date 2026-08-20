@@ -6152,6 +6152,7 @@ export function prepareCommunityCatalogSubmission(body: {
   bundlePath?: string;
   ciRunUrl?: string;
   deliveryMode?: "clone" | "live";
+  stripeConnectAttestation?: boolean;
 }) {
   return api<CommunityCatalogSubmissionPrepareResult>(
     "/marketplace/catalog/community/submission/prepare",
@@ -6171,6 +6172,7 @@ export function submitCommunityCatalogSubmission(body: {
   bundlePath?: string;
   ciRunUrl?: string;
   deliveryMode?: "clone" | "live";
+  stripeConnectAttestation?: boolean;
 }) {
   return api<CommunityCatalogSubmissionSubmitResult>(
     "/marketplace/catalog/community/submission/submit",
@@ -6581,6 +6583,7 @@ export function createMarketplaceListing(body: {
   inferenceEndpointId?: string;
   catalogEntryId?: string;
   bundleChildren?: unknown[];
+  stripeConnectAttestation?: boolean;
 }) {
   return actionDto<{ id: string }>("MarketplaceListing", "publish", {
     kind: body.kind,
@@ -6600,6 +6603,7 @@ export function createMarketplaceListing(body: {
     inference_endpoint_id: body.inferenceEndpointId,
     catalog_entry_id: body.catalogEntryId,
     bundle_children: body.bundleChildren,
+    stripe_connect_attestation: body.stripeConnectAttestation,
   }, undefined, true);
 }
 
@@ -6611,6 +6615,7 @@ export function bindMarketplaceLiveListing(body: {
   title?: string;
   description?: string;
   priceCents?: number;
+  stripeConnectAttestation?: boolean;
 }) {
   return actionDto<{ id: string }>(
     "MarketplaceListing",
@@ -6622,6 +6627,7 @@ export function bindMarketplaceLiveListing(body: {
       title: body.title,
       description: body.description,
       price_cents: body.priceCents,
+      stripe_connect_attestation: body.stripeConnectAttestation,
     },
     undefined,
     true

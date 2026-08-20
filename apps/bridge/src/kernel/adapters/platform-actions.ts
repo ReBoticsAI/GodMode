@@ -1017,6 +1017,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
           description: typeof input.description === "string" ? input.description : undefined,
           priceCents: typeof input.price_cents === "number" ? input.price_cents : undefined,
           githubLogin,
+          stripeConnectAttestation: input.stripe_connect_attestation === true,
         });
         return record(def, row);
       } catch (err) {
@@ -1090,6 +1091,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
           bundleChildren: Array.isArray(input.bundle_children)
             ? (input.bundle_children as PortableBundle[])
             : undefined,
+          stripeConnectAttestation: input.stripe_connect_attestation === true,
         });
         return record(def, row);
       } catch (err) {
@@ -2251,6 +2253,7 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
           license: { type: "string" },
           inference_endpoint_id: { type: "string" },
           bundle_children: { type: "array" },
+          stripe_connect_attestation: { type: "boolean" },
         },
         ["kind"]
       ),
@@ -2268,6 +2271,7 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
           title: { type: "string" },
           description: { type: "string" },
           price_cents: { type: "number" },
+          stripe_connect_attestation: { type: "boolean" },
         },
         ["catalog_entry_id", "resource_id"]
       ),

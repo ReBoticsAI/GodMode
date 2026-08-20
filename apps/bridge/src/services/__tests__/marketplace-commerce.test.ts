@@ -3,13 +3,17 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   acceptMarketplaceTos,
   assertCanAcquireListing,
+  assertMarketplaceTosAccepted,
+  assertStripeConnectAttestation,
   createMarketplaceOrder,
   getSellerPayoutSnapshot,
+  hasAcceptedMarketplaceTos,
   isMarketplaceBanned,
   markOrderDisputedAndBanBuyer,
   markOrderPaid,
   markPaidOrdersDeliveredForListing,
   platformFeeCents,
+  sellerHasStripeConnect,
   updateSellerPayout,
 } from "../marketplace-commerce.js";
 
@@ -265,5 +269,46 @@ describe("marketplace commerce", () => {
       .get(String(order.id)) as { status: string; delivered_at: string | null };
     expect(updated.status).toBe("delivered");
     expect(updated.delivered_at).toBeTruthy();
+  });
+
+  it("rejects ToS acceptance for an older version after a bump", () => {
+    core
+      .prepare(
+        `INSERT INTO marketplace_tos_acceptances (id, user_id, tos_version)
+         VALUES ('tos-v1', 'seller', '1')`
+      )
+      .run();
+    expect(hasAcceptedMarketplaceTos(core as never, "seller")).toBe(false);
+    expect(() => assertMarketplaceTosAccepted(core as never, "seller")).toThrow(
+      /version 2/
+    );
+    acceptMarketplaceTos(core as never, "seller");
+    expect(hasAcceptedMarketplaceTos(core as never, "seller")).toBe(true);
+    expect(() => assertMarketplaceTosAccepted(core as never, "seller")).not.toThrow();
+  });
+
+  it("requires Stripe Connect attestation only when Connect is linked", () => {
+    expect(sellerHasStripeConnect(core as never, "seller")).toBe(false);
+    expect(() =>
+      assertStripeConnectAttestation(core as never, "seller", false)
+    ).not.toThrow();
+
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET stripe_connect_account_id=?, onboarding_status='complete'
+         WHERE user_id=?`
+      )
+      .run("acct_attest", "seller");
+    expect(sellerHasStripeConnect(core as never, "seller")).toBe(true);
+    expect(() =>
+      assertStripeConnectAttestation(core as never, "seller", undefined)
+    ).toThrow(/attestation/);
+    expect(() =>
+      assertStripeConnectAttestation(core as never, "seller", false)
+    ).toThrow(/attestation/);
+    expect(() =>
+      assertStripeConnectAttestation(core as never, "seller", true)
+    ).not.toThrow();
   });
 });
