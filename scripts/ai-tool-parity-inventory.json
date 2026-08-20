@@ -51,8 +51,8 @@
       "rationale": "Coding-stage filesystem edit; not a domain ObjectType mutation."
     },
     "emit_event": {
-      "class": "legacy_gap",
-      "rationale": "Platform event emit still static; PlatformEvent ObjectType path is the long-term target."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to PlatformEvent.emit."
     },
     "git_add": {
       "class": "infra_coding",
@@ -111,8 +111,8 @@
       "rationale": "Cutover alias to Notification.mark_read / mark_all_read."
     },
     "promote_support_to_card": {
-      "class": "legacy_gap",
-      "rationale": "Support → Kanban promote still static; track for Support/ProjectCard action parity."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to SupportTicket.promote_to_card (shared support-to-kanban service)."
     },
     "refresh_holdings": {
       "class": "kernel_generated",

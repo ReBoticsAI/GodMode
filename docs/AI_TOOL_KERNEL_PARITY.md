@@ -48,7 +48,12 @@ P2 domain aliases (static name → ObjectType action):
 - `install_catalog_entry` → `CatalogInstall.install_entry`
 - `create_listing` → `MarketplaceListing.publish`
 
-Remaining `legacy_gap` (P2b): `emit_event`, `promote_support_to_card`.
+Remaining `legacy_gap`: none. Coding/LLM writers stay `infra_coding` / `infra_llm`.
+
+Additional P2b aliases:
+
+- `emit_event` → `PlatformEvent.emit`
+- `promote_support_to_card` → `SupportTicket.promote_to_card`
 
 Do **not** use `git_push` / `github_pr_create` as the Community catalog ship path.
 

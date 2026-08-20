@@ -42,6 +42,10 @@ import {
   listTicketsForRequester,
   updateTicket,
 } from "../../services/support-service.js";
+import { promoteSupportTicketToCard } from "../../services/support-to-kanban.js";
+import { emitEvent } from "../../services/event-bus.js";
+import { createNotification } from "../../services/notification-service.js";
+import { createSqlReadAdapter } from "./sql-read.js";
 import {
   addCatalogSource,
   fetchOfficialCatalog,
@@ -723,6 +727,39 @@ export const supportTicketAdapter: RecordAdapter = {
       );
       return record(def, row as unknown as Record<string, unknown>);
     },
+    promote_to_card(_db, _def, id, input, ctx) {
+      const ticket = getTicket(id, hubDb(ctx));
+      if (!ticket || !canAccessTicket(ticket, ctx)) {
+        throw httpError(404, "Ticket not found");
+      }
+      const userId = requireUser(ctx);
+      const tenantId = requireTenant(ctx);
+      try {
+        const result = promoteSupportTicketToCard({
+          tenantDb: getTenantDb(tenantId),
+          hubDb: hubDb(ctx),
+          ticketId: id,
+          userId,
+          agentId: ctx.agentId ?? null,
+          title: typeof input.title === "string" ? input.title : undefined,
+          prompt: typeof input.prompt === "string" ? input.prompt : undefined,
+        });
+        createNotification({
+          recipientKind: "user",
+          recipientId: userId,
+          recipientTenantId: tenantId,
+          category: "support",
+          title: "Support follow-up card created",
+          body: result.title.slice(0, 200),
+          link: "/tasks",
+          resourceKind: "task_card",
+          resourceId: result.cardId,
+        });
+        return { ok: true, ...result };
+      } catch (err) {
+        statusHttpError(err);
+      }
+    },
   },
 };
 
@@ -1233,6 +1270,37 @@ function communityCatalogSubmissionInput(
       input.stripeConnectAttestation === true,
   };
 }
+
+const platformEventSql = createSqlReadAdapter({
+  id: "platform_event_read",
+  table: "platform_events",
+  scope: "tenant",
+  defaultSort: "created_at",
+});
+
+export const platformEventAdapter: RecordAdapter = {
+  ...platformEventSql,
+  actions: {
+    emit(_db, def, _id, input, ctx) {
+      const tenantId = requireTenant(ctx);
+      const type = requiredText(input, "type");
+      const payloadRaw = input.payload;
+      const payload =
+        payloadRaw && typeof payloadRaw === "object" && !Array.isArray(payloadRaw)
+          ? (payloadRaw as Record<string, unknown>)
+          : {};
+      const row = emitEvent({
+        type,
+        actor: ctx.userId
+          ? { kind: "user", id: ctx.userId }
+          : { kind: "agent", id: ctx.agentId ?? "intelligence" },
+        tenantId,
+        payload,
+      });
+      return record(def, row as unknown as Record<string, unknown>);
+    },
+  },
+};
 
 export const marketplaceCatalogAdapter: RecordAdapter = {
   id: "marketplace_catalog_service",
@@ -1969,6 +2037,7 @@ export const platformActionAdapters = [
   marketplaceOrderAdapter,
   marketplaceSellerAccountAdapter,
   marketplaceCatalogAdapter,
+  platformEventAdapter,
   bridgeConnectionAdapter,
   peerConnectionAdapter,
   inferenceEndpointAdapter,
@@ -1992,6 +2061,7 @@ const OBJECT_TYPE_BY_ADAPTER_ID: Record<string, string> = {
   marketplace_order_read: "MarketplaceOrder",
   marketplace_seller_account_read: "MarketplaceSellerAccount",
   marketplace_catalog_service: "MarketplaceCatalog",
+  platform_event_read: "PlatformEvent",
   bridge_connection_read: "BridgeConnection",
   peer_connection_read: "PeerConnection",
   inference_endpoint_read: "InferenceEndpoint",
@@ -2192,6 +2262,25 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
         status: { type: "string" },
         priority: { type: ["string", "null"] },
       }),
+    }),
+    action("promote_to_card", {
+      inputSchema: objectSchema({
+        title: { type: "string" },
+        prompt: { type: "string" },
+      }),
+    }),
+  ],
+  PlatformEvent: [
+    action("emit", {
+      target: "collection",
+      confirmation: { required: true },
+      inputSchema: objectSchema(
+        {
+          type: { type: "string" },
+          payload: { type: "object" },
+        },
+        ["type"]
+      ),
     }),
   ],
   SupportMessage: [

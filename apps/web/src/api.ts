@@ -4510,17 +4510,14 @@ export const promoteSupportTicketToKanban = (
   ticketId: string,
   body?: { title?: string }
 ) =>
-  api<{
+  actionDto<{
     ok: boolean;
     cardId: string;
     projectId: string;
     columnId: string;
     title: string;
     supportTicketId: string;
-  }>(`/support/tickets/${ticketId}/to-kanban`, {
-    method: "POST",
-    body: JSON.stringify(body ?? {}),
-  });
+  }>("SupportTicket", "promote_to_card", body ?? {}, ticketId, true);
 
 export const createUserProjectCard = (body: {
   columnId?: string;

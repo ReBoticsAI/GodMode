@@ -82,7 +82,7 @@ describe("platform action adapters", () => {
       {
         objectType: "SupportTicket",
         adapterId: "support_ticket_read",
-        actions: ["open", "reply", "set_status"],
+        actions: ["open", "reply", "set_status", "promote_to_card"],
       },
       {
         objectType: "SupportMessage",
@@ -148,6 +148,11 @@ describe("platform action adapters", () => {
         objectType: "MarketplaceCatalog",
         adapterId: "marketplace_catalog_service",
         actions: ["prepare_submission", "submit_submission"],
+      },
+      {
+        objectType: "PlatformEvent",
+        adapterId: "platform_event_read",
+        actions: ["emit"],
       },
       {
         objectType: "BridgeConnection",
