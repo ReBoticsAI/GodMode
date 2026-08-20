@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: Author and install GodMode Bridge plugins (scaffold, ObjectTypes, register, build, tenant install). Use for any durable platform surface or integration.
-tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_marketplace_submission", "build_plugin", "list_object_types", "create_record", "git_status", "git_commit", "git_push", "git_clone", "github_pr_create"]
+tools: ["scaffold_plugin", "install_plugin", "list_available_plugins", "prepare_community_catalog_submission", "submit_community_catalog_submission", "build_plugin", "list_object_types", "create_record", "git_status", "git_commit", "git_push", "git_clone", "github_pr_create"]
 ---
 Use when the change adds ObjectTypes, routes, web pages, AI tools, department types, external APIs, or hardware. Do not only call `create_department` for functional domains.
 

@@ -51,7 +51,10 @@ WebSocket/token streaming and DM binary transfer remain specialized protocols;
 their durable effects are kernel-visible, but bytes and streams are not Records.
 
 See [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) for the complete action,
-security, tenancy, storage, and compatibility contract.
+security, tenancy, storage, and compatibility contract. **UI and agent parity**
+(ship once on the kernel or a shared Bridge route, consume from web and agents)
+is documented there; the static write-tool inventory and P0 gate live in
+[AI_TOOL_KERNEL_PARITY.md](AI_TOOL_KERNEL_PARITY.md).
 
 ## Data storage
 

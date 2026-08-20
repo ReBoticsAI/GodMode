@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "policy": "Every static AI_TOOL_REGISTRY tool with write:true must appear here before merge. Classes: kernel_generated | protocol_exception | infra_coding | infra_llm | infra_search | legacy_gap. See docs/AI_TOOL_KERNEL_PARITY.md and docs/OBJECTTYPE_KERNEL.md UI and agent parity.",
+  "tools": {
+    "apply_patch": {
+      "class": "infra_coding",
+      "rationale": "Coding-stage multi-hunk file edit; not an ObjectType domain mutation."
+    },
+    "build_plugin": {
+      "class": "infra_coding",
+      "rationale": "In-process plugin esbuild; authoring infra, not a kernel Record action."
+    },
+    "coding_workspace_clear": {
+      "class": "infra_coding",
+      "rationale": "Coding workspace retarget clear; Layer 2 infra."
+    },
+    "coding_workspace_set": {
+      "class": "infra_coding",
+      "rationale": "Coding workspace retarget set; Layer 2 infra."
+    },
+    "coding_worktree_create": {
+      "class": "infra_coding",
+      "rationale": "Tenant coding worktree create; Layer 2 infra."
+    },
+    "coding_worktree_discard": {
+      "class": "infra_coding",
+      "rationale": "Tenant coding worktree discard; Layer 2 infra."
+    },
+    "coding_worktree_promote": {
+      "class": "infra_coding",
+      "rationale": "Tenant coding worktree promote; Layer 2 infra."
+    },
+    "create_conversation": {
+      "class": "legacy_gap",
+      "rationale": "Chat conversation create still static; prefer kernel Conversation when cut over."
+    },
+    "create_holding": {
+      "class": "legacy_gap",
+      "rationale": "Bank holding create still static; track for ObjectType/Bank action parity."
+    },
+    "create_listing": {
+      "class": "kernel_generated",
+      "rationale": "Cutover alias: ai-tool-kernel-cutover dispatches to create_record / marketplace listing ObjectType path."
+    },
+    "delete_file": {
+      "class": "infra_coding",
+      "rationale": "Coding-stage filesystem delete; not a domain ObjectType mutation."
+    },
+    "edit_file": {
+      "class": "infra_coding",
+      "rationale": "Coding-stage filesystem edit; not a domain ObjectType mutation."
+    },
+    "emit_event": {
+      "class": "legacy_gap",
+      "rationale": "Platform event emit still static; PlatformEvent ObjectType path is the long-term target."
+    },
+    "git_add": {
+      "class": "infra_coding",
+      "rationale": "Structured git staging for coding ship; keep for repo engineering."
+    },
+    "git_branch": {
+      "class": "infra_coding",
+      "rationale": "Structured git branch for coding ship."
+    },
+    "git_checkout": {
+      "class": "infra_coding",
+      "rationale": "Structured git checkout for coding ship."
+    },
+    "git_clone": {
+      "class": "infra_coding",
+      "rationale": "Clone retargets coding workspace; coding infra."
+    },
+    "git_commit": {
+      "class": "infra_coding",
+      "rationale": "Structured git commit for coding ship."
+    },
+    "git_push": {
+      "class": "infra_coding",
+      "rationale": "Structured git push for coding ship; not Community catalog publish."
+    },
+    "github_pr_create": {
+      "class": "infra_coding",
+      "rationale": "GitHub PR for coding-stage review; Community catalog publish uses submit_community_catalog_submission / Sell UI."
+    },
+    "github_release_create": {
+      "class": "infra_coding",
+      "rationale": "GitHub release draft create; coding/release infra (Release ObjectType owns platform update actions)."
+    },
+    "github_release_prepare": {
+      "class": "infra_coding",
+      "rationale": "GitHub release prepare; coding/release infra."
+    },
+    "github_release_publish": {
+      "class": "infra_coding",
+      "rationale": "GitHub release publish; coding/release infra."
+    },
+    "github_repo_create": {
+      "class": "infra_coding",
+      "rationale": "Create public repo under Connect user; coding infra."
+    },
+    "install_catalog_entry": {
+      "class": "legacy_gap",
+      "rationale": "Catalog install still static; buyer install path not yet a dedicated ObjectType action for agents."
+    },
+    "install_plugin": {
+      "class": "infra_coding",
+      "rationale": "Plugin discovery path + tenant install; authoring/runtime infra."
+    },
+    "mark_notification_read": {
+      "class": "legacy_gap",
+      "rationale": "Notification read mark still static; Notification ObjectType update is the parity target."
+    },
+    "promote_support_to_card": {
+      "class": "legacy_gap",
+      "rationale": "Support → Kanban promote still static; track for Support/ProjectCard action parity."
+    },
+    "refresh_holdings": {
+      "class": "legacy_gap",
+      "rationale": "Bank holdings refresh still static; track for Bank action parity."
+    },
+    "reply_support_ticket": {
+      "class": "legacy_gap",
+      "rationale": "Support reply still static; track for SupportTicket action parity."
+    },
+    "restart_llm": {
+      "class": "infra_llm",
+      "rationale": "Local LLM process control; infrastructure, not a domain Record."
+    },
+    "revert_file": {
+      "class": "infra_coding",
+      "rationale": "Coding-stage file revert; filesystem infra."
+    },
+    "run_ephemeral_build": {
+      "class": "infra_coding",
+      "rationale": "Layer 4 ephemeral npm/native build; authoring infra."
+    },
+    "run_terminal": {
+      "class": "infra_coding",
+      "rationale": "One-shot shell in coding root; coding infra."
+    },
+    "scaffold_plugin": {
+      "class": "infra_coding",
+      "rationale": "Plugin scaffold under coding root; authoring infra."
+    },
+    "send_message": {
+      "class": "legacy_gap",
+      "rationale": "Chat send still static; chat WebSocket remains a protocol exception for streaming."
+    },
+    "start_llm": {
+      "class": "infra_llm",
+      "rationale": "Local LLM process start; infrastructure."
+    },
+    "stop_llm": {
+      "class": "infra_llm",
+      "rationale": "Local LLM process stop; infrastructure."
+    },
+    "submit_community_catalog_submission": {
+      "class": "protocol_exception",
+      "rationale": "#602 shared Bridge Community catalog submit (same handlers as Sell UI); documented protocol exception until MarketplaceCatalog ObjectType exists."
+    },
+    "terminal_session_close": {
+      "class": "infra_coding",
+      "rationale": "PTY session close; coding infra."
+    },
+    "terminal_session_create": {
+      "class": "infra_coding",
+      "rationale": "PTY session create; coding infra."
+    },
+    "terminal_session_write": {
+      "class": "infra_coding",
+      "rationale": "PTY session write; coding infra."
+    },
+    "update_support_ticket": {
+      "class": "legacy_gap",
+      "rationale": "Support ticket update still static; track for SupportTicket action parity."
+    },
+    "write_file": {
+      "class": "infra_coding",
+      "rationale": "Coding-stage filesystem write; not a domain ObjectType mutation."
+    }
+  }
+}
