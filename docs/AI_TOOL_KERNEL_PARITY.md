@@ -15,9 +15,9 @@ This document is the human index for [`scripts/ai-tool-parity-inventory.json`](.
 | `infra_search` | Search/retrieval writers (reserved; none currently) |
 | `legacy_gap` | Known static mutation still awaiting ObjectType / action cutover |
 
-## Reference cutover (#603 P1a)
+## Reference cutover (#603)
 
-Community Marketplace catalog publish:
+Community Marketplace catalog publish (P1a):
 
 - Web: Marketplace → Sell → **Submit to Community catalog** via
   `MarketplaceCatalog.prepare_submission` / `submit_submission`
@@ -26,6 +26,15 @@ Community Marketplace catalog publish:
   generated tools are `marketplace_catalog_prepare_submission` /
   `marketplace_catalog_submit_submission`
 - Shared: `apps/bridge/src/services/marketplace-catalog-submission.ts`
+
+Vault GitHub Connect (P1b):
+
+- Web: Vault → Integrations → **Connect GitHub** via
+  `GithubIntegration.status` / `start_connect` / `disconnect`
+- Generated tools: `github_integration_status`,
+  `github_integration_start_connect`, `github_integration_disconnect`
+- OAuth browser callback stays `GET /api/integrations/github/callback`
+  (protocol exception)
 
 Do **not** use `git_push` / `github_pr_create` as the Community catalog ship path.
 

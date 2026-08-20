@@ -138,6 +138,7 @@ export const CORE_OBJECT_TYPE_NAMES = [
   "IntelligenceSettings",
   "PromptFlow",
   "VaultSecret",
+  "GithubIntegration",
   "ProviderCredential",
   "ModelRuntime",
   "PromptQueueJob",

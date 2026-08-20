@@ -4417,20 +4417,32 @@ export const updateUserBoardColumns = (
   );
 
 export const fetchGithubIntegrationStatus = () =>
-  api<{
+  actionDto<{
     connected: boolean;
     login: string | null;
     configured: boolean;
     githubApp?: boolean;
     installationId?: number | null;
     installUrl?: string | null;
-  }>("/integrations/github/status");
+  }>("GithubIntegration", "status", {});
 
 export const startGithubIntegrationConnect = () =>
-  api<{ url: string }>("/integrations/github/connect", { method: "POST" });
+  actionDto<{ url: string }>(
+    "GithubIntegration",
+    "start_connect",
+    {},
+    undefined,
+    true
+  );
 
 export const disconnectGithubIntegration = () =>
-  api<{ ok: boolean }>("/integrations/github/disconnect", { method: "POST" });
+  actionDto<{ ok: boolean }>(
+    "GithubIntegration",
+    "disconnect",
+    {},
+    undefined,
+    true
+  );
 
 export type ReleaseSubmission = {
   id: string;

@@ -52,7 +52,7 @@ Snowflake Cortex browser OAuth is optional follow-up only. PAT Connect already s
 
 ## Env-based OAuth setup (when a provider ships)
 
-Reuse the GitHub Connect shape (`apps/bridge/src/routes/github-integration.ts`):
+Reuse the GitHub Connect shape (`GithubIntegration` ObjectType for status/connect/disconnect; OAuth callback route under `apps/bridge/src/routes/github-integration.ts`):
 
 1. Operator registers an OAuth app with the provider.
 2. Set host env: `OAUTH_<PROVIDER>_CLIENT_ID`, `OAUTH_<PROVIDER>_CLIENT_SECRET`.

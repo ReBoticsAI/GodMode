@@ -20,7 +20,7 @@ GitHub is the reference Official connector for
 
 | Concern | Where |
 |---------|--------|
-| Auth / refresh / disconnect | Vault **Connect GitHub** (Bridge `github-integration`) |
+| Auth / refresh / disconnect | Vault **Connect GitHub** (`GithubIntegration` ObjectType actions; OAuth callback protocol exception) |
 | Webhooks | GitHub App webhook HMAC on Bridge |
 | Host tools | Core Connect-backed `git_clone` / `github_pr_create` |
 | Official pack | Marketplace Official `godmode-plugin-github` (pinned install + capability grants) |
