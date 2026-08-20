@@ -123,6 +123,54 @@ describe("static AI tool kernel cutover", () => {
       "run_record_action",
       "MarketplaceCatalog",
     ],
+    [
+      "create_conversation",
+      { kind: "direct", memberUserIds: ["user-2"] },
+      "run_record_action",
+      "DirectConversation",
+    ],
+    [
+      "send_message",
+      { conversationId: "c1", body: "hi" },
+      "run_record_action",
+      "DirectMessage",
+    ],
+    [
+      "create_holding",
+      { category: "manual", label: "Cash", balance: 10 },
+      "run_record_action",
+      "FinanceConnection",
+    ],
+    [
+      "refresh_holdings",
+      { connectionId: "fc-1" },
+      "run_record_action",
+      "FinanceConnection",
+    ],
+    [
+      "mark_notification_read",
+      { ids: ["n1"] },
+      "run_record_action",
+      "Notification",
+    ],
+    [
+      "reply_support_ticket",
+      { ticketId: "t1", body: "Thanks" },
+      "run_record_action",
+      "SupportTicket",
+    ],
+    [
+      "update_support_ticket",
+      { ticketId: "t1", status: "resolved" },
+      "run_record_action",
+      "SupportTicket",
+    ],
+    [
+      "install_catalog_entry",
+      { entryId: "entry-1" },
+      "run_record_action",
+      "CatalogInstall",
+    ],
   ])(
     "routes %s through generic kernel dispatch without DB access",
     async (toolName, args, kernelName, objectType) => {

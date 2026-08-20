@@ -31,12 +31,12 @@
       "rationale": "Tenant coding worktree promote; Layer 2 infra."
     },
     "create_conversation": {
-      "class": "legacy_gap",
-      "rationale": "Chat conversation create still static; prefer kernel Conversation when cut over."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to DirectConversation.start (UI createDmConversation shares the same action)."
     },
     "create_holding": {
-      "class": "legacy_gap",
-      "rationale": "Bank holding create still static; track for ObjectType/Bank action parity."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to FinanceConnection.add_manual."
     },
     "create_listing": {
       "class": "kernel_generated",
@@ -99,28 +99,28 @@
       "rationale": "Create public repo under Connect user; coding infra."
     },
     "install_catalog_entry": {
-      "class": "legacy_gap",
-      "rationale": "Catalog install still static; buyer install path not yet a dedicated ObjectType action for agents."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to CatalogInstall.install_entry (async OperationRun)."
     },
     "install_plugin": {
       "class": "infra_coding",
       "rationale": "Plugin discovery path + tenant install; authoring/runtime infra."
     },
     "mark_notification_read": {
-      "class": "legacy_gap",
-      "rationale": "Notification read mark still static; Notification ObjectType update is the parity target."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to Notification.mark_read / mark_all_read."
     },
     "promote_support_to_card": {
       "class": "legacy_gap",
       "rationale": "Support → Kanban promote still static; track for Support/ProjectCard action parity."
     },
     "refresh_holdings": {
-      "class": "legacy_gap",
-      "rationale": "Bank holdings refresh still static; track for Bank action parity."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to FinanceConnection.refresh_external."
     },
     "reply_support_ticket": {
-      "class": "legacy_gap",
-      "rationale": "Support reply still static; track for SupportTicket action parity."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to SupportTicket.reply."
     },
     "restart_llm": {
       "class": "infra_llm",
@@ -143,8 +143,8 @@
       "rationale": "Plugin scaffold under coding root; authoring infra."
     },
     "send_message": {
-      "class": "legacy_gap",
-      "rationale": "Chat send still static; chat WebSocket remains a protocol exception for streaming."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to DirectMessage.send (Intelligence WebSocket streaming stays a separate protocol exception)."
     },
     "start_llm": {
       "class": "infra_llm",
@@ -171,8 +171,8 @@
       "rationale": "PTY session write; coding infra."
     },
     "update_support_ticket": {
-      "class": "legacy_gap",
-      "rationale": "Support ticket update still static; track for SupportTicket action parity."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to SupportTicket.set_status."
     },
     "write_file": {
       "class": "infra_coding",
