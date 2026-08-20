@@ -26,6 +26,9 @@ Community Marketplace catalog publish (P1a):
   generated tools are `marketplace_catalog_prepare_submission` /
   `marketplace_catalog_submit_submission`
 - Shared: `apps/bridge/src/services/marketplace-catalog-submission.ts`
+- P3: `submit_submission` is `execution: "async"` (OperationRun, cancellable,
+  5m timeout). Sell UI already waits via `runRecordActionAndWait`.
+  `prepare_submission` stays sync for Preview.
 
 Vault GitHub Connect (P1b):
 

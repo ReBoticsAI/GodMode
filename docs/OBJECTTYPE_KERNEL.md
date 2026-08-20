@@ -161,7 +161,10 @@ reference: Sell → **Submit to Community catalog** and Intelligence
 (aliases) plus generated `marketplace_catalog_prepare_submission` /
 `marketplace_catalog_submit_submission` all call
 `MarketplaceCatalog.prepare_submission` / `submit_submission`, which wrap
-`marketplace-catalog-submission.ts`. Vault **Connect GitHub** uses
+`marketplace-catalog-submission.ts`. `submit_submission` runs as durable
+`OperationRun` (`execution: "async"`) so long GitHub fork/PR work survives
+across the request boundary; `prepare_submission` stays sync for Sell Preview.
+Vault **Connect GitHub** uses
 `GithubIntegration.status` / `start_connect` / `disconnect` (OAuth browser
 callback remains a protocol exception).
 

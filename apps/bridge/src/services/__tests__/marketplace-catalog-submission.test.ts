@@ -1,7 +1,10 @@
 import Database from "better-sqlite3";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { acceptMarketplaceTos } from "../marketplace-commerce.js";
-import { prepareCommunityCatalogSubmission } from "../marketplace-catalog-submission.js";
+import {
+  prepareCommunityCatalogSubmission,
+  submitCommunityCatalogSubmission,
+} from "../marketplace-catalog-submission.js";
 import * as gitHostAuth from "../coding/git-host-auth.js";
 import * as githubContents from "../coding/github-contents.js";
 
@@ -147,5 +150,29 @@ describe("prepareCommunityCatalogSubmission", () => {
         },
       })
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("submitCommunityCatalogSubmission AbortSignal", () => {
+  it("throws before GitHub work when already aborted", async () => {
+    const core = createCore();
+    acceptMarketplaceTos(core as never, "seller");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      submitCommunityCatalogSubmission({
+        core: core as never,
+        userDb: {} as never,
+        userId: "seller",
+        input: {
+          id: "my-plugin",
+          title: "My Plugin",
+          description: "Does things",
+          installType: "plugin",
+        },
+        signal: controller.signal,
+      })
+    ).rejects.toMatchObject({ status: 499, message: expect.stringMatching(/cancelled/i) });
   });
 });

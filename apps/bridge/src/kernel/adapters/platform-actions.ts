@@ -1326,6 +1326,7 @@ export const marketplaceCatalogAdapter: RecordAdapter = {
           userDb: getUserOwnerTenantDb(userId),
           userId,
           input: communityCatalogSubmissionInput(input),
+          signal: ctx.signal,
         });
       } catch (err) {
         statusHttpError(err);
@@ -2571,8 +2572,13 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
     action("submit_submission", {
       target: "collection",
       effect: "external",
+      execution: "async",
+      timeoutMs: 300_000,
+      cancellable: true,
       confirmation: { required: true },
       idempotency: { required: true },
+      // GitHub fork/branch/PR side effects are not trivially replay-safe.
+      retry: { maxAttempts: 1, backoffMs: 0 },
       inputSchema: objectSchema(
         {
           id: { type: "string" },

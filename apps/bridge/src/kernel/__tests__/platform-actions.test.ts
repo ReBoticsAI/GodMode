@@ -10,6 +10,7 @@ import {
   marketplaceSellerAccountAdapter,
   peerConnectionAdapter,
   platformActionAdapterRegistrations,
+  PLATFORM_ACTION_METADATA,
 } from "../adapters/platform-actions.js";
 import { acceptMarketplaceTos } from "../../services/marketplace-commerce.js";
 
@@ -52,6 +53,21 @@ function context(
 }
 
 describe("platform action adapters", () => {
+  it("declares MarketplaceCatalog.submit_submission as async OperationRun", () => {
+    const submit = PLATFORM_ACTION_METADATA.MarketplaceCatalog.find(
+      (action) => action.name === "submit_submission"
+    );
+    expect(submit).toMatchObject({
+      execution: "async",
+      cancellable: true,
+      timeoutMs: 300_000,
+    });
+    const prepare = PLATFORM_ACTION_METADATA.MarketplaceCatalog.find(
+      (action) => action.name === "prepare_submission"
+    );
+    expect(prepare?.execution ?? "sync").toBe("sync");
+  });
+
   it("reports stable registration IDs and named actions", () => {
     expect(platformActionAdapterRegistrations).toEqual([
       {

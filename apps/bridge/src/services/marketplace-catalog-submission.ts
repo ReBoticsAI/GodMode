@@ -237,27 +237,42 @@ export async function submitCommunityCatalogSubmission(opts: {
   userDb: AppDatabase;
   userId: string;
   input: PrepareCommunityCatalogSubmissionInput;
+  signal?: AbortSignal;
 }): Promise<SubmitCommunityCatalogSubmissionResult> {
+  const throwIfAborted = () => {
+    if (opts.signal?.aborted) {
+      throw Object.assign(new Error("Catalog submission cancelled"), {
+        status: 499,
+        code: "ABORTED",
+      });
+    }
+  };
+
+  throwIfAborted();
   const prepared = await prepareCommunityCatalogSubmission(opts);
   if (!prepared.readyToSubmit) {
     const msg = prepared.blockers.map((b) => b.message).join(" ");
     throw Object.assign(new Error(msg || "Catalog submission is not ready"), { status: 400 });
   }
 
+  throwIfAborted();
   const token = await resolveCodingGithubAccessToken(opts.userDb);
   const entry = prepared.entry;
   const catalogEntryId = String(entry.id ?? "");
 
+  throwIfAborted();
   const fork = await ensureGithubFork(
     token,
     COMMUNITY_MARKETPLACE_UPSTREAM.owner,
     COMMUNITY_MARKETPLACE_UPSTREAM.repo
   );
 
+  throwIfAborted();
   const baseSha = await getGithubBranchSha(token, fork.owner, fork.repo, fork.defaultBranch);
   const branch = `catalog/${catalogEntryId}-${Date.now()}`;
   await createGithubBranch(token, fork.owner, fork.repo, branch, baseSha);
 
+  throwIfAborted();
   const file = await getGithubFileContent(
     token,
     fork.owner,
@@ -279,6 +294,7 @@ export async function submitCommunityCatalogSubmission(opts: {
     );
   }
 
+  throwIfAborted();
   const merged = mergeCommunityIndexEntry(index, entry);
   const contentUtf8 = `${JSON.stringify(merged, null, 2)}\n`;
   await putGithubFileContent({
@@ -292,6 +308,7 @@ export async function submitCommunityCatalogSubmission(opts: {
     sha: file.sha,
   });
 
+  throwIfAborted();
   const pr = await createGithubPullRequest({
     accessToken: token,
     owner: COMMUNITY_MARKETPLACE_UPSTREAM.owner,
