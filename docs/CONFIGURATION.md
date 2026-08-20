@@ -226,7 +226,7 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 | `MARKETPLACE_SAAS_COMMUNITY_URL` | Cloud Community public feed | Remote SaaS Community catalog + public listings overlay. Empty disables. |
 | `MARKETPLACE_SAAS_CHECKOUT_URL` | Cloud origin | Origin for Local guest Stripe Checkout (`POST /api/marketplace/commerce/checkout`). Defaults to the Cloud Community feed origin. |
 | `MARKETPLACE_CACHE_TTL_MS` | `300000` | Catalog cache TTL |
-| `MARKETPLACE_TOS_VERSION` | `1` | Marketplace ToS version buyers/sellers must accept |
+| `MARKETPLACE_TOS_VERSION` | `2` | Marketplace ToS version buyers/sellers must accept |
 | `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |
 | `MARKETPLACE_CRYPTO_CHAIN_ID` | `1` | EVM chain id for crypto payments |
 | `MARKETPLACE_CRYPTO_ASSET` | `USDC` | Display asset label for crypto checkout |

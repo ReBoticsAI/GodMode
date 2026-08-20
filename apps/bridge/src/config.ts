@@ -588,7 +588,7 @@ export const config = {
     catalogFetchTimeoutMs: Number(process.env.MARKETPLACE_CATALOG_FETCH_TIMEOUT_MS ?? 4000),
     pluginsDir: path.join(appData, "marketplace-plugins"),
     /** Marketplace ToS version buyers/sellers must accept. */
-    tosVersion: (process.env.MARKETPLACE_TOS_VERSION ?? "1").trim() || "1",
+    tosVersion: (process.env.MARKETPLACE_TOS_VERSION ?? "2").trim() || "2",
     /**
      * Public Official catalog on GodMode Cloud (prices + curated pins).
      * Local / private-hub / desktop pull this so paid Official matches Cloud.

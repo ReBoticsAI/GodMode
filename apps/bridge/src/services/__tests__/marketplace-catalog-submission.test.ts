@@ -54,6 +54,33 @@ describe("prepareCommunityCatalogSubmission", () => {
     vi.restoreAllMocks();
   });
 
+  it("requires Connect attestation when Stripe Connect is linked", async () => {
+    core
+      .prepare(
+        `UPDATE marketplace_seller_accounts
+         SET stripe_connect_account_id=?, onboarding_status='complete'
+         WHERE user_id=?`
+      )
+      .run("acct_sub", "seller");
+
+    await expect(
+      prepareCommunityCatalogSubmission({
+        core: core as never,
+        userDb,
+        userId: "seller",
+        input: {
+          id: "my-plugin",
+          title: "My Plugin",
+          description: "Does things",
+          installType: "plugin",
+          pluginRepo: "https://github.com/alice/my-plugin",
+          pluginRef: "abc123",
+          ciRunUrl: "https://github.com/alice/my-plugin/actions/runs/1",
+        },
+      })
+    ).rejects.toThrow(/attestation/);
+  });
+
   it("returns blockers when GitHub is not connected", async () => {
     vi.spyOn(gitHostAuth, "resolveCodingGithubAccessToken").mockRejectedValue(
       new Error("not connected")
@@ -71,6 +98,7 @@ describe("prepareCommunityCatalogSubmission", () => {
         pluginRepo: "https://github.com/alice/my-plugin",
         pluginRef: "abc123",
         ciRunUrl: "https://github.com/alice/my-plugin/actions/runs/1",
+        stripeConnectAttestation: true,
       },
     });
 

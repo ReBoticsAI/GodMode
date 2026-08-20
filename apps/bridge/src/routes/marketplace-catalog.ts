@@ -169,6 +169,7 @@ export function createMarketplaceCatalogRouter(): Router {
           deliveryMode: body.deliveryMode === "live" || body.deliveryMode === "clone"
             ? body.deliveryMode
             : undefined,
+          stripeConnectAttestation: body.stripeConnectAttestation === true,
         },
       });
       res.json(result);
@@ -201,6 +202,7 @@ export function createMarketplaceCatalogRouter(): Router {
           deliveryMode: body.deliveryMode === "live" || body.deliveryMode === "clone"
             ? body.deliveryMode
             : undefined,
+          stripeConnectAttestation: body.stripeConnectAttestation === true,
         },
       });
       res.json(result);

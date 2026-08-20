@@ -3,6 +3,7 @@ import type { AppDatabase } from "../db.js";
 import {
   assertMarketplaceTosAccepted,
   assertNotMarketplaceBanned,
+  assertStripeConnectAttestation,
 } from "./marketplace-commerce.js";
 import { createGithubPullRequest } from "./coding/github-pr.js";
 import {
@@ -39,6 +40,7 @@ export type PrepareCommunityCatalogSubmissionInput = {
   /** Community Live Share (#596). Only valid with installType clone. */
   deliveryMode?: "clone" | "live";
   tags?: string[];
+  stripeConnectAttestation?: boolean;
 };
 
 export type CommunityCatalogSubmissionBlocker = {
@@ -167,6 +169,11 @@ export async function prepareCommunityCatalogSubmission(opts: {
 }): Promise<PrepareCommunityCatalogSubmissionResult> {
   assertNotMarketplaceBanned(opts.core, opts.userId);
   assertMarketplaceTosAccepted(opts.core, opts.userId);
+  assertStripeConnectAttestation(
+    opts.core,
+    opts.userId,
+    opts.input.stripeConnectAttestation
+  );
 
   const id = normalizeCatalogId(opts.input.id);
   assertCatalogId(id);

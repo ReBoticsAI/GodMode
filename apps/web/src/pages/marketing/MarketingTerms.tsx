@@ -286,7 +286,7 @@ export default function MarketingTerms() {
           <AccordionTrigger className={termsAccordionTriggerClass}>
             <SectionTrigger
               title="Marketplace"
-              overview="Official catalog: we sell, revenue to the platform, no refunds. Community: seller and buyer transact via the payment processor with a 10% platform cut; disputes are between the parties. Failed access provisioning: email support. Chargebacks after delivery can permanently ban Marketplace access."
+              overview="Official catalog: we sell, revenue to the platform, no refunds. Community: seller and buyer via the payment processor with a 10% platform cut; Stripe Connect sellers are merchant of record. Prohibited categories and Live Share pin duties apply. Chargebacks after delivery can permanently ban Marketplace access."
             />
           </AccordionTrigger>
           <AccordionContent className="text-base">
@@ -297,7 +297,7 @@ export default function MarketingTerms() {
                 these Terms. SaaS Cloud subscription terms remain as in Part B.
               </p>
               <p>
-                <strong>Version:</strong> 1 (product may override with{" "}
+                <strong>Version:</strong> 2 (product may override with{" "}
                 <code className="text-foreground">MARKETPLACE_TOS_VERSION</code>). Using
                 Marketplace buy or sell features requires accepting the current ToS version.
                 Continued use after a ToS version bump requires re-acceptance.
@@ -318,6 +318,35 @@ export default function MarketingTerms() {
                   configured).
                 </li>
               </ul>
+
+              <h3>Stripe Connect (Community sellers)</h3>
+              <p>
+                When you sell Community listings with Stripe Connect checkout, you are the
+                merchant of record for that charge. GodMode collects a 10% platform fee and
+                remits the remainder to your connected Stripe account. You are responsible for
+                listing accuracy, delivery or live access as advertised, tax and legal
+                compliance, and buyer disputes routed to you as seller. GodMode may delist
+                listings, freeze payouts, or ban Marketplace access for ToS violations,
+                repeated disputes, or prohibited content. Before publishing or binding while
+                Connect is linked, you must attest that your listings comply with the
+                prohibited and restricted categories below.
+              </p>
+
+              <h3>Prohibited and restricted listings</h3>
+              <p>
+                Community listings must not offer goods, services, or content that Stripe or
+                applicable law treat as prohibited or heavily restricted. Examples include
+                gambling, adult sexual content, weapons or illegal goods, and clearly illegal
+                activity such as fraud or malware. Sellers remain responsible for compliance.
+              </p>
+
+              <h3>Live Share catalog pin</h3>
+              <p>
+                Community Live Share requires a Community catalog entry with live delivery and
+                a bound workspace resource whose export matches the pinned catalog bundle.
+                Drift or a catalog pin bump demotes the listing until re-bind. Free Shared
+                sidebar grants stay outside Marketplace.
+              </p>
 
               <h3>Digital goods are final</h3>
               <p>

@@ -4,7 +4,36 @@ import type { CoreDatabase } from "../core-db.js";
 
 export const MARKETPLACE_PLATFORM_FEE_BPS = 1000; // 10%
 export const MARKETPLACE_TOS_VERSION = () =>
-  (process.env.MARKETPLACE_TOS_VERSION ?? config.marketplace.tosVersion ?? "1").trim() || "1";
+  (process.env.MARKETPLACE_TOS_VERSION ?? config.marketplace.tosVersion ?? "2").trim() || "2";
+
+/** True when the seller has linked Stripe Connect (attestation required on publish/bind). */
+export function sellerHasStripeConnect(
+  core: CoreDatabase,
+  userId: string
+): boolean {
+  try {
+    const acct = ensureSellerAccount(core, userId);
+    return Boolean(String(acct.stripe_connect_account_id ?? "").trim());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When Stripe Connect is linked, require an explicit attestation flag on sell actions.
+ */
+export function assertStripeConnectAttestation(
+  core: CoreDatabase,
+  userId: string,
+  attested: boolean | undefined
+): void {
+  if (!sellerHasStripeConnect(core, userId)) return;
+  if (attested === true) return;
+  throw new MarketplaceCommerceError(
+    "Confirm the Stripe Connect seller attestation (prohibited and restricted listings) before publishing or binding.",
+    400
+  );
+}
 
 export type MarketplacePaymentProvider = "stripe" | "paypal" | "crypto";
 export type MarketplaceOrderStatus =
