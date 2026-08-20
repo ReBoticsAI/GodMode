@@ -144,6 +144,22 @@ rejected during manifest validation.
 `StructureNode.object_type` chooses generic Record rendering; `segment` remains
 the URL segment.
 
+## UI and agent parity
+
+Ship durable capabilities once on the kernel (or a narrow authenticated Bridge
+route with the same contract), then consume them from both places:
+
+1. **Web UI** forms and wizards call the same action/input schema.
+2. **Agents** use generated ObjectType tools, `run_record_action`, or thin wrappers
+   that delegate to the same handler (not parallel static git/GitHub tools for the
+   same mutation).
+
+External systems (GitHub PR, Stripe, file transport) belong inside action handlers
+or documented protocol exceptions. Community Marketplace catalog submit (#602) is the
+reference: Sell → **Submit to Community catalog** and Intelligence
+`prepare_community_catalog_submission` / `submit_community_catalog_submission` share
+`marketplace-catalog-submission.ts`.
+
 The release subsystem follows the same boundary. `Release` exposes verified
 read-only release metadata, while singleton `InstallationUpdateState` owns
 administrator/system actions for discovery, configuration, download, defer,

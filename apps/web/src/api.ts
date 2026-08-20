@@ -6122,6 +6122,57 @@ export function fetchCommunityCatalog() {
   return api<{ catalogUrl: string; entries: CatalogEntry[] }>("/marketplace/catalog/community");
 }
 
+export type CommunityCatalogSubmissionPrepareResult = {
+  entry: Record<string, unknown>;
+  blockers: Array<{ code: string; message: string }>;
+  readyToSubmit: boolean;
+  githubLogin: string | null;
+};
+
+export type CommunityCatalogSubmissionSubmitResult = {
+  catalogEntryId: string;
+  prNumber: number;
+  prUrl: string;
+  branch: string;
+  forkOwner: string;
+};
+
+export function prepareCommunityCatalogSubmission(body: {
+  id: string;
+  title: string;
+  description: string;
+  installType: "plugin" | "clone";
+  kind?: string;
+  version?: string;
+  pluginRepo?: string;
+  pluginRef?: string;
+  bundlePath?: string;
+  ciRunUrl?: string;
+}) {
+  return api<CommunityCatalogSubmissionPrepareResult>(
+    "/marketplace/catalog/community/submission/prepare",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export function submitCommunityCatalogSubmission(body: {
+  id: string;
+  title: string;
+  description: string;
+  installType: "plugin" | "clone";
+  kind?: string;
+  version?: string;
+  pluginRepo?: string;
+  pluginRef?: string;
+  bundlePath?: string;
+  ciRunUrl?: string;
+}) {
+  return api<CommunityCatalogSubmissionSubmitResult>(
+    "/marketplace/catalog/community/submission/submit",
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 export function fetchUnofficialCatalog() {
   return api<{
     sources: Array<{ id: string; name: string; url: string; created_at: string }>;

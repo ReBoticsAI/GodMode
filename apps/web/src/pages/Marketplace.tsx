@@ -14,6 +14,8 @@ import {
   fetchMyMarketplaceListings,
   fetchOfficialCatalog,
   fetchCommunityCatalog,
+  prepareCommunityCatalogSubmission,
+  submitCommunityCatalogSubmission,
   fetchUnofficialCatalog,
   fetchBridgeHealth,
   fetchInferenceEndpoints,
@@ -27,6 +29,7 @@ import {
   startMarketplaceCheckout,
   uninstallWorkspacePlugin,
   type CatalogEntry,
+  type CommunityCatalogSubmissionPrepareResult,
   type DiscoveredPlugin,
   type InferenceEndpoint,
   type MarketplaceEntitlement,
@@ -406,6 +409,83 @@ export default function MarketplacePage() {
   >([]);
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
   const [inferenceEndpoints, setInferenceEndpoints] = useState<InferenceEndpoint[]>([]);
+  const [catalogSubmitInstallType, setCatalogSubmitInstallType] = useState<"plugin" | "clone">(
+    "plugin"
+  );
+  const [catalogSubmitId, setCatalogSubmitId] = useState("");
+  const [catalogSubmitTitle, setCatalogSubmitTitle] = useState("");
+  const [catalogSubmitDescription, setCatalogSubmitDescription] = useState("");
+  const [catalogSubmitKind, setCatalogSubmitKind] = useState("skill");
+  const [catalogSubmitPluginRepo, setCatalogSubmitPluginRepo] = useState("");
+  const [catalogSubmitPluginRef, setCatalogSubmitPluginRef] = useState("");
+  const [catalogSubmitBundlePath, setCatalogSubmitBundlePath] = useState("bundle.json");
+  const [catalogSubmitCiRunUrl, setCatalogSubmitCiRunUrl] = useState("");
+  const [catalogSubmitPreview, setCatalogSubmitPreview] =
+    useState<CommunityCatalogSubmissionPrepareResult | null>(null);
+  const [catalogSubmitBusy, setCatalogSubmitBusy] = useState(false);
+
+  const catalogSubmitBody = useMemo(
+    () => ({
+      id: catalogSubmitId.trim(),
+      title: catalogSubmitTitle.trim(),
+      description: catalogSubmitDescription.trim(),
+      installType: catalogSubmitInstallType,
+      kind: catalogSubmitInstallType === "clone" ? catalogSubmitKind : undefined,
+      pluginRepo: catalogSubmitPluginRepo.trim() || undefined,
+      pluginRef: catalogSubmitPluginRef.trim() || undefined,
+      bundlePath:
+        catalogSubmitInstallType === "clone"
+          ? catalogSubmitBundlePath.trim() || undefined
+          : undefined,
+      ciRunUrl:
+        catalogSubmitInstallType === "plugin" ? catalogSubmitCiRunUrl.trim() || undefined : undefined,
+    }),
+    [
+      catalogSubmitId,
+      catalogSubmitTitle,
+      catalogSubmitDescription,
+      catalogSubmitInstallType,
+      catalogSubmitKind,
+      catalogSubmitPluginRepo,
+      catalogSubmitPluginRef,
+      catalogSubmitBundlePath,
+      catalogSubmitCiRunUrl,
+    ]
+  );
+
+  const handleCatalogSubmitPreview = async () => {
+    setCatalogSubmitBusy(true);
+    try {
+      const result = await prepareCommunityCatalogSubmission(catalogSubmitBody);
+      setCatalogSubmitPreview(result);
+      if (result.blockers.length) {
+        toast.message("Manifest preview ready", {
+          description: `${result.blockers.length} blocker(s) before PR submit.`,
+        });
+      } else {
+        toast.success("Ready to open a Community catalog PR");
+      }
+    } catch (err) {
+      toast.error(userFacingErrorMessage(err, "Could not prepare catalog submission"));
+    } finally {
+      setCatalogSubmitBusy(false);
+    }
+  };
+
+  const handleCatalogSubmitPr = async () => {
+    setCatalogSubmitBusy(true);
+    try {
+      const result = await submitCommunityCatalogSubmission(catalogSubmitBody);
+      toast.success(`Opened PR #${result.prNumber}`);
+      setPublishCatalogEntryId(result.catalogEntryId);
+      setCatalogSubmitPreview(null);
+      window.open(result.prUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(userFacingErrorMessage(err, "Could not submit catalog PR"));
+    } finally {
+      setCatalogSubmitBusy(false);
+    }
+  };
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -1371,6 +1451,169 @@ export default function MarketplacePage() {
               </Link>
             </CardContent>
           </Card>
+
+          {saas === true ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Submit to Community catalog</CardTitle>
+                <CardDescription>
+                  Open a GodMode-Marketplace PR from GodMode. After merge, claim the catalog entry
+                  below and set your price. GitHub Connect and Marketplace ToS required.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FieldGroup>
+                  {!tosAccepted ? (
+                    <Alert>
+                      <AlertTitle>Marketplace ToS</AlertTitle>
+                      <AlertDescription>Accept Marketplace ToS before catalog submit.</AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <Field>
+                    <FieldLabel>Intake type</FieldLabel>
+                    <ToggleGroup
+                      value={[catalogSubmitInstallType]}
+                      onValueChange={(next) => {
+                        const value = Array.isArray(next) ? next[0] : next;
+                        if (value === "plugin" || value === "clone") setCatalogSubmitInstallType(value);
+                      }}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <ToggleGroupItem value="plugin">Plugin</ToggleGroupItem>
+                      <ToggleGroupItem value="clone">Clone pack</ToggleGroupItem>
+                    </ToggleGroup>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="catalog-submit-id">Catalog entry id</FieldLabel>
+                    <Input
+                      id="catalog-submit-id"
+                      value={catalogSubmitId}
+                      onChange={(e) => setCatalogSubmitId(e.target.value)}
+                      placeholder="my-community-plugin"
+                    />
+                  </Field>
+                  {catalogSubmitInstallType === "clone" ? (
+                    <Field>
+                      <FieldLabel>Pack kind</FieldLabel>
+                      <Select
+                        value={catalogSubmitKind}
+                        onValueChange={(v) => setCatalogSubmitKind(String(v))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {CLONE_PACK_KINDS.map((k) => (
+                              <SelectItem key={k} value={k}>
+                                {k}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  ) : null}
+                  <Field>
+                    <FieldLabel htmlFor="catalog-submit-title">Title</FieldLabel>
+                    <Input
+                      id="catalog-submit-title"
+                      value={catalogSubmitTitle}
+                      onChange={(e) => setCatalogSubmitTitle(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="catalog-submit-desc">Description</FieldLabel>
+                    <Input
+                      id="catalog-submit-desc"
+                      value={catalogSubmitDescription}
+                      onChange={(e) => setCatalogSubmitDescription(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="catalog-submit-repo">GitHub repo URL</FieldLabel>
+                    <Input
+                      id="catalog-submit-repo"
+                      value={catalogSubmitPluginRepo}
+                      onChange={(e) => setCatalogSubmitPluginRepo(e.target.value)}
+                      placeholder="https://github.com/you/your-plugin"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="catalog-submit-ref">Pinned ref (tag or SHA)</FieldLabel>
+                    <Input
+                      id="catalog-submit-ref"
+                      value={catalogSubmitPluginRef}
+                      onChange={(e) => setCatalogSubmitPluginRef(e.target.value)}
+                      placeholder="v0.1.0 or full commit SHA"
+                    />
+                  </Field>
+                  {catalogSubmitInstallType === "clone" ? (
+                    <Field>
+                      <FieldLabel htmlFor="catalog-submit-bundle">bundlePath</FieldLabel>
+                      <Input
+                        id="catalog-submit-bundle"
+                        value={catalogSubmitBundlePath}
+                        onChange={(e) => setCatalogSubmitBundlePath(e.target.value)}
+                        placeholder="bundle.json"
+                      />
+                    </Field>
+                  ) : (
+                    <Field>
+                      <FieldLabel htmlFor="catalog-submit-ci">ciRunUrl</FieldLabel>
+                      <Input
+                        id="catalog-submit-ci"
+                        value={catalogSubmitCiRunUrl}
+                        onChange={(e) => setCatalogSubmitCiRunUrl(e.target.value)}
+                        placeholder="https://github.com/.../actions/runs/..."
+                      />
+                      <FieldDescription>
+                        Green GitHub Actions run for the pinned pluginRef (Community verify workflow).
+                      </FieldDescription>
+                    </Field>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={catalogSubmitBusy || !tosAccepted}
+                      onClick={() => void handleCatalogSubmitPreview()}
+                    >
+                      Preview manifest
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={
+                        catalogSubmitBusy ||
+                        !tosAccepted ||
+                        !catalogSubmitPreview?.readyToSubmit
+                      }
+                      onClick={() => void handleCatalogSubmitPr()}
+                    >
+                      Open catalog PR
+                    </Button>
+                  </div>
+                  {catalogSubmitPreview ? (
+                    <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
+                      {catalogSubmitPreview.blockers.length ? (
+                        <ul className="list-disc pl-5 text-muted-foreground">
+                          {catalogSubmitPreview.blockers.map((b) => (
+                            <li key={b.code}>{b.message}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground">No blockers. Ready to open PR.</p>
+                      )}
+                      <pre className="max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+                        {JSON.stringify(catalogSubmitPreview.entry, null, 2)}
+                      </pre>
+                    </div>
+                  ) : null}
+                </FieldGroup>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader>

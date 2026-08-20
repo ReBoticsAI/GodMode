@@ -145,8 +145,8 @@ the grants file; kill switches (#96) remain the emergency stop.
 
 Every Community sale is a listing (`seller_kind=user`). Catalog PRs are the public artifact transport. They do not replace the listing.
 
-1. Seller: **Sell** → accept ToS → connect payout (required for paid) → publish or auto-claim.
-2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
+1. Seller: **Sell** → accept ToS → connect payout (required for paid) → **Submit to Community catalog** (opens GodMode-Marketplace PR from GodMode) or claim after an external PR → publish listing price.
+2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Use Sell → **Submit to Community catalog** or open a PR manually. Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
 3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin (Official packs already work this way). Not a plugin runtime. Catalog-backed packs skip admin blob review. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
 4. **Live share:** paid Shared grant on this host (`share_grant` + entitlement). Same machine or GodMode Cloud tenants on the VPS. Not a copy, and not a home GPU.
 5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace.

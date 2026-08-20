@@ -18,6 +18,12 @@ import { buildPublicOfficialCatalog } from "../services/marketplace-official-cat
 import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
+import { getUserOwnerTenantDb } from "../services/user-scope.js";
+import {
+  prepareCommunityCatalogSubmission,
+  submitCommunityCatalogSubmission,
+  type PrepareCommunityCatalogSubmissionInput,
+} from "../services/marketplace-catalog-submission.js";
 
 export function createMarketplaceCatalogRouter(): Router {
   const router = Router();
@@ -137,6 +143,64 @@ export function createMarketplaceCatalogRouter(): Router {
           ? err.message.trim()
           : "Failed to load installed plugins";
       res.status(500).json({ error: message });
+    }
+  });
+
+  router.post("/community/submission/prepare", async (req, res) => {
+    try {
+      const core = getCloudDb();
+      const body = req.body as PrepareCommunityCatalogSubmissionInput;
+      const result = await prepareCommunityCatalogSubmission({
+        core,
+        userDb: getUserOwnerTenantDb(req.user!.id),
+        userId: req.user!.id,
+        input: {
+          id: String(body.id ?? ""),
+          title: String(body.title ?? ""),
+          description: String(body.description ?? ""),
+          installType: body.installType === "clone" ? "clone" : "plugin",
+          kind: body.kind,
+          version: body.version,
+          pluginRepo: body.pluginRepo,
+          pluginRef: body.pluginRef,
+          bundlePath: body.bundlePath,
+          ciRunUrl: body.ciRunUrl,
+          tags: body.tags,
+        },
+      });
+      res.json(result);
+    } catch (err) {
+      const e = err as { status?: number; message?: string };
+      res.status(e?.status ?? 500).json({ error: e?.message ?? String(err) });
+    }
+  });
+
+  router.post("/community/submission/submit", async (req, res) => {
+    try {
+      const core = getCloudDb();
+      const body = req.body as PrepareCommunityCatalogSubmissionInput;
+      const result = await submitCommunityCatalogSubmission({
+        core,
+        userDb: getUserOwnerTenantDb(req.user!.id),
+        userId: req.user!.id,
+        input: {
+          id: String(body.id ?? ""),
+          title: String(body.title ?? ""),
+          description: String(body.description ?? ""),
+          installType: body.installType === "clone" ? "clone" : "plugin",
+          kind: body.kind,
+          version: body.version,
+          pluginRepo: body.pluginRepo,
+          pluginRef: body.pluginRef,
+          bundlePath: body.bundlePath,
+          ciRunUrl: body.ciRunUrl,
+          tags: body.tags,
+        },
+      });
+      res.json(result);
+    } catch (err) {
+      const e = err as { status?: number; message?: string };
+      res.status(e?.status ?? 500).json({ error: e?.message ?? String(err) });
     }
   });
 

@@ -229,6 +229,10 @@ import {
   installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
+import {
+  prepareCommunityCatalogSubmission,
+  submitCommunityCatalogSubmission,
+} from "./marketplace-catalog-submission.js";
 import { listPublisherConnectors } from "./publisher-connectors.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
 import {
@@ -4057,6 +4061,48 @@ export async function executeTool(
         title: String(args.title ?? ""),
         description: String(args.description ?? ""),
         pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
+      });
+    }
+
+    case "prepare_community_catalog_submission": {
+      if (!ctx.userId) throw new Error("userId required");
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      return prepareCommunityCatalogSubmission({
+        core: getCloudDb(),
+        userDb: ownerDb,
+        userId: ctx.userId,
+        input: {
+          id: String(args.id ?? ""),
+          title: String(args.title ?? ""),
+          description: String(args.description ?? ""),
+          installType: args.installType === "clone" ? "clone" : "plugin",
+          kind: typeof args.kind === "string" ? args.kind : undefined,
+          pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
+          pluginRef: typeof args.pluginRef === "string" ? args.pluginRef : undefined,
+          bundlePath: typeof args.bundlePath === "string" ? args.bundlePath : undefined,
+          ciRunUrl: typeof args.ciRunUrl === "string" ? args.ciRunUrl : undefined,
+        },
+      });
+    }
+
+    case "submit_community_catalog_submission": {
+      if (!ctx.userId) throw new Error("userId required");
+      const ownerDb = getUserOwnerTenantDb(ctx.userId);
+      return submitCommunityCatalogSubmission({
+        core: getCloudDb(),
+        userDb: ownerDb,
+        userId: ctx.userId,
+        input: {
+          id: String(args.id ?? ""),
+          title: String(args.title ?? ""),
+          description: String(args.description ?? ""),
+          installType: args.installType === "clone" ? "clone" : "plugin",
+          kind: typeof args.kind === "string" ? args.kind : undefined,
+          pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
+          pluginRef: typeof args.pluginRef === "string" ? args.pluginRef : undefined,
+          bundlePath: typeof args.bundlePath === "string" ? args.bundlePath : undefined,
+          ciRunUrl: typeof args.ciRunUrl === "string" ? args.ciRunUrl : undefined,
+        },
       });
     }
 
