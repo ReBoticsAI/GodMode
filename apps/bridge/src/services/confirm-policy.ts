@@ -14,6 +14,7 @@ const NEVER_AUTO_APPROVE = new Set([
   "git_clone",
   "github_repo_create",
   "github_pr_create",
+  "submit_community_catalog_submission",
   "github_release_create",
   "github_release_publish",
 ]);

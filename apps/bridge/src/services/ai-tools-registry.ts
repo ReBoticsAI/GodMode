@@ -2070,6 +2070,49 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       required: ["id", "title", "description"],
     },
   },
+  {
+    name: "prepare_community_catalog_submission",
+    description:
+      "Prepare a Community GodMode-Marketplace catalog entry (validate ToS, GitHub Connect, manifest blockers). Prefer over prepare_marketplace_submission for Community Sell.",
+    mode: "auto",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" },
+        description: { type: "string" },
+        installType: { type: "string", enum: ["plugin", "clone"] },
+        kind: { type: "string" },
+        pluginRepo: { type: "string" },
+        pluginRef: { type: "string" },
+        bundlePath: { type: "string" },
+        ciRunUrl: { type: "string" },
+      },
+      required: ["id", "title", "description", "installType"],
+    },
+  },
+  {
+    name: "submit_community_catalog_submission",
+    description:
+      "Open a GodMode-Marketplace Community catalog PR via Vault GitHub Connect. Requires confirmation.",
+    mode: "confirm",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" },
+        description: { type: "string" },
+        installType: { type: "string", enum: ["plugin", "clone"] },
+        kind: { type: "string" },
+        pluginRepo: { type: "string" },
+        pluginRef: { type: "string" },
+        bundlePath: { type: "string" },
+        ciRunUrl: { type: "string" },
+      },
+      required: ["id", "title", "description", "installType"],
+    },
+  },
   // --- LLM / inference ---
   {
     name: "get_llm_status",
