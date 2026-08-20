@@ -62,7 +62,9 @@ export function AdminMarketplaceReviewPanel() {
       <CardHeader>
         <CardTitle className="text-base">Listing review</CardTitle>
         <CardDescription>
-          Clone, live, and inference listings wait here. Plugins with catalog CI skip this queue.
+          Residual hub listings only (for example inference). Plugin, clone pack, and live share
+          use the GodMode-Marketplace catalog PR merge gate, not this queue. Abuse tools stay under
+          Sellers.
         </CardDescription>
       </CardHeader>
       <CardContent>

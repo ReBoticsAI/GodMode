@@ -107,11 +107,18 @@ describe("publishMarketplaceListing catalog republish upsert", () => {
 
   it("updates an existing catalog-backed plugin listing instead of inserting a duplicate", () => {
     const tenantDb = createTenantDb();
+    const catalog = {
+      id: "workspace-pulse",
+      author: "seller-gh",
+      pluginRepo: "https://github.com/seller-gh/workspace-pulse",
+    };
     const first = publishMarketplaceListing(core as never, tenantDb as never, {
       sellerUserId: "seller",
       sellerTenantId: "t1",
       kind: "plugin",
       catalogEntryId: "workspace-pulse",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
       title: "Pulse v1",
       priceCents: 0,
     });
@@ -120,6 +127,8 @@ describe("publishMarketplaceListing catalog republish upsert", () => {
       sellerTenantId: "t1",
       kind: "plugin",
       catalogEntryId: "workspace-pulse",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
       title: "Pulse v2",
       description: "Updated copy",
       priceCents: 299,
@@ -141,11 +150,18 @@ describe("publishMarketplaceListing catalog republish upsert", () => {
 
   it("upserts catalog-backed clone packs the same way", () => {
     const tenantDb = createTenantDb();
+    const catalog = {
+      id: "weekly-review-pack",
+      author: "seller-gh",
+      pluginRepo: "https://github.com/seller-gh/weekly-review-pack",
+    };
     const first = publishMarketplaceListing(core as never, tenantDb as never, {
       sellerUserId: "seller",
       sellerTenantId: "t1",
       kind: "agent",
       catalogEntryId: "weekly-review-pack",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
       title: "Review pack",
       priceCents: 0,
     });
@@ -154,6 +170,8 @@ describe("publishMarketplaceListing catalog republish upsert", () => {
       sellerTenantId: "t1",
       kind: "agent",
       catalogEntryId: "weekly-review-pack",
+      catalogEntry: catalog,
+      githubLogin: "seller-gh",
       title: "Review pack pro",
       priceCents: 199,
     });

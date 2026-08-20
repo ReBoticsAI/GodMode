@@ -6086,6 +6086,7 @@ export interface CatalogEntry {
   version: string;
   author: string;
   tags?: string[];
+  pluginRepo?: string;
   sourceCatalog?: string;
   sourceName?: string;
   priceCents?: number;

@@ -85,6 +85,28 @@ const OFFICIAL_REPO =
 
 const LISTING_KINDS = CLONE_PACK_KINDS;
 
+function sellerOwnsCatalogEntryClient(
+  entry: { author?: string; pluginRepo?: string },
+  githubLogin: string | null | undefined
+): boolean {
+  const login = String(githubLogin ?? "").trim().toLowerCase();
+  if (!login) return false;
+  const author = String(entry.author ?? "").trim().toLowerCase();
+  if (
+    author &&
+    (author === login || author.endsWith(`/${login}`) || author.startsWith(`${login}/`))
+  ) {
+    return true;
+  }
+  const repo = String(entry.pluginRepo ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/github\.com\//, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+  return Boolean(repo && (repo === login || repo.startsWith(`${login}/`)));
+}
+
 function reloadAfterPluginChange(built?: boolean) {
   if (built) {
     toast.info("Plugin was built — reloading to activate UI…");
@@ -665,6 +687,27 @@ export default function MarketplacePage() {
     () => filterEntries(communityCatalog),
     [communityCatalog, q]
   );
+
+  const ownedCommunityCatalog = useMemo(
+    () =>
+      communityCatalog.filter((entry) => sellerOwnsCatalogEntryClient(entry, githubLogin)),
+    [communityCatalog, githubLogin]
+  );
+
+  const ownedCatalogForFamily = useMemo(() => {
+    if (publishFamily === "plugin") {
+      return ownedCommunityCatalog.filter((e) => e.installType !== "clone");
+    }
+    if (publishFamily === "clone" || publishFamily === "live") {
+      return ownedCommunityCatalog.filter((e) => e.installType === "clone");
+    }
+    return ownedCommunityCatalog;
+  }, [ownedCommunityCatalog, publishFamily]);
+
+  const selectedPublishCatalogEntry = useMemo(
+    () => ownedCatalogForFamily.find((e) => e.id === publishCatalogEntryId) ?? null,
+    [ownedCatalogForFamily, publishCatalogEntryId]
+  );
   const communityFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return communityListings;
@@ -856,17 +899,42 @@ export default function MarketplacePage() {
 
   const publishPriceCents = Math.round(Number(publishPriceDollars || "0") * 100);
   const canPublishPaid =
-    publishPriceCents <= 0 || payoutReady || publishFamily === "plugin" || publishFamily === "clone";
+    publishPriceCents <= 0 ||
+    payoutReady ||
+    publishFamily === "plugin" ||
+    publishFamily === "clone" ||
+    publishFamily === "live";
   const canPublish = (() => {
     if (!tosAccepted) return false;
     if (!canPublishPaid) return false;
     if (!publishTitle.trim()) return false;
     if (publishFamily === "plugin" || publishFamily === "clone") {
-      return Boolean(publishCatalogEntryId.trim());
+      return Boolean(publishCatalogEntryId.trim() && selectedPublishCatalogEntry);
+    }
+    if (publishFamily === "live") {
+      return Boolean(
+        publishCatalogEntryId.trim() &&
+          selectedPublishCatalogEntry &&
+          publishResourceId.trim()
+      );
     }
     if (publishFamily === "inference") return Boolean(publishResourceId.trim());
-    return Boolean(publishResourceId.trim());
+    return false;
   })();
+
+  const applyCatalogEntryToPublish = (entryId: string) => {
+    setPublishCatalogEntryId(entryId);
+    const entry = ownedCommunityCatalog.find((e) => e.id === entryId);
+    if (!entry) return;
+    setPublishTitle(entry.title);
+    setPublishDescription(entry.description ?? "");
+    if (entry.installType === "clone") {
+      setPublishKind(CLONE_PACK_KINDS.includes(entry.kind as never) ? entry.kind : "bundle");
+    }
+    if (typeof entry.priceCents === "number" && entry.priceCents > 0) {
+      setPublishPriceDollars((entry.priceCents / 100).toFixed(2));
+    }
+  };
 
   const handlePublish = async () => {
     if (!canPublish) return;
@@ -887,11 +955,11 @@ export default function MarketplacePage() {
         priceCents: publishPriceCents,
         deliveryMode: delivery,
         resourceId:
-          publishFamily === "plugin" || publishFamily === "clone"
-            ? undefined
-            : publishResourceId.trim() || undefined,
+          publishFamily === "live" || publishFamily === "inference"
+            ? publishResourceId.trim() || undefined
+            : undefined,
         catalogEntryId:
-          publishFamily === "plugin" || publishFamily === "clone"
+          publishFamily === "plugin" || publishFamily === "clone" || publishFamily === "live"
             ? publishCatalogEntryId.trim()
             : undefined,
         inferenceEndpointId:
@@ -899,9 +967,7 @@ export default function MarketplacePage() {
         sellerKind: "user",
       });
       toast.success(
-        publishFamily === "plugin" || publishFamily === "clone"
-          ? "Listing saved"
-          : "Listing submitted for review"
+        publishFamily === "inference" ? "Listing submitted for review" : "Listing saved"
       );
       setPublishTitle("");
       setPublishDescription("");
@@ -1619,9 +1685,9 @@ export default function MarketplacePage() {
             <CardHeader>
               <CardTitle className="text-base">Publish listing</CardTitle>
               <CardDescription>
-                One listing for every Community item. Plugins and clone packs attach a GitHub
-                catalog entry (pin). Live share stays on this host and goes to review. Paid sales
-                use your connected payout ({feePercent}% platform fee).
+                One listing for every Community item. Pick a Community catalog row you own (after
+                catalog PR merge). Submit new entries with Submit to Community catalog above. Paid
+                sales use your connected payout ({feePercent}% platform fee).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1634,8 +1700,7 @@ export default function MarketplacePage() {
                 ) : null}
                 {publishPriceCents > 0 &&
                 !payoutReady &&
-                publishFamily !== "plugin" &&
-                publishFamily !== "clone" ? (
+                publishFamily === "inference" ? (
                   <Alert>
                     <AlertTitle>Payout required</AlertTitle>
                     <AlertDescription>
@@ -1657,6 +1722,8 @@ export default function MarketplacePage() {
                         value === "inference"
                       ) {
                         setPublishFamily(value);
+                        setPublishCatalogEntryId("");
+                        setPublishResourceId("");
                       }
                     }}
                     variant="outline"
@@ -1674,22 +1741,52 @@ export default function MarketplacePage() {
                     {publishFamily === "plugin"
                       ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author."
                       : publishFamily === "live"
-                        ? "Buyer gets live access on this host (paid Shared), not a copy."
+                        ? "Catalog-backed live access on this host. Select a catalog row, then the live resource id (bind/drift in a follow-up)."
                         : publishFamily === "inference"
                           ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
-                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Private work stays on Local or a private repo."}
+                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy."}
                   </FieldDescription>
                 </Field>
 
-                {publishFamily === "plugin" || publishFamily === "clone" ? (
+                {publishFamily === "plugin" ||
+                publishFamily === "clone" ||
+                publishFamily === "live" ? (
                   <Field>
-                    <FieldLabel htmlFor="publish-catalog-id">Catalog entry id</FieldLabel>
-                    <Input
-                      id="publish-catalog-id"
-                      value={publishCatalogEntryId}
-                      onChange={(e) => setPublishCatalogEntryId(e.target.value)}
-                      placeholder={publishFamily === "clone" ? "my-agent-pack" : "workspace-pulse"}
-                    />
+                    <FieldLabel>Community catalog entry</FieldLabel>
+                    {!githubLogin ? (
+                      <Alert>
+                        <AlertTitle>GitHub Connect required</AlertTitle>
+                        <AlertDescription>
+                          Connect GitHub in Personal Vault so catalog rows you own appear here.
+                        </AlertDescription>
+                      </Alert>
+                    ) : ownedCatalogForFamily.length === 0 ? (
+                      <Alert>
+                        <AlertTitle>No owned catalog rows</AlertTitle>
+                        <AlertDescription>
+                          Submit a Community catalog PR above (or wait for merge), then refresh.
+                          GitHub: {githubLogin}
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Select
+                        value={publishCatalogEntryId}
+                        onValueChange={(v) => applyCatalogEntryToPublish(String(v))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select catalog entry you own" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {ownedCatalogForFamily.map((entry) => (
+                              <SelectItem key={entry.id} value={entry.id}>
+                                {entry.title} ({entry.id})
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    )}
                     <FieldDescription>
                       {githubLogin
                         ? `Connected GitHub: ${githubLogin}`
@@ -1698,7 +1795,7 @@ export default function MarketplacePage() {
                   </Field>
                 ) : null}
 
-                {publishFamily === "clone" ? (
+                {publishFamily === "clone" && selectedPublishCatalogEntry ? (
                   <Field>
                     <FieldLabel>Kind</FieldLabel>
                     <Select value={publishKind} onValueChange={(v) => setPublishKind(String(v))}>
@@ -1744,7 +1841,11 @@ export default function MarketplacePage() {
                         value={publishResourceId}
                         onChange={(e) => setPublishResourceId(e.target.value)}
                         placeholder="Workspace entity id"
+                        disabled={!publishCatalogEntryId}
                       />
+                      <FieldDescription>
+                        Temporary until Live Share catalog bind lands. Catalog entry is required.
+                      </FieldDescription>
                     </Field>
                   </>
                 ) : null}
@@ -1812,9 +1913,11 @@ export default function MarketplacePage() {
                 >
                   {publishing
                     ? "Publishing…"
-                    : publishFamily === "plugin"
-                      ? "Save plugin listing"
-                      : "Submit for review"}
+                    : publishFamily === "inference"
+                      ? "Submit for review"
+                      : publishFamily === "plugin"
+                        ? "Save plugin listing"
+                        : "Save listing"}
                 </Button>
               </FieldGroup>
             </CardContent>

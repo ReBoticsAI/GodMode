@@ -253,7 +253,7 @@ describe("platform action adapters", () => {
     expect(bridgeConnectionAdapter.get!(db, def, connection.id, ctxA)).not.toBeNull();
   });
 
-  it("publishes and archives tenant-owned live listings", () => {
+  it("publishes and archives tenant-owned catalog-backed live listings", async () => {
     const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE users (id TEXT PRIMARY KEY);
@@ -285,6 +285,13 @@ describe("platform action adapters", () => {
         tos_accepted_version TEXT, tos_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
+      INSERT INTO marketplace_listings (
+        id, seller_user_id, seller_tenant_id, kind, resource_id, title, bundle_json,
+        visibility, status, delivery_mode, catalog_entry_id
+      ) VALUES (
+        'lst-live-1', 'user-a', 'tenant-a', 'agent', 'agent-live', 'Live Agent', '{}',
+        'public', 'active', 'live', 'live-catalog-row'
+      );
     `);
     acceptMarketplaceTos(db as never, "user-a");
     const def = definition("MarketplaceListing", [
@@ -298,35 +305,32 @@ describe("platform action adapters", () => {
       "status",
     ]);
     const ctx = context(db);
-    const listing = marketplaceListingAdapter.actions!.publish(
-      db,
-      def,
-      "",
-      {
-        kind: "agent",
-        resource_id: "agent-live",
-        title: "Live Agent",
-        delivery_mode: "live",
-      },
-      ctx
-    ) as { id: string; data: Record<string, unknown> };
+    await expect(
+      marketplaceListingAdapter.actions!.publish(
+        db,
+        def,
+        "",
+        {
+          kind: "agent",
+          resource_id: "agent-orphan",
+          title: "Orphan Live",
+          delivery_mode: "live",
+        },
+        ctx
+      )
+    ).rejects.toThrow(/Community catalog entry id/i);
 
-    expect(listing.data).toMatchObject({
-      seller_user_id: "user-a",
-      seller_tenant_id: "tenant-a",
-      status: "in_review",
-    });
     const archived = marketplaceListingAdapter.actions!.archive(
       db,
       def,
-      listing.id,
+      "lst-live-1",
       {},
       ctx
     ) as { data: Record<string, unknown> };
     expect(archived.data.status).toBe("archived");
   });
 
-  it("lets platform admins review listings they do not own", () => {
+  it("lets platform admins review residual hub listings they do not own", () => {
     const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE users (id TEXT PRIMARY KEY);
@@ -358,6 +362,13 @@ describe("platform action adapters", () => {
         tos_accepted_version TEXT, tos_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
+      INSERT INTO marketplace_listings (
+        id, seller_user_id, seller_tenant_id, kind, resource_id, title, bundle_json,
+        visibility, status, delivery_mode, inference_endpoint_id
+      ) VALUES (
+        'lst-inf-1', 'user-a', 'tenant-a', 'inference', 'ep-1', 'Needs Review', '{}',
+        'private', 'in_review', 'live', 'ep-1'
+      );
     `);
     acceptMarketplaceTos(db as never, "user-a");
     const def = definition("MarketplaceListing", [
@@ -371,23 +382,10 @@ describe("platform action adapters", () => {
       "status",
       "visibility",
     ]);
-    const sellerCtx = context(db);
-    const listing = marketplaceListingAdapter.actions!.publish(
-      db,
-      def,
-      "",
-      {
-        kind: "agent",
-        resource_id: "agent-review",
-        title: "Needs Review",
-        delivery_mode: "live",
-      },
-      sellerCtx
-    ) as { id: string; data: Record<string, unknown> };
-    expect(listing.data.status).toBe("in_review");
+    const listingId = "lst-inf-1";
 
     const outsiderCtx = context(db, { tenantId: "tenant-b", userId: "user-b" });
-    expect(marketplaceListingAdapter.get!(db, def, listing.id, outsiderCtx)).toBeNull();
+    expect(marketplaceListingAdapter.get!(db, def, listingId, outsiderCtx)).toBeNull();
     expect(() =>
       marketplaceListingAdapter.actions!.list_review(db, def, "", {}, outsiderCtx)
     ).toThrow(/Platform administrator required/);
@@ -395,14 +393,14 @@ describe("platform action adapters", () => {
       marketplaceListingAdapter.actions!.review(
         db,
         def,
-        listing.id,
+        listingId,
         { action: "approve" },
         outsiderCtx
       )
     ).toThrow(/Platform administrator required/);
 
     const adminCtx = context(db, { isAdmin: true, userId: "admin", tenantId: "tenant-admin" });
-    expect(marketplaceListingAdapter.get!(db, def, listing.id, adminCtx)).not.toBeNull();
+    expect(marketplaceListingAdapter.get!(db, def, listingId, adminCtx)).not.toBeNull();
     const queue = marketplaceListingAdapter.actions!.list_review(
       db,
       def,
@@ -411,12 +409,12 @@ describe("platform action adapters", () => {
       adminCtx
     ) as { listings: Array<Record<string, unknown>> };
     expect(queue.listings).toHaveLength(1);
-    expect(queue.listings[0]?.id).toBe(listing.id);
+    expect(queue.listings[0]?.id).toBe(listingId);
 
     const approved = marketplaceListingAdapter.actions!.review(
       db,
       def,
-      listing.id,
+      listingId,
       { action: "approve" },
       adminCtx
     ) as { data: Record<string, unknown> };

@@ -143,13 +143,13 @@ the grants file; kill switches (#96) remain the emergency stop.
 
 ## Community (user-to-user)
 
-Every Community sale is a listing (`seller_kind=user`). Catalog PRs are the public artifact transport. They do not replace the listing.
+Every Community sale is a listing (`seller_kind=user`). **Catalog PRs are the only public intake path** for plugins, clone packs, and live share. Admin review is not the trust gate for those kinds.
 
-1. Seller: **Sell** → accept ToS → connect payout (required for paid) → **Submit to Community catalog** (opens GodMode-Marketplace PR from GodMode) or claim after an external PR → publish listing price.
-2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Use Sell → **Submit to Community catalog** or open a PR manually. Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
-3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin (Official packs already work this way). Not a plugin runtime. Catalog-backed packs skip admin blob review. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
-4. **Live share:** paid Shared grant on this host (`share_grant` + entitlement). Same machine or GodMode Cloud tenants on the VPS. Not a copy, and not a home GPU.
-5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace.
+1. Seller: **Sell** → accept ToS → connect payout (required for paid) → **Submit to Community catalog** (opens a GodMode-Marketplace PR from GodMode) or claim after an external PR merges → **Publish listing** from an owned Community catalog row (set price).
+2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
+3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin. Not a plugin runtime. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
+4. **Live share:** catalog-backed paid Shared grant on this host (`share_grant` + entitlement + `catalog_entry_id`). Same machine or GodMode Cloud tenants on the VPS. Orphan Sell publish without a catalog row is blocked. Pin bind/drift is a follow-up.
+5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace. Hub-only residual review path.
 6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid Stripe checkout then install. Local Buy does not need a GodMode Cloud account. Recovery of a purchase on a new machine (email / Stripe customer / paste `cs_` session) is a follow-up.
 
 Guest checkout return URLs may be `http://127.0.0.1` / `localhost` or `https://*.godmode.software`, and success URLs must include `{CHECKOUT_SESSION_ID}`.
@@ -188,10 +188,12 @@ Payment provider webhooks and the public Official JSON feed are **protocol excep
 ## Sell tab
 
 **Marketplace → Sell** is the seller dashboard: ToS, Stripe Connect (Vault is the
-connect home), kind-specific publish (plugin, clone, live, inference), and **My listings**
-(draft, in review, listed, archived). Catalog plugins appear here once claimed.
+connect home), **Submit to Community catalog**, publish from owned Community catalog rows
+(plugin, clone, live), hub inference publish, and **My listings**
+(draft, listed, archived). Catalog plugins appear here once claimed.
 
-Admin → Marketplace has the review queue for non-plugin listings.
+Admin → Marketplace review queue is residual (hub inference). Freeze and verified-seller
+tools stay under Sellers. Catalog PR merge is the intake gate for plugin, clone, and live.
 
 ## Local catalogs
 

@@ -53,7 +53,10 @@ import {
   registerLocalPluginFolder,
   removeLocalPluginFolder,
   removeCatalogSource,
+  fetchCommunityCatalog,
 } from "../../services/marketplace-catalog.js";
+import { githubProjectsStatus } from "../../services/github-integration.js";
+import { getUserDb } from "../../user-registry.js";
 import {
   activatePluginForTenant,
   loadPluginsForBoot,
@@ -992,10 +995,31 @@ export const marketplaceListingAdapter: RecordAdapter = {
     acquire_live(db, def, id, input, ctx) {
       return marketplaceListingAdapter.actions!.acquire(db, def, id, input, ctx);
     },
-    publish(_db, def, _id, input, ctx) {
+    async publish(_db, def, _id, input, ctx) {
       try {
+        const sellerUserId = requireUser(ctx);
+        const catalogEntryId =
+          typeof input.catalog_entry_id === "string" ? input.catalog_entry_id.trim() : "";
+        let catalogEntry: { id: string; author?: string; pluginRepo?: string } | null = null;
+        let githubLogin: string | null = null;
+        if (catalogEntryId) {
+          try {
+            githubLogin = githubProjectsStatus(getUserDb(sellerUserId), sellerUserId).login;
+          } catch {
+            githubLogin = null;
+          }
+          const { entries } = await fetchCommunityCatalog(ctx.data!.cloudDb);
+          const found = entries.find((e) => e.id === catalogEntryId);
+          if (found) {
+            catalogEntry = {
+              id: found.id,
+              author: found.author,
+              pluginRepo: found.pluginRepo,
+            };
+          }
+        }
         const row = publishMarketplaceListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
-          sellerUserId: requireUser(ctx),
+          sellerUserId,
           sellerTenantId: requireTenant(ctx),
           kind: requiredText(input, "kind") as never,
           resourceId:
@@ -1016,8 +1040,9 @@ export const marketplaceListingAdapter: RecordAdapter = {
             input.seller_kind === "official" || input.seller_kind === "user"
               ? input.seller_kind
               : undefined,
-          catalogEntryId:
-            typeof input.catalog_entry_id === "string" ? input.catalog_entry_id : undefined,
+          catalogEntryId: catalogEntryId || undefined,
+          catalogEntry,
+          githubLogin,
           deliveryMode:
             typeof input.delivery_mode === "string" ? (input.delivery_mode as never) : undefined,
           pricingModel:

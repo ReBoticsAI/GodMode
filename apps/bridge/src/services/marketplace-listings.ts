@@ -6,7 +6,7 @@ import type {
   PricingModel,
 } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
-import { exportEntity, importEntity, type PortableBundle } from "./portability.js";
+import { importEntity, type PortableBundle } from "./portability.js";
 import { config } from "../config.js";
 import {
   assertCanAcquireListing,
@@ -17,6 +17,8 @@ import {
 } from "./marketplace-commerce.js";
 import {
   PLUGIN_LISTING_KIND,
+  assertResolvedCommunityCatalogEntry,
+  isCatalogEligibleListing,
   listingKindFromCatalogEntry,
   resolveListingPublishState,
   sellerOwnsCatalogEntry,
@@ -35,6 +37,10 @@ export interface PublishMarketplaceListingInput {
   currency?: string;
   sellerKind?: "official" | "user";
   catalogEntryId?: string;
+  /** Resolved Community index row (required for user sellers when catalogEntryId is set). */
+  catalogEntry?: { id: string; author?: string; pluginRepo?: string } | null;
+  /** GitHub Connect login for ownership check against catalogEntry. */
+  githubLogin?: string | null;
   deliveryMode?: DeliveryMode;
   pricingModel?: PricingModel;
   pricePeriod?: string;
@@ -70,9 +76,12 @@ export function publishMarketplaceListing(
     }
   }
 
+  const delivery =
+    input.kind === PLUGIN_LISTING_KIND ? "clone" : (input.deliveryMode ?? "clone");
   const publishState = resolveListingPublishState({
     kind: input.kind,
     catalogEntryId: input.catalogEntryId,
+    deliveryMode: delivery,
     priceCents: input.priceCents,
     payoutReady,
     isSaas: config.isSaas,
@@ -81,8 +90,16 @@ export function publishMarketplaceListing(
     throw Object.assign(new Error(publishState.error), { status: 400 });
   }
 
-  const delivery =
-    input.kind === PLUGIN_LISTING_KIND ? "clone" : (input.deliveryMode ?? "clone");
+  const catalogEntryIdEarly = String(input.catalogEntryId ?? "").trim();
+  if (catalogEntryIdEarly) {
+    assertResolvedCommunityCatalogEntry({
+      catalogEntryId: catalogEntryIdEarly,
+      catalogEntry: input.catalogEntry,
+      githubLogin: input.githubLogin,
+      sellerKind,
+    });
+  }
+
   const pricing = input.pricingModel ?? "one_time";
   let bundleJson = "{}";
   let title = input.title ?? input.kind;
@@ -117,11 +134,11 @@ export function publishMarketplaceListing(
     bundleJson = JSON.stringify({ title, children: input.bundleChildren });
     resourceId = input.resourceId ?? uuidv4();
   } else if (delivery === "clone") {
-    if (!input.resourceId) throw new Error("resourceId required for clone listings");
-    const bundle = exportEntity(tenantDb, input.kind, input.resourceId);
-    title = input.title ?? bundle.title;
-    bundleJson = JSON.stringify(bundle);
-    resourceId = input.resourceId;
+    // Catalog-only (#600): uncatalogued clone export path is closed.
+    throw Object.assign(
+      new Error("Clone pack listings require a Community catalog entry id (GitHub bundle pin)."),
+      { status: 400 }
+    );
   } else if (!input.resourceId) {
     throw new Error("resourceId required for live listings");
   } else {
@@ -348,6 +365,12 @@ export function claimOwnedCommunityCatalogListings(
         sellerTenantId: opts.sellerTenantId,
         kind: listingKindFromCatalogEntry(entry) as MarketplaceListingKind,
         catalogEntryId: entry.id,
+        catalogEntry: {
+          id: entry.id,
+          author: entry.author,
+          pluginRepo: entry.pluginRepo,
+        },
+        githubLogin: opts.githubLogin,
         title: entry.title,
         description: entry.description,
         priceCents: Number(entry.priceCents ?? 0),
@@ -405,7 +428,7 @@ export function reviewMarketplaceListing(
 }
 
 export function listListingsAwaitingReview(core: CoreDatabase): Array<Record<string, unknown>> {
-  return core
+  const rows = core
     .prepare(
       `SELECT * FROM marketplace_listings
        WHERE status='in_review'
@@ -413,6 +436,14 @@ export function listListingsAwaitingReview(core: CoreDatabase): Array<Record<str
        LIMIT 200`
     )
     .all() as Array<Record<string, unknown>>;
+  // Catalog-eligible kinds use the GitHub PR merge gate (#600). Queue is residual (e.g. hub inference).
+  return rows.filter(
+    (row) =>
+      !isCatalogEligibleListing({
+        kind: String(row.kind ?? ""),
+        deliveryMode: typeof row.delivery_mode === "string" ? row.delivery_mode : null,
+      })
+  );
 }
 
 export function acquireCloneListing(

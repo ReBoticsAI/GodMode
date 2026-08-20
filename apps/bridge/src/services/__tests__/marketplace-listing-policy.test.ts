@@ -49,7 +49,7 @@ describe("resolveListingPublishState", () => {
     ).toBe("draft");
   });
 
-  it("activates catalog-backed clone packs and sends uncatalogued clone/live to review", () => {
+  it("activates catalog-backed clone packs and rejects uncatalogued clone/live", () => {
     expect(
       resolveListingPublishState({
         kind: "skill",
@@ -57,11 +57,23 @@ describe("resolveListingPublishState", () => {
         priceCents: 0,
       })
     ).toEqual({ status: "active", visibility: "public" });
-    expect(resolveListingPublishState({ kind: "agent" })).toEqual({
-      status: "in_review",
-      visibility: "private",
-    });
-    expect(resolveListingPublishState({ kind: "page" })).toEqual({
+    expect(resolveListingPublishState({ kind: "agent" }).error).toMatch(/catalog entry id/i);
+    expect(resolveListingPublishState({ kind: "page" }).error).toMatch(/catalog entry id/i);
+    expect(
+      resolveListingPublishState({ kind: "agent", deliveryMode: "live" }).error
+    ).toMatch(/Live share listings require a Community catalog/i);
+    expect(
+      resolveListingPublishState({
+        kind: "agent",
+        deliveryMode: "live",
+        catalogEntryId: "live-pack",
+        priceCents: 0,
+      })
+    ).toEqual({ status: "active", visibility: "public" });
+  });
+
+  it("keeps hub inference on the review path when not SaaS", () => {
+    expect(resolveListingPublishState({ kind: "inference", isSaas: false })).toEqual({
       status: "in_review",
       visibility: "private",
     });
