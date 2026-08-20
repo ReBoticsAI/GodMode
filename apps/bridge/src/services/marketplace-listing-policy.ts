@@ -64,6 +64,21 @@ export function isClonePackKind(kind: string): boolean {
   return (CLONE_PACK_KINDS as readonly string[]).includes(kind.trim());
 }
 
+/**
+ * Plugin, clone packs, and live share must enter via Community catalog (#600).
+ * Inference stays on the hub review path (not catalog-eligible).
+ */
+export function isCatalogEligibleListing(opts: {
+  kind: string;
+  deliveryMode?: string | null;
+}): boolean {
+  const kind = opts.kind.trim();
+  if (kind === "inference") return false;
+  if (kind === PLUGIN_LISTING_KIND) return true;
+  if (isClonePackKind(kind)) return true;
+  return String(opts.deliveryMode ?? "").trim().toLowerCase() === "live";
+}
+
 /** Catalog installType clone maps to a listing kind (default bundle). */
 export function listingKindFromCatalogEntry(entry: {
   installType?: string;
@@ -77,9 +92,55 @@ export function listingKindFromCatalogEntry(entry: {
   return PLUGIN_LISTING_KIND;
 }
 
+export function catalogEntryRequiredMessage(opts: {
+  kind: string;
+  deliveryMode?: string | null;
+}): string {
+  const delivery = String(opts.deliveryMode ?? "").trim().toLowerCase();
+  if (delivery === "live") {
+    return "Live share listings require a Community catalog entry id (GitHub catalog PR + pin).";
+  }
+  if (opts.kind.trim() === PLUGIN_LISTING_KIND) {
+    return "Plugin listings require a Community catalog entry id (intake CI + pin).";
+  }
+  return "Clone pack listings require a Community catalog entry id (GitHub bundle pin).";
+}
+
+/**
+ * User sellers must resolve the Community index row and own it via GitHub Connect.
+ */
+export function assertResolvedCommunityCatalogEntry(opts: {
+  catalogEntryId: string;
+  catalogEntry?: { id: string; author?: string; pluginRepo?: string } | null;
+  githubLogin?: string | null;
+  sellerKind?: "official" | "user";
+}): void {
+  if ((opts.sellerKind ?? "user") !== "user") return;
+  const catalogId = String(opts.catalogEntryId ?? "").trim();
+  if (!catalogId) return;
+  const entry = opts.catalogEntry;
+  if (!entry || String(entry.id).trim() !== catalogId) {
+    throw Object.assign(
+      new Error(
+        "Catalog entry must exist on the Community index. Submit a GodMode-Marketplace PR, wait for merge, then publish."
+      ),
+      { status: 400 }
+    );
+  }
+  if (!sellerOwnsCatalogEntry(entry, opts.githubLogin)) {
+    throw Object.assign(
+      new Error(
+        "GitHub Connect must match the Community catalog author or pluginRepo owner before publish."
+      ),
+      { status: 400 }
+    );
+  }
+}
+
 export function resolveListingPublishState(opts: {
   kind: string;
   catalogEntryId?: string | null;
+  deliveryMode?: string | null;
   priceCents?: number;
   payoutReady?: boolean;
   isSaas?: boolean;
@@ -94,16 +155,12 @@ export function resolveListingPublishState(opts: {
     };
   }
   const catalogId = String(opts.catalogEntryId ?? "").trim();
-  const catalogBacked = kind === PLUGIN_LISTING_KIND || (Boolean(catalogId) && isClonePackKind(kind));
-  if (catalogBacked) {
+  if (isCatalogEligibleListing({ kind, deliveryMode: opts.deliveryMode })) {
     if (!catalogId) {
       return {
         status: "draft",
         visibility: "private",
-        error:
-          kind === PLUGIN_LISTING_KIND
-            ? "Plugin listings require a Community catalog entry id (intake CI + pin)."
-            : "Clone pack listings require a Community catalog entry id (GitHub bundle pin).",
+        error: catalogEntryRequiredMessage({ kind, deliveryMode: opts.deliveryMode }),
       };
     }
     const paid = Number(opts.priceCents ?? 0) > 0;
