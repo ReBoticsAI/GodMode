@@ -171,6 +171,18 @@ describe("static AI tool kernel cutover", () => {
       "run_record_action",
       "CatalogInstall",
     ],
+    [
+      "emit_event",
+      { type: "demo.ping", payload: { ok: true } },
+      "run_record_action",
+      "PlatformEvent",
+    ],
+    [
+      "promote_support_to_card",
+      { ticketId: "t1", title: "Follow-up" },
+      "run_record_action",
+      "SupportTicket",
+    ],
   ])(
     "routes %s through generic kernel dispatch without DB access",
     async (toolName, args, kernelName, objectType) => {

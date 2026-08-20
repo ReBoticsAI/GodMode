@@ -91,7 +91,6 @@ describe("legacy route wave", () => {
       "release-submissions.ts:post:/:id/refresh",
       "saas.ts:post:/checkout",
       "saas.ts:post:/portal",
-      "support.ts:post:/tickets/:id/to-kanban",
       "user-productivity.ts:patch:/projects/:id",
       "user-productivity.ts:post:/projects",
       "user-productivity.ts:post:/projects/:id/archive",

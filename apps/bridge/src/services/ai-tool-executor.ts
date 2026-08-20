@@ -141,7 +141,6 @@ import {
   releaseSubmissionMetricsSummary,
   updateReleaseSubmissionFromGithub,
 } from "./coding/release-submissions.js";
-import { promoteSupportTicketToCard } from "./support-to-kanban.js";
 import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
   parseGithubHttpsRemote,
@@ -910,6 +909,27 @@ async function executeStaticKernelAlias(
           entry_id: value(args, "entryId", "entry_id"),
           source_catalog: value(args, "sourceCatalog", "source_catalog"),
         }),
+      };
+    case "emit_event":
+      return {
+        handled: true,
+        result: await action("PlatformEvent", "", "emit", {
+          type: value(args, "type"),
+          payload: args.payload,
+        }),
+      };
+    case "promote_support_to_card":
+      return {
+        handled: true,
+        result: await action(
+          "SupportTicket",
+          value(args, "ticketId", "ticket_id", "id"),
+          "promote_to_card",
+          {
+            title: value(args, "title"),
+            prompt: value(args, "prompt"),
+          }
+        ),
       };
     case "prepare_community_catalog_submission":
       return {
@@ -3246,37 +3266,6 @@ export async function executeTool(
       };
     }
 
-    case "promote_support_to_card": {
-      if (!ctx.userId) throw new Error("Authenticated user required");
-      const ticketId = String(args.ticketId ?? args.ticket_id ?? "").trim();
-      const result = promoteSupportTicketToCard({
-        tenantDb: ctx.db,
-        hubDb: getHostUsersDb(),
-        ticketId,
-        userId: ctx.userId,
-        agentId: ctx.activeAgentId ?? null,
-        title: args.title != null ? String(args.title) : undefined,
-        prompt: args.prompt != null ? String(args.prompt) : undefined,
-      });
-      createNotification({
-        recipientKind: "user",
-        recipientId: ctx.userId,
-        recipientTenantId: ctx.tenantId ?? null,
-        category: "support",
-        title: "Support follow-up card created",
-        body: result.title.slice(0, 200),
-        link: "/tasks",
-        resourceKind: "task_card",
-        resourceId: result.cardId,
-      });
-      logToolAudit(ctx.db, {
-        ...auditCtx(ctx),
-        action: "promote_support_to_card",
-        result: "ok",
-      });
-      return result;
-    }
-
     case "explore_codebase": {
       const queries = Array.isArray(args.queries)
         ? args.queries.map(String).filter(Boolean)
@@ -3547,22 +3536,6 @@ export async function executeTool(
 
     case "list_hook_runs":
       return listHookRuns(String(args.hookId ?? ""), hookScope(ctx));
-
-    case "emit_event": {
-      const agentId = ctx.activeAgentId ?? "intelligence";
-      const tenantId = resolveToolWorkspaceId(ctx);
-      if (!tenantId) {
-        throw new Error("emit_event requires an active Workspace");
-      }
-      return emitEvent({
-        type: String(args.type ?? ""),
-        actor: ctx.userId
-          ? { kind: "user", id: ctx.userId }
-          : { kind: "agent", id: agentId },
-        tenantId,
-        payload: (args.payload as Record<string, unknown>) ?? {},
-      });
-    }
 
     case "list_events": {
       const agentId = ctx.activeAgentId ?? "intelligence";
