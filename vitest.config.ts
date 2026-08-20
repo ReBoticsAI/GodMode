@@ -21,6 +21,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/marketplace-catalog-claim.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-catalog-bundle.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-community-shelf.test.ts",
+      "apps/bridge/src/services/__tests__/marketplace-catalog-submission.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-guest-checkout.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-listing-indexes.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-verified-publisher.test.ts",
