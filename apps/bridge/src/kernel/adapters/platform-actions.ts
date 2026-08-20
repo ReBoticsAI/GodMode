@@ -114,6 +114,12 @@ import {
   updateSellerPayout,
 } from "../../services/marketplace-commerce.js";
 import {
+  prepareCommunityCatalogSubmission,
+  submitCommunityCatalogSubmission,
+  type PrepareCommunityCatalogSubmissionInput,
+} from "../../services/marketplace-catalog-submission.js";
+import { getUserOwnerTenantDb } from "../../services/user-scope.js";
+import {
   capturePayPalOrder,
   confirmCryptoPayment,
   createOrderForListing,
@@ -1184,6 +1190,82 @@ function commerceHttpError(err: unknown): never {
   throw err;
 }
 
+function statusHttpError(err: unknown): never {
+  const e = err as { status?: number; message?: string };
+  if (typeof e?.status === "number" && e.status >= 400) {
+    throw httpError(e.status, e.message ?? String(err));
+  }
+  throw err;
+}
+
+function optionalString(data: RecordData, ...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = data[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function communityCatalogSubmissionInput(
+  input: RecordData
+): PrepareCommunityCatalogSubmissionInput {
+  const installRaw = optionalString(input, "install_type", "installType") ?? "plugin";
+  const deliveryRaw = optionalString(input, "delivery_mode", "deliveryMode");
+  const tagsRaw = input.tags;
+  return {
+    id: optionalString(input, "id") ?? "",
+    title: optionalString(input, "title") ?? "",
+    description: optionalString(input, "description") ?? "",
+    installType: installRaw === "clone" ? "clone" : "plugin",
+    kind: optionalString(input, "kind"),
+    version: optionalString(input, "version"),
+    pluginRepo: optionalString(input, "plugin_repo", "pluginRepo"),
+    pluginRef: optionalString(input, "plugin_ref", "pluginRef"),
+    bundlePath: optionalString(input, "bundle_path", "bundlePath"),
+    ciRunUrl: optionalString(input, "ci_run_url", "ciRunUrl"),
+    deliveryMode:
+      deliveryRaw === "live" || deliveryRaw === "clone" ? deliveryRaw : undefined,
+    tags: Array.isArray(tagsRaw)
+      ? tagsRaw.filter((t): t is string => typeof t === "string")
+      : undefined,
+    stripeConnectAttestation:
+      input.stripe_connect_attestation === true ||
+      input.stripeConnectAttestation === true,
+  };
+}
+
+export const marketplaceCatalogAdapter: RecordAdapter = {
+  id: "marketplace_catalog_service",
+  actions: {
+    async prepare_submission(_db, _def, _id, input, ctx) {
+      try {
+        const userId = requireUser(ctx);
+        return await prepareCommunityCatalogSubmission({
+          core: ctx.data!.cloudDb,
+          userDb: getUserOwnerTenantDb(userId),
+          userId,
+          input: communityCatalogSubmissionInput(input),
+        });
+      } catch (err) {
+        statusHttpError(err);
+      }
+    },
+    async submit_submission(_db, _def, _id, input, ctx) {
+      try {
+        const userId = requireUser(ctx);
+        return await submitCommunityCatalogSubmission({
+          core: ctx.data!.cloudDb,
+          userDb: getUserOwnerTenantDb(userId),
+          userId,
+          input: communityCatalogSubmissionInput(input),
+        });
+      } catch (err) {
+        statusHttpError(err);
+      }
+    },
+  },
+};
+
 export const marketplaceOrderAdapter: RecordAdapter = {
   id: "marketplace_order_read",
   list(_db, def, query, ctx) {
@@ -1886,6 +1968,7 @@ export const platformActionAdapters = [
   marketplaceEntitlementAdapter,
   marketplaceOrderAdapter,
   marketplaceSellerAccountAdapter,
+  marketplaceCatalogAdapter,
   bridgeConnectionAdapter,
   peerConnectionAdapter,
   inferenceEndpointAdapter,
@@ -1908,6 +1991,7 @@ const OBJECT_TYPE_BY_ADAPTER_ID: Record<string, string> = {
   marketplace_entitlement_read: "MarketplaceEntitlement",
   marketplace_order_read: "MarketplaceOrder",
   marketplace_seller_account_read: "MarketplaceSellerAccount",
+  marketplace_catalog_service: "MarketplaceCatalog",
   bridge_connection_read: "BridgeConnection",
   peer_connection_read: "PeerConnection",
   inference_endpoint_read: "InferenceEndpoint",
@@ -2370,6 +2454,54 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
     action("commerce_config", {
       target: "collection",
       effect: "read",
+    }),
+  ],
+  MarketplaceCatalog: [
+    action("prepare_submission", {
+      target: "collection",
+      effect: "read",
+      inputSchema: objectSchema(
+        {
+          id: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string" },
+          install_type: { enum: ["plugin", "clone"] },
+          kind: { type: "string" },
+          version: { type: "string" },
+          plugin_repo: { type: "string" },
+          plugin_ref: { type: "string" },
+          bundle_path: { type: "string" },
+          ci_run_url: { type: "string" },
+          delivery_mode: { enum: ["clone", "live"] },
+          tags: { type: "array", items: { type: "string" } },
+          stripe_connect_attestation: { type: "boolean" },
+        },
+        ["id", "title", "description", "install_type"]
+      ),
+    }),
+    action("submit_submission", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+      inputSchema: objectSchema(
+        {
+          id: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string" },
+          install_type: { enum: ["plugin", "clone"] },
+          kind: { type: "string" },
+          version: { type: "string" },
+          plugin_repo: { type: "string" },
+          plugin_ref: { type: "string" },
+          bundle_path: { type: "string" },
+          ci_run_url: { type: "string" },
+          delivery_mode: { enum: ["clone", "live"] },
+          tags: { type: "array", items: { type: "string" } },
+          stripe_connect_attestation: { type: "boolean" },
+        },
+        ["id", "title", "description", "install_type"]
+      ),
     }),
   ],
   BridgeConnection: [

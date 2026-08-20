@@ -155,8 +155,8 @@
       "rationale": "Local LLM process stop; infrastructure."
     },
     "submit_community_catalog_submission": {
-      "class": "protocol_exception",
-      "rationale": "#602 shared Bridge Community catalog submit (same handlers as Sell UI); documented protocol exception until MarketplaceCatalog ObjectType exists."
+      "class": "kernel_generated",
+      "rationale": "Cutover alias to MarketplaceCatalog.submit_submission (Sell UI + generated marketplace_catalog_submit_submission); shared marketplace-catalog-submission.ts service."
     },
     "terminal_session_close": {
       "class": "infra_coding",

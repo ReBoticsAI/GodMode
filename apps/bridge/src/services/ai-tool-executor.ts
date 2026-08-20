@@ -229,10 +229,6 @@ import {
   installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
 import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
-import {
-  prepareCommunityCatalogSubmission,
-  submitCommunityCatalogSubmission,
-} from "./marketplace-catalog-submission.js";
 import { listPublisherConnectors } from "./publisher-connectors.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
 import {
@@ -921,6 +917,52 @@ async function executeStaticKernelAlias(
         result: await action("CatalogInstall", "", "install_entry", {
           entry_id: value(args, "entryId", "entry_id"),
           source_catalog: value(args, "sourceCatalog", "source_catalog"),
+        }),
+      };
+    case "prepare_community_catalog_submission":
+      return {
+        handled: true,
+        result: await action("MarketplaceCatalog", "", "prepare_submission", {
+          id: value(args, "id"),
+          title: value(args, "title"),
+          description: value(args, "description"),
+          install_type: value(args, "installType", "install_type"),
+          kind: value(args, "kind"),
+          version: value(args, "version"),
+          plugin_repo: value(args, "pluginRepo", "plugin_repo"),
+          plugin_ref: value(args, "pluginRef", "plugin_ref"),
+          bundle_path: value(args, "bundlePath", "bundle_path"),
+          ci_run_url: value(args, "ciRunUrl", "ci_run_url"),
+          delivery_mode: value(args, "deliveryMode", "delivery_mode"),
+          tags: value(args, "tags"),
+          stripe_connect_attestation: value(
+            args,
+            "stripeConnectAttestation",
+            "stripe_connect_attestation"
+          ),
+        }),
+      };
+    case "submit_community_catalog_submission":
+      return {
+        handled: true,
+        result: await action("MarketplaceCatalog", "", "submit_submission", {
+          id: value(args, "id"),
+          title: value(args, "title"),
+          description: value(args, "description"),
+          install_type: value(args, "installType", "install_type"),
+          kind: value(args, "kind"),
+          version: value(args, "version"),
+          plugin_repo: value(args, "pluginRepo", "plugin_repo"),
+          plugin_ref: value(args, "pluginRef", "plugin_ref"),
+          bundle_path: value(args, "bundlePath", "bundle_path"),
+          ci_run_url: value(args, "ciRunUrl", "ci_run_url"),
+          delivery_mode: value(args, "deliveryMode", "delivery_mode"),
+          tags: value(args, "tags"),
+          stripe_connect_attestation: value(
+            args,
+            "stripeConnectAttestation",
+            "stripe_connect_attestation"
+          ),
         }),
       };
     default:
@@ -4061,48 +4103,6 @@ export async function executeTool(
         title: String(args.title ?? ""),
         description: String(args.description ?? ""),
         pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
-      });
-    }
-
-    case "prepare_community_catalog_submission": {
-      if (!ctx.userId) throw new Error("userId required");
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
-      return prepareCommunityCatalogSubmission({
-        core: getCloudDb(),
-        userDb: ownerDb,
-        userId: ctx.userId,
-        input: {
-          id: String(args.id ?? ""),
-          title: String(args.title ?? ""),
-          description: String(args.description ?? ""),
-          installType: args.installType === "clone" ? "clone" : "plugin",
-          kind: typeof args.kind === "string" ? args.kind : undefined,
-          pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
-          pluginRef: typeof args.pluginRef === "string" ? args.pluginRef : undefined,
-          bundlePath: typeof args.bundlePath === "string" ? args.bundlePath : undefined,
-          ciRunUrl: typeof args.ciRunUrl === "string" ? args.ciRunUrl : undefined,
-        },
-      });
-    }
-
-    case "submit_community_catalog_submission": {
-      if (!ctx.userId) throw new Error("userId required");
-      const ownerDb = getUserOwnerTenantDb(ctx.userId);
-      return submitCommunityCatalogSubmission({
-        core: getCloudDb(),
-        userDb: ownerDb,
-        userId: ctx.userId,
-        input: {
-          id: String(args.id ?? ""),
-          title: String(args.title ?? ""),
-          description: String(args.description ?? ""),
-          installType: args.installType === "clone" ? "clone" : "plugin",
-          kind: typeof args.kind === "string" ? args.kind : undefined,
-          pluginRepo: typeof args.pluginRepo === "string" ? args.pluginRepo : undefined,
-          pluginRef: typeof args.pluginRef === "string" ? args.pluginRef : undefined,
-          bundlePath: typeof args.bundlePath === "string" ? args.bundlePath : undefined,
-          ciRunUrl: typeof args.ciRunUrl === "string" ? args.ciRunUrl : undefined,
-        },
       });
     }
 

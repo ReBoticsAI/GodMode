@@ -160,4 +160,16 @@ export const MARKETPLACE_SPECS: BuiltinSpec[] = [
       "installed_at",
     ],
   },
+  {
+    name: "MarketplaceCatalog",
+    label: "Marketplace Catalog",
+    module: "marketplace",
+    id: "marketplace_catalog_service",
+    table: "marketplace_catalog",
+    database: "cloud",
+    accessPolicy: "relationship-scoped",
+    operations: [],
+    actions: PLATFORM_ACTION_METADATA.MarketplaceCatalog,
+    fields: ["id", "user_id", "created_at", "updated_at"],
+  },
 ];

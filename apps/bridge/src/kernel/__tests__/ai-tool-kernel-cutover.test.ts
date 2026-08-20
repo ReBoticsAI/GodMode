@@ -101,6 +101,28 @@ describe("static AI tool kernel cutover", () => {
       "run_record_action",
       "MarketplaceListing",
     ],
+    [
+      "prepare_community_catalog_submission",
+      {
+        id: "demo-pack",
+        title: "Demo",
+        description: "Demo pack",
+        installType: "plugin",
+      },
+      "run_record_action",
+      "MarketplaceCatalog",
+    ],
+    [
+      "submit_community_catalog_submission",
+      {
+        id: "demo-pack",
+        title: "Demo",
+        description: "Demo pack",
+        installType: "plugin",
+      },
+      "run_record_action",
+      "MarketplaceCatalog",
+    ],
   ])(
     "routes %s through generic kernel dispatch without DB access",
     async (toolName, args, kernelName, objectType) => {

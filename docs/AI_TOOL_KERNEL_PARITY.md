@@ -15,12 +15,16 @@ This document is the human index for [`scripts/ai-tool-parity-inventory.json`](.
 | `infra_search` | Search/retrieval writers (reserved; none currently) |
 | `legacy_gap` | Known static mutation still awaiting ObjectType / action cutover |
 
-## Reference cutover (#602)
+## Reference cutover (#603 P1a)
 
 Community Marketplace catalog publish:
 
-- Web: Marketplace → Sell → **Submit to Community catalog**
-- Agents: `prepare_community_catalog_submission` (read/validate) and `submit_community_catalog_submission` (`write: true`, `protocol_exception`)
+- Web: Marketplace → Sell → **Submit to Community catalog** via
+  `MarketplaceCatalog.prepare_submission` / `submit_submission`
+- Agents: static `prepare_community_catalog_submission` /
+  `submit_community_catalog_submission` are cutover aliases (`kernel_generated`);
+  generated tools are `marketplace_catalog_prepare_submission` /
+  `marketplace_catalog_submit_submission`
 - Shared: `apps/bridge/src/services/marketplace-catalog-submission.ts`
 
 Do **not** use `git_push` / `github_pr_create` as the Community catalog ship path.

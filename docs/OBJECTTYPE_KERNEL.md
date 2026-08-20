@@ -155,9 +155,12 @@ route with the same contract), then consume them from both places:
    same mutation).
 
 External systems (GitHub PR, Stripe, file transport) belong inside action handlers
-or documented protocol exceptions. Community Marketplace catalog submit (#602) is the
+or documented protocol exceptions. Community Marketplace catalog submit is the
 reference: Sell → **Submit to Community catalog** and Intelligence
-`prepare_community_catalog_submission` / `submit_community_catalog_submission` share
+`prepare_community_catalog_submission` / `submit_community_catalog_submission`
+(aliases) plus generated `marketplace_catalog_prepare_submission` /
+`marketplace_catalog_submit_submission` all call
+`MarketplaceCatalog.prepare_submission` / `submit_submission`, which wrap
 `marketplace-catalog-submission.ts`.
 
 The release subsystem follows the same boundary. `Release` exposes verified
@@ -170,7 +173,7 @@ the kernel state machine.
 
 ## Completed migration and protocol exceptions
 
-At the completion baseline, the strict audits discover 74 core ObjectTypes and
+At the completion baseline, the strict audits discover 77 core ObjectTypes and
 report 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers, and 0
 direct writes in audited entry points. Tenant registries can expose additional
 ObjectTypes from installed executable or declarative plugins. Five domain
@@ -186,7 +189,7 @@ transport; and Marketplace Stripe/PayPal webhooks plus the public Official
 catalog JSON are commerce/catalog transport. These are explicit, narrow
 protocol exceptions. Their durable domain effects use kernel CRUD/actions where
 applicable (`MarketplaceOrder`, `MarketplaceListing`, `CatalogInstall`,
-`MarketplaceSellerAccount`); binary, stream, and provider redirects are not
+`MarketplaceSellerAccount`, `MarketplaceCatalog`); binary, stream, and provider redirects are not
 themselves Record CRUD.
 
 ## Plugin author checklist

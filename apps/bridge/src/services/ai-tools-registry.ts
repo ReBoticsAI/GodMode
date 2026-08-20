@@ -2073,7 +2073,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "prepare_community_catalog_submission",
     description:
-      "Prepare a Community GodMode-Marketplace catalog entry (validate ToS, GitHub Connect, manifest blockers). Prefer over prepare_marketplace_submission for Community Sell.",
+      "Prepare a Community GodMode-Marketplace catalog entry via MarketplaceCatalog.prepare_submission (validate ToS, GitHub Connect, manifest blockers). Prefer over prepare_marketplace_submission for Community Sell.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -2094,7 +2094,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "submit_community_catalog_submission",
     description:
-      "Open a GodMode-Marketplace Community catalog PR via Vault GitHub Connect. Requires confirmation.",
+      "Open a GodMode-Marketplace Community catalog PR via MarketplaceCatalog.submit_submission (Vault GitHub Connect). Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {

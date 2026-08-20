@@ -516,22 +516,6 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
-    id: "marketplace-community-catalog-submission-prepare",
-    methods: ["POST"],
-    pathPattern: "/api/marketplace/catalog/community/submission/prepare",
-    rationale:
-      "Community catalog intake preview (#602); validates manifest and blockers via GitHub fork transport, not Record CRUD.",
-    authenticatedDomainMutations: "none",
-  },
-  {
-    id: "marketplace-community-catalog-submission-submit",
-    methods: ["POST"],
-    pathPattern: "/api/marketplace/catalog/community/submission/submit",
-    rationale:
-      "Community catalog intake PR open (#602); writes GodMode-Marketplace catalog/community via Vault GitHub Connect, not Record CRUD.",
-    authenticatedDomainMutations: "none",
-  },
-  {
     id: "analytics-read-query",
     methods: ["POST"],
     pathPattern: "/api/analytics/timeseries/query",
