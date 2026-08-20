@@ -166,6 +166,9 @@ export function createMarketplaceCatalogRouter(): Router {
           bundlePath: body.bundlePath,
           ciRunUrl: body.ciRunUrl,
           tags: body.tags,
+          deliveryMode: body.deliveryMode === "live" || body.deliveryMode === "clone"
+            ? body.deliveryMode
+            : undefined,
         },
       });
       res.json(result);
@@ -195,6 +198,9 @@ export function createMarketplaceCatalogRouter(): Router {
           bundlePath: body.bundlePath,
           ciRunUrl: body.ciRunUrl,
           tags: body.tags,
+          deliveryMode: body.deliveryMode === "live" || body.deliveryMode === "clone"
+            ? body.deliveryMode
+            : undefined,
         },
       });
       res.json(result);

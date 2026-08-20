@@ -6,9 +6,11 @@ import type {
   MarketplaceListingKind,
   PricingModel,
 } from "../core-db.js";
+import type { AppDatabase } from "../db.js";
 import { adjustCredits, CreditsError } from "./credits.js";
 import { createShareGrant, revokeShareGrant } from "./share-service.js";
 import { assertCanAcquireListing, markPaidOrdersDeliveredForListing } from "./marketplace-commerce.js";
+import { assertLiveListingBoundFresh } from "./marketplace-live-bind.js";
 
 export class EntitlementError extends Error {
   status: number;
@@ -150,9 +152,24 @@ export function acquireLiveListing(
     listing: Record<string, unknown>;
     buyerUserId: string;
     buyerTenantId: string;
+    /** Seller tenant DB required for Live Share bind drift checks (#596). */
+    sellerTenantDb?: AppDatabase;
   }
 ): { entitlementId: string; shareGrantId: string; balance: number } {
   const listing = opts.listing;
+  if (opts.sellerTenantDb) {
+    assertLiveListingBoundFresh(core, opts.sellerTenantDb, listing);
+  } else if (String(listing.delivery_mode ?? "") === "live") {
+    const digest = String(listing.live_bundle_digest ?? "").trim();
+    if (!digest) {
+      throw Object.assign(
+        new Error(
+          "This Live Share listing is not bound to a catalog pin. The seller must re-bind before sales."
+        ),
+        { status: 409 }
+      );
+    }
+  }
   assertCanAcquireListing(core, { userId: opts.buyerUserId, listing });
   const pricingModel = String(listing.pricing_model ?? "one_time") as PricingModel;
   const pricePeriod =

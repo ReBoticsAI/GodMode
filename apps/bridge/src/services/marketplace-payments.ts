@@ -455,6 +455,16 @@ export function createOrderForListing(
     provider: MarketplacePaymentProvider;
   }
 ): Record<string, unknown> {
+  if (String(opts.listing.delivery_mode ?? "") === "live") {
+    const digest = String(opts.listing.live_bundle_digest ?? "").trim();
+    const status = String(opts.listing.status ?? "");
+    if (!digest || status !== "active") {
+      throw new MarketplaceCommerceError(
+        "This Live Share listing is not bound or not public. The seller must re-bind before checkout.",
+        409
+      );
+    }
+  }
   const sellerKind = (String(opts.listing.seller_kind || "user") as "official" | "user");
   return createMarketplaceOrder(core, {
     listingId: String(opts.listing.id),

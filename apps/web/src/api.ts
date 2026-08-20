@@ -6081,6 +6081,8 @@ export interface CatalogEntry {
   id: string;
   kind: string;
   installType: "clone" | "plugin";
+  /** clone (default) or live Shared grant on seller host (#596). */
+  deliveryMode?: "clone" | "live";
   title: string;
   description: string;
   version: string;
@@ -6149,6 +6151,7 @@ export function prepareCommunityCatalogSubmission(body: {
   pluginRef?: string;
   bundlePath?: string;
   ciRunUrl?: string;
+  deliveryMode?: "clone" | "live";
 }) {
   return api<CommunityCatalogSubmissionPrepareResult>(
     "/marketplace/catalog/community/submission/prepare",
@@ -6167,6 +6170,7 @@ export function submitCommunityCatalogSubmission(body: {
   pluginRef?: string;
   bundlePath?: string;
   ciRunUrl?: string;
+  deliveryMode?: "clone" | "live";
 }) {
   return api<CommunityCatalogSubmissionSubmitResult>(
     "/marketplace/catalog/community/submission/submit",
@@ -6597,6 +6601,31 @@ export function createMarketplaceListing(body: {
     catalog_entry_id: body.catalogEntryId,
     bundle_children: body.bundleChildren,
   }, undefined, true);
+}
+
+/** Bind a live workspace resource to a Community catalog pin (#596). */
+export function bindMarketplaceLiveListing(body: {
+  catalogEntryId: string;
+  resourceId: string;
+  kind?: string;
+  title?: string;
+  description?: string;
+  priceCents?: number;
+}) {
+  return actionDto<{ id: string }>(
+    "MarketplaceListing",
+    "bind_live",
+    {
+      catalog_entry_id: body.catalogEntryId,
+      resource_id: body.resourceId,
+      kind: body.kind,
+      title: body.title,
+      description: body.description,
+      price_cents: body.priceCents,
+    },
+    undefined,
+    true
+  );
 }
 
 export function acceptMarketplaceTos() {

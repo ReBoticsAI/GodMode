@@ -36,6 +36,8 @@ export type PrepareCommunityCatalogSubmissionInput = {
   pluginRef?: string;
   bundlePath?: string;
   ciRunUrl?: string;
+  /** Community Live Share (#596). Only valid with installType clone. */
+  deliveryMode?: "clone" | "live";
   tags?: string[];
 };
 
@@ -101,6 +103,10 @@ function buildCatalogEntry(
   if (bundlePath) entry.bundlePath = bundlePath;
   const ciRunUrl = String(input.ciRunUrl ?? "").trim();
   if (ciRunUrl) entry.ciRunUrl = ciRunUrl;
+  const deliveryMode = String(input.deliveryMode ?? "").trim().toLowerCase();
+  if (deliveryMode === "live" || deliveryMode === "clone") {
+    entry.deliveryMode = deliveryMode;
+  }
   const tags = (input.tags ?? []).map((t) => String(t).trim()).filter(Boolean);
   if (tags.length) entry.tags = tags;
   return entry;
@@ -141,6 +147,14 @@ function submissionBlockers(
       code: "pluginRef",
       message: "pluginRef (pinned repo ref) is required for clone packs.",
     });
+  }
+  if (String(entry.deliveryMode ?? "").trim().toLowerCase() === "live") {
+    if (installType !== "clone") {
+      blockers.push({
+        code: "deliveryMode",
+        message: "deliveryMode live requires installType clone.",
+      });
+    }
   }
   return blockers;
 }

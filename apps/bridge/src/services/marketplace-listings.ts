@@ -89,6 +89,15 @@ export function publishMarketplaceListing(
   if (publishState.error) {
     throw Object.assign(new Error(publishState.error), { status: 400 });
   }
+  // Unbound live claims stay draft until bindLiveListing pins the resource digest.
+  if (
+    delivery === "live" &&
+    String(input.catalogEntryId ?? "").trim() &&
+    !String(input.resourceId ?? "").trim()
+  ) {
+    publishState.status = "draft";
+    publishState.visibility = "private";
+  }
 
   const catalogEntryIdEarly = String(input.catalogEntryId ?? "").trim();
   if (catalogEntryIdEarly) {
@@ -125,6 +134,16 @@ export function publishMarketplaceListing(
     title = input.title ?? endpoint.name;
     resourceId = endpointId;
   } else if (delivery === "clone" && String(input.catalogEntryId ?? "").trim()) {
+    const catalogId = String(input.catalogEntryId).trim();
+    resourceId = catalogId;
+    title = input.title ?? catalogId;
+    bundleJson = "{}";
+  } else if (
+    delivery === "live" &&
+    String(input.catalogEntryId ?? "").trim() &&
+    !String(input.resourceId ?? "").trim()
+  ) {
+    // Claim path (#596): listing owns the catalog row; bindLiveListing attaches the resource.
     const catalogId = String(input.catalogEntryId).trim();
     resourceId = catalogId;
     title = input.title ?? catalogId;
@@ -341,6 +360,7 @@ export function claimOwnedCommunityCatalogListings(
       priceCents?: number;
       installType?: string;
       kind?: string;
+      deliveryMode?: string;
     }>;
   }
 ): CatalogClaimOrphan[] {
@@ -360,6 +380,8 @@ export function claimOwnedCommunityCatalogListings(
     if (claimed.has(entry.id)) continue;
     if (!sellerOwnsCatalogEntry(entry, opts.githubLogin)) continue;
     try {
+      const delivery =
+        String(entry.deliveryMode ?? "").trim().toLowerCase() === "live" ? "live" : "clone";
       publishMarketplaceListing(core, tenantDb, {
         sellerUserId: opts.sellerUserId,
         sellerTenantId: opts.sellerTenantId,
@@ -375,6 +397,7 @@ export function claimOwnedCommunityCatalogListings(
         description: entry.description,
         priceCents: Number(entry.priceCents ?? 0),
         sellerKind: "user",
+        deliveryMode: delivery,
       });
       claimed.add(entry.id);
     } catch (err) {

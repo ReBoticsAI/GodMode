@@ -7,6 +7,7 @@ import {
   archiveMarketplaceListing,
   confirmMarketplaceCryptoPayment,
   createMarketplaceListing,
+  bindMarketplaceLiveListing,
   fetchInstalledCatalog,
   fetchMarketplaceCommerceConfig,
   fetchMarketplaceEntitlements,
@@ -442,6 +443,9 @@ export default function MarketplacePage() {
   const [catalogSubmitPluginRef, setCatalogSubmitPluginRef] = useState("");
   const [catalogSubmitBundlePath, setCatalogSubmitBundlePath] = useState("bundle.json");
   const [catalogSubmitCiRunUrl, setCatalogSubmitCiRunUrl] = useState("");
+  const [catalogSubmitDeliveryMode, setCatalogSubmitDeliveryMode] = useState<"clone" | "live">(
+    "clone"
+  );
   const [catalogSubmitPreview, setCatalogSubmitPreview] =
     useState<CommunityCatalogSubmissionPrepareResult | null>(null);
   const [catalogSubmitBusy, setCatalogSubmitBusy] = useState(false);
@@ -461,6 +465,8 @@ export default function MarketplacePage() {
           : undefined,
       ciRunUrl:
         catalogSubmitInstallType === "plugin" ? catalogSubmitCiRunUrl.trim() || undefined : undefined,
+      deliveryMode:
+        catalogSubmitInstallType === "clone" ? catalogSubmitDeliveryMode : undefined,
     }),
     [
       catalogSubmitId,
@@ -472,6 +478,7 @@ export default function MarketplacePage() {
       catalogSubmitPluginRef,
       catalogSubmitBundlePath,
       catalogSubmitCiRunUrl,
+      catalogSubmitDeliveryMode,
     ]
   );
 
@@ -698,8 +705,15 @@ export default function MarketplacePage() {
     if (publishFamily === "plugin") {
       return ownedCommunityCatalog.filter((e) => e.installType !== "clone");
     }
-    if (publishFamily === "clone" || publishFamily === "live") {
-      return ownedCommunityCatalog.filter((e) => e.installType === "clone");
+    if (publishFamily === "clone") {
+      return ownedCommunityCatalog.filter(
+        (e) => e.installType === "clone" && e.deliveryMode !== "live"
+      );
+    }
+    if (publishFamily === "live") {
+      return ownedCommunityCatalog.filter(
+        (e) => e.installType === "clone" && e.deliveryMode === "live"
+      );
     }
     return ownedCommunityCatalog;
   }, [ownedCommunityCatalog, publishFamily]);
@@ -940,35 +954,44 @@ export default function MarketplacePage() {
     if (!canPublish) return;
     setPublishing(true);
     try {
-      const kind =
-        publishFamily === "plugin"
-          ? "plugin"
-          : publishFamily === "inference"
-            ? "inference"
-            : publishKind;
-      const delivery =
-        publishFamily === "live" ? "live" : publishFamily === "inference" ? "live" : "clone";
-      await createMarketplaceListing({
-        kind,
-        title: publishTitle.trim(),
-        description: publishDescription.trim() || undefined,
-        priceCents: publishPriceCents,
-        deliveryMode: delivery,
-        resourceId:
-          publishFamily === "live" || publishFamily === "inference"
-            ? publishResourceId.trim() || undefined
-            : undefined,
-        catalogEntryId:
-          publishFamily === "plugin" || publishFamily === "clone" || publishFamily === "live"
-            ? publishCatalogEntryId.trim()
-            : undefined,
-        inferenceEndpointId:
-          publishFamily === "inference" ? publishResourceId.trim() : undefined,
-        sellerKind: "user",
-      });
-      toast.success(
-        publishFamily === "inference" ? "Listing submitted for review" : "Listing saved"
-      );
+      if (publishFamily === "live") {
+        await bindMarketplaceLiveListing({
+          catalogEntryId: publishCatalogEntryId.trim(),
+          resourceId: publishResourceId.trim(),
+          kind: publishKind,
+          title: publishTitle.trim(),
+          description: publishDescription.trim() || undefined,
+          priceCents: publishPriceCents,
+        });
+        toast.success("Live Share bound to catalog pin");
+      } else {
+        const kind =
+          publishFamily === "plugin"
+            ? "plugin"
+            : publishFamily === "inference"
+              ? "inference"
+              : publishKind;
+        const delivery = publishFamily === "inference" ? "live" : "clone";
+        await createMarketplaceListing({
+          kind,
+          title: publishTitle.trim(),
+          description: publishDescription.trim() || undefined,
+          priceCents: publishPriceCents,
+          deliveryMode: delivery,
+          resourceId:
+            publishFamily === "inference" ? publishResourceId.trim() || undefined : undefined,
+          catalogEntryId:
+            publishFamily === "plugin" || publishFamily === "clone"
+              ? publishCatalogEntryId.trim()
+              : undefined,
+          inferenceEndpointId:
+            publishFamily === "inference" ? publishResourceId.trim() : undefined,
+          sellerKind: "user",
+        });
+        toast.success(
+          publishFamily === "inference" ? "Listing submitted for review" : "Listing saved"
+        );
+      }
       setPublishTitle("");
       setPublishDescription("");
       setPublishPriceDollars("0");
@@ -1561,6 +1584,28 @@ export default function MarketplacePage() {
                   </Field>
                   {catalogSubmitInstallType === "clone" ? (
                     <Field>
+                      <FieldLabel>Delivery</FieldLabel>
+                      <ToggleGroup
+                        value={[catalogSubmitDeliveryMode]}
+                        onValueChange={(next) => {
+                          const value = Array.isArray(next) ? next[0] : next;
+                          if (value === "clone" || value === "live") {
+                            setCatalogSubmitDeliveryMode(value);
+                          }
+                        }}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <ToggleGroupItem value="clone">Clone pack</ToggleGroupItem>
+                        <ToggleGroupItem value="live">Live share</ToggleGroupItem>
+                      </ToggleGroup>
+                      <FieldDescription>
+                        Live share buyers get a grant on your host after you bind a matching resource.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                  {catalogSubmitInstallType === "clone" ? (
+                    <Field>
                       <FieldLabel>Pack kind</FieldLabel>
                       <Select
                         value={catalogSubmitKind}
@@ -1741,7 +1786,7 @@ export default function MarketplacePage() {
                     {publishFamily === "plugin"
                       ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author."
                       : publishFamily === "live"
-                        ? "Catalog-backed live access on this host. Select a catalog row, then the live resource id (bind/drift in a follow-up)."
+                        ? "Catalog-backed live access on this host. Select a deliveryMode live catalog row, then bind a workspace resource whose export matches the pin. Free Shared sidebar stays outside Marketplace."
                         : publishFamily === "inference"
                           ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
                           : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy."}
@@ -1844,7 +1889,8 @@ export default function MarketplacePage() {
                         disabled={!publishCatalogEntryId}
                       />
                       <FieldDescription>
-                        Temporary until Live Share catalog bind lands. Catalog entry is required.
+                        Export of this entity must match the pinned catalog bundle. Drift demotes the
+                        listing until you re-bind.
                       </FieldDescription>
                     </Field>
                   </>
@@ -1915,9 +1961,11 @@ export default function MarketplacePage() {
                     ? "Publishing…"
                     : publishFamily === "inference"
                       ? "Submit for review"
-                      : publishFamily === "plugin"
-                        ? "Save plugin listing"
-                        : "Save listing"}
+                      : publishFamily === "live"
+                        ? "Bind Live Share"
+                        : publishFamily === "plugin"
+                          ? "Save plugin listing"
+                          : "Save listing"}
                 </Button>
               </FieldGroup>
             </CardContent>

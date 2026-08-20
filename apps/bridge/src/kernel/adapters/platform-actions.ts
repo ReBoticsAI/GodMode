@@ -100,6 +100,8 @@ import {
   listListingsAwaitingReview,
   reviewMarketplaceListing,
 } from "../../services/marketplace-listings.js";
+import { bindLiveListing } from "../../services/marketplace-live-bind.js";
+import { getTenantDb } from "../../tenant-registry.js";
 import {
   acceptMarketplaceTos,
   ensureSellerAccount,
@@ -984,6 +986,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
           listing,
           buyerUserId: requireUser(ctx),
           buyerTenantId: requireTenant(ctx),
+          sellerTenantDb: getTenantDb(String(listing.seller_tenant_id)),
         });
       } catch (err) {
         if (err instanceof MarketplaceCommerceError) {
@@ -994,6 +997,34 @@ export const marketplaceListingAdapter: RecordAdapter = {
     },
     acquire_live(db, def, id, input, ctx) {
       return marketplaceListingAdapter.actions!.acquire(db, def, id, input, ctx);
+    },
+    async bind_live(_db, def, _id, input, ctx) {
+      try {
+        const sellerUserId = requireUser(ctx);
+        let githubLogin: string | null = null;
+        try {
+          githubLogin = githubProjectsStatus(getUserDb(sellerUserId), sellerUserId).login;
+        } catch {
+          githubLogin = null;
+        }
+        const row = await bindLiveListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
+          sellerUserId,
+          sellerTenantId: requireTenant(ctx),
+          catalogEntryId: requiredText(input, "catalog_entry_id"),
+          resourceId: requiredText(input, "resource_id"),
+          kind: typeof input.kind === "string" ? input.kind : undefined,
+          title: typeof input.title === "string" ? input.title : undefined,
+          description: typeof input.description === "string" ? input.description : undefined,
+          priceCents: typeof input.price_cents === "number" ? input.price_cents : undefined,
+          githubLogin,
+        });
+        return record(def, row);
+      } catch (err) {
+        if (err instanceof MarketplaceCommerceError) {
+          throw httpError(err.status, err.message);
+        }
+        throw err;
+      }
     },
     async publish(_db, def, _id, input, ctx) {
       try {
@@ -2222,6 +2253,23 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
           bundle_children: { type: "array" },
         },
         ["kind"]
+      ),
+    }),
+    action("bind_live", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+      inputSchema: objectSchema(
+        {
+          catalog_entry_id: { type: "string" },
+          resource_id: { type: "string" },
+          kind: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string" },
+          price_cents: { type: "number" },
+        },
+        ["catalog_entry_id", "resource_id"]
       ),
     }),
     action("archive", {
