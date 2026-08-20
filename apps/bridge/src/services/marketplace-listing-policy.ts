@@ -123,6 +123,32 @@ export function attachListingIdToCatalogEntry<
   return { ...entry, listingId };
 }
 
+export function attachListingCommerceToCatalogEntry<
+  T extends {
+    id: string;
+    listingId?: string;
+    priceCents?: number;
+    currency?: string;
+    listingStatus?: string;
+  },
+>(
+  entry: T,
+  listingsByCatalogId: Map<
+    string,
+    { id: string; priceCents: number; currency: string; status: string }
+  >
+): T {
+  const commerce = listingsByCatalogId.get(entry.id);
+  if (!commerce) return entry;
+  return {
+    ...entry,
+    listingId: commerce.id,
+    priceCents: Number(entry.priceCents ?? 0) || commerce.priceCents,
+    currency: entry.currency ?? commerce.currency,
+    listingStatus: entry.listingStatus ?? commerce.status,
+  };
+}
+
 export function communityPluginInstallBlock(opts: {
   priceCents: number;
   listingId?: string | null;
