@@ -145,6 +145,11 @@ describe("platform action adapters", () => {
         ],
       },
       {
+        objectType: "MarketplaceCatalog",
+        adapterId: "marketplace_catalog_service",
+        actions: ["prepare_submission", "submit_submission"],
+      },
+      {
         objectType: "BridgeConnection",
         adapterId: "bridge_connection_read",
         actions: ["register", "touch", "probe_remote"],

@@ -6154,9 +6154,23 @@ export function prepareCommunityCatalogSubmission(body: {
   deliveryMode?: "clone" | "live";
   stripeConnectAttestation?: boolean;
 }) {
-  return api<CommunityCatalogSubmissionPrepareResult>(
-    "/marketplace/catalog/community/submission/prepare",
-    { method: "POST", body: JSON.stringify(body) }
+  return actionDto<CommunityCatalogSubmissionPrepareResult>(
+    "MarketplaceCatalog",
+    "prepare_submission",
+    {
+      id: body.id,
+      title: body.title,
+      description: body.description,
+      install_type: body.installType,
+      kind: body.kind,
+      version: body.version,
+      plugin_repo: body.pluginRepo,
+      plugin_ref: body.pluginRef,
+      bundle_path: body.bundlePath,
+      ci_run_url: body.ciRunUrl,
+      delivery_mode: body.deliveryMode,
+      stripe_connect_attestation: body.stripeConnectAttestation,
+    }
   );
 }
 
@@ -6174,9 +6188,25 @@ export function submitCommunityCatalogSubmission(body: {
   deliveryMode?: "clone" | "live";
   stripeConnectAttestation?: boolean;
 }) {
-  return api<CommunityCatalogSubmissionSubmitResult>(
-    "/marketplace/catalog/community/submission/submit",
-    { method: "POST", body: JSON.stringify(body) }
+  return actionDto<CommunityCatalogSubmissionSubmitResult>(
+    "MarketplaceCatalog",
+    "submit_submission",
+    {
+      id: body.id,
+      title: body.title,
+      description: body.description,
+      install_type: body.installType,
+      kind: body.kind,
+      version: body.version,
+      plugin_repo: body.pluginRepo,
+      plugin_ref: body.pluginRef,
+      bundle_path: body.bundlePath,
+      ci_run_url: body.ciRunUrl,
+      delivery_mode: body.deliveryMode,
+      stripe_connect_attestation: body.stripeConnectAttestation,
+    },
+    undefined,
+    true
   );
 }
 

@@ -181,6 +181,7 @@ Durable buy/sell uses ObjectTypes (see [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.
 | `MarketplaceListing` | `publish`, `acquire`, `archive`, … (`price_cents`) |
 | `MarketplaceOrder` | `start_checkout`, `capture_paypal`, `confirm_crypto` |
 | `MarketplaceSellerAccount` | `accept_tos`, `connect_payout`, `commerce_config` |
+| `MarketplaceCatalog` | `prepare_submission`, `submit_submission` (Community Sell + Intelligence) |
 | `CatalogInstall` | `install_entry` (gates paid Official entries) |
 
 Payment provider webhooks and the public Official JSON feed are **protocol exceptions**, not parallel Express CRUD.

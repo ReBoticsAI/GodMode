@@ -116,6 +116,7 @@ export const CORE_OBJECT_TYPE_NAMES = [
   "MarketplaceEntitlement",
   "MarketplaceOrder",
   "MarketplaceSellerAccount",
+  "MarketplaceCatalog",
   "CatalogSource",
   "CatalogInstall",
   "BridgeConnection",
