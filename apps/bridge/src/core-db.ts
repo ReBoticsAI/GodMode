@@ -712,6 +712,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_guest_delivery_grants_v1",
     up: ensureMarketplaceGuestDeliveryGrants,
   },
+  {
+    version: 18,
+    name: "core_marketplace_live_bind_columns_v1",
+    up: ensureMarketplaceLiveBindColumns,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -903,7 +908,12 @@ function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
   addCol(db, "marketplace_listings", "meter_rate", "INTEGER");
   addCol(db, "marketplace_listings", "license", "TEXT");
   addCol(db, "marketplace_listings", "inference_endpoint_id", "TEXT");
-  // Live Share catalog pin + bind (#596)
+  // Also applied by migration 18 for DBs that already ran marketplace columns v1.
+  ensureMarketplaceLiveBindColumns(db);
+}
+
+/** Community Live Share pin/bind columns (#596). Idempotent; required as its own migration. */
+function ensureMarketplaceLiveBindColumns(db: CoreDatabase): void {
   addCol(db, "marketplace_listings", "catalog_plugin_ref", "TEXT");
   addCol(db, "marketplace_listings", "catalog_plugin_digest", "TEXT");
   addCol(db, "marketplace_listings", "live_resource_id", "TEXT");

@@ -107,4 +107,57 @@ describe("marketplace listing indexes", () => {
     expect(() => db.prepare(sql).all(...params)).not.toThrow();
     db.close();
   });
+
+  it("adds Live Share bind columns after marketplace columns v1 already applied", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE marketplace_listings (
+        id TEXT PRIMARY KEY,
+        seller_user_id TEXT,
+        seller_tenant_id TEXT,
+        kind TEXT,
+        resource_id TEXT,
+        title TEXT,
+        description TEXT,
+        price_credits INTEGER DEFAULT 0,
+        price_cents INTEGER DEFAULT 0,
+        currency TEXT DEFAULT 'usd',
+        seller_kind TEXT DEFAULT 'user',
+        catalog_entry_id TEXT,
+        visibility TEXT DEFAULT 'public',
+        status TEXT DEFAULT 'active',
+        delivery_mode TEXT,
+        pricing_model TEXT,
+        price_period TEXT,
+        meter_unit TEXT,
+        meter_rate INTEGER,
+        license TEXT,
+        inference_endpoint_id TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    const insertVersion = db.prepare(
+      `INSERT INTO schema_version (version, name) VALUES (?, ?)`
+    );
+    for (const m of CORE_MIGRATIONS.filter((row) => row.version < 18)) {
+      insertVersion.run(m.version, m.name);
+    }
+    expect(columnExists(db, "marketplace_listings", "catalog_plugin_ref")).toBe(false);
+    expect(columnExists(db, "marketplace_listings", "live_bundle_digest")).toBe(false);
+
+    runMigrations(db, CORE_MIGRATIONS);
+
+    expect(columnExists(db, "marketplace_listings", "catalog_plugin_ref")).toBe(true);
+    expect(columnExists(db, "marketplace_listings", "catalog_plugin_digest")).toBe(true);
+    expect(columnExists(db, "marketplace_listings", "live_resource_id")).toBe(true);
+    expect(columnExists(db, "marketplace_listings", "live_bundle_digest")).toBe(true);
+    expect(columnExists(db, "marketplace_listings", "live_bound_at")).toBe(true);
+    db.close();
+  });
 });
