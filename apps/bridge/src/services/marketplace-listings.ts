@@ -129,6 +129,46 @@ export function publishMarketplaceListing(
   }
 
   const priceCents = Math.max(0, Math.floor(Number(input.priceCents ?? 0)));
+  const catalogEntryId = String(input.catalogEntryId ?? "").trim() || null;
+  if (catalogEntryId) {
+    const existing = core
+      .prepare(
+        `SELECT id FROM marketplace_listings
+         WHERE seller_user_id=? AND catalog_entry_id=? AND status != 'archived'
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(input.sellerUserId, catalogEntryId) as { id: string } | undefined;
+    if (existing) {
+      core.prepare(
+        `UPDATE marketplace_listings
+         SET title=?, description=?, price_cents=?, currency=?, visibility=?, status=?,
+             delivery_mode=?, pricing_model=?, price_period=?, meter_unit=?, meter_rate=?,
+             license=?, inference_endpoint_id=?, updated_at=datetime('now')
+         WHERE id=? AND seller_user_id=?`
+      ).run(
+        title,
+        input.description ?? null,
+        priceCents,
+        (input.currency ?? "usd").toLowerCase(),
+        publishState.visibility,
+        publishState.status,
+        delivery,
+        pricing,
+        input.pricePeriod ?? null,
+        input.meterUnit ?? null,
+        input.meterRate ?? null,
+        input.license ?? null,
+        endpointId,
+        existing.id,
+        input.sellerUserId
+      );
+      return core.prepare("SELECT * FROM marketplace_listings WHERE id=?").get(existing.id) as Record<
+        string,
+        unknown
+      >;
+    }
+  }
+
   const id = uuidv4();
   core.prepare(
     `INSERT INTO marketplace_listings
@@ -199,21 +239,54 @@ export function findListingByCatalogEntryId(
     .get(catalogEntryId) as Record<string, unknown> | undefined;
 }
 
+export type CatalogListingCommerce = {
+  id: string;
+  priceCents: number;
+  currency: string;
+  status: string;
+};
+
+export function listingCommerceMapForCatalogEntries(
+  core: CoreDatabase,
+  catalogEntryIds: string[]
+): Map<string, CatalogListingCommerce> {
+  const map = new Map<string, CatalogListingCommerce>();
+  if (catalogEntryIds.length === 0) return map;
+  const placeholders = catalogEntryIds.map(() => "?").join(",");
+  const rows = core
+    .prepare(
+      `SELECT id, catalog_entry_id, price_cents, currency, status FROM marketplace_listings
+       WHERE catalog_entry_id IN (${placeholders}) AND status != 'archived'`
+    )
+    .all(...catalogEntryIds) as Array<{
+      id: string;
+      catalog_entry_id: string;
+      price_cents: number;
+      currency: string;
+      status: string;
+    }>;
+  for (const row of rows) {
+    if (map.has(row.catalog_entry_id)) continue;
+    map.set(row.catalog_entry_id, {
+      id: row.id,
+      priceCents: Number(row.price_cents ?? 0),
+      currency: String(row.currency ?? "usd").toLowerCase(),
+      status: String(row.status ?? "active"),
+    });
+  }
+  return map;
+}
+
 export function listingIdMapForCatalogEntries(
   core: CoreDatabase,
   catalogEntryIds: string[]
 ): Map<string, string> {
   const map = new Map<string, string>();
-  if (catalogEntryIds.length === 0) return map;
-  const placeholders = catalogEntryIds.map(() => "?").join(",");
-  const rows = core
-    .prepare(
-      `SELECT id, catalog_entry_id, status FROM marketplace_listings
-       WHERE catalog_entry_id IN (${placeholders}) AND status != 'archived'`
-    )
-    .all(...catalogEntryIds) as Array<{ id: string; catalog_entry_id: string; status: string }>;
-  for (const row of rows) {
-    if (!map.has(row.catalog_entry_id)) map.set(row.catalog_entry_id, row.id);
+  for (const [catalogEntryId, commerce] of listingCommerceMapForCatalogEntries(
+    core,
+    catalogEntryIds
+  )) {
+    map.set(catalogEntryId, commerce.id);
   }
   return map;
 }

@@ -20,7 +20,7 @@ import {
 } from "./plugin-lifecycle.js";
 import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
-  attachListingIdToCatalogEntry,
+  attachListingCommerceToCatalogEntry,
   communityPluginInstallBlock,
   isCommunityCatalogSource,
 } from "./marketplace-listing-policy.js";
@@ -30,7 +30,7 @@ import {
 } from "./marketplace-community-shelf.js";
 import {
   findListingByCatalogEntryId,
-  listingIdMapForCatalogEntries,
+  listingCommerceMapForCatalogEntries,
 } from "./marketplace-listings.js";
 import {
   hasPaidEntitlementForCatalogEntry,
@@ -299,11 +299,11 @@ export async function fetchCommunityCatalog(
     entries = applyCommunityCommerceOverlay(entries, remote.entries);
   }
   if (core) {
-    const map = listingIdMapForCatalogEntries(
+    const commerceMap = listingCommerceMapForCatalogEntries(
       core,
       entries.map((e) => e.id)
     );
-    entries = entries.map((e) => attachListingIdToCatalogEntry(e, map));
+    entries = entries.map((e) => attachListingCommerceToCatalogEntry(e, commerceMap));
   }
   return { url, entries };
 }

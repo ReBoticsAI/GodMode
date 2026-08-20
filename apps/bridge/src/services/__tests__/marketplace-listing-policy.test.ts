@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachListingCommerceToCatalogEntry,
   attachListingIdToCatalogEntry,
   communityPluginInstallBlock,
   isCommunityCatalogSource,
@@ -119,5 +120,34 @@ describe("attachListingIdToCatalogEntry", () => {
   it("joins catalog id to listing id", () => {
     const map = new Map([["pulse", "listing-1"]]);
     expect(attachListingIdToCatalogEntry({ id: "pulse" }, map).listingId).toBe("listing-1");
+  });
+});
+
+describe("attachListingCommerceToCatalogEntry", () => {
+  it("merges listing commerce onto catalog rows without overwriting non-zero catalog price", () => {
+    const map = new Map([
+      [
+        "pulse",
+        { id: "listing-1", priceCents: 500, currency: "usd", status: "active" },
+      ],
+    ]);
+    const merged = attachListingCommerceToCatalogEntry(
+      { id: "pulse", priceCents: 100, currency: "eur" },
+      map
+    );
+    expect(merged.listingId).toBe("listing-1");
+    expect(merged.priceCents).toBe(100);
+    expect(merged.currency).toBe("eur");
+    expect(merged.listingStatus).toBe("active");
+  });
+
+  it("fills price and currency from listing when catalog row has none", () => {
+    const map = new Map([
+      ["pulse", { id: "listing-1", priceCents: 500, currency: "usd", status: "draft" }],
+    ]);
+    const merged = attachListingCommerceToCatalogEntry({ id: "pulse" }, map);
+    expect(merged.priceCents).toBe(500);
+    expect(merged.currency).toBe("usd");
+    expect(merged.listingStatus).toBe("draft");
   });
 });
