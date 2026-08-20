@@ -56,6 +56,8 @@ export interface CatalogEntry {
   id: string;
   kind: string;
   installType: CatalogInstallType;
+  /** clone (default) or live Shared grant on seller host (#596). */
+  deliveryMode?: "clone" | "live";
   title: string;
   description: string;
   version: string;
@@ -304,6 +306,14 @@ export async function fetchCommunityCatalog(
       entries.map((e) => e.id)
     );
     entries = entries.map((e) => attachListingCommerceToCatalogEntry(e, commerceMap));
+    try {
+      const { demoteLiveListingsForCatalogPinChanges } = await import(
+        "./marketplace-live-bind.js"
+      );
+      demoteLiveListingsForCatalogPinChanges(core, entries);
+    } catch {
+      /* bind module optional during early boot */
+    }
   }
   return { url, entries };
 }
@@ -430,6 +440,15 @@ export function githubRawContentUrl(pluginRepo: string, ref: string, filePath: s
   }
   const rel = filePath.replace(/^\//, "");
   return `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(ref)}/${rel}`;
+}
+
+/** Fetch the pinned portable bundle for a catalog entry (Official path or Community GitHub pin). */
+export async function fetchCatalogEntryBundle(
+  entry: CatalogEntry,
+  index: CatalogIndex,
+  catalogUrl: string
+): Promise<PortableBundle> {
+  return fetchBundleJson(entry, index, catalogUrl);
 }
 
 async function fetchBundleJson(

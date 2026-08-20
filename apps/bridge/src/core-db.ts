@@ -903,6 +903,12 @@ function ensureMarketplaceListingEconomyColumns(db: CoreDatabase): void {
   addCol(db, "marketplace_listings", "meter_rate", "INTEGER");
   addCol(db, "marketplace_listings", "license", "TEXT");
   addCol(db, "marketplace_listings", "inference_endpoint_id", "TEXT");
+  // Live Share catalog pin + bind (#596)
+  addCol(db, "marketplace_listings", "catalog_plugin_ref", "TEXT");
+  addCol(db, "marketplace_listings", "catalog_plugin_digest", "TEXT");
+  addCol(db, "marketplace_listings", "live_resource_id", "TEXT");
+  addCol(db, "marketplace_listings", "live_bundle_digest", "TEXT");
+  addCol(db, "marketplace_listings", "live_bound_at", "TEXT");
 }
 
 /** Paid Marketplace commerce: USD orders, seller payouts, ToS, chargeback bans. */

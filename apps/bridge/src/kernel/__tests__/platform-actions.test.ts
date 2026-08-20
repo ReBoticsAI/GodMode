@@ -114,6 +114,7 @@ describe("platform action adapters", () => {
         actions: [
           "acquire",
           "acquire_live",
+          "bind_live",
           "publish",
           "archive",
           "list_review",
