@@ -194,6 +194,7 @@ describe("runtime ObjectType actions", () => {
       "training_job_runtime",
       "inference_runtime",
       "integration_runtime",
+      "github_integration_service",
     ]);
     expect(CHAT_SESSION_ACTIONS.map(({ name, execution }) => [name, execution])).toEqual([
       ["share", "async"],
@@ -227,6 +228,9 @@ describe("runtime ObjectType actions", () => {
       "cancel",
       "run_inference",
       "sync",
+      "status",
+      "start_connect",
+      "disconnect",
     ]);
   });
 
