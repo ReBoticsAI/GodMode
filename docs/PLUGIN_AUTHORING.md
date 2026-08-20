@@ -17,6 +17,8 @@ Fresh clones run as Control Center only until you install plugins from **Marketp
 
 **Model harness profiles** (tool mode, sampling, discovery-tool filters per LLM family) live in Bridge core (`model-profiles/`), not in plugins. Plugins should not try to replace per-model harness behavior — pick a model in Intelligence and GodMode loads that profile automatically. See [LOCAL_LLM.md](./LOCAL_LLM.md#model-harness-profiles-picker-driven).
 
+**UI and agent parity:** Prefer declared ObjectType actions (and generated tools) over new static mutation tools. Community catalog publish uses the shared Sell / `prepare_community_catalog_submission` / `submit_community_catalog_submission` path. See [OBJECTTYPE_KERNEL.md](./OBJECTTYPE_KERNEL.md#ui-and-agent-parity) and [AI_TOOL_KERNEL_PARITY.md](./AI_TOOL_KERNEL_PARITY.md).
+
 ## Intelligence pipeline (local + hub)
 
 Same tools work in the monorepo and on Docker hub/client:

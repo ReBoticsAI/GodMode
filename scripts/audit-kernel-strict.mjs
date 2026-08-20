@@ -11,6 +11,7 @@ const audits = [
   "audit-kernel-writable.mjs",
   "audit-kernel-ownership-parity.mjs",
   "audit-kernel-read-write-symmetry.mjs",
+  "audit-ai-tool-parity.mjs",
 ];
 let failed = false;
 
