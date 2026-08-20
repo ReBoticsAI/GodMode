@@ -2,6 +2,7 @@
  * GitHub Connect tokens for Projects sync (per-user Vault secret).
  * Prefers GitHub App user-to-server + installation id; falls back to classic OAuth.
  */
+import { randomBytes } from "node:crypto";
 import type { AppDatabase } from "../db.js";
 import { getCloudDb } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
@@ -411,4 +412,37 @@ export function buildGithubIntegrationAuthorizeUrl(state: string): string {
   }
   url.searchParams.set("state", state);
   return url.toString();
+}
+
+/** Short-lived OAuth state → userId (shared by kernel start_connect + callback). */
+const pendingOauthStates = new Map<
+  string,
+  { userId: string; expiresAt: number }
+>();
+
+function prunePendingOauthStates(): void {
+  const now = Date.now();
+  for (const [k, v] of pendingOauthStates) {
+    if (v.expiresAt < now) pendingOauthStates.delete(k);
+  }
+}
+
+export function beginGithubIntegrationConnect(userId: string): { url: string } {
+  prunePendingOauthStates();
+  const state = randomBytes(16).toString("hex");
+  pendingOauthStates.set(state, {
+    userId,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+  return { url: buildGithubIntegrationAuthorizeUrl(state) };
+}
+
+export function takeGithubIntegrationOauthPending(state: string): {
+  userId: string;
+} | null {
+  prunePendingOauthStates();
+  const pending = state ? pendingOauthStates.get(state) : undefined;
+  if (pending) pendingOauthStates.delete(state);
+  if (!pending || pending.expiresAt < Date.now()) return null;
+  return { userId: pending.userId };
 }

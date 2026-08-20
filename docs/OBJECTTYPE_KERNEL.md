@@ -161,7 +161,9 @@ reference: Sell → **Submit to Community catalog** and Intelligence
 (aliases) plus generated `marketplace_catalog_prepare_submission` /
 `marketplace_catalog_submit_submission` all call
 `MarketplaceCatalog.prepare_submission` / `submit_submission`, which wrap
-`marketplace-catalog-submission.ts`.
+`marketplace-catalog-submission.ts`. Vault **Connect GitHub** uses
+`GithubIntegration.status` / `start_connect` / `disconnect` (OAuth browser
+callback remains a protocol exception).
 
 The release subsystem follows the same boundary. `Release` exposes verified
 read-only release metadata, while singleton `InstallationUpdateState` owns
@@ -173,7 +175,7 @@ the kernel state machine.
 
 ## Completed migration and protocol exceptions
 
-At the completion baseline, the strict audits discover 77 core ObjectTypes and
+At the completion baseline, the strict audits discover 78 core ObjectTypes and
 report 0 legacy routes, 0 legacy callers, 0 unmatched mutation callers, and 0
 direct writes in audited entry points. Tenant registries can expose additional
 ObjectTypes from installed executable or declarative plugins. Five domain
@@ -189,7 +191,7 @@ transport; and Marketplace Stripe/PayPal webhooks plus the public Official
 catalog JSON are commerce/catalog transport. These are explicit, narrow
 protocol exceptions. Their durable domain effects use kernel CRUD/actions where
 applicable (`MarketplaceOrder`, `MarketplaceListing`, `CatalogInstall`,
-`MarketplaceSellerAccount`, `MarketplaceCatalog`); binary, stream, and provider redirects are not
+`MarketplaceSellerAccount`, `MarketplaceCatalog`, `GithubIntegration`); binary, stream, and provider redirects are not
 themselves Record CRUD.
 
 ## Plugin author checklist

@@ -32,7 +32,11 @@ vi.mock("../../config.js", () => ({
   config: configState,
 }));
 
-import { buildGithubIntegrationAuthorizeUrl } from "../github-integration.js";
+import {
+  beginGithubIntegrationConnect,
+  buildGithubIntegrationAuthorizeUrl,
+  takeGithubIntegrationOauthPending,
+} from "../github-integration.js";
 
 describe("buildGithubIntegrationAuthorizeUrl", () => {
   beforeEach(() => {
@@ -67,5 +71,16 @@ describe("buildGithubIntegrationAuthorizeUrl", () => {
     );
     expect(url.searchParams.get("client_id")).toBe("Iv1.oauth-client");
     expect(url.searchParams.get("scope")).toContain("project");
+  });
+
+  it("stores and consumes connect state for the OAuth callback (#603 P1b)", () => {
+    const { url } = beginGithubIntegrationConnect("user-smoke-1");
+    expect(url).toContain("github.com/login/oauth/authorize");
+    const state = new URL(url).searchParams.get("state");
+    expect(state).toBeTruthy();
+    expect(takeGithubIntegrationOauthPending(state!)).toEqual({
+      userId: "user-smoke-1",
+    });
+    expect(takeGithubIntegrationOauthPending(state!)).toBeNull();
   });
 });

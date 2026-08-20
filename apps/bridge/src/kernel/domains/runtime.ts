@@ -25,6 +25,7 @@ const LABELS: Record<string, string> = {
   TrainingJob: "Training Job",
   InferenceRuntime: "Inference Runtime",
   IntegrationRuntime: "Integration Runtime",
+  GithubIntegration: "GitHub Integration",
 };
 
 const FIELD_TYPES: Record<string, FieldSpec> = {

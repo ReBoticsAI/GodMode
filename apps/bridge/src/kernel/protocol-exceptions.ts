@@ -582,19 +582,11 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
-    id: "github-integration-connect",
-    methods: ["POST"],
-    pathPattern: "/api/integrations/github/connect",
+    id: "github-integration-callback",
+    methods: ["GET"],
+    pathPattern: "/api/integrations/github/callback",
     rationale:
-      "GitHub Projects OAuth start; tokens land in Vault after callback, not ObjectType Record CRUD.",
-    authenticatedDomainMutations: "none",
-  },
-  {
-    id: "github-integration-disconnect",
-    methods: ["POST"],
-    pathPattern: "/api/integrations/github/disconnect",
-    rationale:
-      "Clears Vault-stored GitHub Projects OAuth token; integration transport, not Record CRUD.",
+      "GitHub OAuth browser redirect callback (#603); tokens land via GithubIntegration.start_connect state, not Record CRUD JSON.",
     authenticatedDomainMutations: "none",
   },
   {

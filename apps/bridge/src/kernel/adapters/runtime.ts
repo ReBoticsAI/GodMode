@@ -48,11 +48,14 @@ import {
   type VaultOwnerKind,
 } from "../../services/agents/agents-db.js";
 import {
+  beginGithubIntegrationConnect,
   clearGithubProjectsToken,
   GITHUB_PROJECTS_SECRET_ID,
   GITHUB_PROJECTS_SECRET_NAME,
+  githubProjectsStatus,
   migrateGithubConnectToUserVault,
 } from "../../services/github-integration.js";
+import { getUserDb } from "../../user-registry.js";
 import {
   createAgentApiKeyAccount,
   getAgentAccount,
@@ -3035,6 +3038,89 @@ export const INTEGRATION_RUNTIME_ACTIONS: ActionDef[] = [
   },
 ];
 
+const githubIntegrationRoles: ActionDef["roles"] = [
+  "editor",
+  "owner",
+  "intelligence",
+];
+
+export const GITHUB_INTEGRATION_ACTIONS: ActionDef[] = [
+  {
+    name: "status",
+    label: "Status",
+    description: "Read Personal Vault GitHub Connect status.",
+    target: "collection",
+    effect: "read",
+    execution: "sync",
+    roles: githubIntegrationRoles,
+    confirmation: { required: false },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: "start_connect",
+    label: "Start Connect",
+    description:
+      "Start Vault GitHub Connect OAuth and return the authorize URL for browser redirect.",
+    target: "collection",
+    effect: "external",
+    execution: "sync",
+    roles: githubIntegrationRoles,
+    confirmation: { required: true, ttlSeconds: 300 },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+    idempotency: { required: true, ttlSeconds: 300 },
+  },
+  {
+    name: "disconnect",
+    label: "Disconnect",
+    description: "Clear Personal Vault GitHub Connect tokens.",
+    target: "collection",
+    effect: "destructive",
+    execution: "sync",
+    roles: githubIntegrationRoles,
+    confirmation: { required: true, ttlSeconds: 300 },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+    idempotency: { required: true, ttlSeconds: 300 },
+  },
+];
+
+export const githubIntegrationAdapter: RecordAdapter = {
+  id: "github_integration_service",
+  actions: {
+    status(_db, _def, _id, _input, ctx) {
+      const userId = requiredUser(ctx);
+      return githubProjectsStatus(getUserDb(userId), userId);
+    },
+    start_connect(_db, _def, _id, _input, ctx) {
+      try {
+        return beginGithubIntegrationConnect(requiredUser(ctx));
+      } catch (err) {
+        const e = err as { status?: number; message?: string };
+        if (typeof e?.status === "number" && e.status >= 400) {
+          throw httpError(e.status, e.message ?? String(err));
+        }
+        throw err;
+      }
+    },
+    disconnect(_db, _def, _id, _input, ctx) {
+      const userId = requiredUser(ctx);
+      clearGithubProjectsToken(getUserDb(userId), userId);
+      return { ok: true };
+    },
+  },
+};
+
 function integrationStatus(
   db: AppDatabase,
   kind: IntegrationKind
@@ -3117,6 +3203,7 @@ export const runtimeAdapters = [
   trainingJobRuntimeAdapter,
   inferenceRuntimeAdapter,
   integrationRuntimeAdapter,
+  githubIntegrationAdapter,
 ] as const;
 
 export const runtimeAdapterRegistrations = [
@@ -3337,5 +3424,13 @@ export const runtimeAdapterRegistrations = [
     operations: ["list", "get"],
     fields: ["id", "kind", "connected", "last_sync_at"],
     actions: INTEGRATION_RUNTIME_ACTIONS,
+  },
+  {
+    objectType: "GithubIntegration",
+    adapterId: "github_integration_service",
+    database: "tenant",
+    operations: [],
+    fields: ["id", "connected", "login", "configured"],
+    actions: GITHUB_INTEGRATION_ACTIONS,
   },
 ] as const;

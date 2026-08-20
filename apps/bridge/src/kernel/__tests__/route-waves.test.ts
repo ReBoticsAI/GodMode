@@ -82,8 +82,6 @@ describe("legacy route wave", () => {
       "dm.ts:post:/uploads",
       "federation.ts:post:/invites/:token/accept",
       "federation.ts:post:/sc/:verb",
-      "github-integration.ts:post:/connect",
-      "github-integration.ts:post:/disconnect",
       "marketplace-commerce.ts:post:/admin/official-catalog",
       "marketplace-commerce.ts:post:/admin/official-catalog/sync-from-public",
       "marketplace-commerce.ts:post:/checkout",
