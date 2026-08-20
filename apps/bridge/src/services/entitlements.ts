@@ -182,8 +182,8 @@ export function acquireLiveListing(
       ownerUserId: String(listing.seller_user_id),
       resourceKind: String(listing.kind) as MarketplaceListingKind,
       resourceId: String(listing.resource_id),
+      // share_grants XOR: user grantee XOR tenant grantee (not both).
       granteeUserId: opts.buyerUserId,
-      granteeTenantId: opts.buyerTenantId,
       role: "viewer",
     });
 
