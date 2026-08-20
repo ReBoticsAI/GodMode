@@ -183,16 +183,11 @@ import {
   createNotification,
   listNotificationsForAgent,
   listNotificationsForUser,
-  markAllRead,
-  markRead,
 } from "./notification-service.js";
 import {
-  addMessage as addSupportMessage,
   createTicket,
-  getTicket,
   listAllTickets,
   listTicketsForRequester,
-  updateTicket,
 } from "./support-service.js";
 import {
   createPage as createWikiPage,
@@ -205,8 +200,6 @@ import {
   type WikiScope,
 } from "./wiki-service.js";
 import {
-  createConversation,
-  createMessage as createDmMessage,
   getConversationForUser,
   listConversationsForUser,
   listMessages as listDmMessages,
@@ -222,7 +215,6 @@ import {
 import { refreshScheduler } from "./scheduler.js";
 import { emitEvent, listEventsForOwner } from "./event-bus.js";
 import { createFinancialServices } from "../routes/financial.js";
-import { installCatalogEntry } from "./marketplace-catalog.js";
 import {
   listAvailablePlugins,
   listInstalledPlugins,
@@ -3350,16 +3342,6 @@ export async function executeTool(
       });
     }
 
-    case "mark_notification_read": {
-      if (args.markAll === true) {
-        if (!ctx.userId) throw new Error("userId required");
-        const n = markAllRead({ kind: "user", id: ctx.userId });
-        return { marked: n };
-      }
-      const ids = Array.isArray(args.ids) ? args.ids.map(String) : [];
-      return { marked: markRead(ids) };
-    }
-
     case "create_support_ticket": {
       const agentId = ctx.activeAgentId ?? "intelligence";
       const requesterKind = ctx.userId ? "user" : "agent";
@@ -3386,27 +3368,6 @@ export async function executeTool(
       const requesterKind = ctx.userId ? "user" : "agent";
       const requesterId = ctx.userId ?? agentId;
       return listTicketsForRequester(requesterKind, requesterId);
-    }
-
-    case "reply_support_ticket": {
-      const ticketId = String(args.ticketId ?? "");
-      const body = String(args.body ?? "");
-      const agentId = ctx.activeAgentId ?? "intelligence";
-      const author = isPlatformAdmin(ctx.userId)
-        ? { kind: "admin" as const, id: ctx.userId! }
-        : ctx.userId
-          ? { kind: "user" as const, id: ctx.userId }
-          : { kind: "agent" as const, id: agentId };
-      return addSupportMessage(ticketId, author, body);
-    }
-
-    case "update_support_ticket": {
-      if (!isPlatformAdmin(ctx.userId)) throw new Error("Platform admin required");
-      return updateTicket(String(args.ticketId ?? ""), {
-        status: args.status
-          ? (String(args.status) as "open" | "in_progress" | "resolved" | "closed")
-          : undefined,
-      });
     }
 
     case "list_wiki_pages":
@@ -3478,36 +3439,6 @@ export async function executeTool(
       return listDmMessages(hub, conversationId, ctx.userId, {
         limit: args.limit != null ? Number(args.limit) : 50,
         before: args.before ? String(args.before) : undefined,
-      });
-    }
-
-    case "send_message": {
-      if (!ctx.userId) throw new Error("userId required");
-      return createDmMessage(getHostUsersDb(), {
-        conversationId: String(args.conversationId ?? ""),
-        senderUserId: ctx.userId,
-        bodyText: String(args.body ?? ""),
-      });
-    }
-
-    case "create_conversation": {
-      if (!ctx.userId) throw new Error("userId required");
-      const kind = args.kind === "group" ? "group" : "direct";
-      const memberUserIds = Array.isArray(args.memberUserIds)
-        ? args.memberUserIds.map(String)
-        : [];
-      const memberAgents = Array.isArray(args.memberAgentIds)
-        ? (args.memberAgentIds as string[]).map((agentId) => ({
-            agentId,
-            agentTenantId: ctx.tenantId ?? "",
-          }))
-        : [];
-      return createConversation(getHostUsersDb(), {
-        creatorUserId: ctx.userId,
-        kind,
-        title: args.title ? String(args.title) : null,
-        memberUserIds,
-        memberAgents,
       });
     }
 
@@ -3653,44 +3584,6 @@ export async function executeTool(
     case "get_net_worth":
       return { netWorthCad: createFinancialServices(ctx.db).holdings.netWorthCad() };
 
-    case "create_holding":
-      return createFinancialServices(ctx.db).holdings.create({
-        category: String(args.category ?? "manual") as "manual",
-        provider: String(args.provider ?? "manual"),
-        label: String(args.label ?? ""),
-        currency: String(args.currency ?? "CAD"),
-        balance: Number(args.balance ?? 0),
-        balanceCad: Number(args.balanceCad ?? 0),
-        reference: args.reference ? String(args.reference) : undefined,
-      });
-
-    case "refresh_holdings": {
-      const fin = createFinancialServices(ctx.db);
-      const conn = fin.holdings.get(String(args.connectionId ?? ""));
-      if (!conn) throw new Error("Connection not found");
-      if (conn.category === "wallet" && conn.reference) {
-        const portfolio = await fin.crypto.fetchPortfolio(conn.reference);
-        return fin.holdings.updateBalance(
-          conn.id,
-          portfolio.totalUsd,
-          "USD",
-          portfolio.totalCad,
-          { tokens: portfolio.tokens }
-        );
-      }
-      if (conn.category === "paypal") {
-        const balance = await fin.paypal.fetchBalance();
-        return fin.holdings.updateBalance(
-          conn.id,
-          balance.total,
-          balance.currency,
-          balance.totalCad,
-          balance.raw
-        );
-      }
-      throw new Error("Refresh not supported for this connection type");
-    }
-
     case "search_marketplace": {
       const core = getCloudDb();
       const q = args.q ? String(args.q).toLowerCase() : "";
@@ -3726,17 +3619,6 @@ export async function executeTool(
       return { listings: rows };
     }
 
-
-    case "install_catalog_entry": {
-      if (!ctx.userId || !ctx.tenantId || !ctx.db) throw new Error("user, tenant, and db required");
-      return installCatalogEntry(getCloudDb(), ctx.db, {
-        userId: ctx.userId,
-        tenantId: ctx.tenantId,
-        entryId: String(args.entryId ?? ""),
-        sourceCatalog:
-          typeof args.sourceCatalog === "string" ? args.sourceCatalog : undefined,
-      });
-    }
 
     case "list_available_plugins": {
       if (!ctx.tenantId) throw new Error("tenant required");

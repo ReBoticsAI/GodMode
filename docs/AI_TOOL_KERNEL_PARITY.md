@@ -36,6 +36,20 @@ Vault GitHub Connect (P1b):
 - OAuth browser callback stays `GET /api/integrations/github/callback`
   (protocol exception)
 
+P2 domain aliases (static name → ObjectType action):
+
+- `create_conversation` → `DirectConversation.start`
+- `send_message` → `DirectMessage.send`
+- `create_holding` → `FinanceConnection.add_manual`
+- `refresh_holdings` → `FinanceConnection.refresh_external`
+- `mark_notification_read` → `Notification.mark_read` / `mark_all_read`
+- `reply_support_ticket` → `SupportTicket.reply`
+- `update_support_ticket` → `SupportTicket.set_status`
+- `install_catalog_entry` → `CatalogInstall.install_entry`
+- `create_listing` → `MarketplaceListing.publish`
+
+Remaining `legacy_gap` (P2b): `emit_event`, `promote_support_to_card`.
+
 Do **not** use `git_push` / `github_pr_create` as the Community catalog ship path.
 
 ## Counts (inventory v1)
