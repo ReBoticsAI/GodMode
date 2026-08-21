@@ -1,5 +1,7 @@
 import type { GodModePluginRegister } from "@godmode/plugin-api";
 
+const PLUGIN_ID = "community-sandbox";
+
 const register: GodModePluginRegister = (api) => {
   api.hooks.on("tenant:install", async ({ tenantId, host }) => {
     const db = host.getTenantDb(tenantId);
@@ -18,6 +20,13 @@ const register: GodModePluginRegister = (api) => {
          (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order, tabs_json)
        VALUES (?, ?, ?, 'activity', ?, 'workspace-pulse', NULL, NULL, 0, 0, NULL)`
     ).run("workspace-pulse-pulse", "workspace-pulse-health", "Pulse", "pulse");
+
+    const pluginDb = host.openPluginDb(PLUGIN_ID, tenantId) as import("better-sqlite3").Database;
+    pluginDb.exec(`CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
   });
 
   api.tools.register([
@@ -36,6 +45,41 @@ const register: GodModePluginRegister = (api) => {
             ...(Array.isArray(args.params) ? args.params : [])
           );
           return { ok: true, sql: true };
+        }
+        if (args.pluginDb === "write") {
+          const db = ctx.host.openPluginDb(
+            PLUGIN_ID,
+            ctx.tenantId
+          ) as import("better-sqlite3").Database;
+          const id = typeof args.id === "string" ? args.id : "s1";
+          const payload =
+            typeof args.payload === "string"
+              ? args.payload
+              : JSON.stringify({ ping: true });
+          db.prepare(
+            `INSERT INTO sessions (id, payload_json, updated_at) VALUES (?, ?, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json, updated_at=excluded.updated_at`
+          ).run(id, payload);
+          return { ok: true, wrote: id };
+        }
+        if (args.pluginDb === "read") {
+          const db = ctx.host.openPluginDb(
+            PLUGIN_ID,
+            ctx.tenantId
+          ) as import("better-sqlite3").Database;
+          const id = typeof args.id === "string" ? args.id : "s1";
+          const row = db
+            .prepare(`SELECT id, payload_json FROM sessions WHERE id = ?`)
+            .get(id) as { id: string; payload_json: string } | undefined;
+          return { ok: true, row: row ?? null };
+        }
+        if (args.pluginDb === "cross") {
+          const other =
+            typeof args.otherPluginId === "string"
+              ? args.otherPluginId
+              : "other-plugin";
+          ctx.host.openPluginDb(other, ctx.tenantId);
+          return { ok: true };
         }
         if (typeof args.url === "string") {
           const res = await ctx.host.externalFetch!(args.url);

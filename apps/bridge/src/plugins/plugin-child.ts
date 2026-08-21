@@ -1,6 +1,7 @@
 /**
  * Community plugin child process (#559).
- * No Bridge DB, no getPluginHost() live services, no shared heap.
+ * No Bridge tenant DB live handle, no getPluginHost() Bridge services, no shared heap.
+ * Plugin-owned SQLite via openPluginDb is allowed (same path layout as in-process).
  */
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -18,6 +19,10 @@ import type {
   PublisherConnectorDef,
 } from "@godmode/plugin-api";
 import { KERNEL_CLIENT_API_VERSION } from "@godmode/plugin-api";
+import {
+  closePluginSqlite,
+  openPluginSqlite,
+} from "../services/plugin-sqlite.js";
 import {
   RpcPeer,
   deserializeFetchResponse,
@@ -138,6 +143,14 @@ const peer = new RpcPeer(sendParent, async (method, params) => {
     }
     return { ok: true };
   }
+  if (method === "pluginDb.close") {
+    const tenantId = String(p.tenantId ?? "").trim();
+    if (!tenantId) {
+      throw new Error("pluginDb.close requires tenantId");
+    }
+    closePluginSqlite(pluginId!, tenantId);
+    return { ok: true };
+  }
   if (method === "shutdown") {
     setTimeout(() => process.exit(0), 10);
     return { ok: true };
@@ -188,7 +201,14 @@ const childHost: PluginHostServices = {
     return structureSeedDb(tenantId);
   },
   getReqTenantDb: () => denied("host.getReqTenantDb"),
-  openPluginDb: () => denied("host.openPluginDb"),
+  openPluginDb(requestedPluginId: string, tenantId: string) {
+    if (requestedPluginId !== pluginId) {
+      throw new Error(
+        `Community plugin child can only openPluginDb for itself (${pluginId}), got ${requestedPluginId}`
+      );
+    }
+    return openPluginSqlite(pluginId, tenantId);
+  },
   createPluginRouter: () => Router(),
   getTimeseriesStore: () => denied("host.getTimeseriesStore"),
   bootstrapTradingDepartment: () => denied("host.bootstrapTradingDepartment"),

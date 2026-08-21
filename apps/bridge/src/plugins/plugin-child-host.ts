@@ -228,6 +228,8 @@ export async function loadCommunityPluginInChild(opts: {
       GODMODE_PLUGIN_ROOT: pluginRoot,
       GODMODE_PLUGIN_ENTRY: entryPath,
       GODMODE_PLUGIN_ID: pluginId,
+      // Same data plane as Bridge so openPluginDb lands under plugin-data/.
+      PLATFORM_DATA_DIR: config.dataDir,
     },
   });
   if (!child.pid) {
