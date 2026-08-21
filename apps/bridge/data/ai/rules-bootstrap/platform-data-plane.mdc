@@ -1,16 +1,17 @@
 ---
-description: Cloud + Users host DBs, Platform Vault, Workspace sandboxes
+description: Cloud + Users host DBs, Platform Vault, Workspace sandboxes, Plugin SQLite
 alwaysApply: true
 priority: 18
 ---
-# Data plane (Cloud + Users + User + Workspace)
+# Data plane (Cloud + Users + User + Workspace + Plugin)
 
 Storage planes:
 
 - **Cloud** (host): `Cloud.sqlite` via `getCloudDb()` (boot-migrates from legacy `core.sqlite`). Identity, tenants, billing, marketplace, shares, releases. Kernel ObjectTypes use `database: "cloud"`. Do not store consumer Connect secrets here.
 - **Users** (host hub): `Users.sqlite` / `getHostUsersDb()`. DMs, Support, Notifications, platform groups. Soft user ids (no FK into Cloud).
 - **User** (per account): `users/<userId>.sqlite`. **Platform Vault** Connect keys (Cursor, LLM, Exa). Shared across that account’s workspaces.
-- **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins, wiki (SoR), hooks (SoR), PlatformEvent `platform_events` (SoR), Personal/Agent vault, optional workspace key override.
+- **Workspace**: `tenants/<workspaceId>.sqlite`. Structure, agents/chats, plugins install/lifecycle, wiki (SoR), hooks (SoR), PlatformEvent `platform_events` (SoR), Personal/Agent vault, optional workspace key override. Kernel ObjectType **definitions and adapters** register here; do not put plugin business tables here.
+- **Plugin**: `{dataDir}/plugin-data/{tenantId}/{pluginId}.sqlite` via `host.openPluginDb(pluginId, tenantId)`. Plugin domain/business rows (sessions, blueprints, playbooks-style state, caches). Not the workspace core DB. Specialized stores (e.g. high-volume timeseries DuckDB) stay plugin-owned when SQLite is the wrong fit.
 
 Platform Vault UI: sidebar **Platform Vault** (`/settings/vault`). Account Connect hub (not Personal Vault).
 
@@ -21,3 +22,10 @@ When connecting Cursor/OpenAI/Exa for an account, write to Platform Vault by def
 Do not confuse host `Users.sqlite` with per-account `users/<userId>.sqlite`.
 
 PlatformEvent SoR is Workspace table `platform_events` (`tenant_id` required on emit). Do not use the Workspace durable outbox `events` (`seq` / `dispatched`) for PlatformEvents. Cloud may retain orphan PlatformEvent rows with null `tenant_id` until cleaned. Hook definitions and `hook_runs` live on Workspace (orphans with null `owner_tenant_id` may remain on Cloud until assigned).
+
+## Plugin vs Workspace (agents)
+
+- Workspace DB (`getTenantDb` / `getReqTenantDb`): Structure, install/lifecycle metadata, kernel registration only. Structure seed allowlist for `structure_nodes` is OK. Do not `CREATE TABLE` plugin business schema on the tenant SQLite.
+- Plugin SQLite (`openPluginDb`): default durable store for plugin domain data. ObjectType adapters may façade into this DB; they must not create business tables on the workspace DB.
+- Ban durable state in browser `.log` downloads/pickers or `localStorage` when a plugin SQLite file is appropriate.
+- After reinstall/reset, existing `plugin-data` files may be dirty: migrate schema or delete and recreate; do not assume a fresh empty file.

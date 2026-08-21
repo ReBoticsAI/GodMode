@@ -8,6 +8,7 @@ import "dotenv/config";
 import { config } from "./config.js";
 import { initCoreDb, listAllTenantIds } from "./core-db.js";
 import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.js";
+import { closeAllPluginSqlite } from "./services/plugin-sqlite.js";
 import { closeAllUserDbs } from "./user-registry.js";
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
@@ -663,6 +664,7 @@ function gracefulShutdown() {
     host: getPluginHost(),
   });
   closeAllTenantDbs();
+  closeAllPluginSqlite();
   closeAllUserDbs();
   try {
     coreDb.close();

@@ -188,6 +188,7 @@ const childHost: PluginHostServices = {
     return structureSeedDb(tenantId);
   },
   getReqTenantDb: () => denied("host.getReqTenantDb"),
+  openPluginDb: () => denied("host.openPluginDb"),
   createPluginRouter: () => Router(),
   getTimeseriesStore: () => denied("host.getTimeseriesStore"),
   bootstrapTradingDepartment: () => denied("host.bootstrapTradingDepartment"),

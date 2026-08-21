@@ -53,6 +53,14 @@ export type IpcEnqueueFn = (line: string, chartbookKey?: string) => string;
 export interface PluginHostServices {
   getTenantDb(tenantId: string): TenantDb;
   getReqTenantDb(req: Request): TenantDb;
+  /**
+   * Open a plugin-private SQLite file for a tenant.
+   * Path: `{dataDir}/plugin-data/{tenantId}/{pluginId}.sqlite`.
+   * Not the workspace/core tenant DB. Use this for plugin domain data
+   * (sessions, blueprints, caches) instead of writing into core tables.
+   * Required for in-process Bridge plugins. Community child hosts may deny.
+   */
+  openPluginDb(pluginId: string, tenantId: string): TenantDb;
   createPluginRouter(): IRouter;
   /**
    * Mount a plugin HTTP route through Bridge route slots so install/reload

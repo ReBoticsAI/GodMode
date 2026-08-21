@@ -18,6 +18,7 @@ import {
   type IpcEnqueueFn,
 } from "@godmode/plugin-host";
 import { config } from "../config.js";
+import { openPluginSqlite } from "../services/plugin-sqlite.js";
 import {
   createRecord,
   createSystemOperationContext,
@@ -63,6 +64,9 @@ export function initPluginHost(): PluginHostServices {
       const db = (req as { tenantDb?: AppDatabase }).tenantDb;
       if (!db) throw new Error("tenantDb missing on request");
       return db as TenantDb;
+    },
+    openPluginDb(pluginId, tenantId) {
+      return openPluginSqlite(pluginId, tenantId) as TenantDb;
     },
     createPluginRouter() {
       const router = Router();
