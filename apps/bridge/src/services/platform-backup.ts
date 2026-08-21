@@ -11,6 +11,7 @@ import { getTenantDb } from "../tenant-registry.js";
 import { getUserDb } from "../user-registry.js";
 import { getHostUsersDb } from "../host-users-db.js";
 import { getTimeseriesStore } from "./timeseries-store.js";
+import { backupPluginDataTree } from "./plugin-sqlite.js";
 
 export type PlatformBackupResult = {
   status: "ok" | "failed";
@@ -120,6 +121,11 @@ export async function runLocalPlatformBackup(
       path.join(dest, "timeseries")
     );
 
+    const pluginDataFiles = await backupPluginDataTree(
+      path.join(dest, "plugin-data"),
+      backupSqlite
+    );
+
     fs.writeFileSync(
       path.join(dest, "manifest.json"),
       JSON.stringify(
@@ -131,6 +137,7 @@ export async function runLocalPlatformBackup(
           includes: {
             sqlite: true,
             duckdbTimeseries: duckdbFiles,
+            pluginData: pluginDataFiles,
           },
         },
         null,
