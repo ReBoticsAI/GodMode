@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "name": "__PLUGIN_NAME__",
   "engine": "^0.1.0",
+  "dataPlane": "domain",
   "departments": ["__DEPT_ID__"],
   "bridge": { "entry": "dist/bridge.js" },
   "web": { "entry": "dist/web.js" }

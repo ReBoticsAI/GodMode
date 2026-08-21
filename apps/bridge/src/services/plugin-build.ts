@@ -11,6 +11,7 @@ import {
   isDeployAuthorityError,
   type DeployAssertOpts,
 } from "./authority/deploy-authority.js";
+import { assertPluginDataPlane } from "./plugin-data-plane.js";
 import { PluginLoopError } from "./plugin-loop-error.js";
 
 const BRIDGE_EXTERNAL = ["@godmode/plugin-api", "@godmode/plugin-host"];
@@ -81,7 +82,9 @@ async function buildPluginWithEsbuildUnchecked(
   let manifest;
   try {
     manifest = readGodmodePluginManifest(resolved);
+    assertPluginDataPlane(manifest);
   } catch (err) {
+    if (err instanceof PluginLoopError) throw err;
     throw new PluginLoopError(
       "manifest",
       err instanceof Error ? err.message : String(err)

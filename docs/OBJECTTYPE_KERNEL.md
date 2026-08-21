@@ -199,8 +199,12 @@ themselves Record CRUD.
 
 ## Plugin author checklist
 
-1. Prefer manifest-native ObjectTypes for straightforward tenant data.
-2. Register an executable adapter for service-backed behavior.
+1. Prefer `scaffold_plugin` `domain` + `host.openPluginDb` for plugin-owned business data.
+   Native workspace ObjectType tables require `dataPlane: "core-records"` (Core
+   personal-OS entities only). Build/activate/seed and CI reject native tables
+   otherwise.
+2. Register an executable adapter for service-backed behavior (adapters may
+   façade into plugin SQLite).
 3. Declare only operations and actions the adapter implements.
 4. Supply strict schemas, roles, confirmation, idempotency, concurrency, and
    sensitive-input metadata.

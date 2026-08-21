@@ -169,6 +169,12 @@ describe("plugin loop reliability (#433)", () => {
     expect(pluginRuntime.getToolHandler("pipeline-bar_list_items")).toBeTruthy();
     expect(pluginRuntime.getToolHandler("pipeline-bar_add_item")).toBeTruthy();
 
+    const pluginDb = openPluginSqlite("pipeline-bar", "tenant-a");
+    const tables = pluginDb
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='domain_items'`)
+      .all() as Array<{ name: string }>;
+    expect(tables).toEqual([{ name: "domain_items" }]);
+
     const installed = listInstalledPlugins(core, "tenant-a");
     expect(installed).toEqual(
       expect.arrayContaining([
