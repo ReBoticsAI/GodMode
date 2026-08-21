@@ -240,7 +240,7 @@ Injected at boot via `api.host`:
 |--------|---------|
 | `getTenantDb(tenantId)` | Tenant-scoped SQLite in-process. Community child: INSERT OR IGNORE INTO structure_nodes only (no live handle) |
 | `getReqTenantDb(req)` | SQLite from authenticated request |
-| `openPluginDb(pluginId, tenantId)` | Plugin-private SQLite at `{dataDir}/plugin-data/{tenantId}/{pluginId}.sqlite` (not the workspace core DB). Required on in-process Bridge hosts; community child may deny. |
+| `openPluginDb(pluginId, tenantId)` | Plugin-private SQLite at `{dataDir}/plugin-data/{tenantId}/{pluginId}.sqlite` (not the workspace core DB). Required on in-process and Community child hosts (child may only open its own `pluginId`). |
 | `createPluginRouter()` | Express router with tenant middleware |
 | `mountPluginRoute(pluginId, path, router)` | Slot-based HTTP mount (hot-reload safe) |
 | `getTimeseriesStore()` | Platform analytics DuckDB (telemetry only; not market ticks) |
@@ -268,7 +268,7 @@ Rules:
 - After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.
 - **Uninstall** closes open plugin SQLite handles but **retains** `plugin-data/{tenant}/{plugin}.sqlite` (same spirit as retained ObjectType Records). Reinstall can reopen the file.
 - **Tenant wipe** deletes that tenant’s entire `plugin-data/{tenantId}/` tree.
-- Community / child-process hosts **deny** `openPluginDb` (no live plugin SQLite in the child). Prefer in-process Bridge plugins for domain DB access.
+- Community / child-process hosts use the **same** `openPluginDb` (child opens its own file under `plugin-data/`; tenant DB remains structure-seed only). Cross-plugin ids are rejected.
 - Local Admin backup stamps include `plugin-data/` alongside tenants, users, and timeseries.
 
 ```typescript

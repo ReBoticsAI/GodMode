@@ -25,6 +25,7 @@ import {
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
+import { getPluginChild } from "../plugins/plugin-child-registry.js";
 import { closePluginSqlite } from "./plugin-sqlite.js";
 import {
   PluginLoopError,
@@ -242,7 +243,20 @@ export async function uninstallPluginForTenant(
       pluginId
     );
     // Retain plugin-data/{tenant}/{plugin}.sqlite on disk (reinstall recovery).
-    // Close any open handle so the next openPluginDb is clean.
+    // Close parent and Community-child handles so the next openPluginDb is clean.
+    const child = getPluginChild(pluginId);
+    if (child) {
+      try {
+        await child.call("pluginDb.close", { tenantId });
+      } catch (err) {
+        console.warn(
+          "[plugin-lifecycle] community pluginDb.close failed",
+          pluginId,
+          tenantId,
+          err
+        );
+      }
+    }
     closePluginSqlite(pluginId, tenantId);
   } catch (error) {
     core

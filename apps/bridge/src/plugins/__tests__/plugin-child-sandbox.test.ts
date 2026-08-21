@@ -25,7 +25,9 @@ const fixtureRoot = path.join(
   "community-sandbox"
 );
 const previousTenantsDir = config.tenantsDir;
+const previousDataDir = config.dataDir;
 const tenantTemps: string[] = [];
+const dataTemps: string[] = [];
 
 function pidAlive(pid: number): boolean {
   try {
@@ -97,8 +99,12 @@ describe("Community plugin child-process sandbox (#559)", { timeout: 30_000 }, (
     setPluginChildFailureNotify(null);
     evictTenantDb("tenant-a");
     config.tenantsDir = previousTenantsDir;
+    config.dataDir = previousDataDir;
     while (tenantTemps.length) {
       fs.rmSync(tenantTemps.pop()!, { recursive: true, force: true });
+    }
+    while (dataTemps.length) {
+      fs.rmSync(dataTemps.pop()!, { recursive: true, force: true });
     }
   });
 
@@ -236,5 +242,46 @@ describe("Community plugin child-process sandbox (#559)", { timeout: 30_000 }, (
         ctx
       )
     ).rejects.toThrow(/structure_nodes|INSERT OR IGNORE/i);
+  });
+
+  it("opens plugin SQLite under plugin-data and rejects cross-plugin ids", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "gm-child-pdata-"));
+    dataTemps.push(dataDir);
+    config.dataDir = dataDir;
+
+    const tenantsDir = fs.mkdtempSync(path.join(os.tmpdir(), "gm-child-struct-"));
+    tenantTemps.push(tenantsDir);
+    config.tenantsDir = tenantsDir;
+    getTenantDb("tenant-a");
+
+    await loadPluginFromRoot(fixtureRoot);
+    await pluginRuntime.installPluginForTenant(PLUGIN_ID, "tenant-a");
+
+    const expectedPath = path.join(
+      dataDir,
+      "plugin-data",
+      "tenant-a",
+      `${PLUGIN_ID}.sqlite`
+    );
+    expect(fs.existsSync(expectedPath)).toBe(true);
+
+    const def = pluginRuntime.getToolHandler("sandbox_ping");
+    const ctx = pluginRuntime.buildToolContext({ tenantId: "tenant-a" });
+    await expect(
+      def!.handler!(
+        { pluginDb: "write", id: "s1", payload: '{"n":1}' },
+        ctx
+      )
+    ).resolves.toEqual({ ok: true, wrote: "s1" });
+    await expect(
+      def!.handler!({ pluginDb: "read", id: "s1" }, ctx)
+    ).resolves.toEqual({
+      ok: true,
+      row: { id: "s1", payload_json: '{"n":1}' },
+    });
+
+    await expect(
+      def!.handler!({ pluginDb: "cross", otherPluginId: "other-plugin" }, ctx)
+    ).rejects.toThrow(/only openPluginDb for itself/i);
   });
 });
