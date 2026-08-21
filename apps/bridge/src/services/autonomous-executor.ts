@@ -20,6 +20,16 @@ function getOptimizationScheduler(): PluginSchedulerHost | null {
   return getPluginHost().getPluginScheduler?.(OPTIMIZATION_SCHEDULER_ID) ?? null;
 }
 
+/** Prefer plugin-owned business SQLite when the optimization scheduler exposes it. */
+function businessDb(deps: AutonomousDeps): AppDatabase {
+  const tenantId = deps.tenantId;
+  if (tenantId) {
+    const resolved = getOptimizationScheduler()?.resolveTenantBusinessDb?.(tenantId);
+    if (resolved) return resolved as AppDatabase;
+  }
+  return deps.db;
+}
+
 /**
  * Durable, priority-driven autonomous executor.
  *
@@ -539,11 +549,13 @@ function autoAcceptCompletedBacktestSubtask(
   db: AppDatabase,
   subtask: CardRow,
   resumeBacktest: { runId: string; status: string } | undefined,
-  tenantId?: string | null
+  tenantId?: string | null,
+  runDb?: AppDatabase
 ): boolean {
   if (getOptimizationScheduler()?.isMultiBacktestSubtask(subtask)) return false;
   if (!resumeBacktest || resumeBacktest.status !== "done") return false;
-  const run = db
+  const metricsDb = runDb ?? db;
+  const run = metricsDb
     .prepare(
       `SELECT total_trades, net_pnl, profit_factor FROM backtest_runs WHERE id = ?`
     )
@@ -681,7 +693,7 @@ export async function runAutonomousTick(
   if (activeSubtask) {
     const awaiting = readCardAwaiting(activeSubtask);
     if (awaiting?.kind === "backtest") {
-      const runRow = db
+      const runRow = businessDb(deps)
         .prepare(`SELECT status FROM backtest_runs WHERE id = ?`)
         .get(awaiting.refId) as { status: string } | undefined;
       const runStatus = runRow?.status ?? awaiting.terminalStatus ?? "";
@@ -899,7 +911,13 @@ export async function runAutonomousTick(
   if (
     activeAfterTurn &&
     !isSubtaskDone(activeAfterTurn) &&
-    (autoAcceptCompletedBacktestSubtask(db, activeAfterTurn, resumeBacktest, deps.tenantId) ||
+    (autoAcceptCompletedBacktestSubtask(
+      db,
+      activeAfterTurn,
+      resumeBacktest,
+      deps.tenantId,
+      businessDb(deps)
+    ) ||
       autoAcceptCompletedDeclarationSubtask(
         db,
         parent,
