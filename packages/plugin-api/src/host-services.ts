@@ -21,6 +21,11 @@ export interface PluginSchedulerHost {
   tryDeterministicCombineKick: (...args: unknown[]) => Promise<unknown>;
   tryDeterministicOosKick: (...args: unknown[]) => Promise<unknown>;
   tryDeterministicSweepKick: (...args: unknown[]) => Promise<unknown>;
+  /**
+   * Optional plugin-owned SQLite for domain rows (e.g. backtest_runs).
+   * When present, Core autonomous code must prefer this over the workspace tenant DB.
+   */
+  resolveTenantBusinessDb?(tenantId: string): TenantDb | null;
 }
 
 export interface SystemEventRow {
