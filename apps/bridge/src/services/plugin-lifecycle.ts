@@ -361,31 +361,40 @@ export async function reconcilePluginLifecycle(
 ): Promise<void> {
   ensureTenantPluginsStorage(core);
   for (const plugin of pluginRuntime.loaded) {
-    const row = core
-      .prepare(
-        `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
-      )
-      .get(operatorTenantId, plugin.manifest.id) as
-      | { state: string; desired_state: string }
-      | undefined;
-    if (!row) {
-      const hasExistingStructure = (plugin.manifest.departments ?? []).some((departmentId) =>
-        Boolean(operatorDb.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`).get(departmentId))
-      );
-      if (hasExistingStructure) {
-        core
-          .prepare(
-            `INSERT INTO tenant_plugins
-             (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
-             VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
-          )
-          .run(
+    try {
+      const row = core
+        .prepare(
+          `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+        )
+        .get(operatorTenantId, plugin.manifest.id) as
+        | { state: string; desired_state: string }
+        | undefined;
+      if (!row) {
+        const hasExistingStructure = (plugin.manifest.departments ?? []).some((departmentId) =>
+          Boolean(operatorDb.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`).get(departmentId))
+        );
+        if (hasExistingStructure) {
+          core
+            .prepare(
+              `INSERT INTO tenant_plugins
+               (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
+               VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
+            )
+            .run(
+              operatorTenantId,
+              plugin.manifest.id,
+              plugin.manifest.version,
+              plugin.pluginRoot
+            );
+        } else {
+          await installPluginForTenant(
+            core,
             operatorTenantId,
             plugin.manifest.id,
-            plugin.manifest.version,
             plugin.pluginRoot
           );
-      } else {
+        }
+      } else if (row.state !== "active" && row.desired_state !== "absent") {
         await installPluginForTenant(
           core,
           operatorTenantId,
@@ -393,12 +402,10 @@ export async function reconcilePluginLifecycle(
           plugin.pluginRoot
         );
       }
-    } else if (row.state !== "active" && row.desired_state !== "absent") {
-      await installPluginForTenant(
-        core,
-        operatorTenantId,
-        plugin.manifest.id,
-        plugin.pluginRoot
+    } catch (error) {
+      console.warn(
+        `[plugins] operator lifecycle reconcile failed for ${plugin.manifest.id}:`,
+        error instanceof Error ? error.message : error
       );
     }
   }
