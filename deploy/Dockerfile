@@ -37,6 +37,9 @@ COPY --from=build /app/apps/bridge/dist apps/bridge/dist
 # platform rules/skills from apps/bridge/data/ai/*-bootstrap.
 COPY --from=build /app/apps/bridge/data/ai/rules-bootstrap apps/bridge/data/ai/rules-bootstrap
 COPY --from=build /app/apps/bridge/data/ai/skills-bootstrap apps/bridge/data/ai/skills-bootstrap
+# Versioned plugin scaffold trees for scaffold_plugin (domain / records). Without
+# this, Cloud Intelligence falls back to copying nearby plugins (#630 / #629 dogfood).
+COPY --from=build /app/apps/bridge/data/scaffolds apps/bridge/data/scaffolds
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 # Feature markdown for platform wiki seed (welcome-wiki / ensurePlatformWikiPages).
 # Without this, SaaS images seed welcome only and skip godmode-overview etc.

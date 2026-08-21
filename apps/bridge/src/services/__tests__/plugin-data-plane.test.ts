@@ -26,16 +26,19 @@ describe("plugin data plane (#629)", () => {
       version: "1.0.0",
     });
     expect(manifest.dataPlane).toBe("domain");
+    expect(manifest.scaffoldTemplate).toBeUndefined();
   });
 
-  it("parses core-records", () => {
+  it("parses core-records and scaffoldTemplate", () => {
     const manifest = parseGodmodePluginManifest({
       id: "demo",
       name: "Demo",
       version: "1.0.0",
       dataPlane: "core-records",
+      scaffoldTemplate: "records",
     });
     expect(manifest.dataPlane).toBe("core-records");
+    expect(manifest.scaffoldTemplate).toBe("records");
   });
 
   it("rejects invalid dataPlane", () => {
@@ -57,7 +60,7 @@ describe("plugin data plane (#629)", () => {
       objectTypes: [nativeOt],
     });
     expect(manifest.dataPlane).toBe("domain");
-    expect(() => assertPluginDataPlane(manifest)).toThrow(/openPluginDb|core-records/);
+    expect(() => assertPluginDataPlane(manifest)).toThrow(/openPluginDb|scaffold_plugin/);
     try {
       assertPluginDataPlane(manifest);
     } catch (err) {
@@ -66,12 +69,24 @@ describe("plugin data plane (#629)", () => {
     }
   });
 
-  it("allows native ObjectTypes when dataPlane is core-records", () => {
+  it("rejects native ObjectTypes when only dataPlane is core-records (dogfood loophole)", () => {
+    const manifest = parseGodmodePluginManifest({
+      id: "reading-list-like",
+      name: "Reading List Like",
+      version: "1.0.0",
+      dataPlane: "core-records",
+      objectTypes: [nativeOt],
+    });
+    expect(() => assertPluginDataPlane(manifest)).toThrow(/scaffoldTemplate/);
+  });
+
+  it("allows native ObjectTypes for records scaffold stamps", () => {
     const manifest = parseGodmodePluginManifest({
       id: "notes-core",
       name: "Notes Core",
       version: "1.0.0",
       dataPlane: "core-records",
+      scaffoldTemplate: "records",
       objectTypes: [nativeOt],
     });
     expect(() => assertPluginDataPlane(manifest)).not.toThrow();
@@ -86,7 +101,7 @@ describe("plugin data plane (#629)", () => {
       objectTypes: [nativeOt],
     }) as GodmodePluginManifest;
     expect(() => applyPluginObjectTypeSeeds(db as never, manifest)).toThrow(
-      /core-records|openPluginDb/
+      /openPluginDb|scaffold_plugin/
     );
   });
 });

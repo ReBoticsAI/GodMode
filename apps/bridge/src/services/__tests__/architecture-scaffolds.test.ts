@@ -66,11 +66,15 @@ describe("architecture scaffolds (#630)", () => {
       expect(bridge).not.toMatch(/__PLUGIN_ID__/);
       const manifest = JSON.parse(
         fs.readFileSync(path.join(result.pluginRoot, "godmode.plugin.json"), "utf8")
-      ) as { id: string; dataPlane?: string };
+      ) as { id: string; dataPlane?: string; scaffoldTemplate?: string };
       expect(manifest.id).toBe("demo-domain");
       expect(manifest.dataPlane === undefined || manifest.dataPlane === "domain").toBe(
         true
       );
+      expect(
+        manifest.scaffoldTemplate === undefined ||
+          manifest.scaffoldTemplate === "domain"
+      ).toBe(true);
     } finally {
       delete process.env.GODMODE_PLUGIN_SCAFFOLD_DIR;
     }
@@ -98,10 +102,12 @@ describe("architecture scaffolds (#630)", () => {
       ) as {
         objectTypes?: unknown[];
         dataPlane?: string;
+        scaffoldTemplate?: string;
       };
       expect(Array.isArray(manifest.objectTypes)).toBe(true);
       expect(manifest.objectTypes?.length).toBeGreaterThan(0);
       expect(manifest.dataPlane).toBe("core-records");
+      expect(manifest.scaffoldTemplate).toBe("records");
     } finally {
       delete process.env.GODMODE_PLUGIN_SCAFFOLD_DIR;
     }

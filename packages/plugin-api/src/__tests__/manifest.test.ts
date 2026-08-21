@@ -12,6 +12,7 @@ describe("plugin ObjectType manifests", () => {
         name: "Example",
         version: "1.0.0",
         dataPlane: "core-records",
+        scaffoldTemplate: "records",
         objectTypes: [
           {
             name: "ExampleItem",
@@ -30,6 +31,7 @@ describe("plugin ObjectType manifests", () => {
     ).toMatchObject({
       id: "example",
       dataPlane: "core-records",
+      scaffoldTemplate: "records",
       objectTypes: [{ name: "ExampleItem" }],
     });
   });

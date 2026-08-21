@@ -58,8 +58,15 @@ export interface GodmodePluginManifest {
    * Persistence plane for this plugin.
    * - `domain` (default): business data via openPluginDb; native tenant ObjectType tables rejected.
    * - `core-records`: narrow opt-in for Core personal-OS ObjectTypes on workspace SQLite.
+   *   Requires `scaffoldTemplate: "records"` (set by the records scaffold) so agents cannot
+   *   bypass the gate by only flipping dataPlane.
    */
   dataPlane?: "domain" | "core-records";
+  /**
+   * Which architecture scaffold produced this plugin (stamped by scaffold_plugin).
+   * Native workspace ObjectTypes require `scaffoldTemplate: "records"` plus core-records.
+   */
+  scaffoldTemplate?: "domain" | "records";
   /** ObjectType definitions shipped by the plugin (registered before tenant:install). */
   objectTypes?: ObjectTypeDef[];
   /** Optional Record seeds applied after ObjectTypes register (upsert by id). */
@@ -215,6 +222,7 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
       ? m.tenantMigrations.filter((x): x is string => typeof x === "string")
       : undefined,
     dataPlane: parseDataPlane(m.dataPlane, id),
+    scaffoldTemplate: parseScaffoldTemplate(m.scaffoldTemplate, id),
     objectTypes: parseObjectTypes(m.objectTypes, id),
     records: parseRecordSeeds(m.records),
   };
@@ -228,6 +236,17 @@ function parseDataPlane(
   if (raw === "domain" || raw === "core-records") return raw;
   throw new Error(
     `Invalid plugin manifest (${pluginId}): dataPlane must be "domain" or "core-records"`
+  );
+}
+
+function parseScaffoldTemplate(
+  raw: unknown,
+  pluginId: string
+): "domain" | "records" | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  if (raw === "domain" || raw === "records") return raw;
+  throw new Error(
+    `Invalid plugin manifest (${pluginId}): scaffoldTemplate must be "domain" or "records"`
   );
 }
 
