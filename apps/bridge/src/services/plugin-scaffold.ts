@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCodingRoot, type FsRootOpts } from "./coding/fs-tools.js";
+import {
+  copyScaffoldTree,
+  loadScaffoldBlueprint,
+  pluginTemplateDir,
+  scaffoldTokens,
+  type PluginScaffoldTemplate,
+} from "./architecture-scaffolds.js";
 
 export interface ScaffoldRootOpts {
   tenantId?: string | null;
@@ -25,15 +32,30 @@ export function defaultPluginRoot(id: string, opts?: ScaffoldRootOpts): string {
   return path.join(pluginScaffoldBase(opts), id);
 }
 
+function normalizePluginTemplate(
+  raw: string | undefined
+): PluginScaffoldTemplate {
+  const t = (raw ?? "domain").trim().toLowerCase();
+  if (t === "records" || t === "record") return "records";
+  return "domain";
+}
+
 export function scaffoldPlugin(opts: {
   id: string;
   name: string;
   departments?: string[];
+  /** Architecture template: domain (openPluginDb, default) or records (Core ObjectTypes). */
+  template?: string;
   tenantId?: string | null;
   root?: string;
   isolatedDeployment?: boolean;
   tenantWorkspacesDir?: string;
-}): { pluginRoot: string; created: boolean; codingPath: string } {
+}): {
+  pluginRoot: string;
+  created: boolean;
+  codingPath: string;
+  template: PluginScaffoldTemplate;
+} {
   const id = opts.id.trim().replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   if (!id) throw new Error("Plugin id required");
   const pluginRoot = defaultPluginRoot(id, {
@@ -43,168 +65,19 @@ export function scaffoldPlugin(opts: {
     tenantWorkspacesDir: opts.tenantWorkspacesDir,
   });
   const codingPath = `plugins/${id}`;
+  const template = normalizePluginTemplate(opts.template);
   if (fs.existsSync(pluginRoot)) {
-    return { pluginRoot, created: false, codingPath };
+    return { pluginRoot, created: false, codingPath, template };
   }
-  fs.mkdirSync(path.join(pluginRoot, "src"), { recursive: true });
   const departments = opts.departments?.length ? opts.departments : [id];
   const displayName = opts.name.trim() || id;
-  const manifest = {
+  const tokens = scaffoldTokens({
     id,
-    version: "0.1.0",
     name: displayName,
-    engine: "^0.1.0",
-    departments,
-    bridge: { entry: "dist/bridge.js" },
-    web: { entry: "dist/web.js" },
-  };
-  fs.writeFileSync(
-    path.join(pluginRoot, "godmode.plugin.json"),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(pluginRoot, "package.json"),
-    `${JSON.stringify(
-      {
-        name: `@godmode-plugin/${id}`,
-        version: "0.1.0",
-        private: true,
-        type: "module",
-        scripts: {
-          build: "echo Use Intelligence build_plugin (Bridge esbuild) or tsc locally",
-        },
-        // Types come from Bridge host links at load time — no workspace:* / npm install.
-        dependencies: {},
-        devDependencies: {},
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(pluginRoot, "tsconfig.json"),
-    `${JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ES2022",
-          module: "NodeNext",
-          moduleResolution: "NodeNext",
-          outDir: "dist",
-          rootDir: "src",
-          strict: true,
-          skipLibCheck: true,
-          noEmit: true,
-        },
-        include: ["src"],
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(pluginRoot, "src", "bridge.ts"),
-    `import type { GodModePluginRegister } from "@godmode/plugin-api";
-
-export const register: GodModePluginRegister = (api) => {
-  const deptId = "${departments[0]}";
-  const deptLabel = ${JSON.stringify(displayName)};
-
-  api.hooks.on("tenant:install", async ({ tenantId, host }) => {
-    // Community child process: host.getTenantDb is a structure-seed stub, not live SQLite.
-    // Only INSERT OR IGNORE INTO structure_nodes is forwarded over IPC.
-    const db = host.getTenantDb(tenantId);
-    db.prepare(
-      \`INSERT OR IGNORE INTO structure_nodes
-         (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order, tabs_json)
-       VALUES (?, NULL, ?, 'folder', ?, 'placeholder', NULL, NULL, 0, 99, NULL)\`
-    ).run(deptId, deptLabel, deptId);
-    // Add divisions/pages here as the plugin grows
+    deptId: departments[0]!,
   });
-
-  api.tools.register([
-    {
-      name: "${id}_hello",
-      description: "Example tool from ${displayName.replace(/"/g, '\\"')}",
-      handler: async () => ({ ok: true, plugin: "${id}" }),
-    },
-  ]);
-};
-`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(pluginRoot, "src", "web.tsx"),
-    `import type { GodModeWebPluginRegister } from "@godmode/plugin-api";
-import { useNavigate } from "react-router-dom";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-  cn,
-} from "@godmode/web-host";
-
-function WelcomePage() {
-  const navigate = useNavigate();
-  return (
-    <div className={cn("mx-auto flex max-w-lg flex-col gap-6 p-6")}>
-      <Card>
-        <CardHeader>
-          <CardTitle>${displayName.replace(/`/g, "\\`")}</CardTitle>
-          <CardDescription>
-            Host shadcn components via @godmode/web-host. Wire primary Buttons to navigate or mutate.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button type="button" onClick={() => navigate("/${id}")}>
-            Open ${displayName.replace(/`/g, "\\`")}
-          </Button>
-        </CardContent>
-      </Card>
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>Nothing here yet</EmptyTitle>
-          <EmptyDescription>
-            Seed Structure pages in tenant:install (INSERT OR IGNORE structure_nodes, or api.kernel.create when StructureNode is granted). Prefer host record-list for CRUD. Do not ship decorative Buttons.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    </div>
-  );
-}
-
-export const registerWeb: GodModeWebPluginRegister = (api) => {
-  api.pageKinds.register([{ kind: "${id}-welcome", component: WelcomePage }]);
-};
-`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(pluginRoot, "README.md"),
-    `# ${displayName}
-
-GodMode plugin scaffold.
-
-## Activate (no Bridge restart)
-
-1. Edit sources under \`${codingPath}/\`
-2. Call Intelligence \`build_plugin\` (Bridge esbuild)
-3. Call Intelligence \`install_plugin\` — loads at runtime and enables for your tenant
-
-Same pipeline as Marketplace → Unofficial. Use \`api.routes.mount\` for Express routes; they hot-reload with \`install_plugin\` (no Bridge restart). Avoid raw \`app.use\` in \`server:beforeListen\`.
-`,
-    "utf8"
-  );
-  return { pluginRoot, created: true, codingPath };
+  copyScaffoldTree(pluginTemplateDir(template), pluginRoot, tokens);
+  return { pluginRoot, created: true, codingPath, template };
 }
 
 export function prepareMarketplaceSubmission(opts: {
@@ -215,16 +88,25 @@ export function prepareMarketplaceSubmission(opts: {
   installType?: "clone" | "plugin";
   pluginRepo?: string;
 }): Record<string, unknown> {
+  const base = loadScaffoldBlueprint("pack");
   return {
+    ...base,
     id: opts.id,
-    kind: opts.kind ?? "plugin",
-    installType: opts.installType ?? "plugin",
+    kind: opts.kind ?? base.kind ?? "plugin",
+    installType: opts.installType ?? base.installType ?? "plugin",
     title: opts.title,
     description: opts.description,
-    version: "0.1.0",
-    author: "community",
+    version: typeof base.version === "string" ? base.version : "0.1.0",
+    author: typeof base.author === "string" ? base.author : "community",
     pluginRepo: opts.pluginRepo,
     contributingUrl:
-      "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md",
+      typeof base.contributingUrl === "string"
+        ? base.contributingUrl
+        : "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md",
   };
 }
+
+export {
+  loadScaffoldBlueprint,
+  type PluginScaffoldTemplate,
+} from "./architecture-scaffolds.js";

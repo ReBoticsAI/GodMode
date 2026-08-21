@@ -219,7 +219,7 @@ import {
   listInstalledPlugins,
   installedPluginIdsForTenant,
 } from "../plugins/plugin-install.js";
-import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot } from "./plugin-scaffold.js";
+import { scaffoldPlugin, prepareMarketplaceSubmission, defaultPluginRoot, loadScaffoldBlueprint } from "./plugin-scaffold.js";
 import { listPublisherConnectors } from "./publisher-connectors.js";
 import { buildPluginWithEsbuild } from "./plugin-build.js";
 import {
@@ -2186,22 +2186,39 @@ export async function executeTool(
     case "create_agent": {
       const name = String(args.name ?? "").trim();
       if (!name) throw new Error("name required");
+      const wantTemplate =
+        args.template == null ||
+        String(args.template).trim() === "" ||
+        String(args.template).trim().toLowerCase() === "default";
+      const blueprint = wantTemplate ? loadScaffoldBlueprint("agent") : null;
       const body = {
         id: args.id != null ? String(args.id) : undefined,
         name,
-        description: args.description != null ? String(args.description) : undefined,
+        description:
+          args.description != null
+            ? String(args.description)
+            : typeof blueprint?.description === "string"
+              ? blueprint.description
+              : undefined,
         icon: args.icon != null ? String(args.icon) : undefined,
         parentId:
           args.parentId != null && args.parentId !== ""
             ? String(args.parentId)
-            : "intelligence",
-        systemPrompt: args.systemPrompt != null ? String(args.systemPrompt) : undefined,
+            : typeof blueprint?.parentId === "string"
+              ? blueprint.parentId
+              : "intelligence",
+        systemPrompt:
+          args.systemPrompt != null
+            ? String(args.systemPrompt)
+            : typeof blueprint?.systemPrompt === "string"
+              ? blueprint.systemPrompt
+              : undefined,
         cloneFromId: args.cloneFromId != null ? String(args.cloneFromId) : undefined,
         modelPath: args.modelPath != null ? String(args.modelPath) : undefined,
       };
       return runPlatform(ctx, "create_agent", undefined, body, () => {
         const agent = createAgent(ctx.db, body);
-        return Promise.resolve(agent);
+        return Promise.resolve({ ...agent, scaffoldTemplate: wantTemplate ? "default" : null });
       });
     }
     case "attach_node_agent": {
@@ -3439,19 +3456,38 @@ export async function executeTool(
       // when the model omits ownerKind/ownerId. triggerKind defaults to
       // 'schedule' (the self-loop case) and actionKind to 'run_agent'.
       const agentId = ctx.activeAgentId ?? "intelligence";
+      const wantTemplate =
+        args.template == null ||
+        String(args.template).trim() === "" ||
+        String(args.template).trim().toLowerCase() === "default";
+      const blueprint = wantTemplate ? loadScaffoldBlueprint("automation") : null;
       const ownerKind = args.ownerKind === "user" ? "user" : "agent";
       const ownerId = String(
         args.ownerId ?? (ownerKind === "agent" ? agentId : ctx.userId ?? "")
       ).trim();
-      const triggerKind = args.triggerKind === "event" ? "event" : "schedule";
+      const triggerKind =
+        args.triggerKind === "event"
+          ? "event"
+          : args.triggerKind === "schedule"
+            ? "schedule"
+            : blueprint?.triggerKind === "event"
+              ? "event"
+              : "schedule";
       const actionKind = String(
-        args.actionKind ?? "run_agent"
+        args.actionKind ??
+          (typeof blueprint?.actionKind === "string" ? blueprint.actionKind : "run_agent")
       ) as import("../core-db.js").HookActionKind;
       const name = String(args.name ?? "").trim() || `${agentId}-self-loop`;
 
       // Conditional-required validation with a concrete corrective example so a
       // missing field returns actionable guidance instead of a dead-end.
-      if (triggerKind === "schedule" && !args.scheduleCron) {
+      const scheduleCron =
+        args.scheduleCron != null
+          ? String(args.scheduleCron)
+          : typeof blueprint?.scheduleCron === "string"
+            ? blueprint.scheduleCron
+            : undefined;
+      if (triggerKind === "schedule" && !scheduleCron) {
         return {
           error:
             "A schedule hook requires `scheduleCron` (a cron expression, e.g. '*/5 * * * *').",
@@ -3491,10 +3527,16 @@ export async function executeTool(
         ? String(args.actionConfigJson)
         : null;
       if (actionKind === "run_agent" && !actionConfigJson) {
+        const fromBlueprint =
+          blueprint?.actionConfig && typeof blueprint.actionConfig === "object"
+            ? (blueprint.actionConfig as Record<string, unknown>)
+            : null;
         actionConfigJson = JSON.stringify({
           agentId,
           prompt:
-            "Continue the current task loop: read the latest backtest run via list_backtest_runs/get_backtest_results, adjust paramsOverride and re-run if it took 0 trades, and disable this hook once it takes trades.",
+            typeof fromBlueprint?.prompt === "string"
+              ? fromBlueprint.prompt
+              : "Continue the current task loop: read the latest backtest run via list_backtest_runs/get_backtest_results, adjust paramsOverride and re-run if it took 0 trades, and disable this hook once it takes trades.",
         });
       }
       const created = createHook(
@@ -3506,7 +3548,7 @@ export async function executeTool(
           enabled: args.enabled !== false,
           triggerKind,
           eventType: args.eventType ? String(args.eventType) : null,
-          scheduleCron: args.scheduleCron ? String(args.scheduleCron) : null,
+          scheduleCron: scheduleCron ?? null,
           actionKind,
           actionConfigJson,
         },
@@ -3516,7 +3558,7 @@ export async function executeTool(
       // route) must refresh the scheduler or a schedule self-loop never fires
       // until the next Bridge restart.
       refreshScheduler();
-      return created;
+      return { ...created, scaffoldTemplate: wantTemplate ? "default" : null };
     }
 
     case "update_hook": {
@@ -3613,6 +3655,7 @@ export async function executeTool(
         departments: Array.isArray(args.departments)
           ? args.departments.map(String)
           : undefined,
+        template: args.template != null ? String(args.template) : undefined,
         ...codingFsOpts(ctx),
       });
     }

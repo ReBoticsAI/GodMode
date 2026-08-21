@@ -672,6 +672,10 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         systemPrompt: { type: "string" },
         cloneFromId: { type: "string", description: "Clone settings from an existing agent" },
         modelPath: { type: "string" },
+        template: {
+          type: "string",
+          description: 'Architecture blueprint: "default" merges apps/bridge/data/scaffolds/agent/defaults.json',
+        },
       },
       required: ["name"],
     },
@@ -1717,6 +1721,11 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
             "JSON STRING. For run_agent: '{\"agentId\":\"<id>\",\"prompt\":\"<task>\"}'. For run_workflow: '{\"workflowId\":\"<id>\"}'.",
         },
         enabled: { type: "boolean" },
+        template: {
+          type: "string",
+          description:
+            'Architecture blueprint: "default" merges apps/bridge/data/scaffolds/automation/hook-defaults.json when fields omitted',
+        },
       },
       required: ["name", "triggerKind", "actionKind"],
     },
@@ -1897,7 +1906,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "scaffold_plugin",
     description:
-      "Create a plugin under plugins/<id> (active coding root / worktree). Returns pluginRoot + codingPath. Then edit (ObjectTypes, Structure seed, wire primary Button handlers) → build_plugin → install_plugin. Do not ship decorative CTAs or empty department-only Structure. Requires confirmation.",
+      "Create a plugin under plugins/<id> from a versioned architecture template (apps/bridge/data/scaffolds). template=domain (default): openPluginDb for business data. template=records: Core personal-OS ObjectTypes only. Returns pluginRoot + codingPath + template. Then edit → build_plugin → install_plugin. Requires confirmation.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1906,6 +1915,10 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         id: { type: "string" },
         name: { type: "string" },
         departments: { type: "array", items: { type: "string" } },
+        template: {
+          type: "string",
+          description: 'Architecture template: "domain" (default) or "records"',
+        },
       },
       required: ["id", "name"],
     },

@@ -13,6 +13,7 @@ import { evictTenantDb, getTenantDb } from "../../tenant-registry.js";
 import { listInstalledPlugins } from "../../plugins/plugin-install.js";
 import { scaffoldPlugin } from "../plugin-scaffold.js";
 import { buildPluginWithEsbuild } from "../plugin-build.js";
+import { openPluginSqlite, closeAllPluginSqlite } from "../plugin-sqlite.js";
 import {
   activatePluginForTenant,
   ensureTenantPluginsStorage,
@@ -100,14 +101,20 @@ describe("plugin loop reliability (#433)", () => {
   it("scaffolds, builds, and activates inside a tenant workspace", async () => {
     const root = tempDir("gm-loop-");
     const workspaces = path.join(root, "tenant-workspaces");
+    const dataDir = path.join(root, "platform-data");
+    fs.mkdirSync(dataDir, { recursive: true });
     config.tenantsDir = path.join(root, "tenants");
     fs.mkdirSync(config.tenantsDir, { recursive: true });
+    const previousDataDir = config.dataDir;
+    config.dataDir = dataDir;
 
     setPluginHost({
       getTenantDb: (tenantId: string) => getTenantDb(tenantId),
       getReqTenantDb: () => {
         throw new Error("not used");
       },
+      openPluginDb: (pluginId: string, tenantId: string) =>
+        openPluginSqlite(pluginId, tenantId),
       createPluginRouter: () => Router(),
       getTimeseriesStore: () => null,
       bootstrapTradingDepartment: () => undefined,
@@ -119,6 +126,7 @@ describe("plugin loop reliability (#433)", () => {
       bus: new EventEmitter(),
     });
 
+    try {
     const scaffold = scaffoldPlugin({
       id: "pipeline-bar",
       name: "Pipeline Bar",
@@ -158,7 +166,8 @@ describe("plugin loop reliability (#433)", () => {
     expect(activated.pluginId).toBe("pipeline-bar");
     expect(activated.installed).toBe(true);
     expect(pluginRuntime.hasPlugin("pipeline-bar")).toBe(true);
-    expect(pluginRuntime.getToolHandler("pipeline-bar_hello")).toBeTruthy();
+    expect(pluginRuntime.getToolHandler("pipeline-bar_list_items")).toBeTruthy();
+    expect(pluginRuntime.getToolHandler("pipeline-bar_add_item")).toBeTruthy();
 
     const installed = listInstalledPlugins(core, "tenant-a");
     expect(installed).toEqual(
@@ -186,6 +195,10 @@ describe("plugin loop reliability (#433)", () => {
     await expect(
       activatePluginForTenant(core, "tenant-a", worktreeRoot)
     ).rejects.toMatchObject({ failureClass: "isolation" });
+    } finally {
+      closeAllPluginSqlite();
+      config.dataDir = previousDataDir;
+    }
   });
 
   it("records plugin loop failures as Attention notifications", () => {
