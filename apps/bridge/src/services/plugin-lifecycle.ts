@@ -439,13 +439,35 @@ export async function reconcilePluginLifecycle(
   for (const row of rows) {
     const loaded = pluginRuntime.getPlugin(row.plugin_id);
     if (!loaded) continue;
-    registerPluginObjectTypes(loaded.manifest);
-    applyPluginObjectTypeSeeds(getTenantDb(row.tenant_id), loaded.manifest);
-    syncPluginKnowledgeForTenant(
-      row.tenant_id,
-      row.plugin_id,
-      row.plugin_root ?? loaded.pluginRoot
-    );
+    try {
+      registerPluginObjectTypes(loaded.manifest);
+      applyPluginObjectTypeSeeds(getTenantDb(row.tenant_id), loaded.manifest);
+      syncPluginKnowledgeForTenant(
+        row.tenant_id,
+        row.plugin_id,
+        row.plugin_root ?? loaded.pluginRoot
+      );
+    } catch (error) {
+      // Fail closed for new activate/build; never take down Bridge boot for one plugin.
+      console.warn(
+        `[plugins] ObjectType seed/reconcile failed for ${row.tenant_id}/${row.plugin_id}:`,
+        error instanceof Error ? error.message : error
+      );
+      try {
+        core
+          .prepare(
+            `UPDATE tenant_plugins SET state='failed', last_error=?,
+             updated_at=datetime('now') WHERE tenant_id=? AND plugin_id=?`
+          )
+          .run(
+            error instanceof Error ? error.message : String(error),
+            row.tenant_id,
+            row.plugin_id
+          );
+      } catch {
+        /* durable state update best-effort */
+      }
+    }
   }
 }
 
