@@ -1,0 +1,11 @@
+{
+  "id": "example-pack",
+  "kind": "plugin",
+  "installType": "plugin",
+  "title": "Example Pack",
+  "description": "Catalog entry shape for Marketplace / Community submission. Fill id, title, description, pluginRepo, version; then prepare_community_catalog_submission.",
+  "version": "0.1.0",
+  "author": "community",
+  "pluginRepo": "https://github.com/ORG/REPO",
+  "contributingUrl": "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md"
+}

@@ -1,0 +1,37 @@
+{
+  "id": "__PLUGIN_ID__",
+  "version": "0.1.0",
+  "name": "__PLUGIN_NAME__",
+  "engine": "^0.1.0",
+  "kernelApiVersion": 1,
+  "departments": ["__DEPT_ID__"],
+  "bridge": { "entry": "dist/bridge.js" },
+  "web": { "entry": "dist/web.js" },
+  "objectTypes": [
+    {
+      "name": "__RECORD_TYPE__",
+      "label": "__PLUGIN_NAME__ Item",
+      "module": "__PLUGIN_ID__",
+      "table": "__RECORD_TABLE__",
+      "defaultSort": "updated_at",
+      "writable": ["title", "body"],
+      "required": ["title"],
+      "operations": ["list", "get", "create", "update", "delete"],
+      "fields": [
+        "id",
+        ["title", "Data"],
+        ["body", "Text"],
+        "created_at",
+        "updated_at"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "__PLUGIN_ID__-list",
+      "kind": "record-list",
+      "objectType": "__RECORD_TYPE__",
+      "title": "__PLUGIN_NAME__"
+    }
+  ]
+}

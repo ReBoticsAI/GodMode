@@ -1,0 +1,11 @@
+{
+  "name": "@godmode-plugin/__PLUGIN_ID__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo Use Intelligence build_plugin (Bridge esbuild) or tsc locally"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

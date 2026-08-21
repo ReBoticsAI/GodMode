@@ -1,0 +1,10 @@
+{
+  "template": "default",
+  "description": "Default architecture hints for create_agent. Merge when template is default or omitted clone.",
+  "backend": null,
+  "parentId": "intelligence",
+  "systemPrompt": "You are a focused GodMode agent. Prefer native tools. Do not invent platform architecture; follow skills and scaffolds.",
+  "toolAllow": null,
+  "autoApprove": [],
+  "config": {}
+}

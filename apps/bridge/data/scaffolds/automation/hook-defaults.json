@@ -1,0 +1,10 @@
+{
+  "template": "default",
+  "description": "Default create_hook architecture. Schedule self-loop with run_agent; override scheduleCron and prompt.",
+  "triggerKind": "schedule",
+  "scheduleCron": "*/15 * * * *",
+  "actionKind": "run_agent",
+  "actionConfig": {
+    "prompt": "Continue the current task: read latest state, take the next safe step, stop when the goal is met or blocked."
+  }
+}

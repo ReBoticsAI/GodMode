@@ -23,7 +23,7 @@ Fresh clones run as Control Center only until you install plugins from **Marketp
 
 Same tools work in the monorepo and on Docker hub/client:
 
-1. `scaffold_plugin` — creates `plugins/<id>/` under the **active coding root** (local: `{repo}/plugins/<id>`; hub/client: `{tenant-workspace}/plugins/<id>`, or under `{tenant}/.worktrees/<slug>/plugins/<id>` when `agent.config.workspace` points at a Layer 2 worktree). Override with `GODMODE_PLUGIN_SCAFFOLD_DIR`.
+1. `scaffold_plugin` — creates `plugins/<id>/` under the **active coding root** from versioned trees in `apps/bridge/data/scaffolds/` (`template: "domain"` default with `openPluginDb`, or `template: "records"` for Core personal-OS ObjectTypes). Coding root: local `{repo}/plugins/<id>`; hub/client `{tenant-workspace}/plugins/<id}`, or under `{tenant}/.worktrees/<slug>/plugins/<id>` when `agent.config.workspace` points at a Layer 2 worktree. Override destination with `GODMODE_PLUGIN_SCAFFOLD_DIR`; override template root with `GODMODE_SCAFFOLDS_DIR`.
 2. Edit with `edit_file` using the returned `codingPath` (e.g. `plugins/my-plugin/src/bridge.ts`). Use `coding_worktree_create` to isolate iterative edits, then `coding_worktree_promote` to merge into the live tenant tree (and optionally discard). `install_plugin` **refuses** paths under `.worktrees/`. Promote first, then install from live `plugins/<id>`. To ship the coding root itself: `git_status` → optional `git_branch` → `git_diff` → `git_add` → `git_commit` → `git_push` (confirm; no force-push). Opening a review request on an external host is a separate Official GitHub plugin tool when installed.
 3. `build_plugin` — Bridge **esbuild** compile to `dist/` (no monorepo `workspace:*` / no per-plugin `npm install`). For native/`npm ci` deps when Layer 4 is enabled, use `run_ephemeral_build` (host build supervisor; Docker socket never on Bridge).
 4. `install_plugin` — append discovery path → runtime `loadPluginFromRoot` (reload on rebuild) → `installPluginForTenant`. **No Bridge restart** for tools, `tenant:install`, and `api.routes.mount` HTTP routes. Failures return a class (`manifest`, `build`, `isolation`, `install`) and surface in Attention.
@@ -251,7 +251,12 @@ Plugins must **not** import from `apps/bridge/src/**`.
 
 ## Persistence
 
-Choose the store explicitly:
+Choose the store explicitly. Prefer `scaffold_plugin` templates over inventing architecture from nearby examples:
+
+| `scaffold_plugin` template | When |
+|----------------------------|------|
+| `domain` (default) | Plugin-owned business data → `openPluginDb` |
+| `records` | True Core personal-OS entities only → workspace ObjectTypes |
 
 | Data | Store |
 |------|--------|
