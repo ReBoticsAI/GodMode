@@ -10,6 +10,7 @@
 #   GODMODE_ENV_FILE     default .env.production (relative to deploy dir)
 #   GODMODE_COMPOSE_FILES  space-separated compose -f args
 #                          default: docker-compose.prod.yml docker-compose.override.yml
+#   GODMODE_HEALTH_ATTEMPTS  default 60 (2s sleep between tries ≈ 2 minutes)
 
 set -eu
 
@@ -17,6 +18,7 @@ IMAGE_REF=${1:?Usage: godmode-saas-pin.sh <image@sha256:digest> [deploy-dir] [he
 DEPLOY_DIR=${2:-${GODMODE_DEPLOY_DIR:-/opt/godmode/deploy}}
 HEALTH_URL=${3:-${GODMODE_HEALTH_URL:-http://127.0.0.1:8080/api/health}}
 ENV_FILE=${GODMODE_ENV_FILE:-.env.production}
+HEALTH_ATTEMPTS=${GODMODE_HEALTH_ATTEMPTS:-60}
 
 case "$IMAGE_REF" in
   *@sha256:*) ;;
@@ -59,17 +61,31 @@ fi
 docker compose --env-file "$ENV_FILE" "$@" pull
 docker compose --env-file "$ENV_FILE" "$@" up -d --remove-orphans
 
+# Nginx/Bridge need time after recreate. Match godmode-update.sh readiness loop.
+# Do not require writing the body to disk (curl 23 on full/readonly /tmp).
+attempt=1
+code=000
+while [ "$attempt" -le "$HEALTH_ATTEMPTS" ]; do
+  code=$(curl -sS -o /dev/null -w '%{http_code}' "$HEALTH_URL" || true)
+  printf '%s\n' "Health attempt ${attempt}/${HEALTH_ATTEMPTS}: HTTP ${code} (${HEALTH_URL})"
+  if [ "$code" = "200" ]; then
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
+if [ "$code" != "200" ]; then
+  printf '%s\n' "Health check failed after ${HEALTH_ATTEMPTS} attempts (last HTTP ${code})" >&2
+  docker compose --env-file "$ENV_FILE" "$@" ps || true
+  docker compose --env-file "$ENV_FILE" "$@" logs --tail 120 || true
+  exit 1
+fi
+
 if [ -x ./scripts/prune-old-images.sh ]; then
   ./scripts/prune-old-images.sh --previous "${PRIOR:-}" || true
 elif [ -x ../scripts/prune-old-images.sh ]; then
   ../scripts/prune-old-images.sh --previous "${PRIOR:-}" || true
-fi
-
-code=$(curl -sS -o /tmp/godmode-saas-health.json -w '%{http_code}' "$HEALTH_URL" || true)
-printf '%s\n' "Health HTTP ${code} (${HEALTH_URL})"
-if [ "$code" != "200" ]; then
-  printf '%s\n' "Health check failed" >&2
-  exit 1
 fi
 
 printf '%s\n' "Pin and roll OK"

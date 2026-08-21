@@ -171,13 +171,20 @@ const bus = new EventEmitter();
 setKernelEventBus(bus);
 pluginRuntime.configure({ operatorTenantId, bus });
 seedCorePublisherConnectors();
-await executeCollectionAction(
-  db,
-  "CatalogInstall",
-  "reconcile_runtime",
-  { operator_tenant_id: operatorTenantId },
-  lifecycleContext()
-);
+try {
+  await executeCollectionAction(
+    db,
+    "CatalogInstall",
+    "reconcile_runtime",
+    { operator_tenant_id: operatorTenantId },
+    lifecycleContext()
+  );
+} catch (error) {
+  console.warn(
+    "[plugins] reconcile_runtime failed (continuing boot):",
+    error instanceof Error ? error.message : error
+  );
+}
 
 const hasSierra = pluginRuntime.hasPlugin("sierra-chart");
 

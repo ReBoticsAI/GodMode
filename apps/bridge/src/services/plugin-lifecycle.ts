@@ -361,31 +361,40 @@ export async function reconcilePluginLifecycle(
 ): Promise<void> {
   ensureTenantPluginsStorage(core);
   for (const plugin of pluginRuntime.loaded) {
-    const row = core
-      .prepare(
-        `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
-      )
-      .get(operatorTenantId, plugin.manifest.id) as
-      | { state: string; desired_state: string }
-      | undefined;
-    if (!row) {
-      const hasExistingStructure = (plugin.manifest.departments ?? []).some((departmentId) =>
-        Boolean(operatorDb.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`).get(departmentId))
-      );
-      if (hasExistingStructure) {
-        core
-          .prepare(
-            `INSERT INTO tenant_plugins
-             (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
-             VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
-          )
-          .run(
+    try {
+      const row = core
+        .prepare(
+          `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+        )
+        .get(operatorTenantId, plugin.manifest.id) as
+        | { state: string; desired_state: string }
+        | undefined;
+      if (!row) {
+        const hasExistingStructure = (plugin.manifest.departments ?? []).some((departmentId) =>
+          Boolean(operatorDb.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`).get(departmentId))
+        );
+        if (hasExistingStructure) {
+          core
+            .prepare(
+              `INSERT INTO tenant_plugins
+               (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
+               VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
+            )
+            .run(
+              operatorTenantId,
+              plugin.manifest.id,
+              plugin.manifest.version,
+              plugin.pluginRoot
+            );
+        } else {
+          await installPluginForTenant(
+            core,
             operatorTenantId,
             plugin.manifest.id,
-            plugin.manifest.version,
             plugin.pluginRoot
           );
-      } else {
+        }
+      } else if (row.state !== "active" && row.desired_state !== "absent") {
         await installPluginForTenant(
           core,
           operatorTenantId,
@@ -393,12 +402,10 @@ export async function reconcilePluginLifecycle(
           plugin.pluginRoot
         );
       }
-    } else if (row.state !== "active" && row.desired_state !== "absent") {
-      await installPluginForTenant(
-        core,
-        operatorTenantId,
-        plugin.manifest.id,
-        plugin.pluginRoot
+    } catch (error) {
+      console.warn(
+        `[plugins] operator lifecycle reconcile failed for ${plugin.manifest.id}:`,
+        error instanceof Error ? error.message : error
       );
     }
   }
@@ -439,13 +446,35 @@ export async function reconcilePluginLifecycle(
   for (const row of rows) {
     const loaded = pluginRuntime.getPlugin(row.plugin_id);
     if (!loaded) continue;
-    registerPluginObjectTypes(loaded.manifest);
-    applyPluginObjectTypeSeeds(getTenantDb(row.tenant_id), loaded.manifest);
-    syncPluginKnowledgeForTenant(
-      row.tenant_id,
-      row.plugin_id,
-      row.plugin_root ?? loaded.pluginRoot
-    );
+    try {
+      registerPluginObjectTypes(loaded.manifest);
+      applyPluginObjectTypeSeeds(getTenantDb(row.tenant_id), loaded.manifest);
+      syncPluginKnowledgeForTenant(
+        row.tenant_id,
+        row.plugin_id,
+        row.plugin_root ?? loaded.pluginRoot
+      );
+    } catch (error) {
+      // Fail closed for new activate/build; never take down Bridge boot for one plugin.
+      console.warn(
+        `[plugins] ObjectType seed/reconcile failed for ${row.tenant_id}/${row.plugin_id}:`,
+        error instanceof Error ? error.message : error
+      );
+      try {
+        core
+          .prepare(
+            `UPDATE tenant_plugins SET state='failed', last_error=?,
+             updated_at=datetime('now') WHERE tenant_id=? AND plugin_id=?`
+          )
+          .run(
+            error instanceof Error ? error.message : String(error),
+            row.tenant_id,
+            row.plugin_id
+          );
+      } catch {
+        /* durable state update best-effort */
+      }
+    }
   }
 }
 
