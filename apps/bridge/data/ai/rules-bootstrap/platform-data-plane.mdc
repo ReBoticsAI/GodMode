@@ -29,3 +29,5 @@ PlatformEvent SoR is Workspace table `platform_events` (`tenant_id` required on 
 - Plugin SQLite (`openPluginDb`): default durable store for plugin domain data. ObjectType adapters may façade into this DB; they must not create business tables on the workspace DB.
 - Ban durable state in browser `.log` downloads/pickers or `localStorage` when a plugin SQLite file is appropriate.
 - After reinstall/reset, existing `plugin-data` files may be dirty: migrate schema or delete and recreate; do not assume a fresh empty file.
+- Uninstall retains `plugin-data/{tenant}/{plugin}.sqlite` and closes open handles. Tenant wipe deletes `plugin-data/{tenantId}/`. Community child hosts deny `openPluginDb`.
+- Local backup stamps include `plugin-data/` (with tenants, users, timeseries).

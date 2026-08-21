@@ -266,6 +266,10 @@ Rules:
 - ObjectType adapters may façade into plugin SQLite; they must not create domain tables on the tenant SQLite.
 - Do not use browser `.log` downloads/pickers or `localStorage` for durable plugin state.
 - After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.
+- **Uninstall** closes open plugin SQLite handles but **retains** `plugin-data/{tenant}/{plugin}.sqlite` (same spirit as retained ObjectType Records). Reinstall can reopen the file.
+- **Tenant wipe** deletes that tenant’s entire `plugin-data/{tenantId}/` tree.
+- Community / child-process hosts **deny** `openPluginDb` (no live plugin SQLite in the child). Prefer in-process Bridge plugins for domain DB access.
+- Local Admin backup stamps include `plugin-data/` alongside tenants, users, and timeseries.
 
 ```typescript
 export const register: GodModePluginRegister = (api) => {

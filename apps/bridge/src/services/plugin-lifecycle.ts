@@ -25,6 +25,7 @@ import {
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
+import { closePluginSqlite } from "./plugin-sqlite.js";
 import {
   PluginLoopError,
   assertLivePluginRoot,
@@ -240,6 +241,9 @@ export async function uninstallPluginForTenant(
       tenantId,
       pluginId
     );
+    // Retain plugin-data/{tenant}/{plugin}.sqlite on disk (reinstall recovery).
+    // Close any open handle so the next openPluginDb is clean.
+    closePluginSqlite(pluginId, tenantId);
   } catch (error) {
     core
       .prepare(

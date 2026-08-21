@@ -54,6 +54,75 @@ export function closePluginSqlite(pluginId: string, tenantId: string): void {
   db.close();
 }
 
+/** Close every cached plugin SQLite handle for one tenant (uninstall / wipe). */
+export function closePluginSqliteForTenant(tenantId: string): void {
+  if (!TENANT_ID_RE.test(tenantId)) {
+    throw new Error(`Invalid tenantId for plugin SQLite: ${tenantId}`);
+  }
+  const prefix = `${tenantId}::`;
+  for (const key of [...openHandles.keys()]) {
+    if (!key.startsWith(prefix)) continue;
+    const db = openHandles.get(key);
+    openHandles.delete(key);
+    if (!db) continue;
+    try {
+      db.close();
+    } catch (err) {
+      console.warn("[plugin-sqlite] close failed", key, err);
+    }
+  }
+}
+
+/**
+ * Delete `{dataDir}/plugin-data/{tenantId}/` after closing handles.
+ * Used on tenant wipe only; uninstall retains the files.
+ */
+export function deletePluginDataForTenant(tenantId: string): void {
+  closePluginSqliteForTenant(tenantId);
+  const dir = path.join(config.dataDir, "plugin-data", tenantId);
+  if (!fs.existsSync(dir)) return;
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/** Root directory for all plugin-owned SQLite files. */
+export function pluginDataRoot(): string {
+  return path.join(config.dataDir, "plugin-data");
+}
+
+/**
+ * Snapshot every on-disk plugin SQLite into `destPluginDataDir` (same relative layout).
+ * Uses open handles when present so WAL is included via SQLite backup API.
+ */
+export async function backupPluginDataTree(
+  destPluginDataDir: string,
+  backupSqliteFile: (db: Database.Database, destFile: string) => Promise<void>
+): Promise<string[]> {
+  const srcRoot = pluginDataRoot();
+  if (!fs.existsSync(srcRoot)) return [];
+  const copied: string[] = [];
+  for (const tenantId of fs.readdirSync(srcRoot)) {
+    if (!TENANT_ID_RE.test(tenantId)) continue;
+    const tenantSrc = path.join(srcRoot, tenantId);
+    if (!fs.statSync(tenantSrc).isDirectory()) continue;
+    for (const file of fs.readdirSync(tenantSrc)) {
+      if (!file.endsWith(".sqlite")) continue;
+      const pluginId = file.slice(0, -".sqlite".length);
+      if (!PLUGIN_ID_RE.test(pluginId)) continue;
+      const key = `${tenantId}::${pluginId}`;
+      const destFile = path.join(destPluginDataDir, tenantId, file);
+      const existing = openHandles.get(key);
+      const opened = existing ?? new Database(path.join(tenantSrc, file), { readonly: true });
+      try {
+        await backupSqliteFile(opened, destFile);
+        copied.push(path.join(tenantId, file).replace(/\\/g, "/"));
+      } finally {
+        if (!existing) opened.close();
+      }
+    }
+  }
+  return copied;
+}
+
 export function closeAllPluginSqlite(): void {
   for (const [key, db] of openHandles) {
     try {
@@ -63,4 +132,10 @@ export function closeAllPluginSqlite(): void {
     }
   }
   openHandles.clear();
+}
+
+/** Test helper: whether a tenant/plugin pair currently holds an open handle. */
+export function isPluginSqliteOpen(pluginId: string, tenantId: string): boolean {
+  assertIds(pluginId, tenantId);
+  return openHandles.has(`${tenantId}::${pluginId}`);
 }

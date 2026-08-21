@@ -22,6 +22,7 @@ import { ensureUserDb } from "../user-registry.js";
 import { seedIntelligenceAgent, ensureAgentReflectionDefaults } from "./agents/agents-db.js";
 import { seedPersonalOsForNewTenant } from "./personal-os-seed.js";
 import { ensureWelcomeWikiPage } from "./welcome-wiki.js";
+import { deletePluginDataForTenant } from "./plugin-sqlite.js";
 
 const SYSTEM_USER_ID = "system-local";
 const DEFAULT_TENANT_SLUG = "default";
@@ -364,14 +365,15 @@ export function removeLegacyLifeDepartmentFromPersonalTenants(
 
 /**
  * Delete every trace of a non-operator workspace tenant: its SQLite file (plus
- * WAL/SHM sidecars), memberships, share grants it owns or receives, and the
- * `tenants` row. The cached DB handle is evicted first so the file is not held
- * open (Windows would otherwise refuse the unlink). Never call on the operator
- * tenant — caller guards with `is_operator=0`.
+ * WAL/SHM sidecars), plugin-data tree for that tenant, memberships, share grants
+ * it owns or receives, and the `tenants` row. The cached DB handle is evicted
+ * first so the file is not held open (Windows would otherwise refuse the unlink).
+ * Never call on the operator tenant — caller guards with `is_operator=0`.
  */
 export function wipeWorkspaceTenant(core: CoreDatabase, tenantId: string): void {
   // Drop the cached/open handle so the file is unlocked before deletion.
   evictTenantDb(tenantId);
+  deletePluginDataForTenant(tenantId);
 
   const base = path.join(config.tenantsDir, `${tenantId}.sqlite`);
   for (const file of [base, `${base}-wal`, `${base}-shm`]) {

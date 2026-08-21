@@ -131,7 +131,7 @@ per-file Sigstore bundles inside the verification archive).
 
 An update snapshot is one consistency unit containing:
 
-- `Cloud.sqlite` (Cloud live filename; boot-migrates from legacy `core.sqlite`) plus a `core.sqlite` archive alias for older tools, `Users.sqlite` (hub), every `users/*.sqlite` User DB, and every workspace (`tenants/*.sqlite`) database;
+- `Cloud.sqlite` (Cloud live filename; boot-migrates from legacy `core.sqlite`) plus a `core.sqlite` archive alias for older tools, `Users.sqlite` (hub), every `users/*.sqlite` User DB, every workspace (`tenants/*.sqlite`) database, and `plugin-data/{tenant}/{plugin}.sqlite` plugin business stores;
 - tenant workspaces and installed plugin state;
 - installation/release metadata and the plugin lock snapshot.
 
