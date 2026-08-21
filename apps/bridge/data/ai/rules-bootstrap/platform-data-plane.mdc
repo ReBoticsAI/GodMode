@@ -27,7 +27,7 @@ PlatformEvent SoR is Workspace table `platform_events` (`tenant_id` required on 
 
 - Workspace DB (`getTenantDb` / `getReqTenantDb`): Structure, install/lifecycle metadata, kernel registration only. Structure seed allowlist for `structure_nodes` is OK. Do not `CREATE TABLE` plugin business schema on the tenant SQLite.
 - Plugin SQLite (`openPluginDb`): default durable store for plugin domain data. ObjectType adapters may façade into this DB; they must not create business tables on the workspace DB.
-- Manifest gate: omit `dataPlane` or set `"domain"` (default). Native ObjectType tables on the workspace DB are rejected at build/activate/seed unless `dataPlane: "core-records"` (true Core personal-OS entities only; `scaffold_plugin` template `records`).
+- Manifest gate: omit `dataPlane` / set `"domain"` and prefer `scaffold_plugin` template `domain`. Native ObjectType tables on the workspace DB require both `scaffoldTemplate: "records"` and `dataPlane: "core-records"` (records scaffold only). Do not set `dataPlane: "core-records"` alone to bypass the gate.
 - Ban durable state in browser `.log` downloads/pickers or `localStorage` when a plugin SQLite file is appropriate.
 - After reinstall/reset, existing `plugin-data` files may be dirty: migrate schema or delete and recreate; do not assume a fresh empty file.
 - Uninstall retains `plugin-data/{tenant}/{plugin}.sqlite` and closes open handles (including Community child handles via RPC). Tenant wipe deletes `plugin-data/{tenantId}/`. Community children use the same `openPluginDb` path; they must not open another plugin's id.

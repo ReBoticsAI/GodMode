@@ -125,7 +125,8 @@ This matches **Marketplace → Local** on non-SaaS hosts. Prefer `api.routes.mou
 - `bridge.entry` — ESM module exporting `register(api)` or default
 - `web.entry` — ESM module exporting `registerWeb(api)` or default
 - `objectTypes` — metadata **ObjectTypes** (Fields + storage). Use adapter storage (or Core `dataPlane: "core-records"`) for Records surfaces. Plugin business tables belong in `openPluginDb`, not native workspace tables. Vocabulary is ObjectType / Field / Record — **not** DocType. See `@godmode/kernel`.
-- `dataPlane` — `"domain"` (default) or `"core-records"`. Native ObjectType materialization on the workspace DB is rejected unless `"core-records"`.
+- `dataPlane` — `"domain"` (default) or `"core-records"`. Native ObjectType materialization on the workspace DB requires **both** `dataPlane: "core-records"` and `scaffoldTemplate: "records"` (from `scaffold_plugin` template `records`). Setting `dataPlane` alone is rejected.
+- `scaffoldTemplate` — `"domain"` or `"records"`, stamped by `scaffold_plugin`. Do not invent `"records"` to bypass the native-table gate for plugin business data.
 - `records` — declarative Record seeds applied on tenant install (before / with `tenant:install`). Structure shells should prefer seeding `StructureNode` Records here when possible.
 - Platform releases do **not** auto-update marketplace plugins unless the signed release manifest pins a coordinated plugin artifact.
 - Manifest-native ObjectTypes (`storage.kind: "native"`) receive native storage and generic CRUD from metadata **only** when `dataPlane: "core-records"`. Service-backed behavior requires an executable Bridge registration that supplies an adapter and implements every declared operation/action.
@@ -267,7 +268,7 @@ Choose the store explicitly. Prefer `scaffold_plugin` templates over inventing a
 Rules:
 
 - Do not `CREATE TABLE` plugin business schema on the workspace DB. Structure seed allowlist for `structure_nodes` is the exception.
-- Set `dataPlane: "core-records"` only for true Core personal-OS ObjectTypes. Omit or use `"domain"` otherwise. Build, activate, seed, and `npm run audit:plugin-data-plane` reject native workspace ObjectTypes without that opt-in.
+- Set `dataPlane: "core-records"` **and** `scaffoldTemplate: "records"` only via `scaffold_plugin` template `records` for true Core personal-OS ObjectTypes. Omit or use `"domain"` otherwise. Build, activate, seed, and `npm run audit:plugin-data-plane` reject native workspace ObjectTypes without both stamps (do not flip `dataPlane` alone after a build failure).
 - ObjectType adapters may façade into plugin SQLite; they must not create domain tables on the tenant SQLite.
 - Do not use browser `.log` downloads/pickers or `localStorage` for durable plugin state.
 - After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.

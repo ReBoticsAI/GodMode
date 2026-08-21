@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Fail CI when a godmode.plugin.json seeds native ObjectType tables on the
- * workspace DB without dataPlane: "core-records".
+ * workspace DB without scaffoldTemplate "records" + dataPlane "core-records".
+ *
+ * Also require the SaaS Dockerfile to ship scaffold trees (Cloud scaffold_plugin).
  *
  * Scans plugins/, scaffold trees, and test fixtures.
  */
@@ -48,6 +50,23 @@ function objectTypeIsNative(ot) {
   return storage.kind === "native";
 }
 
+function allowsNativeWorkspaceTables(raw) {
+  return raw.dataPlane === "core-records" && raw.scaffoldTemplate === "records";
+}
+
+const dockerfile = path.join(root, "deploy", "Dockerfile");
+if (!fs.existsSync(dockerfile)) {
+  errors.push("deploy/Dockerfile missing");
+} else {
+  const df = fs.readFileSync(dockerfile, "utf8");
+  if (!/apps\/bridge\/data\/scaffolds/.test(df)) {
+    errors.push(
+      "deploy/Dockerfile must COPY apps/bridge/data/scaffolds into the runtime image " +
+        "(scaffold_plugin on SaaS / Cloud)"
+    );
+  }
+}
+
 const scanRoots = [
   "plugins",
   "apps/bridge/data/scaffolds",
@@ -70,22 +89,32 @@ for (const rel of manifests) {
     continue;
   }
   const dataPlane = raw.dataPlane ?? "domain";
-  if (dataPlane === "core-records") continue;
   if (dataPlane !== "domain" && dataPlane !== "core-records") {
     errors.push(
       `${normPath(rel)}: dataPlane must be "domain" or "core-records" (got ${JSON.stringify(dataPlane)})`
     );
     continue;
   }
+  if (
+    raw.scaffoldTemplate != null &&
+    raw.scaffoldTemplate !== "domain" &&
+    raw.scaffoldTemplate !== "records"
+  ) {
+    errors.push(
+      `${normPath(rel)}: scaffoldTemplate must be "domain" or "records" (got ${JSON.stringify(raw.scaffoldTemplate)})`
+    );
+    continue;
+  }
   const objectTypes = Array.isArray(raw.objectTypes) ? raw.objectTypes : [];
   const natives = objectTypes.filter(objectTypeIsNative);
   if (!natives.length) continue;
+  if (allowsNativeWorkspaceTables(raw)) continue;
   const names = natives
     .map((ot) => (typeof ot?.name === "string" ? ot.name : "?"))
     .join(", ");
   errors.push(
-    `${normPath(rel)}: native ObjectType(s) [${names}] require dataPlane: "core-records" ` +
-      `(plugin business data uses openPluginDb / dataPlane "domain")`
+    `${normPath(rel)}: native ObjectType(s) [${names}] require scaffoldTemplate: "records" ` +
+      `and dataPlane: "core-records" (plugin business data uses openPluginDb / domain scaffold)`
   );
 }
 
