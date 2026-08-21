@@ -54,6 +54,12 @@ export interface GodmodePluginManifest {
     entry: string;
   };
   tenantMigrations?: string[];
+  /**
+   * Persistence plane for this plugin.
+   * - `domain` (default): business data via openPluginDb; native tenant ObjectType tables rejected.
+   * - `core-records`: narrow opt-in for Core personal-OS ObjectTypes on workspace SQLite.
+   */
+  dataPlane?: "domain" | "core-records";
   /** ObjectType definitions shipped by the plugin (registered before tenant:install). */
   objectTypes?: ObjectTypeDef[];
   /** Optional Record seeds applied after ObjectTypes register (upsert by id). */
@@ -208,9 +214,21 @@ export function parseGodmodePluginManifest(raw: unknown): GodmodePluginManifest 
     tenantMigrations: Array.isArray(m.tenantMigrations)
       ? m.tenantMigrations.filter((x): x is string => typeof x === "string")
       : undefined,
+    dataPlane: parseDataPlane(m.dataPlane, id),
     objectTypes: parseObjectTypes(m.objectTypes, id),
     records: parseRecordSeeds(m.records),
   };
+}
+
+function parseDataPlane(
+  raw: unknown,
+  pluginId: string
+): "domain" | "core-records" {
+  if (raw === undefined || raw === null || raw === "") return "domain";
+  if (raw === "domain" || raw === "core-records") return raw;
+  throw new Error(
+    `Invalid plugin manifest (${pluginId}): dataPlane must be "domain" or "core-records"`
+  );
 }
 
 function parseNamedCapabilityList(

@@ -7,6 +7,7 @@ import {
 } from "./record-api.js";
 import { replaceObjectTypesByPlugin } from "./registry.js";
 import { registerPageKinds } from "../kernel/kind-registry.js";
+import { assertPluginDataPlane } from "../services/plugin-data-plane.js";
 
 /** Register ObjectTypes from a plugin manifest (idempotent overwrite by name). */
 export function registerPluginObjectTypes(manifest: GodmodePluginManifest): void {
@@ -33,6 +34,7 @@ export function applyPluginObjectTypeSeeds(
   db: AppDatabase,
   manifest: GodmodePluginManifest
 ): void {
+  assertPluginDataPlane(manifest);
   for (const ot of manifest.objectTypes ?? []) {
     ensureObjectTypeStorage(db, ot);
   }

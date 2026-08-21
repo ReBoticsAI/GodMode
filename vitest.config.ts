@@ -12,6 +12,7 @@ export default defineConfig({
       "apps/bridge/src/plugins/__tests__/plugin-child-sandbox.test.ts",
       "apps/bridge/src/services/__tests__/plugin-pipeline.test.ts",
       "apps/bridge/src/services/__tests__/plugin-sqlite.test.ts",
+      "apps/bridge/src/services/__tests__/plugin-data-plane.test.ts",
       "apps/bridge/src/services/__tests__/architecture-scaffolds.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",

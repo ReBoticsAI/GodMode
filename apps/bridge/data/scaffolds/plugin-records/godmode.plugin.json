@@ -4,6 +4,7 @@
   "name": "__PLUGIN_NAME__",
   "engine": "^0.1.0",
   "kernelApiVersion": 1,
+  "dataPlane": "core-records",
   "departments": ["__DEPT_ID__"],
   "bridge": { "entry": "dist/bridge.js" },
   "web": { "entry": "dist/web.js" },
@@ -12,26 +13,15 @@
       "name": "__RECORD_TYPE__",
       "label": "__PLUGIN_NAME__ Item",
       "module": "__PLUGIN_ID__",
-      "table": "__RECORD_TABLE__",
-      "defaultSort": "updated_at",
-      "writable": ["title", "body"],
-      "required": ["title"],
+      "storage": { "kind": "native", "tableName": "__RECORD_TABLE__" },
       "operations": ["list", "get", "create", "update", "delete"],
       "fields": [
-        "id",
-        ["title", "Data"],
-        ["body", "Text"],
-        "created_at",
-        "updated_at"
+        { "name": "id", "label": "Id", "fieldType": "Data", "required": true },
+        { "name": "title", "label": "Title", "fieldType": "Data", "required": true },
+        { "name": "body", "label": "Body", "fieldType": "Text" },
+        { "name": "created_at", "label": "Created", "fieldType": "Datetime" },
+        { "name": "updated_at", "label": "Updated", "fieldType": "Datetime" }
       ]
-    }
-  ],
-  "pages": [
-    {
-      "id": "__PLUGIN_ID__-list",
-      "kind": "record-list",
-      "objectType": "__RECORD_TYPE__",
-      "title": "__PLUGIN_NAME__"
     }
   ]
 }

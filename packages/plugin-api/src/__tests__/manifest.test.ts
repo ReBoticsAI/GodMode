@@ -11,6 +11,7 @@ describe("plugin ObjectType manifests", () => {
         id: "example",
         name: "Example",
         version: "1.0.0",
+        dataPlane: "core-records",
         objectTypes: [
           {
             name: "ExampleItem",
@@ -26,7 +27,21 @@ describe("plugin ObjectType manifests", () => {
           },
         ],
       })
-    ).toMatchObject({ id: "example", objectTypes: [{ name: "ExampleItem" }] });
+    ).toMatchObject({
+      id: "example",
+      dataPlane: "core-records",
+      objectTypes: [{ name: "ExampleItem" }],
+    });
+  });
+
+  it("defaults dataPlane to domain", () => {
+    expect(
+      parseGodmodePluginManifest({
+        id: "domain-default",
+        name: "Domain Default",
+        version: "1.0.0",
+      }).dataPlane
+    ).toBe("domain");
   });
 
   it("rejects invalid metadata before registration", () => {

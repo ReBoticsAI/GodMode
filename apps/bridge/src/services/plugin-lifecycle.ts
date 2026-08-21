@@ -27,6 +27,7 @@ import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
 import { getPluginChild } from "../plugins/plugin-child-registry.js";
 import { closePluginSqlite } from "./plugin-sqlite.js";
+import { assertPluginDataPlane } from "./plugin-data-plane.js";
 import {
   PluginLoopError,
   assertLivePluginRoot,
@@ -291,7 +292,7 @@ export async function activatePluginForTenant(
   });
   const resolved = assertLivePluginRoot(pluginRoot);
   try {
-    readGodmodePluginManifest(resolved);
+    assertPluginDataPlane(readGodmodePluginManifest(resolved));
   } catch (err) {
     throw isPluginLoopError(err)
       ? err
