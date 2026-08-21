@@ -240,6 +240,7 @@ Injected at boot via `api.host`:
 |--------|---------|
 | `getTenantDb(tenantId)` | Tenant-scoped SQLite in-process. Community child: INSERT OR IGNORE INTO structure_nodes only (no live handle) |
 | `getReqTenantDb(req)` | SQLite from authenticated request |
+| `openPluginDb(pluginId, tenantId)` | Plugin-private SQLite at `{dataDir}/plugin-data/{tenantId}/{pluginId}.sqlite` (not the workspace core DB). Required on in-process Bridge hosts; community child may deny. |
 | `createPluginRouter()` | Express router with tenant middleware |
 | `mountPluginRoute(pluginId, path, router)` | Slot-based HTTP mount (hot-reload safe) |
 | `getTimeseriesStore()` | Platform analytics DuckDB (telemetry only; not market ticks) |
@@ -247,6 +248,39 @@ Injected at boot via `api.host`:
 | `bridgeFetch(path)` | Internal HTTP to Bridge |
 
 Plugins must **not** import from `apps/bridge/src/**`.
+
+## Persistence
+
+Choose the store explicitly:
+
+| Data | Store |
+|------|--------|
+| Structure, install/lifecycle, kernel ObjectType registration | Workspace tenant SQLite (`getTenantDb` / `getReqTenantDb`) |
+| Core personal-OS Records (notes, tasks, calendar-style entities the product owns) | Workspace tenant SQLite via ObjectTypes / Records |
+| Plugin domain / business rows (sessions, blueprints, calculators, playbooks-style state) | `host.openPluginDb(pluginId, tenantId)` → `plugin-data/{tenantId}/{pluginId}.sqlite` |
+| High-volume specialized series (when SQLite is wrong) | Plugin-owned specialized store (still outside Core) |
+
+Rules:
+
+- Do not `CREATE TABLE` plugin business schema on the workspace DB. Structure seed allowlist for `structure_nodes` is the exception.
+- ObjectType adapters may façade into plugin SQLite; they must not create domain tables on the tenant SQLite.
+- Do not use browser `.log` downloads/pickers or `localStorage` for durable plugin state.
+- After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.
+
+```typescript
+export const register: GodModePluginRegister = (api) => {
+  const { host } = api;
+  api.hooks.on("tenant:install", ({ tenantId }) => {
+    const db = host.openPluginDb("my-plugin", tenantId) as import("better-sqlite3").Database;
+    db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
+  });
+};
+```
+
 
 ## Web register
 
