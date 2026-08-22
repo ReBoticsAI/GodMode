@@ -22,6 +22,7 @@ import {
   WrenchIcon,
   ZapIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,11 +34,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useIntelligence } from "@/lib/intelligence-context";
 import {
   addWorkflowComment,
   createAiWorkflow,
+  deleteAiWorkflow,
   fetchAiWorkflows,
   fetchWorkflowComments,
   updateAiWorkflow,
@@ -347,46 +365,104 @@ function toFlowGraph(
   return { nodes, edges };
 }
 
-export function WorkflowFlow() {
+export function WorkflowFlow({
+  onWorkflowsChanged,
+}: {
+  onWorkflowsChanged?: () => void;
+} = {}) {
   const { activeAgentId } = useIntelligence();
-  const [workflow, setWorkflow] = useState<AiWorkflow | null>(null);
+  const [workflows, setWorkflows] = useState<AiWorkflow[]>([]);
+  const [selectedId, setSelectedWorkflowId] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(DEFAULT_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(DEFAULT_EDGES);
   const [saving, setSaving] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedId] = useState<string | null>(null);
   const [comments, setComments] = useState<AiWorkflowComment[]>([]);
   const [composer, setComposer] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [crudBusy, setCrudBusy] = useState(false);
+
+  const workflow = useMemo(
+    () => workflows.find((w) => w.id === selectedId) ?? null,
+    [workflows, selectedId]
+  );
+
+  const applyGraph = useCallback(
+    (wf: AiWorkflow) => {
+      try {
+        const config = JSON.parse(wf.config_json) as {
+          nodes?: StoredNode[];
+          edges?: StoredEdge[];
+        };
+        if (config.nodes?.length) {
+          const flow = toFlowGraph(config.nodes, config.edges ?? []);
+          setNodes(flow.nodes);
+          setEdges(flow.edges);
+        } else {
+          setNodes(DEFAULT_NODES);
+          setEdges(DEFAULT_EDGES);
+        }
+      } catch {
+        setNodes(DEFAULT_NODES);
+        setEdges(DEFAULT_EDGES);
+      }
+      setSelectedId(null);
+    },
+    [setNodes, setEdges]
+  );
+
+  const reloadWorkflows = useCallback(
+    async (preferId?: string | null) => {
+      const r = await fetchAiWorkflows(activeAgentId);
+      const list = r.workflows;
+      setWorkflows(list);
+      setListLoaded(true);
+      setSelectedWorkflowId((prev) => {
+        const keep =
+          (preferId && list.find((w) => w.id === preferId)?.id) ||
+          (prev && list.find((w) => w.id === prev)?.id) ||
+          list[0]?.id ||
+          null;
+        const wf = keep ? list.find((w) => w.id === keep) : null;
+        if (wf) applyGraph(wf);
+        else {
+          setNodes(DEFAULT_NODES);
+          setEdges(DEFAULT_EDGES);
+        }
+        return keep;
+      });
+      onWorkflowsChanged?.();
+    },
+    [activeAgentId, applyGraph, setNodes, setEdges, onWorkflowsChanged]
+  );
 
   useEffect(() => {
-    fetchAiWorkflows(activeAgentId)
-      .then(async (r) => {
-        let wf = r.workflows[0] ?? null;
-        if (!wf) {
-          wf = await createAiWorkflow("Default workflow", undefined, activeAgentId);
-        }
-        setWorkflow(wf);
-        try {
-          const config = JSON.parse(wf.config_json) as {
-            nodes?: StoredNode[];
-            edges?: StoredEdge[];
-          };
-          if (config.nodes?.length) {
-            const flow = toFlowGraph(config.nodes, config.edges ?? []);
-            setNodes(flow.nodes);
-            setEdges(flow.edges);
-          } else {
-            setNodes(DEFAULT_NODES);
-            setEdges(DEFAULT_EDGES);
-          }
-        } catch {
+    setListLoaded(false);
+    setSelectedWorkflowId(null);
+    void fetchAiWorkflows(activeAgentId)
+      .then((r) => {
+        const list = r.workflows;
+        setWorkflows(list);
+        setListLoaded(true);
+        const first = list[0] ?? null;
+        setSelectedWorkflowId(first?.id ?? null);
+        if (first) applyGraph(first);
+        else {
           setNodes(DEFAULT_NODES);
           setEdges(DEFAULT_EDGES);
         }
       })
-      .catch(() => undefined);
-  }, [setNodes, setEdges, activeAgentId]);
+      .catch(() => {
+        setWorkflows([]);
+        setListLoaded(true);
+        setSelectedWorkflowId(null);
+      });
+  }, [activeAgentId, applyGraph, setNodes, setEdges]);
 
   const workflowId = workflow?.id ?? null;
   const reloadComments = useCallback(async () => {
@@ -443,7 +519,10 @@ export function WorkflowFlow() {
         {
           id,
           type: "workflow",
-          position: { x: 40 + (nds.length % 4) * 60, y: 260 + Math.floor(nds.length / 4) * 90 },
+          position: {
+            x: 40 + (nds.length % 4) * 60,
+            y: 260 + Math.floor(nds.length / 4) * 90,
+          },
           data: { kind, label: NODE_META[kind].label },
         },
       ]);
@@ -472,11 +551,11 @@ export function WorkflowFlow() {
     [setNodes, setEdges]
   );
 
-  const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
   const selectedData = selectedNode?.data as WorkflowNodeData | undefined;
   const nodeIdOptions = useMemo(
-    () => nodes.map((n) => n.id).filter((id) => id !== selectedId),
-    [nodes, selectedId]
+    () => nodes.map((n) => n.id).filter((id) => id !== selectedNodeId),
+    [nodes, selectedNodeId]
   );
 
   const save = async () => {
@@ -486,43 +565,266 @@ export function WorkflowFlow() {
       const updated = await updateAiWorkflow(workflow.id, {
         config: toExecGraph(nodes, edges),
       });
-      setWorkflow(updated);
+      setWorkflows((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+      toast.success("Workflow saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save workflow");
     } finally {
       setSaving(false);
     }
   };
 
+  const selectWorkflow = (id: string) => {
+    const wf = workflows.find((w) => w.id === id);
+    if (!wf) return;
+    setSelectedWorkflowId(id);
+    applyGraph(wf);
+    setShowComments(false);
+  };
+
+  const openCreate = () => {
+    setNameDraft("");
+    setCreateOpen(true);
+  };
+
+  const submitCreate = async () => {
+    const name = nameDraft.trim();
+    if (!name) {
+      toast.error("Enter a workflow name");
+      return;
+    }
+    setCrudBusy(true);
+    try {
+      const created = await createAiWorkflow(name, undefined, activeAgentId);
+      setCreateOpen(false);
+      await reloadWorkflows(created.id);
+      toast.success(`Created “${created.name}”`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create workflow");
+    } finally {
+      setCrudBusy(false);
+    }
+  };
+
+  const openRename = () => {
+    if (!workflow) return;
+    setNameDraft(workflow.name);
+    setRenameOpen(true);
+  };
+
+  const submitRename = async () => {
+    if (!workflow) return;
+    const name = nameDraft.trim();
+    if (!name) {
+      toast.error("Enter a workflow name");
+      return;
+    }
+    setCrudBusy(true);
+    try {
+      const updated = await updateAiWorkflow(workflow.id, { name });
+      setWorkflows((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+      setRenameOpen(false);
+      onWorkflowsChanged?.();
+      toast.success("Workflow renamed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to rename");
+    } finally {
+      setCrudBusy(false);
+    }
+  };
+
+  const toggleEnabled = async (enabled: boolean) => {
+    if (!workflow) return;
+    setCrudBusy(true);
+    try {
+      const updated = await updateAiWorkflow(workflow.id, { enabled });
+      setWorkflows((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+      onWorkflowsChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setCrudBusy(false);
+    }
+  };
+
+  const removeWorkflow = async () => {
+    if (!workflow) return;
+    if (
+      !window.confirm(
+        `Delete workflow “${workflow.name}”? Hooks and schedules that run this workflow will be removed.`
+      )
+    ) {
+      return;
+    }
+    setCrudBusy(true);
+    try {
+      const deletedId = workflow.id;
+      await deleteAiWorkflow(deletedId);
+      const next = workflows.filter((w) => w.id !== deletedId);
+      setWorkflows(next);
+      const pick = next[0] ?? null;
+      setSelectedWorkflowId(pick?.id ?? null);
+      if (pick) applyGraph(pick);
+      else {
+        setNodes(DEFAULT_NODES);
+        setEdges(DEFAULT_EDGES);
+      }
+      onWorkflowsChanged?.();
+      toast.success("Workflow deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setCrudBusy(false);
+    }
+  };
+
   const paletteItems = useMemo(() => PALETTE, []);
+
+  const nameDialogs = (
+    <>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New workflow</DialogTitle>
+            <DialogDescription>
+              Create a named guidance graph for this agent. Wire it from Hooks or Schedules.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Name</Label>
+            <Input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Scaffold domain plugin"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitCreate();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={crudBusy}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitCreate()} disabled={crudBusy}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename workflow</DialogTitle>
+            <DialogDescription>Update the display name for Hooks and Schedules pickers.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Name</Label>
+            <Input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitRename();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameOpen(false)} disabled={crudBusy}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitRename()} disabled={crudBusy}>
+              Save name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 
   const toolbar = (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-        <div className="min-w-0">
-          <span className="text-sm font-medium">{workflow?.name ?? "Workflow"}</span>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {workflows.length > 0 ? (
+            <Select
+              value={selectedId ?? workflows[0]?.id}
+              onValueChange={(id) => {
+                if (id) selectWorkflow(id);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[220px] text-xs">
+                <SelectValue placeholder="Select workflow" />
+              </SelectTrigger>
+              <SelectContent>
+                {workflows.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                    {!w.enabled ? " (off)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="text-sm font-medium">Workflows</span>
+          )}
           <p className="text-xs text-muted-foreground">
             Wire trigger → prompt/agent/tool → output, then run from a Hook or Schedule.
           </p>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            disabled={!workflow}
-            onClick={() => setShowComments((v) => !v)}
-          >
-            <MessageSquareIcon className="mr-1 size-3" />
-            Comments{comments.length > 0 ? ` (${comments.length})` : ""}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openCreate}>
+            New
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "Save workflow"}
-          </Button>
+          {workflow ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={crudBusy}
+                onClick={openRename}
+              >
+                Rename
+              </Button>
+              <div className="flex items-center gap-1.5 px-1">
+                <Switch
+                  checked={Boolean(workflow.enabled)}
+                  disabled={crudBusy}
+                  onCheckedChange={(v) => void toggleEnabled(v)}
+                />
+                <span className="text-[10px] text-muted-foreground">Enabled</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs text-destructive"
+                disabled={crudBusy}
+                onClick={() => void removeWorkflow()}
+              >
+                Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={!workflow}
+                onClick={() => setShowComments((v) => !v)}
+              >
+                <MessageSquareIcon className="mr-1 size-3" />
+                Comments{comments.length > 0 ? ` (${comments.length})` : ""}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={saving || crudBusy}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save workflow"}
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
       {workflow && showComments ? (
@@ -571,6 +873,7 @@ export function WorkflowFlow() {
           </div>
         </div>
       ) : null}
+      {nameDialogs}
     </>
   );
 
@@ -902,13 +1205,42 @@ export function WorkflowFlow() {
     );
 
   return (
-    <FlowWorkspace
-      bordered={false}
-      toolbar={toolbar}
-      palette={palette}
-      canvas={canvas}
-      inspector={inspector}
-      className="h-full"
-    />
+    <>
+      {!listLoaded ? (
+        <div className="flex h-full flex-col">
+          {toolbar}
+          <p className="p-4 text-sm text-muted-foreground">Loading workflows…</p>
+        </div>
+      ) : !workflow ? (
+        <div className="flex h-full flex-col">
+          {toolbar}
+          <div className="p-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">No workflows yet</CardTitle>
+                <CardDescription>
+                  Create a named workflow for this agent. Hooks and Schedules can run it with
+                  run_workflow.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button size="sm" onClick={openCreate}>
+                  New workflow
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <FlowWorkspace
+          bordered={false}
+          toolbar={toolbar}
+          palette={palette}
+          canvas={canvas}
+          inspector={inspector}
+          className="h-full"
+        />
+      )}
+    </>
   );
 }

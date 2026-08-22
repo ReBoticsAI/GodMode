@@ -3926,18 +3926,23 @@ export const fetchAiWorkflows = (agentId = "intelligence") =>
   api<{ workflows: AiWorkflow[] }>(
     `/ai/workflows?agentId=${encodeURIComponent(agentId)}`
   );
-export const updateAiWorkflow = (id: string, patch: { name?: string; config?: unknown; enabled?: boolean }) =>
-  updateDto<AiWorkflow>("Workflow", id, {
-    name: patch.name,
-    config_json: patch.config,
-    enabled: patch.enabled,
-  });
+export const updateAiWorkflow = (
+  id: string,
+  patch: { name?: string; config?: unknown; enabled?: boolean }
+) => {
+  const data: Record<string, unknown> = {};
+  if (patch.name !== undefined) data.name = patch.name;
+  if (patch.config !== undefined) data.config_json = patch.config;
+  if (patch.enabled !== undefined) data.enabled = patch.enabled;
+  return updateDto<AiWorkflow>("Workflow", id, data);
+};
 export const createAiWorkflow = (name: string, config?: unknown, agentId = "intelligence") =>
   createDto<AiWorkflow>("Workflow", {
     name,
     config_json: config ?? { nodes: [], edges: [], triggers: [] },
     agent_id: agentId,
   });
+export const deleteAiWorkflow = (id: string) => deleteDto("Workflow", id);
 
 export const fetchActiveAgents = () =>
   api<{ activeAgentIds: string[] }>("/ai/agents/active");
