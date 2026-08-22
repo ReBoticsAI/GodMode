@@ -254,6 +254,8 @@ export interface WorkflowExecDeps {
   bridgePort?: number;
   /** Optional event bus for ai_notification emissions on pause/failure. */
   bus?: EventEmitter;
+  /** SaaS/hub tenant for coding-root and plugin tools inside workflow steps (#648). */
+  tenantId?: string | null;
 }
 
 /** Hard cap on total node executions per (resume)invocation; catches runaway cycles. */
@@ -440,7 +442,12 @@ async function runAgentNode(
         agentId,
         prompt: promptText,
         systemExtra: cfg.system ? String(cfg.system) : undefined,
-        toolCtx: { db: deps.db, bridgePort: deps.bridgePort, llm: deps.llm },
+        toolCtx: {
+          db: deps.db,
+          bridgePort: deps.bridgePort,
+          llm: deps.llm,
+          ...(deps.tenantId ? { tenantId: deps.tenantId } : {}),
+        },
         maxIterations: Number(cfg.maxIterations ?? 8),
         onConfirmRequired: async ({ name }) =>
           allow.includes(name) && !NEVER_AUTO_APPROVE.has(name),
@@ -560,6 +567,7 @@ async function runLoop(
     db: deps.db,
     bridgePort: deps.bridgePort,
     ...(ownerAgentId ? { activeAgentId: ownerAgentId } : {}),
+    ...(deps.tenantId ? { tenantId: deps.tenantId } : {}),
   };
   let finalOutput = state.lastOutput;
   let executions = 0;
