@@ -269,6 +269,7 @@ Rules:
 
 - Do not `CREATE TABLE` plugin business schema on the workspace DB. Structure seed allowlist for `structure_nodes` is the exception.
 - Set `dataPlane: "core-records"` **and** `scaffoldTemplate: "records"` only via `scaffold_plugin` template `records` for true Core personal-OS ObjectTypes. Omit or use `"domain"` otherwise. Build, activate, seed, and `npm run audit:plugin-data-plane` reject native workspace ObjectTypes without both stamps (do not flip `dataPlane` alone after a build failure).
+- **Domain default:** register an ObjectType with a RecordAdapter over `openPluginDb` (see domain scaffold `domain-sqlite-ot.ts`). Agents prove with generated `create_*` / `list_*` tools (or `create_record` / `list_records` with `objectType`). Use `api.tools.register` only for non-CRUD capabilities.
 - ObjectType adapters may façade into plugin SQLite; they must not create domain tables on the tenant SQLite.
 - Do not use browser `.log` downloads/pickers or `localStorage` for durable plugin state.
 - After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.

@@ -246,9 +246,10 @@ function perTypeTools(def: ObjectTypeDef, existingNames: Set<string>): KernelToo
 export function objectTypeAutoToolDefs(existingCoreNames: Set<string>): KernelToolDef[] {
   const out: KernelToolDef[] = [];
   const used = new Set(existingCoreNames);
-  // Plugin ObjectTypes use the generic Record tools. Per-type tools would leak
-  // their presence because the legacy tool registry is not tenant-aware.
-  for (const def of listObjectTypes().filter((item) => !item.pluginId)) {
+  // Include plugin ObjectTypes. Catalog presence matches plugin tool registry
+  // (process-global defs + per-tenant toolAllow merge on install). Execution
+  // still goes through requireOt / install checks.
+  for (const def of listObjectTypes()) {
     const generated = perTypeTools(def, used);
     for (const tool of generated) {
       if (used.has(tool.name)) {

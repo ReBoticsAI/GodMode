@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setPluginHost } from "@godmode/plugin-host";
 import { config } from "../../config.js";
 import { pluginRuntime } from "../../plugins/runtime.js";
-import { unregisterObjectTypesByPlugin } from "../../kernel/registry.js";
+import { unregisterObjectTypesByPlugin, getObjectType } from "../../kernel/registry.js";
 import { evictTenantDb, getTenantDb } from "../../tenant-registry.js";
 import { listInstalledPlugins } from "../../plugins/plugin-install.js";
 import { scaffoldPlugin } from "../plugin-scaffold.js";
@@ -166,8 +166,10 @@ describe("plugin loop reliability (#433)", () => {
     expect(activated.pluginId).toBe("pipeline-bar");
     expect(activated.installed).toBe(true);
     expect(pluginRuntime.hasPlugin("pipeline-bar")).toBe(true);
-    expect(pluginRuntime.getToolHandler("pipeline-bar_list_items")).toBeTruthy();
-    expect(pluginRuntime.getToolHandler("pipeline-bar_add_item")).toBeTruthy();
+    expect(getObjectType("PipelineBarItem")?.pluginId).toBe("pipeline-bar");
+    expect(getObjectType("PipelineBarItem")?.operations).toEqual(
+      expect.arrayContaining(["list", "create"])
+    );
 
     const pluginDb = openPluginSqlite("pipeline-bar", "tenant-a");
     const tables = pluginDb

@@ -28,17 +28,26 @@ describe("workflow seeds (#635)", () => {
     expect(
       (
         db
-          .prepare(
-            `SELECT name FROM schema_version WHERE version = 26`
-          )
+          .prepare(`SELECT name FROM schema_version WHERE version = 26`)
           .get() as { name: string } | undefined
       )?.name
     ).toBe("scaffold_domain_plugin_workflow_v1");
+    expect(
+      (
+        db
+          .prepare(`SELECT name FROM schema_version WHERE version = 27`)
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_workflow_ot_v2");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
         type: string;
-        config?: { tool?: string; args?: Record<string, unknown> };
+        config?: {
+          tool?: string;
+          args?: Record<string, unknown>;
+          system?: string;
+        };
       }>;
     };
     expect(
@@ -60,8 +69,14 @@ describe("workflow seeds (#635)", () => {
         (n) => n.type === "tool" && n.config?.tool === "install_plugin"
       )
     ).toBe(true);
+    const prove = graph.nodes.find((n) => n.config?.system?.includes("ObjectType"));
+    expect(prove?.config?.system).toMatch(/create_|list_records|objectType/i);
+    const implement = graph.nodes.find((n) =>
+      n.config?.system?.includes("RecordAdapter")
+    );
+    expect(implement?.config?.system).toMatch(/ObjectType|openPluginDb/);
 
-    // Idempotent: remigrate does not duplicate (v26 already applied).
+    // Idempotent: remigrate does not duplicate (v26/v27 already applied).
     migrateTenantDb(db);
     expect(
       (
