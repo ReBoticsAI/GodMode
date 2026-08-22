@@ -3,7 +3,7 @@ import Database from "better-sqlite3";
 import { migrateTenantDb } from "../../db.js";
 
 describe("workflow seeds (#635)", () => {
-  it("seeds Scaffold domain plugin with domain template and use_skill", () => {
+  it("seeds Scaffold domain plugin via boot migration v26", () => {
     const db = new Database(":memory:");
     migrateTenantDb(db);
 
@@ -25,6 +25,15 @@ describe("workflow seeds (#635)", () => {
     expect(row!.name).toBe("Scaffold domain plugin");
     expect(row!.enabled).toBe(1);
     expect(row!.agent_id).toBe("intelligence");
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT name FROM schema_version WHERE version = 26`
+          )
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_workflow_v1");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
@@ -52,6 +61,7 @@ describe("workflow seeds (#635)", () => {
       )
     ).toBe(true);
 
+    // Idempotent: remigrate does not duplicate (v26 already applied).
     migrateTenantDb(db);
     expect(
       (
@@ -63,35 +73,24 @@ describe("workflow seeds (#635)", () => {
       ).c
     ).toBe(1);
 
-    // Existing Cloud tenants already applied unified_data_schema_v1 without this
-    // seed. ensureScaffoldDomainPluginWorkflow runs on every migrateTenantDb open.
-    db.prepare(
-      `DELETE FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
-    ).run();
-    migrateTenantDb(db);
-    expect(
-      (
-        db
-          .prepare(
-            `SELECT id, agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
-          )
-          .get() as { id: string; agent_id: string | null } | undefined
-      )?.agent_id
-    ).toBe("intelligence");
+    db.close();
+  });
 
-    db.prepare(
-      `UPDATE ai_workflows SET agent_id = NULL WHERE id = 'scaffold-domain-plugin'`
-    ).run();
+  it("applies v26 on tenants that already stopped before scaffold seed", () => {
+    const db = new Database(":memory:");
     migrateTenantDb(db);
-    expect(
-      (
-        db
-          .prepare(
-            `SELECT agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
-          )
-          .get() as { agent_id: string | null }
-      ).agent_id
-    ).toBe("intelligence");
+    db.prepare(`DELETE FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`).run();
+    db.prepare(`DELETE FROM schema_version WHERE version = 26`).run();
+
+    migrateTenantDb(db);
+
+    const row = db
+      .prepare(
+        `SELECT id, agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+      )
+      .get() as { id: string; agent_id: string | null } | undefined;
+    expect(row?.id).toBe("scaffold-domain-plugin");
+    expect(row?.agent_id).toBe("intelligence");
 
     db.close();
   });

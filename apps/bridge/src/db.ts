@@ -270,9 +270,9 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
 } as const;
 
 /**
- * Idempotent seed for Scaffold domain plugin (#635). Must run from migrateTenantDb
- * (every open), not only from an already-applied boot migration: Cloud tenants that
- * applied unified_data_schema_v1 before this seed existed would otherwise never get it.
+ * Idempotent seed for Scaffold domain plugin (#635). Invoked from boot migration
+ * scaffold_domain_plugin_workflow_v1 (v26), not on every tenant open and not from
+ * already-applied unified_data_schema_v1 (so existing Cloud tenants still get it).
  */
 function ensureScaffoldDomainPluginWorkflow(db: Database.Database): void {
   if (!tableExists(db, "ai_workflows")) return;
@@ -409,9 +409,6 @@ export function migrateTenantDb(db: Database.Database): void {
   runPendingMigrations(db);
   ensureCapabilityTables(db);
   cleanupProvisionedStructureAgents(db);
-  // Seeds that must land on existing Cloud tenants: never fold into an already-applied
-  // boot migration (e.g. unified_data_schema_v1). Run on every open; idempotent.
-  ensureScaffoldDomainPluginWorkflow(db);
 
   const fkViolationsMid = runForeignKeyCheck(db);
   if (fkViolationsMid.length > 0) {
@@ -441,11 +438,21 @@ export const TENANT_BOOT_MIGRATIONS = [
   { version: 23, name: "hooks_workspace_schema_v1", up: migrateHooksWorkspaceSchema },
   { version: 24, name: "platform_events_workspace_schema_v1", up: migratePlatformEventsWorkspaceSchema },
   { version: 25, name: "ai_chats_turn_state_v1", up: migrateAiChatsTurnStateSchema },
+  {
+    version: 26,
+    name: "scaffold_domain_plugin_workflow_v1",
+    up: migrateScaffoldDomainPluginWorkflow,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
   if (!tableExists(db, "ai_chats")) return;
   addColumn(db, "ai_chats", "turn_state_json", "TEXT");
+}
+
+/** One-shot seed for Scaffold domain plugin on new and existing tenants (#635). */
+function migrateScaffoldDomainPluginWorkflow(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
 }
 
 function migrateWikiWorkspaceSchema(db: Database.Database): void {
@@ -1025,10 +1032,9 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
   db.prepare(`UPDATE ai_workflows SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
   db.prepare(`UPDATE ai_projects SET agent_id = 'intelligence' WHERE agent_id IS NULL AND user_id IS NULL`).run();
 
-  // Seed workflows after agent_id exists so Automations list filters
-  // (agent_id === active agent) include them. Idempotent; no auto schedule.
-  // Scaffold domain plugin is ensured from migrateTenantDb (every open) so existing
-  // Cloud tenants that already applied this migration still receive it (#635).
+  // Seed ATR after agent_id exists so Automations list filters include it.
+  // Scaffold domain plugin is seeded by boot migration v26 (not here): appending
+  // seeds to this already-applied migration would skip existing Cloud tenants.
   const existing = db
     .prepare(`SELECT id FROM ai_workflows WHERE id = 'autonomous-task-runner'`)
     .get();
@@ -1038,7 +1044,6 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
        VALUES ('autonomous-task-runner', 'intelligence', 'Autonomous Task Runner', ?, 1)`
     ).run(JSON.stringify(AUTONOMOUS_TASK_RUNNER_GRAPH));
   }
-  ensureScaffoldDomainPluginWorkflow(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_agents (
