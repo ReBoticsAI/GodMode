@@ -201,9 +201,9 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Implement on openPluginDb",
       config: {
         system:
-          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Adapt the domain scaffold create/list tools and Structure as needed.",
+          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Register an ObjectType with a RecordAdapter over openPluginDb (domain scaffold helper). Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Do not hand-register primary CRUD tools.",
         prompt:
-          "Skill load result (reference): {{load_skill}}\nScaffold result: {{scaffold}}\nUser request JSON: {{trigger}}\nEdit under plugins/<id>/; keep domain items on plugin SQLite only.",
+          "Skill load result (reference): {{load_skill}}\nScaffold result: {{scaffold}}\nUser request JSON: {{trigger}}\nEdit under plugins/<id>/; keep domain Records on plugin SQLite via ObjectType + openPluginDb adapter.",
         autoApproveTools: [
           "read_file",
           "edit_file",
@@ -242,9 +242,9 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Prove create + list on plugin SQLite",
       config: {
         system:
-          "Call the plugin add/list tools (for example <id>_add_item then <id>_list_items). Do not use workspace create_record for plugin business rows. If MCP tool catalog has not refreshed, tell the user to re-run those tools after a moment.",
+          "Prove with generated ObjectType tools (create_<snake> / list_<plural> from the plugin ObjectType) or create_record / list_records with objectType set. Do not use workspace Records for plugin business rows. If MCP tool catalog has not refreshed, tell the user to re-run those tools after a moment.",
         prompt:
-          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\nCreate one item and list items via the plugin tools. Report plugin id, data plane (plugin SQLite), and how to re-run tools if the catalog lagged.",
+          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\nCreate one Record and list Records via generated ObjectType tools (or generics with objectType). Report plugin id, data plane (plugin SQLite), ObjectType name, and how to re-run tools if the catalog lagged.",
         autoApproveTools: [],
         maxIterations: 8,
       },
@@ -277,6 +277,7 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
 function ensureScaffoldDomainPluginWorkflow(db: Database.Database): void {
   if (!tableExists(db, "ai_workflows")) return;
   addColumn(db, "ai_workflows", "agent_id", "TEXT");
+  const graphJson = JSON.stringify(SCAFFOLD_DOMAIN_PLUGIN_GRAPH);
   const existing = db
     .prepare(
       `SELECT id, agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
@@ -286,15 +287,13 @@ function ensureScaffoldDomainPluginWorkflow(db: Database.Database): void {
     db.prepare(
       `INSERT INTO ai_workflows (id, agent_id, name, config_json, enabled)
        VALUES ('scaffold-domain-plugin', 'intelligence', 'Scaffold domain plugin', ?, 1)`
-    ).run(JSON.stringify(SCAFFOLD_DOMAIN_PLUGIN_GRAPH));
+    ).run(graphJson);
     return;
   }
-  if (existing.agent_id == null || existing.agent_id === "") {
-    db.prepare(
-      `UPDATE ai_workflows SET agent_id = 'intelligence'
-       WHERE id = 'scaffold-domain-plugin'`
-    ).run();
-  }
+  db.prepare(
+    `UPDATE ai_workflows SET config_json = ?, agent_id = COALESCE(NULLIF(agent_id, ''), 'intelligence')
+     WHERE id = 'scaffold-domain-plugin'`
+  ).run(graphJson);
 }
 
 /** Idempotent: rename legacy root agent id intelligence -> intelligence across tenant DB. */
@@ -443,6 +442,11 @@ export const TENANT_BOOT_MIGRATIONS = [
     name: "scaffold_domain_plugin_workflow_v1",
     up: migrateScaffoldDomainPluginWorkflow,
   },
+  {
+    version: 27,
+    name: "scaffold_domain_plugin_workflow_ot_v2",
+    up: migrateScaffoldDomainPluginWorkflowOtV2,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
@@ -452,6 +456,11 @@ function migrateAiChatsTurnStateSchema(db: Database.Database): void {
 
 /** One-shot seed for Scaffold domain plugin on new and existing tenants (#635). */
 function migrateScaffoldDomainPluginWorkflow(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
+}
+
+/** Refresh scaffold-domain-plugin graph for ObjectType + openPluginDb prove path (#654). */
+function migrateScaffoldDomainPluginWorkflowOtV2(db: Database.Database): void {
   ensureScaffoldDomainPluginWorkflow(db);
 }
 
