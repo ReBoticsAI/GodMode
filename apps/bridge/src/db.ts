@@ -156,6 +156,119 @@ const AUTONOMOUS_TASK_RUNNER_GRAPH = {
   ],
 } as const;
 
+/**
+ * Seeded guidance graph for plugin self-expansion (#635). run_workflow input
+ * should be JSON {"id":"...","name":"..."}; trigger records it for {{trigger.id}}.
+ * Always scaffolds with template domain (openPluginDb). No auto schedule.
+ */
+const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
+  triggerEvents: [],
+  nodes: [
+    {
+      id: "trigger",
+      type: "trigger",
+      label: "Trigger",
+      config: { input: "" },
+      position: { x: 0, y: 200 },
+    },
+    {
+      id: "load_skill",
+      type: "tool",
+      label: "Load plugin-authoring skill",
+      config: {
+        tool: "use_skill",
+        args: { skillId: "plugin-authoring" },
+      },
+      position: { x: 220, y: 200 },
+    },
+    {
+      id: "scaffold",
+      type: "tool",
+      label: "Scaffold domain plugin",
+      config: {
+        tool: "scaffold_plugin",
+        args: {
+          id: "{{trigger.id}}",
+          name: "{{trigger.name}}",
+          template: "domain",
+        },
+      },
+      position: { x: 460, y: 200 },
+    },
+    {
+      id: "implement",
+      type: "agent",
+      label: "Implement on openPluginDb",
+      config: {
+        system:
+          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Adapt the domain scaffold create/list tools and Structure as needed.",
+        prompt:
+          "Skill load result (reference): {{load_skill}}\nScaffold result: {{scaffold}}\nUser request JSON: {{trigger}}\nEdit under plugins/<id>/; keep domain items on plugin SQLite only.",
+        autoApproveTools: [
+          "read_file",
+          "edit_file",
+          "write_file",
+          "grep",
+          "glob",
+          "list_dir",
+        ],
+        maxIterations: 16,
+      },
+      position: { x: 700, y: 200 },
+    },
+    {
+      id: "build",
+      type: "tool",
+      label: "Build plugin",
+      config: {
+        tool: "build_plugin",
+        args: { pluginId: "{{trigger.id}}" },
+      },
+      position: { x: 940, y: 200 },
+    },
+    {
+      id: "install",
+      type: "tool",
+      label: "Install plugin",
+      config: {
+        tool: "install_plugin",
+        args: { pluginId: "{{trigger.id}}" },
+      },
+      position: { x: 1180, y: 200 },
+    },
+    {
+      id: "prove",
+      type: "agent",
+      label: "Prove create + list on plugin SQLite",
+      config: {
+        system:
+          "Call the plugin add/list tools (for example <id>_add_item then <id>_list_items). Do not use workspace create_record for plugin business rows. If MCP tool catalog has not refreshed, tell the user to re-run those tools after a moment.",
+        prompt:
+          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\nCreate one item and list items via the plugin tools. Report plugin id, data plane (plugin SQLite), and how to re-run tools if the catalog lagged.",
+        autoApproveTools: [],
+        maxIterations: 8,
+      },
+      position: { x: 1420, y: 200 },
+    },
+    {
+      id: "done",
+      type: "output",
+      label: "Report",
+      config: { target: "chat" },
+      position: { x: 1660, y: 200 },
+    },
+  ],
+  edges: [
+    { from: "trigger", to: "load_skill" },
+    { from: "load_skill", to: "scaffold" },
+    { from: "scaffold", to: "implement" },
+    { from: "implement", to: "build" },
+    { from: "build", to: "install" },
+    { from: "install", to: "prove" },
+    { from: "prove", to: "done" },
+  ],
+} as const;
+
 /** Idempotent: rename legacy root agent id intelligence -> intelligence across tenant DB. */
 function migrateRootAgentMoneyAiToIntelligence(db: Database.Database): void {
   const legacy = db
@@ -850,6 +963,18 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
         `INSERT INTO ai_workflows (id, name, config_json, enabled)
          VALUES ('autonomous-task-runner', 'Autonomous Task Runner', ?, 1)`
       ).run(JSON.stringify(AUTONOMOUS_TASK_RUNNER_GRAPH));
+  }
+
+  // Seed Scaffold domain plugin guidance graph (#635). Enabled for Automations /
+  // run_workflow; no auto schedule.
+  const existingScaffold = db
+    .prepare(`SELECT id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`)
+    .get();
+  if (!existingScaffold) {
+    db.prepare(
+      `INSERT INTO ai_workflows (id, name, config_json, enabled)
+       VALUES ('scaffold-domain-plugin', 'Scaffold domain plugin', ?, 1)`
+    ).run(JSON.stringify(SCAFFOLD_DOMAIN_PLUGIN_GRAPH));
   }
 
   addCol("ai_project_cards", "prompt", "TEXT");

@@ -12,4 +12,6 @@ summary: "Self-expansion: scaffold_plugin → build_plugin → install_plugin fr
 
 Self-expansion path: Intelligence authors plugins through `scaffold_plugin` → optional worktree → promote → `build_plugin` → `install_plugin` for local, hub, or Cloud workspace authoring. Never install from `.worktrees/`. Worktree promote is a local merge for install safety. Shipping the coding root uses core `git_*` tools (see [[coding-stage]]). Domain packs register ObjectTypes, actions, bridge routes, web pages, and install hooks without forking core.
 
+Prefer the seeded **Scaffold domain plugin** workflow (Automations → Workflows, or `run_workflow` with id `scaffold-domain-plugin` and JSON `{"id","name"}`) so the agent loads the `plugin-authoring` playbook and stays on domain / `openPluginDb` instead of improvising. See [[automations]] and [[skills]].
+
 See PLUGIN_AUTHORING docs in the repository and [[objecttype-records]].

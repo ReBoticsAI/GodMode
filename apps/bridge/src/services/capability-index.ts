@@ -86,6 +86,17 @@ const WORKFLOW_WHEN_TO_USE: Record<string, { when: string; pairs?: string[] }> =
       "Kanban-driven autonomous loop: check backlog, plan subtasks, work cards, review, complete. Prefer over manual todo chains for ongoing optimization.",
     pairs: ["todo_write", "list_project_cards", "run_workflow", "create_schedule"],
   },
+  "scaffold-domain-plugin": {
+    when:
+      "Scaffold or create a domain plugin with openPluginDb business data: plugin self-expansion, scaffold_plugin domain template, build and install. Prefer over improvising plugin files without the golden path.",
+    pairs: [
+      "use_skill",
+      "scaffold_plugin",
+      "build_plugin",
+      "install_plugin",
+      "run_workflow",
+    ],
+  },
 };
 
 function hashContent(text: string): string {

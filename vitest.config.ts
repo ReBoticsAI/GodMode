@@ -14,6 +14,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/plugin-sqlite.test.ts",
       "apps/bridge/src/services/__tests__/plugin-data-plane.test.ts",
       "apps/bridge/src/services/__tests__/architecture-scaffolds.test.ts",
+      "apps/bridge/src/services/__tests__/workflow-seeds.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-listings-commerce.test.ts",
