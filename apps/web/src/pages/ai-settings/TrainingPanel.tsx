@@ -26,6 +26,7 @@ import {
   fetchAiTrainingConfig,
   fetchAiTrainingJob,
   fetchAiTrainingJobs,
+  fetchBridgeHealth,
   updateAiAdapter,
   type AiAdapter,
   type AiChatSummary,
@@ -34,6 +35,7 @@ import {
   type AiDatasetSource,
   type AiTrainingJob,
 } from "@/api";
+import { useTenant } from "@/lib/tenant-context";
 
 function jobAdapterName(job: AiTrainingJob): string {
   try {
@@ -52,6 +54,7 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
 }
 
 export function TrainingPanel() {
+  const { user } = useTenant();
   const [jobs, setJobs] = useState<AiTrainingJob[]>([]);
   const [datasets, setDatasets] = useState<AiDataset[]>([]);
   const [adapters, setAdapters] = useState<AiAdapter[]>([]);
@@ -59,6 +62,7 @@ export function TrainingPanel() {
   const [trainConfig, setTrainConfig] = useState<{ trainBaseModel: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trainingAllowed, setTrainingAllowed] = useState(true);
 
   const [adapterName, setAdapterName] = useState("");
   const [description, setDescription] = useState("");
@@ -112,6 +116,17 @@ export function TrainingPanel() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    void fetchBridgeHealth()
+      .then((h) => {
+        const shared = Boolean(h.hub || h.saas);
+        if (h.saas) setTrainingAllowed(false);
+        else if (shared) setTrainingAllowed(Boolean(user?.isAdmin));
+        else setTrainingAllowed(true);
+      })
+      .catch(() => setTrainingAllowed(true));
+  }, [user?.isAdmin]);
 
   useEffect(() => {
     if (!runningJob) return;
@@ -293,6 +308,15 @@ export function TrainingPanel() {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  if (!trainingAllowed) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Host LoRA training is not available on GodMode Cloud for tenants. Use Vault BYOK for
+        chat. Private hub admins can train from Admin when a host LLM is attached.
+      </p>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

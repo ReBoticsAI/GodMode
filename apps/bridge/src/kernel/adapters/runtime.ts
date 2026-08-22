@@ -404,22 +404,77 @@ function runtimeOperator(ctx: OperationContext): void {
   }
 }
 
+function isSharedHostDeployment(): boolean {
+  return (process.env.DEPLOYMENT_MODE ?? "local").toLowerCase() === "hub";
+}
+
+/**
+ * Hub/SaaS share one host machine. Only platform admins may mutate shared host
+ * process controls (embeddings, local LLM, training, capability rebuild).
+ * Local keeps tenant-owner (or optional operator) control.
+ */
+function requireSharedHostProcessMutate(
+  ctx: OperationContext,
+  resourceLabel: string,
+  opts?: { localRoles?: Array<NonNullable<OperationContext["role"]>> }
+): void {
+  requiredUser(ctx);
+  if (isSharedHostDeployment()) {
+    if (!ctx.isAdmin) {
+      throw httpError(
+        403,
+        `Platform administrator required to control ${resourceLabel}`
+      );
+    }
+    return;
+  }
+  const localRoles = opts?.localRoles ?? ["owner"];
+  if (!ctx.role || !localRoles.includes(ctx.role)) {
+    throw httpError(
+      403,
+      localRoles.length === 1 && localRoles[0] === "owner"
+        ? "Owner role required"
+        : "Runtime operator role required"
+    );
+  }
+}
+
 /**
  * Hub/SaaS share one host embedder. Only platform admins may start/stop/enable it.
  * Local (non-hub) keeps tenant-owner control of the machine-local process.
  */
 function requireEmbeddingRuntimeMutate(ctx: OperationContext): void {
-  requiredUser(ctx);
-  const sharedHost =
-    (process.env.DEPLOYMENT_MODE ?? "local").toLowerCase() === "hub";
-  if (sharedHost && !ctx.isAdmin) {
+  requireSharedHostProcessMutate(ctx, "the shared embedding engine");
+}
+
+const HOST_LLM_PROCESS_SETTING_KEYS = [
+  "activeModelPath",
+  "ctxSize",
+  "gpuLayers",
+  "flashAttn",
+  "batchSize",
+  "ubatchSize",
+  "extraArgs",
+  "autoStart",
+  "port",
+  "threads",
+  "parallel",
+  "jinja",
+] as const;
+
+function assertHubHostLlmProcessSettingsAllowed(
+  ctx: OperationContext,
+  patch: RecordData
+): void {
+  if (!isSharedHostDeployment() || ctx.isAdmin) return;
+  const touched = HOST_LLM_PROCESS_SETTING_KEYS.filter(
+    (key) => key in patch && patch[key] !== undefined
+  );
+  if (touched.length > 0) {
     throw httpError(
       403,
-      "Platform administrator required to control the shared embedding engine"
+      "Platform administrator required to change host LLM process settings"
     );
-  }
-  if (!sharedHost && ctx.role !== "owner") {
-    throw httpError(403, "Owner role required");
   }
 }
 
@@ -932,7 +987,11 @@ export const capabilityIndexRuntimeAdapter: RecordAdapter = {
   },
   actions: {
     async rebuild(db, _def, _id, _input, ctx) {
-      runtimeOperator(ctx);
+      requireSharedHostProcessMutate(
+        ctx,
+        "the shared capability index rebuild",
+        { localRoles: ["owner", "intelligence"] }
+      );
       const embeddings = runtime().embeddings;
       const count = await rebuildAllAgentCapabilityIndexes(
         db,
@@ -1008,10 +1067,12 @@ export const intelligenceSettingsRuntimeAdapter: RecordAdapter = {
   update(db, def, id, data, ctx) {
     ownerOnly(ctx);
     if (id !== "default") throw httpError(404, "Intelligence settings not found");
+    const patch = internalSettings(data);
+    assertHubHostLlmProcessSettingsAllowed(ctx, patch);
     return settingsRecord(
       db,
       def,
-      runtime().llm.updateSettings(internalSettings(data), db)
+      runtime().llm.updateSettings(patch, db)
     );
   },
 };
@@ -2410,6 +2471,9 @@ export const modelRuntimeAdapter: RecordAdapter = {
         }
       }
       if (!selected) throw httpError(404, "Model is not in the authorized catalog");
+      if (selected.source === "local") {
+        requireSharedHostProcessMutate(ctx, "the host LLM process");
+      }
       const transport =
         selected.transport ??
         (selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db)
@@ -2476,15 +2540,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
       });
     },
     start(_db, _def, _id, _input, ctx) {
-      ownerOnly(ctx);
+      requireSharedHostProcessMutate(ctx, "the host LLM process");
       return runtime().llm.start();
     },
     stop(_db, _def, _id, _input, ctx) {
-      ownerOnly(ctx);
+      requireSharedHostProcessMutate(ctx, "the host LLM process");
       return runtime().llm.stop();
     },
     restart(_db, _def, _id, _input, ctx) {
-      ownerOnly(ctx);
+      requireSharedHostProcessMutate(ctx, "the host LLM process");
       return runtime().llm.restart();
     },
   },
@@ -2924,7 +2988,7 @@ export const trainingJobRuntimeAdapter: RecordAdapter = {
   },
   actions: {
     async enqueue(_db, _def, _id, input, ctx) {
-      ownerOnly(ctx);
+      requireSharedHostProcessMutate(ctx, "host LLM training jobs");
       const config: TrainingJobConfig = {
         adapterName: requiredText(input, "adapter_name"),
         datasetId: requiredText(input, "dataset_id"),
@@ -2944,7 +3008,7 @@ export const trainingJobRuntimeAdapter: RecordAdapter = {
       return { ok: true, jobId: await runtime().training.startJob(config) };
     },
     cancel(_db, _def, id, _input, ctx) {
-      ownerOnly(ctx);
+      requireSharedHostProcessMutate(ctx, "host LLM training jobs");
       const current = runtime().training.getJob(id);
       if (!current) throw httpError(404, "Training job not found");
       if (current.status !== "pending" && current.status !== "running") {

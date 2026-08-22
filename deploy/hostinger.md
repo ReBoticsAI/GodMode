@@ -25,3 +25,9 @@ Bridge attaches to a **host** embedder; it does not spawn EmbeddingGemma inside 
 | GodMode Local | Each user’s Intelligence Memory / Activity |
 
 Tenant workspace Memory UI on hub/SaaS is read-only for the engine switch.
+
+## Chat LLM vs embeddings
+
+GodMode Cloud chat is **Vault BYOK only** (no hosted seat chat GGUF). The shared host model process is the **embeddings** engine (fair queue), not a multi-tenant chat llama-server.
+
+Tenant owners must not start/stop/restart a host chat LLM, enqueue host LoRA training, or change process launch flags on hub/SaaS. Those stay platform Admin (private hub) or Local-only. See #638.

@@ -6,9 +6,11 @@ import {
   CHAT_SESSION_ACTIONS,
   clearRuntimeAdapterServices,
   configureRuntimeAdapterServices,
+  capabilityIndexRuntimeAdapter,
   chatMessageRuntimeAdapter,
   chatSessionRuntimeAdapter,
   embeddingRuntimeAdapter,
+  intelligenceSettingsRuntimeAdapter,
   memoryMaintenanceRuntimeAdapter,
   modelAdapterRuntimeAdapter,
   modelRuntimeAdapter,
@@ -16,6 +18,7 @@ import {
   providerCredentialRuntimeAdapter,
   REQUIRED_RUNTIME_ADAPTER_SERVICE_KEYS,
   runtimeAdapterRegistrations,
+  trainingJobRuntimeAdapter,
   vaultSecretRuntimeAdapter,
   type RuntimeAdapterServices,
 } from "../adapters/runtime.js";
@@ -463,6 +466,82 @@ describe("runtime ObjectType actions", () => {
           { ...owner, isAdmin: true }
         )
       ).resolves.toEqual({ enabled: true });
+    } finally {
+      if (prev === undefined) delete process.env.DEPLOYMENT_MODE;
+      else process.env.DEPLOYMENT_MODE = prev;
+    }
+  });
+
+  it("requires platform admin for host LLM, training, and capability rebuild on hub", async () => {
+    const prev = process.env.DEPLOYMENT_MODE;
+    process.env.DEPLOYMENT_MODE = "hub";
+    try {
+      const active = fakeServices();
+      configureRuntimeAdapterServices(active);
+      const tenantOwner: OperationContext = { ...owner, isAdmin: false };
+      const admin: OperationContext = { ...owner, isAdmin: true };
+      const modelDef = definition("ModelRuntime", "model_runtime");
+      const trainDef = definition("TrainingJob", "training_job_runtime");
+      const capDef = definition("CapabilityIndex", "capability_index_runtime");
+      const settingsDef = definition(
+        "IntelligenceSettings",
+        "intelligence_settings_runtime"
+      );
+
+      expect(() =>
+        modelRuntimeAdapter.actions!.stop(db, modelDef, "runtime", {}, tenantOwner)
+      ).toThrow(/Platform administrator required/);
+      await expect(
+        modelRuntimeAdapter.actions!.stop(db, modelDef, "runtime", {}, admin)
+      ).resolves.toEqual({ state: "stopped" });
+
+      await expect(
+        trainingJobRuntimeAdapter.actions!.enqueue(
+          db,
+          trainDef,
+          "",
+          { adapter_name: "a", dataset_id: "d" },
+          tenantOwner
+        )
+      ).rejects.toThrow(/Platform administrator required/);
+      await expect(
+        trainingJobRuntimeAdapter.actions!.enqueue(
+          db,
+          trainDef,
+          "",
+          { adapter_name: "a", dataset_id: "d" },
+          admin
+        )
+      ).resolves.toEqual({ ok: true, jobId: "training-1" });
+
+      await expect(
+        capabilityIndexRuntimeAdapter.actions!.rebuild(
+          db,
+          capDef,
+          "default",
+          {},
+          tenantOwner
+        )
+      ).rejects.toThrow(/Platform administrator required/);
+
+      expect(() =>
+        intelligenceSettingsRuntimeAdapter.update!(
+          db,
+          settingsDef,
+          "default",
+          { gpu_layers: 32 },
+          tenantOwner
+        )
+      ).toThrow(/Platform administrator required/);
+      expect(
+        intelligenceSettingsRuntimeAdapter.update!(
+          db,
+          settingsDef,
+          "default",
+          { top_p: 0.9 },
+          tenantOwner
+        )
+      ).toBeTruthy();
     } finally {
       if (prev === undefined) delete process.env.DEPLOYMENT_MODE;
       else process.env.DEPLOYMENT_MODE = prev;

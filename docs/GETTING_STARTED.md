@@ -55,7 +55,7 @@ under **Admin → Updates** for platform administrators.
 After signup (and email verify on Cloud), the **FirstRunWizard** guides three steps:
 
 1. **Welcome**: overview of Intelligence and why an LLM is required
-2. **LLM**: self-host: local GGUF, Ollama, or Vault; Cloud: Vault BYOK (Cursor / cloud keys), no GGUF
+2. **LLM**: self-host: local GGUF, Ollama, or Vault; Cloud: Vault BYOK (Cursor / cloud keys), no hosted seat chat GGUF. Shared Cloud host process is embeddings RAG only (Admin), not tenant LLM start/stop or training.
 3. **Ready**: open Chat and start with Intelligence
 
 Complete the wizard, then open **Chat** from the sidebar. Details: [ONBOARDING.md](./ONBOARDING.md).

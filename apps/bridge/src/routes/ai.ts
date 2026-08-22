@@ -2230,6 +2230,7 @@ export function createAiRouter(
             activeAgentId: agent.id,
             activeTaskCardId: activeWorkCardId ?? undefined,
             userId: auth.user.id,
+            isAdmin: Boolean(auth.user.isAdmin),
             tenantId: work.tenantId,
             sessionAutonomy,
             abortSignal: abortController.signal,

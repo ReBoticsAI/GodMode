@@ -262,6 +262,8 @@ export interface ToolExecContext {
   reflectionWatermark?: string;
   /** Authenticated user id (marketplace remote inference metering). */
   userId?: string;
+  /** Platform admin (hub/SaaS host process controls). */
+  isAdmin?: boolean;
   /** Active workspace tenant (entitlement + metering scoping). */
   tenantId?: string;
   /** Session tool autonomy from composer (off | writes | full). */
@@ -324,6 +326,7 @@ function kernelOperationContext(ctx: ToolExecContext): OperationContext {
   return {
     tenantId: ctx.tenantId,
     userId: ctx.userId,
+    isAdmin: ctx.isAdmin,
     role:
       (ctx.activeAgentId ?? "intelligence") === "intelligence"
         ? "intelligence"
@@ -339,6 +342,14 @@ function kernelOperationContext(ctx: ToolExecContext): OperationContext {
         : []
     ),
   };
+}
+
+function assertHubHostLlmToolAllowed(ctx: ToolExecContext): void {
+  if ((process.env.DEPLOYMENT_MODE ?? "local").toLowerCase() !== "hub") return;
+  if (ctx.isAdmin) return;
+  throw new Error(
+    "Host LLM process control is not available on hub/SaaS for tenants. Use Vault BYOK for chat, or Admin for host process on private hub."
+  );
 }
 
 type KernelToolDispatcher = typeof executeKernelTool;
@@ -4017,6 +4028,7 @@ export async function executeTool(
       return { models: ctx.llm.scanModels() };
 
     case "start_llm": {
+      assertHubHostLlmToolAllowed(ctx);
       if (!ctx.llm) throw new Error("LLM manager not available");
       const modelPath = String(args.modelPath ?? "");
       if (!modelPath) throw new Error("modelPath required");
@@ -4024,10 +4036,12 @@ export async function executeTool(
     }
 
     case "stop_llm":
+      assertHubHostLlmToolAllowed(ctx);
       if (!ctx.llm) throw new Error("LLM manager not available");
       return ctx.llm.stop();
 
     case "restart_llm":
+      assertHubHostLlmToolAllowed(ctx);
       if (!ctx.llm) throw new Error("LLM manager not available");
       return ctx.llm.restart(args.modelPath ? String(args.modelPath) : undefined);
 
