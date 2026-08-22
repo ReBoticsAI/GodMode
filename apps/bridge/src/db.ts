@@ -269,6 +269,34 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
   ],
 } as const;
 
+/**
+ * Idempotent seed for Scaffold domain plugin (#635). Must run from migrateTenantDb
+ * (every open), not only from an already-applied boot migration: Cloud tenants that
+ * applied unified_data_schema_v1 before this seed existed would otherwise never get it.
+ */
+function ensureScaffoldDomainPluginWorkflow(db: Database.Database): void {
+  if (!tableExists(db, "ai_workflows")) return;
+  addColumn(db, "ai_workflows", "agent_id", "TEXT");
+  const existing = db
+    .prepare(
+      `SELECT id, agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+    )
+    .get() as { id: string; agent_id: string | null } | undefined;
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO ai_workflows (id, agent_id, name, config_json, enabled)
+       VALUES ('scaffold-domain-plugin', 'intelligence', 'Scaffold domain plugin', ?, 1)`
+    ).run(JSON.stringify(SCAFFOLD_DOMAIN_PLUGIN_GRAPH));
+    return;
+  }
+  if (existing.agent_id == null || existing.agent_id === "") {
+    db.prepare(
+      `UPDATE ai_workflows SET agent_id = 'intelligence'
+       WHERE id = 'scaffold-domain-plugin'`
+    ).run();
+  }
+}
+
 /** Idempotent: rename legacy root agent id intelligence -> intelligence across tenant DB. */
 function migrateRootAgentMoneyAiToIntelligence(db: Database.Database): void {
   const legacy = db
@@ -381,6 +409,9 @@ export function migrateTenantDb(db: Database.Database): void {
   runPendingMigrations(db);
   ensureCapabilityTables(db);
   cleanupProvisionedStructureAgents(db);
+  // Seeds that must land on existing Cloud tenants: never fold into an already-applied
+  // boot migration (e.g. unified_data_schema_v1). Run on every open; idempotent.
+  ensureScaffoldDomainPluginWorkflow(db);
 
   const fkViolationsMid = runForeignKeyCheck(db);
   if (fkViolationsMid.length > 0) {
@@ -950,33 +981,6 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
       }
   }
 
-  // Seed the canonical autonomous task-runner workflow (idempotent). It is the
-  // 12-step loop: check backlog → priority → in progress → plan subtasks → work
-  // subtasks → review → comments → address → accept → done. Left enabled so the
-  // user can run it from the queue / attach a cron schedule; no schedule is
-  // auto-created to avoid surprising autonomous activity.
-  const existing = db
-      .prepare(`SELECT id FROM ai_workflows WHERE id = 'autonomous-task-runner'`)
-      .get();
-  if (!existing) {
-      db.prepare(
-        `INSERT INTO ai_workflows (id, name, config_json, enabled)
-         VALUES ('autonomous-task-runner', 'Autonomous Task Runner', ?, 1)`
-      ).run(JSON.stringify(AUTONOMOUS_TASK_RUNNER_GRAPH));
-  }
-
-  // Seed Scaffold domain plugin guidance graph (#635). Enabled for Automations /
-  // run_workflow; no auto schedule.
-  const existingScaffold = db
-    .prepare(`SELECT id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`)
-    .get();
-  if (!existingScaffold) {
-    db.prepare(
-      `INSERT INTO ai_workflows (id, name, config_json, enabled)
-       VALUES ('scaffold-domain-plugin', 'Scaffold domain plugin', ?, 1)`
-    ).run(JSON.stringify(SCAFFOLD_DOMAIN_PLUGIN_GRAPH));
-  }
-
   addCol("ai_project_cards", "prompt", "TEXT");
   addCol("ai_project_cards", "context_json", "TEXT");
   addCol("ai_project_cards", "priority", "INTEGER NOT NULL DEFAULT 2");
@@ -1020,6 +1024,21 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
     `);
   db.prepare(`UPDATE ai_workflows SET agent_id = 'intelligence' WHERE agent_id IS NULL`).run();
   db.prepare(`UPDATE ai_projects SET agent_id = 'intelligence' WHERE agent_id IS NULL AND user_id IS NULL`).run();
+
+  // Seed workflows after agent_id exists so Automations list filters
+  // (agent_id === active agent) include them. Idempotent; no auto schedule.
+  // Scaffold domain plugin is ensured from migrateTenantDb (every open) so existing
+  // Cloud tenants that already applied this migration still receive it (#635).
+  const existing = db
+    .prepare(`SELECT id FROM ai_workflows WHERE id = 'autonomous-task-runner'`)
+    .get();
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO ai_workflows (id, agent_id, name, config_json, enabled)
+       VALUES ('autonomous-task-runner', 'intelligence', 'Autonomous Task Runner', ?, 1)`
+    ).run(JSON.stringify(AUTONOMOUS_TASK_RUNNER_GRAPH));
+  }
+  ensureScaffoldDomainPluginWorkflow(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_agents (

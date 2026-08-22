@@ -9,15 +9,22 @@ describe("workflow seeds (#635)", () => {
 
     const row = db
       .prepare(
-        `SELECT id, name, enabled, config_json FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+        `SELECT id, name, enabled, agent_id, config_json FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
       )
       .get() as
-      | { id: string; name: string; enabled: number; config_json: string }
+      | {
+          id: string;
+          name: string;
+          enabled: number;
+          agent_id: string | null;
+          config_json: string;
+        }
       | undefined;
 
     expect(row).toBeTruthy();
     expect(row!.name).toBe("Scaffold domain plugin");
     expect(row!.enabled).toBe(1);
+    expect(row!.agent_id).toBe("intelligence");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
@@ -55,6 +62,36 @@ describe("workflow seeds (#635)", () => {
           .get() as { c: number }
       ).c
     ).toBe(1);
+
+    // Existing Cloud tenants already applied unified_data_schema_v1 without this
+    // seed. ensureScaffoldDomainPluginWorkflow runs on every migrateTenantDb open.
+    db.prepare(
+      `DELETE FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+    ).run();
+    migrateTenantDb(db);
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT id, agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+          )
+          .get() as { id: string; agent_id: string | null } | undefined
+      )?.agent_id
+    ).toBe("intelligence");
+
+    db.prepare(
+      `UPDATE ai_workflows SET agent_id = NULL WHERE id = 'scaffold-domain-plugin'`
+    ).run();
+    migrateTenantDb(db);
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT agent_id FROM ai_workflows WHERE id = 'scaffold-domain-plugin'`
+          )
+          .get() as { agent_id: string | null }
+      ).agent_id
+    ).toBe("intelligence");
 
     db.close();
   });

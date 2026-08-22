@@ -2640,7 +2640,10 @@ export function createAiRouter(
     const agentId = String(req.query.agentId ?? "intelligence");
     res.json({
       workflows: listWorkflows(tdb(req))
-        .filter((workflow) => workflow.agent_id === agentId)
+        // Legacy rows may still have NULL agent_id; treat as Intelligence.
+        .filter(
+          (workflow) => (workflow.agent_id ?? "intelligence") === agentId
+        )
         .map(workflowApiRow),
     });
   });
