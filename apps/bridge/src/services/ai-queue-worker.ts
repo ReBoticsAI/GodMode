@@ -286,6 +286,7 @@ export class AiQueueWorker {
       embedder: this.opts.embeddings?.isEmbedderReady()
         ? this.opts.embeddings.getEmbeddingClient()
         : null,
+      tenantId: job.tenant_id,
     };
 
     // Resume a parked workflow run (does not block; the run either finishes or
@@ -300,7 +301,7 @@ export class AiQueueWorker {
 
     if (ctx.reflectionAgentId) {
       return runReflection(
-        { ...deps, tenantId: job.tenant_id },
+        deps,
         String(ctx.reflectionAgentId),
         (ctx.reflectionTrigger as "manual" | "scheduled" | "idle" | "queued") ?? "queued"
       );
