@@ -410,8 +410,9 @@ function isSharedHostDeployment(): boolean {
 
 /**
  * Hub/SaaS share one host machine. Only platform admins may mutate shared host
- * process controls (embeddings, local LLM, training, capability rebuild).
- * Local keeps tenant-owner (or optional operator) control.
+ * process controls (embeddings, local LLM, training). Local keeps tenant-owner
+ * (or optional operator) control. Capability index rebuild is tenant-scoped and
+ * uses runtimeOperator instead.
  */
 function requireSharedHostProcessMutate(
   ctx: OperationContext,
@@ -964,7 +965,9 @@ export const CAPABILITY_INDEX_ACTIONS: ActionDef[] = [
     execution: "async",
     cancellable: true,
     roles: ["owner", "intelligence"],
-    confirmation: { required: true, ttlSeconds: 300 },
+    // Tenant-scoped FTS/embeddings refresh; no confirmation so agents are not
+    // stalled after plugin install (#646). Embedder process controls stay admin-gated.
+    confirmation: { required: false },
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
 ];
@@ -987,11 +990,12 @@ export const capabilityIndexRuntimeAdapter: RecordAdapter = {
   },
   actions: {
     async rebuild(db, _def, _id, _input, ctx) {
-      requireSharedHostProcessMutate(
-        ctx,
-        "the shared capability index rebuild",
-        { localRoles: ["owner", "intelligence"] }
-      );
+      // Tenant DB index only. Platform admin or tenant runtime operator (owner /
+      // intelligence). Do not use requireSharedHostProcessMutate (#646).
+      requiredUser(ctx);
+      if (!ctx.isAdmin) {
+        runtimeOperator(ctx);
+      }
       const embeddings = runtime().embeddings;
       const count = await rebuildAllAgentCapabilityIndexes(
         db,
