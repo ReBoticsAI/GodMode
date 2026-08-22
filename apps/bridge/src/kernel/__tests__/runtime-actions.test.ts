@@ -437,6 +437,38 @@ describe("runtime ObjectType actions", () => {
     );
   });
 
+  it("requires platform admin to mutate embeddings on hub", async () => {
+    const prev = process.env.DEPLOYMENT_MODE;
+    process.env.DEPLOYMENT_MODE = "hub";
+    try {
+      const active = fakeServices();
+      configureRuntimeAdapterServices(active);
+      const embeddingDef = definition("EmbeddingRuntime", "embedding_runtime");
+      const tenantOwner: OperationContext = { ...owner, isAdmin: false };
+      expect(() =>
+        embeddingRuntimeAdapter.actions!.set_enabled(
+          db,
+          embeddingDef,
+          "runtime",
+          { enabled: true },
+          tenantOwner
+        )
+      ).toThrow(/Platform administrator required/);
+      await expect(
+        embeddingRuntimeAdapter.actions!.set_enabled(
+          db,
+          embeddingDef,
+          "runtime",
+          { enabled: true },
+          { ...owner, isAdmin: true }
+        )
+      ).resolves.toEqual({ enabled: true });
+    } finally {
+      if (prev === undefined) delete process.env.DEPLOYMENT_MODE;
+      else process.env.DEPLOYMENT_MODE = prev;
+    }
+  });
+
   it("truncates only messages after an owned chat anchor", () => {
     db.prepare(
       `INSERT INTO ai_chats (id, title, user_id, created_at, updated_at)

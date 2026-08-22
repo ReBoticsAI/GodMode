@@ -15,6 +15,7 @@ import { STATE_TONE } from "@/pages/ai-settings/fields";
 import {
   fetchEmbeddingActivity,
   fetchEmbeddingStatus,
+  fetchBridgeHealth,
   fetchPlatformActions,
   setEmbeddingEnabled,
   type CpuServerStatus,
@@ -115,13 +116,25 @@ function EngineCard({
   );
 }
 
-export function MemoryEngineTab() {
+export function MemoryEngineTab({
+  allowControls,
+  hostWide = false,
+}: {
+  /** When false, show status only (hub/SaaS Activity). Default true for Local. */
+  allowControls?: boolean;
+  /** Admin copy: shared host embedder for all tenants. */
+  hostWide?: boolean;
+} = {}) {
   const [status, setStatus] = useState<EmbeddingEngineStatus | null>(null);
   const [activity, setActivity] = useState<EmbeddingEngineActivity | null>(null);
   const [platformActions, setPlatformActions] = useState<PlatformActionLogRow[]>([]);
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [hubSurface, setHubSurface] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const controlsAllowed =
+    allowControls !== undefined ? allowControls : !hubSurface;
 
   const load = useCallback(() => {
     fetchEmbeddingStatus()
@@ -137,6 +150,14 @@ export function MemoryEngineTab() {
       .then((r) => setPlatformActions(r.actions))
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (allowControls === undefined) {
+      void fetchBridgeHealth()
+        .then((h) => setHubSurface(Boolean(h.hub)))
+        .catch(() => setHubSurface(false));
+    }
+  }, [allowControls]);
 
   useEffect(() => {
     load();
@@ -205,32 +226,53 @@ export function MemoryEngineTab() {
             </Badge>
           </div>
           <CardDescription className="text-[11px]">
-            CPU-pinned embedders power semantic recall for{" "}
-            <span className="font-medium">memory</span> (RAG) and{" "}
-            <span className="font-medium">code</span> (`codebase_search`). Both
-            profiles share one server by default. Optional: chat works with this
-            off and falls back to recency / grep.
+            {hostWide ? (
+              <>
+                Host-wide embedder shared by all tenants on this deployment.
+                CPU-pinned profiles power semantic recall for{" "}
+                <span className="font-medium">memory</span> (RAG) and{" "}
+                <span className="font-medium">code</span> (`codebase_search`).
+              </>
+            ) : (
+              <>
+                CPU-pinned embedders power semantic recall for{" "}
+                <span className="font-medium">memory</span> (RAG) and{" "}
+                <span className="font-medium">code</span> (`codebase_search`). Both
+                profiles share one server by default. Optional: chat works with this
+                off and falls back to recency / grep.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <div className="text-xs">
-            <span className="text-muted-foreground">Master switch</span>
-            <p className="text-[10px] text-muted-foreground">
-              {status?.enabledOverride == null
-                ? "Using environment default"
-                : "Runtime override (persists across restarts)"}
+        {controlsAllowed ? (
+          <CardContent className="flex items-center justify-between">
+            <div className="text-xs">
+              <span className="text-muted-foreground">Master switch</span>
+              <p className="text-[10px] text-muted-foreground">
+                {status?.enabledOverride == null
+                  ? "Using environment default"
+                  : "Runtime override (persists across restarts)"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">off</span>
+              <Switch
+                checked={enabled}
+                disabled={busy || !available}
+                onCheckedChange={(v) => void toggle(v)}
+              />
+              <span className="text-xs text-muted-foreground">on</span>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <p className="text-[11px] text-muted-foreground">
+              On hub and GodMode Cloud, Enable is limited to platform{" "}
+              <span className="font-medium">Admin</span> (host infrastructure).
+              Status below stays visible for everyone.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">off</span>
-            <Switch
-              checked={enabled}
-              disabled={busy || !available}
-              onCheckedChange={(v) => void toggle(v)}
-            />
-            <span className="text-xs text-muted-foreground">on</span>
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
       {!available && (
