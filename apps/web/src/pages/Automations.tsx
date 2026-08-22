@@ -870,10 +870,15 @@ export function AutomationsPanel({
   const [tab, setTab] = useState<AutomationsTabId>(defaultTab);
   const [agentWorkflowIds, setAgentWorkflowIds] = useState<string[] | undefined>();
   const [legacyScheduleCount, setLegacyScheduleCount] = useState<number | null>(null);
+  const [workflowListEpoch, setWorkflowListEpoch] = useState(0);
 
   useEffect(() => {
     setTab(defaultTab);
   }, [defaultTab, agentId]);
+
+  const refreshAgentWorkflowIds = useCallback(() => {
+    setWorkflowListEpoch((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!agentId) {
@@ -901,7 +906,7 @@ export function AutomationsPanel({
     return () => {
       cancelled = true;
     };
-  }, [agentId]);
+  }, [agentId, workflowListEpoch]);
 
   const showLegacySchedulesCard =
     !agentId || legacyScheduleCount === null || legacyScheduleCount > 0;
@@ -942,7 +947,7 @@ export function AutomationsPanel({
           value="workflows"
           className="mt-2 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          <WorkflowFlow />
+          <WorkflowFlow onWorkflowsChanged={refreshAgentWorkflowIds} />
         </TabsContent>
 
         <TabsContent

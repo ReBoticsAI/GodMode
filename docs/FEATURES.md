@@ -27,7 +27,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 ## Knowledge and memory
 
 - [Rules](features/rules.md) - Behavior constraints attached to the active agent.
-- [Skills](features/skills.md) - Reusable workflows or playbooks the agent can invoke.
+- [Skills](features/skills.md) - Reusable playbooks the agent can invoke.
 - [Memory](features/memory.md) - Semantic facts (global or chat-scoped); hybrid RAG when embeddings are enabled.
 - [Artifacts](features/artifacts.md) - Generated outputs linked to agent work.
 - [Reflection](features/reflection.md) - Queued knowledge proposals and RAG maintenance for review before merge.
