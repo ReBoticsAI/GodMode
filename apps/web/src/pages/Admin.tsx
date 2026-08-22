@@ -54,6 +54,7 @@ import { AdminMarketplaceFeesPanel } from "@/pages/admin/AdminMarketplaceFeesPan
 import { AdminMarketplaceReviewPanel } from "@/pages/admin/AdminMarketplaceReviewPanel";
 import { AdminMarketplaceSellersPanel } from "@/pages/admin/AdminMarketplaceSellersPanel";
 import { AdminObservabilityPanel } from "@/pages/admin/AdminObservabilityPanel";
+import { MemoryEngineTab } from "@/pages/ai-settings/MemoryEngineTab";
 import { AdminAuthorityPanel } from "@/pages/admin/AdminAuthorityPanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
@@ -97,10 +98,10 @@ export default function Admin() {
         title="Admin"
         description={
           isSaas
-            ? "Billing, SaaS customers, authority, observability, updates, workspace template, users, and support."
+            ? "Billing, SaaS customers, authority, embeddings, observability, updates, workspace template, users, and support."
             : isHub
-              ? "Billing, authority, observability, updates, workspace template, users, and support."
-              : "Authority, observability, updates, workspace template, users, and support."
+              ? "Billing, authority, embeddings, observability, updates, workspace template, users, and support."
+              : "Authority, embeddings, observability, updates, workspace template, users, and support."
         }
       />
 
@@ -114,6 +115,7 @@ export default function Admin() {
           {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
           <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
           <TabsTrigger value="authority">Authority</TabsTrigger>
+          <TabsTrigger value="embeddings">Embeddings</TabsTrigger>
           <TabsTrigger value="observability">Observability</TabsTrigger>
           <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="template">Workspace template</TabsTrigger>
@@ -138,6 +140,9 @@ export default function Admin() {
         </TabsContent>
         <TabsContent value="authority" className="mt-4">
           <AdminAuthorityPanel />
+        </TabsContent>
+        <TabsContent value="embeddings" className="mt-4">
+          <MemoryEngineTab allowControls hostWide={isHub || isSaas} />
         </TabsContent>
         <TabsContent value="observability" className="mt-4">
           <AdminObservabilityPanel />

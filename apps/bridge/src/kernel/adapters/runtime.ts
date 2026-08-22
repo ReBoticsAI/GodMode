@@ -404,6 +404,25 @@ function runtimeOperator(ctx: OperationContext): void {
   }
 }
 
+/**
+ * Hub/SaaS share one host embedder. Only platform admins may start/stop/enable it.
+ * Local (non-hub) keeps tenant-owner control of the machine-local process.
+ */
+function requireEmbeddingRuntimeMutate(ctx: OperationContext): void {
+  requiredUser(ctx);
+  const sharedHost =
+    (process.env.DEPLOYMENT_MODE ?? "local").toLowerCase() === "hub";
+  if (sharedHost && !ctx.isAdmin) {
+    throw httpError(
+      403,
+      "Platform administrator required to control the shared embedding engine"
+    );
+  }
+  if (!sharedHost && ctx.role !== "owner") {
+    throw httpError(403, "Owner role required");
+  }
+}
+
 function record(def: ObjectTypeDef, id: string, data: RecordData): RecordRow {
   return { id, objectType: def.name, data: { id, ...data } };
 }
@@ -863,15 +882,18 @@ export const embeddingRuntimeAdapter: RecordAdapter = {
     return id === "runtime" ? embeddingStatus(def) : null;
   },
   actions: {
-    start() {
+    start(_db, _def, _id, _input, ctx) {
+      requireEmbeddingRuntimeMutate(ctx);
       const embeddings = runtime().embeddings;
       return embeddings.start();
     },
-    stop() {
+    stop(_db, _def, _id, _input, ctx) {
+      requireEmbeddingRuntimeMutate(ctx);
       const embeddings = runtime().embeddings;
       return embeddings.stop();
     },
-    set_enabled(_db, _def, _id, input) {
+    set_enabled(_db, _def, _id, input, ctx) {
+      requireEmbeddingRuntimeMutate(ctx);
       const embeddings = runtime().embeddings;
       return embeddings.setEnabled(input.enabled === true);
     },

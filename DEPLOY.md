@@ -104,6 +104,13 @@ and are not blocked when a subscription lapses.
 **Security gate:** Do not expose a hub publicly until `AUTH_ALLOW_ANONYMOUS=false`,
 SaaS paywall or invite-only signup, and CORS locked to `WEB_ORIGIN`.
 
+### Embeddings (shared host RAG)
+
+Production SaaS attaches to a host embedder on `:8082` (`EMBEDDINGS_*` in
+`.env.production`; see `deploy/.env.production.example` and
+`deploy/hostinger.md`). Enable/Start/Stop on Cloud and hub is **Admin → Embeddings**
+only; Local keeps per-user Memory controls.
+
 ### Clean host layout
 
 Mental model:
