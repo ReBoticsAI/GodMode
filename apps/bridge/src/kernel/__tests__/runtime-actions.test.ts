@@ -472,7 +472,7 @@ describe("runtime ObjectType actions", () => {
     }
   });
 
-  it("requires platform admin for host LLM, training, and capability rebuild on hub", async () => {
+  it("requires platform admin for host LLM and training on hub (not capability rebuild)", async () => {
     const prev = process.env.DEPLOYMENT_MODE;
     process.env.DEPLOYMENT_MODE = "hub";
     try {
@@ -482,7 +482,6 @@ describe("runtime ObjectType actions", () => {
       const admin: OperationContext = { ...owner, isAdmin: true };
       const modelDef = definition("ModelRuntime", "model_runtime");
       const trainDef = definition("TrainingJob", "training_job_runtime");
-      const capDef = definition("CapabilityIndex", "capability_index_runtime");
       const settingsDef = definition(
         "IntelligenceSettings",
         "intelligence_settings_runtime"
@@ -514,16 +513,6 @@ describe("runtime ObjectType actions", () => {
         )
       ).resolves.toEqual({ ok: true, jobId: "training-1" });
 
-      await expect(
-        capabilityIndexRuntimeAdapter.actions!.rebuild(
-          db,
-          capDef,
-          "default",
-          {},
-          tenantOwner
-        )
-      ).rejects.toThrow(/Platform administrator required/);
-
       expect(() =>
         intelligenceSettingsRuntimeAdapter.update!(
           db,
@@ -542,6 +531,67 @@ describe("runtime ObjectType actions", () => {
           tenantOwner
         )
       ).toBeTruthy();
+    } finally {
+      if (prev === undefined) delete process.env.DEPLOYMENT_MODE;
+      else process.env.DEPLOYMENT_MODE = prev;
+    }
+  });
+
+  it("allows tenant owner/intelligence to rebuild capability index on hub (#646)", async () => {
+    const prev = process.env.DEPLOYMENT_MODE;
+    process.env.DEPLOYMENT_MODE = "hub";
+    try {
+      const active = fakeServices();
+      configureRuntimeAdapterServices(active);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_agents (
+          id TEXT PRIMARY KEY,
+          enabled INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS ai_capability_embeddings (
+          id TEXT PRIMARY KEY
+        );
+      `);
+      const capDef = definition("CapabilityIndex", "capability_index_runtime");
+      const tenantOwner: OperationContext = { ...owner, isAdmin: false };
+      const intelligence: OperationContext = {
+        ...owner,
+        role: "intelligence",
+        isAdmin: false,
+      };
+      const outsider: OperationContext = {
+        ...owner,
+        role: "member",
+        isAdmin: false,
+      };
+
+      await expect(
+        capabilityIndexRuntimeAdapter.actions!.rebuild(
+          db,
+          capDef,
+          "default",
+          {},
+          tenantOwner
+        )
+      ).resolves.toMatchObject({ ok: true, count: 0 });
+      await expect(
+        capabilityIndexRuntimeAdapter.actions!.rebuild(
+          db,
+          capDef,
+          "default",
+          {},
+          intelligence
+        )
+      ).resolves.toMatchObject({ ok: true, count: 0 });
+      await expect(
+        capabilityIndexRuntimeAdapter.actions!.rebuild(
+          db,
+          capDef,
+          "default",
+          {},
+          outsider
+        )
+      ).rejects.toThrow(/Runtime operator role required/);
     } finally {
       if (prev === undefined) delete process.env.DEPLOYMENT_MODE;
       else process.env.DEPLOYMENT_MODE = prev;
