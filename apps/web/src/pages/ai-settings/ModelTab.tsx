@@ -30,11 +30,13 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
+  fetchBridgeHealth,
   shareModel,
   type AiModel,
   type AiSettings as AiSettingsType,
   type AiStatus,
 } from "@/api";
+import { useTenant } from "@/lib/tenant-context";
 import { formatBytes, NumberField, SegmentedField, ToggleField } from "./fields";
 
 /** Owner affordance: share a single local model with a friend for free inference. */
@@ -145,12 +147,27 @@ export function ModelTab({
   saveSetting: (patch: Partial<AiSettingsType>) => void;
   launchLine: string | null;
 }) {
+  const { user } = useTenant();
   const logRef = useRef<HTMLPreElement>(null);
   const state = status?.state ?? "stopped";
   const running = state === "running";
+  const [hostLlmControls, setHostLlmControls] = useState(true);
+
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [status?.logs]);
+
+  useEffect(() => {
+    void fetchBridgeHealth()
+      .then((h) => {
+        const shared = Boolean(h.hub || h.saas);
+        // Cloud (SaaS): no host chat LLM. Private hub: Admin only.
+        if (h.saas) setHostLlmControls(false);
+        else if (shared) setHostLlmControls(Boolean(user?.isAdmin));
+        else setHostLlmControls(true);
+      })
+      .catch(() => setHostLlmControls(true));
+  }, [user?.isAdmin]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -158,13 +175,21 @@ export function ModelTab({
         <CardHeader>
           <CardTitle>Model</CardTitle>
           <CardDescription>
-            Scanned from{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              {settings?.modelDirs ?? "…"}
-            </code>
+            {hostLlmControls ? (
+              <>
+                Scanned from{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {settings?.modelDirs ?? "…"}
+                </code>
+              </>
+            ) : (
+              "GodMode Cloud uses Vault BYOK for chat. Host GGUF start/stop is not available for tenants."
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {hostLlmControls ? (
+            <>
           {models.map((m) => (
             <div
               key={m.id}
@@ -218,9 +243,17 @@ export function ModelTab({
               Restart
             </Button>
           </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Connect a provider in Vault (Cursor or cloud keys). Shared host
+              embeddings stay under Admin when enabled.
+            </p>
+          )}
         </CardContent>
       </Card>
 
+      {hostLlmControls ? (
       <Card>
         <CardHeader>
           <CardTitle>Server flags</CardTitle>
@@ -255,7 +288,9 @@ export function ModelTab({
           )}
         </CardContent>
       </Card>
+      ) : null}
 
+      {hostLlmControls ? (
       <Card>
         <CardHeader>
           <CardTitle>Logs</CardTitle>
@@ -273,6 +308,7 @@ export function ModelTab({
           </pre>
         </CardContent>
       </Card>
+      ) : null}
     </div>
   );
 }

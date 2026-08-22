@@ -2,12 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { fetchAiAdapters, updateAiAdapter, type AiAdapter } from "@/api";
+import {
+  fetchAiAdapters,
+  fetchBridgeHealth,
+  updateAiAdapter,
+  type AiAdapter,
+} from "@/api";
+import { useTenant } from "@/lib/tenant-context";
 import { TrainingPanel } from "@/pages/ai-settings/TrainingPanel";
 
 export function AdaptersTab() {
+  const { user } = useTenant();
   const [adapters, setAdapters] = useState<AiAdapter[]>([]);
   const [showTraining, setShowTraining] = useState(false);
+  const [trainingAllowed, setTrainingAllowed] = useState(true);
 
   const loadAdapters = useCallback(() => {
     fetchAiAdapters()
@@ -18,6 +26,17 @@ export function AdaptersTab() {
   useEffect(() => {
     loadAdapters();
   }, [loadAdapters]);
+
+  useEffect(() => {
+    void fetchBridgeHealth()
+      .then((h) => {
+        const shared = Boolean(h.hub || h.saas);
+        if (h.saas) setTrainingAllowed(false);
+        else if (shared) setTrainingAllowed(Boolean(user?.isAdmin));
+        else setTrainingAllowed(true);
+      })
+      .catch(() => setTrainingAllowed(true));
+  }, [user?.isAdmin]);
 
   const toggleEnabled = async (adapter: AiAdapter, enabled: boolean) => {
     try {
@@ -55,18 +74,26 @@ export function AdaptersTab() {
           <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{a.path}</div>
         </div>
       ))}
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-fit"
-        onClick={() => setShowTraining((v) => !v)}
-      >
-        {showTraining ? "Hide training" : "Train adapter (Unsloth)"}
-      </Button>
-      {showTraining && (
-        <div className="border-t pt-3">
-          <TrainingPanel />
-        </div>
+      {trainingAllowed ? (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-fit"
+            onClick={() => setShowTraining((v) => !v)}
+          >
+            {showTraining ? "Hide training" : "Train adapter (Unsloth)"}
+          </Button>
+          {showTraining && (
+            <div className="border-t pt-3">
+              <TrainingPanel />
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Host adapter training is not available on GodMode Cloud for tenants.
+        </p>
       )}
     </div>
   );
