@@ -15,8 +15,10 @@ import {
 import { pluginRuntime } from "../plugins/runtime.js";
 import {
   importPluginKnowledgeFromRoot,
+  refreshIntelligenceToolsAfterPluginInstall,
   removePluginKnowledge,
 } from "./knowledge-store.js";
+import { scheduleCapabilityRebuild } from "./capability-index.js";
 import { getTenantDb } from "../tenant-registry.js";
 import {
   applyPluginObjectTypeSeeds,
@@ -191,6 +193,16 @@ export async function installPluginForTenant(
          updated_at=datetime('now') WHERE tenant_id=? AND plugin_id=?`
       )
       .run(tenantId, pluginId);
+    try {
+      const tenantDb = getTenantDb(tenantId);
+      refreshIntelligenceToolsAfterPluginInstall(tenantDb);
+      scheduleCapabilityRebuild(tenantDb, "intelligence");
+    } catch (refreshErr) {
+      console.warn(
+        `[plugins] post-install tool catalog refresh failed for ${pluginId}:`,
+        refreshErr instanceof Error ? refreshErr.message : refreshErr
+      );
+    }
   } catch (error) {
     try {
       removePluginKnowledge(getTenantDb(tenantId), pluginId);

@@ -205,6 +205,14 @@ export function repairPersonalTenantDefaults(db: AppDatabase): void {
   });
 }
 
+/**
+ * After a mid-session plugin install/reload, merge live registry + plugin tools
+ * into personal Intelligence toolAllow so the next schema build can see them (#645).
+ */
+export function refreshIntelligenceToolsAfterPluginInstall(db: AppDatabase): void {
+  repairPersonalTenantDefaults(db);
+}
+
 export function syncPersonalBootstrapKnowledge(db: AppDatabase): void {
   if (isOperatorTenantDb(db)) return;
   syncBootstrapRules(db);

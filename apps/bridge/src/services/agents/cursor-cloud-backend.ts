@@ -405,9 +405,22 @@ export function cursorCloudCacheFingerprint(
   settingSourcesKey = "",
   sdkMode: "agent" | "plan" = "agent",
   mcpKey = "",
-  sandboxKey = ""
+  sandboxKey = "",
+  toolsKey = ""
 ): string {
-  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}|${mcpKey}|${sandboxKey}`;
+  return `${modelId}|${paramsHash}|${sysHash}|${settingSourcesKey}|${sdkMode}|${mcpKey}|${sandboxKey}|${toolsKey}`;
+}
+
+/** Stable fingerprint of advertised tool names (invalidates SDK agent cache after install). */
+export function cursorToolSchemasFingerprint(
+  schemas: Array<{ function: { name: string } }> | undefined
+): string {
+  if (!schemas?.length) return "";
+  return schemas
+    .map((s) => s.function.name)
+    .filter(Boolean)
+    .sort()
+    .join(",");
 }
 
 /** Whether cursor_cloud should enable SDK sandboxOptions (hub/client Linux when required). */
@@ -762,7 +775,10 @@ export class CursorCloudBackend implements AgentBackend {
       cursorSettingSourcesFingerprint(effectiveSettingSources),
       sdkMode,
       mcpKey,
-      cursorSdkSandboxFingerprint(sandboxEnabled)
+      cursorSdkSandboxFingerprint(sandboxEnabled),
+      cursorToolSchemasFingerprint(req.toolSchemas ?? Object.keys(customTools).map((name) => ({
+        function: { name },
+      })))
     );
 
     const runOnce = async (forceFresh: boolean): Promise<string> => {

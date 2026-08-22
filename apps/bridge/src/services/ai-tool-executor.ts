@@ -26,7 +26,13 @@ import {
   corePrDoneAllowed,
   summarizePrChecks,
 } from "./github-pr-ci.js";
-import { executePluginTool, isPluginToolName, pluginToolsAsAiDefs, type PluginToolExecContext } from "../plugins/plugin-tools.js";
+import {
+  executePluginTool,
+  isPluginToolName,
+  pluginToolNamesForPlugin,
+  pluginToolsAsAiDefs,
+  type PluginToolExecContext,
+} from "../plugins/plugin-tools.js";
 import {
   executeBridgeMcpTool,
   getBridgeMcpToolMode,
@@ -3906,7 +3912,16 @@ export async function executeTool(
             install_for_tenant: true,
           },
         });
-        return { ok: true, result };
+        const tools = pluginToolNamesForPlugin(pluginId);
+        return {
+          ok: true,
+          result,
+          tools,
+          hint:
+            tools.length > 0
+              ? `Plugin tools now registered: ${tools.join(", ")}. Prefer calling them directly in this chat.`
+              : "Plugin installed. If tools are missing from this turn, continue in a follow-up message.",
+        };
       } catch (err) {
         const loop = toPluginLoopError(err);
         notifyPluginLoopFailure({

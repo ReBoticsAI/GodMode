@@ -239,13 +239,18 @@ export class ProviderBackend implements AgentBackend {
       let messages = [...req.messages];
       const chatMode = req.chatMode ?? "agent";
       const maxIter = req.maxIterations ?? PROVIDER_AGENT_ITERATIONS;
-      const tools =
+      let tools =
         req.toolSchemas ??
         filterSchemas(req.agent.toolAllow, req.agent.id, this.db, chatMode);
       const toolCtx: ToolExecContext = {
         ...req.toolCtx,
         delegationDepth: req.delegationDepth ?? 0,
       };
+      const catalogChangingTools = new Set([
+        "install_plugin",
+        "scaffold_plugin",
+        "build_plugin",
+      ]);
 
       for (let i = 0; i < maxIter; i++) {
         if (req.abortSignal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -306,6 +311,23 @@ export class ProviderBackend implements AgentBackend {
           sanitizedToolCalls.map((tc) => executeOneTool(tc, req, toolCtx))
         );
         messages.push(...toolMessages);
+
+        if (
+          sanitizedToolCalls.some((tc) =>
+            catalogChangingTools.has(tc.function?.name ?? "")
+          )
+        ) {
+          if (req.refreshToolSchemas) {
+            tools = req.refreshToolSchemas();
+          } else if (!req.toolSchemas) {
+            tools = filterSchemas(
+              req.agent.toolAllow,
+              req.agent.id,
+              this.db,
+              chatMode
+            );
+          }
+        }
       }
 
       return messages.filter((m) => m.role === "assistant").pop()?.content ?? "";
