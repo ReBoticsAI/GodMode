@@ -16,6 +16,12 @@ export interface AgentRunRequest {
     type: "function";
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }>;
+  /**
+   * Recompute advertised tools mid-run (e.g. after install_plugin merges
+   * new plugin tools into toolAllow). Provider backends call this before the
+   * next model iteration; Cursor Cloud relies on the next user turn + fingerprint.
+   */
+  refreshToolSchemas?: () => NonNullable<AgentRunRequest["toolSchemas"]>;
   delegationDepth?: number;
   onToken?: (chunk: string) => void;
   onToolCall?: (

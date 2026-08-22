@@ -5,12 +5,18 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import type { AppDatabase } from "../../db.js";
 import { getAgent } from "../agents/agents-db.js";
-import { personalIntelligenceToolNames } from "../ai-tools-registry.js";
+import {
+  getToolSchemasForLlm,
+  isToolVisibleForAgent,
+  personalIntelligenceToolNames,
+} from "../ai-tools-registry.js";
 import {
   mergeIntelligenceToolAllowWithRegistry,
+  refreshIntelligenceToolsAfterPluginInstall,
   repairPersonalTenantDefaults,
 } from "../knowledge-store.js";
 import { writeTenantKind } from "../tenant-kind.js";
+import { pluginToolNamesForPlugin } from "../../plugins/plugin-tools.js";
 
 function openPersonalDb(toolAllow: string[] | null): AppDatabase {
   const db = new Database(":memory:") as unknown as AppDatabase;
@@ -156,5 +162,23 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
     expect(allow).toContain("git_clone");
     expect(allow).toContain("github_repo_create");
     expect(allow).toContain("github_pr_create");
+  });
+
+  it("refreshIntelligenceToolsAfterPluginInstall merges stale allow so schemas can include new tools (#645)", () => {
+    const stale = [
+      "remember",
+      "git_status",
+      "install_plugin",
+      "list_structure",
+    ];
+    const db = openPersonalDb(stale);
+    expect(isToolVisibleForAgent(db, "intelligence", "git_clone")).toBe(false);
+
+    refreshIntelligenceToolsAfterPluginInstall(db);
+
+    expect(isToolVisibleForAgent(db, "intelligence", "git_clone")).toBe(true);
+    const schemas = getToolSchemasForLlm(db, "intelligence", "agent");
+    expect(schemas.some((s) => s.function.name === "git_clone")).toBe(true);
+    expect(pluginToolNamesForPlugin("missing-plugin")).toEqual([]);
   });
 });

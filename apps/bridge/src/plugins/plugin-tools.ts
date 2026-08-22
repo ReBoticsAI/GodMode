@@ -21,6 +21,17 @@ export function pluginToolsAsAiDefs(): AiToolDef[] {
   }));
 }
 
+/** Tool names currently registered for a loaded plugin (live runtime). */
+export function pluginToolNamesForPlugin(pluginId: string): string[] {
+  const id = pluginId.trim();
+  if (!id) return [];
+  return pluginRuntime
+    .allTools()
+    .filter((t) => t.pluginId === id)
+    .map((t) => t.name)
+    .sort();
+}
+
 export function isPluginToolName(name: string): boolean {
   return pluginRuntime.getToolHandler(name) !== undefined;
 }

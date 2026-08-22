@@ -2198,16 +2198,23 @@ export function createAiRouter(
           db: engineDb,
         });
         const rawSchemas = getToolSchemasForLlm(engineDb, agent.id, chatMode);
-        const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, {
+        const profileFilterOpts = {
           userMessage: message?.trim(),
           pathname: platformContext?.pathname,
           mentionIds: platformContext?.mentionedSources?.map((s) => s.id) ?? [],
-        });
+        };
+        const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, profileFilterOpts);
         const answer = await backend.run({
           agent,
           messages: agentMessages,
           chatMode,
           toolSchemas,
+          refreshToolSchemas: () =>
+            filterSchemasForProfile(
+              getToolSchemasForLlm(engineDb, agent.id, chatMode),
+              harnessProfile,
+              profileFilterOpts
+            ),
           toolMode:
             harnessProfile.toolMode === "grammar" ? "grammar" : "native",
           samplingOverlay: {
