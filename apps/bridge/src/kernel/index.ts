@@ -56,6 +56,7 @@ export {
   unregisterRecordAdapter,
   getRecordAdapter,
   setKernelEventBus,
+  emitKernelStructureChanged,
   type RecordAdapter,
   type OperationContext,
   type RecordQuery,
