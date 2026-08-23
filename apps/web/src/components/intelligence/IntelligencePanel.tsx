@@ -65,6 +65,7 @@ import {
   getActiveTenantId,
   markDmConversationRead,
   sendDmMessage,
+  refreshCursorSession,
   type AiChat,
   type CatalogModel,
   type DmContact,
@@ -289,6 +290,7 @@ export function IntelligencePanel() {
   const [sharedSession, setSharedSession] = useState(false);
   const [sharingSession, setSharingSession] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [queuePending, setQueuePending] = useState(0);
   const pendingConfirmRef = useRef<PartsBuilder | null>(null);
   const pendingAssistantIdRef = useRef<string | null>(null);
@@ -639,6 +641,7 @@ export function IntelligencePanel() {
         setActiveChatId(chatId);
       } catch {
         setErrorMsg("Failed to load chat");
+        setErrorCode(null);
       }
     },
     []
@@ -663,6 +666,7 @@ export function IntelligencePanel() {
             setBusy(true);
             busyRef.current = true;
             setErrorMsg(null);
+            setErrorCode(null);
             setMessages((prev) =>
               prev.map((m) =>
                 m.role === "assistant" &&
@@ -681,6 +685,7 @@ export function IntelligencePanel() {
           if (hasAssistant) {
             await loadChat(chatId);
             setErrorMsg(null);
+            setErrorCode(null);
             setBusy(false);
             busyRef.current = false;
             return;
@@ -690,6 +695,7 @@ export function IntelligencePanel() {
             setErrorMsg(
               "This turn did not recover after a Bridge restart. Send again if needed."
             );
+            setErrorCode(null);
             setBusy(false);
             busyRef.current = false;
             return;
@@ -815,6 +821,7 @@ export function IntelligencePanel() {
         }
       } catch {
         setErrorMsg("Failed to load conversation");
+        setErrorCode(null);
       }
     },
     [dmToUi, refreshDmConversations]
@@ -871,6 +878,7 @@ export function IntelligencePanel() {
       setActiveChatId(null);
     }
     setErrorMsg(null);
+    setErrorCode(null);
   };
 
   useEffect(() => {
@@ -916,6 +924,7 @@ export function IntelligencePanel() {
   const send = async ({ text, images, mentionIds, dmAttachments }: ComposerSubmit) => {
     if (busy) return;
     setErrorMsg(null);
+    setErrorCode(null);
 
     if (isDmMode && activeConversationId) {
       const userMsg: UiMessage = {
@@ -938,6 +947,7 @@ export function IntelligencePanel() {
         void refreshDmConversations();
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : "Send failed");
+        setErrorCode(null);
       } finally {
         setBusy(false);
       }
@@ -1128,10 +1138,12 @@ export function IntelligencePanel() {
           abortRef.current = null;
           refreshChats();
         },
-        onError: (error) => {
-          const errorText =
+        onError: (error, code) => {
+          const raw =
             String(error ?? "").trim() ||
             "Chat connection dropped. Try sending again.";
+          const staleFromMsg = raw.includes("CURSOR_SESSION_STALE");
+          const errorText = raw.replace(/^CURSOR_SESSION_STALE:\s*/i, "");
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -1149,6 +1161,11 @@ export function IntelligencePanel() {
             )
           );
           setErrorMsg(errorText);
+          setErrorCode(
+            code === "CURSOR_SESSION_STALE" || staleFromMsg
+              ? "CURSOR_SESSION_STALE"
+              : code ?? null
+          );
           setBusy(false);
           busyRef.current = false;
           abortRef.current = null;
@@ -1792,8 +1809,34 @@ export function IntelligencePanel() {
         )}
 
         {effectiveTab === "chat" && errorMsg && (
-          <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-            {errorMsg}
+          <div className="flex items-center gap-2 border-t border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+            <span className="min-w-0 flex-1">{errorMsg}</span>
+            {errorCode === "CURSOR_SESSION_STALE" && (
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await refreshCursorSession(activeAgentId);
+                      toast.success("Cursor session refreshed. Retry your message.");
+                      setErrorMsg(null);
+                      setErrorCode(null);
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not refresh Cursor session"
+                      );
+                    }
+                  })();
+                }}
+              >
+                Refresh session
+              </Button>
+            )}
           </div>
         )}
 

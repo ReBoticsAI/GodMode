@@ -6,9 +6,14 @@ import type { AgentMessage } from "../ai-agent.js";
 import {
   buildPrompt,
   clearCursorCloudAgentCacheForTests,
+  CURSOR_SESSION_STALE_CODE,
+  CURSOR_STALE_AUTH_MAX_RETRIES,
+  CursorSessionStaleError,
   isCursorSdkAgentCacheExpired,
   isCursorSdkAuthStaleError,
+  isCursorSessionStaleError,
   resolveCursorSdkAgent,
+  retryCursorRunOnStaleAuth,
   setCursorSdkAgentTtlForTests,
   shouldIncludeTranscriptAppendix,
 } from "../agents/cursor-cloud-backend.js";
@@ -44,6 +49,58 @@ describe("isCursorSdkAuthStaleError", () => {
     expect(isCursorSdkAuthStaleError(new Error("git clone timed out"))).toBe(
       false
     );
+  });
+});
+
+describe("CursorSessionStaleError (#668)", () => {
+  it("exposes CURSOR_SESSION_STALE code and prefixes message", () => {
+    const err = new CursorSessionStaleError();
+    expect(err.code).toBe(CURSOR_SESSION_STALE_CODE);
+    expect(err.message).toContain(CURSOR_SESSION_STALE_CODE);
+    expect(isCursorSessionStaleError(err)).toBe(true);
+    expect(
+      isCursorSessionStaleError(new Error(`${CURSOR_SESSION_STALE_CODE}: x`))
+    ).toBe(true);
+    expect(CURSOR_STALE_AUTH_MAX_RETRIES).toBe(3);
+  });
+
+  it("retries three times then throws CursorSessionStaleError", async () => {
+    const sleeps: number[] = [];
+    const runOnce = vi.fn(async () => {
+      throw new Error("Authentication error ERROR_NOT_LOGGED_IN");
+    });
+    const onEvict = vi.fn();
+    await expect(
+      retryCursorRunOnStaleAuth({
+        runOnce,
+        onEvict,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+        backoffMs: [1, 2, 3],
+      })
+    ).rejects.toBeInstanceOf(CursorSessionStaleError);
+    expect(runOnce).toHaveBeenCalledTimes(3);
+    expect(onEvict).toHaveBeenCalledTimes(3);
+    expect(sleeps).toEqual([1, 2, 3]);
+  });
+
+  it("returns on a successful retry before exhaustion", async () => {
+    let n = 0;
+    const runOnce = vi.fn(async () => {
+      n += 1;
+      if (n < 2) throw new Error("Authentication error");
+      return "ok";
+    });
+    await expect(
+      retryCursorRunOnStaleAuth({
+        runOnce,
+        onEvict: () => {},
+        sleep: async () => {},
+        backoffMs: [0, 0, 0],
+      })
+    ).resolves.toBe("ok");
+    expect(runOnce).toHaveBeenCalledTimes(2);
   });
 });
 

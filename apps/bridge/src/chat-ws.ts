@@ -340,6 +340,9 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
                 event: "error",
                 data: {
                   error: err instanceof Error ? err.message : String(err),
+                  ...((err as { code?: string })?.code
+                    ? { code: String((err as { code: string }).code) }
+                    : {}),
                 },
               })
             );
