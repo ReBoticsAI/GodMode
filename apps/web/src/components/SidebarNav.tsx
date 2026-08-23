@@ -53,6 +53,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { iconByName } from "@/lib/icon-lookup";
 import { cn } from "@/lib/utils";
+import { isLeafDivision } from "@/lib/structure-adapters";
 import { AgentGroup } from "@/components/AgentGroup";
 import { AgentPulseIcon } from "@/components/AgentPulseIcon";
 import {
@@ -72,6 +73,7 @@ import {
   readOnboardingCompleted,
   writeOnboardingCompleted,
 } from "@/lib/storage-keys";
+import type { DepartmentNode, DivisionNode, PageNode, StructureNode } from "@/lib/navigation";
 
 /** The user's personal pages, surfaced at the very top of the nav tree. */
 const PERSONAL_ITEMS = [
@@ -95,10 +97,11 @@ const NEW_PAGE_PROMPT =
 
 /**
  * Tree navigation. Top: the user's PERSONAL pages (Calendar, Tasks, Personal Vault, etc.).
- * Middle: departments as labeled section headers, each revealing divisions as
- * expandable sub-trees. Bottom: Shared and Marketplace nodes. The active division
- * auto-expands and the active page is highlighted. Brand header, project
- * switcher, and Users/Settings live in SidebarShellContent.tsx.
+ * Middle: departments as labeled section headers; leaf pages under a department
+ * render as one row, multi-page divisions as expandable sub-trees. Bottom: Shared
+ * and Marketplace. The active division auto-expands and the active page is
+ * highlighted. Brand header, project switcher, and Users/Settings live in
+ * SidebarShellContent.tsx.
  */
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
@@ -582,6 +585,27 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               const isOpen = openKeys.has(key);
               const isActiveDivision = key === activeKey;
               const DivIcon = iconByName(division.icon);
+
+              if (isLeafDivision(division)) {
+                const page = division.pages[0];
+                return (
+                  <SidebarDivisionPageLink
+                    key={key}
+                    division={division}
+                    page={page}
+                    pathname={pathname}
+                    nodes={nodes}
+                    departments={departments}
+                    panelOpen={panelOpen}
+                    activeAgentId={activeAgentId}
+                    openPanel={openPanel}
+                    navigate={navigate}
+                    onNavigate={onNavigate}
+                    variant="leaf"
+                  />
+                );
+              }
+
               return (
                 <Collapsible
                   key={key}
@@ -627,66 +651,22 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent className="flex flex-col gap-0.5 py-0.5 pl-3">
-                    {division.pages.map((page) => {
-                      const to = pageHref(division, page);
-                      const PageIcon = iconByName(page.icon);
-                      const pageAgentId = autoChatAgentIdForPagePath(
-                        to,
-                        nodes,
-                        departments
-                      );
-                      const agentActive =
-                        panelOpen && pageAgentId != null && activeAgentId === pageAgentId;
-
-                      if (pageAgentId) {
-                        const isActivePage =
-                          pathname.replace(/\/+$/, "") === to.replace(/\/+$/, "");
-                        return (
-                          <button
-                            key={page.id}
-                            type="button"
-                            onClick={() => {
-                              openPanel({ agentId: pageAgentId });
-                              navigate(to);
-                              onNavigate?.();
-                            }}
-                            className={cn(
-                              "flex w-full items-center gap-2 rounded-md border-l border-sidebar-border/50 px-3 py-1.5 text-left text-sm transition-colors",
-                              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                              isActivePage
-                                ? "border-sidebar-accent-foreground/60 bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <AgentPulseIcon pulse active={agentActive}>
-                              <PageIcon className="size-4 shrink-0" />
-                            </AgentPulseIcon>
-                            <span className="truncate">{page.label}</span>
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <NavLink
-                          key={page.id}
-                          to={to}
-                          end={page.segment === ""}
-                          onClick={onNavigate}
-                          className={({ isActive }) =>
-                            cn(
-                              "flex items-center gap-2 rounded-md border-l border-sidebar-border/50 px-3 py-1.5 text-sm transition-colors",
-                              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                              isActive
-                                ? "border-sidebar-accent-foreground/60 bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                : "text-muted-foreground"
-                            )
-                          }
-                        >
-                          <PageIcon className="size-4 shrink-0" />
-                          <span className="truncate">{page.label}</span>
-                        </NavLink>
-                      );
-                    })}
+                    {division.pages.map((page) => (
+                      <SidebarDivisionPageLink
+                        key={page.id}
+                        division={division}
+                        page={page}
+                        pathname={pathname}
+                        nodes={nodes}
+                        departments={departments}
+                        panelOpen={panelOpen}
+                        activeAgentId={activeAgentId}
+                        openPanel={openPanel}
+                        navigate={navigate}
+                        onNavigate={onNavigate}
+                        variant="nested"
+                      />
+                    ))}
                   </CollapsibleContent>
                 </Collapsible>
               );
@@ -855,5 +835,88 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       </Collapsible>
     </nav>
     </>
+  );
+}
+
+function SidebarDivisionPageLink({
+  division,
+  page,
+  pathname,
+  nodes,
+  departments,
+  panelOpen,
+  activeAgentId,
+  openPanel,
+  navigate,
+  onNavigate,
+  variant,
+}: {
+  division: DivisionNode;
+  page: PageNode;
+  pathname: string;
+  nodes: StructureNode[];
+  departments: DepartmentNode[];
+  panelOpen: boolean;
+  activeAgentId: string | null;
+  openPanel: (opts?: { agentId?: string }) => void;
+  navigate: (to: string) => void;
+  onNavigate?: () => void;
+  variant: "leaf" | "nested";
+}) {
+  const to = pageHref(division, page);
+  const label = variant === "leaf" ? division.label : page.label;
+  const PageIcon = iconByName(variant === "leaf" ? division.icon : page.icon);
+  const pageAgentId = autoChatAgentIdForPagePath(to, nodes, departments);
+  const agentActive =
+    panelOpen && pageAgentId != null && activeAgentId === pageAgentId;
+  const isActivePage =
+    pathname.replace(/\/+$/, "") === to.replace(/\/+$/, "");
+
+  const leafClass = cn(
+    "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition-colors",
+    "hover:bg-sidebar-accent/50",
+    isActivePage ? "text-sidebar-accent-foreground" : "text-foreground"
+  );
+  const nestedClass = cn(
+    "flex items-center gap-2 rounded-md border-l border-sidebar-border/50 px-3 py-1.5 text-sm transition-colors",
+    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    isActivePage
+      ? "border-sidebar-accent-foreground/60 bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+      : "text-muted-foreground"
+  );
+  const className = variant === "leaf" ? leafClass : nestedClass;
+
+  if (pageAgentId) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          openPanel({ agentId: pageAgentId });
+          navigate(to);
+          onNavigate?.();
+        }}
+        className={cn(
+          className,
+          variant === "nested" && "w-full text-left"
+        )}
+      >
+        <AgentPulseIcon pulse active={agentActive}>
+          <PageIcon className="size-4 shrink-0" />
+        </AgentPulseIcon>
+        <span className="truncate">{label}</span>
+      </button>
+    );
+  }
+
+  return (
+    <NavLink
+      to={to}
+      end={page.segment === ""}
+      onClick={onNavigate}
+      className={() => className}
+    >
+      <PageIcon className="size-4 shrink-0" />
+      <span className="truncate">{label}</span>
+    </NavLink>
   );
 }

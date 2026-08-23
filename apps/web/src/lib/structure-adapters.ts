@@ -22,6 +22,10 @@ function pageIdFromNode(node: StructureNode, parent: StructureNode): string {
 /**
  * Bridge adapter: recursive pages -> legacy department/division/pages shape so
  * routing and sidebar keep working during the transition.
+ *
+ * Leaf children of a department (Welcome, Plants, …) become divisions with only
+ * a synthetic index page. Use {@link isLeafDivision} in the sidebar so those
+ * render as a single page row instead of Division → same-named page.
  */
 export function nodesToLegacyDepartments(nodes: StructureNode[]): DepartmentNode[] {
   return nodes.map((top) => ({
@@ -33,6 +37,16 @@ export function nodesToLegacyDepartments(nodes: StructureNode[]): DepartmentNode
     sortOrder: top.sortOrder,
     divisions: top.children.map((div) => divisionFromNode(div, top)),
   }));
+}
+
+/**
+ * True when this legacy division is really a leaf page under a department:
+ * only the synthetic index route, no real child pages.
+ */
+export function isLeafDivision(division: DivisionNode): boolean {
+  if (division.pages.length !== 1) return false;
+  const only = division.pages[0];
+  return only.segment === "" || only.id === "index";
 }
 
 function divisionFromNode(node: StructureNode, dept: StructureNode): DivisionNode {
