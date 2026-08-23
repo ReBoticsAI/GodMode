@@ -181,7 +181,7 @@ describe("record API", () => {
       },
       owner
     );
-    expect(seen).toEqual([{ nodeId: "test-page" }]);
+    expect(seen).toEqual([{ nodeId: "test-page", tenantId: "tenant-a" }]);
   });
 
   it("propagates generic mutation reconciliation events", () => {
