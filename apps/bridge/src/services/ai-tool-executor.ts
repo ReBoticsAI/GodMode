@@ -2366,6 +2366,48 @@ export async function executeTool(
         .all(agentId);
       return { agentId, workflows: rows };
     }
+    case "get_workflow_run": {
+      const runId = String(args.runId ?? "").trim();
+      if (!runId) throw new Error("runId required");
+      const row = ctx.db
+        .prepare(
+          `SELECT id, workflow_id, status, card_id, awaiting_node_id, error,
+                  trigger_input, state_json, result_json, created_at, updated_at
+           FROM ai_workflow_runs WHERE id = ?`
+        )
+        .get(runId);
+      if (!row) throw new Error(`workflow run not found: ${runId}`);
+      return row;
+    }
+    case "list_workflow_runs": {
+      const workflowId = args.workflowId != null ? String(args.workflowId).trim() : "";
+      const status = args.status != null ? String(args.status).trim() : "";
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.isFinite(Number(args.limit)) ? Number(args.limit) : 20)
+      );
+      const clauses: string[] = ["1=1"];
+      const params: unknown[] = [];
+      if (workflowId) {
+        clauses.push("workflow_id = ?");
+        params.push(workflowId);
+      }
+      if (status) {
+        clauses.push("status = ?");
+        params.push(status);
+      }
+      params.push(limit);
+      const runs = ctx.db
+        .prepare(
+          `SELECT id, workflow_id, status, card_id, awaiting_node_id, error, created_at, updated_at
+           FROM ai_workflow_runs
+           WHERE ${clauses.join(" AND ")}
+           ORDER BY updated_at DESC
+           LIMIT ?`
+        )
+        .all(...params);
+      return { runs };
+    }
     case "run_workflow": {
       const workflowId = String(args.workflowId ?? "").trim();
       if (!workflowId) throw new Error("workflowId required");
@@ -2387,7 +2429,13 @@ export async function executeTool(
         },
         priority: 2,
       });
-      return { jobId, workflowId, status: "enqueued" };
+      return {
+        jobId,
+        workflowId,
+        status: "enqueued",
+        pollHint:
+          "Poll with list_workflow_runs({ workflowId }) until a run appears, then get_workflow_run({ runId }). jobId is the queue id, not the durable run id.",
+      };
     }
     case "update_workflow": {
       const id = String(args.id ?? "");

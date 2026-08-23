@@ -46,6 +46,13 @@ describe("workflow seeds (#635)", () => {
           .get() as { name: string } | undefined
       )?.name
     ).toBe("scaffold_domain_plugin_workflow_dogfood_v3");
+    expect(
+      (
+        db
+          .prepare(`SELECT name FROM schema_version WHERE version = 29`)
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_workflow_run_tools_v4");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
@@ -81,12 +88,19 @@ describe("workflow seeds (#635)", () => {
     const prove = graph.nodes.find((n) => n.config?.system?.includes("ObjectType"));
     expect(prove?.config?.system).toMatch(/create_|list_records|objectType/i);
     const implement = graph.nodes.find((n) =>
-      n.config?.system?.includes("RecordAdapter")
+      n.config?.system?.includes("RecordAdapter") ||
+      n.config?.system?.includes("openPluginDb")
     );
-    expect(implement?.config?.system).toMatch(/ObjectType|openPluginDb/);
-    expect(implement?.config?.system).toMatch(/blocked|Finish|stop/i);
-    expect(implement?.config?.maxIterations).toBe(12);
-    expect(implement?.config?.timeoutMs).toBe(300_000);
+    expect(implement?.config?.system).toMatch(/ObjectType|openPluginDb/i);
+    expect(implement?.config?.system).toMatch(/blocked|stop|time budget/i);
+    expect(
+      implement?.config?.maxIterations ??
+        (implement?.config as { maxIterations?: number } | undefined)?.maxIterations
+    ).toBe(12);
+    expect(
+      implement?.config?.timeoutMs ??
+        (implement?.config as { timeoutMs?: number } | undefined)?.timeoutMs
+    ).toBe(300_000);
 
     // Idempotent: remigrate does not duplicate (v26/v27/v28 already applied).
     migrateTenantDb(db);
