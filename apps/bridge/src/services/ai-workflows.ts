@@ -435,6 +435,10 @@ async function runAgentNode(
     : [];
   const bounded = await runBoundedSubagentDelegation({
     agentId,
+    timeoutMs:
+      cfg.timeoutMs != null && Number.isFinite(Number(cfg.timeoutMs))
+        ? Number(cfg.timeoutMs)
+        : undefined,
     run: () =>
       runSubagent({
         db: deps.db,

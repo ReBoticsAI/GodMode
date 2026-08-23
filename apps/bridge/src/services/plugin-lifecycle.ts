@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { resolveCodingRoot } from "./coding/fs-tools.js";
 import { createRequire } from "node:module";
 import type { CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
@@ -17,6 +18,7 @@ import {
   importPluginKnowledgeFromRoot,
   refreshIntelligenceToolsAfterPluginInstall,
   removePluginKnowledge,
+  stripIntelligenceToolsAfterPluginUninstall,
 } from "./knowledge-store.js";
 import { scheduleCapabilityRebuild } from "./capability-index.js";
 import { getTenantDb } from "../tenant-registry.js";
@@ -220,6 +222,41 @@ export async function installPluginForTenant(
   }
 }
 
+
+/**
+ * Policy (#653): on last-tenant uninstall, delete coding-root plugins/<id>
+ * when the install root sits under that coding root. Plugin SQLite under
+ * plugin-data/ is retained for reinstall recovery.
+ */
+export function deleteCodingRootPluginSource(opts: {
+  tenantId: string;
+  pluginId: string;
+  pluginRoot: string;
+  /** Test-only override so unit tests need not resolve a live coding root. */
+  codingRootOverride?: string;
+}): { deleted: boolean; path?: string } {
+  const root = opts.pluginRoot.trim();
+  if (!root) return { deleted: false };
+  let codingRoot: string;
+  if (opts.codingRootOverride?.trim()) {
+    codingRoot = path.resolve(opts.codingRootOverride.trim());
+  } else {
+    try {
+      codingRoot = resolveCodingRoot({ tenantId: opts.tenantId });
+    } catch {
+      return { deleted: false };
+    }
+  }
+  const expected = path.resolve(codingRoot, "plugins", opts.pluginId);
+  const resolved = path.resolve(root);
+  const underExpected =
+    resolved === expected ||
+    resolved.startsWith(expected + path.sep);
+  if (!underExpected) return { deleted: false };
+  if (!fs.existsSync(expected)) return { deleted: false, path: expected };
+  fs.rmSync(expected, { recursive: true, force: true });
+  return { deleted: true, path: expected };
+}
 export async function uninstallPluginForTenant(
   core: CoreDatabase,
   tenantId: string,
@@ -281,13 +318,36 @@ export async function uninstallPluginForTenant(
     throw error;
   }
   if (!core.prepare(`SELECT 1 FROM tenant_plugins WHERE plugin_id=? LIMIT 1`).get(pluginId)) {
+    const toolNames = pluginRuntime
+      .allTools()
+      .filter((t) => t.pluginId === pluginId)
+      .map((t) => t.name);
+    try {
+      const tenantDb = getTenantDb(tenantId);
+      stripIntelligenceToolsAfterPluginUninstall(tenantDb, toolNames);
+      scheduleCapabilityRebuild(tenantDb, "intelligence");
+    } catch (stripErr) {
+      console.warn(
+        `[plugins] post-uninstall toolAllow strip failed for ${pluginId}:`,
+        stripErr instanceof Error ? stripErr.message : stripErr
+      );
+    }
     unregisterObjectTypesByPlugin(pluginId);
+    pluginRuntime.unregister(pluginId);
     if (pluginRoot) {
       try {
         revokeCapabilityGrants(pluginRoot);
       } catch {
         /* grants file may already be gone with the install tree */
       }
+    }
+    try {
+      deleteCodingRootPluginSource({ tenantId, pluginId, pluginRoot });
+    } catch (delErr) {
+      console.warn(
+        `[plugins] coding-root source delete failed for ${pluginId}:`,
+        delErr instanceof Error ? delErr.message : delErr
+      );
     }
   }
 }

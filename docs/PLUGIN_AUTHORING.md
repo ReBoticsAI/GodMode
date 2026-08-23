@@ -273,7 +273,7 @@ Rules:
 - ObjectType adapters may façade into plugin SQLite; they must not create domain tables on the tenant SQLite.
 - Do not use browser `.log` downloads/pickers or `localStorage` for durable plugin state.
 - After reinstall or reset, existing plugin SQLite files may be dirty: migrate the schema or delete and recreate.
-- **Uninstall** closes open plugin SQLite handles but **retains** `plugin-data/{tenant}/{plugin}.sqlite` (same spirit as retained ObjectType Records). Reinstall can reopen the file.
+- **Uninstall** (last tenant) unregisters live tools/ObjectTypes, strips those tool names from Intelligence `toolAllow`, and **deletes** coding-root `plugins/<id>` when the install root sits under that coding root. It closes open plugin SQLite handles but **retains** `plugin-data/{tenant}/{plugin}.sqlite` for reinstall recovery (same spirit as retained ObjectType Records).
 - **Tenant wipe** deletes that tenant’s entire `plugin-data/{tenantId}/` tree.
 - Community / child-process hosts use the **same** `openPluginDb` (child opens its own file under `plugin-data/`; tenant DB remains structure-seed only). Cross-plugin ids are rejected.
 - Local Admin backup stamps include `plugin-data/` alongside tenants, users, and timeseries.

@@ -590,11 +590,22 @@ export function sanitizeSdkJsonValue(
   return JSON.parse(JSON.stringify(value)) as import("@cursor/sdk").SDKJsonValue;
 }
 
+/** Tools that mutate the live tool catalog mid-chat (#653 / #645). */
+export const CATALOG_CHANGING_TOOL_NAMES = new Set([
+  "install_plugin",
+  "scaffold_plugin",
+  "build_plugin",
+]);
+
+const CATALOG_REFRESH_CONTINUE_PROMPT =
+  "Plugin tools were just installed and are now available in this chat. Continue the user's task using the new tools (prove create + list if that was the goal).";
+
 function buildCustomTools(
   req: AgentRunRequest,
   db: AppDatabase,
   toolCtx: ToolExecContext,
-  chatMode?: IntelligenceChatMode
+  chatMode?: IntelligenceChatMode,
+  onCatalogChanged?: () => void
 ): Record<string, import("@cursor/sdk").SDKCustomTool> {
   const schemas =
     req.toolSchemas ?? filterSchemas(req.agent.toolAllow, req.agent.id, db, chatMode);
@@ -676,6 +687,21 @@ function buildCustomTools(
             scrubbedResult = scrubbed;
           }
           req.onToolResult?.(name, scrubbedResult, context.toolCallId, false);
+          if (CATALOG_CHANGING_TOOL_NAMES.has(name)) {
+            onCatalogChanged?.();
+            if (req.refreshToolSchemas) {
+              const nextSchemas = req.refreshToolSchemas();
+              const extras = buildCustomTools(
+                { ...req, toolSchemas: nextSchemas },
+                db,
+                toolCtx,
+                chatMode
+              );
+              for (const [extraName, tool] of Object.entries(extras)) {
+                if (!(extraName in tools)) tools[extraName] = tool;
+              }
+            }
+          }
           return scrubbed;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -722,7 +748,10 @@ export class CursorCloudBackend implements AgentBackend {
       ...req.toolCtx,
       delegationDepth: req.delegationDepth ?? 0,
     };
-    const customTools = buildCustomTools(req, this.db, toolCtx, chatMode);
+    let catalogDirty = false;
+    let customTools = buildCustomTools(req, this.db, toolCtx, chatMode, () => {
+      catalogDirty = true;
+    });
     const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
     const modelId = cfg.model?.trim() || "auto";
     const modelParams = toSdkModelParams(
@@ -768,7 +797,11 @@ export class CursorCloudBackend implements AgentBackend {
     if (sandboxEnabled) {
       ensureTenantCursorSandboxJson(cwd);
     }
-    const fingerprint = cursorCloudCacheFingerprint(
+    const toolsFingerprint = (tools: typeof customTools) =>
+      cursorToolSchemasFingerprint(
+        Object.keys(tools).map((name) => ({ function: { name } }))
+      );
+    let fingerprint = cursorCloudCacheFingerprint(
       modelId,
       systemHash(sys),
       paramsHash,
@@ -776,9 +809,7 @@ export class CursorCloudBackend implements AgentBackend {
       sdkMode,
       mcpKey,
       cursorSdkSandboxFingerprint(sandboxEnabled),
-      cursorToolSchemasFingerprint(req.toolSchemas ?? Object.keys(customTools).map((name) => ({
-        function: { name },
-      })))
+      toolsFingerprint(customTools)
     );
 
     const runOnce = async (forceFresh: boolean): Promise<string> => {
@@ -871,7 +902,44 @@ export class CursorCloudBackend implements AgentBackend {
     };
 
     try {
-      return await runOnce(false);
+      let answer = await runOnce(false);
+      if (catalogDirty && req.refreshToolSchemas && !req.abortSignal?.aborted) {
+        const nextSchemas = req.refreshToolSchemas();
+        customTools = buildCustomTools(
+          { ...req, toolSchemas: nextSchemas },
+          this.db,
+          toolCtx,
+          chatMode,
+          () => {
+            catalogDirty = true;
+          }
+        );
+        fingerprint = cursorCloudCacheFingerprint(
+          modelId,
+          systemHash(sys),
+          paramsHash,
+          cursorSettingSourcesFingerprint(effectiveSettingSources),
+          sdkMode,
+          mcpKey,
+          cursorSdkSandboxFingerprint(sandboxEnabled),
+          toolsFingerprint(customTools)
+        );
+        evictCursorSdkAgent(chatKey);
+        const priorMessages = req.messages;
+        req.messages = [
+          ...priorMessages,
+          { role: "user", content: CATALOG_REFRESH_CONTINUE_PROMPT },
+        ];
+        try {
+          const cont = await runOnce(true);
+          if (cont?.trim()) {
+            answer = [answer, cont].filter((p) => p?.trim()).join("\n\n");
+          }
+        } finally {
+          req.messages = priorMessages;
+        }
+      }
+      return answer;
     } catch (err) {
       if (req.abortSignal?.aborted || !isCursorSdkAuthStaleError(err)) {
         throw err;

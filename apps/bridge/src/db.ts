@@ -201,7 +201,7 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Implement on openPluginDb",
       config: {
         system:
-          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Register an ObjectType with a RecordAdapter over openPluginDb (domain scaffold helper). Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Do not hand-register primary CRUD tools.",
+          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Register an ObjectType with a RecordAdapter over openPluginDb (domain scaffold helper). Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Do not hand-register primary CRUD tools. Finish the ObjectType + adapter edits and stop. If blocked, report the blocker clearly instead of looping.",
         prompt:
           "Skill load result (reference): {{load_skill}}\nScaffold result: {{scaffold}}\nUser request JSON: {{trigger}}\nEdit under plugins/<id>/; keep domain Records on plugin SQLite via ObjectType + openPluginDb adapter.",
         autoApproveTools: [
@@ -212,7 +212,8 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
           "glob",
           "list_dir",
         ],
-        maxIterations: 16,
+        maxIterations: 12,
+        timeoutMs: 300_000,
       },
       position: { x: 700, y: 200 },
     },
@@ -242,7 +243,7 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Prove create + list on plugin SQLite",
       config: {
         system:
-          "Prove with generated ObjectType tools (create_<snake> / list_<plural> from the plugin ObjectType) or create_record / list_records with objectType set. Do not use workspace Records for plugin business rows. If MCP tool catalog has not refreshed, tell the user to re-run those tools after a moment.",
+          "Prove with generated ObjectType tools (create_<snake> / list_<plural> from the plugin ObjectType) or create_record / list_records with objectType set. Do not use workspace Records for plugin business rows. Prefer generated ObjectType tools in this same chat; the host refreshes the catalog after install_plugin.",
         prompt:
           "Plugin id: {{trigger.id}}\nInstall result: {{install}}\nCreate one Record and list Records via generated ObjectType tools (or generics with objectType). Report plugin id, data plane (plugin SQLite), ObjectType name, and how to re-run tools if the catalog lagged.",
         autoApproveTools: [],
@@ -447,6 +448,11 @@ export const TENANT_BOOT_MIGRATIONS = [
     name: "scaffold_domain_plugin_workflow_ot_v2",
     up: migrateScaffoldDomainPluginWorkflowOtV2,
   },
+  {
+    version: 28,
+    name: "scaffold_domain_plugin_workflow_dogfood_v3",
+    up: migrateScaffoldDomainPluginWorkflowDogfoodV3,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
@@ -461,6 +467,11 @@ function migrateScaffoldDomainPluginWorkflow(db: Database.Database): void {
 
 /** Refresh scaffold-domain-plugin graph for ObjectType + openPluginDb prove path (#654). */
 function migrateScaffoldDomainPluginWorkflowOtV2(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
+}
+
+/** Harden implement timeout / fail-loud copy for domain dogfood (#653). */
+function migrateScaffoldDomainPluginWorkflowDogfoodV3(db: Database.Database): void {
   ensureScaffoldDomainPluginWorkflow(db);
 }
 
