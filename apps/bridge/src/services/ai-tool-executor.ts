@@ -3941,6 +3941,22 @@ export async function executeTool(
       const pluginId = String(args.pluginId ?? "").trim();
       if (!pluginId) throw new Error("pluginId required");
       try {
+        const already = listInstalledPlugins(getCloudDb(), ctx.tenantId).find(
+          (row) => row.plugin_id === pluginId
+        );
+        if (already) {
+          const tools = pluginToolNamesForPlugin(pluginId);
+          return {
+            ok: true,
+            alreadyInstalled: true,
+            pluginId,
+            tools,
+            hint:
+              tools.length > 0
+                ? `Plugin already active. Prefer: ${tools.join(", ")}.`
+                : "Plugin already active for this tenant.",
+          };
+        }
         const rawRoot =
           typeof args.pluginRoot === "string" && args.pluginRoot.trim()
             ? args.pluginRoot.trim()
