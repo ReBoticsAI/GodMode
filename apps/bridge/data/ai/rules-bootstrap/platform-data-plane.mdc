@@ -32,3 +32,12 @@ PlatformEvent SoR is Workspace table `platform_events` (`tenant_id` required on 
 - After reinstall/reset, existing `plugin-data` files may be dirty: migrate schema or delete and recreate; do not assume a fresh empty file.
 - Uninstall retains `plugin-data/{tenant}/{plugin}.sqlite` and closes open handles (including Community child handles via RPC). Tenant wipe deletes `plugin-data/{tenantId}/`. Community children use the same `openPluginDb` path; they must not open another plugin's id.
 - Local backup stamps include `plugin-data/` (with tenants, users, timeseries).
+
+## After domain install (same chat)
+
+When a domain plugin was just `install_plugin`'d in this session (or `scaffold-domain-plugin` prove):
+
+1. Prefer that plugin’s generated ObjectType tools (`create_<snake>` / `list_<plural>`) for create/list prove on the **first** attempt.
+2. Do not use bare workspace `create_record` / `list_records` for plugin business rows (that writes or reads Core Records and can duplicate dogfood data).
+3. Generics with `objectType` set to the plugin ObjectType are allowed only when generated tools are missing after catalog refresh; they still hit the plugin SQLite façade, not a substitute domain table on the workspace DB.
+4. Core personal-OS types (notes, tasks, StructureNode, etc.) still use workspace Records tools as usual.
