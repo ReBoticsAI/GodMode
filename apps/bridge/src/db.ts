@@ -201,7 +201,7 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Implement on openPluginDb",
       config: {
         system:
-          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Register an ObjectType with a RecordAdapter over openPluginDb (domain scaffold helper). Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Do not hand-register primary CRUD tools. Finish the ObjectType + adapter edits and stop. If blocked, report the blocker clearly instead of looping.",
+          "Follow the plugin-authoring skill already loaded via use_skill. Keep all plugin business data on host.openPluginDb. Register an ObjectType with a RecordAdapter over openPluginDb (domain scaffold helper). Never set dataPlane core-records or native workspace ObjectTypes to bypass gates. Do not hand-register primary CRUD tools. Finish the ObjectType + adapter edits and stop. If blocked or about to exceed the time budget, report the blocker clearly and stop instead of looping or improvising outside the workflow.",
         prompt:
           "Skill load result (reference): {{load_skill}}\nScaffold result: {{scaffold}}\nUser request JSON: {{trigger}}\nEdit under plugins/<id>/; keep domain Records on plugin SQLite via ObjectType + openPluginDb adapter.",
         autoApproveTools: [
@@ -453,6 +453,11 @@ export const TENANT_BOOT_MIGRATIONS = [
     name: "scaffold_domain_plugin_workflow_dogfood_v3",
     up: migrateScaffoldDomainPluginWorkflowDogfoodV3,
   },
+  {
+    version: 29,
+    name: "scaffold_domain_plugin_workflow_run_tools_v4",
+    up: migrateScaffoldDomainPluginWorkflowRunToolsV4,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
@@ -472,6 +477,11 @@ function migrateScaffoldDomainPluginWorkflowOtV2(db: Database.Database): void {
 
 /** Harden implement timeout / fail-loud copy for domain dogfood (#653). */
 function migrateScaffoldDomainPluginWorkflowDogfoodV3(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
+}
+
+/** Re-seed after get_workflow_run / list_workflow_runs + implement fail-loud copy (#659). */
+function migrateScaffoldDomainPluginWorkflowRunToolsV4(db: Database.Database): void {
   ensureScaffoldDomainPluginWorkflow(db);
 }
 
