@@ -535,6 +535,36 @@ export function ensureBuiltInStructure(db: AppDatabase): void {
   // via tenant:install — core ships personal OS with an empty structure tree.
 }
 
+/**
+ * Remove Structure departments seeded by a plugin (no plugin_id column).
+ * Uses manifest department ids (default `[pluginId]`) and the same subtree
+ * prune pattern as built-in cleanup so nested pages go with the root (#658).
+ */
+export function prunePluginStructureNodes(
+  db: AppDatabase,
+  opts: { pluginId: string; departmentIds?: string[] | null }
+): { prunedRoots: string[] } {
+  const roots = (
+    opts.departmentIds?.length ? opts.departmentIds : [opts.pluginId]
+  )
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const pruneSubtree = db.prepare(
+    `DELETE FROM structure_nodes WHERE id=? OR parent_id=? OR parent_id LIKE ?`
+  );
+  const prunedRoots: string[] = [];
+  for (const deptId of roots) {
+    const row = db
+      .prepare(`SELECT built_in FROM structure_nodes WHERE id=?`)
+      .get(deptId) as { built_in: number } | undefined;
+    if (!row) continue;
+    if (row.built_in === 1) continue;
+    pruneSubtree.run(deptId, deptId, `${deptId}-%`);
+    prunedRoots.push(deptId);
+  }
+  return { prunedRoots };
+}
+
 /* Legacy aliases for transitional imports */
 export function createDepartment(
   db: AppDatabase,
