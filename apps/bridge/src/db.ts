@@ -243,9 +243,9 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Prove create + list on plugin SQLite",
       config: {
         system:
-          "After install_plugin in this same session, prove create+list with generated ObjectType tools first (create_<snake> / list_<plural>). Do not use bare workspace create_record / list_records for plugin business rows. Generics with objectType set to the plugin ObjectType are a fallback only when generated tools are missing after catalog refresh. Do not claim done after tools alone: call list_structure and confirm Welcome (__id__-welcome kind) and Items (record-list with objectType) exist; then list_records with that objectType as a Welcome/page smoke (same kernel path the Welcome UI uses). Fail clearly if structure pages or the smoke list are missing.",
+          "After install_plugin in this same session, prove create+list using Install.tools and Install.preferToolsHint (generated ObjectType tools first: create_<snake> / list_<plural>). Do not use bare workspace create_record / list_records for plugin business rows. Generics with objectType set to the plugin ObjectType are a fallback only when generated tools are missing after catalog refresh. Do not claim done after tools alone: call list_structure and confirm Welcome (__id__-welcome kind) and Items (record-list with objectType) exist; then list_records with that objectType as a Welcome/page smoke (same kernel path the Welcome UI uses). Fail clearly if structure pages or the smoke list are missing.",
         prompt:
-          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\n1) Create one row and list via generated ObjectType tools (prefer those over generics).\n2) list_structure: confirm Welcome + Items pages for this plugin.\n3) list_records(objectType=<plugin ObjectType>) smoke for Welcome.\nReport plugin id, data plane (plugin SQLite), ObjectType name, structure page ids, and smoke list count.",
+          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\n1) Read Install.preferToolsHint / Install.tools and create one row then list via those generated ObjectType tools first (prefer them over generics).\n2) list_structure: confirm Welcome + Items pages for this plugin.\n3) list_records(objectType=<plugin ObjectType>) smoke for Welcome.\nReport plugin id, data plane (plugin SQLite), ObjectType name, structure page ids, and smoke list count.",
         autoApproveTools: [],
         maxIterations: 10,
       },
@@ -463,6 +463,11 @@ export const TENANT_BOOT_MIGRATIONS = [
     name: "scaffold_domain_plugin_ui_verify_v5",
     up: migrateScaffoldDomainPluginWorkflowUiVerifyV5,
   },
+  {
+    version: 31,
+    name: "scaffold_domain_plugin_prefer_tools_v6",
+    up: migrateScaffoldDomainPluginWorkflowPreferToolsV6,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
@@ -492,6 +497,11 @@ function migrateScaffoldDomainPluginWorkflowRunToolsV4(db: Database.Database): v
 
 /** Re-seed prove for Welcome/page verify after domain install (#660). */
 function migrateScaffoldDomainPluginWorkflowUiVerifyV5(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
+}
+
+/** Re-seed prove to prefer Install.tools / preferToolsHint (#670). */
+function migrateScaffoldDomainPluginWorkflowPreferToolsV6(db: Database.Database): void {
   ensureScaffoldDomainPluginWorkflow(db);
 }
 

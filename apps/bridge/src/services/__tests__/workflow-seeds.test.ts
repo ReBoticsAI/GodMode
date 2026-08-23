@@ -60,6 +60,13 @@ describe("workflow seeds (#635)", () => {
           .get() as { name: string } | undefined
       )?.name
     ).toBe("scaffold_domain_plugin_ui_verify_v5");
+    expect(
+      (
+        db
+          .prepare(`SELECT name FROM schema_version WHERE version = 31`)
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_prefer_tools_v6");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
