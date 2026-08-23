@@ -28,6 +28,7 @@ import {
 } from "../kernel/plugin-object-types.js";
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
 import { emitKernelStructureChanged } from "../kernel/adapter-registry.js";
+import { prunePluginStructureNodes } from "./structure.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
 import { getPluginChild } from "../plugins/plugin-child-registry.js";
@@ -288,6 +289,8 @@ export async function uninstallPluginForTenant(
     existing.plugin_root?.trim() ||
     pluginRuntime.getPlugin(pluginId)?.pluginRoot ||
     "";
+  const departmentIds =
+    pluginRuntime.getPlugin(pluginId)?.manifest.departments ?? null;
   core
     .prepare(
       `UPDATE tenant_plugins SET state='uninstalling', desired_state='absent', last_error=NULL,
@@ -296,6 +299,17 @@ export async function uninstallPluginForTenant(
     .run(tenantId, pluginId);
   try {
     removePluginKnowledge(getTenantDb(tenantId), pluginId);
+    try {
+      prunePluginStructureNodes(getTenantDb(tenantId), {
+        pluginId,
+        departmentIds,
+      });
+    } catch (pruneErr) {
+      console.warn(
+        `[plugins] Structure prune on uninstall failed for ${pluginId}:`,
+        pruneErr instanceof Error ? pruneErr.message : pruneErr
+      );
+    }
     await pluginRuntime.uninstallPluginForTenant(pluginId, tenantId);
     core.prepare(`DELETE FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`).run(
       tenantId,
@@ -359,8 +373,7 @@ export async function uninstallPluginForTenant(
       );
     }
   }
-  // Refresh sidebar even when Structure rows are unchanged today; #658 prune
-  // will rely on this same emit so ghost departments clear without a hard refresh.
+  // Sidebar refresh (#657); Structure rows pruned above (#658).
   emitKernelStructureChanged({
     entity: "plugin",
     action: "uninstalled",

@@ -17,6 +17,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/workflow-seeds.test.ts",
       "apps/bridge/src/services/__tests__/domain-plugin-dogfood-653.test.ts",
       "apps/bridge/src/services/__tests__/plugin-lifecycle-structure-657.test.ts",
+      "apps/bridge/src/services/__tests__/plugin-lifecycle-uninstall-structure-658.test.ts",
       "apps/bridge/src/services/__tests__/domain-sqlite-ot.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",
