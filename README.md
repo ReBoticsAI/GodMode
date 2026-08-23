@@ -4,9 +4,9 @@
 [![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
-**Your Control Center:** create, edit, organize, and monitor everything you do for yourself, your agents, and your people. Built to be the last platform stack you need.
+Think of GodMode as the feeling of inhabiting a digital body. The software is the body. Structure is the anatomy: departments are regions, divisions group work inside a region and pages are the surfaces you use. The model is the brain. Digital You is your twin inside GodMode: it learns your voice and conventions. It guides you when you are here and stands in when you are not. Intelligence is the nervous system, the platform agent you talk to in order to grow GodMode and its anatomy. Specialized agents are the muscles: they own a job, attach to a region and execute.
 
-Open source (Apache 2.0). Local-first by design: self-host on your own machine, or use Cloud for convenience. **Self-expanding:** Intelligence builds and extends GodMode from inside GodMode. **Digital You** is your twin (thinking partner and stand-in). **Connect anything** via Marketplace packs, plugins, and connectors. Share live resources with your team.
+Open source (Apache 2.0). Local-first by design: self-host on your own machine or use Cloud for convenience.
 
 ![GodMode home hub](docs/assets/readme/hero-home.png)
 
