@@ -117,6 +117,71 @@ export function isCursorSdkAuthStaleError(err: unknown): boolean {
   );
 }
 
+/** Stable code for chat UI / clients (#668). Prefixed on Error.message for string-only transports. */
+export const CURSOR_SESSION_STALE_CODE = "CURSOR_SESSION_STALE";
+
+export class CursorSessionStaleError extends Error {
+  readonly code = CURSOR_SESSION_STALE_CODE;
+  constructor(
+    message = "Cursor session expired for this agent run (your API key is usually still valid). Open Platform Vault → Cursor subscription → Refresh session, then retry. You do not need a new API key unless Connect itself fails."
+  ) {
+    super(`${CURSOR_SESSION_STALE_CODE}: ${message}`);
+    this.name = "CursorSessionStaleError";
+  }
+}
+
+export function isCursorSessionStaleError(err: unknown): boolean {
+  if (err instanceof CursorSessionStaleError) return true;
+  if (err && typeof err === "object" && (err as { code?: string }).code === CURSOR_SESSION_STALE_CODE) {
+    return true;
+  }
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return msg.includes(CURSOR_SESSION_STALE_CODE);
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Stale-auth retries after the first failure (evict + backoff between attempts). */
+export const CURSOR_STALE_AUTH_MAX_RETRIES = 3;
+const CURSOR_STALE_AUTH_BACKOFF_MS = [250, 750, 1500] as const;
+
+/**
+ * After an initial stale-auth failure, evict + backoff + retry up to
+ * CURSOR_STALE_AUTH_MAX_RETRIES times. Exhaustion throws CursorSessionStaleError.
+ * Exported for #668 unit tests.
+ */
+export async function retryCursorRunOnStaleAuth<T>(opts: {
+  runOnce: (forceNewAgent: boolean) => Promise<T>;
+  onEvict: () => void;
+  initialError?: unknown;
+  abortSignal?: AbortSignal | null;
+  sleep?: (ms: number) => Promise<void>;
+  maxRetries?: number;
+  backoffMs?: readonly number[];
+}): Promise<T> {
+  const sleep = opts.sleep ?? sleepMs;
+  const maxRetries = opts.maxRetries ?? CURSOR_STALE_AUTH_MAX_RETRIES;
+  const backoffMs = opts.backoffMs ?? CURSOR_STALE_AUTH_BACKOFF_MS;
+  let lastErr: unknown = opts.initialError ?? new Error("stale auth");
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const backoff = backoffMs[attempt] ?? backoffMs[backoffMs.length - 1] ?? 1500;
+    opts.onEvict();
+    await sleep(backoff);
+    if (opts.abortSignal?.aborted) {
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+    }
+    try {
+      return await opts.runOnce(true);
+    } catch (retryErr) {
+      lastErr = retryErr;
+      if (!isCursorSdkAuthStaleError(retryErr)) throw retryErr;
+    }
+  }
+  throw new CursorSessionStaleError();
+}
+
 function closeCachedAgent(entry: ChatAgentEntry): void {
   try {
     entry.agent.close();
@@ -947,22 +1012,15 @@ export class CursorCloudBackend implements AgentBackend {
       // Same Vault API key. Cursor SDK often surfaces stale gRPC/session as
       // AuthenticationError; a fresh Agent.create recovers without a new key.
       console.warn(
-        "[cursor_cloud] stale auth on SDK agent; clearing handle and retrying once",
+        "[cursor_cloud] stale auth on SDK agent; clearing handle and retrying",
         err instanceof Error ? err.message : err
       );
-      evictCursorSdkAgent(chatKey);
-      try {
-        return await runOnce(true);
-      } catch (retryErr) {
-        if (isCursorSdkAuthStaleError(retryErr)) {
-          throw new Error(
-            "Cursor session expired for this agent run (your API key is usually still valid). " +
-              "Open Platform Vault → Cursor subscription → Refresh session, then retry. " +
-              "You do not need a new API key unless Connect itself fails."
-          );
-        }
-        throw retryErr;
-      }
+      return await retryCursorRunOnStaleAuth({
+        runOnce,
+        onEvict: () => evictCursorSdkAgent(chatKey),
+        initialError: err,
+        abortSignal: req.abortSignal,
+      });
     }
     });
   }

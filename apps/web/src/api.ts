@@ -1173,7 +1173,7 @@ export interface AiStreamHandlers {
     messageId: string;
   }) => void;
   onStatus?: (payload: { phase: string; message: string }) => void;
-  onError?: (error: string) => void;
+  onError?: (error: string, code?: string) => void;
 }
 
 /** Open `/ws/chat` socket for the in-flight turn (Approve via same WS). */
@@ -1274,7 +1274,10 @@ export function streamAiChat(
             (parsed as { error?: string }).error ??
               (parsed as { message?: string }).message ??
               ""
-          ).trim() || "Chat failed without a message. Try sending again."
+          ).trim() || "Chat failed without a message. Try sending again.",
+          typeof (parsed as { code?: unknown }).code === "string"
+            ? String((parsed as { code: string }).code)
+            : undefined
         );
         break;
     }
