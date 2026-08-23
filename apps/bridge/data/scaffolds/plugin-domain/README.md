@@ -10,7 +10,15 @@ GodMode **domain** plugin scaffold. Business rows use `host.openPluginDb`, not t
 
 Structure seed may use `getTenantDb` (INSERT OR IGNORE `structure_nodes` only on Community child). Domain tables stay in `plugin-data/{tenant}/__PLUGIN_ID__.sqlite`.
 
-## ObjectType + generated tools
+## Structure + Welcome
+
+Install seeds:
+
+- Department placeholder
+- Welcome page (`kind: __PLUGIN_ID__-welcome`) that lists live `__RECORD_TYPE__` rows via `api.kernel.listRecords`
+- Items page (`kind: record-list`, `object_type: __RECORD_TYPE__`) using the host record-list UI
+
+Empty Welcome copy appears only when total is 0.
 
 This scaffold registers ObjectType `__RECORD_TYPE__` with a RecordAdapter over `domain_items` in plugin SQLite.
 
