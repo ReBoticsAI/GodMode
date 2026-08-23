@@ -32,6 +32,45 @@ export type WorkflowNodeType =
   | "agent"
   | "pause";
 
+/**
+ * Workflow tool nodes that may mutate install/build state without a live chat
+ * confirm UI. Trusted confirmation maps to kernel `trustedConfirmation`.
+ */
+export const WORKFLOW_TRUSTED_CONFIRM_TOOLS = new Set([
+  "install_plugin",
+  "build_plugin",
+]);
+
+/** Stable Idempotency-Key / request id for a workflow tool attempt (#669). */
+export function workflowToolCallId(
+  runId: string,
+  nodeId: string,
+  visit: number
+): string {
+  return `wf:${runId}:${nodeId}:${visit}`;
+}
+
+/**
+ * Attach per-attempt tool call id (kernel idempotency) and, for install/build,
+ * trusted confirmation so scaffold workflows do not fail KERNEL_IDEMPOTENCY_REQUIRED.
+ */
+export function withWorkflowToolTrust(
+  base: ToolExecContext,
+  opts: {
+    runId: string;
+    nodeId: string;
+    visit: number;
+    toolName: string;
+  }
+): ToolExecContext {
+  const trusted = WORKFLOW_TRUSTED_CONFIRM_TOOLS.has(opts.toolName);
+  return {
+    ...base,
+    activeToolCallId: workflowToolCallId(opts.runId, opts.nodeId, opts.visit),
+    ...(trusted ? { confirmationApproved: true } : {}),
+  };
+}
+
 export interface WorkflowNode {
   id: string;
   type: WorkflowNodeType;
@@ -567,7 +606,7 @@ async function runLoop(
         .prepare(`SELECT agent_id FROM ai_workflows WHERE id = ?`)
         .get(wf.id) as { agent_id: string | null } | undefined
     )?.agent_id ?? undefined;
-  const toolCtx: ToolExecContext = {
+  const baseToolCtx: ToolExecContext = {
     db: deps.db,
     bridgePort: deps.bridgePort,
     ...(ownerAgentId ? { activeAgentId: ownerAgentId } : {}),
@@ -616,6 +655,15 @@ async function runLoop(
                 ? interpolate(val, input, state.nodeOutputs, state.nodeJson)
                 : val;
           }
+          // Kernel activate_plugin_path requires Idempotency-Key; chat sets
+          // activeToolCallId from the model tool call. Workflows must invent one.
+          const visit = state.visited[nodeId] ?? 1;
+          const toolCtx = withWorkflowToolTrust(baseToolCtx, {
+            runId,
+            nodeId,
+            visit,
+            toolName,
+          });
           const result = await executeTool(toolName, interpolated, toolCtx);
           const out = typeof result === "string" ? result : JSON.stringify(result);
           recordOutput(state, nodeId, out);
