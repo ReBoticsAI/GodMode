@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -81,20 +82,25 @@ export function StructureProvider({ children }: { children: ReactNode }) {
   const [departments, setDepartments] = useState<DepartmentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Ignore stale /records responses when overlapping structure_changed reloads race. */
+  const reloadGen = useRef(0);
 
   const reload = useCallback(async () => {
+    const gen = ++reloadGen.current;
     try {
       const res = await api<StructureRecordsResponse>(
         "/records/StructureNode?limit=500"
       );
+      if (gen !== reloadGen.current) return;
       const adapted = adaptRecords(res);
       setNodes(adapted.nodes);
       setDepartments(adapted.departments);
       setError(null);
     } catch (err) {
+      if (gen !== reloadGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   }, []);
 

@@ -186,17 +186,26 @@ export const structureNodeAdapter: RecordAdapter = {
   get: (db, _def, id) => getStructureNodeRecord(db, id),
   create: (db, _def, data, ctx) => {
     const row = createStructureNodeRecord(db, data);
-    ctx.bus?.emit("structure.node.created", { nodeId: row.id });
+    ctx.bus?.emit("structure.node.created", {
+      nodeId: row.id,
+      tenantId: ctx.tenantId,
+    });
     return row;
   },
   update: (db, _def, id, data, ctx) => {
     const row = updateStructureNodeRecord(db, id, data);
-    ctx.bus?.emit("structure.node.updated", { nodeId: id });
+    ctx.bus?.emit("structure.node.updated", {
+      nodeId: id,
+      tenantId: ctx.tenantId,
+    });
     return row;
   },
   delete: (db, _def, id, ctx) => {
     deleteStructureNodeRecord(db, id);
-    ctx.bus?.emit("structure.node.deleted", { nodeId: id });
+    ctx.bus?.emit("structure.node.deleted", {
+      nodeId: id,
+      tenantId: ctx.tenantId,
+    });
   },
   actions: {
     set_agent(db, _def, id, input, ctx) {
@@ -205,7 +214,10 @@ export const structureNodeAdapter: RecordAdapter = {
           ? null
           : String(input.agent_id);
       setNodeAgent(db, id, agentId);
-      ctx.bus?.emit("structure.node.updated", { nodeId: id });
+      ctx.bus?.emit("structure.node.updated", {
+        nodeId: id,
+        tenantId: ctx.tenantId,
+      });
       return getStructureNodeRecord(db, id);
     },
     move(db, _def, id, input, ctx) {
@@ -215,7 +227,10 @@ export const structureNodeAdapter: RecordAdapter = {
             ? null
             : String(input.parent_id),
       });
-      ctx.bus?.emit("structure.node.updated", { nodeId: id });
+      ctx.bus?.emit("structure.node.updated", {
+        nodeId: id,
+        tenantId: ctx.tenantId,
+      });
       return row;
     },
     reorder(db, _def, _id, input, ctx) {
