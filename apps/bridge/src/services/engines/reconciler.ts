@@ -78,9 +78,14 @@ export class EngineReconciler {
     for (const action of ["created", "updated", "deleted"] as const) {
       this.bus.on(
         `structure.node.${action}`,
-        (payload: { nodeId: string }) => {
+        (payload: { nodeId: string; tenantId?: string }) => {
           this.registry.reconcileAll();
-          this.emitStructureChanged("node", action, payload.nodeId);
+          this.emitStructureChanged(
+            "node",
+            action,
+            payload.nodeId,
+            payload.tenantId
+          );
         }
       );
     }
@@ -103,8 +108,15 @@ export class EngineReconciler {
   private emitStructureChanged(
     entity: string,
     action: string,
-    id: string
+    id: string,
+    tenantId?: string
   ): void {
-    this.bus.emit("structure_changed", { entity, action, id, at: Date.now() });
+    this.bus.emit("structure_changed", {
+      entity,
+      action,
+      id,
+      ...(tenantId ? { tenantId } : {}),
+      at: Date.now(),
+    });
   }
 }
