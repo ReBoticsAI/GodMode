@@ -17,10 +17,36 @@ export const register: GodModePluginRegister = (api) => {
     tenantDb
       .prepare(
         `INSERT OR IGNORE INTO structure_nodes
-           (id, parent_id, label, icon, segment, kind, right_sidebar, agent_id, built_in, sort_order, tabs_json)
-         VALUES (?, NULL, ?, 'folder', ?, 'placeholder', NULL, NULL, 0, 99, NULL)`
+           (id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order, tabs_json)
+         VALUES (?, NULL, ?, 'folder', ?, 'placeholder', NULL, NULL, NULL, 0, 99, NULL)`
       )
       .run(deptId, deptLabel, deptId);
+    tenantDb
+      .prepare(
+        `INSERT OR IGNORE INTO structure_nodes
+           (id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order, tabs_json)
+         VALUES (?, ?, ?, 'sparkles', ?, ?, NULL, NULL, NULL, 0, 0, NULL)`
+      )
+      .run(
+        `${deptId}-welcome`,
+        deptId,
+        "Welcome",
+        `${deptId}-welcome`,
+        `${PLUGIN_ID}-welcome`
+      );
+    tenantDb
+      .prepare(
+        `INSERT OR IGNORE INTO structure_nodes
+           (id, parent_id, label, icon, segment, kind, object_type, right_sidebar, agent_id, built_in, sort_order, tabs_json)
+         VALUES (?, ?, ?, 'list', ?, 'record-list', ?, NULL, NULL, 0, 1, NULL)`
+      )
+      .run(
+        `${deptId}-items`,
+        deptId,
+        "Items",
+        `${deptId}-items`,
+        RECORD_TYPE
+      );
 
     // Plugin business data: dedicated SQLite under plugin-data/{tenant}/{plugin}.sqlite
     const db = host.openPluginDb(PLUGIN_ID, tenantId);

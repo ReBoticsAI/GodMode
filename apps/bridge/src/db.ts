@@ -243,11 +243,11 @@ const SCAFFOLD_DOMAIN_PLUGIN_GRAPH = {
       label: "Prove create + list on plugin SQLite",
       config: {
         system:
-          "Prove with generated ObjectType tools (create_<snake> / list_<plural> from the plugin ObjectType) or create_record / list_records with objectType set. Do not use workspace Records for plugin business rows. Prefer generated ObjectType tools in this same chat; the host refreshes the catalog after install_plugin.",
+          "After install_plugin in this same session, prove create+list with generated ObjectType tools first (create_<snake> / list_<plural>). Do not use bare workspace create_record / list_records for plugin business rows. Generics with objectType set to the plugin ObjectType are a fallback only when generated tools are missing after catalog refresh. Do not claim done after tools alone: call list_structure and confirm Welcome (__id__-welcome kind) and Items (record-list with objectType) exist; then list_records with that objectType as a Welcome/page smoke (same kernel path the Welcome UI uses). Fail clearly if structure pages or the smoke list are missing.",
         prompt:
-          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\nCreate one Record and list Records via generated ObjectType tools (or generics with objectType). Report plugin id, data plane (plugin SQLite), ObjectType name, and how to re-run tools if the catalog lagged.",
+          "Plugin id: {{trigger.id}}\nInstall result: {{install}}\n1) Create one row and list via generated ObjectType tools (prefer those over generics).\n2) list_structure: confirm Welcome + Items pages for this plugin.\n3) list_records(objectType=<plugin ObjectType>) smoke for Welcome.\nReport plugin id, data plane (plugin SQLite), ObjectType name, structure page ids, and smoke list count.",
         autoApproveTools: [],
-        maxIterations: 8,
+        maxIterations: 10,
       },
       position: { x: 1420, y: 200 },
     },
@@ -458,6 +458,11 @@ export const TENANT_BOOT_MIGRATIONS = [
     name: "scaffold_domain_plugin_workflow_run_tools_v4",
     up: migrateScaffoldDomainPluginWorkflowRunToolsV4,
   },
+  {
+    version: 30,
+    name: "scaffold_domain_plugin_ui_verify_v5",
+    up: migrateScaffoldDomainPluginWorkflowUiVerifyV5,
+  },
 ] as const;
 
 function migrateAiChatsTurnStateSchema(db: Database.Database): void {
@@ -482,6 +487,11 @@ function migrateScaffoldDomainPluginWorkflowDogfoodV3(db: Database.Database): vo
 
 /** Re-seed after get_workflow_run / list_workflow_runs + implement fail-loud copy (#659). */
 function migrateScaffoldDomainPluginWorkflowRunToolsV4(db: Database.Database): void {
+  ensureScaffoldDomainPluginWorkflow(db);
+}
+
+/** Re-seed prove for Welcome/page verify after domain install (#660). */
+function migrateScaffoldDomainPluginWorkflowUiVerifyV5(db: Database.Database): void {
   ensureScaffoldDomainPluginWorkflow(db);
 }
 

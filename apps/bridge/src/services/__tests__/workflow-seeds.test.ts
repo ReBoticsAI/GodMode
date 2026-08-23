@@ -53,6 +53,13 @@ describe("workflow seeds (#635)", () => {
           .get() as { name: string } | undefined
       )?.name
     ).toBe("scaffold_domain_plugin_workflow_run_tools_v4");
+    expect(
+      (
+        db
+          .prepare(`SELECT name FROM schema_version WHERE version = 30`)
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_ui_verify_v5");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
@@ -85,8 +92,12 @@ describe("workflow seeds (#635)", () => {
         (n) => n.type === "tool" && n.config?.tool === "install_plugin"
       )
     ).toBe(true);
-    const prove = graph.nodes.find((n) => n.config?.system?.includes("ObjectType"));
-    expect(prove?.config?.system).toMatch(/create_|list_records|objectType/i);
+    const prove = graph.nodes.find((n) =>
+      n.config?.system?.includes("generated ObjectType tools first")
+    );
+    expect(prove?.config?.system).toMatch(/list_structure|Welcome/i);
+    expect(prove?.config?.system).toMatch(/generated ObjectType tools first/i);
+    expect(prove?.config?.maxIterations).toBe(10);
     const implement = graph.nodes.find((n) =>
       n.config?.system?.includes("RecordAdapter") ||
       n.config?.system?.includes("openPluginDb")

@@ -64,6 +64,8 @@ describe("architecture scaffolds (#630)", () => {
       expect(bridge).toMatch(/openPluginDb/);
       expect(bridge).toMatch(/ensureDomainItemsTable|domain_items/);
       expect(bridge).toMatch(/registerDomainSqliteObjectType/);
+      expect(bridge).toMatch(/-welcome/);
+      expect(bridge).toMatch(/record-list/);
       expect(bridge).not.toMatch(/tools\.register/);
       expect(bridge).not.toMatch(/_list_items|_add_item/);
       expect(bridge).not.toMatch(/__PLUGIN_ID__/);
@@ -75,6 +77,12 @@ describe("architecture scaffolds (#630)", () => {
         "utf8"
       );
       expect(helper).toMatch(/domain_items/);
+      const web = fs.readFileSync(
+        path.join(result.pluginRoot, "src", "web.tsx"),
+        "utf8"
+      );
+      expect(web).toMatch(/listRecords/);
+      expect(web).toMatch(/No rows yet/);
       const manifest = JSON.parse(
         fs.readFileSync(path.join(result.pluginRoot, "godmode.plugin.json"), "utf8")
       ) as { id: string; dataPlane?: string; scaffoldTemplate?: string };
