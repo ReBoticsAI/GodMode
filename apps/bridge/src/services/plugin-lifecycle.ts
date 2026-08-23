@@ -27,6 +27,7 @@ import {
   registerPluginObjectTypes,
 } from "../kernel/plugin-object-types.js";
 import { unregisterObjectTypesByPlugin } from "../kernel/registry.js";
+import { emitKernelStructureChanged } from "../kernel/adapter-registry.js";
 import { listInstalledPlugins } from "../plugins/plugin-install.js";
 import { revokeCapabilityGrants } from "./plugin-capabilities.js";
 import { getPluginChild } from "../plugins/plugin-child-registry.js";
@@ -205,6 +206,14 @@ export async function installPluginForTenant(
         refreshErr instanceof Error ? refreshErr.message : refreshErr
       );
     }
+    // Raw SQL / Community Structure seeds skip kernel StructureNode CRUD, so
+    // emit once so the web sidebar reloads without a hard refresh (#657).
+    emitKernelStructureChanged({
+      entity: "plugin",
+      action: "installed",
+      id: pluginId,
+      tenantId,
+    });
   } catch (error) {
     try {
       removePluginKnowledge(getTenantDb(tenantId), pluginId);
@@ -350,6 +359,14 @@ export async function uninstallPluginForTenant(
       );
     }
   }
+  // Refresh sidebar even when Structure rows are unchanged today; #658 prune
+  // will rely on this same emit so ghost departments clear without a hard refresh.
+  emitKernelStructureChanged({
+    entity: "plugin",
+    action: "uninstalled",
+    id: pluginId,
+    tenantId,
+  });
 }
 
 export async function activatePluginForTenant(

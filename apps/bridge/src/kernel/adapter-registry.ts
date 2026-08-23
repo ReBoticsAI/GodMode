@@ -95,12 +95,33 @@ export interface RecordAdapter {
 const adapters = new Map<string, RecordAdapter>();
 let kernelBus: EventEmitter | undefined;
 
-export function setKernelEventBus(bus: EventEmitter): void {
+export function setKernelEventBus(bus: EventEmitter | undefined): void {
   kernelBus = bus;
 }
 
 export function withKernelEventBus(ctx: OperationContext): OperationContext {
   return ctx.bus || !kernelBus ? ctx : { ...ctx, bus: kernelBus };
+}
+
+/**
+ * Notify web clients that Structure may have changed outside kernel
+ * StructureNode CRUD (e.g. plugin install raw SQL seeds). No-op when the
+ * process bus is unset (unit tests that never bootstrap).
+ */
+export function emitKernelStructureChanged(payload: {
+  entity: string;
+  action: string;
+  id: string;
+  tenantId?: string;
+}): void {
+  if (!kernelBus) return;
+  kernelBus.emit("structure_changed", {
+    entity: payload.entity,
+    action: payload.action,
+    id: payload.id,
+    tenantId: payload.tenantId,
+    at: Date.now(),
+  });
 }
 
 export function registerRecordAdapter(adapter: RecordAdapter): void {
