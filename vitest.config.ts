@@ -21,6 +21,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/structure-tenant-ws-667.test.ts",
       "apps/bridge/src/services/__tests__/workflow-run-tools-659.test.ts",
       "apps/bridge/src/services/__tests__/workflow-install-idempotency-669.test.ts",
+      "apps/bridge/src/services/__tests__/plugin-install-prefer-tools-670.test.ts",
       "apps/bridge/src/services/__tests__/domain-sqlite-ot.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-acquisition.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-commerce.test.ts",

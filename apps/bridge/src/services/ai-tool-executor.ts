@@ -33,6 +33,7 @@ import {
   pluginToolsAsAiDefs,
   type PluginToolExecContext,
 } from "../plugins/plugin-tools.js";
+import { mergeInstallPluginTools } from "../plugins/plugin-install-tools.js";
 import {
   executeBridgeMcpTool,
   getBridgeMcpToolMode,
@@ -3945,12 +3946,16 @@ export async function executeTool(
           (row) => row.plugin_id === pluginId
         );
         if (already) {
-          const tools = pluginToolNamesForPlugin(pluginId);
+          const { tools, preferToolsHint } = mergeInstallPluginTools(
+            pluginId,
+            pluginToolNamesForPlugin(pluginId)
+          );
           return {
             ok: true,
             alreadyInstalled: true,
             pluginId,
             tools,
+            ...(preferToolsHint ? { preferToolsHint } : {}),
             hint:
               tools.length > 0
                 ? `Plugin already active. Prefer: ${tools.join(", ")}.`
@@ -3976,11 +3981,15 @@ export async function executeTool(
             install_for_tenant: true,
           },
         });
-        const tools = pluginToolNamesForPlugin(pluginId);
+        const { tools, preferToolsHint } = mergeInstallPluginTools(
+          pluginId,
+          pluginToolNamesForPlugin(pluginId)
+        );
         return {
           ok: true,
           result,
           tools,
+          ...(preferToolsHint ? { preferToolsHint } : {}),
           hint:
             tools.length > 0
               ? `Plugin tools now registered: ${tools.join(", ")}. Prefer calling them directly in this chat.`
