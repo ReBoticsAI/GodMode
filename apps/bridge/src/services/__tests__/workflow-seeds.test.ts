@@ -39,6 +39,13 @@ describe("workflow seeds (#635)", () => {
           .get() as { name: string } | undefined
       )?.name
     ).toBe("scaffold_domain_plugin_workflow_ot_v2");
+    expect(
+      (
+        db
+          .prepare(`SELECT name FROM schema_version WHERE version = 28`)
+          .get() as { name: string } | undefined
+      )?.name
+    ).toBe("scaffold_domain_plugin_workflow_dogfood_v3");
 
     const graph = JSON.parse(row!.config_json) as {
       nodes: Array<{
@@ -47,6 +54,8 @@ describe("workflow seeds (#635)", () => {
           tool?: string;
           args?: Record<string, unknown>;
           system?: string;
+          maxIterations?: number;
+          timeoutMs?: number;
         };
       }>;
     };
@@ -75,8 +84,11 @@ describe("workflow seeds (#635)", () => {
       n.config?.system?.includes("RecordAdapter")
     );
     expect(implement?.config?.system).toMatch(/ObjectType|openPluginDb/);
+    expect(implement?.config?.system).toMatch(/blocked|Finish|stop/i);
+    expect(implement?.config?.maxIterations).toBe(12);
+    expect(implement?.config?.timeoutMs).toBe(300_000);
 
-    // Idempotent: remigrate does not duplicate (v26/v27 already applied).
+    // Idempotent: remigrate does not duplicate (v26/v27/v28 already applied).
     migrateTenantDb(db);
     expect(
       (

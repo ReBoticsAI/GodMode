@@ -213,6 +213,23 @@ export function refreshIntelligenceToolsAfterPluginInstall(db: AppDatabase): voi
   repairPersonalTenantDefaults(db);
 }
 
+/** Remove plugin tool names from personal Intelligence toolAllow after uninstall (#653). */
+export function stripIntelligenceToolsAfterPluginUninstall(
+  db: AppDatabase,
+  toolNames: string[]
+): void {
+  if (!toolNames.length) return;
+  if (isOperatorTenantDb(db)) return;
+  const intel = getAgent(db, "intelligence");
+  if (!intel) return;
+  const allow = intel.toolAllow;
+  if (allow == null || allow.length === 0) return;
+  const drop = new Set(toolNames);
+  const next = allow.filter((name) => !drop.has(name));
+  if (next.length === allow.length) return;
+  updateAgent(db, "intelligence", { toolAllow: next });
+}
+
 export function syncPersonalBootstrapKnowledge(db: AppDatabase): void {
   if (isOperatorTenantDb(db)) return;
   syncBootstrapRules(db);
