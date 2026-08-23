@@ -33,12 +33,12 @@ function ctx(db: AppDatabase): ToolExecContext {
 }
 
 describe("workflow run tools (#659)", () => {
-  it("registers get_workflow_run and list_workflow_runs", () => {
-    expect(AI_TOOL_REGISTRY.some((t) => t.name === "get_workflow_run")).toBe(true);
-    expect(AI_TOOL_REGISTRY.some((t) => t.name === "list_workflow_runs")).toBe(true);
+  it("registers get_ai_workflow_run and list_ai_workflow_runs", () => {
+    expect(AI_TOOL_REGISTRY.some((t) => t.name === "get_ai_workflow_run")).toBe(true);
+    expect(AI_TOOL_REGISTRY.some((t) => t.name === "list_ai_workflow_runs")).toBe(true);
   });
 
-  it("get_workflow_run and list_workflow_runs read durable runs", async () => {
+  it("get_ai_workflow_run and list_ai_workflow_runs read durable runs", async () => {
     const db = openRunDb();
     db.prepare(
       `INSERT INTO ai_workflow_runs (id, workflow_id, status, awaiting_node_id, error)
@@ -50,7 +50,7 @@ describe("workflow run tools (#659)", () => {
     ).run("run-2", "other-wf", "done", null, null);
 
     const one = (await executeTool(
-      "get_workflow_run",
+      "get_ai_workflow_run",
       { runId: "run-1" },
       ctx(db)
     )) as { id: string; status: string; awaiting_node_id: string };
@@ -59,7 +59,7 @@ describe("workflow run tools (#659)", () => {
     expect(one.awaiting_node_id).toBe("implement");
 
     const listed = (await executeTool(
-      "list_workflow_runs",
+      "list_ai_workflow_runs",
       { workflowId: "scaffold-domain-plugin" },
       ctx(db)
     )) as { runs: Array<{ id: string }> };

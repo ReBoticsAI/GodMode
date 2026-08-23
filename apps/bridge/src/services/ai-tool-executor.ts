@@ -2366,7 +2366,7 @@ export async function executeTool(
         .all(agentId);
       return { agentId, workflows: rows };
     }
-    case "get_workflow_run": {
+    case "get_ai_workflow_run": {
       const runId = String(args.runId ?? "").trim();
       if (!runId) throw new Error("runId required");
       const row = ctx.db
@@ -2379,7 +2379,7 @@ export async function executeTool(
       if (!row) throw new Error(`workflow run not found: ${runId}`);
       return row;
     }
-    case "list_workflow_runs": {
+    case "list_ai_workflow_runs": {
       const workflowId = args.workflowId != null ? String(args.workflowId).trim() : "";
       const status = args.status != null ? String(args.status).trim() : "";
       const limit = Math.min(
@@ -2434,7 +2434,7 @@ export async function executeTool(
         workflowId,
         status: "enqueued",
         pollHint:
-          "Poll with list_workflow_runs({ workflowId }) until a run appears, then get_workflow_run({ runId }). jobId is the queue id, not the durable run id.",
+          "Poll with list_ai_workflow_runs({ workflowId }) until a run appears, then get_ai_workflow_run({ runId }). jobId is the queue id, not the durable run id.",
       };
     }
     case "update_workflow": {

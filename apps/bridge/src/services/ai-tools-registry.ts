@@ -775,7 +775,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "run_workflow",
     description:
-      "Enqueue a stored automation workflow for serialized execution (same path as schedules/hooks). Prefer this over long improvised tool chains when capabilities suggest a matching workflow. Returns jobId; poll progress with list_workflow_runs (by workflowId) or get_workflow_run (by run id once known).",
+      "Enqueue a stored automation workflow for serialized execution (same path as schedules/hooks). Prefer this over long improvised tool chains when capabilities suggest a matching workflow. Returns jobId; poll progress with list_ai_workflow_runs (by workflowId) or get_ai_workflow_run (by run id once known).",
     mode: "confirm",
     parameters: {
       type: "object",
@@ -789,9 +789,9 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "get_workflow_run",
+    name: "get_ai_workflow_run",
     description:
-      "Fetch one durable automation workflow run by id (status, awaiting node, error, timestamps). Use after list_workflow_runs or when a run id is known.",
+      "Fetch one durable automation workflow run by id (status, awaiting node, error, timestamps). Prefer this over guessing queue job ids after run_workflow. Distinct from ObjectType get_workflow_run.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -802,9 +802,9 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
-    name: "list_workflow_runs",
+    name: "list_ai_workflow_runs",
     description:
-      "List recent durable automation workflow runs, optionally filtered by workflowId and/or status. Prefer this to poll scaffold-domain-plugin after run_workflow.",
+      "List recent durable automation workflow runs, optionally filtered by workflowId and/or status. Prefer this to poll scaffold-domain-plugin after run_workflow. Distinct from ObjectType list_workflow_runs.",
     mode: "auto",
     parameters: {
       type: "object",
