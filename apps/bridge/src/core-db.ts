@@ -171,6 +171,7 @@ export interface CoreMarketplaceSellerAccount {
   metamask_address: string | null;
   payout_preference: "stripe" | "paypal" | "crypto" | null;
   onboarding_status: string;
+  public_handle: string | null;
   tos_accepted_version: string | null;
   tos_accepted_at: string | null;
   created_at: string;
