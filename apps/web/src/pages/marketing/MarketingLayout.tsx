@@ -108,7 +108,7 @@ function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           className={navLinkClass({ isActive: false })}
         >
           <CloudIcon className="size-4 shrink-0" />
-          Open Cloud
+          Login / Signup
         </a>
         <a
           href="https://github.com/ReBoticsAI/GodMode"

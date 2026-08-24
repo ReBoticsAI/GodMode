@@ -245,29 +245,6 @@ export default function MarketingHome() {
         }
         description={GODMODE_MANIFESTO}
         descriptionClassName={marketingPageDescriptionClass}
-        actions={
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button render={<a href={CLOUD_APP_HOME} />}>Login / Signup</Button>
-            <Button variant="outline" render={<Link to={`${MARKETING_BASE}/pricing`} />}>
-              View pricing
-            </Button>
-            <Button
-              variant="outline"
-              render={
-                <a
-                  href="https://github.com/ReBoticsAI/GodMode"
-                  target="_blank"
-                  rel="noreferrer"
-                />
-              }
-            >
-              GitHub
-            </Button>
-            <Button variant="outline" render={<Link to={`${MARKETING_BASE}/features`} />}>
-              Features
-            </Button>
-          </div>
-        }
       />
 
       <Card className={cn(marketingCardClass, "gap-0 py-0")}>
