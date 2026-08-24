@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "./config.js";
@@ -717,6 +718,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_live_bind_columns_v1",
     up: ensureMarketplaceLiveBindColumns,
   },
+  {
+    version: 19,
+    name: "core_marketplace_seller_public_handle_v1",
+    up: ensureMarketplaceSellerPublicHandle,
+  },
 ];
 
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
@@ -919,6 +925,58 @@ function ensureMarketplaceLiveBindColumns(db: CoreDatabase): void {
   addCol(db, "marketplace_listings", "live_resource_id", "TEXT");
   addCol(db, "marketplace_listings", "live_bundle_digest", "TEXT");
   addCol(db, "marketplace_listings", "live_bound_at", "TEXT");
+}
+
+/** Opaque public storefront handle for marketing + Stripe business_profile.url (#688). */
+function ensureMarketplaceSellerPublicHandle(db: CoreDatabase): void {
+  if (!tableExists(db, "marketplace_seller_accounts")) return;
+  addCol(db, "marketplace_seller_accounts", "public_handle", "TEXT");
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS marketplace_seller_accounts_public_handle_uidx
+      ON marketplace_seller_accounts(public_handle)
+      WHERE public_handle IS NOT NULL AND TRIM(public_handle) != '';
+  `);
+  const rows = db
+    .prepare(
+      `SELECT id FROM marketplace_seller_accounts
+       WHERE public_handle IS NULL OR TRIM(public_handle) = ''`
+    )
+    .all() as Array<{ id: string }>;
+  const used = new Set(
+    (
+      db
+        .prepare(
+          `SELECT public_handle AS h FROM marketplace_seller_accounts
+           WHERE public_handle IS NOT NULL AND TRIM(public_handle) != ''`
+        )
+        .all() as Array<{ h: string }>
+    ).map((r) => r.h)
+  );
+  const insert = db.prepare(
+    columnExists(db, "marketplace_seller_accounts", "updated_at")
+      ? `UPDATE marketplace_seller_accounts SET public_handle=?, updated_at=datetime('now') WHERE id=?`
+      : `UPDATE marketplace_seller_accounts SET public_handle=? WHERE id=?`
+  );
+  for (const row of rows) {
+    let handle = "";
+    for (let i = 0; i < 8; i++) {
+      handle = allocateSellerPublicHandleCandidate();
+      if (!used.has(handle)) break;
+    }
+    if (!handle || used.has(handle)) {
+      handle = `s_${row.id.replace(/-/g, "").slice(0, 12)}`;
+    }
+    used.add(handle);
+    insert.run(handle, row.id);
+  }
+}
+
+function allocateSellerPublicHandleCandidate(): string {
+  // Opaque short id: s_ + 10 lowercase base36 chars from crypto.
+  const bytes = randomBytes(10);
+  let n = "";
+  for (const b of bytes) n += (b % 36).toString(36);
+  return `s_${n.slice(0, 10)}`;
 }
 
 /** Paid Marketplace commerce: USD orders, seller payouts, ToS, chargeback bans. */

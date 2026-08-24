@@ -11,7 +11,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `DEPLOYMENT_MODE` | `local` | `local`, `hub`, or `client` |
 | `AUTH_PUBLIC_URL` | `http://127.0.0.1:3847` | Bridge URL for session cookies |
 | `WEB_PUBLIC_URL` | `http://127.0.0.1:5173` | Dashboard URL |
-| `WEB_ORIGIN` | same as web URL | CORS allowed origin(s), comma-separated |
+| `WEB_ORIGIN` | same as web URL | CORS allowed origin(s), comma-separated. Cloud also allows marketing apex/www (`https://godmode.software`, `https://www.godmode.software`), `BUSINESS_WEBSITE_URL` when set, and `*.pages.dev` hosts that include `godmode-www` for Marketplace public API browse (#688). |
 | `CORS_PERMISSIVE` | unset | Set `true` to allow any Origin in non-production (dev only) |
 | `AUTH_SESSION_SECRET` | dev placeholder | **Required in production** — random secret |
 | `AUTH_ALLOW_ANONYMOUS` | `false` | Set `true` only for headless local tooling |
@@ -24,7 +24,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `EMAIL_FROM` | `GodMode <noreply@localhost>` | From header for transactional mail (must be a Resend-verified domain in SaaS) |
 | `RESEND_API_KEY` | empty | Real Resend API key when `EMAIL_PROVIDER=resend` (not the `re_...` placeholder) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | empty | SMTP transport when `EMAIL_PROVIDER=smtp` |
-| `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website) |
+| `BUSINESS_WEBSITE_URL` | empty | Public marketing site URL (Stripe business website). Also merged into CORS allowlist when set. |
 | `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | empty | Google OAuth for sign-in (optional) |
 | `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | empty | **Deprecated** classic GitHub OAuth for sign-in. Unused when `GITHUB_APP_*` is set; keep only as local/dev fallback |
 | `OAUTH_GITHUB_INTEGRATION_CLIENT_ID` / `OAUTH_GITHUB_INTEGRATION_CLIENT_SECRET` | falls back to login GitHub client | **Deprecated** classic Tasks ↔ Projects OAuth. Unused when `GITHUB_APP_*` is set |

@@ -41,6 +41,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/marketplace-verified-publisher.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-verified-seller.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-stripe-connect.test.ts",
+      "apps/bridge/src/services/__tests__/marketplace-seller-storefront.test.ts",
       "apps/bridge/src/services/__tests__/marketplace-payments-direct-charges.test.ts",
       "apps/bridge/src/services/__tests__/plugin-capabilities.test.ts",
       "apps/bridge/src/routes/__tests__/marketplace-listings-query.test.ts",

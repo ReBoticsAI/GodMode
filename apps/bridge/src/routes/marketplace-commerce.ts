@@ -19,6 +19,8 @@ import {
 } from "../services/marketplace-payments.js";
 import {
   getPublicCommerceConfig,
+  getPublicSellerStorefront,
+  renderPublicSellerStorefrontHtml,
   MARKETPLACE_LISTING_SELLER_JOINS,
   COMMUNITY_VERIFIED_TIER_SQL,
   MarketplaceCommerceError,
@@ -102,6 +104,53 @@ export function createMarketplaceCommerceRouter(): Router {
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : "Failed to load Community catalog",
+      });
+    }
+  });
+
+  /** Public seller storefront (JSON). Prefer Accept: text/html or /page for crawlable HTML. */
+  router.get("/sellers/:handle/page", (req, res) => {
+    try {
+      const store = getPublicSellerStorefront(getCloudDb(), String(req.params.handle ?? ""));
+      if (!store) {
+        res.status(404).type("html").send("<!DOCTYPE html><title>Not found</title><h1>Seller not found</h1>");
+        return;
+      }
+      res.status(200).type("html").send(renderPublicSellerStorefrontHtml(store));
+    } catch (err) {
+      res.status(502).type("html").send(
+        `<!DOCTYPE html><title>Error</title><h1>${
+          err instanceof Error ? err.message : "Failed to load seller"
+        }</h1>`
+      );
+    }
+  });
+
+  router.get("/sellers/:handle", (req, res) => {
+    try {
+      const store = getPublicSellerStorefront(getCloudDb(), String(req.params.handle ?? ""));
+      if (!store) {
+        const wantsHtml = String(req.headers.accept ?? "").includes("text/html");
+        if (wantsHtml) {
+          res.status(404).type("html").send("<!DOCTYPE html><title>Not found</title><h1>Seller not found</h1>");
+          return;
+        }
+        res.status(404).json({ error: "Seller not found" });
+        return;
+      }
+      const wantsHtml = String(req.headers.accept ?? "").includes("text/html");
+      if (wantsHtml) {
+        res.status(200).type("html").send(renderPublicSellerStorefrontHtml(store));
+        return;
+      }
+      res.json({
+        handle: store.handle,
+        storefrontUrl: store.storefrontUrl,
+        listings: store.listings,
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : "Failed to load seller storefront",
       });
     }
   });

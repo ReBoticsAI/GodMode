@@ -309,6 +309,7 @@ describe("platform action adapters", () => {
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
         stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
         payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
         tos_accepted_version TEXT, tos_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -386,6 +387,7 @@ describe("platform action adapters", () => {
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
         stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
         payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
         tos_accepted_version TEXT, tos_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -459,6 +461,7 @@ describe("platform action adapters", () => {
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE,
         stripe_connect_account_id TEXT, paypal_merchant_id TEXT, metamask_address TEXT,
         payout_preference TEXT, onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
         tos_accepted_version TEXT, tos_accepted_at TEXT,
         created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
       );

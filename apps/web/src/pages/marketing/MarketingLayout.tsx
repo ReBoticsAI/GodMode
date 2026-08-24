@@ -14,6 +14,7 @@ import {
   ScaleIcon,
   ShieldIcon,
   ReceiptIcon,
+  StoreIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/ModeToggle";
@@ -45,6 +46,7 @@ export const marketingPageDescriptionClass =
 const NAV_ITEMS = [
   { to: MARKETING_HOME, end: true, label: "Home", Icon: HomeIcon },
   { to: `${MARKETING_BASE}/features`, label: "Features", Icon: LayoutGridIcon },
+  { to: `${MARKETING_BASE}/marketplace`, label: "Marketplace", Icon: StoreIcon },
   { to: `${MARKETING_BASE}/pricing`, label: "Pricing", Icon: DollarSignIcon },
   { to: `${MARKETING_BASE}/security`, label: "Security", Icon: ShieldIcon },
   { to: `${MARKETING_BASE}/contact`, label: "Contact", Icon: ContactIcon },
@@ -145,6 +147,18 @@ function marketingCrumbs(pathname: string): MarketingCrumb[] {
       home,
       { label: "Features", to: featurePrefix },
       { label: getFeatureDoc(featureMatch[1])?.title ?? "Feature" },
+    ];
+  }
+
+  const marketplacePrefix = `${MARKETING_BASE}/marketplace`;
+  const sellerMatch = pathname.match(
+    new RegExp(`^${marketplacePrefix.replace(/\//g, "\\/")}\\/([^/]+)$`)
+  );
+  if (sellerMatch) {
+    return [
+      home,
+      { label: "Marketplace", to: marketplacePrefix },
+      { label: sellerMatch[1] },
     ];
   }
 

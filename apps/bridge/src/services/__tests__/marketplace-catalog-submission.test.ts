@@ -20,6 +20,7 @@ function createCore(): Database.Database {
       metamask_address TEXT,
       payout_preference TEXT,
       onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
       tos_accepted_version TEXT,
       tos_accepted_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),

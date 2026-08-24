@@ -35,7 +35,8 @@ function openDb(): CoreDatabase {
       stripe_connect_account_id TEXT,
       paypal_merchant_id TEXT,
       metamask_address TEXT,
-      onboarding_status TEXT NOT NULL DEFAULT 'pending'
+      onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT
     );
     CREATE TABLE marketplace_listings (
       id TEXT PRIMARY KEY,

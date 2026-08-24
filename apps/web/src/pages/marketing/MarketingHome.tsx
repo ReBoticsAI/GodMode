@@ -330,7 +330,7 @@ export default function MarketingHome() {
                 </Button>
                 <Button
                   variant="outline"
-                  render={<Link to={`${MARKETING_BASE}/features/marketplace`} />}
+                  render={<Link to={`${MARKETING_BASE}/marketplace`} />}
                 >
                   Browse Marketplace
                 </Button>

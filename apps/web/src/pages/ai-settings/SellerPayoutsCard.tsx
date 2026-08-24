@@ -49,6 +49,7 @@ export function SellerPayoutsCard({
   const [paypalMerchantId, setPaypalMerchantId] = useState("");
   const [metamaskAddress, setMetamaskAddress] = useState("");
   const [payoutReady, setPayoutReady] = useState(false);
+  const [storefrontUrl, setStorefrontUrl] = useState("");
   const [tosAccepted, setTosAccepted] = useState(false);
   const [platformFeeBps, setPlatformFeeBps] = useState(1000);
   const [busy, setBusy] = useState(false);
@@ -79,6 +80,7 @@ export function SellerPayoutsCard({
         setPaypalMerchantId(applied.paypalMerchantId);
         setMetamaskAddress(applied.metamaskAddress);
         setPayoutReady(applied.payoutReady);
+        setStorefrontUrl(String(cfg.storefrontUrl ?? "").trim());
         notify({
           ...applied,
           tosAccepted: Boolean(cfg.tosAccepted),
@@ -139,6 +141,7 @@ export function SellerPayoutsCard({
       } else {
         notify({ stripeConnectId, payoutReady, tosAccepted: true });
       }
+      if (result.storefrontUrl) setStorefrontUrl(result.storefrontUrl);
       window.location.assign(result.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Stripe Connect onboarding failed");
@@ -194,7 +197,8 @@ export function SellerPayoutsCard({
         <CardDescription>
           Connect Stripe for Community sales (recommended). Platform fee is {feePercent}%.
           Official ReBotics catalog sales are separate (100% to platform). PayPal/crypto are
-          deferred for v1.
+          deferred for v1. GodMode hosts your public seller page on godmode.software; you do not
+          need a personal website for Stripe Connect.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -206,6 +210,19 @@ export function SellerPayoutsCard({
           >
             Connect with Stripe
           </Button>
+          {storefrontUrl ? (
+            <p className="text-xs text-muted-foreground break-all">
+              Public storefront:{" "}
+              <a
+                href={storefrontUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2"
+              >
+                {storefrontUrl}
+              </a>
+            </p>
+          ) : null}
           {stripeConnectId ? (
             <p className="text-xs text-muted-foreground">
               Linked Connect account: {stripeConnectId}

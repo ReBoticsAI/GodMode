@@ -445,6 +445,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-seller-storefront-public",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/sellers/:",
+    rationale:
+      "Unauthenticated seller storefront JSON/HTML for marketing browse and Stripe business_profile crawl (#688); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-seller-storefront-page",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/commerce/sellers/:/page",
+    rationale:
+      "Minimal crawlable HTML for the same public seller payload (#688); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-guest-checkout",
     methods: ["POST"],
     pathPattern: "/api/marketplace/commerce/checkout",

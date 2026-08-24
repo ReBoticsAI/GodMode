@@ -103,6 +103,7 @@ describe("marketplace listing indexes", () => {
 
     expect(columnExists(db, "marketplace_seller_accounts", "verified_frozen")).toBe(true);
     expect(columnExists(db, "marketplace_seller_accounts", "verified_seller")).toBe(true);
+    expect(columnExists(db, "marketplace_seller_accounts", "public_handle")).toBe(true);
     const { sql, params } = buildPublicListingsSql({ sellerKind: "user" });
     expect(() => db.prepare(sql).all(...params)).not.toThrow();
     db.close();

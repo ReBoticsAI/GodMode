@@ -5,7 +5,7 @@ import http from "node:http";
 import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
 import "dotenv/config";
-import { config } from "./config.js";
+import { config, isMarketingCorsOrigin } from "./config.js";
 import { initCoreDb, listAllTenantIds } from "./core-db.js";
 import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.js";
 import { closeAllPluginSqlite } from "./services/plugin-sqlite.js";
@@ -321,6 +321,10 @@ app.use(
         return;
       }
       if (config.web.allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (isMarketingCorsOrigin(origin)) {
         callback(null, true);
         return;
       }

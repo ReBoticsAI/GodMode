@@ -17,7 +17,14 @@ export const CLONE_PACK_KINDS = [
   "bundle",
 ] as const;
 
-export type ListingPublishStatus = "draft" | "in_review" | "active" | "archived";
+export type ListingPublishStatus =
+  | "draft"
+  | "in_review"
+  | "pending_payout"
+  | "active"
+  | "archived";
+
+export type ListingVisibility = "public" | "private" | "unlisted";
 
 export function isCommunityCatalogSource(url?: string | null): boolean {
   return String(url ?? "").toLowerCase().includes("/catalog/community");
@@ -144,7 +151,11 @@ export function resolveListingPublishState(opts: {
   priceCents?: number;
   payoutReady?: boolean;
   isSaas?: boolean;
-}): { status: ListingPublishStatus; visibility: "public" | "private"; error?: string } {
+}): {
+  status: ListingPublishStatus;
+  visibility: ListingVisibility;
+  error?: string;
+} {
   const kind = opts.kind.trim();
   if (kind === "inference" && opts.isSaas) {
     return {
@@ -165,7 +176,8 @@ export function resolveListingPublishState(opts: {
     }
     const paid = Number(opts.priceCents ?? 0) > 0;
     if (paid && !opts.payoutReady) {
-      return { status: "draft", visibility: "private" };
+      // Storefront-visible, not buyable; excluded from global public browse.
+      return { status: "pending_payout", visibility: "unlisted" };
     }
     return { status: "active", visibility: "public" };
   }

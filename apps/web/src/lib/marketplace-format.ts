@@ -59,6 +59,7 @@ export function listingStatusLabel(status: string): string {
   if (status === "draft") return "Draft";
   if (status === "archived") return "Archived";
   if (status === "active") return "Listed";
+  if (status === "pending_payout") return "Pending · awaiting payment setup";
   return status;
 }
 

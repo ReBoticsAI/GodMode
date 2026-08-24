@@ -45,8 +45,8 @@ describe("resolveListingPublishState", () => {
         catalogEntryId: "workspace-pulse",
         priceCents: 999,
         payoutReady: false,
-      }).status
-    ).toBe("draft");
+      })
+    ).toEqual({ status: "pending_payout", visibility: "unlisted" });
   });
 
   it("activates catalog-backed clone packs and rejects uncatalogued clone/live", () => {
