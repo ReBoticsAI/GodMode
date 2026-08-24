@@ -230,7 +230,8 @@ Linked Tasks boards poll GitHub on an interval (last-write-wins with manual Sync
 | `MARKETPLACE_CRYPTO_TREASURY_ADDRESS` | empty | Platform treasury address for crypto checkout |
 | `MARKETPLACE_CRYPTO_CHAIN_ID` | `1` | EVM chain id for crypto payments |
 | `MARKETPLACE_CRYPTO_ASSET` | `USDC` | Display asset label for crypto checkout |
-| `STRIPE_MARKETPLACE_WEBHOOK_SECRET` | empty | Stripe webhook secret for Marketplace orders (falls back to `STRIPE_WEBHOOK_SECRET`) |
+| `STRIPE_MARKETPLACE_WEBHOOK_SECRET` | empty | Stripe webhook secret for Marketplace orders on the platform account (falls back to `STRIPE_WEBHOOK_SECRET`) |
+| `STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET` | empty | Stripe webhook secret for **Connected accounts** events (Community direct charges). Same Marketplace webhook URL; create a Dashboard destination scoped to Connected accounts. |
 | `PAYPAL_MARKETPLACE_CLIENT_ID` / `SECRET` | holdings PayPal | PayPal app credentials for Marketplace (falls back to `PAYPAL_CLIENT_*`) |
 | `PAYPAL_MARKETPLACE_WEBHOOK_ID` | empty | Optional PayPal webhook id metadata |
 

@@ -66,7 +66,7 @@ export async function startMarketplaceCheckout(
     successUrl: string;
     cancelUrl: string;
     buyerEmail?: string;
-    /** Stripe Connect destination for user listings (optional). */
+    /** Stripe Connect account for Community direct charges (optional). */
     stripeConnectAccountId?: string | null;
     /** PayPal payee merchant id for user listings (optional). */
     paypalMerchantId?: string | null;
@@ -122,22 +122,30 @@ export async function startMarketplaceCheckout(
     if (opts.buyerEmail?.trim()) {
       params.customer_email = opts.buyerEmail.trim().toLowerCase();
     }
-    if (
+
+    const connectAccountId =
       sellerKind === "user" &&
-      opts.stripeConnectAccountId &&
-      feeCents >= 0
-    ) {
+      typeof opts.stripeConnectAccountId === "string" &&
+      opts.stripeConnectAccountId.startsWith("acct_")
+        ? opts.stripeConnectAccountId
+        : "";
+    // Community (user) sellers: direct charges on the connected account + application fee.
+    // Official / no-Connect: platform charge on ReBotics (unchanged).
+    if (connectAccountId && feeCents > 0) {
       params["payment_intent_data[application_fee_amount]"] = String(feeCents);
-      params["payment_intent_data[transfer_data][destination]"] =
-        opts.stripeConnectAccountId;
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+    if (connectAccountId) {
+      headers["Stripe-Account"] = connectAccountId;
     }
 
     const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers,
       body: stripeForm(params),
     });
     if (!res.ok) {
@@ -244,13 +252,22 @@ export function handleMarketplaceStripeWebhook(
   rawBody: Buffer,
   signatureHeader: string | undefined
 ): { ok: true; orderId?: string } | { ok: false; error: string; status: number } {
-  const secret =
+  const platformSecret =
     config.marketplace.payments.stripeWebhookSecret ||
     (process.env.STRIPE_WEBHOOK_SECRET ?? "").trim();
-  if (!secret) {
+  const connectSecret = (
+    config.marketplace.payments.stripeConnectWebhookSecret ||
+    (process.env.STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET ?? "")
+  ).trim();
+  if (!platformSecret && !connectSecret) {
     return { ok: false, error: "Marketplace Stripe webhook secret not configured", status: 503 };
   }
-  if (!verifyStripeWebhookSignature(rawBody, signatureHeader, secret)) {
+  const signed =
+    (platformSecret &&
+      verifyStripeWebhookSignature(rawBody, signatureHeader, platformSecret)) ||
+    (connectSecret &&
+      verifyStripeWebhookSignature(rawBody, signatureHeader, connectSecret));
+  if (!signed) {
     return { ok: false, error: "Invalid Stripe signature", status: 400 };
   }
 

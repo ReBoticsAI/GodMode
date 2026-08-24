@@ -166,6 +166,18 @@ Vault → Marketplace (Marketplace → Sell links there)
 Connect account and redirects to Stripe. Return/refresh URLs land back on the
 page you started from: `/vault?tab=integrations` or `/marketplace?tab=seller`.
 
+Paid **Community** Checkout uses **Connect direct charges**: the Checkout Session
+is created on the seller's connected account (`Stripe-Account` header). GodMode
+collects a **10%** `application_fee_amount`; the seller keeps the remainder.
+Official catalog sales stay on the platform Stripe account (ReBotics merchant of
+record) and do not use Connect direct charges.
+
+Because direct-charge `checkout.session.completed` events are emitted for
+connected accounts, Cloud must register a Stripe webhook destination scoped to
+**Connected accounts** (same Marketplace webhook path) and set
+`STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET`. Platform-account Marketplace events
+still use `STRIPE_MARKETPLACE_WEBHOOK_SECRET` (or `STRIPE_WEBHOOK_SECRET`).
+
 Requires `STRIPE_SECRET_KEY` (same secret used for Marketplace Checkout). Set
 `WEB_PUBLIC_URL` / `WEB_ORIGIN` so return URLs match the UI origin. Local/hub
 Sell UIs still proxy commerce actions to Cloud.

@@ -13,7 +13,7 @@ These terms apply to buying and selling on the GodMode Marketplace (Official cat
 
 When you sell Community listings with **Stripe Connect** checkout:
 
-1. **You are the merchant of record** for the buyer relationship on that charge. GodMode collects a **10%** platform fee and remits the remainder to your connected Stripe account according to Stripe Connect and GodMode payout settings.
+1. **You are the merchant of record** for the buyer relationship on that charge. Buyers pay your Stripe Connect account (direct charge). GodMode collects a **10%** platform application fee; the remainder stays in your connected Stripe balance according to Stripe Connect and GodMode payout settings.
 2. **You are responsible** for listing accuracy, delivery or live access as advertised, tax and legal compliance in your jurisdictions, and responding to buyer disputes that Stripe or the buyer routes to you as seller.
 3. **Chargebacks and disputes** on Community Connect sales are primarily between buyer and seller. GodMode may delist listings, freeze payouts, or ban Marketplace access for ToS violations, repeated disputes, or prohibited content.
 4. Before publishing or binding listings while Connect is linked, you must **attest** that your listings comply with the prohibited and restricted categories below (and with Stripe’s applicable restricted-business rules).
