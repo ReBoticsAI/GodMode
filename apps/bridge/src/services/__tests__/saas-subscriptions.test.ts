@@ -34,6 +34,13 @@ vi.mock("../../config.js", () => ({
           amountLabel: "$9.99/month",
           interval: "month",
         },
+        {
+          id: "seller",
+          priceId: "price_seller",
+          label: "GodMode Seller",
+          amountLabel: "$4.99/month",
+          interval: "month",
+        },
       ],
     },
   },
@@ -43,12 +50,14 @@ import { handleSaasStripeWebhook } from "../saas-billing.js";
 import {
   applyStripeSubscriptionObject,
   assertSaasUserMayAccess,
+  getSellerEntitlementForUser,
   grantComplimentaryAccess,
   linkSubscriptionToUser,
   listSaasCustomersForAdmin,
   revokeComplimentaryAccess,
   setUserAccessDisabled,
   subscriptionGrantsAccess,
+  subscriptionGrantsSellerCommerce,
   upsertSubscriptionFromCheckout,
   type SaasSubscription,
 } from "../saas-subscriptions.js";
@@ -356,5 +365,59 @@ describe("saas subscriptions", () => {
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
     expect(assertSaasUserMayAccess(user).ok).toBe(false);
+  });
+
+  it("seller plan grants seller commerce but not full workspace access", () => {
+    const user = insertUser({ email: "seller@example.com" });
+    const seller = upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_seller_1",
+      email: "seller@example.com",
+      stripeCustomerId: "cus_seller_1",
+      stripeSubscriptionId: "sub_seller_1",
+      planId: "seller",
+      priceId: "price_seller",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_seller_1",
+      stripeCustomerId: "cus_seller_1",
+      email: "seller@example.com",
+    });
+    expect(subscriptionGrantsAccess(seller)).toBe(false);
+    expect(subscriptionGrantsSellerCommerce(seller)).toBe(true);
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+    expect(getSellerEntitlementForUser(user.id)).toEqual({
+      sellerActive: true,
+      planId: "seller",
+      source: "seller",
+    });
+  });
+
+  it("workspace plan grants seller commerce and full workspace access", () => {
+    const user = insertUser({ email: "workspace@example.com" });
+    const monthly = upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_ws_1",
+      email: "workspace@example.com",
+      stripeCustomerId: "cus_ws_1",
+      stripeSubscriptionId: "sub_ws_1",
+      planId: "monthly",
+      priceId: "price_month",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_ws_1",
+      stripeCustomerId: "cus_ws_1",
+      email: "workspace@example.com",
+    });
+    expect(subscriptionGrantsAccess(monthly)).toBe(true);
+    expect(subscriptionGrantsSellerCommerce(monthly)).toBe(true);
+    expect(assertSaasUserMayAccess(user).ok).toBe(true);
+    expect(getSellerEntitlementForUser(user.id)).toEqual({
+      sellerActive: true,
+      planId: "monthly",
+      source: "workspace",
+    });
   });
 });

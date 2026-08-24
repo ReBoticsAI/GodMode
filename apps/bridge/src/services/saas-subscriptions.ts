@@ -6,6 +6,31 @@ import { config } from "../config.js";
 /** Admin-granted Cloud access without Stripe. Distinct from platform admin (`is_admin`). */
 export const COMPLIMENTARY_PLAN_ID = "complimentary";
 
+/** Commerce-only Marketplace Seller seat. Does not grant full Cloud workspace access. */
+export const SELLER_PLAN_ID = "seller";
+
+const WORKSPACE_PLAN_IDS = new Set([
+  "monthly",
+  "yearly",
+  "default",
+  COMPLIMENTARY_PLAN_ID,
+]);
+
+export function isSellerPlanId(planId: string | null | undefined): boolean {
+  return (planId ?? "").trim() === SELLER_PLAN_ID;
+}
+
+/** Workspace Cloud plans (and legacy null plan_id). Seller-only is excluded. */
+export function isWorkspacePlanId(planId: string | null | undefined): boolean {
+  const key = (planId ?? "").trim();
+  if (!key) return true;
+  if (isSellerPlanId(key)) return false;
+  if (WORKSPACE_PLAN_IDS.has(key)) return true;
+  const configured = config.saas.plans.find((p) => p.id === key || p.priceId === key);
+  if (configured) return configured.id !== SELLER_PLAN_ID;
+  return true;
+}
+
 function planMeta(planIdOrPriceId: string | null | undefined): {
   id: string | null;
   label: string | null;
@@ -352,7 +377,9 @@ export function linkSubscriptionToUser(opts: {
   return findSubscriptionByUserId(core, opts.userId) ?? null;
 }
 
-export function subscriptionGrantsAccess(sub: SaasSubscription | undefined): boolean {
+function subscriptionStatusGrantsCommerce(
+  sub: SaasSubscription | undefined
+): boolean {
   if (!sub) return false;
   if (sub.access_revoked) return false;
   if (ALLOWED_STATUSES.has(sub.status)) {
@@ -369,6 +396,70 @@ export function subscriptionGrantsAccess(sub: SaasSubscription | undefined): boo
     return true;
   }
   return false;
+}
+
+/** Full GodMode Cloud workspace access (Structure, agents, chat, …). Not Seller-only. */
+export function subscriptionGrantsAccess(sub: SaasSubscription | undefined): boolean {
+  if (!subscriptionStatusGrantsCommerce(sub)) return false;
+  return isWorkspacePlanId(sub!.plan_id);
+}
+
+/**
+ * Marketplace seller commerce (ToS / Connect / publish on Cloud).
+ * True for an active Seller seat or an active full workspace subscription.
+ */
+export function subscriptionGrantsSellerCommerce(
+  sub: SaasSubscription | undefined
+): boolean {
+  if (!subscriptionStatusGrantsCommerce(sub)) return false;
+  if (isSellerPlanId(sub!.plan_id)) return true;
+  return isWorkspacePlanId(sub!.plan_id);
+}
+
+export type SellerEntitlementSource = "seller" | "workspace" | null;
+
+export type SellerEntitlement = {
+  sellerActive: boolean;
+  planId: string | null;
+  source: SellerEntitlementSource;
+};
+
+function listSubscriptionsForUser(
+  core: CoreDatabase,
+  userId: string
+): SaasSubscription[] {
+  return core
+    .prepare(
+      `SELECT * FROM saas_subscriptions
+       WHERE user_id=?
+       ORDER BY datetime(updated_at) DESC`
+    )
+    .all(userId) as SaasSubscription[];
+}
+
+/** Resolve seller commerce entitlement for a Cloud user (Seller seat or workspace). */
+export function getSellerEntitlementForUser(userId: string): SellerEntitlement {
+  const core = getCloudDb();
+  const rows = listSubscriptionsForUser(core, userId);
+  const sellerRow = rows.find(
+    (row) => isSellerPlanId(row.plan_id) && subscriptionGrantsSellerCommerce(row)
+  );
+  if (sellerRow) {
+    return {
+      sellerActive: true,
+      planId: sellerRow.plan_id,
+      source: "seller",
+    };
+  }
+  const workspaceRow = rows.find((row) => subscriptionGrantsAccess(row));
+  if (workspaceRow) {
+    return {
+      sellerActive: true,
+      planId: workspaceRow.plan_id,
+      source: "workspace",
+    };
+  }
+  return { sellerActive: false, planId: null, source: null };
 }
 
 /**

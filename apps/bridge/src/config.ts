@@ -76,9 +76,10 @@ export const config = {
     plans: (() => {
       const monthly = (process.env.STRIPE_SAAS_PRICE_MONTHLY ?? "").trim();
       const yearly = (process.env.STRIPE_SAAS_PRICE_YEARLY ?? "").trim();
+      const seller = (process.env.STRIPE_SAAS_PRICE_SELLER_MONTHLY ?? "").trim();
       const legacy = (process.env.STRIPE_SAAS_PRICE_ID ?? "").trim();
       const plans: Array<{
-        id: "monthly" | "yearly" | "default";
+        id: "monthly" | "yearly" | "seller" | "default";
         priceId: string;
         label: string;
         amountLabel: string;
@@ -102,6 +103,15 @@ export const config = {
           interval: "year",
         });
       }
+      if (seller) {
+        plans.push({
+          id: "seller",
+          priceId: seller,
+          label: "GodMode Seller",
+          amountLabel: "$4.99/month",
+          interval: "month",
+        });
+      }
       if (plans.length === 0 && legacy) {
         plans.push({
           id: "default",
@@ -116,7 +126,9 @@ export const config = {
     /** `payment` (one-time) or `subscription`. Defaults to subscription when plan prices are set. */
     checkoutMode: ((
       process.env.STRIPE_SAAS_CHECKOUT_MODE ??
-      ((process.env.STRIPE_SAAS_PRICE_MONTHLY || process.env.STRIPE_SAAS_PRICE_YEARLY)
+      ((process.env.STRIPE_SAAS_PRICE_MONTHLY ||
+        process.env.STRIPE_SAAS_PRICE_YEARLY ||
+        process.env.STRIPE_SAAS_PRICE_SELLER_MONTHLY)
         ? "subscription"
         : "payment")
     ).toLowerCase() === "subscription"
