@@ -622,9 +622,14 @@ export const config = {
     payments: {
       stripeEnabled: Boolean(
         (process.env.STRIPE_SECRET_KEY ?? "").trim() ||
-          (process.env.STRIPE_MARKETPLACE_WEBHOOK_SECRET ?? "").trim()
+          (process.env.STRIPE_MARKETPLACE_WEBHOOK_SECRET ?? "").trim() ||
+          (process.env.STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET ?? "").trim()
       ),
       stripeWebhookSecret: (process.env.STRIPE_MARKETPLACE_WEBHOOK_SECRET ?? "").trim(),
+      /** Connect-scoped webhook secret (direct-charge events on connected accounts). */
+      stripeConnectWebhookSecret: (
+        process.env.STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET ?? ""
+      ).trim(),
       paypalEnabled: Boolean(
         (process.env.PAYPAL_CLIENT_ID ?? process.env.PAYPAL_MARKETPLACE_CLIENT_ID ?? "").trim() &&
           (
