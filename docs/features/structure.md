@@ -3,14 +3,14 @@ slug: structure
 title: "Structure"
 section: "Productivity"
 location: "/structure"
-summary: "Tree editor for departments, divisions, and pages."
+summary: "Anatomy: departments are regions, divisions group work and pages are surfaces."
 ---
 # Structure
 
 ![structure in GodMode](/features/structure.png)
 
 
-Structure is the tree editor for departments → divisions → pages. New workspaces start empty; Intelligence or Structure creates content.
+Structure is the anatomy of the body. **Departments** are regions, **divisions** group work inside a region and **pages** are the surfaces you use. New workspaces start empty; Intelligence or Structure grows the tree.
 
 ## Route
 

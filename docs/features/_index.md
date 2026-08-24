@@ -8,7 +8,7 @@ summary: "Catalog of built-in GodMode features."
 
 # Features
 
-GodMode is your Control Center. These pages describe every built-in feature, with screenshots where they help.
+Where you Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern yourself, your people and your agents. These pages describe every built-in feature, with screenshots where they help.
 
 ## How to use this catalog
 

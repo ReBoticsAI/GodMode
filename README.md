@@ -4,7 +4,9 @@
 [![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
-Think of GodMode as the feeling of inhabiting a digital body. The software is the body. Structure is the anatomy: departments are regions, divisions group work inside a region and pages are the surfaces you use. The model is the brain. Digital You is your twin inside GodMode: it learns your voice and conventions. It guides you when you are here and stands in when you are not. Intelligence is the nervous system, the platform agent you talk to in order to grow GodMode and its anatomy. Specialized agents are the muscles: they own a job, attach to a region and execute.
+**GodMode** is where you Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern yourself, your people and your agents.
+
+Think of GodMode as the feeling of inhabiting a digital body. The software is the body. Structure is the anatomy: departments are regions, divisions group work inside a region and pages are the surfaces you use. The model is the brain. Digital You is your twin inside GodMode, your digital persona; It learns your voice and conventions. It guides you when you are here and stands in when you are not. Intelligence is the nervous system, the platform agent you talk to in order to grow GodMode and its anatomy. Specialized agents are the muscles: they own a job, attach to a region and execute.
 
 Open source (Apache 2.0). Local-first by design: self-host on your own machine or use Cloud for convenience.
 
@@ -16,19 +18,19 @@ Open source (Apache 2.0). Local-first by design: self-host on your own machine o
 
 | Name | Meaning |
 |------|---------|
-| **Intelligence** | The built-in platform agent: your guide to GodMode itself |
+| **Intelligence** | Nervous system: the platform agent you talk to in order to grow GodMode and its anatomy |
 | **Chat panel** | The sidebar floating window where you talk to agents (not the agent's name) |
-| **Digital You** | Your digital twin: private thinking partner and stand-in; compounds via Reflection and memory as you use the platform |
+| **Digital You** | Your twin inside GodMode: learns your voice and conventions; guides you when you are here and stands in when you are not |
 | **Agents → Pipeline** | Where you configure models, tools, rules, and profiles |
 
 ## Why GodMode?
 
-GodMode is the **last platform stack** for everything you do digitally: one Control Center where you **create, edit, organize, and monitor** knowledge, work, people, money surfaces, and agents.
+GodMode is where you **Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern** for you, your people and your agents. Knowledge, work, people, money surfaces and agents live in one body.
 
-- **Self-expansion:** Intelligence scaffolds, codes, and installs plugins and workspace structure from chat (GodMode-from-GodMode). You extend the product without leaving it.
-- **Digital You:** twin agent for personal judgment and voice; stand-in quality deepens as memories and Reflection accumulate. Distinct from Intelligence (platform builder/guide).
-- **Connect anything:** Marketplace Official/Community packs, Local plugins on self-host, Connector for hardware-bound plugins, coding tools for custom integrations. Niche professions stay packs; Core stays universal.
-- **Open source + install flexibility:** desktop, clone, private hub, or Cloud. Cloud is browser onboarding and commerce authority; local/desktop stay first-class.
+- **Self-expansion:** Intelligence grows GodMode and its anatomy from chat (GodMode-from-GodMode). You extend the product without leaving it.
+- **Digital You:** your twin; learns your voice and conventions; guides you here and stands in when you are not. Distinct from Intelligence (nervous system).
+- **Connect:** Marketplace Official/Community packs, Local plugins on self-host, Connector for hardware-bound plugins, coding tools for custom integrations. Niche professions stay packs; Core stays universal.
+- **Open source + install flexibility:** desktop, clone, private hub or Cloud. Cloud is browser onboarding and commerce authority; local/desktop stay first-class.
 
 Full accounting, owned email/domains, robot/IoT actor plane, and GodMode Inference by ReBotics are Core depth on the roadmap. See [CORE_VS_PLUGINS.md](docs/CORE_VS_PLUGINS.md) and the [feature catalog](docs/FEATURES.md).
 
@@ -43,8 +45,8 @@ Usable now. Core still grows toward the full Control Center (owned email and dom
 ### Platform and agents
 
 - **Home** (`/home`)  -  dashboard and quick links
-- **Intelligence**  -  platform companion; setup, structure, cross-cutting work
-- **Digital You**  -  twin: thinking partner + stand-in; compounds with use
+- **Intelligence**  -  nervous system; grow GodMode and its anatomy from chat
+- **Digital You**  -  twin: learns you, guides you here and stands in when you are not
 - **Chat panel**  -  talk to any agent; history, tools, model picker
 - **Agents** (`/agents`)  -  org chart and Pipeline configuration
 

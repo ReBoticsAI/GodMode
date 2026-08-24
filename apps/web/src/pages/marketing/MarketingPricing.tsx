@@ -23,7 +23,7 @@ export default function MarketingPricing() {
     <Page>
       <PageHeader
         title="Pricing"
-        description="Open-source Control Center in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
+        description="Open-source GodMode in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
         descriptionClassName={marketingPageDescriptionClass}
       />
 
@@ -53,7 +53,7 @@ export default function MarketingPricing() {
                 />
               }
             >
-              Get the source
+              GitHub
             </Button>
           </CardFooter>
         </Card>
@@ -97,11 +97,12 @@ export default function MarketingPricing() {
       </div>
 
       <p className="max-w-5xl text-base leading-relaxed text-muted-foreground">
-        Before you pay, you must acknowledge that Cloud subscriptions are non-refundable
-        (no refunds, no liability). Official Marketplace sales are likewise final. Community
-        Marketplace purchases settle through the payment processor; disputes are between
-        buyer and seller, except we look into failed access provisioning via support. Buying
-        in the Marketplace is separate from your Cloud subscription. Details:{" "}
+        Before you pay, you must acknowledge that Cloud and Seller subscriptions are
+        non-refundable (no refunds, no liability). Official Marketplace sales are likewise
+        final. Community Marketplace purchases settle through the payment processor; disputes
+        are between buyer and seller, except we look into failed access provisioning via
+        support. Buying in the Marketplace is separate from your Cloud or Seller
+        subscription. Details:{" "}
         <Link
           to={`${MARKETING_BASE}/terms`}
           className="text-foreground underline underline-offset-4"

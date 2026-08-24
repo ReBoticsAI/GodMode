@@ -3,7 +3,7 @@ slug: agents
 title: "Agents"
 section: "Platform and agents"
 location: "/agents"
-summary: "Org chart with Intelligence and Digital You at the root; Pipeline configures each agent."
+summary: "Org chart: Intelligence (nervous system), Digital You (twin) and specialized agents (muscles)."
 ---
 # Agents
 
@@ -12,9 +12,9 @@ summary: "Org chart with Intelligence and Digital You at the root; Pipeline conf
 
 | Agent | Role |
 |-------|------|
-| **Intelligence** | Platform-wide companion |
-| **Digital You** | Digital twin: learns from use; can stand in when unavailable |
-| **Department agents** | Own a division or page |
+| **Intelligence** | Nervous system: grow GodMode and its anatomy |
+| **Digital You** | Your twin: learns your voice, guides you here and stands in when you are not |
+| **Specialized agents** | Muscles: own a job, attach to a region and execute |
 | **Custom agents** | Workflow or domain specific |
 
 ## Route

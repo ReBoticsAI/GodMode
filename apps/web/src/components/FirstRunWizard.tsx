@@ -51,6 +51,7 @@ import {
 import { useIntelligence } from "@/lib/intelligence-context";
 import { EXA_API_KEY_SECRET_NAME } from "@/pages/ai-settings/ExaConnectCard";
 import { platformVaultSettingsHref } from "@/pages/Vault";
+import { GODMODE_MANIFESTO } from "@/lib/product-copy";
 
 type Props = {
   open: boolean;
@@ -227,10 +228,7 @@ export function FirstRunWizard({ open, epoch, onFinished, onOpenVault }: Props) 
                   : "Set up an LLM so Intelligence can respond from your first chat."}
               </DialogDescription>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              GodMode is your Control Center: create, edit, organize, and monitor your work
-              with structure, agents, wiki, tasks, and automations in one place.
-            </p>
+            <p className="text-sm text-muted-foreground">{GODMODE_MANIFESTO}</p>
             <DialogFooter>
               <Button onClick={() => setStep(1)}>Continue</Button>
             </DialogFooter>

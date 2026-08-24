@@ -33,6 +33,7 @@ import {
   WIKI_PATH,
 } from "@/lib/navigation";
 import { fetchNotificationUnreadCount } from "@/api";
+import { GODMODE_MANIFESTO } from "@/lib/product-copy";
 
 const QUICK_LINKS = [
   {
@@ -95,7 +96,7 @@ export default function Home() {
     <Page>
       <PageHeader
         title={`Welcome, ${name}`}
-        description="Your Control Center: create, edit, organize, and monitor everything in one place."
+        description={GODMODE_MANIFESTO}
         actions={
           unread > 0 ? (
             <Button variant="outline" size="sm" render={<Link to={NOTIFICATIONS_PATH} />}>
@@ -111,14 +112,13 @@ export default function Home() {
           <CardHeader>
             <CardTitle>How GodMode works</CardTitle>
             <CardDescription>
-              A short map of the platform so you know where to start.
+              The software is the body. {AI_NAME} grows its anatomy. Digital You is your twin.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
             <p>
-              <strong className="text-foreground">{AI_NAME}</strong> is your platform
-              companion: open it from the sidebar to chat, run agents, and build
-              automations.
+              <strong className="text-foreground">{AI_NAME}</strong> is the nervous system:
+              the platform agent you talk to in order to grow GodMode and its anatomy.
             </p>
             <p>
               <strong className="text-foreground">Personal pages</strong> in the sidebar
@@ -126,8 +126,9 @@ export default function Home() {
               required.
             </p>
             <p>
-              <strong className="text-foreground">Departments and pages</strong> organize
-              domain-specific work (projects, life areas, hobbies).{" "}
+              <strong className="text-foreground">Structure</strong> is the anatomy:
+              departments are regions, divisions group work inside a region and pages are
+              the surfaces you use.{" "}
               {hasDepartments ? (
                 <>
                   Your sidebar already has {departments.length === 1

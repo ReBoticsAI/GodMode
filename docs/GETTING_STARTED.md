@@ -1,6 +1,6 @@
 # Getting started
 
-GodMode is your Control Center. Pick the path that matches how you want to run it.
+Where you Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern yourself, your people and your agents. Pick the path that matches how you want to run it.
 
 ## Download (recommended for most users)
 

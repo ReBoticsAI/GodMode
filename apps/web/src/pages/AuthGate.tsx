@@ -467,17 +467,10 @@ export default function AuthGate() {
         <CardContent className="flex flex-col gap-4">
           {showSaasPlan && (
             <div className="flex flex-col gap-3">
-              <div className="rounded-md border border-border bg-muted/40 p-3">
-                <p className="text-sm font-medium">GodMode Cloud</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Hosted convenience: we run the infrastructure. Prefer to
-                  self-host? The open-source local install is free.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">Select a plan</p>
-                {plans.map((plan) => {
+              {(() => {
+                const cloudPlans = plans.filter((p) => p.id !== "seller");
+                const sellerPlans = plans.filter((p) => p.id === "seller");
+                const planButton = (plan: (typeof plans)[number]) => {
                   const selected = selectedPlanId === plan.id;
                   return (
                     <button
@@ -491,36 +484,66 @@ export default function AuthGate() {
                       }`}
                     >
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium">{plan.label}</span>
+                        <span className="text-sm font-medium">
+                          {plan.id === "seller" ? "GodMode Seller" : plan.label}
+                        </span>
                         <span className="text-sm">{plan.amountLabel}</span>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {plan.interval === "year"
-                          ? "Billed yearly via Stripe. Lower total than twelve monthly payments (about 4.5 months of savings)."
-                          : plan.interval === "month"
-                            ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
-                            : checkoutMode === "subscription"
-                              ? "Subscription billed via Stripe Checkout."
-                              : "One-time payment via Stripe Checkout."}
+                        {plan.id === "seller"
+                          ? "Marketplace Sell seat only. Commerce access without a full Cloud workspace. Billed monthly via Stripe."
+                          : plan.interval === "year"
+                            ? "Billed yearly via Stripe. Lower total than twelve monthly payments (about 4.5 months of savings)."
+                            : plan.interval === "month"
+                              ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
+                              : checkoutMode === "subscription"
+                                ? "Subscription billed via Stripe Checkout."
+                                : "One-time payment via Stripe Checkout."}
                       </p>
                     </button>
                   );
-                })}
-                {plans.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No plans configured yet.
-                  </p>
-                )}
-              </div>
+                };
+                return (
+                  <>
+                    <div className="rounded-md border border-border bg-muted/40 p-3">
+                      <p className="text-sm font-medium">GodMode Cloud</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Hosted convenience: we run the infrastructure. Prefer to
+                        self-host? The open-source local install is free.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium">Select a plan</p>
+                      {cloudPlans.map(planButton)}
+                      {sellerPlans.length > 0 && (
+                        <>
+                          <p className="mt-1 text-sm font-medium">GodMode Seller</p>
+                          <p className="text-xs text-muted-foreground">
+                            Commerce-only seat for Marketplace Sell. Does not include a full
+                            Cloud workspace.
+                          </p>
+                          {sellerPlans.map(planButton)}
+                        </>
+                      )}
+                      {plans.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No plans configured yet.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="rounded-md border border-border p-3 text-left">
                 <p className="text-sm font-medium">Refund policy</p>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                   All sales are final. There are no refunds and no liability for
-                  GodMode Cloud purchases, including change of mind, unused
-                  access, dissatisfaction, outages, or agent behavior. Try the
-                  free open-source / self-hosted install first if you want to
-                  evaluate GodMode without paying.
+                  GodMode Cloud or GodMode Seller purchases, including change of
+                  mind, unused access, dissatisfaction, outages, or agent
+                  behavior. Try the free open-source / self-hosted install first
+                  if you want to evaluate GodMode without paying.
                 </p>
               </div>
 
@@ -548,8 +571,9 @@ export default function AuthGate() {
                   onChange={(e) => setRefundAck(e.target.checked)}
                 />
                 <span>
-                  I understand GodMode Cloud purchases are non-refundable with no
-                  liability, and that a free self-hosted / desktop option exists.
+                  I understand GodMode Cloud and GodMode Seller purchases are
+                  non-refundable with no liability, and that a free self-hosted /
+                  desktop option exists.
                 </span>
               </label>
 

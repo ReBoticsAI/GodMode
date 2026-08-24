@@ -65,15 +65,21 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 function MarketingSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
-      <div className="flex w-full justify-center px-2 py-1.5">
+      <div className="flex w-full justify-center px-2 py-2">
         <NavLink
           to={MARKETING_HOME}
           end
           onClick={onNavigate}
-          className="font-heading truncate text-4xl font-extrabold leading-none tracking-tight transition-opacity hover:opacity-80"
-          aria-label="Go to marketing home"
+          className="transition-opacity hover:opacity-80"
+          aria-label={`Go to ${APP_NAME} marketing home`}
         >
-          {APP_NAME}
+          <img
+            src="/marketing/godmode-mark-wordmark.png?v=13"
+            alt="ReBoticsAI"
+            width={595}
+            height={543}
+            className="h-24 w-auto max-w-full object-contain dark:invert"
+          />
         </NavLink>
       </div>
 

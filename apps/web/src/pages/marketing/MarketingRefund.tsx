@@ -5,37 +5,40 @@ export default function MarketingRefund() {
   return (
     <MarketingProse
       title="Refund policy"
-      description="Effective 2026-07-28 · Cloud and Official sales are final; Community disputes are party/processor"
+      description="Effective 2026-07-28 · Cloud, Seller, and Official sales are final; Community disputes are party/processor"
     >
       <p>
-        This page states the refund rules for <strong>GodMode Cloud</strong> (hosted SaaS)
-        and the <strong>Marketplace</strong> (Official and Community digital packs).
-        Self-hosted open-source software, desktop apps, private hub, and Docker installs are
-        free and are not paid purchases. Operator: <strong>ReBotics AI</strong>.
+        This page states the refund rules for <strong>GodMode Cloud</strong> (hosted SaaS),{" "}
+        <strong>GodMode Seller</strong> (Marketplace Sell seat), and the{" "}
+        <strong>Marketplace</strong> (Official and Community digital packs). Self-hosted
+        open-source software, desktop apps, private hub, and Docker installs are free and
+        are not paid purchases. Operator: <strong>ReBotics AI</strong>.
       </p>
 
-      <h2>No refunds (Cloud and Official)</h2>
+      <h2>No refunds (Cloud, Seller, and Official)</h2>
       <p>
         <strong>
-          GodMode Cloud subscriptions and Official Marketplace sales are final. There are no
-          refunds
+          GodMode Cloud subscriptions, GodMode Seller subscriptions, and Official Marketplace
+          sales are final. There are no refunds
         </strong>{" "}
-        and no liability for paid Cloud access or Official catalog digital goods. That
-        includes change of mind, unused time, dissatisfaction, feature gaps, outages, data
-        loss, agent behavior, security incidents, and delivered Official Marketplace items.
+        and no liability for paid Cloud access, Seller seats, or Official catalog digital
+        goods. That includes change of mind, unused time, dissatisfaction, feature gaps,
+        outages, data loss, agent behavior, security incidents, and delivered Official
+        Marketplace items.
       </p>
       <p>
         Open-source desktop and self-host options exist so you can evaluate GodMode without
-        paying. Cloud is convenience hosting only. Paying does not purchase refund rights.
-        Details and liability terms:{" "}
+        paying. Cloud is convenience hosting only. Seller is a commerce seat only. Paying
+        does not purchase refund rights. Details and liability terms:{" "}
         <Link to={`${MARKETING_BASE}/terms`}>Terms of Service</Link>.
       </p>
 
-      <h2>GodMode Cloud</h2>
+      <h2>GodMode Cloud and GodMode Seller</h2>
       <p>
-        Cloud subscription payments are non-refundable. Plans renew until you cancel in the
-        Stripe Customer Portal (or equivalent billing portal). Canceling stops future
-        renewals; it does not refund the current paid period.
+        Cloud and Seller subscription payments are non-refundable. Plans renew until you
+        cancel in the Stripe Customer Portal (or equivalent billing portal). Canceling stops
+        future renewals; it does not refund the current paid period. Seller does not include
+        a full Cloud workspace; the no-refund rule still applies.
       </p>
 
       <h2>Marketplace digital goods</h2>
@@ -61,8 +64,8 @@ export default function MarketingRefund() {
         <a href="mailto:support@godmode.software">support@godmode.software</a> with details
         (account email, approximate payment date, item, and any payment reference). We will
         look into it. That path is for failed access provisioning only. It does not create a
-        general right to a refund for delivered Community goods, or for Cloud or Official
-        sales.
+        general right to a refund for delivered Community goods, or for Cloud, Seller, or
+        Official sales.
       </p>
       <p>
         Chargebacks or payment disputes after delivery may result in a permanent Marketplace

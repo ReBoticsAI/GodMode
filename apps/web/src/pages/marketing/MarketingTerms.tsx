@@ -59,11 +59,11 @@ export default function MarketingTerms() {
     >
       <p>
         These Terms cover GodMode open-source software (desktop, clone-the-repo,
-        private hub, and Docker self-host) and GodMode Cloud (hosted SaaS). Part A
-        and Part B are separate.         Marketplace buying and selling is governed by the
-        Marketplace terms inline below. Related:{" "}
-        <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link> (Cloud and Official
-        final; Community dispute routing) and{" "}
+        private hub, and Docker self-host), GodMode Cloud (hosted SaaS), and GodMode
+        Seller (Marketplace Sell seat). Part A and Part B are separate. Marketplace
+        buying and selling is governed by the Marketplace terms inline below. Related:{" "}
+        <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link> (Cloud, Seller, and
+        Official final; Community dispute routing) and{" "}
         <Link to={`${MARKETING_BASE}/privacy`}>Privacy</Link>.
       </p>
       <p>
@@ -152,23 +152,26 @@ export default function MarketingTerms() {
         <AccordionItem value="part-b">
           <AccordionTrigger className={termsAccordionTriggerClass}>
             <SectionTrigger
-              title="Part B: GodMode Cloud (SaaS)"
-              overview="Cloud is paid convenience hosting. No refunds. No warranties. $0 liability. You are responsible for agent actions under your account. We may suspend or terminate for abuse, non-payment, or security risk."
+              title="Part B: GodMode Cloud and Seller (SaaS)"
+              overview="Cloud and Seller are paid hosted plans. No refunds. No warranties. $0 liability. You are responsible for agent actions under your account. We may suspend or terminate for abuse, non-payment, or security risk."
             />
           </AccordionTrigger>
           <AccordionContent className="text-base">
             <LegalBlock>
               <h3>B1. Scope</h3>
               <p>
-                <strong>Part B</strong> applies only to GodMode Cloud, the hosted multi-tenant
-                SaaS operated by ReBotics AI. Part B does not convert Part A software into a
-                managed service and does not create Cloud obligations for self-hosted or
-                desktop use.
+                <strong>Part B</strong> applies to GodMode Cloud (hosted multi-tenant SaaS)
+                and GodMode Seller (Marketplace Sell seat on the hosted platform), both
+                operated by ReBotics AI. Part B does not convert Part A software into a
+                managed service and does not create Cloud or Seller obligations for
+                self-hosted or desktop use.
               </p>
               <p>
-                Open-source desktop and self-host options are available without a Cloud
-                subscription. Cloud is offered as convenience hosting only. Paying for Cloud
-                does not purchase warranties, liability coverage, or refund rights.
+                Open-source desktop and self-host options are available without a Cloud or
+                Seller subscription. Cloud is convenience hosting only. Seller is a
+                commerce-only seat and does not include a full Cloud workspace. Paying for
+                Cloud or Seller does not purchase warranties, liability coverage, or refund
+                rights.
               </p>
 
               <h3>B2. Accounts and acceptable use</h3>
@@ -186,18 +189,20 @@ export default function MarketingTerms() {
 
               <h3>B3. Subscription and billing</h3>
               <p>
-                Paid Cloud access is billed through Stripe (or successor processors we
-                configure). Plans renew until you cancel in the billing portal. Canceling stops
-                future renewals; it does not create a refund for the current paid period.
+                Paid Cloud and Seller access is billed through Stripe (or successor processors
+                we configure). Plans renew until you cancel in the billing portal. Canceling
+                stops future renewals; it does not create a refund for the current paid period.
                 Failure to pay may suspend or terminate access. Designated platform operators
                 may be exempt from the paywall so we can operate the service.
               </p>
 
               <h3>B4. No refunds</h3>
               <p>
-                <strong>All Cloud sales are final. There are no refunds</strong>, including for
-                change of mind, unused time, dissatisfaction, feature gaps, outages, data loss,
-                agent behavior, or security incidents. See the{" "}
+                <strong>
+                  All Cloud and Seller sales are final. There are no refunds
+                </strong>
+                , including for change of mind, unused time, dissatisfaction, feature gaps,
+                outages, data loss, agent behavior, or security incidents. See the{" "}
                 <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link>. If you want to
                 evaluate GodMode without paying, use Part A (open source / self-hosted /
                 desktop) first.
@@ -205,11 +210,11 @@ export default function MarketingTerms() {
 
               <h3>B5. Suspension and termination</h3>
               <p>
-                We may suspend or terminate Cloud access, in whole or in part, for violation of
-                these Terms, non-payment, chargebacks or payment disputes we deem abusive,
-                security risk to the platform or other tenants, unlawful use, or operational
-                necessity. We are not obligated to provide advance notice where doing so would
-                increase risk or is impractical.
+                We may suspend or terminate Cloud or Seller access, in whole or in part, for
+                violation of these Terms, non-payment, chargebacks or payment disputes we deem
+                abusive, security risk to the platform or other tenants, unlawful use, or
+                operational necessity. We are not obligated to provide advance notice where
+                doing so would increase risk or is impractical.
               </p>
 
               <h3>B6. Data deletion</h3>
@@ -259,15 +264,15 @@ export default function MarketingTerms() {
                 the maximum extent permitted by law, we disclaim all warranties, express or
                 implied, including merchantability, fitness for a particular purpose,
                 non-infringement, quiet enjoyment, and any warranty arising from course of
-                dealing or usage of trade. We do not warrant that Cloud will be error-free,
-                secure, or available at any particular time.
+                dealing or usage of trade. We do not warrant that Cloud or Seller will be
+                error-free, secure, or available at any particular time.
               </p>
 
               <h3>B10. Liability cap: $0</h3>
               <p>
                 To the maximum extent permitted by law, ReBotics AI&apos;s total liability
-                arising out of or related to GodMode Cloud, these Terms, or your use of the
-                service is <strong>$0 (zero)</strong>. We have no responsibility for any
+                arising out of or related to GodMode Cloud, GodMode Seller, these Terms, or your
+                use of the service is <strong>$0 (zero)</strong>. We have no responsibility for any
                 damages of any kind, including direct, indirect, incidental, special,
                 consequential, exemplary, or punitive damages, or loss of profits, data,
                 goodwill, or business opportunity, whether based in contract, tort (including
@@ -276,7 +281,7 @@ export default function MarketingTerms() {
               </p>
               <p>
                 Rationale in plain terms: self-host and desktop are available free under Part
-                A; Cloud is pure convenience. There are no refunds and no liability.
+                A; Cloud and Seller are paid convenience. There are no refunds and no liability.
               </p>
             </LegalBlock>
           </AccordionContent>
@@ -294,7 +299,7 @@ export default function MarketingTerms() {
               <p>
                 The following Marketplace Terms apply to buying and selling on the GodMode
                 Marketplace (Official catalog and Community / user listings). They supplement
-                these Terms. SaaS Cloud subscription terms remain as in Part B.
+                these Terms. Cloud and Seller subscription terms remain as in Part B.
               </p>
               <p>
                 <strong>Version:</strong> 2 (product may override with{" "}

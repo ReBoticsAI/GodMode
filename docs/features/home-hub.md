@@ -10,7 +10,7 @@ summary: "Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Sh
 ![home-hub in GodMode](/features/home-hub.png)
 
 
-The Home hub is the landing dashboard after login. It surfaces quick links into personal tools and Marketplace.
+The Home hub is the landing dashboard after login. It orients you to the body: Intelligence, anatomy (Structure) and personal surfaces (Calendar, Tasks, Wiki, Vault, Shared, Marketplace).
 
 ## Route
 
