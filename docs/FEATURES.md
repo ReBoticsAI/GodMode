@@ -1,13 +1,13 @@
 # GodMode features
 
-Complete reference for the Control Center shipped in core. **Intelligence** is the built-in platform agent; the **Chat panel** is where you talk to agents.
+Complete reference for GodMode shipped in core. **Intelligence** is the built-in platform agent (nervous system); the **Chat panel** is where you talk to agents.
 
 Canonical per-feature pages (marketing site and platform wiki seed):
 
 ## Hubs
 
-- [GodMode overview](features/godmode-overview.md) - Last platform stack, self-expansion, Digital You, connect anything.
-- [Workspace structure](features/workspace-structure.md) - Departments, divisions, and pages. New workspaces start empty.
+- [GodMode overview](features/godmode-overview.md) - Digital body, self-expansion, Digital You, Connect.
+- [Workspace structure](features/workspace-structure.md) - Anatomy: departments, divisions and pages. New workspaces start empty.
 - [Shared and Marketplace](features/shared-and-marketplace.md) - Live grants and the pack marketplace at a glance.
 - [Personal tools](features/personal-tools.md) - Calendar, Tasks, Wiki, Vault, Bank, Notifications, Support.
 
@@ -15,13 +15,13 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 
 - [Admin Updates](features/admin-updates.md) - Stable/nightly channels, signed release checks, defer/skip, host-supervisor apply.
 - [Home hub](features/home-hub.md) - Welcome dashboard with quick links to Calendar, Tasks, Wiki, Vault, Shared, and Marketplace.
-- [Intelligence](features/intelligence.md) - Platform-wide companion for setup, structure, wiki, and cross-cutting work.
-- [Digital You](features/digital-you.md) - Twin: thinking partner + stand-in; compounds via Reflection/memory.
+- [Intelligence](features/intelligence.md) - Nervous system: grow GodMode and its anatomy from chat.
+- [Digital You](features/digital-you.md) - Twin: learns your voice, guides you here and stands in when you are not.
 - [Chat panel](features/chat-panel.md) - Floating window for agent chat, history, model picker, tools, and in-panel tabs.
 - [Model picker](features/model-picker.md) - Unified catalog: local GGUFs, Cursor subscription, cloud providers, and shared endpoints.
 - [Model harness profiles](features/model-harness-profiles.md) - Per-family tool mode, sampling, and discovery middleware.
 - [Cursor Cloud](features/cursor-cloud.md) - Run Intelligence on your Cursor plan with GodMode tools.
-- [Agents](features/agents.md) - Org chart with Intelligence and Digital You at the root; Pipeline configures each agent.
+- [Agents](features/agents.md) - Org chart: Intelligence, Digital You and specialized agents; Pipeline configures each agent.
 - [DMs and channels](features/dms-and-channels.md) - Direct messages and group conversations with users and agents.
 
 ## Knowledge and memory
@@ -35,7 +35,7 @@ Canonical per-feature pages (marketing site and platform wiki seed):
 
 ## Productivity
 
-- [Structure](features/structure.md) - Tree editor for departments, divisions, and pages.
+- [Structure](features/structure.md) - Anatomy editor: departments, divisions and pages.
 - [Wiki](features/wiki.md) - Markdown knowledge base with spaces, visibility, backlinks, and RAG.
 - [Tasks](features/tasks.md) - Multiple personal kanban boards; optional GitHub Project sync; tag a card auto for autonomous agent work.
 - [Automations](features/automations.md) - Same kanban board in Chat; auto tags drive the autonomous runner.

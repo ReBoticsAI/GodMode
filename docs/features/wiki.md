@@ -14,4 +14,4 @@ Wiki is the markdown knowledge base with spaces, internal/external visibility, a
 
 Pages are stored in the **Workspace** database (system of record), not on the host Cloud plane.
 
-Built-in product docs also appear in the in-app **platform** wiki space, so the Control Center stays aligned with this catalog.
+Built-in product docs also appear in the in-app **platform** wiki space, so GodMode stays aligned with this catalog.

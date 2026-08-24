@@ -23,7 +23,7 @@ export default function MarketingPricing() {
     <Page>
       <PageHeader
         title="Pricing"
-        description="Open-source Control Center in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
+        description="Open-source GodMode in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
         descriptionClassName={marketingPageDescriptionClass}
       />
 
@@ -53,7 +53,7 @@ export default function MarketingPricing() {
                 />
               }
             >
-              Get the source
+              GitHub
             </Button>
           </CardFooter>
         </Card>
