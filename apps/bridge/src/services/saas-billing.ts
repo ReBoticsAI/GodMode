@@ -83,7 +83,9 @@ export async function createSaasCheckoutSession(opts: {
   if (!secret) throw Object.assign(new Error("Stripe is not configured"), { status: 503 });
   if (!plans.length) {
     throw Object.assign(
-      new Error("No SaaS plan configured (set STRIPE_SAAS_PRICE_MONTHLY / YEARLY)"),
+      new Error(
+        "No SaaS plan configured (set STRIPE_SAAS_PRICE_MONTHLY / YEARLY / SELLER_MONTHLY)"
+      ),
       { status: 503 }
     );
   }

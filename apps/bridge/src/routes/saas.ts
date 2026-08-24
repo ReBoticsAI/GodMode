@@ -12,7 +12,7 @@ import {
   handleSaasStripeWebhook,
   resolveEntitlementForCheckoutSession,
 } from "../services/saas-billing.js";
-import { getPublicSubscriptionForUser } from "../services/saas-subscriptions.js";
+import { getPublicSubscriptionForUser, getSellerEntitlementForUser } from "../services/saas-subscriptions.js";
 
 function requireSaas(_req: Request, res: Response, next: () => void): void {
   if (!config.isSaas) {
@@ -106,6 +106,21 @@ export function createSaasRouter(): Router {
     (req, res) => {
       const sub = getPublicSubscriptionForUser(req.user!.id);
       res.json({ subscription: sub });
+    }
+  );
+
+  router.get(
+    "/seller-entitlement",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    (req, res) => {
+      const entitlement = getSellerEntitlementForUser(req.user!.id);
+      res.json({
+        sellerActive: entitlement.sellerActive,
+        planId: entitlement.planId,
+        source: entitlement.source,
+      });
     }
   );
 
