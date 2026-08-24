@@ -27,6 +27,7 @@ function openSellerDb(): CoreDatabase {
       metamask_address TEXT,
       payout_preference TEXT,
       onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
       tos_accepted_version TEXT,
       tos_accepted_at TEXT,
       verified_seller INTEGER NOT NULL DEFAULT 0,

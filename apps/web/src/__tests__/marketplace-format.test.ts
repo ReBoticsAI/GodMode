@@ -85,6 +85,7 @@ describe("listingStatusLabel", () => {
     expect(listingStatusLabel("active")).toBe("Listed");
     expect(listingStatusLabel("in_review")).toBe("In review");
     expect(listingStatusLabel("draft")).toBe("Draft");
+    expect(listingStatusLabel("pending_payout")).toBe("Pending · awaiting payment setup");
   });
 });
 

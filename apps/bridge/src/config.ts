@@ -33,6 +33,27 @@ const corsOrigins = (process.env.WEB_ORIGIN ?? (webPublicUrl || "http://127.0.0.
   .map((s) => s.trim())
   .filter(Boolean);
 
+/** Marketing hosts that fetch public Marketplace APIs from the Cloud Bridge (#688). */
+const MARKETING_CORS_ORIGINS = [
+  "https://godmode.software",
+  "https://www.godmode.software",
+];
+
+function mergeCorsOrigins(base: string[]): string[] {
+  const out = [...base];
+  const seen = new Set(base);
+  const extras: string[] = [...MARKETING_CORS_ORIGINS];
+  const business = (process.env.BUSINESS_WEBSITE_URL ?? "").trim().replace(/\/$/, "");
+  if (business) extras.push(business);
+  for (const o of extras) {
+    if (!seen.has(o)) {
+      seen.add(o);
+      out.push(o);
+    }
+  }
+  return out.length > 0 ? out : ["http://127.0.0.1:5173"];
+}
+
 const isHub = deploymentMode === "hub";
 const isProduction = deploymentMode === "hub" || deploymentMode === "client";
 const installationSurface = (
@@ -142,7 +163,7 @@ export const config = {
   host: process.env.BRIDGE_HOST ?? "127.0.0.1",
   web: {
     publicUrl: webPublicUrl || "http://127.0.0.1:5173",
-    allowedOrigins: corsOrigins.length > 0 ? corsOrigins : ["http://127.0.0.1:5173"],
+    allowedOrigins: mergeCorsOrigins(corsOrigins),
   },
   /** When true, allow any Origin in non-production (dev convenience). Default: strict WEB_ORIGIN only. */
   corsPermissive: process.env.CORS_PERMISSIVE === "true",
@@ -662,6 +683,23 @@ export const config = {
 /** Filesystem-safe slug for an agent id (used as the sandbox folder name). */
 export function slugAgentId(agentId: string): string {
   return (agentId || "").replace(/[^a-zA-Z0-9._-]/g, "_") || "agent";
+}
+
+/**
+ * True when Origin is marketing apex/www or a godmode-www Cloudflare Pages preview (#688).
+ * Exact WEB_ORIGIN / BUSINESS_WEBSITE_URL values are already in allowedOrigins.
+ */
+export function isMarketingCorsOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "godmode.software" || host === "www.godmode.software") return true;
+    if (host.endsWith(".pages.dev") && host.includes("godmode-www")) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /** Root sandbox/workspace directory for a single agent. */

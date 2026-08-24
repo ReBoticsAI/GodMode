@@ -6712,7 +6712,13 @@ export function connectMarketplacePayout(body: {
 }
 
 export function startMarketplaceStripeConnect(body?: { returnUrl?: string; refreshUrl?: string }) {
-  return actionDto<{ url: string; accountId: string; onboardingStatus: string }>(
+  return actionDto<{
+    url: string;
+    accountId: string;
+    onboardingStatus: string;
+    publicHandle?: string;
+    storefrontUrl?: string;
+  }>(
     "MarketplaceSellerAccount",
     "start_stripe_connect",
     {
@@ -6745,6 +6751,8 @@ export function fetchMarketplaceCommerceConfig() {
     onboardingStatus?: string | null;
     payoutReady?: boolean;
     stripePayoutsEnabled?: boolean;
+    publicHandle?: string | null;
+    storefrontUrl?: string | null;
     providers: { stripe: boolean; paypal: boolean; crypto: boolean };
     cryptoTreasuryAddress: string | null;
     cryptoChainId: number;

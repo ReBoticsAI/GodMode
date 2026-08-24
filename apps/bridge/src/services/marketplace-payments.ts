@@ -15,6 +15,8 @@ import {
   assertNotMarketplaceBanned,
   ensureSellerAccount,
   updateSellerPayout,
+  sellerStorefrontUrl,
+  sellerProductDescriptionForConnect,
   type MarketplacePaymentProvider,
 } from "./marketplace-commerce.js";
 
@@ -598,6 +600,7 @@ async function stripeGet(secret: string, path: string): Promise<Record<string, u
 /**
  * Start Stripe Connect Express onboarding (Account Links).
  * Primary Community seller path (#316); replaces paste-acct as the default UX.
+ * Prefills business_profile.url to the public marketing storefront (#688).
  */
 export async function startStripeConnectOnboarding(
   core: CoreDatabase,
@@ -606,7 +609,13 @@ export async function startStripeConnectOnboarding(
     returnUrl?: string;
     refreshUrl?: string;
   }
-): Promise<{ url: string; accountId: string; onboardingStatus: string }> {
+): Promise<{
+  url: string;
+  accountId: string;
+  onboardingStatus: string;
+  publicHandle: string;
+  storefrontUrl: string;
+}> {
   assertNotMarketplaceBanned(core, opts.userId);
   assertMarketplaceTosAccepted(core, opts.userId);
 
@@ -622,6 +631,17 @@ export async function startStripeConnectOnboarding(
     `${webBase}/marketplace?tab=seller&stripe_connect=refresh`;
 
   const row = ensureSellerAccount(core, opts.userId);
+  const publicHandle = String(row.public_handle ?? "").trim();
+  if (!publicHandle) {
+    throw new MarketplaceCommerceError("Seller public handle missing", 500);
+  }
+  const storefrontUrl = sellerStorefrontUrl(publicHandle);
+  const productDescription = sellerProductDescriptionForConnect(core, opts.userId);
+  const businessProfile = {
+    "business_profile[url]": storefrontUrl,
+    "business_profile[product_description]": productDescription,
+  };
+
   let accountId =
     typeof row.stripe_connect_account_id === "string" && row.stripe_connect_account_id.startsWith("acct_")
       ? row.stripe_connect_account_id
@@ -633,6 +653,7 @@ export async function startStripeConnectOnboarding(
       "capabilities[card_payments][requested]": "true",
       "capabilities[transfers][requested]": "true",
       "metadata[godmode_user_id]": opts.userId,
+      ...businessProfile,
     });
     accountId = String(created.id ?? "");
     if (!accountId.startsWith("acct_")) {
@@ -646,6 +667,9 @@ export async function startStripeConnectOnboarding(
       stripeConnectAccountId: accountId,
       payoutPreference: "stripe",
     });
+  } else {
+    // Keep storefront URL / product blurb current when reusing an Express account.
+    await stripePost(secret, `accounts/${accountId}`, businessProfile);
   }
 
   const link = await stripePost(secret, "account_links", {
@@ -662,7 +686,13 @@ export async function startStripeConnectOnboarding(
     );
   }
 
-  return { url, accountId, onboardingStatus: "pending" };
+  return {
+    url,
+    accountId,
+    onboardingStatus: "pending",
+    publicHandle,
+    storefrontUrl,
+  };
 }
 
 /** Refresh Connect account capabilities into seller onboarding_status. */

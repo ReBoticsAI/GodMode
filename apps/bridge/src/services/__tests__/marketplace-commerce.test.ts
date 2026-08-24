@@ -55,6 +55,7 @@ function createCore(): Database.Database {
       metamask_address TEXT,
       payout_preference TEXT,
       onboarding_status TEXT NOT NULL DEFAULT 'pending',
+      public_handle TEXT,
       tos_accepted_version TEXT,
       tos_accepted_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -120,6 +121,8 @@ describe("marketplace commerce", () => {
       onboardingStatus: null,
       payoutReady: false,
       stripePayoutsEnabled: false,
+      publicHandle: null,
+      storefrontUrl: null,
     });
 
     core
@@ -136,6 +139,9 @@ describe("marketplace commerce", () => {
       stripePayoutsEnabled: false,
       onboardingStatus: "pending",
     });
+    const snap = getSellerPayoutSnapshot(core as never, "seller");
+    expect(snap.publicHandle).toMatch(/^s_/);
+    expect(snap.storefrontUrl).toContain(`/marketplace/${snap.publicHandle}`);
   });
 
   it("requires ToS before creating a paid order", () => {

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
 import type { CoreDatabase } from "../core-db.js";
@@ -165,17 +166,189 @@ export function ensureSellerAccount(
   const existing = core
     .prepare(`SELECT * FROM marketplace_seller_accounts WHERE user_id=?`)
     .get(userId) as Record<string, unknown> | undefined;
-  if (existing) return existing;
+  if (existing) {
+    return ensureSellerPublicHandle(core, existing);
+  }
   const id = uuidv4();
+  const handle = allocateUniqueSellerPublicHandle(core);
   core
     .prepare(
-      `INSERT INTO marketplace_seller_accounts (id, user_id, onboarding_status)
-       VALUES (?, ?, 'pending')`
+      `INSERT INTO marketplace_seller_accounts (id, user_id, onboarding_status, public_handle)
+       VALUES (?, ?, 'pending', ?)`
     )
-    .run(id, userId);
+    .run(id, userId, handle);
   return core
     .prepare(`SELECT * FROM marketplace_seller_accounts WHERE id=?`)
     .get(id) as Record<string, unknown>;
+}
+
+/** Marketing apex used for Stripe business_profile.url and public storefront links. */
+export function marketplaceMarketingBaseUrl(): string {
+  const fromEnv = String(config.businessWebsiteUrl ?? "")
+    .trim()
+    .replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  return "https://godmode.software";
+}
+
+export function sellerStorefrontUrl(handle: string): string {
+  const h = String(handle ?? "").trim();
+  return `${marketplaceMarketingBaseUrl()}/marketplace/${encodeURIComponent(h)}`;
+}
+
+function allocateSellerPublicHandleCandidate(): string {
+  const bytes = randomBytes(10);
+  let n = "";
+  for (const b of bytes) n += (b % 36).toString(36);
+  return `s_${n.slice(0, 10)}`;
+}
+
+export function allocateUniqueSellerPublicHandle(core: CoreDatabase): string {
+  for (let i = 0; i < 12; i++) {
+    const handle = allocateSellerPublicHandleCandidate();
+    const hit = core
+      .prepare(`SELECT 1 AS ok FROM marketplace_seller_accounts WHERE public_handle=?`)
+      .get(handle) as { ok?: number } | undefined;
+    if (!hit) return handle;
+  }
+  return `s_${uuidv4().replace(/-/g, "").slice(0, 12)}`;
+}
+
+/** Ensure row has a public_handle; allocate if missing (pre-migration rows). */
+export function ensureSellerPublicHandle(
+  core: CoreDatabase,
+  row: Record<string, unknown>
+): Record<string, unknown> {
+  const existing = String(row.public_handle ?? "").trim();
+  if (existing) return row;
+  const id = String(row.id ?? "");
+  if (!id) return row;
+  const handle = allocateUniqueSellerPublicHandle(core);
+  core
+    .prepare(
+      `UPDATE marketplace_seller_accounts
+       SET public_handle=?, updated_at=datetime('now') WHERE id=?`
+    )
+    .run(handle, id);
+  return {
+    ...row,
+    public_handle: handle,
+  };
+}
+
+export type PublicSellerListing = {
+  id: string;
+  title: string;
+  description: string | null;
+  kind: string;
+  priceCents: number;
+  currency: string;
+  status: string;
+  catalogEntryId: string | null;
+  deliveryMode: string | null;
+  buyEnabled: boolean;
+};
+
+export type PublicSellerStorefront = {
+  handle: string;
+  storefrontUrl: string;
+  listings: PublicSellerListing[];
+};
+
+/** Unauthenticated storefront payload for marketing + Stripe crawl HTML. */
+export function getPublicSellerStorefront(
+  core: CoreDatabase,
+  handleRaw: string
+): PublicSellerStorefront | null {
+  const handle = String(handleRaw ?? "").trim();
+  if (!handle || !/^s_[a-z0-9]{6,24}$/i.test(handle)) return null;
+  const seller = core
+    .prepare(
+      `SELECT id, user_id, public_handle FROM marketplace_seller_accounts WHERE public_handle=?`
+    )
+    .get(handle) as
+    | { id: string; user_id: string; public_handle: string }
+    | undefined;
+  if (!seller) return null;
+  const rows = core
+    .prepare(
+      `SELECT id, title, description, kind, price_cents, currency, status,
+              catalog_entry_id, delivery_mode
+       FROM marketplace_listings
+       WHERE seller_user_id=?
+         AND status IN ('active', 'pending_payout')
+         AND visibility IN ('public', 'unlisted')
+       ORDER BY
+         CASE status WHEN 'active' THEN 0 ELSE 1 END,
+         updated_at DESC
+       LIMIT 100`
+    )
+    .all(seller.user_id) as Array<Record<string, unknown>>;
+  const listings: PublicSellerListing[] = rows.map((r) => {
+    const status = String(r.status ?? "");
+    const priceCents = Number(r.price_cents ?? 0) || 0;
+    return {
+      id: String(r.id),
+      title: String(r.title ?? ""),
+      description: r.description != null ? String(r.description) : null,
+      kind: String(r.kind ?? ""),
+      priceCents,
+      currency: String(r.currency ?? "usd"),
+      status,
+      catalogEntryId:
+        r.catalog_entry_id != null ? String(r.catalog_entry_id) : null,
+      deliveryMode: r.delivery_mode != null ? String(r.delivery_mode) : null,
+      buyEnabled: status === "active",
+    };
+  });
+  return {
+    handle: seller.public_handle,
+    storefrontUrl: sellerStorefrontUrl(seller.public_handle),
+    listings,
+  };
+}
+
+export function renderPublicSellerStorefrontHtml(store: PublicSellerStorefront): string {
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  const items = store.listings
+    .map((l) => {
+      const price =
+        l.priceCents > 0 ? `$${(l.priceCents / 100).toFixed(2)}` : "Free";
+      const badge =
+        l.status === "pending_payout"
+          ? "Pending · awaiting payment setup"
+          : "Listed";
+      return `<li><strong>${esc(l.title)}</strong> (${esc(l.kind)}) · ${esc(price)} · ${esc(badge)}${
+        l.description ? `<br/><span>${esc(l.description.slice(0, 280))}</span>` : ""
+      }</li>`;
+    })
+    .join("\n");
+  const productBlurb =
+    store.listings.length > 0
+      ? store.listings.map((l) => l.title).join(", ")
+      : "GodMode Community Marketplace seller";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GodMode seller ${esc(store.handle)}</title>
+  <meta name="description" content="${esc(productBlurb.slice(0, 160))}"/>
+</head>
+<body>
+  <h1>GodMode Community seller</h1>
+  <p>Storefront <code>${esc(store.handle)}</code>. Listings below are sold through GodMode Community Marketplace (Cloud checkout).</p>
+  <ul>
+  ${items || "<li>No public listings yet.</li>"}
+  </ul>
+  <p><a href="${esc(store.storefrontUrl)}">${esc(store.storefrontUrl)}</a></p>
+</body>
+</html>`;
 }
 
 /** Gate-passing Community listing count thresholds (#313). */
@@ -781,11 +954,14 @@ export type SellerPayoutSnapshot = {
   onboardingStatus: string | null;
   payoutReady: boolean;
   stripePayoutsEnabled: boolean;
+  publicHandle: string | null;
+  storefrontUrl: string | null;
 };
 
 /**
  * Stored seller payout methods for Sell / Vault hydration.
  * Read-only: does not call Stripe, create a seller row, or require ToS.
+ * Allocates public_handle only when a seller row already exists.
  */
 export function getSellerPayoutSnapshot(
   core: CoreDatabase,
@@ -793,21 +969,29 @@ export function getSellerPayoutSnapshot(
 ): SellerPayoutSnapshot {
   const row = core
     .prepare(
-      `SELECT stripe_connect_account_id, paypal_merchant_id, metamask_address, onboarding_status
+      `SELECT id, stripe_connect_account_id, paypal_merchant_id, metamask_address,
+              onboarding_status, public_handle
        FROM marketplace_seller_accounts WHERE user_id=?`
     )
     .get(userId) as
     | {
+        id: string;
         stripe_connect_account_id: string | null;
         paypal_merchant_id: string | null;
         metamask_address: string | null;
         onboarding_status: string | null;
+        public_handle: string | null;
       }
     | undefined;
   const stripeConnectAccountId = nonemptyText(row?.stripe_connect_account_id);
   const paypalMerchantId = nonemptyText(row?.paypal_merchant_id);
   const metamaskAddress = nonemptyText(row?.metamask_address);
   const onboardingStatus = nonemptyText(row?.onboarding_status);
+  let publicHandle: string | null = null;
+  if (row) {
+    const ensured = ensureSellerPublicHandle(core, row as Record<string, unknown>);
+    publicHandle = nonemptyText(ensured.public_handle);
+  }
   return {
     stripeConnectAccountId,
     paypalMerchantId,
@@ -815,5 +999,31 @@ export function getSellerPayoutSnapshot(
     onboardingStatus,
     payoutReady: Boolean(stripeConnectAccountId || paypalMerchantId || metamaskAddress),
     stripePayoutsEnabled: onboardingStatus === "ready",
+    publicHandle,
+    storefrontUrl: publicHandle ? sellerStorefrontUrl(publicHandle) : null,
   };
+}
+
+/** Truncated listing titles for Stripe business_profile.product_description. */
+export function sellerProductDescriptionForConnect(
+  core: CoreDatabase,
+  userId: string
+): string {
+  const rows = core
+    .prepare(
+      `SELECT title FROM marketplace_listings
+       WHERE seller_user_id=?
+         AND status IN ('active', 'pending_payout')
+       ORDER BY updated_at DESC
+       LIMIT 20`
+    )
+    .all(userId) as Array<{ title: string }>;
+  const titles = rows
+    .map((r) => String(r.title ?? "").trim())
+    .filter(Boolean);
+  const joined =
+    titles.length > 0
+      ? `GodMode Community Marketplace: ${titles.join("; ")}`
+      : "GodMode Community Marketplace seller storefront";
+  return joined.slice(0, 350);
 }
