@@ -501,6 +501,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-approve",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/approve",
+    rationale:
+      "Cloud user approves Local Seller device-code link (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-deny",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/deny",
+    rationale:
+      "Cloud user denies Local Seller device-code link (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-local-cloud-checkout",
     methods: ["POST"],
     pathPattern: "/api/marketplace/cloud-checkout",
