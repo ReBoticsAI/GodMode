@@ -22,7 +22,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { userFacingErrorMessage } from "@/lib/user-facing-error";
+import { userFacingErrorMessage } from "@/lib/marketplace-format";
 
 type PendingLink = {
   deviceCode: string;
