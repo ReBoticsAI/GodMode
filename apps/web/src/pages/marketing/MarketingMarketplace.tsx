@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Page, PageHeader } from "@/components/PageHeader";
-import { formatMarketplaceCents } from "@/lib/marketplace-format";
+import { formatMarketplaceCents, marketplaceSellerStorefrontUrl } from "@/lib/marketplace-format";
 import {
   MARKETING_BASE,
   marketingBadgeClass,
@@ -201,32 +201,46 @@ export default function MarketingMarketplace() {
             </Empty>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {community.map((listing) => (
-                <Card key={listing.id} className={marketingCardClass}>
-                  <CardHeader>
-                    <Badge variant="outline" className={marketingBadgeClass}>
-                      {listing.kind || "listing"}
-                    </Badge>
-                    <CardTitle className={marketingCardTitleClass}>
-                      {listing.title || listing.id}
-                    </CardTitle>
-                    <CardDescription className={marketingCardDescriptionClass}>
-                      {listing.description || "Community Marketplace listing."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
-                    {formatMarketplaceCents(listing.price_cents)}
-                  </CardContent>
-                  <CardFooter>
-                    <Button
-                      size="sm"
-                      render={<a href={cloudCommunityMarketplaceUrl()} />}
-                    >
-                      Buy on Cloud
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+              {community.map((listing) => {
+                const sellerHref = marketplaceSellerStorefrontUrl(
+                  String(listing.seller_public_handle ?? "")
+                );
+                return (
+                  <Card key={listing.id} className={marketingCardClass}>
+                    <CardHeader>
+                      <Badge variant="outline" className={marketingBadgeClass}>
+                        {listing.kind || "listing"}
+                      </Badge>
+                      <CardTitle className={marketingCardTitleClass}>
+                        {listing.title || listing.id}
+                      </CardTitle>
+                      <CardDescription className={marketingCardDescriptionClass}>
+                        {listing.description || "Community Marketplace listing."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      {formatMarketplaceCents(listing.price_cents)}
+                    </CardContent>
+                    <CardFooter className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        render={<a href={cloudCommunityMarketplaceUrl()} />}
+                      >
+                        Buy on Cloud
+                      </Button>
+                      {sellerHref ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          render={<Link to={`${MARKETING_BASE}/marketplace/${encodeURIComponent(String(listing.seller_public_handle).trim())}`} />}
+                        >
+                          More from this seller
+                        </Button>
+                      ) : null}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>

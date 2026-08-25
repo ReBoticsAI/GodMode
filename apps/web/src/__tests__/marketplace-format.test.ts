@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   marketplaceCloudCommunityUrl,
   marketplaceCloudSellUrl,
+  marketplaceSellerStorefrontUrl,
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
@@ -26,6 +27,15 @@ describe("marketplaceCloudSellUrl", () => {
     expect(marketplaceCloudSellUrl("https://app.godmode.software")).toBe(
       "https://app.godmode.software/marketplace?tab=seller"
     );
+  });
+});
+
+describe("marketplaceSellerStorefrontUrl", () => {
+  it("builds the marketing storefront path", () => {
+    expect(marketplaceSellerStorefrontUrl("s_bq54l3pxqb")).toBe(
+      "https://godmode.software/marketplace/s_bq54l3pxqb"
+    );
+    expect(marketplaceSellerStorefrontUrl("")).toBe("");
   });
 });
 

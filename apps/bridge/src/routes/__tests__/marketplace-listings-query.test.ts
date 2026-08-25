@@ -22,6 +22,7 @@ describe("buildPublicListingsSql", () => {
     expect(sql).toContain("verified_publisher");
     expect(sql).toContain("verified_tier");
     expect(sql).toContain("payout_ready");
+    expect(sql).toContain("seller_public_handle");
     expect(sql).toContain("marketplace_seller_accounts");
     expect(sql).toContain("gate_passing_cnt");
     expect(sql).toMatch(/GROUP BY seller_user_id/);

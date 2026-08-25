@@ -6047,6 +6047,8 @@ export interface MarketplaceListing {
   verified_publisher?: number | boolean;
   /** Community earned/admin-resolved tier 0–3 (#313). */
   verified_tier?: number;
+  /** Opaque public storefront handle (`s_…`); marketing `/marketplace/{handle}`. */
+  seller_public_handle?: string | null;
   /** Cloud overlay listings on Local/hub (this host is not the commerce authority). */
   commerce_host?: string;
   created_at: string;

@@ -44,6 +44,7 @@ import {
   listingStatusLabel,
   marketplaceCloudCommunityUrl,
   marketplaceCloudSellUrl,
+  marketplaceSellerStorefrontUrl,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -238,6 +239,9 @@ function CommunityListingCard({
   const cloudHosted = listingIsCloudHosted(listing);
   const live = String(listing.delivery_mode ?? "clone").toLowerCase() === "live";
   const openOnCloud = cloudHosted && live;
+  const sellerStorefront = marketplaceSellerStorefrontUrl(
+    String(listing.seller_public_handle ?? "")
+  );
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -310,6 +314,16 @@ function CommunityListingCard({
             {owned ? "Owned" : busy ? "Acquiring…" : "Acquire"}
           </Button>
         )}
+        {sellerStorefront ? (
+          <Button
+            size="sm"
+            variant="link"
+            className="h-auto w-fit px-0"
+            render={<a href={sellerStorefront} target="_blank" rel="noreferrer" />}
+          >
+            More from this seller
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   );
