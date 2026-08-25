@@ -6797,6 +6797,9 @@ export type SellerLinkStatus = {
   source: string | null;
   cloudUserHint: string | null;
   linkedAt: string | null;
+  githubConnected: boolean;
+  tosAccepted: boolean;
+  stripePayoutReady: boolean;
 };
 
 export function fetchSellerLinkStatus() {

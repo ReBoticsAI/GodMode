@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { CoreDatabase, CoreUser } from "../core-db.js";
 import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
+import {
+  getSellerPayoutSnapshot,
+  hasAcceptedMarketplaceTos,
+} from "./marketplace-commerce.js";
+import { githubProjectsStatus } from "./github-integration.js";
+import { getUserDb } from "../user-registry.js";
 
 /** Admin-granted Cloud access without Stripe. Distinct from platform admin (`is_admin`). */
 export const COMPLIMENTARY_PLAN_ID = "complimentary";
@@ -424,6 +430,14 @@ export type SellerEntitlement = {
   source: SellerEntitlementSource;
 };
 
+export type SellerCommerceReadiness = {
+  githubConnected: boolean;
+  tosAccepted: boolean;
+  stripePayoutReady: boolean;
+};
+
+export type SellerEntitlementPayload = SellerEntitlement & SellerCommerceReadiness;
+
 function listSubscriptionsForUser(
   core: CoreDatabase,
   userId: string
@@ -435,6 +449,26 @@ function listSubscriptionsForUser(
        ORDER BY datetime(updated_at) DESC`
     )
     .all(userId) as SaasSubscription[];
+}
+
+/** GitHub / ToS / Stripe Connect readiness for Local Sell checklist (#681). */
+export function getSellerCommerceReadiness(userId: string): SellerCommerceReadiness {
+  const core = getCloudDb();
+  const payout = getSellerPayoutSnapshot(core, userId);
+  const github = githubProjectsStatus(getUserDb(userId), userId);
+  return {
+    githubConnected: Boolean(github.connected),
+    tosAccepted: hasAcceptedMarketplaceTos(core, userId),
+    stripePayoutReady: Boolean(payout.stripeConnectAccountId),
+  };
+}
+
+/** Entitlement plus commerce readiness for Local / Cloud seller gates. */
+export function getSellerEntitlementPayload(userId: string): SellerEntitlementPayload {
+  return {
+    ...getSellerEntitlementForUser(userId),
+    ...getSellerCommerceReadiness(userId),
+  };
 }
 
 /** Resolve seller commerce entitlement for a Cloud user (Seller seat or workspace). */
