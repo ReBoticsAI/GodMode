@@ -21,6 +21,8 @@ app.
 | `/www/features` | Features index |
 | `/www/features/:slug` | Feature detail (from `docs/features`) |
 | `/www/pricing` | Pricing |
+| `/www/downloads` | Downloads (Stable, Nightly, Docker) |
+| `/www/marketplace` | Marketplace browse |
 | `/www/terms` | Terms |
 | `/www/privacy` | Privacy |
 | `/www/security` | Security |

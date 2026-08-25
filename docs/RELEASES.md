@@ -30,6 +30,19 @@ release page. Tags such as `latest` or a channel name are discovery aliases
 only; installation and rollback always record immutable digests and artifact
 hashes.
 
+### Marketing Downloads channel map
+
+The public marketing **Downloads** page
+(`apps/web` route `/downloads`, Pages host `https://godmode.software/downloads`)
+links GitHub artifacts; it does not re-host binaries.
+
+| Channel | Discovery |
+|---------|-----------|
+| Stable | GitHub `releases/latest` (annotated `vX.Y.Z`) |
+| Nightly desktop | Newest release tag matching `*-nightly.*` that includes desktop installers |
+| Nightly updater alias | Floating tag `nightly` (often manifest-only) used by Admin → Updates |
+| Docker | `ghcr.io/reboticsai/godmode` pinned by digest (see Docker section below) |
+
 ## Installation update records
 
 The core-backed `Release` and `InstallationUpdateState` ObjectTypes expose

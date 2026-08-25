@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { MarketingLayout } from "./MarketingLayout";
 import MarketingHome from "./MarketingHome";
 import MarketingPricing from "./MarketingPricing";
+import MarketingDownloads from "./MarketingDownloads";
 import MarketingTerms from "./MarketingTerms";
 import MarketingRefund from "./MarketingRefund";
 import MarketingPrivacy from "./MarketingPrivacy";
@@ -25,6 +26,7 @@ export default function MarketingRoutes() {
           <Route path="marketplace" element={<MarketingMarketplace />} />
           <Route path="marketplace/:handle" element={<MarketingSellerStorefront />} />
           <Route path="pricing" element={<MarketingPricing />} />
+          <Route path="downloads" element={<MarketingDownloads />} />
           <Route path="terms" element={<MarketingTerms />} />
           <Route path="refund" element={<MarketingRefund />} />
           <Route path="privacy" element={<MarketingPrivacy />} />
