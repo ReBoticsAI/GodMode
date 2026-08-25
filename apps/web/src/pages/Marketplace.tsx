@@ -431,7 +431,15 @@ export default function MarketplacePage() {
   const [cryptoTxHash, setCryptoTxHash] = useState("");
   const [tosVersion, setTosVersion] = useState("1");
   const [platformFeeBps, setPlatformFeeBps] = useState(1000);
-  const [tosAccepted, setTosAccepted] = useState(false);
+  // Local Buy gates on ToS before proxying to Cloud; persist acknowledgment on this browser
+  // because Local has no Cloud seller-account commerce_config row to hydrate from.
+  const [tosAccepted, setTosAccepted] = useState(() => {
+    try {
+      return localStorage.getItem("godmode.marketplace.tosAccepted") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [tosDialogOpen, setTosDialogOpen] = useState(false);
   const [tosAccepting, setTosAccepting] = useState(false);
   const [payoutReady, setPayoutReady] = useState(false);
@@ -939,6 +947,17 @@ export default function MarketplacePage() {
   const handleAcceptTos = async () => {
     setTosAccepting(true);
     try {
+      if (saas !== true) {
+        try {
+          localStorage.setItem("godmode.marketplace.tosAccepted", "1");
+        } catch {
+          /* ignore quota / private mode */
+        }
+        setTosAccepted(true);
+        setTosDialogOpen(false);
+        toast.success(`Accepted Marketplace ToS v${tosVersion}`);
+        return;
+      }
       const result = await acceptMarketplaceTos();
       setTosVersion(result.tosVersion);
       setTosAccepted(true);
@@ -1578,14 +1597,6 @@ export default function MarketplacePage() {
               </CardContent>
             </Card>
           ) : null}
-          <MarketplaceTosDialog
-            open={tosDialogOpen}
-            onOpenChange={setTosDialogOpen}
-            version={tosVersion}
-            accepted={tosAccepted}
-            accepting={tosAccepting}
-            onAccept={() => void handleAcceptTos()}
-          />
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -2108,6 +2119,14 @@ export default function MarketplacePage() {
           </Card>
         </TabsContent>
       </Tabs>
+      <MarketplaceTosDialog
+        open={tosDialogOpen}
+        onOpenChange={setTosDialogOpen}
+        version={tosVersion}
+        accepted={tosAccepted}
+        accepting={tosAccepting}
+        onAccept={() => void handleAcceptTos()}
+      />
     </Page>
   );
 }
