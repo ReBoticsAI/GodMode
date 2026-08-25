@@ -83,6 +83,7 @@ import { Page, PageHeader } from "@/components/PageHeader";
 import { VAULT_PATH } from "@/lib/navigation";
 import { FolderOpenIcon, StoreIcon, Trash2Icon } from "lucide-react";
 import { MarketplaceTosDialog } from "@/pages/MarketplaceTosDialog";
+import { CloudSellerLinkApproveCard, LocalSellerLinkCard } from "@/pages/SellerLinkCards";
 
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
@@ -442,6 +443,7 @@ export default function MarketplacePage() {
   });
   const [tosDialogOpen, setTosDialogOpen] = useState(false);
   const [tosAccepting, setTosAccepting] = useState(false);
+  const [sellerLinkApproveCode, setSellerLinkApproveCode] = useState<string | null>(null);
   const [payoutReady, setPayoutReady] = useState(false);
   const [stripeConnectLinked, setStripeConnectLinked] = useState(false);
   const [stripeConnectAttested, setStripeConnectAttested] = useState(false);
@@ -646,6 +648,18 @@ export default function MarketplacePage() {
       })
       .catch(() => undefined);
   }, [reload]);
+
+  useEffect(() => {
+    const code = searchParams.get("seller_link");
+    if (code && saas === true) {
+      setSellerLinkApproveCode(code.trim().toUpperCase());
+      if (tab !== "seller") {
+        const next = new URLSearchParams(searchParams);
+        next.set("tab", "seller");
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [saas, searchParams, setSearchParams, tab]);
 
   useEffect(() => {
     const paid = searchParams.get("paid");
@@ -1533,22 +1547,36 @@ export default function MarketplacePage() {
 
         <TabsContent value="seller" className="mt-4 space-y-4">
           {saas !== true ? (
-            <Alert>
-              <AlertTitle>Paid listings sell on GodMode Cloud</AlertTitle>
-              <AlertDescription>
-                Stripe Connect, catalog claim, and paid checkout live on Cloud. Buyers on this
-                machine pay there and the copy installs here. Open{" "}
-                <a
-                  className="underline underline-offset-4"
-                  href={marketplaceCloudSellUrl()}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Cloud Sell
-                </a>{" "}
-                to connect payouts and publish Community listings.
-              </AlertDescription>
-            </Alert>
+            <>
+              <Alert>
+                <AlertTitle>Paid listings sell on GodMode Cloud</AlertTitle>
+                <AlertDescription>
+                  Stripe Connect, catalog claim, and paid checkout live on Cloud. Buyers on this
+                  machine pay there and the copy installs here. Open{" "}
+                  <a
+                    className="underline underline-offset-4"
+                    href={marketplaceCloudSellUrl()}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Cloud Sell
+                  </a>{" "}
+                  to connect payouts and publish Community listings.
+                </AlertDescription>
+              </Alert>
+              <LocalSellerLinkCard />
+            </>
+          ) : null}
+          {saas === true && sellerLinkApproveCode ? (
+            <CloudSellerLinkApproveCard
+              initialCode={sellerLinkApproveCode}
+              onCleared={() => {
+                setSellerLinkApproveCode(null);
+                const next = new URLSearchParams(searchParams);
+                next.delete("seller_link");
+                setSearchParams(next, { replace: true });
+              }}
+            />
           ) : null}
           <Card>
             <CardHeader>

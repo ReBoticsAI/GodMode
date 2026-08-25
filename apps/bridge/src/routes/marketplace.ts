@@ -34,6 +34,15 @@ import {
   startCloudGuestCheckout,
 } from "../services/marketplace-cloud-checkout-client.js";
 import {
+  clearStoredSellerLink,
+  getLocalSellerLinkStatus,
+  pollCloudSellerLinkToken,
+  revokeCloudSellerLinkToken,
+  readStoredSellerLink,
+  startCloudSellerLinkDevice,
+  writeStoredSellerLink,
+} from "../services/marketplace-seller-link-client.js";
+import {
   fetchRemoteCommunityShelf,
   mergePublicListings,
 } from "../services/marketplace-community-shelf.js";
@@ -294,6 +303,80 @@ export function createMarketplaceRouter(): Router {
     } catch (err) {
       const status = err instanceof MarketplaceCommerceError ? err.status : 500;
       sendRouteError(res, err, "Cloud delivery failed", status);
+    }
+  });
+
+  router.get("/seller-link/status", async (_req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    try {
+      res.json(await getLocalSellerLinkStatus());
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller link status failed", status);
+    }
+  });
+
+  router.post("/seller-link/start", async (_req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    try {
+      const started = await startCloudSellerLinkDevice();
+      res.json(started);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller link start failed", status);
+    }
+  });
+
+  router.post("/seller-link/poll", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    const deviceCode = String(req.body?.deviceCode ?? req.body?.device_code ?? "").trim();
+    if (!deviceCode) {
+      res.status(400).json({ error: "deviceCode required" });
+      return;
+    }
+    try {
+      const polled = await pollCloudSellerLinkToken(deviceCode);
+      if (polled.status === "complete" && polled.accessToken) {
+        writeStoredSellerLink(polled.accessToken);
+        const status = await getLocalSellerLinkStatus();
+        res.json({ status: "complete", ...status });
+        return;
+      }
+      res.json({ status: polled.status });
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller link poll failed", status);
+    }
+  });
+
+  router.delete("/seller-link", async (_req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    try {
+      const stored = readStoredSellerLink();
+      if (stored) {
+        try {
+          await revokeCloudSellerLinkToken(stored.accessToken);
+        } catch {
+          /* still clear local store */
+        }
+      }
+      clearStoredSellerLink();
+      res.json({ ok: true, linked: false });
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller unlink failed", status);
     }
   });
 
