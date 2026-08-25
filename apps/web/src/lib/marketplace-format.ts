@@ -115,7 +115,7 @@ export function marketplaceCloudVaultMarketplaceUrl(
   return `${origin}/vault?tab=marketplace`;
 }
 
-/** Signals for Local Sell checklist (#681). Commerce stays on Cloud. */
+/** Signals for Local Sell checklist (#681). Seat from Cloud link; setup from Local or Cloud. */
 export type LocalSellChecklistSignals = {
   linked: boolean;
   sellerActive: boolean;
@@ -135,6 +135,27 @@ export function localSellChecklistComplete(s: LocalSellChecklistSignals): boolea
     Boolean(s.tosAccepted) &&
     Boolean(s.stripePayoutReady)
   );
+}
+
+/** Merge Cloud seller-link readiness with Local Vault / ToS state for unlock. */
+export function mergeLocalSellChecklistSignals(opts: {
+  linked: boolean;
+  sellerActive: boolean;
+  githubConnected: boolean;
+  tosAccepted: boolean;
+  stripePayoutReady: boolean;
+  localGithubLogin?: string | null;
+  localTosAccepted?: boolean;
+  localPayoutReady?: boolean;
+}): LocalSellChecklistSignals {
+  return {
+    linked: opts.linked,
+    sellerActive: opts.sellerActive,
+    githubConnected:
+      Boolean(opts.githubConnected) || Boolean(String(opts.localGithubLogin ?? "").trim()),
+    tosAccepted: Boolean(opts.tosAccepted) || Boolean(opts.localTosAccepted),
+    stripePayoutReady: Boolean(opts.stripePayoutReady) || Boolean(opts.localPayoutReady),
+  };
 }
 
 /** Public marketing seller storefront (Stripe business_profile.url shape). */

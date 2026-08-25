@@ -45,6 +45,8 @@ import {
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
+  localSellChecklistComplete,
+  mergeLocalSellChecklistSignals,
   marketplaceCloudCommunityUrl,
   marketplaceCloudSellUrl,
   marketplaceSellerStorefrontUrl,
@@ -519,6 +521,43 @@ export default function MarketplacePage() {
       stripeConnectAttested,
     ]
   );
+
+  const localSellSignals = useMemo(
+    () =>
+      mergeLocalSellChecklistSignals({
+        linked: Boolean(sellerLinkStatus?.linked),
+        sellerActive: Boolean(sellerLinkStatus?.sellerActive),
+        githubConnected: Boolean(sellerLinkStatus?.githubConnected),
+        tosAccepted: Boolean(sellerLinkStatus?.tosAccepted),
+        stripePayoutReady: Boolean(sellerLinkStatus?.stripePayoutReady),
+        localGithubLogin: githubLogin,
+        localTosAccepted: tosAccepted,
+        localPayoutReady: payoutReady,
+      }),
+    [sellerLinkStatus, githubLogin, tosAccepted, payoutReady]
+  );
+  const localSellUnlocked = saas !== true && localSellChecklistComplete(localSellSignals);
+  const showSellerDashboard = saas === true || localSellUnlocked;
+
+  const refreshLocalSellChecklist = useCallback(() => {
+    void fetchSellerLinkStatus()
+      .then(setSellerLinkStatus)
+      .catch((err) =>
+        toast.error(userFacingErrorMessage(err, "Could not refresh Seller link status"))
+      );
+    void fetchMarketplaceCommerceConfig()
+      .then((cfg) => {
+        setTosVersion(cfg.tosVersion);
+        setPlatformFeeBps(cfg.platformFeeBps);
+        setTosAccepted(Boolean(cfg.tosAccepted));
+        setPayoutReady(sellerPayoutStatusFromAccount(cfg).payoutReady);
+        setStripeConnectLinked(Boolean(String(cfg.stripeConnectAccountId ?? "").trim()));
+      })
+      .catch(() => {});
+    void fetchMyMarketplaceListings()
+      .then((mine) => setGithubLogin(mine.githubLogin ?? null))
+      .catch(() => {});
+  }, []);
 
   const handleCatalogSubmitPreview = async () => {
     setCatalogSubmitBusy(true);
@@ -1556,34 +1595,17 @@ export default function MarketplacePage() {
           {saas !== true ? (
             <>
               <Alert>
-                <AlertTitle>Paid listings sell on GodMode Cloud</AlertTitle>
+                <AlertTitle>Community listings use GodMode Seller</AlertTitle>
                 <AlertDescription>
-                  Stripe Connect, catalog claim, and paid checkout live on Cloud. Buyers on this
-                  machine pay there and the copy installs here. Complete the checklist below, then
-                  continue on{" "}
-                  <a
-                    className="underline underline-offset-4"
-                    href={marketplaceCloudSellUrl()}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Cloud Sell
-                  </a>
-                  .
+                  Link a GodMode Seller seat, finish the checklist, then publish and manage listings
+                  on this install. Buyers checkout on GodMode Cloud; paid copies install here.
                 </AlertDescription>
               </Alert>
               <LocalSellerLinkCard onStatusChange={setSellerLinkStatus} />
               <LocalSellChecklistCard
-                status={sellerLinkStatus}
-                onRefresh={() => {
-                  void fetchSellerLinkStatus()
-                    .then(setSellerLinkStatus)
-                    .catch((err) =>
-                      toast.error(
-                        userFacingErrorMessage(err, "Could not refresh Sell checklist")
-                      )
-                    );
-                }}
+                signals={localSellSignals}
+                onRefresh={refreshLocalSellChecklist}
+                onOpenTos={() => setTosDialogOpen(true)}
               />
             </>
           ) : null}
@@ -1598,7 +1620,7 @@ export default function MarketplacePage() {
               }}
             />
           ) : null}
-          {saas === true ? (
+          {showSellerDashboard ? (
             <>
           <Card>
             <CardHeader>
@@ -1670,10 +1692,9 @@ export default function MarketplacePage() {
             </CardContent>
           </Card>
 
-          {saas === true ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Submit to Community catalog</CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Submit to Community catalog</CardTitle>
                 <CardDescription>
                   Open a GodMode-Marketplace PR from GodMode. After merge, claim the catalog entry
                   below and set your price. GitHub Connect and Marketplace ToS required.
@@ -1854,7 +1875,6 @@ export default function MarketplacePage() {
                 </FieldGroup>
               </CardContent>
             </Card>
-          ) : null}
 
           <Card>
             <CardHeader>
