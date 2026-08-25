@@ -50,6 +50,7 @@ export function SellerPayoutsCard({
   const [metamaskAddress, setMetamaskAddress] = useState("");
   const [payoutReady, setPayoutReady] = useState(false);
   const [storefrontUrl, setStorefrontUrl] = useState("");
+  const [onboardingStatus, setOnboardingStatus] = useState<string | null>(null);
   const [tosAccepted, setTosAccepted] = useState(false);
   const [platformFeeBps, setPlatformFeeBps] = useState(1000);
   const [busy, setBusy] = useState(false);
@@ -81,6 +82,9 @@ export function SellerPayoutsCard({
         setMetamaskAddress(applied.metamaskAddress);
         setPayoutReady(applied.payoutReady);
         setStorefrontUrl(String(cfg.storefrontUrl ?? "").trim());
+        setOnboardingStatus(
+          typeof cfg.onboardingStatus === "string" ? cfg.onboardingStatus : null
+        );
         notify({
           ...applied,
           tosAccepted: Boolean(cfg.tosAccepted),
@@ -101,15 +105,27 @@ export function SellerPayoutsCard({
         setPaypalMerchantId(applied.paypalMerchantId);
         setMetamaskAddress(applied.metamaskAddress);
         setPayoutReady(applied.payoutReady);
+        if (typeof row.storefrontUrl === "string" && row.storefrontUrl.trim()) {
+          setStorefrontUrl(row.storefrontUrl.trim());
+        }
+        const status = String(
+          row.onboardingStatus ?? row.onboarding_status ?? ""
+        ).trim();
+        if (status) setOnboardingStatus(status);
         notify(applied);
-        if (
-          row.onboarding_status === "ready" ||
+        const ready =
+          status === "ready" ||
           row.stripe_payouts_enabled === true ||
-          row.stripe_payouts_enabled === 1
-        ) {
+          row.stripe_payouts_enabled === 1 ||
+          row.stripePayoutsEnabled === true;
+        if (ready) {
           toast.success("Stripe Connect is ready for payouts");
         } else if (stripeConnect === "refresh") {
-          toast.message("Stripe onboarding incomplete. Click Connect with Stripe to continue.");
+          toast.message("Stripe onboarding incomplete. Continue setup to finish verification.");
+        } else if (applied.stripeConnectId) {
+          toast.message(
+            "Stripe account linked. If payouts are not enabled yet, continue verification in Stripe."
+          );
         } else {
           toast.message(
             "Stripe onboarding saved. If payouts are not enabled yet, finish verification in Stripe."
@@ -186,6 +202,11 @@ export function SellerPayoutsCard({
   };
 
   const feePercent = (platformFeeBps / 100).toFixed(0);
+  const connectButtonLabel = !stripeConnectId
+    ? "Connect with Stripe"
+    : onboardingStatus === "ready" || payoutReady
+      ? "Open Stripe Connect again"
+      : "Continue Stripe setup";
 
   return (
     <Card>
@@ -208,7 +229,7 @@ export function SellerPayoutsCard({
             disabled={busy}
             onClick={() => void handleStripeConnectOnboarding()}
           >
-            Connect with Stripe
+            {connectButtonLabel}
           </Button>
           {storefrontUrl ? (
             <p className="text-xs text-muted-foreground break-all">
@@ -226,7 +247,8 @@ export function SellerPayoutsCard({
           {stripeConnectId ? (
             <p className="text-xs text-muted-foreground">
               Linked Connect account: {stripeConnectId}
-              {payoutReady ? " (ready)" : " (finish onboarding if prompted)"}
+              {onboardingStatus ? ` · status ${onboardingStatus}` : null}
+              {payoutReady ? " (payout method present)" : " (finish verification if prompted)"}
             </p>
           ) : null}
         </div>
