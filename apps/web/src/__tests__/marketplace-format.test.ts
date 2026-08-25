@@ -10,6 +10,7 @@ import {
   listingStatusLabel,
   localSellChecklistComplete,
   localSellSeatReady,
+  mergeLocalSellChecklistSignals,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -50,6 +51,22 @@ describe("localSellChecklistComplete (#681)", () => {
     expect(localSellChecklistComplete({ ...base, githubConnected: false })).toBe(false);
     expect(localSellChecklistComplete({ ...base, tosAccepted: false })).toBe(false);
     expect(localSellChecklistComplete({ ...base, stripePayoutReady: false })).toBe(false);
+  });
+});
+
+describe("mergeLocalSellChecklistSignals", () => {
+  it("treats Local Vault setup as satisfying checklist rows", () => {
+    const merged = mergeLocalSellChecklistSignals({
+      linked: true,
+      sellerActive: true,
+      githubConnected: false,
+      tosAccepted: false,
+      stripePayoutReady: false,
+      localGithubLogin: "dev",
+      localTosAccepted: true,
+      localPayoutReady: true,
+    });
+    expect(localSellChecklistComplete(merged)).toBe(true);
   });
 });
 

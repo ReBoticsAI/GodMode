@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { CheckIcon, ExternalLinkIcon, Link2Icon, UnlinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -27,10 +28,10 @@ import {
   localSellChecklistComplete,
   localSellSeatReady,
   marketplaceCloudSellUrl,
-  marketplaceCloudVaultMarketplaceUrl,
-  marketplaceCloudVaultUrl,
   userFacingErrorMessage,
+  type LocalSellChecklistSignals,
 } from "@/lib/marketplace-format";
+import { VAULT_PATH } from "@/lib/navigation";
 
 type PendingLink = {
   deviceCode: string;
@@ -157,8 +158,8 @@ export function LocalSellerLinkCard({
           GodMode Cloud Seller account
         </CardTitle>
         <CardDescription>
-          Link this Local install to a Cloud Seller seat (~$4.99/mo). Sell checklist below
-          reads entitlement and commerce readiness from Cloud.
+          Link this Local install to a GodMode Seller seat (~$4.99/mo). When the checklist
+          below is complete, Local Sell tools unlock on this machine.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -229,49 +230,50 @@ type ChecklistRow = {
   cta: string;
 };
 
-/** Local Sell: Cloud readiness checklist; commerce stays on Cloud Sell. */
+/** Local Sell: readiness checklist; unlocks Local seller dashboard when complete. */
 export function LocalSellChecklistCard({
-  status,
+  signals,
   onRefresh,
+  onOpenTos,
 }: {
-  status: SellerLinkStatus | null;
+  signals: LocalSellChecklistSignals;
   onRefresh?: () => void;
+  onOpenTos?: () => void;
 }) {
-  const signals = status ?? emptySellerLinkStatus();
   const complete = localSellChecklistComplete(signals);
   const seatReady = localSellSeatReady(signals);
   const sellUrl = marketplaceCloudSellUrl();
-  const vaultUrl = marketplaceCloudVaultUrl();
-  const vaultMarketplaceUrl = marketplaceCloudVaultMarketplaceUrl();
+  const vaultIntegrations = `${VAULT_PATH}?tab=integrations`;
+  const vaultMarketplace = `${VAULT_PATH}?tab=marketplace`;
 
   const rows: ChecklistRow[] = [
     {
       id: "seat",
-      label: "Cloud Seller seat linked and active",
+      label: "GodMode Seller seat linked and active",
       done: seatReady,
       href: sellUrl,
-      cta: signals.linked ? "Open Cloud Sell" : "Connect on Cloud Sell",
+      cta: signals.linked ? "Renew on Cloud" : "Buy seat on Cloud",
     },
     {
       id: "github",
       label: "GitHub connected",
       done: Boolean(signals.githubConnected),
-      href: vaultUrl,
-      cta: "Open Cloud Vault",
+      href: vaultIntegrations,
+      cta: "Open Personal Vault",
     },
     {
       id: "stripe",
       label: "Stripe Connect payouts ready",
       done: Boolean(signals.stripePayoutReady),
-      href: vaultMarketplaceUrl,
-      cta: "Open Cloud Vault Marketplace",
+      href: vaultMarketplace,
+      cta: "Open Vault Marketplace",
     },
     {
       id: "tos",
       label: "Marketplace Terms accepted",
       done: Boolean(signals.tosAccepted),
-      href: sellUrl,
-      cta: "Accept on Cloud Sell",
+      href: "",
+      cta: "Accept Marketplace ToS",
     },
   ];
 
@@ -280,58 +282,72 @@ export function LocalSellChecklistCard({
       <CardHeader>
         <CardTitle className="text-base">Sell readiness checklist</CardTitle>
         <CardDescription>
-          Complete these on GodMode Cloud. Local does not publish or take payouts as
-          merchant of record.
+          {complete
+            ? "Checklist complete. Seller tools are unlocked below."
+            : "Complete each item to unlock Local Sell: Terms, payouts, catalog submit, Publish, and My listings."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <ul className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                {row.done ? (
-                  <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />
+        {complete ? (
+          <Alert>
+            <AlertTitle>Local Sell unlocked</AlertTitle>
+            <AlertDescription>
+              You can publish and manage Community listings on this install. Buyers still checkout
+              on GodMode Cloud; delivery installs here.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  {row.done ? (
+                    <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                  ) : (
+                    <span
+                      className="size-4 shrink-0 rounded-full border border-muted-foreground/40"
+                      aria-hidden
+                    />
+                  )}
+                  <span className="font-medium">{row.label}</span>
+                  <Badge variant={row.done ? "secondary" : "outline"}>
+                    {row.done ? "Ready" : "Needed"}
+                  </Badge>
+                </div>
+                {row.done ? null : row.id === "seat" ? (
+                  <a
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                    href={row.href}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLinkIcon data-icon="inline-start" />
+                    {row.cta}
+                  </a>
+                ) : row.id === "tos" && onOpenTos ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onOpenTos}>
+                    {row.cta}
+                  </Button>
                 ) : (
-                  <span
-                    className="size-4 shrink-0 rounded-full border border-muted-foreground/40"
-                    aria-hidden
-                  />
+                  <Link
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                    to={row.href}
+                  >
+                    {row.cta}
+                  </Link>
                 )}
-                <span className="font-medium">{row.label}</span>
-                <Badge variant={row.done ? "secondary" : "outline"}>
-                  {row.done ? "Ready" : "Needed"}
-                </Badge>
-              </div>
-              {row.done ? null : (
-                <a
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                  href={row.href}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLinkIcon data-icon="inline-start" />
-                  {row.cta}
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div className="flex flex-wrap gap-2">
-          {onRefresh ? (
-            <Button type="button" variant="outline" onClick={() => onRefresh()}>
-              Refresh checklist
-            </Button>
-          ) : null}
-          {complete ? (
-            <a className={cn(buttonVariants())} href={sellUrl} target="_blank" rel="noreferrer">
-              <ExternalLinkIcon data-icon="inline-start" />
-              Continue on Cloud Sell
-            </a>
-          ) : null}
-        </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {onRefresh ? (
+          <Button type="button" variant="outline" onClick={() => onRefresh()}>
+            Refresh checklist
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   );
