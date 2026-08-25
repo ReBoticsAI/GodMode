@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link2Icon, UnlinkIcon } from "lucide-react";
+import { CheckIcon, ExternalLinkIcon, Link2Icon, UnlinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   approveCloudSellerLink,
@@ -11,6 +11,7 @@ import {
   type SellerLinkStatus,
 } from "@/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -22,7 +23,14 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { userFacingErrorMessage } from "@/lib/marketplace-format";
+import {
+  localSellChecklistComplete,
+  localSellSeatReady,
+  marketplaceCloudSellUrl,
+  marketplaceCloudVaultMarketplaceUrl,
+  marketplaceCloudVaultUrl,
+  userFacingErrorMessage,
+} from "@/lib/marketplace-format";
 
 type PendingLink = {
   deviceCode: string;
@@ -31,16 +39,39 @@ type PendingLink = {
   intervalMs: number;
 };
 
+function emptySellerLinkStatus(): SellerLinkStatus {
+  return {
+    linked: false,
+    sellerActive: false,
+    planId: null,
+    source: null,
+    cloudUserHint: null,
+    linkedAt: null,
+    githubConnected: false,
+    tosAccepted: false,
+    stripePayoutReady: false,
+  };
+}
+
 /** Local Sell: start device-code link to GodMode Cloud Seller account. */
-export function LocalSellerLinkCard() {
+export function LocalSellerLinkCard({
+  onStatusChange,
+}: {
+  onStatusChange?: (status: SellerLinkStatus) => void;
+} = {}) {
   const [status, setStatus] = useState<SellerLinkStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingLink | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const applyStatus = (next: SellerLinkStatus) => {
+    setStatus(next);
+    onStatusChange?.(next);
+  };
+
   const reload = async () => {
     try {
-      setStatus(await fetchSellerLinkStatus());
+      applyStatus(await fetchSellerLinkStatus());
     } catch (err) {
       toast.error(userFacingErrorMessage(err, "Could not load Seller link status"));
     }
@@ -63,14 +94,7 @@ export function LocalSellerLinkCard() {
           if (result.status === "complete") {
             if (pollRef.current) clearInterval(pollRef.current);
             setPending(null);
-            setStatus({
-              linked: true,
-              sellerActive: Boolean(result.sellerActive),
-              planId: result.planId ?? null,
-              source: result.source ?? null,
-              cloudUserHint: result.cloudUserHint ?? null,
-              linkedAt: result.linkedAt ?? new Date().toISOString(),
-            });
+            await reload();
             toast.success("GodMode Cloud Seller account linked");
             return;
           }
@@ -115,14 +139,7 @@ export function LocalSellerLinkCard() {
     setBusy(true);
     try {
       await unlinkSellerLink();
-      setStatus({
-        linked: false,
-        sellerActive: false,
-        planId: null,
-        source: null,
-        cloudUserHint: null,
-        linkedAt: null,
-      });
+      applyStatus(emptySellerLinkStatus());
       setPending(null);
       toast.success("Seller account unlinked");
     } catch (err) {
@@ -140,8 +157,8 @@ export function LocalSellerLinkCard() {
           GodMode Cloud Seller account
         </CardTitle>
         <CardDescription>
-          Link this Local install to a Cloud Seller seat (~$4.99/mo) so Sell can verify
-          entitlement. Full Sell checklist unlock lands in a follow-up.
+          Link this Local install to a Cloud Seller seat (~$4.99/mo). Sell checklist below
+          reads entitlement and commerce readiness from Cloud.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -199,6 +216,122 @@ export function LocalSellerLinkCard() {
             {busy ? "Starting…" : "Connect GodMode Seller account"}
           </Button>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type ChecklistRow = {
+  id: string;
+  label: string;
+  done: boolean;
+  href: string;
+  cta: string;
+};
+
+/** Local Sell: Cloud readiness checklist; commerce stays on Cloud Sell. */
+export function LocalSellChecklistCard({
+  status,
+  onRefresh,
+}: {
+  status: SellerLinkStatus | null;
+  onRefresh?: () => void;
+}) {
+  const signals = status ?? emptySellerLinkStatus();
+  const complete = localSellChecklistComplete(signals);
+  const seatReady = localSellSeatReady(signals);
+  const sellUrl = marketplaceCloudSellUrl();
+  const vaultUrl = marketplaceCloudVaultUrl();
+  const vaultMarketplaceUrl = marketplaceCloudVaultMarketplaceUrl();
+
+  const rows: ChecklistRow[] = [
+    {
+      id: "seat",
+      label: "Cloud Seller seat linked and active",
+      done: seatReady,
+      href: sellUrl,
+      cta: signals.linked ? "Open Cloud Sell" : "Connect on Cloud Sell",
+    },
+    {
+      id: "github",
+      label: "GitHub connected",
+      done: Boolean(signals.githubConnected),
+      href: vaultUrl,
+      cta: "Open Cloud Vault",
+    },
+    {
+      id: "stripe",
+      label: "Stripe Connect payouts ready",
+      done: Boolean(signals.stripePayoutReady),
+      href: vaultMarketplaceUrl,
+      cta: "Open Cloud Vault Marketplace",
+    },
+    {
+      id: "tos",
+      label: "Marketplace Terms accepted",
+      done: Boolean(signals.tosAccepted),
+      href: sellUrl,
+      cta: "Accept on Cloud Sell",
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Sell readiness checklist</CardTitle>
+        <CardDescription>
+          Complete these on GodMode Cloud. Local does not publish or take payouts as
+          merchant of record.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                {row.done ? (
+                  <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                ) : (
+                  <span
+                    className="size-4 shrink-0 rounded-full border border-muted-foreground/40"
+                    aria-hidden
+                  />
+                )}
+                <span className="font-medium">{row.label}</span>
+                <Badge variant={row.done ? "secondary" : "outline"}>
+                  {row.done ? "Ready" : "Needed"}
+                </Badge>
+              </div>
+              {row.done ? null : (
+                <a
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  href={row.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLinkIcon data-icon="inline-start" />
+                  {row.cta}
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap gap-2">
+          {onRefresh ? (
+            <Button type="button" variant="outline" onClick={() => onRefresh()}>
+              Refresh checklist
+            </Button>
+          ) : null}
+          {complete ? (
+            <a className={cn(buttonVariants())} href={sellUrl} target="_blank" rel="noreferrer">
+              <ExternalLinkIcon data-icon="inline-start" />
+              Continue on Cloud Sell
+            </a>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );

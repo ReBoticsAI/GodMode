@@ -20,6 +20,7 @@ import {
   fetchUnofficialCatalog,
   fetchBridgeHealth,
   fetchInferenceEndpoints,
+  fetchSellerLinkStatus,
   installCatalogEntry,
   installWorkspacePlugin,
   registerLocalPlugin,
@@ -36,6 +37,7 @@ import {
   type InferenceEndpoint,
   type MarketplaceEntitlement,
   type MarketplaceListing,
+  type SellerLinkStatus,
   type TenantPluginRow,
 } from "@/api";
 import {
@@ -83,7 +85,11 @@ import { Page, PageHeader } from "@/components/PageHeader";
 import { VAULT_PATH } from "@/lib/navigation";
 import { FolderOpenIcon, StoreIcon, Trash2Icon } from "lucide-react";
 import { MarketplaceTosDialog } from "@/pages/MarketplaceTosDialog";
-import { CloudSellerLinkApproveCard, LocalSellerLinkCard } from "@/pages/SellerLinkCards";
+import {
+  CloudSellerLinkApproveCard,
+  LocalSellChecklistCard,
+  LocalSellerLinkCard,
+} from "@/pages/SellerLinkCards";
 
 const OFFICIAL_REPO =
   "https://github.com/ReBoticsAI/GodMode-Marketplace/blob/main/CONTRIBUTING.md";
@@ -444,6 +450,7 @@ export default function MarketplacePage() {
   const [tosDialogOpen, setTosDialogOpen] = useState(false);
   const [tosAccepting, setTosAccepting] = useState(false);
   const [sellerLinkApproveCode, setSellerLinkApproveCode] = useState<string | null>(null);
+  const [sellerLinkStatus, setSellerLinkStatus] = useState<SellerLinkStatus | null>(null);
   const [payoutReady, setPayoutReady] = useState(false);
   const [stripeConnectLinked, setStripeConnectLinked] = useState(false);
   const [stripeConnectAttested, setStripeConnectAttested] = useState(false);
@@ -1552,7 +1559,8 @@ export default function MarketplacePage() {
                 <AlertTitle>Paid listings sell on GodMode Cloud</AlertTitle>
                 <AlertDescription>
                   Stripe Connect, catalog claim, and paid checkout live on Cloud. Buyers on this
-                  machine pay there and the copy installs here. Open{" "}
+                  machine pay there and the copy installs here. Complete the checklist below, then
+                  continue on{" "}
                   <a
                     className="underline underline-offset-4"
                     href={marketplaceCloudSellUrl()}
@@ -1560,11 +1568,23 @@ export default function MarketplacePage() {
                     rel="noreferrer"
                   >
                     Cloud Sell
-                  </a>{" "}
-                  to connect payouts and publish Community listings.
+                  </a>
+                  .
                 </AlertDescription>
               </Alert>
-              <LocalSellerLinkCard />
+              <LocalSellerLinkCard onStatusChange={setSellerLinkStatus} />
+              <LocalSellChecklistCard
+                status={sellerLinkStatus}
+                onRefresh={() => {
+                  void fetchSellerLinkStatus()
+                    .then(setSellerLinkStatus)
+                    .catch((err) =>
+                      toast.error(
+                        userFacingErrorMessage(err, "Could not refresh Sell checklist")
+                      )
+                    );
+                }}
+              />
             </>
           ) : null}
           {saas === true && sellerLinkApproveCode ? (
@@ -1578,6 +1598,8 @@ export default function MarketplacePage() {
               }}
             />
           ) : null}
+          {saas === true ? (
+            <>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Marketplace Terms</CardTitle>
@@ -2145,6 +2167,8 @@ export default function MarketplacePage() {
               )}
             </CardContent>
           </Card>
+            </>
+          ) : null}
         </TabsContent>
       </Tabs>
       <MarketplaceTosDialog

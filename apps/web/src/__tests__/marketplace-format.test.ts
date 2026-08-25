@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   marketplaceCloudCommunityUrl,
   marketplaceCloudSellUrl,
+  marketplaceCloudVaultMarketplaceUrl,
   marketplaceSellerStorefrontUrl,
   communityCheckoutBody,
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
+  localSellChecklistComplete,
+  localSellSeatReady,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -26,6 +29,34 @@ describe("marketplaceCloudSellUrl", () => {
   it("points at the Cloud Sell tab", () => {
     expect(marketplaceCloudSellUrl("https://app.godmode.software")).toBe(
       "https://app.godmode.software/marketplace?tab=seller"
+    );
+  });
+});
+
+describe("localSellChecklistComplete (#681)", () => {
+  const base = {
+    linked: true,
+    sellerActive: true,
+    githubConnected: true,
+    tosAccepted: true,
+    stripePayoutReady: true,
+  };
+
+  it("requires all four readiness signals plus active seat", () => {
+    expect(localSellChecklistComplete(base)).toBe(true);
+    expect(localSellSeatReady(base)).toBe(true);
+    expect(localSellChecklistComplete({ ...base, linked: false })).toBe(false);
+    expect(localSellChecklistComplete({ ...base, sellerActive: false })).toBe(false);
+    expect(localSellChecklistComplete({ ...base, githubConnected: false })).toBe(false);
+    expect(localSellChecklistComplete({ ...base, tosAccepted: false })).toBe(false);
+    expect(localSellChecklistComplete({ ...base, stripePayoutReady: false })).toBe(false);
+  });
+});
+
+describe("marketplaceCloudVaultMarketplaceUrl", () => {
+  it("points at Cloud Personal Vault Marketplace", () => {
+    expect(marketplaceCloudVaultMarketplaceUrl("https://app.godmode.software")).toBe(
+      "https://app.godmode.software/vault?tab=marketplace"
     );
   });
 });

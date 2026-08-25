@@ -121,6 +121,9 @@ export async function fetchCloudSellerEntitlement(accessToken: string): Promise<
   planId: string | null;
   source: string | null;
   cloudUserHint?: string | null;
+  githubConnected?: boolean;
+  tosAccepted?: boolean;
+  stripePayoutReady?: boolean;
 }> {
   return cloudSellerJson("/api/saas/seller-entitlement", {
     method: "GET",
@@ -135,24 +138,34 @@ export async function revokeCloudSellerLinkToken(accessToken: string): Promise<v
   });
 }
 
-export async function getLocalSellerLinkStatus(): Promise<{
+export type LocalSellerLinkStatus = {
   linked: boolean;
   sellerActive: boolean;
   planId: string | null;
   source: string | null;
   cloudUserHint: string | null;
   linkedAt: string | null;
-}> {
+  githubConnected: boolean;
+  tosAccepted: boolean;
+  stripePayoutReady: boolean;
+};
+
+const emptySellerLinkStatus = (): LocalSellerLinkStatus => ({
+  linked: false,
+  sellerActive: false,
+  planId: null,
+  source: null,
+  cloudUserHint: null,
+  linkedAt: null,
+  githubConnected: false,
+  tosAccepted: false,
+  stripePayoutReady: false,
+});
+
+export async function getLocalSellerLinkStatus(): Promise<LocalSellerLinkStatus> {
   const stored = readStoredSellerLink();
   if (!stored) {
-    return {
-      linked: false,
-      sellerActive: false,
-      planId: null,
-      source: null,
-      cloudUserHint: null,
-      linkedAt: null,
-    };
+    return emptySellerLinkStatus();
   }
   try {
     const ent = await fetchCloudSellerEntitlement(stored.accessToken);
@@ -163,18 +176,14 @@ export async function getLocalSellerLinkStatus(): Promise<{
       source: ent.source ?? null,
       cloudUserHint: ent.cloudUserHint ?? null,
       linkedAt: stored.linkedAt,
+      githubConnected: Boolean(ent.githubConnected),
+      tosAccepted: Boolean(ent.tosAccepted),
+      stripePayoutReady: Boolean(ent.stripePayoutReady),
     };
   } catch (err) {
     if (err instanceof MarketplaceCommerceError && err.status === 401) {
       clearStoredSellerLink();
-      return {
-        linked: false,
-        sellerActive: false,
-        planId: null,
-        source: null,
-        cloudUserHint: null,
-        linkedAt: null,
-      };
+      return emptySellerLinkStatus();
     }
     throw err;
   }

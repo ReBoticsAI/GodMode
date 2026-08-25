@@ -97,6 +97,46 @@ export function marketplaceCloudSellUrl(
   return `${origin}/marketplace?tab=seller`;
 }
 
+/** Cloud Personal Vault (GitHub Connect and integrations). */
+export function marketplaceCloudVaultUrl(
+  origin =
+    (import.meta.env.VITE_CLOUD_APP_ORIGIN as string | undefined)?.replace(/\/$/, "") ||
+    "https://app.godmode.software"
+): string {
+  return `${origin}/vault`;
+}
+
+/** Cloud Personal Vault Marketplace tab (Stripe Connect payouts). */
+export function marketplaceCloudVaultMarketplaceUrl(
+  origin =
+    (import.meta.env.VITE_CLOUD_APP_ORIGIN as string | undefined)?.replace(/\/$/, "") ||
+    "https://app.godmode.software"
+): string {
+  return `${origin}/vault?tab=marketplace`;
+}
+
+/** Signals for Local Sell checklist (#681). Commerce stays on Cloud. */
+export type LocalSellChecklistSignals = {
+  linked: boolean;
+  sellerActive: boolean;
+  githubConnected: boolean;
+  tosAccepted: boolean;
+  stripePayoutReady: boolean;
+};
+
+export function localSellSeatReady(s: LocalSellChecklistSignals): boolean {
+  return Boolean(s.linked && s.sellerActive);
+}
+
+export function localSellChecklistComplete(s: LocalSellChecklistSignals): boolean {
+  return (
+    localSellSeatReady(s) &&
+    Boolean(s.githubConnected) &&
+    Boolean(s.tosAccepted) &&
+    Boolean(s.stripePayoutReady)
+  );
+}
+
 /** Public marketing seller storefront (Stripe business_profile.url shape). */
 export function marketplaceSellerStorefrontUrl(
   handle: string,

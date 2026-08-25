@@ -21,7 +21,7 @@ import {
   sellerLinkCloudUserHint,
   startSellerLinkDevice,
 } from "../services/seller-link.js";
-import { getPublicSubscriptionForUser, getSellerEntitlementForUser } from "../services/saas-subscriptions.js";
+import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
 
 function requireSaas(_req: Request, res: Response, next: () => void): void {
   if (!config.isSaas) {
@@ -113,22 +113,28 @@ export function createSaasRouter(): Router {
     (req, res) => {
       const linkUser = resolveSellerLinkBearer(req.headers.authorization);
       if (linkUser) {
-        const entitlement = getSellerEntitlementForUser(linkUser.id);
+        const entitlement = getSellerEntitlementPayload(linkUser.id);
         res.json({
           sellerActive: entitlement.sellerActive,
           planId: entitlement.planId,
           source: entitlement.source,
           cloudUserHint: sellerLinkCloudUserHint(linkUser.id),
+          githubConnected: entitlement.githubConnected,
+          tosAccepted: entitlement.tosAccepted,
+          stripePayoutReady: entitlement.stripePayoutReady,
         });
         return;
       }
       attachAuthContext(req, res, () => {
         requireAuth(req, res, () => {
-          const entitlement = getSellerEntitlementForUser(req.user!.id);
+          const entitlement = getSellerEntitlementPayload(req.user!.id);
           res.json({
             sellerActive: entitlement.sellerActive,
             planId: entitlement.planId,
             source: entitlement.source,
+            githubConnected: entitlement.githubConnected,
+            tosAccepted: entitlement.tosAccepted,
+            stripePayoutReady: entitlement.stripePayoutReady,
           });
         });
       });
