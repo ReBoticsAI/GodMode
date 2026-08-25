@@ -48,7 +48,6 @@ import {
   localSellChecklistComplete,
   mergeLocalSellChecklistSignals,
   marketplaceCloudCommunityUrl,
-  marketplaceCloudSellUrl,
   marketplaceSellerStorefrontUrl,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
