@@ -132,8 +132,8 @@ function firstNonemptyString(...values: unknown[]): string {
 }
 
 /**
- * Map commerce_config (camelCase) or a seller-account row (snake_case) to Sell/Vault
- * payout UI state. Does not call Stripe.
+ * Map commerce_config (camelCase), seller-account row (snake_case), or kernel
+ * RecordRow `{ data }` to Sell/Vault payout UI state. Does not call Stripe.
  */
 export function sellerPayoutStatusFromAccount(row: object): {
   stripeConnectId: string;
@@ -141,7 +141,12 @@ export function sellerPayoutStatusFromAccount(row: object): {
   metamaskAddress: string;
   payoutReady: boolean;
 } {
-  const rec = row as Record<string, unknown>;
+  const raw = row as Record<string, unknown>;
+  const nested =
+    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+      ? (raw.data as Record<string, unknown>)
+      : {};
+  const rec = { ...nested, ...raw };
   const stripeConnectId = firstNonemptyString(
     rec.stripeConnectAccountId,
     rec.stripe_connect_account_id

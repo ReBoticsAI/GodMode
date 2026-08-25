@@ -1504,10 +1504,18 @@ export const marketplaceSellerAccountAdapter: RecordAdapter = {
         commerceHttpError(err);
       }
     },
-    async refresh_stripe_connect(_db, def, _id, _input, ctx) {
+    async refresh_stripe_connect(_db, _def, _id, _input, ctx) {
       try {
         const updated = await refreshStripeConnectStatus(ctx.data!.cloudDb, requireUser(ctx));
-        return record(def, updated);
+        // Flat camelCase payload for Vault (not a RecordRow); matches commerce_config shape.
+        return {
+          ...getSellerPayoutSnapshot(ctx.data!.cloudDb, requireUser(ctx)),
+          onboarding_status: updated.onboarding_status,
+          stripe_connect_account_id: updated.stripe_connect_account_id,
+          stripe_payouts_enabled: updated.stripe_payouts_enabled,
+          stripe_charges_enabled: updated.stripe_charges_enabled,
+          stripe_details_submitted: updated.stripe_details_submitted,
+        };
       } catch (err) {
         commerceHttpError(err);
       }

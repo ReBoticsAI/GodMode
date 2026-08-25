@@ -131,6 +131,23 @@ describe("sellerPayoutStatusFromAccount", () => {
       payoutReady: true,
     });
   });
+
+  it("unwraps kernel RecordRow data from refresh_stripe_connect", () => {
+    expect(
+      sellerPayoutStatusFromAccount({
+        id: "sa-1",
+        objectType: "MarketplaceSellerAccount",
+        data: {
+          id: "sa-1",
+          stripe_connect_account_id: "acct_nested",
+          onboarding_status: "pending",
+        },
+      })
+    ).toMatchObject({
+      stripeConnectId: "acct_nested",
+      payoutReady: true,
+    });
+  });
 });
 
 describe("communityCheckoutBody", () => {
