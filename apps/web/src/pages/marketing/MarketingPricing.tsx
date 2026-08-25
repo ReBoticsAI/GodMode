@@ -42,7 +42,10 @@ export default function MarketingPricing() {
               Your data stays with you. Open source on GitHub.
             </p>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-wrap gap-2">
+            <Button render={<Link to={`${MARKETING_BASE}/downloads`} />}>
+              Downloads
+            </Button>
             <Button
               variant="outline"
               render={

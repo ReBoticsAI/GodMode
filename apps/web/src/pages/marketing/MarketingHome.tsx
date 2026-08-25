@@ -452,7 +452,10 @@ export default function MarketingHome() {
                 from source. Local models or your own provider keys. Your machine, your rules.
               </CardDescription>
             </CardHeader>
-            <CardFooter>
+            <CardFooter className="flex flex-wrap gap-2">
+              <Button render={<Link to={`${MARKETING_BASE}/downloads`} />}>
+                Downloads
+              </Button>
               <Button
                 variant="outline"
                 render={
