@@ -126,6 +126,7 @@ import { getUserOwnerTenantDb } from "../../services/user-scope.js";
 import {
   capturePayPalOrder,
   confirmCryptoPayment,
+  confirmMarketplaceCheckoutSession,
   createOrderForListing,
   createOrderForOfficialCatalogEntry,
   startMarketplaceCheckout,
@@ -1359,6 +1360,12 @@ export const marketplaceOrderAdapter: RecordAdapter = {
         const tenantId = requireTenant(ctx);
 
         let order: Record<string, unknown>;
+        const buyerEmailRow = core
+          .prepare(`SELECT email FROM users WHERE id=?`)
+          .get(userId) as { email?: string } | undefined;
+        const buyerEmail =
+          typeof buyerEmailRow?.email === "string" ? buyerEmailRow.email.trim() : "";
+
         if (typeof input.listing_id === "string" && input.listing_id) {
           const listing = core
             .prepare(
@@ -1380,6 +1387,8 @@ export const marketplaceOrderAdapter: RecordAdapter = {
             orderId: String(order.id),
             successUrl,
             cancelUrl,
+            buyerEmail: buyerEmail || undefined,
+            productName: String(listing.title ?? "").trim() || undefined,
             stripeConnectAccountId:
               typeof sellerAcct?.stripe_connect_account_id === "string"
                 ? sellerAcct.stripe_connect_account_id
@@ -1408,8 +1417,21 @@ export const marketplaceOrderAdapter: RecordAdapter = {
           orderId: String(order.id),
           successUrl,
           cancelUrl,
+          buyerEmail: buyerEmail || undefined,
+          productName: `Official: ${entryId}`,
         });
         return { order: record(def, getMarketplaceOrder(core, String(order.id))!), checkout };
+      } catch (err) {
+        commerceHttpError(err);
+      }
+    },
+    async confirm_stripe_session(_db, def, _id, input, ctx) {
+      try {
+        const updated = await confirmMarketplaceCheckoutSession(ctx.data!.cloudDb, {
+          sessionId: requiredText(input, "session_id"),
+          buyerUserId: requireUser(ctx),
+        });
+        return record(def, updated);
       } catch (err) {
         commerceHttpError(err);
       }
@@ -2517,6 +2539,13 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
       confirmation: { required: true },
       idempotency: { required: true },
       inputSchema: objectSchema({ tx_hash: { type: "string" } }, ["tx_hash"]),
+    }),
+    action("confirm_stripe_session", {
+      target: "collection",
+      effect: "external",
+      confirmation: { required: true },
+      idempotency: { required: true },
+      inputSchema: objectSchema({ session_id: { type: "string" } }, ["session_id"]),
     }),
   ],
   MarketplaceSellerAccount: [

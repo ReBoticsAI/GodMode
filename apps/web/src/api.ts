@@ -6828,6 +6828,16 @@ export function startMarketplaceCheckout(body: {
   );
 }
 
+export function confirmMarketplaceStripeSession(sessionId: string) {
+  return actionDto<Record<string, unknown>>(
+    "MarketplaceOrder",
+    "confirm_stripe_session",
+    { session_id: sessionId },
+    undefined,
+    true
+  );
+}
+
 export function confirmMarketplaceCryptoPayment(orderId: string, txHash: string) {
   return actionDto<Record<string, unknown>>(
     "MarketplaceOrder",
