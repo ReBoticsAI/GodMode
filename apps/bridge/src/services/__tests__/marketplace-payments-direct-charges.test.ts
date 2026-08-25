@@ -151,6 +151,7 @@ describe("Marketplace Stripe direct charges (#690)", () => {
     const body = String(init.body);
     expect(body).toContain("payment_intent_data%5Bapplication_fee_amount%5D=100");
     expect(body).not.toContain("transfer_data");
+    expect(body).toMatch(/product_data(\]|%5D)(\[|%5B)name(\]|%5D)=/);
   });
 
   it("Official Checkout has no Stripe-Account header", async () => {

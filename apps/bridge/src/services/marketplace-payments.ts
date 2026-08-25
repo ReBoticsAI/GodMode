@@ -68,6 +68,8 @@ export async function startMarketplaceCheckout(
     successUrl: string;
     cancelUrl: string;
     buyerEmail?: string;
+    /** Line-item label on Stripe Checkout (defaults to order id). */
+    productName?: string;
     /** Stripe Connect account for Community direct charges (optional). */
     stripeConnectAccountId?: string | null;
     /** PayPal payee merchant id for user listings (optional). */
@@ -108,13 +110,17 @@ export async function startMarketplaceCheckout(
     const secret = resolveStripeSecretKey();
     if (!secret) throw new MarketplaceCommerceError("Stripe is not configured", 503);
 
+    const productName =
+      String(opts.productName ?? "").trim() ||
+      `GodMode Marketplace ${opts.orderId}`;
+
     const params: Record<string, string> = {
       mode: "payment",
       success_url: opts.successUrl,
       cancel_url: opts.cancelUrl,
       "line_items[0][price_data][currency]": currency,
       "line_items[0][price_data][unit_amount]": String(amountCents),
-      "line_items[0][price_data][product_data][name]": `GodMode Marketplace ${opts.orderId}`,
+      "line_items[0][price_data][product_data][name]": productName.slice(0, 120),
       "line_items[0][quantity]": "1",
       "metadata[godmode_marketplace]": "1",
       "metadata[godmode_order_id]": opts.orderId,
@@ -566,12 +572,18 @@ async function stripePost(
   return json;
 }
 
-async function stripeGet(secret: string, path: string): Promise<Record<string, unknown>> {
+async function stripeGet(
+  secret: string,
+  path: string,
+  opts?: { stripeAccount?: string }
+): Promise<Record<string, unknown>> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${secret}` };
+  if (opts?.stripeAccount?.startsWith("acct_")) {
+    headers["Stripe-Account"] = opts.stripeAccount;
+  }
   let res: Response;
   try {
-    res = await fetch(`https://api.stripe.com/v1/${path}`, {
-      headers: { Authorization: `Bearer ${secret}` },
-    });
+    res = await fetch(`https://api.stripe.com/v1/${path}`, { headers });
   } catch (err) {
     throw new MarketplaceCommerceError(
       `Stripe Connect failed: ${err instanceof Error ? err.message : "network error"}`,
@@ -595,6 +607,58 @@ async function stripeGet(secret: string, path: string): Promise<Record<string, u
     throw new MarketplaceCommerceError(`Stripe Connect failed: ${msg}`, upstreamPaymentStatus);
   }
   return json;
+}
+
+/**
+ * Mark a Marketplace order paid from a Stripe Checkout session id (return-path
+ * reconcile when Connect webhooks are delayed or missing).
+ */
+export async function confirmMarketplaceCheckoutSession(
+  core: CoreDatabase,
+  opts: { sessionId: string; buyerUserId: string }
+): Promise<Record<string, unknown>> {
+  const sessionId = String(opts.sessionId ?? "").trim();
+  if (!sessionId.startsWith("cs_")) {
+    throw new MarketplaceCommerceError("Invalid Checkout session id", 400);
+  }
+  const order = findOrderByProviderRef(core, "stripe", sessionId);
+  if (!order) {
+    throw new MarketplaceCommerceError("No Marketplace order for this Checkout session", 404);
+  }
+  if (String(order.buyer_user_id) !== opts.buyerUserId) {
+    throw new MarketplaceCommerceError("Checkout session does not belong to this buyer", 403);
+  }
+  if (order.status === "paid" || order.status === "delivered") {
+    return order;
+  }
+
+  const secret = resolveStripeSecretKey();
+  if (!secret) throw new MarketplaceCommerceError("Stripe is not configured", 503);
+
+  let connectAccountId = "";
+  const sellerUserId =
+    order.seller_user_id != null ? String(order.seller_user_id).trim() : "";
+  if (String(order.seller_kind) === "user" && sellerUserId) {
+    const seller = ensureSellerAccount(core, sellerUserId);
+    const acct =
+      typeof seller.stripe_connect_account_id === "string"
+        ? seller.stripe_connect_account_id.trim()
+        : "";
+    if (acct.startsWith("acct_")) connectAccountId = acct;
+  }
+
+  const session = await stripeGet(secret, `checkout/sessions/${encodeURIComponent(sessionId)}`, {
+    stripeAccount: connectAccountId || undefined,
+  });
+  const paymentStatus = String(session.payment_status ?? "");
+  if (paymentStatus !== "paid") {
+    throw new MarketplaceCommerceError(
+      `Checkout session is not paid yet (payment_status=${paymentStatus || "unknown"})`,
+      409
+    );
+  }
+
+  return markOrderPaid(core, { orderId: String(order.id), providerRef: sessionId });
 }
 
 /**

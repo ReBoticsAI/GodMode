@@ -28,6 +28,7 @@ import {
   startCloudMarketplaceCheckout,
   completeCloudMarketplaceCheckout,
   startMarketplaceCheckout,
+  confirmMarketplaceStripeSession,
   uninstallWorkspacePlugin,
   type CatalogEntry,
   type CommunityCatalogSubmissionPrepareResult,
@@ -659,6 +660,24 @@ export default function MarketplacePage() {
         });
       return;
     }
+    if (paid === "1" && sessionId && saas === true) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("paid");
+      next.delete("entry");
+      next.delete("listing");
+      next.delete("session_id");
+      setSearchParams(next, { replace: true });
+      void confirmMarketplaceStripeSession(sessionId)
+        .then(() => {
+          toast.success("Payment complete. Install or acquire your purchase.");
+          void reload();
+        })
+        .catch((err) => {
+          toast.error(userFacingErrorMessage(err, "Paid session could not be confirmed"));
+          void reload();
+        });
+      return;
+    }
     if (paid === "1") {
       toast.success("Payment complete. Install or acquire your purchase.");
       const next = new URLSearchParams(searchParams);
@@ -798,7 +817,7 @@ export default function MarketplacePage() {
         provider,
         catalogEntryId: entry.id,
         listingId: entry.listingId,
-        successUrl: `${origin}/marketplace?paid=1&tab=official&entry=${encodeURIComponent(entry.id)}`,
+        successUrl: `${origin}/marketplace?paid=1&session_id={CHECKOUT_SESSION_ID}&tab=official&entry=${encodeURIComponent(entry.id)}`,
         cancelUrl: `${origin}/marketplace?canceled=1&tab=official`,
       });
       if (result.checkout.url) {
@@ -861,7 +880,7 @@ export default function MarketplacePage() {
         communityCheckoutBody({
           listingId: listing.id,
           provider,
-          successUrl: `${origin}/marketplace?paid=1&tab=community&listing=${encodeURIComponent(listing.id)}`,
+          successUrl: `${origin}/marketplace?paid=1&session_id={CHECKOUT_SESSION_ID}&tab=community&listing=${encodeURIComponent(listing.id)}`,
           cancelUrl: `${origin}/marketplace?canceled=1&tab=community`,
         })
       );

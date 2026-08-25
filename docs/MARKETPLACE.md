@@ -178,6 +178,10 @@ connected accounts, Cloud must register a Stripe webhook destination scoped to
 `STRIPE_MARKETPLACE_CONNECT_WEBHOOK_SECRET`. Platform-account Marketplace events
 still use `STRIPE_MARKETPLACE_WEBHOOK_SECRET` (or `STRIPE_WEBHOOK_SECRET`).
 
+Cloud Checkout success URLs include `{CHECKOUT_SESSION_ID}`. On return, the app
+calls `confirm_stripe_session` so paid status is reconciled even if the Connect
+webhook is delayed.
+
 Requires `STRIPE_SECRET_KEY` (same secret used for Marketplace Checkout). Set
 `WEB_PUBLIC_URL` / `WEB_ORIGIN` so return URLs match the UI origin. Local/hub
 Sell UIs still proxy commerce actions to Cloud.
