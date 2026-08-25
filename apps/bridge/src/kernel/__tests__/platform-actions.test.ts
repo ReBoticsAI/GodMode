@@ -147,7 +147,7 @@ describe("platform action adapters", () => {
       {
         objectType: "MarketplaceOrder",
         adapterId: "marketplace_order_read",
-        actions: ["start_checkout", "capture_paypal", "confirm_crypto"],
+        actions: ["start_checkout", "confirm_stripe_session", "capture_paypal", "confirm_crypto"],
       },
       {
         objectType: "MarketplaceSellerAccount",
