@@ -12,6 +12,7 @@ export type PublicCatalogListing = {
   currency?: string;
   status?: string;
   catalog_entry_id?: string | null;
+  seller_public_handle?: string | null;
 };
 
 export type PublicOfficialEntry = {

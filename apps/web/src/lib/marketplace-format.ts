@@ -97,6 +97,18 @@ export function marketplaceCloudSellUrl(
   return `${origin}/marketplace?tab=seller`;
 }
 
+/** Public marketing seller storefront (Stripe business_profile.url shape). */
+export function marketplaceSellerStorefrontUrl(
+  handle: string,
+  marketingOrigin =
+    (import.meta.env.VITE_MARKETING_ORIGIN as string | undefined)?.replace(/\/$/, "") ||
+    "https://godmode.software"
+): string {
+  const h = String(handle ?? "").trim();
+  if (!h) return "";
+  return `${marketingOrigin}/marketplace/${encodeURIComponent(h)}`;
+}
+
 /** Checkout body for a Community (user) listing — listingId required. */
 export function communityCheckoutBody(opts: {
   listingId: string;

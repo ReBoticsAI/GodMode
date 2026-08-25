@@ -81,6 +81,7 @@ export function createMarketplaceCommerceRouter(): Router {
                   ml.visibility, ml.status, ml.delivery_mode, ml.pricing_model,
                   ml.price_period, ml.meter_unit, ml.meter_rate, ml.license,
                   ml.inference_endpoint_id, ml.created_at, ml.updated_at,
+                  sa.public_handle AS seller_public_handle,
                   (${COMMUNITY_VERIFIED_TIER_SQL}) AS verified_tier,
                   CASE WHEN (${COMMUNITY_VERIFIED_TIER_SQL}) > 0 THEN 1 ELSE 0 END AS verified_publisher,
                   CASE WHEN sa.stripe_connect_account_id IS NOT NULL
