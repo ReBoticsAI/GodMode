@@ -12,6 +12,15 @@ import {
   handleSaasStripeWebhook,
   resolveEntitlementForCheckoutSession,
 } from "../services/saas-billing.js";
+import {
+  approveSellerLinkDevice,
+  denySellerLinkDevice,
+  pollSellerLinkDevice,
+  resolveSellerLinkBearer,
+  revokeSellerLinkBearer,
+  sellerLinkCloudUserHint,
+  startSellerLinkDevice,
+} from "../services/seller-link.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementForUser } from "../services/saas-subscriptions.js";
 
 function requireSaas(_req: Request, res: Response, next: () => void): void {
@@ -99,6 +108,142 @@ export function createSaasRouter(): Router {
   });
 
   router.get(
+    "/seller-entitlement",
+    requireSaas,
+    (req, res) => {
+      const linkUser = resolveSellerLinkBearer(req.headers.authorization);
+      if (linkUser) {
+        const entitlement = getSellerEntitlementForUser(linkUser.id);
+        res.json({
+          sellerActive: entitlement.sellerActive,
+          planId: entitlement.planId,
+          source: entitlement.source,
+          cloudUserHint: sellerLinkCloudUserHint(linkUser.id),
+        });
+        return;
+      }
+      attachAuthContext(req, res, () => {
+        requireAuth(req, res, () => {
+          const entitlement = getSellerEntitlementForUser(req.user!.id);
+          res.json({
+            sellerActive: entitlement.sellerActive,
+            planId: entitlement.planId,
+            source: entitlement.source,
+          });
+        });
+      });
+    }
+  );
+
+  /** Local Bridge starts a device-code Seller link (no Cloud session). */
+  router.post("/seller-link/device", requireSaas, limiter, (_req, res) => {
+    try {
+      res.json(startSellerLinkDevice());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Failed to start seller link",
+      });
+    }
+  });
+
+  /** Local Bridge polls until the Cloud user approves. */
+  router.post("/seller-link/token", requireSaas, limiter, (req, res) => {
+    const deviceCode =
+      typeof req.body?.device_code === "string"
+        ? req.body.device_code
+        : typeof req.body?.deviceCode === "string"
+          ? req.body.deviceCode
+          : "";
+    try {
+      const result = pollSellerLinkDevice(deviceCode);
+      if (result.status === "complete") {
+        res.json({
+          status: "complete",
+          access_token: result.accessToken,
+          token_type: result.tokenType,
+        });
+        return;
+      }
+      res.json({ status: result.status });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: number }).status)
+          : 500;
+      res.status(Number.isFinite(status) ? status : 500).json({
+        error: err instanceof Error ? err.message : "Poll failed",
+      });
+    }
+  });
+
+  /** Cloud user approves a pending Local link code. */
+  router.post(
+    "/seller-link/approve",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const userCode =
+        typeof req.body?.user_code === "string"
+          ? req.body.user_code
+          : typeof req.body?.userCode === "string"
+            ? req.body.userCode
+            : "";
+      try {
+        const result = approveSellerLinkDevice(req.user!.id, userCode);
+        res.json({ ok: true, ...result });
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) ? status : 500).json({
+          error: err instanceof Error ? err.message : "Approve failed",
+        });
+      }
+    }
+  );
+
+  router.post(
+    "/seller-link/deny",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const userCode =
+        typeof req.body?.user_code === "string"
+          ? req.body.user_code
+          : typeof req.body?.userCode === "string"
+            ? req.body.userCode
+            : "";
+      try {
+        denySellerLinkDevice(req.user!.id, userCode);
+        res.json({ ok: true });
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) ? status : 500).json({
+          error: err instanceof Error ? err.message : "Deny failed",
+        });
+      }
+    }
+  );
+
+  /** Local Bridge revokes its stored seller-link token. */
+  router.delete("/seller-link/token", requireSaas, limiter, (req, res) => {
+    const revoked = revokeSellerLinkBearer(req.headers.authorization);
+    if (!revoked) {
+      res.status(401).json({ error: "Invalid or already revoked seller link token" });
+      return;
+    }
+    res.json({ ok: true });
+  });
+
+  router.get(
     "/subscription",
     requireSaas,
     attachAuthContext,
@@ -106,21 +251,6 @@ export function createSaasRouter(): Router {
     (req, res) => {
       const sub = getPublicSubscriptionForUser(req.user!.id);
       res.json({ subscription: sub });
-    }
-  );
-
-  router.get(
-    "/seller-entitlement",
-    requireSaas,
-    attachAuthContext,
-    requireAuth,
-    (req, res) => {
-      const entitlement = getSellerEntitlementForUser(req.user!.id);
-      res.json({
-        sellerActive: entitlement.sellerActive,
-        planId: entitlement.planId,
-        source: entitlement.source,
-      });
     }
   );
 

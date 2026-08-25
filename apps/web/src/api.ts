@@ -6790,6 +6790,62 @@ export function completeCloudMarketplaceCheckout(sessionId: string) {
   });
 }
 
+export type SellerLinkStatus = {
+  linked: boolean;
+  sellerActive: boolean;
+  planId: string | null;
+  source: string | null;
+  cloudUserHint: string | null;
+  linkedAt: string | null;
+};
+
+export function fetchSellerLinkStatus() {
+  return api<SellerLinkStatus>("/marketplace/seller-link/status");
+}
+
+export function startSellerLink() {
+  return api<{
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    expiresIn: number;
+    interval: number;
+  }>("/marketplace/seller-link/start", { method: "POST", body: "{}" });
+}
+
+export function pollSellerLink(deviceCode: string) {
+  return api<{ status: string } & Partial<SellerLinkStatus>>(
+    "/marketplace/seller-link/poll",
+    {
+      method: "POST",
+      body: JSON.stringify({ deviceCode }),
+    }
+  );
+}
+
+export function unlinkSellerLink() {
+  return api<{ ok: true; linked: false }>("/marketplace/seller-link", {
+    method: "DELETE",
+  });
+}
+
+export function approveCloudSellerLink(userCode: string) {
+  return api<{ ok: true; userCode: string; expiresAt: string }>(
+    "/saas/seller-link/approve",
+    {
+      method: "POST",
+      body: JSON.stringify({ user_code: userCode }),
+    }
+  );
+}
+
+export function denyCloudSellerLink(userCode: string) {
+  return api<{ ok: true }>("/saas/seller-link/deny", {
+    method: "POST",
+    body: JSON.stringify({ user_code: userCode }),
+  });
+}
+
 export function startMarketplaceCheckout(body: {
   provider: "stripe" | "paypal" | "crypto";
   listingId?: string;

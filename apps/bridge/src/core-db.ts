@@ -724,8 +724,38 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_seller_public_handle_v1",
     up: ensureMarketplaceSellerPublicHandle,
   },
+  {
+    version: 20,
+    name: "core_seller_link_v1",
+    up: ensureSellerLinkMigration,
+  },
 ];
 
+function ensureSellerLinkMigration(db: CoreDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seller_link_devices (
+      device_code_hash TEXT PRIMARY KEY,
+      user_code TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      approved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS seller_link_devices_user_code_idx
+      ON seller_link_devices(user_code);
+    CREATE TABLE IF NOT EXISTS seller_link_tokens (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      device_code_hash TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS seller_link_tokens_user_idx
+      ON seller_link_tokens(user_id);
+  `);
+}
 function ensureEmbedQueueSchema(db: CoreDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS embed_queue (

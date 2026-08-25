@@ -485,6 +485,38 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-device",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/device",
+    rationale:
+      "Unauthenticated device-code start for Local ↔ Cloud Seller link (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-token",
+    methods: ["POST", "DELETE"],
+    pathPattern: "/api/saas/seller-link/token",
+    rationale:
+      "Device poll and seller-link token revoke for Local Bridge (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-approve",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/approve",
+    rationale:
+      "Cloud user approves Local Seller device-code link (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-deny",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/deny",
+    rationale:
+      "Cloud user denies Local Seller device-code link (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-local-cloud-checkout",
     methods: ["POST"],
     pathPattern: "/api/marketplace/cloud-checkout",
@@ -498,6 +530,35 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     pathPattern: "/api/marketplace/cloud-checkout/complete",
     rationale:
       "Authenticated Local delivery after Cloud paid session; not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link",
+    methods: ["GET", "POST", "DELETE"],
+    pathPattern: "/api/marketplace/seller-link",
+    rationale:
+      "Authenticated Local Bridge Seller account link to Cloud (#680); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-start",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/start",
+    rationale: "Start Cloud Seller device-code link from Local (#680).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-poll",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/poll",
+    rationale: "Poll Cloud Seller device-code link from Local (#680).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-status",
+    methods: ["GET"],
+    pathPattern: "/api/marketplace/seller-link/status",
+    rationale: "Local Seller link + Cloud sellerActive status (#680).",
     authenticatedDomainMutations: "none",
   },
   {

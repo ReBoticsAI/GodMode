@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { MarketplaceCommerceError } from "./marketplace-commerce.js";
 
-function cloudCommerceBase(): string {
+export function cloudCommerceBase(): string {
   const explicit = (process.env.MARKETPLACE_SAAS_CHECKOUT_URL ?? "").trim().replace(/\/$/, "");
   if (explicit) return explicit;
   const community = config.marketplace.saasCommunityCatalogUrl.trim();
