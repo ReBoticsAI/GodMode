@@ -135,6 +135,14 @@ export function requireTrustedOrigin(
     next();
     return;
   }
+  // Server-to-server callers (Local Bridge → Cloud guest checkout, workers) omit
+  // Origin/Referer and do not carry browser session cookies. CSRF only applies when
+  // the browser would auto-attach a cookie; without a session cookie there is no
+  // cookie CSRF vector.
+  if (!origin && !referer && !hasSessionCookie) {
+    next();
+    return;
+  }
   // Same-origin navigations sometimes omit Origin; require at least one match in prod.
   if (!origin && !referer && !config.isProduction) {
     next();

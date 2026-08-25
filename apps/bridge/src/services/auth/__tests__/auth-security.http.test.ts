@@ -549,6 +549,27 @@ describe("auth security HTTP integration", () => {
       });
       expect(bearerOk.status).toBe(200);
       expect(bearerOk.json.mutated).toBe(true);
+
+      // Production hub: Local→Cloud guest checkout is server-to-server (no Origin,
+      // no session cookie). Cookie CSRF must not block that path.
+      const prevProduction = config.isProduction;
+      (config as { isProduction: boolean }).isProduction = true;
+      try {
+        const serverToServer = await api(base, "POST", "/api/structure", {
+          body: {},
+        });
+        expect(serverToServer.status).toBe(200);
+        expect(serverToServer.json.mutated).toBe(true);
+
+        const cookieNoOrigin = await api(base, "POST", "/api/structure", {
+          cookie: `godmode_session=${sessionId}`,
+          body: {},
+        });
+        expect(cookieNoOrigin.status).toBe(403);
+        expect(cookieNoOrigin.json.error).toBe("Untrusted Origin");
+      } finally {
+        (config as { isProduction: boolean }).isProduction = prevProduction;
+      }
     });
   });
 
