@@ -4986,6 +4986,7 @@ export interface AdminUserRow {
   avatarUrl: string | null;
   isAdmin: boolean;
   complimentaryCloudAccess?: boolean;
+  complimentarySellerAccess?: boolean;
   createdAt: string;
   tenants: TenantSummary[];
 }
@@ -6443,6 +6444,7 @@ export type AdminSaasCustomerRow = {
   cancelAtPeriodEnd: boolean;
   accessRevoked: boolean;
   complimentaryAccess: boolean;
+  complimentarySellerAccess: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   stripeDashboardUrl: string | null;
@@ -6466,12 +6468,14 @@ export function setAdminSaasCustomerAccess(userId: string, disabled: boolean) {
 export function setAdminSaasComplimentaryAccess(
   userId: string,
   grant: boolean,
-  opts?: { expiresAt?: string | null }
+  opts?: { expiresAt?: string | null; kind?: "workspace" | "seller" }
 ) {
   return api<{
     userId: string;
     grant: boolean;
+    kind?: "workspace" | "seller";
     complimentaryAccess: boolean;
+    complimentarySellerAccess: boolean;
     accessGranted: boolean;
     planId: string | null;
     status: string;
@@ -6480,6 +6484,7 @@ export function setAdminSaasComplimentaryAccess(
     method: "POST",
     body: JSON.stringify({
       grant,
+      ...(opts?.kind ? { kind: opts.kind } : {}),
       ...(opts?.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
     }),
   });

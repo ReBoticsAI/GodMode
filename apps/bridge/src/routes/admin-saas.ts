@@ -7,11 +7,15 @@ import {
 } from "../services/auth/middleware.js";
 import {
   grantComplimentaryAccess,
+  grantComplimentarySellerAccess,
   listSaasCustomersForAdmin,
   revokeComplimentaryAccess,
+  revokeComplimentarySellerAccess,
   setUserAccessDisabled,
   subscriptionGrantsAccess,
+  subscriptionGrantsSellerCommerce,
   userHasActiveComplimentaryAccess,
+  userHasActiveComplimentarySellerAccess,
 } from "../services/saas-subscriptions.js";
 import { syncMissingSaasSubscriptionsFromStripe } from "../services/saas-billing.js";
 
@@ -59,8 +63,9 @@ export function createAdminSaasRouter(): Router {
   });
 
   /**
-   * Grant or revoke complimentary Cloud access (not platform admin).
-   * Body: `{ grant: boolean, expiresAt?: string | null }`
+   * Grant or revoke complimentary Cloud or Seller access (not platform admin).
+   * Body: `{ grant: boolean, kind?: "workspace" | "seller", expiresAt?: string | null }`
+   * Default kind is workspace (full Cloud). Seller kind grants commerce-only access.
    * Revoke leaves the account able to log in credentials-wise but
    * `assertSaasUserMayAccess` returns 403 until they subscribe.
    */
@@ -75,19 +80,34 @@ export function createAdminSaasRouter(): Router {
       res.status(400).json({ error: "grant boolean required" });
       return;
     }
+    const kindRaw =
+      typeof req.body?.kind === "string" ? req.body.kind.trim().toLowerCase() : "workspace";
+    const kind = kindRaw === "seller" ? "seller" : "workspace";
 
     try {
       const sub = req.body.grant
-        ? grantComplimentaryAccess(userId, {
-            expiresAt:
-              req.body.expiresAt === undefined ? undefined : req.body.expiresAt,
-          })
-        : revokeComplimentaryAccess(userId);
+        ? kind === "seller"
+          ? grantComplimentarySellerAccess(userId, {
+              expiresAt:
+                req.body.expiresAt === undefined ? undefined : req.body.expiresAt,
+            })
+          : grantComplimentaryAccess(userId, {
+              expiresAt:
+                req.body.expiresAt === undefined ? undefined : req.body.expiresAt,
+            })
+        : kind === "seller"
+          ? revokeComplimentarySellerAccess(userId)
+          : revokeComplimentaryAccess(userId);
       res.json({
         userId,
         grant: req.body.grant,
+        kind,
         complimentaryAccess: userHasActiveComplimentaryAccess(userId),
-        accessGranted: subscriptionGrantsAccess(sub),
+        complimentarySellerAccess: userHasActiveComplimentarySellerAccess(userId),
+        accessGranted:
+          kind === "seller"
+            ? subscriptionGrantsSellerCommerce(sub)
+            : subscriptionGrantsAccess(sub),
         planId: sub.plan_id,
         status: sub.status,
         currentPeriodEnd: sub.current_period_end,

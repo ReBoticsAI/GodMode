@@ -61,27 +61,38 @@ export function AdminSaasCustomersPanel() {
     }
   };
 
-  const toggleComplimentary = async (row: AdminSaasCustomerRow) => {
+  const toggleComplimentary = async (
+    row: AdminSaasCustomerRow,
+    kind: "workspace" | "seller"
+  ) => {
     if (!row.userId) {
       toast.error("This checkout has not created an account yet");
       return;
     }
-    const grant = !row.complimentaryAccess;
+    const active =
+      kind === "seller" ? row.complimentarySellerAccess : row.complimentaryAccess;
+    const grant = !active;
     if (
       !grant &&
       !window.confirm(
-        `Revoke complimentary Cloud access for ${row.email ?? row.displayName ?? "this user"}? They will need to subscribe before logging in again.`
+        kind === "seller"
+          ? `Revoke complimentary Seller access for ${row.email ?? row.displayName ?? "this user"}?`
+          : `Revoke complimentary Cloud access for ${row.email ?? row.displayName ?? "this user"}? They will need to subscribe before logging in again.`
       )
     ) {
       return;
     }
     setBusyUserId(row.userId);
     try {
-      await setAdminSaasComplimentaryAccess(row.userId, grant);
+      await setAdminSaasComplimentaryAccess(row.userId, grant, { kind });
       toast.success(
         grant
-          ? "Complimentary Cloud access granted"
-          : "Complimentary access revoked. They must subscribe to continue."
+          ? kind === "seller"
+            ? "Complimentary Seller access granted"
+            : "Complimentary Cloud access granted"
+          : kind === "seller"
+            ? "Complimentary Seller access revoked"
+            : "Complimentary access revoked. They must subscribe to continue."
       );
       reload();
     } catch (err) {
@@ -96,8 +107,9 @@ export function AdminSaasCustomersPanel() {
       <CardHeader>
         <CardTitle>SaaS customers</CardTitle>
         <CardDescription>
-          Paid and complimentary GodMode Cloud accounts, subscription status, and
-          access controls. Complimentary access is separate from platform admin.
+          Paid and complimentary GodMode Cloud and Seller accounts, subscription
+          status, and access controls. Complimentary access is separate from
+          platform admin.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -158,7 +170,10 @@ export function AdminSaasCustomersPanel() {
                           </Badge>
                         ) : null}
                         {row.complimentaryAccess ? (
-                          <Badge variant="outline">complimentary</Badge>
+                          <Badge variant="outline">complimentary Cloud</Badge>
+                        ) : null}
+                        {row.complimentarySellerAccess ? (
+                          <Badge variant="outline">complimentary Seller</Badge>
                         ) : null}
                         {row.accessDisabled ? (
                           <Badge variant="destructive">disabled</Badge>
@@ -195,14 +210,29 @@ export function AdminSaasCustomersPanel() {
                               size="sm"
                               variant="outline"
                               disabled={busyUserId === row.userId}
-                              onClick={() => void toggleComplimentary(row)}
+                              onClick={() => void toggleComplimentary(row, "workspace")}
                             >
                               {busyUserId === row.userId ? (
                                 <Spinner className="size-3.5" />
                               ) : row.complimentaryAccess ? (
-                                "Revoke complimentary"
+                                "Revoke Cloud complimentary"
                               ) : (
-                                "Grant complimentary"
+                                "Grant Cloud complimentary"
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busyUserId === row.userId}
+                              onClick={() => void toggleComplimentary(row, "seller")}
+                            >
+                              {busyUserId === row.userId ? (
+                                <Spinner className="size-3.5" />
+                              ) : row.complimentarySellerAccess ? (
+                                "Revoke Seller complimentary"
+                              ) : (
+                                "Grant Seller complimentary"
                               )}
                             </Button>
                             <Button

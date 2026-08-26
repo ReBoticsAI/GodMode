@@ -288,6 +288,7 @@ function UserDialog({
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [complimentaryCloudAccess, setComplimentaryCloudAccess] = useState(false);
+  const [complimentarySellerAccess, setComplimentarySellerAccess] = useState(false);
   const [provisionDefaultTenant, setProvisionDefaultTenant] = useState(true);
   const [saving, setSaving] = useState(false);
   const [complimentaryBusy, setComplimentaryBusy] = useState(false);
@@ -300,6 +301,7 @@ function UserDialog({
       setPassword("");
       setIsAdmin(false);
       setComplimentaryCloudAccess(false);
+      setComplimentarySellerAccess(false);
       setProvisionDefaultTenant(true);
     } else {
       setEmail(mode.user.email);
@@ -307,6 +309,7 @@ function UserDialog({
       setPassword("");
       setIsAdmin(mode.user.isAdmin);
       setComplimentaryCloudAccess(Boolean(mode.user.complimentaryCloudAccess));
+      setComplimentarySellerAccess(Boolean(mode.user.complimentarySellerAccess));
     }
   }, [mode]);
 
@@ -319,15 +322,20 @@ function UserDialog({
           password,
           displayName: displayName || undefined,
           isAdmin,
-          provisionDefaultTenant,
+          provisionDefaultTenant: complimentarySellerAccess ? false : provisionDefaultTenant,
         });
         if (isSaas && complimentaryCloudAccess && !isAdmin) {
-          await setAdminSaasComplimentaryAccess(res.user.id, true);
+          await setAdminSaasComplimentaryAccess(res.user.id, true, { kind: "workspace" });
+        }
+        if (isSaas && complimentarySellerAccess && !isAdmin) {
+          await setAdminSaasComplimentaryAccess(res.user.id, true, { kind: "seller" });
         }
         toast.success(
-          isSaas && complimentaryCloudAccess && !isAdmin
-            ? "User created with complimentary Cloud access"
-            : "User created"
+          isSaas && complimentarySellerAccess && !isAdmin
+            ? "User created with complimentary Seller access"
+            : isSaas && complimentaryCloudAccess && !isAdmin
+              ? "User created with complimentary Cloud access"
+              : "User created"
         );
         await onSaved(res.user);
         onClose();
@@ -348,28 +356,41 @@ function UserDialog({
     }
   };
 
-  const toggleComplimentary = async () => {
+  const toggleComplimentary = async (kind: "workspace" | "seller") => {
     if (!user) return;
-    const grant = !user.complimentaryCloudAccess;
+    const active =
+      kind === "seller"
+        ? Boolean(user.complimentarySellerAccess)
+        : Boolean(user.complimentaryCloudAccess);
+    const grant = !active;
     if (
       !grant &&
       !window.confirm(
-        `Revoke complimentary Cloud access for ${user.email}? They will need to subscribe before logging in again.`
+        kind === "seller"
+          ? `Revoke complimentary Seller access for ${user.email}? They will need a Seller seat to use Local Sell again.`
+          : `Revoke complimentary Cloud access for ${user.email}? They will need to subscribe before logging in again.`
       )
     ) {
       return;
     }
     setComplimentaryBusy(true);
     try {
-      await setAdminSaasComplimentaryAccess(user.id, grant);
+      await setAdminSaasComplimentaryAccess(user.id, grant, { kind });
       toast.success(
         grant
-          ? "Complimentary Cloud access granted"
-          : "Complimentary access revoked. They must subscribe to continue."
+          ? kind === "seller"
+            ? "Complimentary Seller access granted"
+            : "Complimentary Cloud access granted"
+          : kind === "seller"
+            ? "Complimentary Seller access revoked"
+            : "Complimentary access revoked. They must subscribe to continue."
       );
       await onSaved({
         ...user,
-        complimentaryCloudAccess: grant,
+        complimentaryCloudAccess:
+          kind === "workspace" ? grant : user.complimentaryCloudAccess,
+        complimentarySellerAccess:
+          kind === "seller" ? grant : user.complimentarySellerAccess,
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
@@ -432,15 +453,33 @@ function UserDialog({
             Platform admin
           </label>
           {isSaas && isCreate && !isAdmin ? (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={complimentaryCloudAccess}
-                onCheckedChange={(checked) =>
-                  setComplimentaryCloudAccess(!!checked)
-                }
-              />
-              Complimentary Cloud access
-            </label>
+            <>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={complimentaryCloudAccess}
+                  onCheckedChange={(checked) => {
+                    const on = !!checked;
+                    setComplimentaryCloudAccess(on);
+                    if (on) setComplimentarySellerAccess(false);
+                  }}
+                />
+                Complimentary Cloud workspace
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={complimentarySellerAccess}
+                  onCheckedChange={(checked) => {
+                    const on = !!checked;
+                    setComplimentarySellerAccess(on);
+                    if (on) {
+                      setComplimentaryCloudAccess(false);
+                      setProvisionDefaultTenant(false);
+                    }
+                  }}
+                />
+                Complimentary Seller seat (commerce only, no workspace)
+              </label>
+            </>
           ) : null}
           {isCreate && (
             <label className="flex items-center gap-2 text-sm">
@@ -457,25 +496,43 @@ function UserDialog({
               <p className="text-sm font-medium">GodMode Cloud</p>
               <p className="text-sm text-muted-foreground">
                 {user.complimentaryCloudAccess
-                  ? "This user has complimentary access (not a platform admin)."
-                  : "No complimentary access. Without a paid subscription they cannot log in."}
+                  ? "Complimentary workspace access is active."
+                  : user.complimentarySellerAccess
+                    ? "Complimentary Seller seat is active (commerce only)."
+                    : "No complimentary access. Without a paid subscription they cannot log in."}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="self-start"
-                disabled={complimentaryBusy}
-                onClick={() => void toggleComplimentary()}
-              >
-                {complimentaryBusy ? (
-                  <Spinner className="size-3.5" />
-                ) : user.complimentaryCloudAccess ? (
-                  "Revoke complimentary (require pay)"
-                ) : (
-                  "Grant complimentary access"
-                )}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={complimentaryBusy}
+                  onClick={() => void toggleComplimentary("workspace")}
+                >
+                  {complimentaryBusy ? (
+                    <Spinner className="size-3.5" />
+                  ) : user.complimentaryCloudAccess ? (
+                    "Revoke Cloud complimentary"
+                  ) : (
+                    "Grant Cloud complimentary"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={complimentaryBusy}
+                  onClick={() => void toggleComplimentary("seller")}
+                >
+                  {complimentaryBusy ? (
+                    <Spinner className="size-3.5" />
+                  ) : user.complimentarySellerAccess ? (
+                    "Revoke Seller complimentary"
+                  ) : (
+                    "Grant Seller complimentary"
+                  )}
+                </Button>
+              </div>
             </div>
           ) : null}
 
