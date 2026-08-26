@@ -28,6 +28,7 @@ import {
   startSellerLinkDevice,
   startSellerLinkRedirect,
 } from "../services/seller-link.js";
+import { beginGithubIntegrationConnect } from "../services/github-integration.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
 
 function sellerLinkErrStatus(err: unknown): number {
@@ -265,6 +266,42 @@ export function createSaasRouter(): Router {
       });
     }
   });
+
+  /** Cloud Seller GitHub OAuth start without a workspace (#711 complimentary Seller). */
+  router.post(
+    "/seller-link/github-connect",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const returnPath =
+        typeof req.body?.returnPath === "string"
+          ? req.body.returnPath
+          : typeof req.body?.return_path === "string"
+            ? req.body.return_path
+            : undefined;
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active.",
+            sellerActive: false,
+          });
+          return;
+        }
+        res.json(beginGithubIntegrationConnect(req.user!.id, { returnPath }));
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) ? status : 500).json({
+          error: err instanceof Error ? err.message : "Failed to start Seller GitHub connect",
+        });
+      }
+    }
+  );
 
   router.post(
     "/seller-link/github-redirect/complete",

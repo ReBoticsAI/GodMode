@@ -102,6 +102,7 @@ describe("legacy route wave", () => {
       "saas.ts:post:/seller-link/deny",
       "saas.ts:post:/seller-link/device",
       "saas.ts:post:/seller-link/exchange",
+      "saas.ts:post:/seller-link/github-connect",
       "saas.ts:post:/seller-link/github-redirect",
       "saas.ts:post:/seller-link/github-redirect/complete",
       "saas.ts:post:/seller-link/redirect",

@@ -6916,6 +6916,14 @@ export function completeSellerGithubRedirect(state: string) {
   );
 }
 
+/** Workspace-optional GitHub OAuth for complimentary Seller-only Cloud logins (#711). */
+export function startSellerGithubConnect(returnPath: string) {
+  return api<{ url: string }>("/saas/seller-link/github-connect", {
+    method: "POST",
+    body: JSON.stringify({ returnPath }),
+  });
+}
+
 export function approveCloudSellerLink(userCode: string) {
   return api<{ ok: true; userCode: string; expiresAt: string }>(
     "/saas/seller-link/approve",
