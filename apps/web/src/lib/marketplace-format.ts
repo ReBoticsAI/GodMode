@@ -146,7 +146,10 @@ export function sellerLinkExchangeFromSearch(search: string): string | null {
   return code && code.trim() ? code.trim() : null;
 }
 
-/** Merge Cloud seller-link readiness with Local Vault / ToS state for unlock. */
+/** Merge Cloud seller-link readiness with Local Vault / ToS state for unlock.
+ * Local Sell publish gates on Local Marketplace ToS, so Cloud-only ToS does not
+ * mark the checklist complete.
+ */
 export function mergeLocalSellChecklistSignals(opts: {
   linked: boolean;
   sellerActive: boolean;
@@ -162,7 +165,7 @@ export function mergeLocalSellChecklistSignals(opts: {
     sellerActive: opts.sellerActive,
     githubConnected:
       Boolean(opts.githubConnected) || Boolean(String(opts.localGithubLogin ?? "").trim()),
-    tosAccepted: Boolean(opts.tosAccepted) || Boolean(opts.localTosAccepted),
+    tosAccepted: Boolean(opts.localTosAccepted),
     stripePayoutReady: Boolean(opts.stripePayoutReady) || Boolean(opts.localPayoutReady),
   };
 }

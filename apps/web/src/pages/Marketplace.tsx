@@ -696,6 +696,13 @@ export default function MarketplacePage() {
   }, [reload]);
 
   useEffect(() => {
+    if (saas !== false) return;
+    void fetchSellerLinkStatus()
+      .then(setSellerLinkStatus)
+      .catch(() => undefined);
+  }, [saas]);
+
+  useEffect(() => {
     const code = searchParams.get("seller_link");
     if (code && saas === true) {
       setSellerLinkApproveCode(code.trim().toUpperCase());
@@ -1623,7 +1630,10 @@ export default function MarketplacePage() {
                   GodMode Cloud; paid copies install here.
                 </AlertDescription>
               </Alert>
-              <LocalSellerLinkCard onStatusChange={setSellerLinkStatus} />
+              <LocalSellerLinkCard
+                status={sellerLinkStatus}
+                onStatusChange={setSellerLinkStatus}
+              />
               <LocalSellChecklistCard
                 signals={localSellSignals}
                 onRefresh={refreshLocalSellChecklist}

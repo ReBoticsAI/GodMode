@@ -56,7 +56,7 @@ describe("localSellChecklistComplete (#681)", () => {
 });
 
 describe("mergeLocalSellChecklistSignals", () => {
-  it("treats Local Vault setup as satisfying checklist rows", () => {
+  it("treats Local Vault setup as satisfying GitHub and Stripe rows", () => {
     const merged = mergeLocalSellChecklistSignals({
       linked: true,
       sellerActive: true,
@@ -68,6 +68,19 @@ describe("mergeLocalSellChecklistSignals", () => {
       localPayoutReady: true,
     });
     expect(localSellChecklistComplete(merged)).toBe(true);
+  });
+
+  it("requires Local Marketplace ToS even if Cloud ToS is already accepted", () => {
+    const merged = mergeLocalSellChecklistSignals({
+      linked: true,
+      sellerActive: true,
+      githubConnected: true,
+      tosAccepted: true,
+      stripePayoutReady: true,
+      localTosAccepted: false,
+    });
+    expect(merged.tosAccepted).toBe(false);
+    expect(localSellChecklistComplete(merged)).toBe(false);
   });
 });
 
