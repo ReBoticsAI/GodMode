@@ -57,18 +57,21 @@ function emptySellerLinkStatus(): SellerLinkStatus {
 
 /** Local Sell: primary Cloud redirect bind; device-code is secondary. */
 export function LocalSellerLinkCard({
+  status: statusFromParent,
   onStatusChange,
 }: {
+  status?: SellerLinkStatus | null;
   onStatusChange?: (status: SellerLinkStatus) => void;
 } = {}) {
-  const [status, setStatus] = useState<SellerLinkStatus | null>(null);
+  const [statusLocal, setStatusLocal] = useState<SellerLinkStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingLink | null>(null);
   const [showDeviceCode, setShowDeviceCode] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const status = statusFromParent !== undefined ? statusFromParent : statusLocal;
 
   const applyStatus = (next: SellerLinkStatus) => {
-    setStatus(next);
+    setStatusLocal(next);
     onStatusChange?.(next);
   };
 
@@ -180,7 +183,9 @@ export function LocalSellerLinkCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {status?.linked ? (
+        {status === null ? (
+          <p className="text-sm text-muted-foreground">Loading Seller link status…</p>
+        ) : status.linked ? (
           <>
             <p className="text-sm">
               Linked{status.cloudUserHint ? ` as ${status.cloudUserHint}` : ""}.
