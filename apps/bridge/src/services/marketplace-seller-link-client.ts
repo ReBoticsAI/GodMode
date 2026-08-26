@@ -144,6 +144,28 @@ export async function startCloudSellerGithubRedirect(returnUrl: string): Promise
   };
 }
 
+export async function startCloudSellerStripeRedirect(returnUrl: string): Promise<{
+  state: string;
+  connectUrl: string;
+  expiresIn: number;
+}> {
+  const json = await cloudSellerJson<{
+    state: string;
+    connectUrl?: string;
+    connect_url?: string;
+    expiresIn?: number;
+    expires_in?: number;
+  }>("/api/saas/seller-link/stripe-redirect", {
+    method: "POST",
+    body: JSON.stringify({ return_url: returnUrl }),
+  });
+  return {
+    state: String(json.state ?? ""),
+    connectUrl: String(json.connectUrl ?? json.connect_url ?? ""),
+    expiresIn: Number(json.expiresIn ?? json.expires_in ?? 1800),
+  };
+}
+
 export async function exchangeCloudSellerLinkCode(code: string): Promise<{
   accessToken: string;
 }> {

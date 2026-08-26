@@ -31,17 +31,20 @@ const {
   assertSellerLinkReturnUrl,
   completeSellerGithubRedirect,
   completeSellerLinkRedirect,
+  completeSellerStripeRedirect,
   denySellerLinkDevice,
   ensureSellerLinkSchema,
   exchangeSellerLinkCode,
   getSellerGithubRedirectSession,
   getSellerLinkRedirectSession,
+  getSellerStripeRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
   startSellerGithubRedirect,
   startSellerLinkDevice,
   startSellerLinkRedirect,
+  startSellerStripeRedirect,
 } = await import("../seller-link.js");
 
 function seedUser(email = "seller@example.com"): string {
@@ -195,5 +198,56 @@ describe("seller-link GitHub redirect (#711)", () => {
     const completed = completeSellerGithubRedirect(userId, started.state);
     expect(completed.redirectUrl).toContain("seller_github=connected");
     expect(completed.redirectUrl).toContain("github_login=seller-gh");
+  });
+});
+
+describe("seller-link Stripe redirect (#709)", () => {
+  beforeEach(() => {
+    mem.exec(`
+      DROP TABLE IF EXISTS seller_stripe_redirects;
+      DROP TABLE IF EXISTS marketplace_seller_accounts;
+      DROP TABLE IF EXISTS users;
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        avatar_url TEXT,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        password_hash TEXT,
+        access_disabled INTEGER NOT NULL DEFAULT 0,
+        last_seen_at TEXT,
+        email_verified_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE marketplace_seller_accounts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        stripe_connect_account_id TEXT,
+        paypal_merchant_id TEXT,
+        metamask_address TEXT,
+        onboarding_status TEXT,
+        public_handle TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    ensureSellerLinkSchema(mem as never);
+  });
+
+  it("starts Stripe redirect and completes back to Local with seller_stripe=connected", () => {
+    const userId = seedUser();
+    mem.prepare(
+      `INSERT INTO marketplace_seller_accounts (id, user_id, stripe_connect_account_id, onboarding_status, public_handle)
+       VALUES (?, ?, 'acct_test709', 'ready', 'seller709')`
+    ).run(randomUUID(), userId);
+
+    const started = startSellerStripeRedirect("http://127.0.0.1:5173/marketplace?tab=seller");
+    expect(started.connectUrl).toContain("/seller-link/stripe?state=");
+    const session = getSellerStripeRedirectSession(started.state);
+    expect(session.returnUrl).toContain("127.0.0.1:5173");
+
+    const completed = completeSellerStripeRedirect(userId, started.state);
+    expect(completed.redirectUrl).toContain("seller_stripe=connected");
   });
 });

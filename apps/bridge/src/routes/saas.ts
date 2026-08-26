@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { config } from "../config.js";
+import { getCloudDb } from "../core-db.js";
 import { rateLimit } from "../services/auth/rate-limit.js";
 import {
   attachAuthContext,
@@ -16,10 +17,12 @@ import {
   approveSellerLinkDevice,
   completeSellerGithubRedirect,
   completeSellerLinkRedirect,
+  completeSellerStripeRedirect,
   denySellerLinkDevice,
   exchangeSellerLinkCode,
   getSellerGithubRedirectSession,
   getSellerLinkRedirectSession,
+  getSellerStripeRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
@@ -27,8 +30,17 @@ import {
   startSellerGithubRedirect,
   startSellerLinkDevice,
   startSellerLinkRedirect,
+  startSellerStripeRedirect,
 } from "../services/seller-link.js";
 import { beginGithubIntegrationConnect } from "../services/github-integration.js";
+import {
+  acceptMarketplaceTos,
+  getSellerPayoutSnapshot,
+} from "../services/marketplace-commerce.js";
+import {
+  refreshStripeConnectStatus,
+  startStripeConnectOnboarding,
+} from "../services/marketplace-payments.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
 
 function sellerLinkErrStatus(err: unknown): number {
@@ -330,6 +342,152 @@ export function createSaasRouter(): Router {
       } catch (err) {
         res.status(sellerLinkErrStatus(err)).json({
           error: err instanceof Error ? err.message : "Complete Seller GitHub failed",
+        });
+      }
+    }
+  );
+
+  /** Local Bridge starts Seller Stripe Connect redirect (#709). */
+  router.post("/seller-link/stripe-redirect", requireSaas, limiter, (req, res) => {
+    const returnUrl =
+      typeof req.body?.return_url === "string"
+        ? req.body.return_url
+        : typeof req.body?.returnUrl === "string"
+          ? req.body.returnUrl
+          : "";
+    try {
+      res.json(startSellerStripeRedirect(returnUrl));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Failed to start Seller Stripe redirect",
+      });
+    }
+  });
+
+  router.get("/seller-link/stripe-redirect", requireSaas, limiter, (req, res) => {
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    try {
+      res.json(getSellerStripeRedirectSession(state));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Seller Stripe session lookup failed",
+      });
+    }
+  });
+
+  /** Cloud Seller Stripe Connect start without a workspace (#709 complimentary Seller). */
+  router.post(
+    "/seller-link/stripe-connect",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    async (req, res) => {
+      const state =
+        typeof req.body?.state === "string"
+          ? req.body.state
+          : typeof req.query.state === "string"
+            ? req.query.state
+            : "";
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active.",
+            sellerActive: false,
+          });
+          return;
+        }
+        const userId = req.user!.id;
+        const core = getCloudDb();
+        acceptMarketplaceTos(core, userId);
+        const origin = config.web.publicUrl.replace(/\/$/, "");
+        const returnPath = state
+          ? `/seller-link/stripe?state=${encodeURIComponent(state)}&stripe_connect=return`
+          : `/seller-link/stripe?stripe_connect=return`;
+        const refreshPath = state
+          ? `/seller-link/stripe?state=${encodeURIComponent(state)}&stripe_connect=refresh`
+          : `/seller-link/stripe?stripe_connect=refresh`;
+        const result = await startStripeConnectOnboarding(core, {
+          userId,
+          returnUrl: `${origin}${returnPath}`,
+          refreshUrl: `${origin}${refreshPath}`,
+        });
+        res.json(result);
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) ? status : 500).json({
+          error: err instanceof Error ? err.message : "Failed to start Seller Stripe connect",
+        });
+      }
+    }
+  );
+
+  router.post(
+    "/seller-link/stripe-refresh",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    async (req, res) => {
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active.",
+            sellerActive: false,
+          });
+          return;
+        }
+        const userId = req.user!.id;
+        const core = getCloudDb();
+        const payout = getSellerPayoutSnapshot(core, userId);
+        const accountId = String(payout.stripeConnectAccountId ?? "").trim();
+        if (accountId.startsWith("acct_")) {
+          await refreshStripeConnectStatus(core, userId);
+        }
+        res.json({
+          ...getSellerEntitlementPayload(userId),
+          ...getSellerPayoutSnapshot(core, userId),
+        });
+      } catch (err) {
+        res.status(sellerLinkErrStatus(err)).json({
+          error: err instanceof Error ? err.message : "Seller Stripe refresh failed",
+        });
+      }
+    }
+  );
+
+  router.post(
+    "/seller-link/stripe-redirect/complete",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const state =
+        typeof req.body?.state === "string"
+          ? req.body.state
+          : typeof req.query.state === "string"
+            ? req.query.state
+            : "";
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active.",
+            sellerActive: false,
+          });
+          return;
+        }
+        const result = completeSellerStripeRedirect(req.user!.id, state);
+        res.json({ ok: true, redirectUrl: result.redirectUrl, sellerActive: true });
+      } catch (err) {
+        res.status(sellerLinkErrStatus(err)).json({
+          error: err instanceof Error ? err.message : "Complete Seller Stripe failed",
         });
       }
     }

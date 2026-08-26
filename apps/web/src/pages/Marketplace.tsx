@@ -23,6 +23,7 @@ import {
   fetchSellerLinkStatus,
   exchangeSellerLink,
   startSellerGithubRedirect,
+  startSellerStripeRedirect,
   installCatalogEntry,
   installWorkspacePlugin,
   registerLocalPlugin,
@@ -1681,6 +1682,19 @@ export default function MarketplacePage() {
                     .catch((err) =>
                       toast.error(
                         userFacingErrorMessage(err, "Could not start Seller GitHub connect")
+                      )
+                    );
+                }}
+                onConnectStripe={() => {
+                  void startSellerStripeRedirect(
+                    `${window.location.origin}/marketplace?tab=seller`
+                  )
+                    .then(({ connectUrl }) => {
+                      window.location.href = connectUrl;
+                    })
+                    .catch((err) =>
+                      toast.error(
+                        userFacingErrorMessage(err, "Could not start Seller Stripe connect")
                       )
                     );
                 }}

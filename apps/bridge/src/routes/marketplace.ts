@@ -44,6 +44,7 @@ import {
   startCloudSellerLinkDevice,
   startCloudSellerLinkRedirect,
   startCloudSellerGithubRedirect,
+  startCloudSellerStripeRedirect,
   writeStoredSellerLink,
 } from "../services/marketplace-seller-link-client.js";
 import {
@@ -365,6 +366,25 @@ export function createMarketplaceRouter(): Router {
     } catch (err) {
       const status = err instanceof MarketplaceCommerceError ? err.status : 500;
       sendRouteError(res, err, "Seller GitHub redirect start failed", status);
+    }
+  });
+
+  router.post("/seller-link/stripe-redirect", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller Stripe connect is a Local → Cloud flow" });
+      return;
+    }
+    const returnUrl = String(req.body?.returnUrl ?? req.body?.return_url ?? "").trim();
+    if (!returnUrl) {
+      res.status(400).json({ error: "returnUrl required" });
+      return;
+    }
+    try {
+      const started = await startCloudSellerStripeRedirect(returnUrl);
+      res.json(started);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller Stripe redirect start failed", status);
     }
   });
 

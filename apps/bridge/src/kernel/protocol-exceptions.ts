@@ -533,6 +533,38 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-stripe-redirect",
+    methods: ["GET", "POST"],
+    pathPattern: "/api/saas/seller-link/stripe-redirect",
+    rationale:
+      "Local Bridge Seller Stripe connect redirect start/status (#709); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-stripe-connect",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/stripe-connect",
+    rationale:
+      "Cloud Seller starts Stripe Connect without a workspace (#709 complimentary Seller); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-stripe-refresh",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/stripe-refresh",
+    rationale:
+      "Cloud Seller refreshes Stripe Connect status without a workspace (#709); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-stripe-redirect-complete",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/stripe-redirect/complete",
+    rationale:
+      "Cloud Seller finishes Stripe connect and returns to Local (#709); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-seller-link-exchange",
     methods: ["POST"],
     pathPattern: "/api/saas/seller-link/exchange",
@@ -607,6 +639,13 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/marketplace/seller-link/github-redirect",
     rationale: "Start Cloud Seller GitHub connect redirect from Local (#711).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-stripe-redirect",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/stripe-redirect",
+    rationale: "Start Cloud Seller Stripe connect redirect from Local (#709).",
     authenticatedDomainMutations: "none",
   },
   {
