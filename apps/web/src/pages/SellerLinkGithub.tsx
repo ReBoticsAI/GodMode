@@ -3,11 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   completeSellerGithubRedirect,
-  fetchGithubIntegrationStatus,
   fetchSellerEntitlement,
   fetchSellerGithubRedirectSession,
-  startGithubIntegrationConnect,
   startSaasCheckout,
+  startSellerGithubConnect,
 } from "@/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -62,11 +61,14 @@ export default function SellerLinkGithubPage() {
   useEffect(() => {
     if (!authenticated) return;
     void fetchSellerEntitlement()
-      .then((ent) => setSellerActive(Boolean(ent.sellerActive)))
-      .catch(() => setSellerActive(false));
-    void fetchGithubIntegrationStatus()
-      .then((st) => setGithubLogin(st.login ?? null))
-      .catch(() => setGithubLogin(null));
+      .then((ent) => {
+        setSellerActive(Boolean(ent.sellerActive));
+        setGithubLogin(ent.githubLogin ?? null);
+      })
+      .catch(() => {
+        setSellerActive(false);
+        setGithubLogin(null);
+      });
   }, [authenticated, githubFlag]);
 
   const finishToLocal = async () => {
@@ -102,7 +104,7 @@ export default function SellerLinkGithubPage() {
     setBusy(true);
     try {
       const returnPath = `/seller-link/github?state=${encodeURIComponent(state)}`;
-      const { url } = await startGithubIntegrationConnect({ returnPath });
+      const { url } = await startSellerGithubConnect(returnPath);
       window.location.href = url;
     } catch (err) {
       toast.error(userFacingErrorMessage(err, "Could not start GitHub connect"));

@@ -525,6 +525,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-github-connect",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/github-connect",
+    rationale:
+      "Cloud Seller starts GitHub OAuth without a workspace (#711 complimentary Seller); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-seller-link-exchange",
     methods: ["POST"],
     pathPattern: "/api/saas/seller-link/exchange",
