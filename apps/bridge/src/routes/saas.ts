@@ -14,14 +14,17 @@ import {
 } from "../services/saas-billing.js";
 import {
   approveSellerLinkDevice,
+  completeSellerGithubRedirect,
   completeSellerLinkRedirect,
   denySellerLinkDevice,
   exchangeSellerLinkCode,
+  getSellerGithubRedirectSession,
   getSellerLinkRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
   sellerLinkCloudUserHint,
+  startSellerGithubRedirect,
   startSellerLinkDevice,
   startSellerLinkRedirect,
 } from "../services/seller-link.js";
@@ -132,6 +135,7 @@ export function createSaasRouter(): Router {
           source: entitlement.source,
           cloudUserHint: sellerLinkCloudUserHint(linkUser.id),
           githubConnected: entitlement.githubConnected,
+          githubLogin: entitlement.githubLogin,
           tosAccepted: entitlement.tosAccepted,
           stripePayoutReady: entitlement.stripePayoutReady,
         });
@@ -145,6 +149,7 @@ export function createSaasRouter(): Router {
             planId: entitlement.planId,
             source: entitlement.source,
             githubConnected: entitlement.githubConnected,
+            githubLogin: entitlement.githubLogin,
             tosAccepted: entitlement.tosAccepted,
             stripePayoutReady: entitlement.stripePayoutReady,
           });
@@ -228,6 +233,66 @@ export function createSaasRouter(): Router {
       } catch (err) {
         res.status(sellerLinkErrStatus(err)).json({
           error: err instanceof Error ? err.message : "Complete seller link failed",
+        });
+      }
+    }
+  );
+
+  /** Local Bridge starts Seller GitHub connect redirect (#711). */
+  router.post("/seller-link/github-redirect", requireSaas, limiter, (req, res) => {
+    const returnUrl =
+      typeof req.body?.return_url === "string"
+        ? req.body.return_url
+        : typeof req.body?.returnUrl === "string"
+          ? req.body.returnUrl
+          : "";
+    try {
+      res.json(startSellerGithubRedirect(returnUrl));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Failed to start Seller GitHub redirect",
+      });
+    }
+  });
+
+  router.get("/seller-link/github-redirect", requireSaas, limiter, (req, res) => {
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    try {
+      res.json(getSellerGithubRedirectSession(state));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Seller GitHub session lookup failed",
+      });
+    }
+  });
+
+  router.post(
+    "/seller-link/github-redirect/complete",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const state =
+        typeof req.body?.state === "string"
+          ? req.body.state
+          : typeof req.query.state === "string"
+            ? req.query.state
+            : "";
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active.",
+            sellerActive: false,
+          });
+          return;
+        }
+        const result = completeSellerGithubRedirect(req.user!.id, state);
+        res.json({ ok: true, redirectUrl: result.redirectUrl, sellerActive: true });
+      } catch (err) {
+        res.status(sellerLinkErrStatus(err)).json({
+          error: err instanceof Error ? err.message : "Complete Seller GitHub failed",
         });
       }
     }

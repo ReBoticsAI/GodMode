@@ -3192,9 +3192,15 @@ export const githubIntegrationAdapter: RecordAdapter = {
       const userId = requiredUser(ctx);
       return githubProjectsStatus(getUserDb(userId), userId);
     },
-    start_connect(_db, _def, _id, _input, ctx) {
+    start_connect(_db, _def, _id, input, ctx) {
       try {
-        return beginGithubIntegrationConnect(requiredUser(ctx));
+        const returnPath =
+          typeof input?.returnPath === 'string'
+            ? input.returnPath
+            : typeof input?.return_path === 'string'
+              ? input.return_path
+              : undefined;
+        return beginGithubIntegrationConnect(requiredUser(ctx), { returnPath });
       } catch (err) {
         const e = err as { status?: number; message?: string };
         if (typeof e?.status === "number" && e.status >= 400) {

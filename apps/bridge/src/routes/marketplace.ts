@@ -37,19 +37,19 @@ import {
   clearStoredSellerLink,
   exchangeCloudSellerLinkCode,
   getLocalSellerLinkStatus,
+  resolveLocalSellGithubLogin,
   pollCloudSellerLinkToken,
   revokeCloudSellerLinkToken,
   readStoredSellerLink,
   startCloudSellerLinkDevice,
   startCloudSellerLinkRedirect,
+  startCloudSellerGithubRedirect,
   writeStoredSellerLink,
 } from "../services/marketplace-seller-link-client.js";
 import {
   fetchRemoteCommunityShelf,
   mergePublicListings,
 } from "../services/marketplace-community-shelf.js";
-import { githubProjectsStatus } from "../services/github-integration.js";
-import { getUserDb } from "../user-registry.js";
 import {
   COMMUNITY_VERIFIED_TIER_SQL,
   MARKETPLACE_LISTING_SELLER_JOINS,
@@ -198,12 +198,7 @@ export function createMarketplaceRouter(): Router {
     try {
       const core = getCloudDb();
       const userId = req.user!.id;
-      let githubLogin: string | null = null;
-      try {
-        githubLogin = githubProjectsStatus(getUserDb(userId), userId).login;
-      } catch {
-        githubLogin = null;
-      }
+      const githubLogin = await resolveLocalSellGithubLogin(userId);
       let catalogOrphans: Array<{
         id: string;
         title: string;
@@ -351,6 +346,25 @@ export function createMarketplaceRouter(): Router {
     } catch (err) {
       const status = err instanceof MarketplaceCommerceError ? err.status : 500;
       sendRouteError(res, err, "Seller link redirect start failed", status);
+    }
+  });
+
+  router.post("/seller-link/github-redirect", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller GitHub connect is a Local → Cloud flow" });
+      return;
+    }
+    const returnUrl = String(req.body?.returnUrl ?? req.body?.return_url ?? "").trim();
+    if (!returnUrl) {
+      res.status(400).json({ error: "returnUrl required" });
+      return;
+    }
+    try {
+      const started = await startCloudSellerGithubRedirect(returnUrl);
+      res.json(started);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller GitHub redirect start failed", status);
     }
   });
 

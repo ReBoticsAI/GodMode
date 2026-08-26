@@ -60,6 +60,7 @@ import {
   fetchCommunityCatalog,
 } from "../../services/marketplace-catalog.js";
 import { githubProjectsStatus } from "../../services/github-integration.js";
+import { resolveLocalSellGithubLogin } from "../../services/marketplace-seller-link-client.js";
 import { getUserDb } from "../../user-registry.js";
 import {
   activatePluginForTenant,
@@ -1045,12 +1046,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
     async bind_live(_db, def, _id, input, ctx) {
       try {
         const sellerUserId = requireUser(ctx);
-        let githubLogin: string | null = null;
-        try {
-          githubLogin = githubProjectsStatus(getUserDb(sellerUserId), sellerUserId).login;
-        } catch {
-          githubLogin = null;
-        }
+        const githubLogin = await resolveLocalSellGithubLogin(sellerUserId);
         const row = await bindLiveListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
           sellerUserId,
           sellerTenantId: requireTenant(ctx),
@@ -1079,11 +1075,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
         let catalogEntry: { id: string; author?: string; pluginRepo?: string } | null = null;
         let githubLogin: string | null = null;
         if (catalogEntryId) {
-          try {
-            githubLogin = githubProjectsStatus(getUserDb(sellerUserId), sellerUserId).login;
-          } catch {
-            githubLogin = null;
-          }
+          githubLogin = await resolveLocalSellGithubLogin(sellerUserId);
           const { entries } = await fetchCommunityCatalog(ctx.data!.cloudDb);
           const found = entries.find((e) => e.id === catalogEntryId);
           if (found) {

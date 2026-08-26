@@ -417,8 +417,30 @@ export function buildGithubIntegrationAuthorizeUrl(state: string): string {
 /** Short-lived OAuth state → userId (shared by kernel start_connect + callback). */
 const pendingOauthStates = new Map<
   string,
-  { userId: string; expiresAt: number }
+  { userId: string; expiresAt: number; returnPath?: string }
 >();
+
+const ALLOWED_GITHUB_OAUTH_RETURN_PATHS = new Set(["/seller-link/github"]);
+
+/** Allowlisted in-app path (optionally with query) after GitHub OAuth (#711). */
+export function assertGithubOauthReturnPath(
+  returnPathRaw: string | null | undefined
+): string | undefined {
+  const raw = String(returnPathRaw ?? "").trim();
+  if (!raw) return undefined;
+  if (!raw.startsWith("/")) {
+    throw Object.assign(new Error("GitHub OAuth return path must be a relative path"), {
+      status: 400,
+    });
+  }
+  const pathOnly = raw.split("?")[0]?.split("#")[0] || "";
+  if (!ALLOWED_GITHUB_OAUTH_RETURN_PATHS.has(pathOnly)) {
+    throw Object.assign(new Error("GitHub OAuth return path is not allowlisted"), {
+      status: 400,
+    });
+  }
+  return raw;
+}
 
 function prunePendingOauthStates(): void {
   const now = Date.now();
@@ -427,22 +449,31 @@ function prunePendingOauthStates(): void {
   }
 }
 
-export function beginGithubIntegrationConnect(userId: string): { url: string } {
+export function beginGithubIntegrationConnect(
+  userId: string,
+  opts?: { returnPath?: string | null }
+): { url: string } {
   prunePendingOauthStates();
   const state = randomBytes(16).toString("hex");
+  const returnPath = assertGithubOauthReturnPath(opts?.returnPath);
   pendingOauthStates.set(state, {
     userId,
     expiresAt: Date.now() + 10 * 60 * 1000,
+    ...(returnPath ? { returnPath } : {}),
   });
   return { url: buildGithubIntegrationAuthorizeUrl(state) };
 }
 
 export function takeGithubIntegrationOauthPending(state: string): {
   userId: string;
+  returnPath?: string;
 } | null {
   prunePendingOauthStates();
   const pending = state ? pendingOauthStates.get(state) : undefined;
   if (pending) pendingOauthStates.delete(state);
   if (!pending || pending.expiresAt < Date.now()) return null;
-  return { userId: pending.userId };
+  return {
+    userId: pending.userId,
+    ...(pending.returnPath ? { returnPath: pending.returnPath } : {}),
+  };
 }

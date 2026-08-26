@@ -24,6 +24,16 @@ export function createGithubIntegrationRouter(): Router {
         : "";
     const pending = takeGithubIntegrationOauthPending(state);
     const webBase = config.web.publicUrl.replace(/\/$/, "");
+    const successPath = pending?.returnPath
+      ? pending.returnPath.includes("?")
+        ? `${pending.returnPath}&github=connected`
+        : `${pending.returnPath}?github=connected`
+      : "/vault?tab=integrations&github=connected";
+    const errorPath = pending?.returnPath
+      ? pending.returnPath.includes("?")
+        ? `${pending.returnPath}&github=error`
+        : `${pending.returnPath}?github=error`
+      : "/vault?tab=integrations&github=error";
     if (!code || !pending) {
       res.redirect(`${webBase}/vault?tab=integrations&github=error`);
       return;
@@ -36,10 +46,10 @@ export function createGithubIntegrationRouter(): Router {
       }
       const db = getUserDb(pending.userId);
       upsertGithubProjectsToken(db, token, pending.userId);
-      res.redirect(`${webBase}/vault?tab=integrations&github=connected`);
+      res.redirect(`${webBase}${successPath}`);
     } catch (err) {
       console.error("[github-integration] callback", err);
-      res.redirect(`${webBase}/vault?tab=integrations&github=error`);
+      res.redirect(`${webBase}${errorPath}`);
     }
   });
 

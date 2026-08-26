@@ -509,6 +509,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-github-redirect",
+    methods: ["GET", "POST"],
+    pathPattern: "/api/saas/seller-link/github-redirect",
+    rationale:
+      "Local Bridge Seller GitHub connect redirect start/status (#711); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-github-redirect-complete",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/github-redirect/complete",
+    rationale:
+      "Cloud Seller finishes GitHub connect and returns to Local (#711); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-seller-link-exchange",
     methods: ["POST"],
     pathPattern: "/api/saas/seller-link/exchange",
@@ -576,6 +592,13 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/marketplace/seller-link/start-redirect",
     rationale: "Start Cloud Seller browser redirect bind from Local (#706).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-github-redirect",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/github-redirect",
+    rationale: "Start Cloud Seller GitHub connect redirect from Local (#711).",
     authenticatedDomainMutations: "none",
   },
   {

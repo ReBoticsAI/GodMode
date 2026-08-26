@@ -22,6 +22,7 @@ import {
   fetchInferenceEndpoints,
   fetchSellerLinkStatus,
   exchangeSellerLink,
+  startSellerGithubRedirect,
   installCatalogEntry,
   installWorkspacePlugin,
   registerLocalPlugin,
@@ -536,6 +537,13 @@ export default function MarketplacePage() {
       }),
     [sellerLinkStatus, githubLogin, tosAccepted, payoutReady]
   );
+  /** Prefer Seller Cloud GitHub login when linked (#711); else Local Vault. */
+  const sellGithubLogin =
+    (sellerLinkStatus?.linked
+      ? String(sellerLinkStatus.githubLogin ?? "").trim()
+      : "") ||
+    String(githubLogin ?? "").trim() ||
+    null;
   const localSellUnlocked = saas !== true && localSellChecklistComplete(localSellSignals);
   const showSellerDashboard = saas === true || localSellUnlocked;
 
@@ -736,6 +744,29 @@ export default function MarketplacePage() {
   }, [saas, searchParams, setSearchParams]);
 
   useEffect(() => {
+    const flag = searchParams.get("seller_github");
+    if (flag !== "connected" || saas === true) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("seller_github");
+    next.delete("github_login");
+    next.set("tab", "seller");
+    setSearchParams(next, { replace: true });
+    void fetchSellerLinkStatus()
+      .then((status) => {
+        setSellerLinkStatus(status);
+        toast.success(
+          status.githubLogin
+            ? `GitHub connected as ${status.githubLogin}`
+            : "Seller GitHub connected"
+        );
+      })
+      .catch((err) => {
+        toast.error(userFacingErrorMessage(err, "Could not refresh Seller GitHub status"));
+      });
+  }, [saas, searchParams, setSearchParams]);
+
+
+  useEffect(() => {
     const paid = searchParams.get("paid");
     const canceled = searchParams.get("canceled");
     const sessionId = searchParams.get("session_id");
@@ -833,8 +864,10 @@ export default function MarketplacePage() {
 
   const ownedCommunityCatalog = useMemo(
     () =>
-      communityCatalog.filter((entry) => sellerOwnsCatalogEntryClient(entry, githubLogin)),
-    [communityCatalog, githubLogin]
+      communityCatalog.filter((entry) =>
+        sellerOwnsCatalogEntryClient(entry, sellGithubLogin)
+      ),
+    [communityCatalog, sellGithubLogin]
   );
 
   const ownedCatalogForFamily = useMemo(() => {
@@ -1638,6 +1671,19 @@ export default function MarketplacePage() {
                 signals={localSellSignals}
                 onRefresh={refreshLocalSellChecklist}
                 onOpenTos={() => setTosDialogOpen(true)}
+                onConnectGithub={() => {
+                  void startSellerGithubRedirect(
+                    `${window.location.origin}/marketplace?tab=seller`
+                  )
+                    .then(({ connectUrl }) => {
+                      window.location.href = connectUrl;
+                    })
+                    .catch((err) =>
+                      toast.error(
+                        userFacingErrorMessage(err, "Could not start Seller GitHub connect")
+                      )
+                    );
+                }}
               />
             </>
           ) : null}
@@ -1980,11 +2026,13 @@ export default function MarketplacePage() {
                 publishFamily === "live" ? (
                   <Field>
                     <FieldLabel>Community catalog entry</FieldLabel>
-                    {!githubLogin ? (
+                    {!sellGithubLogin ? (
                       <Alert>
                         <AlertTitle>GitHub Connect required</AlertTitle>
                         <AlertDescription>
-                          Connect GitHub in Personal Vault so catalog rows you own appear here.
+                          Connect GitHub on your GodMode Seller account (checklist above) so
+                          catalog rows you own appear here. Local installs do not need a GitHub
+                          App configured on this Bridge.
                         </AlertDescription>
                       </Alert>
                     ) : ownedCatalogForFamily.length === 0 ? (
@@ -1992,7 +2040,7 @@ export default function MarketplacePage() {
                         <AlertTitle>No owned catalog rows</AlertTitle>
                         <AlertDescription>
                           Submit a Community catalog PR above (or wait for merge), then refresh.
-                          GitHub: {githubLogin}
+                          GitHub: {sellGithubLogin}
                         </AlertDescription>
                       </Alert>
                     ) : (
@@ -2015,9 +2063,9 @@ export default function MarketplacePage() {
                       </Select>
                     )}
                     <FieldDescription>
-                      {githubLogin
-                        ? `Connected GitHub: ${githubLogin}`
-                        : "Connect GitHub in Personal Vault so catalog items you own can be claimed automatically."}
+                      {sellGithubLogin
+                        ? `Connected GitHub: ${sellGithubLogin}`
+                        : "Connect GitHub on your GodMode Seller account so catalog items you own can be claimed automatically."}
                     </FieldDescription>
                   </Field>
                 ) : null}

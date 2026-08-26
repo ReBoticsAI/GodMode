@@ -50,6 +50,7 @@ function emptySellerLinkStatus(): SellerLinkStatus {
     cloudUserHint: null,
     linkedAt: null,
     githubConnected: false,
+    githubLogin: null,
     tosAccepted: false,
     stripePayoutReady: false,
   };
@@ -279,15 +280,17 @@ export function LocalSellChecklistCard({
   signals,
   onRefresh,
   onOpenTos,
+  onConnectGithub,
 }: {
   signals: LocalSellChecklistSignals;
   onRefresh?: () => void;
   onOpenTos?: () => void;
+  /** Local → Cloud Seller GitHub App connect (#711). */
+  onConnectGithub?: () => void;
 }) {
   const complete = localSellChecklistComplete(signals);
   const seatReady = localSellSeatReady(signals);
   const sellUrl = marketplaceCloudSellUrl();
-  const vaultIntegrations = `${VAULT_PATH}?tab=integrations`;
   const vaultMarketplace = `${VAULT_PATH}?tab=marketplace`;
 
   const rows: ChecklistRow[] = [
@@ -302,8 +305,8 @@ export function LocalSellChecklistCard({
       id: "github",
       label: "GitHub connected",
       done: Boolean(signals.githubConnected),
-      href: vaultIntegrations,
-      cta: "Open Personal Vault",
+      href: "",
+      cta: "Connect GitHub on Seller account",
     },
     {
       id: "stripe",
@@ -371,6 +374,11 @@ export function LocalSellChecklistCard({
                     <ExternalLinkIcon data-icon="inline-start" />
                     {row.cta}
                   </a>
+                ) : row.id === "github" && onConnectGithub ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onConnectGithub}>
+                    <ExternalLinkIcon data-icon="inline-start" />
+                    {row.cta}
+                  </Button>
                 ) : row.id === "tos" && onOpenTos ? (
                   <Button type="button" size="sm" variant="outline" onClick={onOpenTos}>
                     {row.cta}
