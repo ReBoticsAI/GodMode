@@ -4,6 +4,7 @@ import { getCloudDb } from "../core-db.js";
 import { config } from "../config.js";
 import { coreUserToAuth, type AuthenticatedUser } from "../types/express-auth.js";
 import { githubProjectsStatus } from "./github-integration.js";
+import { getSellerPayoutSnapshot } from "./marketplace-commerce.js";
 import { getUserDb } from "../user-registry.js";
 
 const DEVICE_TTL_MS = 15 * 60 * 1000;
@@ -593,6 +594,128 @@ export function completeSellerGithubRedirect(
   const redirect = new URL(row.return_url);
   redirect.searchParams.set("seller_github", "connected");
   if (login) redirect.searchParams.set("github_login", login);
+  if (!redirect.searchParams.get("tab")) {
+    redirect.searchParams.set("tab", "seller");
+  }
+  return { redirectUrl: redirect.toString() };
+}
+
+export type SellerStripeRedirectStart = {
+  state: string;
+  connectUrl: string;
+  expiresIn: number;
+};
+
+export type SellerStripeRedirectSession = {
+  state: string;
+  returnUrl: string;
+  status: string;
+  expiresAt: string;
+};
+
+function ensureSellerStripeRedirectSchema(db: ReturnType<typeof getCloudDb>): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seller_stripe_redirects (
+      state_hash TEXT PRIMARY KEY,
+      return_url TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+  `);
+}
+
+export function startSellerStripeRedirect(returnUrlRaw: string): SellerStripeRedirectStart {
+  const db = getCloudDb();
+  ensureSellerStripeRedirectSchema(db);
+  const returnUrl = assertSellerLinkReturnUrl(returnUrlRaw);
+  const state = randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + REDIRECT_TTL_MS).toISOString();
+  db.prepare(
+    `INSERT INTO seller_stripe_redirects (state_hash, return_url, status, expires_at)
+     VALUES (?, ?, 'pending', ?)`
+  ).run(hashToken(state), returnUrl, expiresAt);
+  const publicBase = config.web.publicUrl.replace(/\/$/, "") || "https://app.godmode.software";
+  return {
+    state,
+    connectUrl: `${publicBase}/seller-link/stripe?state=${encodeURIComponent(state)}`,
+    expiresIn: Math.floor(REDIRECT_TTL_MS / 1000),
+  };
+}
+
+function loadSellerStripeRedirect(stateRaw: string): {
+  state_hash: string;
+  return_url: string;
+  status: string;
+  expires_at: string;
+} {
+  const state = stateRaw.trim();
+  if (!state) {
+    throw Object.assign(new Error("state required"), { status: 400 });
+  }
+  const db = getCloudDb();
+  ensureSellerStripeRedirectSchema(db);
+  const row = db
+    .prepare(`SELECT * FROM seller_stripe_redirects WHERE state_hash=?`)
+    .get(hashToken(state)) as
+    | {
+        state_hash: string;
+        return_url: string;
+        status: string;
+        expires_at: string;
+      }
+    | undefined;
+  if (!row) {
+    throw Object.assign(new Error("Unknown seller Stripe session"), { status: 404 });
+  }
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    if (row.status !== "expired" && row.status !== "complete") {
+      db.prepare(
+        `UPDATE seller_stripe_redirects SET status='expired' WHERE state_hash=?`
+      ).run(row.state_hash);
+    }
+    throw Object.assign(new Error("Seller Stripe session expired"), { status: 410 });
+  }
+  return row;
+}
+
+export function getSellerStripeRedirectSession(stateRaw: string): SellerStripeRedirectSession {
+  const row = loadSellerStripeRedirect(stateRaw);
+  return {
+    state: stateRaw.trim(),
+    returnUrl: row.return_url,
+    status: row.status,
+    expiresAt: row.expires_at,
+  };
+}
+
+/** After Seller auth + Stripe Connect on Cloud, send the browser back to Local. */
+export function completeSellerStripeRedirect(
+  userId: string,
+  stateRaw: string
+): { redirectUrl: string } {
+  const db = getCloudDb();
+  ensureSellerStripeRedirectSchema(db);
+  const row = loadSellerStripeRedirect(stateRaw);
+  if (row.status === "complete") {
+    throw Object.assign(new Error("Seller Stripe session already completed"), { status: 409 });
+  }
+  const payout = getSellerPayoutSnapshot(db, userId);
+  const accountId = String(payout.stripeConnectAccountId ?? "").trim();
+  if (!accountId.startsWith("acct_")) {
+    throw Object.assign(new Error("Connect Stripe on this Seller account first"), {
+      status: 400,
+    });
+  }
+  db.prepare(
+    `UPDATE seller_stripe_redirects
+     SET status='complete', user_id=?, completed_at=datetime('now')
+     WHERE state_hash=?`
+  ).run(userId, row.state_hash);
+  const redirect = new URL(row.return_url);
+  redirect.searchParams.set("seller_stripe", "connected");
   if (!redirect.searchParams.get("tab")) {
     redirect.searchParams.set("tab", "seller");
   }

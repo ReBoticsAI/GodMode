@@ -80,6 +80,9 @@ import SellerLinkConnectPage, {
 import SellerLinkGithubPage, {
   SELLER_GITHUB_STATE_KEY,
 } from "./pages/SellerLinkGithub";
+import SellerLinkStripePage, {
+  SELLER_STRIPE_STATE_KEY,
+} from "./pages/SellerLinkStripe";
 import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
@@ -391,7 +394,9 @@ function AuthGatedApp() {
   const { pathname, search } = useLocation();
   const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
   const isSellerLinkGithub = pathname.startsWith("/seller-link/github");
-  const isSellerLinkSurface = isSellerLinkConnect || isSellerLinkGithub;
+  const isSellerLinkStripe = pathname.startsWith("/seller-link/stripe");
+  const isSellerLinkSurface =
+    isSellerLinkConnect || isSellerLinkGithub || isSellerLinkStripe;
 
   useEffect(() => {
     if (!isSellerLinkSurface) return;
@@ -399,13 +404,17 @@ function AuthGatedApp() {
     if (!state) return;
     try {
       sessionStorage.setItem(
-        isSellerLinkGithub ? SELLER_GITHUB_STATE_KEY : SELLER_LINK_STATE_KEY,
+        isSellerLinkGithub
+          ? SELLER_GITHUB_STATE_KEY
+          : isSellerLinkStripe
+            ? SELLER_STRIPE_STATE_KEY
+            : SELLER_LINK_STATE_KEY,
         state
       );
     } catch {
       /* ignore */
     }
-  }, [isSellerLinkSurface, isSellerLinkGithub, search]);
+  }, [isSellerLinkSurface, isSellerLinkGithub, isSellerLinkStripe, search]);
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -485,6 +494,16 @@ function AuthGatedApp() {
     return (
       <>
         <SellerLinkGithubPage />
+        <Toaster richColors position="top-right" />
+      </>
+    );
+  }
+
+  // Seller Stripe Connect for Local Sell (#709): workspace-optional Cloud surface.
+  if (isSellerLinkStripe) {
+    return (
+      <>
+        <SellerLinkStripePage />
         <Toaster richColors position="top-right" />
       </>
     );

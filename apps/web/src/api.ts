@@ -6924,6 +6924,55 @@ export function startSellerGithubConnect(returnPath: string) {
   });
 }
 
+export function startSellerStripeRedirect(returnUrl: string) {
+  return api<{ state: string; connectUrl: string; expiresIn: number }>(
+    "/marketplace/seller-link/stripe-redirect",
+    {
+      method: "POST",
+      body: JSON.stringify({ returnUrl }),
+    }
+  );
+}
+
+export function fetchSellerStripeRedirectSession(state: string) {
+  return api<{
+    state: string;
+    returnUrl: string;
+    status: string;
+    expiresAt: string;
+  }>(`/saas/seller-link/stripe-redirect?state=${encodeURIComponent(state)}`);
+}
+
+export function startSellerStripeConnect(state: string) {
+  return api<{
+    url: string;
+    accountId: string;
+    onboardingStatus: string;
+    publicHandle: string;
+    storefrontUrl: string;
+  }>("/saas/seller-link/stripe-connect", {
+    method: "POST",
+    body: JSON.stringify({ state }),
+  });
+}
+
+export function refreshSellerStripeConnect() {
+  return api<Record<string, unknown>>("/saas/seller-link/stripe-refresh", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function completeSellerStripeRedirect(state: string) {
+  return api<{ ok: true; redirectUrl: string; sellerActive: boolean }>(
+    "/saas/seller-link/stripe-redirect/complete",
+    {
+      method: "POST",
+      body: JSON.stringify({ state }),
+    }
+  );
+}
+
 export function approveCloudSellerLink(userCode: string) {
   return api<{ ok: true; userCode: string; expiresAt: string }>(
     "/saas/seller-link/approve",

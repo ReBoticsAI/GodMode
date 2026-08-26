@@ -281,12 +281,15 @@ export function LocalSellChecklistCard({
   onRefresh,
   onOpenTos,
   onConnectGithub,
+  onConnectStripe,
 }: {
   signals: LocalSellChecklistSignals;
   onRefresh?: () => void;
   onOpenTos?: () => void;
   /** Local → Cloud Seller GitHub App connect (#711). */
   onConnectGithub?: () => void;
+  /** Local → Cloud Seller Stripe Connect (#709). */
+  onConnectStripe?: () => void;
 }) {
   const complete = localSellChecklistComplete(signals);
   const seatReady = localSellSeatReady(signals);
@@ -313,7 +316,7 @@ export function LocalSellChecklistCard({
       label: "Stripe Connect payouts ready",
       done: Boolean(signals.stripePayoutReady),
       href: vaultMarketplace,
-      cta: "Open Vault Marketplace",
+      cta: "Connect Stripe on Seller account",
     },
     {
       id: "tos",
@@ -376,6 +379,11 @@ export function LocalSellChecklistCard({
                   </a>
                 ) : row.id === "github" && onConnectGithub ? (
                   <Button type="button" size="sm" variant="outline" onClick={onConnectGithub}>
+                    <ExternalLinkIcon data-icon="inline-start" />
+                    {row.cta}
+                  </Button>
+                ) : row.id === "stripe" && onConnectStripe ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onConnectStripe}>
                     <ExternalLinkIcon data-icon="inline-start" />
                     {row.cta}
                   </Button>
