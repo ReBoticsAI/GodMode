@@ -4434,11 +4434,11 @@ export const fetchGithubIntegrationStatus = () =>
     installUrl?: string | null;
   }>("GithubIntegration", "status", {});
 
-export const startGithubIntegrationConnect = () =>
+export const startGithubIntegrationConnect = (opts?: { returnPath?: string }) =>
   actionDto<{ url: string }>(
     "GithubIntegration",
     "start_connect",
-    {},
+    opts?.returnPath ? { returnPath: opts.returnPath } : {},
     undefined,
     true
   );
@@ -6798,6 +6798,8 @@ export type SellerLinkStatus = {
   cloudUserHint: string | null;
   linkedAt: string | null;
   githubConnected: boolean;
+  /** Seller Cloud GitHub login for Local catalog claim/publish (#711). */
+  githubLogin: string | null;
   tosAccepted: boolean;
   stripePayoutReady: boolean;
 };
@@ -6874,9 +6876,39 @@ export function fetchSellerEntitlement() {
     planId: string | null;
     source: string | null;
     githubConnected?: boolean;
+    githubLogin?: string | null;
     tosAccepted?: boolean;
     stripePayoutReady?: boolean;
   }>("/saas/seller-entitlement");
+}
+
+export function startSellerGithubRedirect(returnUrl: string) {
+  return api<{ state: string; connectUrl: string; expiresIn: number }>(
+    "/marketplace/seller-link/github-redirect",
+    {
+      method: "POST",
+      body: JSON.stringify({ returnUrl }),
+    }
+  );
+}
+
+export function fetchSellerGithubRedirectSession(state: string) {
+  return api<{
+    state: string;
+    returnUrl: string;
+    status: string;
+    expiresAt: string;
+  }>(`/saas/seller-link/github-redirect?state=${encodeURIComponent(state)}`);
+}
+
+export function completeSellerGithubRedirect(state: string) {
+  return api<{ ok: true; redirectUrl: string; sellerActive: boolean }>(
+    "/saas/seller-link/github-redirect/complete",
+    {
+      method: "POST",
+      body: JSON.stringify({ state }),
+    }
+  );
 }
 
 export function approveCloudSellerLink(userCode: string) {

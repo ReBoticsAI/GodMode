@@ -3,6 +3,8 @@ import path from "node:path";
 import { config } from "../config.js";
 import { MarketplaceCommerceError } from "./marketplace-commerce.js";
 import { cloudCommerceBase } from "./marketplace-cloud-checkout-client.js";
+import { githubProjectsStatus } from "./github-integration.js";
+import { getUserDb } from "../user-registry.js";
 
 type StoredSellerLink = {
   accessToken: string;
@@ -120,6 +122,28 @@ export async function startCloudSellerLinkRedirect(returnUrl: string): Promise<{
   };
 }
 
+export async function startCloudSellerGithubRedirect(returnUrl: string): Promise<{
+  state: string;
+  connectUrl: string;
+  expiresIn: number;
+}> {
+  const json = await cloudSellerJson<{
+    state: string;
+    connectUrl?: string;
+    connect_url?: string;
+    expiresIn?: number;
+    expires_in?: number;
+  }>("/api/saas/seller-link/github-redirect", {
+    method: "POST",
+    body: JSON.stringify({ return_url: returnUrl }),
+  });
+  return {
+    state: String(json.state ?? ""),
+    connectUrl: String(json.connectUrl ?? json.connect_url ?? ""),
+    expiresIn: Number(json.expiresIn ?? json.expires_in ?? 1800),
+  };
+}
+
 export async function exchangeCloudSellerLinkCode(code: string): Promise<{
   accessToken: string;
 }> {
@@ -162,6 +186,7 @@ export async function fetchCloudSellerEntitlement(accessToken: string): Promise<
   source: string | null;
   cloudUserHint?: string | null;
   githubConnected?: boolean;
+  githubLogin?: string | null;
   tosAccepted?: boolean;
   stripePayoutReady?: boolean;
 }> {
@@ -186,6 +211,8 @@ export type LocalSellerLinkStatus = {
   cloudUserHint: string | null;
   linkedAt: string | null;
   githubConnected: boolean;
+  /** Seller Cloud user GitHub login for Local catalog claim/publish (#711). */
+  githubLogin: string | null;
   tosAccepted: boolean;
   stripePayoutReady: boolean;
 };
@@ -198,6 +225,7 @@ const emptySellerLinkStatus = (): LocalSellerLinkStatus => ({
   cloudUserHint: null,
   linkedAt: null,
   githubConnected: false,
+  githubLogin: null,
   tosAccepted: false,
   stripePayoutReady: false,
 });
@@ -209,6 +237,7 @@ export async function getLocalSellerLinkStatus(): Promise<LocalSellerLinkStatus>
   }
   try {
     const ent = await fetchCloudSellerEntitlement(stored.accessToken);
+    const githubLogin = String(ent.githubLogin ?? "").trim() || null;
     return {
       linked: true,
       sellerActive: Boolean(ent.sellerActive),
@@ -216,7 +245,8 @@ export async function getLocalSellerLinkStatus(): Promise<LocalSellerLinkStatus>
       source: ent.source ?? null,
       cloudUserHint: ent.cloudUserHint ?? null,
       linkedAt: stored.linkedAt,
-      githubConnected: Boolean(ent.githubConnected),
+      githubConnected: Boolean(ent.githubConnected) || Boolean(githubLogin),
+      githubLogin,
       tosAccepted: Boolean(ent.tosAccepted),
       stripePayoutReady: Boolean(ent.stripePayoutReady),
     };
@@ -226,5 +256,31 @@ export async function getLocalSellerLinkStatus(): Promise<LocalSellerLinkStatus>
       return emptySellerLinkStatus();
     }
     throw err;
+  }
+}
+
+/**
+ * GitHub login for Local Sell claim/publish (#711).
+ * Prefer the linked Seller Cloud account login; fall back to Local Vault Connect.
+ */
+export async function resolveLocalSellGithubLogin(
+  localUserId: string
+): Promise<string | null> {
+  if (!config.isSaas) {
+    try {
+      const status = await getLocalSellerLinkStatus();
+      const fromSeller = String(status.githubLogin ?? "").trim();
+      if (status.linked && fromSeller) return fromSeller;
+    } catch {
+      /* fall through to Local Vault */
+    }
+  }
+  try {
+    return (
+      String(githubProjectsStatus(getUserDb(localUserId), localUserId).login ?? "").trim() ||
+      null
+    );
+  } catch {
+    return null;
   }
 }

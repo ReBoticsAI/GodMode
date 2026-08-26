@@ -77,6 +77,9 @@ import Marketplace from "./pages/Marketplace";
 import SellerLinkConnectPage, {
   SELLER_LINK_STATE_KEY,
 } from "./pages/SellerLinkConnect";
+import SellerLinkGithubPage, {
+  SELLER_GITHUB_STATE_KEY,
+} from "./pages/SellerLinkGithub";
 import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
@@ -387,17 +390,22 @@ function AuthGatedApp() {
   const [saas, setSaas] = useState(false);
   const { pathname, search } = useLocation();
   const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
+  const isSellerLinkGithub = pathname.startsWith("/seller-link/github");
+  const isSellerLinkSurface = isSellerLinkConnect || isSellerLinkGithub;
 
   useEffect(() => {
-    if (!isSellerLinkConnect) return;
+    if (!isSellerLinkSurface) return;
     const state = new URLSearchParams(search).get("state");
     if (!state) return;
     try {
-      sessionStorage.setItem(SELLER_LINK_STATE_KEY, state);
+      sessionStorage.setItem(
+        isSellerLinkGithub ? SELLER_GITHUB_STATE_KEY : SELLER_LINK_STATE_KEY,
+        state
+      );
     } catch {
       /* ignore */
     }
-  }, [isSellerLinkConnect, search]);
+  }, [isSellerLinkSurface, isSellerLinkGithub, search]);
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -467,6 +475,16 @@ function AuthGatedApp() {
     return (
       <>
         <SellerLinkConnectPage />
+        <Toaster richColors position="top-right" />
+      </>
+    );
+  }
+
+  // Seller GitHub connect for Local Sell (#711): same workspace-optional surface.
+  if (isSellerLinkGithub) {
+    return (
+      <>
+        <SellerLinkGithubPage />
         <Toaster richColors position="top-right" />
       </>
     );

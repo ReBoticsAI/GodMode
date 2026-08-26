@@ -432,6 +432,8 @@ export type SellerEntitlement = {
 
 export type SellerCommerceReadiness = {
   githubConnected: boolean;
+  /** GitHub login on the Seller Cloud user (for Local claim/publish). */
+  githubLogin: string | null;
   tosAccepted: boolean;
   stripePayoutReady: boolean;
 };
@@ -456,8 +458,10 @@ export function getSellerCommerceReadiness(userId: string): SellerCommerceReadin
   const core = getCloudDb();
   const payout = getSellerPayoutSnapshot(core, userId);
   const github = githubProjectsStatus(getUserDb(userId), userId);
+  const githubLogin = String(github.login ?? "").trim() || null;
   return {
-    githubConnected: Boolean(github.connected),
+    githubConnected: Boolean(github.connected) || Boolean(githubLogin),
+    githubLogin,
     tosAccepted: hasAcceptedMarketplaceTos(core, userId),
     stripePayoutReady: Boolean(payout.stripeConnectAccountId),
   };

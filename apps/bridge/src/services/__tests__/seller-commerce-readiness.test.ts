@@ -88,6 +88,7 @@ describe("getSellerCommerceReadiness (#681)", () => {
 
     expect(getSellerCommerceReadiness(userId)).toEqual({
       githubConnected: true,
+      githubLogin: "seller-gh",
       tosAccepted: false,
       stripePayoutReady: false,
     });
@@ -103,6 +104,7 @@ describe("getSellerCommerceReadiness (#681)", () => {
 
     expect(getSellerCommerceReadiness(userId)).toEqual({
       githubConnected: true,
+      githubLogin: "seller-gh",
       tosAccepted: true,
       stripePayoutReady: true,
     });

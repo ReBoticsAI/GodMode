@@ -15,17 +15,31 @@ vi.mock("../../config.js", () => ({
   },
 }));
 
+vi.mock("../github-integration.js", () => ({
+  githubProjectsStatus: () => ({
+    connected: true,
+    login: "seller-gh",
+  }),
+}));
+
+vi.mock("../../user-registry.js", () => ({
+  getUserDb: () => mem,
+}));
+
 const {
   approveSellerLinkDevice,
   assertSellerLinkReturnUrl,
+  completeSellerGithubRedirect,
   completeSellerLinkRedirect,
   denySellerLinkDevice,
   ensureSellerLinkSchema,
   exchangeSellerLinkCode,
+  getSellerGithubRedirectSession,
   getSellerLinkRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
+  startSellerGithubRedirect,
   startSellerLinkDevice,
   startSellerLinkRedirect,
 } = await import("../seller-link.js");
@@ -142,5 +156,44 @@ describe("seller-link redirect flow (#706)", () => {
     expect(resolveSellerLinkBearer(`Bearer ${exchanged.accessToken}`)?.id).toBe(userId);
 
     expect(() => exchangeSellerLinkCode(completed.exchangeCode)).toThrow();
+  });
+});
+
+describe("seller-link GitHub redirect (#711)", () => {
+  beforeEach(() => {
+    mem.exec(`
+      DROP TABLE IF EXISTS seller_link_tokens;
+      DROP TABLE IF EXISTS seller_link_devices;
+      DROP TABLE IF EXISTS seller_link_redirects;
+      DROP TABLE IF EXISTS seller_github_redirects;
+      DROP TABLE IF EXISTS users;
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        avatar_url TEXT,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        password_hash TEXT,
+        access_disabled INTEGER NOT NULL DEFAULT 0,
+        last_seen_at TEXT,
+        email_verified_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    ensureSellerLinkSchema(mem as never);
+  });
+
+  it("starts GitHub redirect and completes back to Local with seller_github=connected", () => {
+    const userId = seedUser();
+    const started = startSellerGithubRedirect("http://127.0.0.1:5173/marketplace?tab=seller");
+    expect(started.connectUrl).toContain("/seller-link/github?state=");
+    const session = getSellerGithubRedirectSession(started.state);
+    expect(session.returnUrl).toContain("127.0.0.1:5173");
+    expect(session.status).toBe("pending");
+
+    const completed = completeSellerGithubRedirect(userId, started.state);
+    expect(completed.redirectUrl).toContain("seller_github=connected");
+    expect(completed.redirectUrl).toContain("github_login=seller-gh");
   });
 });
