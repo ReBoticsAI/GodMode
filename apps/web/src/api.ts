@@ -6816,6 +6816,23 @@ export function startSellerLink() {
   }>("/marketplace/seller-link/start", { method: "POST", body: "{}" });
 }
 
+export function startSellerLinkRedirect(returnUrl: string) {
+  return api<{ state: string; connectUrl: string; expiresIn: number }>(
+    "/marketplace/seller-link/start-redirect",
+    {
+      method: "POST",
+      body: JSON.stringify({ returnUrl }),
+    }
+  );
+}
+
+export function exchangeSellerLink(code: string) {
+  return api<{ status: string } & SellerLinkStatus>("/marketplace/seller-link/exchange", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
 export function pollSellerLink(deviceCode: string) {
   return api<{ status: string } & Partial<SellerLinkStatus>>(
     "/marketplace/seller-link/poll",
@@ -6830,6 +6847,36 @@ export function unlinkSellerLink() {
   return api<{ ok: true; linked: false }>("/marketplace/seller-link", {
     method: "DELETE",
   });
+}
+
+export function fetchSellerLinkRedirectSession(state: string) {
+  return api<{
+    state: string;
+    returnUrl: string;
+    status: string;
+    expiresAt: string;
+  }>(`/saas/seller-link/redirect?state=${encodeURIComponent(state)}`);
+}
+
+export function completeSellerLinkRedirect(state: string) {
+  return api<{ ok: true; redirectUrl: string; sellerActive: boolean }>(
+    "/saas/seller-link/redirect/complete",
+    {
+      method: "POST",
+      body: JSON.stringify({ state }),
+    }
+  );
+}
+
+export function fetchSellerEntitlement() {
+  return api<{
+    sellerActive: boolean;
+    planId: string | null;
+    source: string | null;
+    githubConnected?: boolean;
+    tosAccepted?: boolean;
+    stripePayoutReady?: boolean;
+  }>("/saas/seller-entitlement");
 }
 
 export function approveCloudSellerLink(userCode: string) {

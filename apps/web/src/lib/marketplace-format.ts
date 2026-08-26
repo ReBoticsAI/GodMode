@@ -137,6 +137,15 @@ export function localSellChecklistComplete(s: LocalSellChecklistSignals): boolea
   );
 }
 
+/** Parse one-time Seller link exchange code from Local return URL query. */
+export function sellerLinkExchangeFromSearch(search: string): string | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search
+  );
+  const code = params.get("seller_link_exchange");
+  return code && code.trim() ? code.trim() : null;
+}
+
 /** Merge Cloud seller-link readiness with Local Vault / ToS state for unlock. */
 export function mergeLocalSellChecklistSignals(opts: {
   linked: boolean;

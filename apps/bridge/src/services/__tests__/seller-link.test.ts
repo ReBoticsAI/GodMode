@@ -17,12 +17,17 @@ vi.mock("../../config.js", () => ({
 
 const {
   approveSellerLinkDevice,
+  assertSellerLinkReturnUrl,
+  completeSellerLinkRedirect,
   denySellerLinkDevice,
   ensureSellerLinkSchema,
+  exchangeSellerLinkCode,
+  getSellerLinkRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
   startSellerLinkDevice,
+  startSellerLinkRedirect,
 } = await import("../seller-link.js");
 
 function seedUser(email = "seller@example.com"): string {
@@ -41,6 +46,7 @@ describe("seller-link device flow", () => {
     mem.exec(`
       DROP TABLE IF EXISTS seller_link_tokens;
       DROP TABLE IF EXISTS seller_link_devices;
+      DROP TABLE IF EXISTS seller_link_redirects;
       DROP TABLE IF EXISTS users;
       CREATE TABLE users (
         id TEXT PRIMARY KEY,
@@ -81,10 +87,60 @@ describe("seller-link device flow", () => {
     expect(resolveSellerLinkBearer(`Bearer ${complete.accessToken}`)).toBeNull();
   });
 
-  it("denies pending device", () => {
-    const userId = seedUser("deny@example.com");
+  it("denies a pending device code", () => {
+    const userId = seedUser();
     const started = startSellerLinkDevice();
     denySellerLinkDevice(userId, started.userCode);
     expect(pollSellerLinkDevice(started.deviceCode)).toEqual({ status: "denied" });
+  });
+});
+
+describe("seller-link redirect flow (#706)", () => {
+  beforeEach(() => {
+    mem.exec(`
+      DROP TABLE IF EXISTS seller_link_tokens;
+      DROP TABLE IF EXISTS seller_link_devices;
+      DROP TABLE IF EXISTS seller_link_redirects;
+      DROP TABLE IF EXISTS users;
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        avatar_url TEXT,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        password_hash TEXT,
+        access_disabled INTEGER NOT NULL DEFAULT 0,
+        last_seen_at TEXT,
+        email_verified_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    ensureSellerLinkSchema(mem as never);
+  });
+
+  it("rejects non-local return URLs", () => {
+    expect(() => assertSellerLinkReturnUrl("https://evil.example/hack")).toThrow(/localhost/i);
+  });
+
+  it("starts redirect, completes, exchanges gsl_ token", () => {
+    const userId = seedUser();
+    const started = startSellerLinkRedirect("http://localhost:5173/marketplace?tab=seller");
+    expect(started.connectUrl).toContain("/seller-link/connect?state=");
+    expect(started.state.length).toBeGreaterThan(10);
+
+    const session = getSellerLinkRedirectSession(started.state);
+    expect(session.returnUrl).toContain("localhost:5173");
+    expect(session.status).toBe("pending");
+
+    const completed = completeSellerLinkRedirect(userId, started.state);
+    expect(completed.redirectUrl).toContain("seller_link_exchange=slx_");
+    expect(completed.exchangeCode.startsWith("slx_")).toBe(true);
+
+    const exchanged = exchangeSellerLinkCode(completed.exchangeCode);
+    expect(exchanged.accessToken.startsWith("gsl_")).toBe(true);
+    expect(resolveSellerLinkBearer(`Bearer ${exchanged.accessToken}`)?.id).toBe(userId);
+
+    expect(() => exchangeSellerLinkCode(completed.exchangeCode)).toThrow();
   });
 });

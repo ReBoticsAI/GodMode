@@ -11,6 +11,7 @@ import {
   localSellChecklistComplete,
   localSellSeatReady,
   mergeLocalSellChecklistSignals,
+  sellerLinkExchangeFromSearch,
   marketplaceShowsLocalTab,
   normalizeMarketplaceTab,
   officialCatalogEmptyMessage,
@@ -67,6 +68,15 @@ describe("mergeLocalSellChecklistSignals", () => {
       localPayoutReady: true,
     });
     expect(localSellChecklistComplete(merged)).toBe(true);
+  });
+});
+
+describe("sellerLinkExchangeFromSearch (#706)", () => {
+  it("reads the exchange code from the return query", () => {
+    expect(
+      sellerLinkExchangeFromSearch("?tab=seller&seller_link_exchange=slx_abc")
+    ).toBe("slx_abc");
+    expect(sellerLinkExchangeFromSearch("tab=seller")).toBeNull();
   });
 });
 

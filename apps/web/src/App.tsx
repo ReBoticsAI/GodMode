@@ -74,6 +74,9 @@ import { TenantProvider, useTenant } from "@/lib/tenant-context";
 import { IntelligenceProvider, useIntelligence } from "@/lib/intelligence-context";
 import { PageChromeProvider } from "@/lib/page-chrome-context";
 import Marketplace from "./pages/Marketplace";
+import SellerLinkConnectPage, {
+  SELLER_LINK_STATE_KEY,
+} from "./pages/SellerLinkConnect";
 import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
@@ -382,6 +385,19 @@ function AuthGatedApp() {
   const [pluginsReady, setPluginsReady] = useState(false);
   const [pluginsEpoch, setPluginsEpoch] = useState(0);
   const [saas, setSaas] = useState(false);
+  const { pathname, search } = useLocation();
+  const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
+
+  useEffect(() => {
+    if (!isSellerLinkConnect) return;
+    const state = new URLSearchParams(search).get("state");
+    if (!state) return;
+    try {
+      sessionStorage.setItem(SELLER_LINK_STATE_KEY, state);
+    } catch {
+      /* ignore */
+    }
+  }, [isSellerLinkConnect, search]);
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -441,6 +457,16 @@ function AuthGatedApp() {
     return (
       <>
         <AuthGate />
+        <Toaster richColors position="top-right" />
+      </>
+    );
+  }
+
+  // Seller redirect bind (#706): allow connect without a full Cloud workspace.
+  if (isSellerLinkConnect) {
+    return (
+      <>
+        <SellerLinkConnectPage />
         <Toaster richColors position="top-right" />
       </>
     );

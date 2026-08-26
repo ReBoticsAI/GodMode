@@ -14,14 +14,26 @@ import {
 } from "../services/saas-billing.js";
 import {
   approveSellerLinkDevice,
+  completeSellerLinkRedirect,
   denySellerLinkDevice,
+  exchangeSellerLinkCode,
+  getSellerLinkRedirectSession,
   pollSellerLinkDevice,
   resolveSellerLinkBearer,
   revokeSellerLinkBearer,
   sellerLinkCloudUserHint,
   startSellerLinkDevice,
+  startSellerLinkRedirect,
 } from "../services/seller-link.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
+
+function sellerLinkErrStatus(err: unknown): number {
+  if (err && typeof err === "object" && "status" in err) {
+    const status = Number((err as { status: number }).status);
+    if (Number.isFinite(status)) return status;
+  }
+  return 500;
+}
 
 function requireSaas(_req: Request, res: Response, next: () => void): void {
   if (!config.isSaas) {
@@ -152,6 +164,99 @@ export function createSaasRouter(): Router {
     }
   });
 
+  /** Local Bridge starts browser redirect bind (primary UX #706). */
+  router.post("/seller-link/redirect", requireSaas, limiter, (req, res) => {
+    const returnUrl =
+      typeof req.body?.return_url === "string"
+        ? req.body.return_url
+        : typeof req.body?.returnUrl === "string"
+          ? req.body.returnUrl
+          : "";
+    try {
+      res.json(startSellerLinkRedirect(returnUrl));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Failed to start seller link redirect",
+      });
+    }
+  });
+
+  /** Public: inspect a pending redirect session (Cloud connect page). */
+  router.get("/seller-link/redirect", requireSaas, limiter, (req, res) => {
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    try {
+      res.json(getSellerLinkRedirectSession(state));
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Seller link session lookup failed",
+      });
+    }
+  });
+
+  /**
+   * Cloud user finishes bind after auth (+ optional Seller checkout).
+   * Returns Local redirect URL with one-time exchange code.
+   */
+  router.post(
+    "/seller-link/redirect/complete",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const state =
+        typeof req.body?.state === "string"
+          ? req.body.state
+          : typeof req.query.state === "string"
+            ? req.query.state
+            : "";
+      try {
+        const entitlement = getSellerEntitlementPayload(req.user!.id);
+        if (!entitlement.sellerActive) {
+          res.status(403).json({
+            error: "GodMode Seller seat is not active. Complete Seller checkout first.",
+            sellerActive: false,
+          });
+          return;
+        }
+        const result = completeSellerLinkRedirect(req.user!.id, state);
+        res.json({
+          ok: true,
+          redirectUrl: result.redirectUrl,
+          sellerActive: true,
+        });
+      } catch (err) {
+        res.status(sellerLinkErrStatus(err)).json({
+          error: err instanceof Error ? err.message : "Complete seller link failed",
+        });
+      }
+    }
+  );
+
+  /** Local Bridge exchanges one-time code for gsl_ token. */
+  router.post("/seller-link/exchange", requireSaas, limiter, (req, res) => {
+    const code =
+      typeof req.body?.code === "string"
+        ? req.body.code
+        : typeof req.body?.exchange_code === "string"
+          ? req.body.exchange_code
+          : typeof req.body?.exchangeCode === "string"
+            ? req.body.exchangeCode
+            : "";
+    try {
+      const result = exchangeSellerLinkCode(code);
+      res.json({
+        status: "complete",
+        access_token: result.accessToken,
+        token_type: result.tokenType,
+      });
+    } catch (err) {
+      res.status(sellerLinkErrStatus(err)).json({
+        error: err instanceof Error ? err.message : "Exchange failed",
+      });
+    }
+  });
+
   /** Local Bridge polls until the Cloud user approves. */
   router.post("/seller-link/token", requireSaas, limiter, (req, res) => {
     const deviceCode =
@@ -172,11 +277,7 @@ export function createSaasRouter(): Router {
       }
       res.json({ status: result.status });
     } catch (err) {
-      const status =
-        err && typeof err === "object" && "status" in err
-          ? Number((err as { status: number }).status)
-          : 500;
-      res.status(Number.isFinite(status) ? status : 500).json({
+      res.status(sellerLinkErrStatus(err)).json({
         error: err instanceof Error ? err.message : "Poll failed",
       });
     }
