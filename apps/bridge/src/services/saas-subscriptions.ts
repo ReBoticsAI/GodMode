@@ -51,6 +51,14 @@ function planMeta(planIdOrPriceId: string | null | undefined): {
       amountLabel: "Free",
     };
   }
+  if (key === SELLER_PLAN_ID) {
+    const sellerPlan = config.saas.plans.find((p) => p.id === SELLER_PLAN_ID);
+    return {
+      id: SELLER_PLAN_ID,
+      label: sellerPlan?.label ?? "Seller",
+      amountLabel: sellerPlan?.amountLabel ?? null,
+    };
+  }
   const plan = config.saas.plans.find((p) => p.id === key || p.priceId === key);
   return plan
     ? { id: plan.id, label: plan.label, amountLabel: plan.amountLabel }
@@ -64,6 +72,14 @@ export function isComplimentarySubscription(
   return (
     sub.plan_id === COMPLIMENTARY_PLAN_ID && !sub.stripe_subscription_id
   );
+}
+
+/** Admin-granted Seller seat without Stripe. Does not grant full Cloud workspace. */
+export function isComplimentarySellerSubscription(
+  sub: SaasSubscription | undefined
+): boolean {
+  if (!sub) return false;
+  return isSellerPlanId(sub.plan_id) && !sub.stripe_subscription_id;
 }
 
 export type SaasSubscriptionStatus =
@@ -390,7 +406,8 @@ function subscriptionStatusGrantsCommerce(
   if (sub.access_revoked) return false;
   if (ALLOWED_STATUSES.has(sub.status)) {
     if (
-      isComplimentarySubscription(sub) &&
+      (isComplimentarySubscription(sub) ||
+        isComplimentarySellerSubscription(sub)) &&
       sub.current_period_end &&
       !periodStillActive(sub.current_period_end)
     ) {
@@ -577,6 +594,76 @@ export function grantComplimentaryAccess(
 }
 
 /**
+ * Grant complimentary GodMode Seller access (no Stripe).
+ * Commerce-only: Local Sell / seller-link surfaces, not full Cloud workspace.
+ */
+export function grantComplimentarySellerAccess(
+  userId: string,
+  opts?: { expiresAt?: string | null }
+): SaasSubscription {
+  const core = getCloudDb();
+  const user = core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as
+    | CoreUser
+    | undefined;
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { status: 404 });
+  }
+
+  const expiresAt =
+    typeof opts?.expiresAt === "string" && opts.expiresAt.trim()
+      ? opts.expiresAt.trim()
+      : null;
+  if (expiresAt) {
+    const t = Date.parse(expiresAt);
+    if (!Number.isFinite(t)) {
+      throw Object.assign(new Error("expiresAt must be a valid ISO date"), {
+        status: 400,
+      });
+    }
+  }
+
+  const rows = core
+    .prepare(
+      `SELECT * FROM saas_subscriptions
+       WHERE user_id=?
+       ORDER BY datetime(updated_at) DESC`
+    )
+    .all(userId) as SaasSubscription[];
+  const complimentary = rows.find((r) => isComplimentarySellerSubscription(r));
+  if (complimentary) {
+    core
+      .prepare(
+        `UPDATE saas_subscriptions SET
+          plan_id=?,
+          status='active',
+          access_revoked=0,
+          current_period_end=?,
+          cancel_at_period_end=0,
+          email=COALESCE(?, email),
+          updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(SELLER_PLAN_ID, expiresAt, user.email, complimentary.id);
+    return core
+      .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+      .get(complimentary.id) as SaasSubscription;
+  }
+
+  const id = randomUUID();
+  core
+    .prepare(
+      `INSERT INTO saas_subscriptions (
+        id, user_id, email, plan_id, status, current_period_end,
+        cancel_at_period_end, access_revoked
+      ) VALUES (?, ?, ?, ?, 'active', ?, 0, 0)`
+    )
+    .run(id, userId, user.email, SELLER_PLAN_ID, expiresAt);
+  return core
+    .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+    .get(id) as SaasSubscription;
+}
+
+/**
  * Revoke complimentary Cloud access so the user must subscribe again.
  * Login then fails `assertSaasUserMayAccess` with the inactive-subscription
  * message (client should show that error and point them at signup/billing).
@@ -618,9 +705,64 @@ export function revokeComplimentaryAccess(userId: string): SaasSubscription {
     .get(complimentary.id) as SaasSubscription;
 }
 
+/**
+ * Revoke complimentary Seller access (admin-granted seat without Stripe).
+ */
+export function revokeComplimentarySellerAccess(userId: string): SaasSubscription {
+  const core = getCloudDb();
+  const user = core.prepare(`SELECT id FROM users WHERE id=?`).get(userId) as
+    | { id: string }
+    | undefined;
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { status: 404 });
+  }
+
+  const rows = core
+    .prepare(
+      `SELECT * FROM saas_subscriptions
+       WHERE user_id=?
+       ORDER BY datetime(updated_at) DESC`
+    )
+    .all(userId) as SaasSubscription[];
+  const complimentary = rows.find((r) => isComplimentarySellerSubscription(r));
+  if (!complimentary) {
+    throw Object.assign(
+      new Error("User has no complimentary Seller access to revoke"),
+      { status: 400 }
+    );
+  }
+
+  core
+    .prepare(
+      `UPDATE saas_subscriptions
+       SET access_revoked=1, status='canceled', updated_at=datetime('now')
+       WHERE id=?`
+    )
+    .run(complimentary.id);
+  return core
+    .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+    .get(complimentary.id) as SaasSubscription;
+}
+
 export function userHasActiveComplimentaryAccess(userId: string): boolean {
-  const sub = findSubscriptionByUserId(getCloudDb(), userId);
-  return isComplimentarySubscription(sub) && subscriptionGrantsAccess(sub);
+  const rows = listSubscriptionsForUser(getCloudDb(), userId);
+  return rows.some(
+    (sub) => isComplimentarySubscription(sub) && subscriptionGrantsAccess(sub)
+  );
+}
+
+export function userHasActiveComplimentarySellerAccess(userId: string): boolean {
+  const rows = listSubscriptionsForUser(getCloudDb(), userId);
+  return rows.some(
+    (sub) =>
+      isComplimentarySellerSubscription(sub) &&
+      subscriptionGrantsSellerCommerce(sub)
+  );
+}
+
+export function userHasActiveSellerCommerceAccess(userId: string): boolean {
+  const rows = listSubscriptionsForUser(getCloudDb(), userId);
+  return rows.some((sub) => subscriptionGrantsSellerCommerce(sub));
 }
 
 /**
@@ -642,8 +784,11 @@ export function assertSaasUserMayAccess(user: CoreUser): {
   }
 
   const core = getCloudDb();
-  const sub = findSubscriptionByUserId(core, user.id);
-  if (subscriptionGrantsAccess(sub)) return { ok: true };
+  const rows = listSubscriptionsForUser(core, user.id);
+  if (rows.some((row) => subscriptionGrantsAccess(row))) return { ok: true };
+  if (rows.some((row) => subscriptionGrantsSellerCommerce(row))) {
+    return { ok: true };
+  }
 
   const entitlement = core
     .prepare(
@@ -653,7 +798,7 @@ export function assertSaasUserMayAccess(user: CoreUser): {
     )
     .get(user.id) as { id: string } | undefined;
 
-  if (!sub && entitlement) return { ok: true };
+  if (rows.length === 0 && entitlement) return { ok: true };
 
   return {
     ok: false,
@@ -727,6 +872,7 @@ export type SaasCustomerAdminRow = {
   cancelAtPeriodEnd: boolean;
   accessRevoked: boolean;
   complimentaryAccess: boolean;
+  complimentarySellerAccess: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   stripeDashboardUrl: string | null;
@@ -842,6 +988,15 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
       !stripeSubscriptionId &&
       !accessRevoked &&
       (status === null || ALLOWED_STATUSES.has(status));
+    const complimentarySellerAccess =
+      planId === SELLER_PLAN_ID &&
+      !stripeSubscriptionId &&
+      !accessRevoked &&
+      (status === null || ALLOWED_STATUSES.has(status));
+    const planLabel =
+      complimentarySellerAccess && meta.id === SELLER_PLAN_ID
+        ? "Complimentary Seller"
+        : meta.label;
     return {
     userId: typeof r.user_id === "string" ? r.user_id : null,
     email: typeof r.email === "string" ? r.email : null,
@@ -852,7 +1007,7 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     accessDisabled: Boolean(r.access_disabled),
     lastSeenAt: typeof r.last_seen_at === "string" ? r.last_seen_at : null,
     planId: meta.id ?? planId,
-    planLabel: meta.label,
+    planLabel,
     amountLabel: meta.amountLabel,
     priceId,
     status,
@@ -861,6 +1016,7 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     cancelAtPeriodEnd: Boolean(r.cancel_at_period_end),
     accessRevoked,
     complimentaryAccess,
+    complimentarySellerAccess,
     stripeCustomerId:
       typeof r.stripe_customer_id === "string" ? r.stripe_customer_id : null,
     stripeSubscriptionId,

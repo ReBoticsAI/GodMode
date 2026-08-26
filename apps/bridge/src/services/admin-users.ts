@@ -7,7 +7,7 @@ import {
   listUserTenants,
   wipeWorkspaceTenant,
 } from "./tenant-bootstrap.js";
-import { userHasActiveComplimentaryAccess } from "./saas-subscriptions.js";
+import { userHasActiveComplimentaryAccess, userHasActiveComplimentarySellerAccess } from "./saas-subscriptions.js";
 import { config } from "../config.js";
 
 const SYSTEM_USER_ID = "system-local";
@@ -19,6 +19,7 @@ export interface AdminUserDto {
   avatarUrl: string | null;
   isAdmin: boolean;
   complimentaryCloudAccess: boolean;
+  complimentarySellerAccess: boolean;
   createdAt: string;
   tenants: ReturnType<typeof listUserTenants>;
 }
@@ -55,6 +56,9 @@ function rowToAdminUser(core: CoreDatabase, u: CoreUser): AdminUserDto {
     isAdmin: Boolean(u.is_admin),
     complimentaryCloudAccess: config.isSaas
       ? userHasActiveComplimentaryAccess(u.id)
+      : false,
+    complimentarySellerAccess: config.isSaas
+      ? userHasActiveComplimentarySellerAccess(u.id)
       : false,
     createdAt: u.created_at,
     tenants: listUserTenants(core, u.id),

@@ -52,12 +52,15 @@ import {
   assertSaasUserMayAccess,
   getSellerEntitlementForUser,
   grantComplimentaryAccess,
+  grantComplimentarySellerAccess,
   linkSubscriptionToUser,
   listSaasCustomersForAdmin,
   revokeComplimentaryAccess,
+  revokeComplimentarySellerAccess,
   setUserAccessDisabled,
   subscriptionGrantsAccess,
   subscriptionGrantsSellerCommerce,
+  userHasActiveComplimentarySellerAccess,
   upsertSubscriptionFromCheckout,
   type SaasSubscription,
 } from "../saas-subscriptions.js";
@@ -367,6 +370,33 @@ describe("saas subscriptions", () => {
     expect(assertSaasUserMayAccess(user).ok).toBe(false);
   });
 
+  it("grants and revokes complimentary Seller access without Stripe or workspace", () => {
+    const user = insertUser({ email: "seller-gift@example.com" });
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+
+    const granted = grantComplimentarySellerAccess(user.id);
+    expect(granted.plan_id).toBe("seller");
+    expect(granted.stripe_subscription_id).toBeNull();
+    expect(subscriptionGrantsAccess(granted)).toBe(false);
+    expect(subscriptionGrantsSellerCommerce(granted)).toBe(true);
+    expect(assertSaasUserMayAccess(user).ok).toBe(true);
+    expect(userHasActiveComplimentarySellerAccess(user.id)).toBe(true);
+    expect(getSellerEntitlementForUser(user.id)).toEqual({
+      sellerActive: true,
+      planId: "seller",
+      source: "seller",
+    });
+
+    const customers = listSaasCustomersForAdmin();
+    const row = customers.find((c) => c.userId === user.id);
+    expect(row?.complimentarySellerAccess).toBe(true);
+    expect(row?.planLabel).toBe("Complimentary Seller");
+
+    const revoked = revokeComplimentarySellerAccess(user.id);
+    expect(revoked.access_revoked).toBe(1);
+    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+  });
+
   it("seller plan grants seller commerce but not full workspace access", () => {
     const user = insertUser({ email: "seller@example.com" });
     const seller = upsertSubscriptionFromCheckout({
@@ -386,7 +416,7 @@ describe("saas subscriptions", () => {
     });
     expect(subscriptionGrantsAccess(seller)).toBe(false);
     expect(subscriptionGrantsSellerCommerce(seller)).toBe(true);
-    expect(assertSaasUserMayAccess(user).ok).toBe(false);
+    expect(assertSaasUserMayAccess(user).ok).toBe(true);
     expect(getSellerEntitlementForUser(user.id)).toEqual({
       sellerActive: true,
       planId: "seller",
