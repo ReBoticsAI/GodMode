@@ -642,6 +642,13 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-local-seller-link-stripe-redirect",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/stripe-redirect",
+    rationale: "Start Cloud Seller Stripe connect redirect from Local (#709).",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-local-seller-link-exchange",
     methods: ["POST"],
     pathPattern: "/api/marketplace/seller-link/exchange",
