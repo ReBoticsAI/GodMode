@@ -5,8 +5,10 @@ import { config } from "../config.js";
 import { coreUserToAuth, type AuthenticatedUser } from "../types/express-auth.js";
 
 const DEVICE_TTL_MS = 15 * 60 * 1000;
+const REDIRECT_TTL_MS = 30 * 60 * 1000;
 const POLL_INTERVAL_SECONDS = 5;
 const TOKEN_PREFIX = "gsl_";
+const EXCHANGE_PREFIX = "slx_";
 
 export type SellerLinkDeviceStart = {
   deviceCode: string;
@@ -21,6 +23,19 @@ export type SellerLinkPollResult =
   | { status: "expired" }
   | { status: "denied" }
   | { status: "complete"; accessToken: string; tokenType: "Bearer" };
+
+export type SellerLinkRedirectStart = {
+  state: string;
+  connectUrl: string;
+  expiresIn: number;
+};
+
+export type SellerLinkRedirectSession = {
+  state: string;
+  returnUrl: string;
+  status: string;
+  expiresAt: string;
+};
 
 function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
@@ -61,7 +76,203 @@ export function ensureSellerLinkSchema(db: CoreDatabase): void {
     );
     CREATE INDEX IF NOT EXISTS seller_link_tokens_user_idx
       ON seller_link_tokens(user_id);
+    CREATE TABLE IF NOT EXISTS seller_link_redirects (
+      state_hash TEXT PRIMARY KEY,
+      return_url TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      exchange_code_hash TEXT UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS seller_link_redirects_exchange_idx
+      ON seller_link_redirects(exchange_code_hash);
   `);
+}
+
+/** Local return URLs: localhost / 127.0.0.1 (any port) or same-origin Cloud public URL. */
+export function assertSellerLinkReturnUrl(returnUrlRaw: string): string {
+  const trimmed = returnUrlRaw.trim();
+  if (!trimmed) {
+    throw Object.assign(new Error("return_url required"), { status: 400 });
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw Object.assign(new Error("return_url must be a valid URL"), { status: 400 });
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw Object.assign(new Error("return_url must be http or https"), { status: 400 });
+  }
+  const host = url.hostname.toLowerCase();
+  const publicBase = (config.web.publicUrl || "").replace(/\/$/, "");
+  let publicHost = "";
+  try {
+    publicHost = publicBase ? new URL(publicBase).hostname.toLowerCase() : "";
+  } catch {
+    publicHost = "";
+  }
+  const localOk =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host === "::1";
+  const cloudOk = Boolean(publicHost) && host === publicHost;
+  if (!localOk && !cloudOk) {
+    throw Object.assign(
+      new Error("return_url must use localhost or the Cloud app origin"),
+      { status: 400 }
+    );
+  }
+  return url.toString();
+}
+
+export function startSellerLinkRedirect(returnUrlRaw: string): SellerLinkRedirectStart {
+  const db = getCloudDb();
+  ensureSellerLinkSchema(db);
+  const returnUrl = assertSellerLinkReturnUrl(returnUrlRaw);
+  const state = randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + REDIRECT_TTL_MS).toISOString();
+  db.prepare(
+    `INSERT INTO seller_link_redirects (state_hash, return_url, status, expires_at)
+     VALUES (?, ?, 'pending', ?)`
+  ).run(hashToken(state), returnUrl, expiresAt);
+
+  const publicBase = config.web.publicUrl.replace(/\/$/, "") || "https://app.godmode.software";
+  return {
+    state,
+    connectUrl: `${publicBase}/seller-link/connect?state=${encodeURIComponent(state)}`,
+    expiresIn: Math.floor(REDIRECT_TTL_MS / 1000),
+  };
+}
+
+function loadRedirectByState(stateRaw: string): {
+  state_hash: string;
+  return_url: string;
+  status: string;
+  expires_at: string;
+  user_id: string | null;
+  exchange_code_hash: string | null;
+} {
+  const state = stateRaw.trim();
+  if (!state) {
+    throw Object.assign(new Error("state required"), { status: 400 });
+  }
+  const db = getCloudDb();
+  ensureSellerLinkSchema(db);
+  const row = db
+    .prepare(`SELECT * FROM seller_link_redirects WHERE state_hash=?`)
+    .get(hashToken(state)) as
+    | {
+        state_hash: string;
+        return_url: string;
+        status: string;
+        expires_at: string;
+        user_id: string | null;
+        exchange_code_hash: string | null;
+      }
+    | undefined;
+  if (!row) {
+    throw Object.assign(new Error("Unknown seller link state"), { status: 404 });
+  }
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    if (row.status !== "expired" && row.status !== "complete") {
+      db.prepare(
+        `UPDATE seller_link_redirects SET status='expired' WHERE state_hash=?`
+      ).run(row.state_hash);
+    }
+    throw Object.assign(new Error("Seller link session expired"), { status: 410 });
+  }
+  return row;
+}
+
+export function getSellerLinkRedirectSession(stateRaw: string): SellerLinkRedirectSession {
+  const row = loadRedirectByState(stateRaw);
+  return {
+    state: stateRaw.trim(),
+    returnUrl: row.return_url,
+    status: row.status,
+    expiresAt: row.expires_at,
+  };
+}
+
+/**
+ * After Cloud auth (+ optional Seller checkout), mint a one-time exchange code
+ * and return the Local return URL with seller_link_exchange query.
+ */
+export function completeSellerLinkRedirect(
+  userId: string,
+  stateRaw: string
+): { redirectUrl: string; exchangeCode: string } {
+  const db = getCloudDb();
+  ensureSellerLinkSchema(db);
+  const row = loadRedirectByState(stateRaw);
+  if (row.status === "complete") {
+    throw Object.assign(new Error("Seller link already completed"), { status: 409 });
+  }
+  if (row.status !== "pending" && row.status !== "ready") {
+    throw Object.assign(new Error("Seller link session is not pending"), { status: 409 });
+  }
+
+  const exchangeCode = `${EXCHANGE_PREFIX}${randomBytes(24).toString("base64url")}`;
+  db.prepare(
+    `UPDATE seller_link_redirects
+     SET status='ready', user_id=?, exchange_code_hash=?, completed_at=datetime('now')
+     WHERE state_hash=?`
+  ).run(userId, hashToken(exchangeCode), row.state_hash);
+
+  const redirect = new URL(row.return_url);
+  redirect.searchParams.set("seller_link_exchange", exchangeCode);
+  if (!redirect.searchParams.get("tab")) {
+    redirect.searchParams.set("tab", "seller");
+  }
+  return { redirectUrl: redirect.toString(), exchangeCode };
+}
+
+/** Local Bridge exchanges one-time code for a durable gsl_ bearer token. */
+export function exchangeSellerLinkCode(exchangeCodeRaw: string): {
+  accessToken: string;
+  tokenType: "Bearer";
+} {
+  const exchangeCode = exchangeCodeRaw.trim();
+  if (!exchangeCode.startsWith(EXCHANGE_PREFIX)) {
+    throw Object.assign(new Error("Invalid exchange code"), { status: 400 });
+  }
+  const db = getCloudDb();
+  ensureSellerLinkSchema(db);
+  const row = db
+    .prepare(`SELECT * FROM seller_link_redirects WHERE exchange_code_hash=?`)
+    .get(hashToken(exchangeCode)) as
+    | {
+        state_hash: string;
+        status: string;
+        expires_at: string;
+        user_id: string | null;
+      }
+    | undefined;
+  if (!row) {
+    throw Object.assign(new Error("Unknown exchange code"), { status: 404 });
+  }
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    throw Object.assign(new Error("Exchange code expired"), { status: 410 });
+  }
+  if (row.status !== "ready" || !row.user_id) {
+    throw Object.assign(new Error("Exchange code already used or not ready"), { status: 409 });
+  }
+
+  const accessToken = `${TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+  db.prepare(
+    `INSERT INTO seller_link_tokens (token_hash, user_id, device_code_hash)
+     VALUES (?, ?, NULL)`
+  ).run(hashToken(accessToken), row.user_id);
+  db.prepare(
+    `UPDATE seller_link_redirects
+     SET status='complete', exchange_code_hash=NULL
+     WHERE state_hash=?`
+  ).run(row.state_hash);
+  return { accessToken, tokenType: "Bearer" };
 }
 
 export function startSellerLinkDevice(): SellerLinkDeviceStart {
@@ -187,7 +398,6 @@ export function pollSellerLinkDevice(deviceCodeRaw: string): SellerLinkPollResul
   }
   if (row.status === "pending") return { status: "pending" };
   if (row.status === "complete") {
-    // One-shot: token already issued; Local should have stored it.
     return { status: "expired" };
   }
   if (row.status !== "approved" || !row.user_id) {

@@ -493,6 +493,30 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-redirect",
+    methods: ["GET", "POST"],
+    pathPattern: "/api/saas/seller-link/redirect",
+    rationale:
+      "Browser redirect Seller bind start/status for Local (#706); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-redirect-complete",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/redirect/complete",
+    rationale:
+      "Cloud session completes redirect bind and mints exchange code (#706); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-seller-link-exchange",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/exchange",
+    rationale:
+      "Local Bridge exchanges one-time seller-link code for gsl_ token (#706); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-seller-link-token",
     methods: ["POST", "DELETE"],
     pathPattern: "/api/saas/seller-link/token",
@@ -545,6 +569,20 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/marketplace/seller-link/start",
     rationale: "Start Cloud Seller device-code link from Local (#680).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-start-redirect",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/start-redirect",
+    rationale: "Start Cloud Seller browser redirect bind from Local (#706).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "marketplace-local-seller-link-exchange",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/seller-link/exchange",
+    rationale: "Exchange Cloud seller-link code for Local stored token (#706).",
     authenticatedDomainMutations: "none",
   },
   {

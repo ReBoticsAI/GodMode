@@ -21,6 +21,7 @@ import {
   fetchBridgeHealth,
   fetchInferenceEndpoints,
   fetchSellerLinkStatus,
+  exchangeSellerLink,
   installCatalogEntry,
   installWorkspacePlugin,
   registerLocalPlugin,
@@ -705,6 +706,27 @@ export default function MarketplacePage() {
       }
     }
   }, [saas, searchParams, setSearchParams, tab]);
+
+  useEffect(() => {
+    const exchange = searchParams.get("seller_link_exchange");
+    if (!exchange || saas === true) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("seller_link_exchange");
+    next.set("tab", "seller");
+    setSearchParams(next, { replace: true });
+    void exchangeSellerLink(exchange)
+      .then((status) => {
+        setSellerLinkStatus(status);
+        toast.success(
+          status.sellerActive
+            ? "GodMode Seller account linked"
+            : "Linked. Activate Seller seat if checkout is still pending."
+        );
+      })
+      .catch((err) => {
+        toast.error(userFacingErrorMessage(err, "Could not complete Seller link"));
+      });
+  }, [saas, searchParams, setSearchParams]);
 
   useEffect(() => {
     const paid = searchParams.get("paid");
@@ -1596,8 +1618,9 @@ export default function MarketplacePage() {
               <Alert>
                 <AlertTitle>Community listings use GodMode Seller</AlertTitle>
                 <AlertDescription>
-                  Link a GodMode Seller seat, finish the checklist, then publish and manage listings
-                  on this install. Buyers checkout on GodMode Cloud; paid copies install here.
+                  Connect a GodMode Seller seat (sign in or pay on Cloud, then return here). Finish
+                  the checklist, then publish and manage listings on this install. Buyers checkout on
+                  GodMode Cloud; paid copies install here.
                 </AlertDescription>
               </Alert>
               <LocalSellerLinkCard onStatusChange={setSellerLinkStatus} />

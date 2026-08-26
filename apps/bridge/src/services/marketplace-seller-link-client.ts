@@ -98,6 +98,46 @@ export async function startCloudSellerLinkDevice(): Promise<{
   };
 }
 
+export async function startCloudSellerLinkRedirect(returnUrl: string): Promise<{
+  state: string;
+  connectUrl: string;
+  expiresIn: number;
+}> {
+  const json = await cloudSellerJson<{
+    state: string;
+    connectUrl?: string;
+    connect_url?: string;
+    expiresIn?: number;
+    expires_in?: number;
+  }>("/api/saas/seller-link/redirect", {
+    method: "POST",
+    body: JSON.stringify({ return_url: returnUrl }),
+  });
+  return {
+    state: String(json.state ?? ""),
+    connectUrl: String(json.connectUrl ?? json.connect_url ?? ""),
+    expiresIn: Number(json.expiresIn ?? json.expires_in ?? 1800),
+  };
+}
+
+export async function exchangeCloudSellerLinkCode(code: string): Promise<{
+  accessToken: string;
+}> {
+  const json = await cloudSellerJson<{
+    status: string;
+    access_token?: string;
+    accessToken?: string;
+  }>("/api/saas/seller-link/exchange", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  const accessToken = json.access_token ?? json.accessToken;
+  if (!accessToken) {
+    throw new MarketplaceCommerceError("Cloud seller-link exchange returned no token", 502);
+  }
+  return { accessToken };
+}
+
 export async function pollCloudSellerLinkToken(deviceCode: string): Promise<{
   status: string;
   accessToken?: string;

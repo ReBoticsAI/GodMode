@@ -35,11 +35,13 @@ import {
 } from "../services/marketplace-cloud-checkout-client.js";
 import {
   clearStoredSellerLink,
+  exchangeCloudSellerLinkCode,
   getLocalSellerLinkStatus,
   pollCloudSellerLinkToken,
   revokeCloudSellerLinkToken,
   readStoredSellerLink,
   startCloudSellerLinkDevice,
+  startCloudSellerLinkRedirect,
   writeStoredSellerLink,
 } from "../services/marketplace-seller-link-client.js";
 import {
@@ -330,6 +332,46 @@ export function createMarketplaceRouter(): Router {
     } catch (err) {
       const status = err instanceof MarketplaceCommerceError ? err.status : 500;
       sendRouteError(res, err, "Seller link start failed", status);
+    }
+  });
+
+  router.post("/seller-link/start-redirect", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    const returnUrl = String(req.body?.returnUrl ?? req.body?.return_url ?? "").trim();
+    if (!returnUrl) {
+      res.status(400).json({ error: "returnUrl required" });
+      return;
+    }
+    try {
+      const started = await startCloudSellerLinkRedirect(returnUrl);
+      res.json(started);
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller link redirect start failed", status);
+    }
+  });
+
+  router.post("/seller-link/exchange", async (req, res) => {
+    if (config.isSaas) {
+      res.status(404).json({ error: "Seller link is a Local → Cloud flow" });
+      return;
+    }
+    const code = String(req.body?.code ?? req.body?.exchangeCode ?? "").trim();
+    if (!code) {
+      res.status(400).json({ error: "code required" });
+      return;
+    }
+    try {
+      const exchanged = await exchangeCloudSellerLinkCode(code);
+      writeStoredSellerLink(exchanged.accessToken);
+      const status = await getLocalSellerLinkStatus();
+      res.json({ status: "complete", ...status });
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      sendRouteError(res, err, "Seller link exchange failed", status);
     }
   });
 

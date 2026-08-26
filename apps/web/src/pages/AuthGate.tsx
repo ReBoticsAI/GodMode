@@ -228,6 +228,20 @@ export default function AuthGate() {
         );
         return;
       }
+      let sellerLinkState: string | null = null;
+      try {
+        sellerLinkState = sessionStorage.getItem("godmode.sellerLinkState");
+      } catch {
+        sellerLinkState = null;
+      }
+      if (sellerLinkState) {
+        navigate(
+          `/seller-link/connect?state=${encodeURIComponent(sellerLinkState)}`,
+          { replace: true }
+        );
+        toast.success("Signed in. Continuing Seller link…");
+        return;
+      }
       if (result.tenants.length === 0) {
         toast.message("Signed in. Create a workspace to continue.");
         return;

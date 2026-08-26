@@ -5,9 +5,11 @@ import { toast } from "sonner";
 import {
   approveCloudSellerLink,
   denyCloudSellerLink,
+  exchangeSellerLink,
   fetchSellerLinkStatus,
   pollSellerLink,
   startSellerLink,
+  startSellerLinkRedirect,
   unlinkSellerLink,
   type SellerLinkStatus,
 } from "@/api";
@@ -31,7 +33,7 @@ import {
   userFacingErrorMessage,
   type LocalSellChecklistSignals,
 } from "@/lib/marketplace-format";
-import { VAULT_PATH } from "@/lib/navigation";
+import { MARKETPLACE_PATH, VAULT_PATH } from "@/lib/navigation";
 
 type PendingLink = {
   deviceCode: string;
@@ -54,7 +56,7 @@ function emptySellerLinkStatus(): SellerLinkStatus {
   };
 }
 
-/** Local Sell: start device-code link to GodMode Cloud Seller account. */
+/** Local Sell: primary Cloud redirect bind; device-code is secondary. */
 export function LocalSellerLinkCard({
   onStatusChange,
 }: {
@@ -63,6 +65,7 @@ export function LocalSellerLinkCard({
   const [status, setStatus] = useState<SellerLinkStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingLink | null>(null);
+  const [showDeviceCode, setShowDeviceCode] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applyStatus = (next: SellerLinkStatus) => {
@@ -118,7 +121,22 @@ export function LocalSellerLinkCard({
     };
   }, [pending]);
 
-  const onStart = async () => {
+  const onStartRedirect = async () => {
+    setBusy(true);
+    try {
+      const returnUrl = `${window.location.origin}${MARKETPLACE_PATH}?tab=seller`;
+      const started = await startSellerLinkRedirect(returnUrl);
+      if (!started.connectUrl) {
+        throw new Error("Cloud did not return a connect URL");
+      }
+      window.location.href = started.connectUrl;
+    } catch (err) {
+      toast.error(userFacingErrorMessage(err, "Could not start Seller link"));
+      setBusy(false);
+    }
+  };
+
+  const onStartDevice = async () => {
     setBusy(true);
     try {
       const started = await startSellerLink();
@@ -130,7 +148,7 @@ export function LocalSellerLinkCard({
       });
       toast.message("Approve this code on GodMode Cloud while signed in.");
     } catch (err) {
-      toast.error(userFacingErrorMessage(err, "Could not start Seller link"));
+      toast.error(userFacingErrorMessage(err, "Could not start Seller link code"));
     } finally {
       setBusy(false);
     }
@@ -158,8 +176,8 @@ export function LocalSellerLinkCard({
           GodMode Cloud Seller account
         </CardTitle>
         <CardDescription>
-          Link this Local install to a GodMode Seller seat (~$4.99/mo). When the checklist
-          below is complete, Local Sell tools unlock on this machine.
+          Sign in or buy a GodMode Seller seat on Cloud, then return here. Local Sell tools unlock
+          when the checklist below is complete.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -213,9 +231,31 @@ export function LocalSellerLinkCard({
             </div>
           </>
         ) : (
-          <Button type="button" onClick={() => void onStart()} disabled={busy}>
-            {busy ? "Starting…" : "Connect GodMode Seller account"}
-          </Button>
+          <>
+            <Button type="button" onClick={() => void onStartRedirect()} disabled={busy}>
+              {busy ? "Opening Cloud…" : "Connect GodMode Seller account"}
+            </Button>
+            {showDeviceCode ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void onStartDevice()}
+                disabled={busy}
+              >
+                Use a link code instead
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-fit text-muted-foreground"
+                onClick={() => setShowDeviceCode(true)}
+              >
+                Having trouble? Use a link code
+              </Button>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
