@@ -597,6 +597,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-seller-link-publish-listing",
+    methods: ["POST"],
+    pathPattern: "/api/saas/seller-link/publish-listing",
+    rationale:
+      "Local Sell mirrors Community listing publish onto Cloud checkout DB (#709); not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "marketplace-local-cloud-checkout",
     methods: ["POST"],
     pathPattern: "/api/marketplace/cloud-checkout",

@@ -130,6 +130,8 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
       "apps/bridge/src/services/__tests__/seller-link.test.ts",
+      "apps/bridge/src/services/__tests__/seller-link-cloud-publish.test.ts",
+      "apps/bridge/src/services/__tests__/seller-listing-tenant.test.ts",
       "apps/bridge/src/services/__tests__/seller-commerce-readiness.test.ts",
       "apps/bridge/src/services/__tests__/admin-users-provision.test.ts",
       "apps/bridge/src/services/auth/__tests__/mfa-and-tokens.test.ts",

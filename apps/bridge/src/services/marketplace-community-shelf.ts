@@ -28,6 +28,12 @@ export function resetRemoteCommunityShelfCacheForTests(): void {
   shelfInflight.clear();
 }
 
+/** Bust cached Cloud shelf after Local Sell publishes to Cloud (#709). */
+export function invalidateRemoteCommunityShelfCache(): void {
+  shelfCache.clear();
+  shelfInflight.clear();
+}
+
 function catalogFetchTimeoutMs(): number {
   const n = Number(config.marketplace.catalogFetchTimeoutMs);
   return Number.isFinite(n) && n > 0 ? n : 4000;

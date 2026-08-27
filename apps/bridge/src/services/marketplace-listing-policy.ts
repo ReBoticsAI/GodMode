@@ -38,6 +38,7 @@ export function catalogAuthorMatchesGithub(
   const login = String(githubLogin ?? "").trim().toLowerCase();
   if (!a || !login) return false;
   if (a === login) return true;
+  if (a.replace(/\s+/g, "") === login.replace(/\s+/g, "")) return true;
   if (a.endsWith(`/${login}`)) return true;
   if (a.startsWith(`${login}/`)) return true;
   return false;

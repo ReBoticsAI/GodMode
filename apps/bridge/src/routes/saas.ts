@@ -42,6 +42,9 @@ import {
   startStripeConnectOnboarding,
 } from "../services/marketplace-payments.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
+import {
+  publishListingForSellerLinkUser,
+} from "../services/seller-link-cloud-publish.js";
 
 function sellerLinkErrStatus(err: unknown): number {
   if (err && typeof err === "object" && "status" in err) {
@@ -608,6 +611,52 @@ export function createSaasRouter(): Router {
       return;
     }
     res.json({ ok: true });
+  });
+
+  /** Local Sell mirrors Community publish onto Cloud checkout DB (#709). */
+  router.post("/seller-link/publish-listing", requireSaas, limiter, async (req, res) => {
+    const linkUser = resolveSellerLinkBearer(req.headers.authorization);
+    if (!linkUser) {
+      res.status(401).json({ error: "Seller link token required" });
+      return;
+    }
+    const catalogEntryId =
+      typeof req.body?.catalog_entry_id === "string"
+        ? req.body.catalog_entry_id.trim()
+        : typeof req.body?.catalogEntryId === "string"
+          ? req.body.catalogEntryId.trim()
+          : "";
+    if (!catalogEntryId) {
+      res.status(400).json({ error: "catalog_entry_id required" });
+      return;
+    }
+    try {
+      const listing = await publishListingForSellerLinkUser(getCloudDb(), linkUser.id, {
+        catalogEntryId,
+        kind: typeof req.body?.kind === "string" ? req.body.kind : undefined,
+        title: typeof req.body?.title === "string" ? req.body.title : undefined,
+        description:
+          typeof req.body?.description === "string" ? req.body.description : undefined,
+        priceCents:
+          typeof req.body?.price_cents === "number"
+            ? req.body.price_cents
+            : typeof req.body?.priceCents === "number"
+              ? req.body.priceCents
+              : undefined,
+        currency: typeof req.body?.currency === "string" ? req.body.currency : undefined,
+        deliveryMode:
+          typeof req.body?.delivery_mode === "string" ? req.body.delivery_mode : undefined,
+        stripeConnectAttestation:
+          req.body?.stripe_connect_attestation === true ||
+          req.body?.stripeConnectAttestation === true,
+      });
+      res.json({ listing });
+    } catch (err) {
+      const status = sellerLinkErrStatus(err);
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Cloud publish failed",
+      });
+    }
   });
 
   router.get(

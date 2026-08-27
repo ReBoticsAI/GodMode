@@ -60,7 +60,8 @@ import {
   fetchCommunityCatalog,
 } from "../../services/marketplace-catalog.js";
 import { githubProjectsStatus } from "../../services/github-integration.js";
-import { resolveLocalSellGithubLogin, resolveLocalSellPayoutReady } from "../../services/marketplace-seller-link-client.js";
+import { resolveLocalSellGithubLogin, resolveLocalSellPayoutReady, readStoredSellerLink, publishCloudListingViaSellerLink } from "../../services/marketplace-seller-link-client.js";
+import { invalidateRemoteCommunityShelfCache } from "../../services/marketplace-community-shelf.js";
 import { getUserDb } from "../../user-registry.js";
 import {
   activatePluginForTenant,
@@ -1088,10 +1089,40 @@ export const marketplaceListingAdapter: RecordAdapter = {
           }
         }
         const linkedCloudPayoutReady = await resolveLocalSellPayoutReady();
+        const publishKind = requiredText(input, "kind") as never;
+        const publishPriceCents =
+          typeof input.price_cents === "number"
+            ? input.price_cents
+            : typeof input.price_credits === "number"
+              ? input.price_credits
+              : undefined;
+        if (!config.isSaas && catalogEntryId) {
+          const stored = readStoredSellerLink();
+          if (stored?.accessToken) {
+            await publishCloudListingViaSellerLink(stored.accessToken, {
+              catalogEntryId,
+              kind: publishKind,
+              title: typeof input.title === "string" ? input.title : undefined,
+              description:
+                typeof input.description === "string" ? input.description : undefined,
+              priceCents: publishPriceCents,
+              currency: typeof input.currency === "string" ? input.currency : undefined,
+              deliveryMode:
+                typeof input.delivery_mode === "string" ? input.delivery_mode : undefined,
+              stripeConnectAttestation: input.stripe_connect_attestation === true,
+            });
+            invalidateRemoteCommunityShelfCache();
+          } else if (linkedCloudPayoutReady) {
+            throw new MarketplaceCommerceError(
+              "Linked Cloud Seller account required to publish checkout-ready Community listings. Reconnect Seller account on Local Sell.",
+              400
+            );
+          }
+        }
         const row = publishMarketplaceListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
           sellerUserId,
           sellerTenantId: requireTenant(ctx),
-          kind: requiredText(input, "kind") as never,
+          kind: publishKind,
           resourceId:
             typeof input.resource_id === "string" ? input.resource_id : undefined,
           title: typeof input.title === "string" ? input.title : undefined,
@@ -1099,12 +1130,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
             typeof input.description === "string" ? input.description : undefined,
           priceCredits:
             typeof input.price_credits === "number" ? input.price_credits : undefined,
-          priceCents:
-            typeof input.price_cents === "number"
-              ? input.price_cents
-              : typeof input.price_credits === "number"
-                ? input.price_credits
-                : undefined,
+          priceCents: publishPriceCents,
           currency: typeof input.currency === "string" ? input.currency : undefined,
           sellerKind:
             input.seller_kind === "official" || input.seller_kind === "user"

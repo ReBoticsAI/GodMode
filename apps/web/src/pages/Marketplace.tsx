@@ -109,7 +109,10 @@ function sellerOwnsCatalogEntryClient(
   const author = String(entry.author ?? "").trim().toLowerCase();
   if (
     author &&
-    (author === login || author.endsWith(`/${login}`) || author.startsWith(`${login}/`))
+    (author === login ||
+      author.replace(/\s+/g, "") === login.replace(/\s+/g, "") ||
+      author.endsWith(`/${login}`) ||
+      author.startsWith(`${login}/`))
   ) {
     return true;
   }

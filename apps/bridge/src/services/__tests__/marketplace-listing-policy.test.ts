@@ -20,6 +20,10 @@ describe("sellerOwnsCatalogEntry", () => {
     ).toBe(true);
     expect(sellerOwnsCatalogEntry({ author: "other" }, "alice")).toBe(false);
   });
+
+  it("matches catalog display names with spaces to GitHub login (#709)", () => {
+    expect(sellerOwnsCatalogEntry({ author: "Dane Schell" }, "DaneSchell")).toBe(true);
+  });
 });
 
 describe("resolveListingPublishState", () => {
