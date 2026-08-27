@@ -160,6 +160,10 @@ export function createKernelRouter(
         req.params.id,
         context(req, "viewer")
       );
+      // OperationRun is polled by waiters; never soft-304 a stale terminal status.
+      if (req.params.objectType === "OperationRun") {
+        res.set("Cache-Control", "no-store");
+      }
       res.set("ETag", `"${row.version}"`).json(row);
     } catch (err) {
       handleErr(err, res);

@@ -219,7 +219,12 @@ export async function runRecordActionApi(
 }
 
 export async function fetchOperationRun(id: string): Promise<OperationRunClient> {
-  const row = await fetchRecord("OperationRun", id);
+  // Bypass HTTP cache: Express soft-304 + browser cache can leave waiters stuck
+  // on a stale pending/running body while the run already finished.
+  const row = await api<RecordRowClient>(
+    `/records/OperationRun/${encodeURIComponent(id)}`,
+    { cache: "no-store" }
+  );
   return {
     id: row.id,
     status: String(row.data.status) as OperationRunClient["status"],

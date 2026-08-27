@@ -10,6 +10,7 @@ import {
   createRecordApi,
   deleteRecordApi,
   fetchRecord,
+  fetchRecords,
   runRecordActionApi,
   updateRecordApi,
   waitForOperationRun,
@@ -7036,6 +7037,37 @@ export function confirmMarketplaceStripeSession(sessionId: string) {
     undefined,
     true
   );
+}
+
+export type MarketplaceOrderRow = {
+  id: string;
+  listing_id: string | null;
+  catalog_entry_id: string | null;
+  status: string;
+  amount_cents: number;
+  platform_fee_cents: number;
+  seller_kind: string | null;
+  provider: string | null;
+  created_at: string;
+};
+
+export async function fetchMyMarketplaceOrders(): Promise<MarketplaceOrderRow[]> {
+  const res = await fetchRecords("MarketplaceOrder", { limit: 200 });
+  return (res.records ?? []).map((row) => {
+    const d = row.data;
+    return {
+      id: row.id,
+      listing_id: typeof d.listing_id === "string" ? d.listing_id : null,
+      catalog_entry_id:
+        typeof d.catalog_entry_id === "string" ? d.catalog_entry_id : null,
+      status: String(d.status ?? ""),
+      amount_cents: Number(d.amount_cents ?? 0) || 0,
+      platform_fee_cents: Number(d.platform_fee_cents ?? 0) || 0,
+      seller_kind: typeof d.seller_kind === "string" ? d.seller_kind : null,
+      provider: typeof d.provider === "string" ? d.provider : null,
+      created_at: String(d.created_at ?? ""),
+    };
+  });
 }
 
 export function confirmMarketplaceCryptoPayment(orderId: string, txHash: string) {

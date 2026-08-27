@@ -13,6 +13,7 @@ import {
   fetchMarketplaceEntitlements,
   fetchMarketplaceListings,
   fetchMyMarketplaceListings,
+  fetchMyMarketplaceOrders,
   fetchOfficialCatalog,
   fetchCommunityCatalog,
   prepareCommunityCatalogSubmission,
@@ -174,6 +175,7 @@ function formatPrice(entry: CatalogEntry): string {
 function EntryCard({
   entry,
   installed,
+  owned,
   onInstall,
   onBuy,
   installing,
@@ -181,12 +183,14 @@ function EntryCard({
 }: {
   entry: CatalogEntry;
   installed: boolean;
+  owned?: boolean;
   onInstall: () => void;
   onBuy: (provider: "stripe" | "paypal" | "crypto") => void;
   installing: boolean;
   buying: boolean;
 }) {
   const paid = Number(entry.priceCents ?? 0) > 0;
+  const needsPurchase = paid && !installed && !owned;
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -209,7 +213,11 @@ function EntryCard({
             {entry.sourceName ? (
               <Badge variant="outline">{entry.sourceName}</Badge>
             ) : null}
-            {installed ? <Badge variant="secondary">Installed</Badge> : null}
+            {installed ? (
+              <Badge variant="secondary">Installed</Badge>
+            ) : owned ? (
+              <Badge variant="secondary">Owned</Badge>
+            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -224,7 +232,7 @@ function EntryCard({
             ))}
           </div>
         ) : null}
-        {paid && !installed ? (
+        {needsPurchase ? (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => onBuy("stripe")} disabled={buying || installing}>
               {buying ? "Starting…" : "Buy (Card)"}
@@ -446,6 +454,9 @@ export default function MarketplacePage() {
   const [communityCatalog, setCommunityCatalog] = useState<CatalogEntry[]>([]);
   const [myListings, setMyListings] = useState<MarketplaceListing[]>([]);
   const [entitlements, setEntitlements] = useState<MarketplaceEntitlement[]>([]);
+  const [ownedCatalogEntryIds, setOwnedCatalogEntryIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [discovered, setDiscovered] = useState<DiscoveredPlugin[]>([]);
   const [localPaths, setLocalPaths] = useState<string[]>([]);
   const [sources, setSources] = useState<Array<{ id: string; name: string; url: string }>>(
@@ -658,6 +669,11 @@ export default function MarketplacePage() {
     return ids;
   }, [entitlements]);
 
+  const isCatalogEntryOwned = useCallback(
+    (entryId: string) => ownedCatalogEntryIds.has(entryId),
+    [ownedCatalogEntryIds]
+  );
+
   const catalogInstalledIds = useMemo(() => {
     const ids = new Set<string>();
     for (const row of catalogInstalls) {
@@ -682,7 +698,8 @@ export default function MarketplacePage() {
     };
     try {
       const showLocal = marketplaceShowsLocalTab(saas);
-      const [off, local, inst, community, communityCat, mine, ents, inf] = await Promise.all([
+      const [off, local, inst, community, communityCat, mine, ents, orders, inf] =
+        await Promise.all([
         fetchOfficialCatalog().catch((err) => {
           toast.error(userFacingErrorMessage(err, "Failed to load Official catalog"));
           return { entries: [] as CatalogEntry[] };
@@ -716,6 +733,7 @@ export default function MarketplacePage() {
           githubLogin: null,
         })),
         fetchMarketplaceEntitlements().catch(() => ({ entitlements: [] })),
+        fetchMyMarketplaceOrders().catch(() => []),
         fetchInferenceEndpoints().catch(() => ({ endpoints: [] as InferenceEndpoint[] })),
       ]);
       setOfficial(off.entries);
@@ -731,6 +749,16 @@ export default function MarketplacePage() {
       setCatalogOrphans(mine.catalogOrphans ?? []);
       setGithubLogin(mine.githubLogin ?? null);
       setEntitlements(ents.entitlements);
+      const ownedIds = new Set<string>();
+      for (const order of orders) {
+        if (
+          (order.status === "paid" || order.status === "delivered") &&
+          order.catalog_entry_id
+        ) {
+          ownedIds.add(order.catalog_entry_id);
+        }
+      }
+      setOwnedCatalogEntryIds(ownedIds);
       setInferenceEndpoints(inf.endpoints);
       const ids = new Set((inst.plugins ?? []).map((p) => p.plugin_id));
       setInstalledIds(ids);
@@ -848,6 +876,8 @@ export default function MarketplacePage() {
       return;
     }
     if (paid === "1" && sessionId && saas === true) {
+      const entryId = searchParams.get("entry")?.trim() || "";
+      const listingId = searchParams.get("listing")?.trim() || "";
       const next = new URLSearchParams(searchParams);
       next.delete("paid");
       next.delete("entry");
@@ -858,9 +888,23 @@ export default function MarketplacePage() {
         return;
       }
       void confirmMarketplaceStripeSession(sessionId)
-        .then(() => {
+        .then(async () => {
           markMarketplaceCheckoutSessionDone(sessionId);
-          toast.success("Payment complete. Install or acquire your purchase.");
+          if (entryId) {
+            try {
+              await installCatalogEntry(entryId, "saas-official");
+              toast.success("Payment complete. Installed.");
+            } catch (installErr) {
+              toast.message("Payment complete. Use Install to finish delivery.");
+              toast.error(
+                userFacingErrorMessage(installErr, "Install after payment failed")
+              );
+            }
+          } else if (listingId) {
+            toast.success("Payment complete. Acquire your purchase on Community.");
+          } else {
+            toast.success("Payment complete. Install or acquire your purchase.");
+          }
           void reload();
         })
         .catch((err) => {
@@ -1403,6 +1447,7 @@ export default function MarketplacePage() {
                   key={`official-${entry.id}`}
                   entry={entry}
                   installed={isCatalogEntryInstalled(entry.id)}
+                  owned={isCatalogEntryOwned(entry.id)}
                   installing={installingId === entry.id}
                   buying={buyingId === entry.id}
                   onInstall={() => void handleInstall(entry)}
@@ -1536,6 +1581,7 @@ export default function MarketplacePage() {
                     key={`local-${entry.id}-${entry.sourceCatalog}`}
                     entry={entry}
                     installed={isCatalogEntryInstalled(entry.id)}
+                    owned={isCatalogEntryOwned(entry.id)}
                     installing={installingId === entry.id}
                     buying={false}
                     onInstall={() => void handleInstall(entry)}
@@ -1565,6 +1611,10 @@ export default function MarketplacePage() {
                     key={`community-cat-${entry.id}`}
                     entry={entry}
                     installed={isCatalogEntryInstalled(entry.id)}
+                    owned={
+                      isCatalogEntryOwned(entry.id) ||
+                      (entry.listingId ? ownedListingIds.has(entry.listingId) : false)
+                    }
                     installing={installingId === entry.id}
                     buying={buyingId === entry.id}
                     onInstall={() => void handleInstall(entry)}
