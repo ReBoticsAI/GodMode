@@ -77,4 +77,39 @@ describe("Marketplace OperationRun tenant poll (#567)", () => {
     expect(run.status).toBe("succeeded");
     expect(run.result).toEqual({ pluginId: "workspace-pulse" });
   });
+
+  it("on timeout, returns a late terminal failed run instead of a bare 408", async () => {
+    localStorage.setItem(TENANT_STORAGE_KEY, "workspace-a");
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "run-late-fail",
+            objectType: "OperationRun",
+            data: { status: "running" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "run-late-fail",
+            objectType: "OperationRun",
+            data: {
+              status: "failed",
+              error_code: "KERNEL_INTERNAL_ERROR",
+              error_message: "Catalog entry not found",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    const run = await waitForOperationRun("run-late-fail", {
+      intervalMs: 30,
+      timeoutMs: 40,
+    });
+    expect(run.status).toBe("failed");
+    expect(run.errorMessage).toBe("Catalog entry not found");
+  });
 });

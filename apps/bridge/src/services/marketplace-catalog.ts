@@ -389,10 +389,15 @@ export async function findCatalogEntry(
   opts?: { sourceCatalog?: string; userId?: string }
 ): Promise<{ entry: CatalogEntry; index: CatalogIndex; catalogUrl: string } | null> {
   const catalogs: Array<{ url: string; name: string }> = [];
-  if (opts?.sourceCatalog) {
+  const source = opts?.sourceCatalog?.trim() ?? "";
+  if (source === "saas-official") {
+    // Curated SaaS Official rows use a synthetic source id in the UI. Resolve pins
+    // from the public Official index (same entry ids / bundle paths after sync).
+    catalogs.push({ url: resolveCatalogUrl(), name: "Official" });
+  } else if (source) {
     catalogs.push({
-      url: opts.sourceCatalog,
-      name: catalogSourceName(opts.sourceCatalog),
+      url: source,
+      name: catalogSourceName(source),
     });
   } else {
     catalogs.push({ url: resolveCatalogUrl(), name: "Official" });
