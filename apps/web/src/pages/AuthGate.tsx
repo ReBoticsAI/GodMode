@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   fetchBridgeHealth,
   fetchOauthProviders,
@@ -18,6 +18,10 @@ import {
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
 import { APP_NAME, HOME_PATH } from "@/lib/navigation";
+import {
+  isSellerLinkPath,
+  readSellerLinkResumePath,
+} from "@/lib/seller-link-resume";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +75,7 @@ function clearStoredCheckoutSession(): void {
 export default function AuthGate() {
   const { refresh, user } = useTenant();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>("login");
   const [saasStep, setSaasStep] = useState<SaasSignupStep>("plan");
@@ -228,18 +233,15 @@ export default function AuthGate() {
         );
         return;
       }
-      let sellerLinkState: string | null = null;
-      try {
-        sellerLinkState = sessionStorage.getItem("godmode.sellerLinkState");
-      } catch {
-        sellerLinkState = null;
+      const sellerResume = readSellerLinkResumePath();
+      if (sellerResume) {
+        navigate(sellerResume, { replace: true });
+        toast.success("Signed in. Continuing Seller setup…");
+        return;
       }
-      if (sellerLinkState) {
-        navigate(
-          `/seller-link/connect?state=${encodeURIComponent(sellerLinkState)}`,
-          { replace: true }
-        );
-        toast.success("Signed in. Continuing Seller link…");
+      if (isSellerLinkPath(location.pathname)) {
+        navigate(`${location.pathname}${location.search}`, { replace: true });
+        toast.success("Signed in. Continuing Seller setup…");
         return;
       }
       if (result.tenants.length === 0) {
