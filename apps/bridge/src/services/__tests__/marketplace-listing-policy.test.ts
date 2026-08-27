@@ -162,4 +162,24 @@ describe("attachListingCommerceToCatalogEntry", () => {
     expect(merged.currency).toBe("usd");
     expect(merged.listingStatus).toBe("draft");
   });
+
+  it("keeps Cloud checkout listing id when commerceHost is cloud", () => {
+    const map = new Map([
+      [
+        "pulse",
+        { id: "listing-local", priceCents: 100, currency: "usd", status: "active" },
+      ],
+    ]);
+    const merged = attachListingCommerceToCatalogEntry(
+      {
+        id: "pulse",
+        listingId: "listing-cloud",
+        commerceHost: "cloud",
+        priceCents: 100,
+      },
+      map
+    );
+    expect(merged.listingId).toBe("listing-cloud");
+    expect(merged.listingStatus).toBe("active");
+  });
 });

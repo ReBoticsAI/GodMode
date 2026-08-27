@@ -46,15 +46,16 @@ export function applyCommunityCommerceOverlay(
     const remoteListing = String(remote.listingId ?? "").trim();
     return {
       ...entry,
-      listingId: localListing || remoteListing || undefined,
+      // Cloud is checkout authority on Local; prefer Cloud listing id when present.
+      listingId: remoteListing || localListing || undefined,
       listingStatus: entry.listingStatus ?? remote.listingStatus,
       priceCents: Number(entry.priceCents ?? 0) || Number(remote.priceCents ?? 0),
       currency: entry.currency ?? remote.currency,
       verifiedPublisher: entry.verifiedPublisher === true || remote.verifiedPublisher === true,
-      commerceHost: localListing
-        ? entry.commerceHost
-        : remoteListing
-          ? COMMUNITY_SHELF_COMMERCE_HOST
+      commerceHost: remoteListing
+        ? COMMUNITY_SHELF_COMMERCE_HOST
+        : localListing
+          ? entry.commerceHost
           : entry.commerceHost,
     };
   });
