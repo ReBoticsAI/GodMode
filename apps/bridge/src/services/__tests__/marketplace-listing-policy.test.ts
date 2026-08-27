@@ -20,6 +20,10 @@ describe("sellerOwnsCatalogEntry", () => {
     ).toBe(true);
     expect(sellerOwnsCatalogEntry({ author: "other" }, "alice")).toBe(false);
   });
+
+  it("matches catalog display names with spaces to GitHub login (#709)", () => {
+    expect(sellerOwnsCatalogEntry({ author: "Alice Example" }, "AliceExample")).toBe(true);
+  });
 });
 
 describe("resolveListingPublishState", () => {
@@ -161,5 +165,25 @@ describe("attachListingCommerceToCatalogEntry", () => {
     expect(merged.priceCents).toBe(500);
     expect(merged.currency).toBe("usd");
     expect(merged.listingStatus).toBe("draft");
+  });
+
+  it("keeps Cloud checkout listing id when commerceHost is cloud", () => {
+    const map = new Map([
+      [
+        "pulse",
+        { id: "listing-local", priceCents: 100, currency: "usd", status: "active" },
+      ],
+    ]);
+    const merged = attachListingCommerceToCatalogEntry(
+      {
+        id: "pulse",
+        listingId: "listing-cloud",
+        commerceHost: "cloud",
+        priceCents: 100,
+      },
+      map
+    );
+    expect(merged.listingId).toBe("listing-cloud");
+    expect(merged.listingStatus).toBe("active");
   });
 });

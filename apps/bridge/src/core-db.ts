@@ -729,6 +729,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_seller_link_v1",
     up: ensureSellerLinkMigration,
   },
+  {
+    version: 21,
+    name: "core_marketplace_seller_listing_tenant_v1",
+    up: ensureMarketplaceSellerListingTenantColumn,
+  },
 ];
 
 function ensureSellerLinkMigration(db: CoreDatabase): void {
@@ -1156,6 +1161,12 @@ function ensureMarketplaceSellerVerifiedColumns(db: CoreDatabase): void {
   if (!tableExists(db, "marketplace_seller_accounts")) return;
   addCol(db, "marketplace_seller_accounts", "verified_seller", "INTEGER NOT NULL DEFAULT 0");
   addCol(db, "marketplace_seller_accounts", "verified_frozen", "INTEGER NOT NULL DEFAULT 0");
+}
+
+/** Seller-only Cloud accounts: listing tenant without workspace membership (#709). */
+function ensureMarketplaceSellerListingTenantColumn(db: CoreDatabase): void {
+  if (!tableExists(db, "marketplace_seller_accounts")) return;
+  addCol(db, "marketplace_seller_accounts", "listing_tenant_id", "TEXT REFERENCES tenants(id)");
 }
 
 /** Guest Local Buy (#584): session-keyed delivery, no Cloud user required. */

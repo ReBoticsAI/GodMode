@@ -38,6 +38,7 @@ export function catalogAuthorMatchesGithub(
   const login = String(githubLogin ?? "").trim().toLowerCase();
   if (!a || !login) return false;
   if (a === login) return true;
+  if (a.replace(/\s+/g, "") === login.replace(/\s+/g, "")) return true;
   if (a.endsWith(`/${login}`)) return true;
   if (a.startsWith(`${login}/`)) return true;
   return false;
@@ -196,6 +197,7 @@ export function attachListingCommerceToCatalogEntry<
   T extends {
     id: string;
     listingId?: string;
+    commerceHost?: string;
     priceCents?: number;
     currency?: string;
     listingStatus?: string;
@@ -209,6 +211,15 @@ export function attachListingCommerceToCatalogEntry<
 ): T {
   const commerce = listingsByCatalogId.get(entry.id);
   if (!commerce) return entry;
+  // Local hub rows must not replace Cloud checkout listing ids (#709).
+  if (entry.commerceHost === "cloud" && String(entry.listingId ?? "").trim()) {
+    return {
+      ...entry,
+      priceCents: Number(entry.priceCents ?? 0) || commerce.priceCents,
+      currency: entry.currency ?? commerce.currency,
+      listingStatus: entry.listingStatus ?? commerce.status,
+    };
+  }
   return {
     ...entry,
     listingId: commerce.id,

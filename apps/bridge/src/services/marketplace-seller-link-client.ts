@@ -225,6 +225,38 @@ export async function revokeCloudSellerLinkToken(accessToken: string): Promise<v
   });
 }
 
+export type CloudSellerPublishListingInput = {
+  catalogEntryId: string;
+  kind?: string;
+  title?: string;
+  description?: string;
+  priceCents?: number;
+  currency?: string;
+  deliveryMode?: string;
+  stripeConnectAttestation?: boolean;
+};
+
+/** Mirror Local Sell publish onto Cloud for checkout authority (#709). */
+export async function publishCloudListingViaSellerLink(
+  accessToken: string,
+  input: CloudSellerPublishListingInput
+): Promise<{ listing: Record<string, unknown> }> {
+  return cloudSellerJson("/api/saas/seller-link/publish-listing", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({
+      catalog_entry_id: input.catalogEntryId,
+      kind: input.kind,
+      title: input.title,
+      description: input.description,
+      price_cents: input.priceCents,
+      currency: input.currency,
+      delivery_mode: input.deliveryMode,
+      stripe_connect_attestation: input.stripeConnectAttestation === true,
+    }),
+  });
+}
+
 export type LocalSellerLinkStatus = {
   linked: boolean;
   sellerActive: boolean;

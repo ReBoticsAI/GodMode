@@ -106,6 +106,7 @@ describe("legacy route wave", () => {
       "saas.ts:post:/seller-link/github-connect",
       "saas.ts:post:/seller-link/github-redirect",
       "saas.ts:post:/seller-link/github-redirect/complete",
+      "saas.ts:post:/seller-link/publish-listing",
       "saas.ts:post:/seller-link/redirect",
       "saas.ts:post:/seller-link/redirect/complete",
       "saas.ts:post:/seller-link/stripe-connect",

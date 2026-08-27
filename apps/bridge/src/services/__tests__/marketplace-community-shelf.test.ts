@@ -85,6 +85,41 @@ describe("community commerce overlay", () => {
     expect(merged[0]?.commerceHost).toBe("cloud");
   });
 
+  it("prefers Cloud listing id when Local and Cloud both have a listing", () => {
+    const merged = applyCommunityCommerceOverlay(
+      [
+        {
+          id: "workspace-pulse",
+          kind: "plugin",
+          installType: "plugin",
+          title: "Workspace Pulse",
+          description: "",
+          version: "0.1.0",
+          author: "seller",
+          listingId: "lst-local",
+          listingStatus: "active",
+          priceCents: 100,
+        },
+      ],
+      [
+        {
+          id: "workspace-pulse",
+          kind: "plugin",
+          installType: "plugin",
+          title: "Workspace Pulse",
+          description: "",
+          version: "0.1.0",
+          author: "seller",
+          listingId: "lst-cloud",
+          listingStatus: "active",
+          priceCents: 100,
+        },
+      ]
+    );
+    expect(merged[0]?.listingId).toBe("lst-cloud");
+    expect(merged[0]?.commerceHost).toBe("cloud");
+  });
+
   it("keeps local listings first and tags remote Cloud rows", () => {
     const merged = mergePublicListings(
       [{ id: "local-1", title: "Local skill" }],
