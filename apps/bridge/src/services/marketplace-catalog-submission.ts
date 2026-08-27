@@ -182,20 +182,23 @@ export async function prepareCommunityCatalogSubmission(opts: {
   try {
     const token = await resolveCodingGithubAccessToken(opts.userDb);
     const user = await getGithubAuthenticatedUser(token);
-    githubLogin = user.login;
+    githubLogin = String(user.login ?? "").trim() || null;
   } catch {
     githubLogin = null;
   }
 
-  const author = githubLogin ?? "community";
-  const entry = buildCatalogEntry({ ...opts.input, id }, author);
   const blockers: CommunityCatalogSubmissionBlocker[] = [];
   if (!githubLogin) {
     blockers.push({
       code: "github_connect",
-      message: "Connect GitHub in Personal Vault before submitting to the Community catalog.",
+      message:
+        "Connect GitHub before submitting to the Community catalog. The catalog author is your GitHub login.",
     });
   }
+
+  // Community author is always the submitter's GitHub login (never a display name).
+  const author = githubLogin ?? "";
+  const entry = buildCatalogEntry({ ...opts.input, id }, author || "unknown");
   blockers.push(...submissionBlockers(entry, opts.input.installType));
 
   return {

@@ -5,6 +5,7 @@ import {
   marketplaceCloudVaultMarketplaceUrl,
   marketplaceSellerStorefrontUrl,
   communityCheckoutBody,
+  formatMarketplaceAuthor,
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
@@ -115,6 +116,27 @@ describe("formatMarketplaceCents", () => {
     expect(formatMarketplaceCents(0)).toBe("Free");
     expect(formatMarketplaceCents(null)).toBe("Free");
     expect(formatMarketplaceCents(999)).toBe("$9.99");
+  });
+});
+
+describe("formatMarketplaceAuthor", () => {
+  it("shows Official as ReBotics AI", () => {
+    expect(
+      formatMarketplaceAuthor({ sourceName: "Official", author: "GodMode" })
+    ).toBe("ReBotics AI");
+  });
+
+  it("shows Community authors as GitHub logins", () => {
+    expect(
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "Dane Schell",
+        pluginRepo: "https://github.com/DaneSchell/godmode-workspace-pulse",
+      })
+    ).toBe("DaneSchell");
+    expect(
+      formatMarketplaceAuthor({ sourceName: "Community", author: "Dane Schell" })
+    ).toBe("DaneSchell");
   });
 });
 

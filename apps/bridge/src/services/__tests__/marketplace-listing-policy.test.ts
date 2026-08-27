@@ -3,6 +3,9 @@ import {
   attachListingCommerceToCatalogEntry,
   attachListingIdToCatalogEntry,
   communityPluginInstallBlock,
+  displayCommunityCatalogAuthor,
+  displayMarketplaceAuthor,
+  isGithubLoginAuthor,
   isCommunityCatalogSource,
   listingKindFromCatalogEntry,
   resolveListingPublishState,
@@ -23,6 +26,35 @@ describe("sellerOwnsCatalogEntry", () => {
 
   it("matches catalog display names with spaces to GitHub login (#709)", () => {
     expect(sellerOwnsCatalogEntry({ author: "Alice Example" }, "AliceExample")).toBe(true);
+  });
+});
+
+describe("displayMarketplaceAuthor", () => {
+  it("forces Official author to ReBotics AI", () => {
+    expect(
+      displayMarketplaceAuthor({
+        sourceName: "Official",
+        author: "GodMode",
+      })
+    ).toBe("ReBotics AI");
+  });
+
+  it("shows Community authors as GitHub logins, not spaced names", () => {
+    expect(
+      displayCommunityCatalogAuthor("Dane Schell", "https://github.com/DaneSchell/godmode-workspace-pulse")
+    ).toBe("DaneSchell");
+    expect(displayCommunityCatalogAuthor("DaneSchell")).toBe("DaneSchell");
+    expect(displayCommunityCatalogAuthor("Dane Schell")).toBe("DaneSchell");
+    // Author login wins over org-hosted pluginRepo
+    expect(
+      displayCommunityCatalogAuthor("Dane Schell", "https://github.com/ReBoticsAI/gm-442-smoke-test")
+    ).toBe("DaneSchell");
+  });
+
+  it("isGithubLoginAuthor rejects display names", () => {
+    expect(isGithubLoginAuthor("DaneSchell")).toBe(true);
+    expect(isGithubLoginAuthor("Dane Schell")).toBe(false);
+    expect(isGithubLoginAuthor("ReBotics AI")).toBe(false);
   });
 });
 

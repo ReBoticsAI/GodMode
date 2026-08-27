@@ -30,6 +30,9 @@ export function isCommunityCatalogSource(url?: string | null): boolean {
   return String(url ?? "").toLowerCase().includes("/catalog/community");
 }
 
+/** Display author for every Official Marketplace card. */
+export const OFFICIAL_MARKETPLACE_AUTHOR = "ReBotics AI";
+
 export function catalogAuthorMatchesGithub(
   author: string | null | undefined,
   githubLogin: string | null | undefined
@@ -42,6 +45,59 @@ export function catalogAuthorMatchesGithub(
   if (a.endsWith(`/${login}`)) return true;
   if (a.startsWith(`${login}/`)) return true;
   return false;
+}
+
+/** GitHub owner/login from a github.com repo URL (or owner/repo path). */
+export function githubOwnerFromPluginRepo(
+  pluginRepo: string | null | undefined
+): string | null {
+  const repo = String(pluginRepo ?? "").trim();
+  if (!repo) return null;
+  const path = repo
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  const owner = path.split("/")[0]?.trim();
+  return owner || null;
+}
+
+/**
+ * Community catalog author is the publisher's GitHub login (not a display name).
+ * Spaced names like "Dane Schell" are collapsed to DaneSchell for display/serve.
+ * Repo owner is only a fallback when author is missing (not preferred over login).
+ */
+export function displayCommunityCatalogAuthor(
+  author: string | null | undefined,
+  pluginRepo?: string | null
+): string {
+  const raw = String(author ?? "").trim();
+  if (raw) {
+    // GitHub logins never contain spaces; collapse legacy display names.
+    return raw.includes(" ") ? raw.replace(/\s+/g, "") : raw;
+  }
+  return githubOwnerFromPluginRepo(pluginRepo) || "Unknown";
+}
+
+/** True when author looks like a GitHub login (no spaces). */
+export function isGithubLoginAuthor(author: string | null | undefined): boolean {
+  const a = String(author ?? "").trim();
+  if (!a || /\s/.test(a)) return false;
+  // GitHub username: 1-39 chars, alphanumeric or hyphen, cannot start/end with hyphen.
+  return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(a);
+}
+
+/** Normalize catalog card author by shelf (Official vs Community). */
+export function displayMarketplaceAuthor(opts: {
+  sourceName?: string | null;
+  author?: string | null;
+  pluginRepo?: string | null;
+}): string {
+  const shelf = String(opts.sourceName ?? "").trim().toLowerCase();
+  if (shelf === "official") return OFFICIAL_MARKETPLACE_AUTHOR;
+  if (shelf === "community") {
+    return displayCommunityCatalogAuthor(opts.author, opts.pluginRepo);
+  }
+  return String(opts.author ?? "").trim() || "Unknown";
 }
 
 export function pluginRepoOwnedByGithub(

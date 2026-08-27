@@ -70,6 +70,52 @@ export function formatMarketplaceCents(cents: number | null | undefined): string
   return `$${(n / 100).toFixed(2)}`;
 }
 
+/** Display author for every Official Marketplace card. */
+export const OFFICIAL_MARKETPLACE_AUTHOR = "ReBotics AI";
+
+/** GitHub owner/login from a github.com repo URL (or owner/repo path). */
+export function githubOwnerFromPluginRepo(
+  pluginRepo: string | null | undefined
+): string | null {
+  const repo = String(pluginRepo ?? "").trim();
+  if (!repo) return null;
+  const path = repo
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  const owner = path.split("/")[0]?.trim();
+  return owner || null;
+}
+
+/**
+ * Community catalog author is the publisher's GitHub login (not a display name).
+ * Spaced names like "Dane Schell" are collapsed to DaneSchell for display.
+ */
+export function displayCommunityCatalogAuthor(
+  author: string | null | undefined,
+  pluginRepo?: string | null
+): string {
+  const raw = String(author ?? "").trim();
+  if (raw) {
+    return raw.includes(" ") ? raw.replace(/\s+/g, "") : raw;
+  }
+  return githubOwnerFromPluginRepo(pluginRepo) || "Unknown";
+}
+
+/** Normalize catalog card author by shelf (Official vs Community). */
+export function formatMarketplaceAuthor(entry: {
+  sourceName?: string | null;
+  author?: string | null;
+  pluginRepo?: string | null;
+}): string {
+  const shelf = String(entry.sourceName ?? "").trim().toLowerCase();
+  if (shelf === "official") return OFFICIAL_MARKETPLACE_AUTHOR;
+  if (shelf === "community") {
+    return displayCommunityCatalogAuthor(entry.author, entry.pluginRepo);
+  }
+  return String(entry.author ?? "").trim() || "Unknown";
+}
+
 /**
  * Official tab empty-state copy (#434 / #380).
  * Cloud empty means feed/network/admin curation; local path is self-host/dev only.

@@ -46,6 +46,7 @@ import {
 } from "@/api";
 import {
   communityCheckoutBody,
+  formatMarketplaceAuthor,
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
@@ -200,7 +201,7 @@ function EntryCard({
             <CardDescription className="text-xs">
               <span className="inline-flex flex-wrap items-center gap-1.5">
                 <span>
-                  {entry.author} · v{entry.version} · {entry.kind}
+                  {formatMarketplaceAuthor(entry)} · v{entry.version} · {entry.kind}
                 </span>
                 {entry.verifiedPublisher ? (
                   <Badge variant="outline">Verified</Badge>
@@ -2140,12 +2141,12 @@ export default function MarketplacePage() {
                   </ToggleGroup>
                   <FieldDescription>
                     {publishFamily === "plugin"
-                      ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author."
+                      ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author (GitHub login)."
                       : publishFamily === "live"
                         ? "Catalog-backed live access on this host. Select a deliveryMode live catalog row, then bind a workspace resource whose export matches the pin. Free Shared sidebar stays outside Marketplace."
                         : publishFamily === "inference"
                           ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
-                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy."}
+                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Catalog author is the publisher GitHub login."}
                   </FieldDescription>
                 </Field>
 
