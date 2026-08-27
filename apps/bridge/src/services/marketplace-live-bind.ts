@@ -161,6 +161,7 @@ export async function bindLiveListing(
     priceCents?: number;
     githubLogin?: string | null;
     stripeConnectAttestation?: boolean;
+    linkedCloudPayoutReady?: boolean;
   }
 ): Promise<Record<string, unknown>> {
   assertNotMarketplaceBanned(core, opts.sellerUserId);
@@ -228,9 +229,11 @@ export async function bindLiveListing(
   }
 
   const acct = ensureSellerAccount(core, opts.sellerUserId);
-  const payoutReady = Boolean(
-    acct.stripe_connect_account_id || acct.paypal_merchant_id || acct.metamask_address
-  );
+  const payoutReady =
+    Boolean(opts.linkedCloudPayoutReady) ||
+    Boolean(
+      acct.stripe_connect_account_id || acct.paypal_merchant_id || acct.metamask_address
+    );
   const publishState = resolveListingPublishState({
     kind,
     catalogEntryId,
@@ -258,8 +261,10 @@ export async function bindLiveListing(
     title: opts.title?.trim() || entry.title,
     description: opts.description?.trim() || entry.description,
     priceCents: opts.priceCents ?? Number(entry.priceCents ?? 0),
-    deliveryMode: "live",
     sellerKind: "user",
+    deliveryMode: "live",
+    linkedCloudPayoutReady: opts.linkedCloudPayoutReady,
+    stripeConnectAttestation: opts.stripeConnectAttestation,
   });
 
   const listingId = String(listing.id);

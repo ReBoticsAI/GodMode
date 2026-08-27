@@ -60,7 +60,7 @@ import {
   fetchCommunityCatalog,
 } from "../../services/marketplace-catalog.js";
 import { githubProjectsStatus } from "../../services/github-integration.js";
-import { resolveLocalSellGithubLogin } from "../../services/marketplace-seller-link-client.js";
+import { resolveLocalSellGithubLogin, resolveLocalSellPayoutReady } from "../../services/marketplace-seller-link-client.js";
 import { getUserDb } from "../../user-registry.js";
 import {
   activatePluginForTenant,
@@ -1057,6 +1057,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
           description: typeof input.description === "string" ? input.description : undefined,
           priceCents: typeof input.price_cents === "number" ? input.price_cents : undefined,
           githubLogin,
+          linkedCloudPayoutReady: await resolveLocalSellPayoutReady(),
           stripeConnectAttestation: input.stripe_connect_attestation === true,
         });
         return record(def, row);
@@ -1086,6 +1087,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
             };
           }
         }
+        const linkedCloudPayoutReady = await resolveLocalSellPayoutReady();
         const row = publishMarketplaceListing(ctx.data!.cloudDb, ctx.data!.tenantDb, {
           sellerUserId,
           sellerTenantId: requireTenant(ctx),
@@ -1111,6 +1113,7 @@ export const marketplaceListingAdapter: RecordAdapter = {
           catalogEntryId: catalogEntryId || undefined,
           catalogEntry,
           githubLogin,
+          linkedCloudPayoutReady,
           deliveryMode:
             typeof input.delivery_mode === "string" ? (input.delivery_mode as never) : undefined,
           pricingModel:

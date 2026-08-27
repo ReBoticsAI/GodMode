@@ -38,6 +38,7 @@ import {
   exchangeCloudSellerLinkCode,
   getLocalSellerLinkStatus,
   resolveLocalSellGithubLogin,
+  resolveLocalSellPayoutReady,
   pollCloudSellerLinkToken,
   revokeCloudSellerLinkToken,
   readStoredSellerLink,
@@ -200,6 +201,7 @@ export function createMarketplaceRouter(): Router {
       const core = getCloudDb();
       const userId = req.user!.id;
       const githubLogin = await resolveLocalSellGithubLogin(userId);
+      const linkedCloudPayoutReady = await resolveLocalSellPayoutReady();
       let catalogOrphans: Array<{
         id: string;
         title: string;
@@ -212,6 +214,7 @@ export function createMarketplaceRouter(): Router {
           sellerUserId: userId,
           sellerTenantId: req.tenantId!,
           githubLogin,
+          linkedCloudPayoutReady,
           entries,
         });
       } catch (err) {
