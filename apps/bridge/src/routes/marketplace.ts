@@ -27,7 +27,7 @@ import {
   listInferenceEndpoints,
 } from "../services/inference-service.js";
 import { claimOwnedCommunityCatalogListings } from "../services/marketplace-listings.js";
-import { fetchCommunityCatalog, installCatalogEntry } from "../services/marketplace-catalog.js";
+import { fetchCommunityCatalog, installCatalogEntry, listCatalogInstalls } from "../services/marketplace-catalog.js";
 import {
   fetchCloudGuestCheckoutStatus,
   fetchCloudGuestDelivery,
@@ -283,8 +283,21 @@ export function createMarketplaceRouter(): Router {
       }
       const delivery = await fetchCloudGuestDelivery(sessionId);
       const tenantDb = getReqTenantDb(req);
+      const coreDb = getCloudDb();
       if (delivery.catalogEntryId) {
-        const installed = await installCatalogEntry(getCloudDb(), tenantDb, {
+        const alreadyInstalled = listCatalogInstalls(coreDb, req.tenantId!).some(
+          (row) => String(row.entry_id ?? "") === delivery.catalogEntryId
+        );
+        if (alreadyInstalled) {
+          res.json({
+            ok: true,
+            deliveryKind: delivery.deliveryKind,
+            alreadyInstalled: true,
+            entryId: delivery.catalogEntryId,
+          });
+          return;
+        }
+        const installed = await installCatalogEntry(coreDb, tenantDb, {
           userId: req.user!.id,
           tenantId: req.tenantId!,
           entryId: delivery.catalogEntryId,

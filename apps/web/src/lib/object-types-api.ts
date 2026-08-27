@@ -246,6 +246,15 @@ export async function waitForOperationRun(
   for (;;) {
     opts.signal?.throwIfAborted();
     if (Date.now() - started > timeoutMs) {
+      // Prefer the real terminal error if the run already finished while a poll hung.
+      try {
+        const late = await fetchOperationRun(id);
+        if (["succeeded", "failed", "cancelled"].includes(late.status)) {
+          return late;
+        }
+      } catch {
+        /* fall through to timeout */
+      }
       throw new ApiError(408, `OperationRun timed out: ${id}`);
     }
     try {

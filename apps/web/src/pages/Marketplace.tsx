@@ -134,6 +134,39 @@ function reloadAfterPluginChange(built?: boolean) {
   window.setTimeout(() => window.location.reload(), 400);
 }
 
+function marketplaceCheckoutSessionKey(sessionId: string): string {
+  return `godmode-marketplace-checkout:${sessionId}`;
+}
+
+/** Guard Strict Mode / double navigation from running delivery twice for one Stripe session. */
+function claimMarketplaceCheckoutSession(sessionId: string): boolean {
+  try {
+    const key = marketplaceCheckoutSessionKey(sessionId);
+    const existing = sessionStorage.getItem(key);
+    if (existing === "pending" || existing === "done") return false;
+    sessionStorage.setItem(key, "pending");
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function markMarketplaceCheckoutSessionDone(sessionId: string): void {
+  try {
+    sessionStorage.setItem(marketplaceCheckoutSessionKey(sessionId), "done");
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearMarketplaceCheckoutSessionClaim(sessionId: string): void {
+  try {
+    sessionStorage.removeItem(marketplaceCheckoutSessionKey(sessionId));
+  } catch {
+    /* ignore */
+  }
+}
+
 function formatPrice(entry: CatalogEntry): string {
   return formatMarketplaceCents(entry.priceCents);
 }
@@ -625,6 +658,20 @@ export default function MarketplacePage() {
     return ids;
   }, [entitlements]);
 
+  const catalogInstalledIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of catalogInstalls) {
+      const entryId = String(row.entry_id ?? "").trim();
+      if (entryId) ids.add(entryId);
+    }
+    return ids;
+  }, [catalogInstalls]);
+
+  const isCatalogEntryInstalled = useCallback(
+    (entryId: string) => installedIds.has(entryId) || catalogInstalledIds.has(entryId),
+    [installedIds, catalogInstalledIds]
+  );
+
   const reload = useCallback(async () => {
     setLoading(true);
     const emptyUnofficial = {
@@ -771,22 +818,31 @@ export default function MarketplacePage() {
 
 
   useEffect(() => {
+    // Wait for deployment mode before handling paid return. While saas is null,
+    // `saas !== true` would wrongly take the Local delivery path on Cloud (#721).
+    if (saas === null) return;
+
     const paid = searchParams.get("paid");
     const canceled = searchParams.get("canceled");
     const sessionId = searchParams.get("session_id");
-    if (paid === "1" && sessionId && saas !== true) {
+    if (paid === "1" && sessionId && saas === false) {
       const next = new URLSearchParams(searchParams);
       next.delete("paid");
       next.delete("entry");
       next.delete("listing");
       next.delete("session_id");
       setSearchParams(next, { replace: true });
+      if (!claimMarketplaceCheckoutSession(sessionId)) {
+        return;
+      }
       void completeCloudMarketplaceCheckout(sessionId)
         .then(() => {
+          markMarketplaceCheckoutSessionDone(sessionId);
           toast.success("Payment complete. Installed on this machine.");
           void reload();
         })
         .catch((err) => {
+          clearMarketplaceCheckoutSessionClaim(sessionId);
           toast.error(userFacingErrorMessage(err, "Paid session could not be delivered"));
         });
       return;
@@ -798,12 +854,17 @@ export default function MarketplacePage() {
       next.delete("listing");
       next.delete("session_id");
       setSearchParams(next, { replace: true });
+      if (!claimMarketplaceCheckoutSession(sessionId)) {
+        return;
+      }
       void confirmMarketplaceStripeSession(sessionId)
         .then(() => {
+          markMarketplaceCheckoutSessionDone(sessionId);
           toast.success("Payment complete. Install or acquire your purchase.");
           void reload();
         })
         .catch((err) => {
+          clearMarketplaceCheckoutSessionClaim(sessionId);
           toast.error(userFacingErrorMessage(err, "Paid session could not be confirmed"));
           void reload();
         });
@@ -1341,7 +1402,7 @@ export default function MarketplacePage() {
                 <EntryCard
                   key={`official-${entry.id}`}
                   entry={entry}
-                  installed={installedIds.has(entry.id)}
+                  installed={isCatalogEntryInstalled(entry.id)}
                   installing={installingId === entry.id}
                   buying={buyingId === entry.id}
                   onInstall={() => void handleInstall(entry)}
@@ -1474,7 +1535,7 @@ export default function MarketplacePage() {
                   <EntryCard
                     key={`local-${entry.id}-${entry.sourceCatalog}`}
                     entry={entry}
-                    installed={installedIds.has(entry.id)}
+                    installed={isCatalogEntryInstalled(entry.id)}
                     installing={installingId === entry.id}
                     buying={false}
                     onInstall={() => void handleInstall(entry)}
@@ -1503,7 +1564,7 @@ export default function MarketplacePage() {
                   <EntryCard
                     key={`community-cat-${entry.id}`}
                     entry={entry}
-                    installed={installedIds.has(entry.id)}
+                    installed={isCatalogEntryInstalled(entry.id)}
                     installing={installingId === entry.id}
                     buying={buyingId === entry.id}
                     onInstall={() => void handleInstall(entry)}
