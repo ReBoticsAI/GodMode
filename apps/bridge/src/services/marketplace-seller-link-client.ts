@@ -306,3 +306,17 @@ export async function resolveLocalSellGithubLogin(
     return null;
   }
 }
+
+/**
+ * Stripe payout readiness for Local Sell publish (#709).
+ * Prefer linked Cloud Seller Stripe Connect; Local Vault Connect is optional.
+ */
+export async function resolveLocalSellPayoutReady(): Promise<boolean> {
+  if (config.isSaas) return false;
+  try {
+    const status = await getLocalSellerLinkStatus();
+    return Boolean(status.linked && status.stripePayoutReady);
+  } catch {
+    return false;
+  }
+}

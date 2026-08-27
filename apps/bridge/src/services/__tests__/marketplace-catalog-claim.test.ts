@@ -150,6 +150,51 @@ describe("claimOwnedCommunityCatalogListings", () => {
     });
   });
 
+  it("upgrades pending_payout plugin claims when linked Cloud Stripe is ready", () => {
+    const core = openClaimDb();
+    acceptMarketplaceTos(core, "u-alice");
+    const tenantDb = new Database(":memory:") as unknown as AppDatabase;
+    const paidPlugin = {
+      id: "workspace-pulse",
+      title: "Workspace Pulse",
+      author: "alice",
+      pluginRepo: "https://github.com/alice/workspace-pulse",
+      installType: "plugin",
+      kind: "plugin",
+      priceCents: 100,
+    };
+    expect(
+      claimOwnedCommunityCatalogListings(core, tenantDb, {
+        sellerUserId: "u-alice",
+        sellerTenantId: "t-alice",
+        githubLogin: "alice",
+        entries: [paidPlugin],
+      })
+    ).toEqual([]);
+    const pending = core
+      .prepare(
+        `SELECT status, visibility FROM marketplace_listings WHERE catalog_entry_id=?`
+      )
+      .get("workspace-pulse") as { status: string; visibility: string };
+    expect(pending).toEqual({ status: "pending_payout", visibility: "unlisted" });
+
+    expect(
+      claimOwnedCommunityCatalogListings(core, tenantDb, {
+        sellerUserId: "u-alice",
+        sellerTenantId: "t-alice",
+        githubLogin: "alice",
+        linkedCloudPayoutReady: true,
+        entries: [paidPlugin],
+      })
+    ).toEqual([]);
+    const active = core
+      .prepare(
+        `SELECT status, visibility FROM marketplace_listings WHERE catalog_entry_id=?`
+      )
+      .get("workspace-pulse") as { status: string; visibility: string };
+    expect(active).toEqual({ status: "active", visibility: "public" });
+  });
+
   it("does not block seller listings when the seller has not accepted ToS", () => {
     const core = openClaimDb();
     const tenantDb = new Database(":memory:") as unknown as AppDatabase;

@@ -54,6 +54,11 @@ export interface PublishMarketplaceListingInput {
   stripeConnectAttestation?: boolean;
   /** Catalog claim refresh: no Sell checkbox; skip Connect attestation assert. */
   skipStripeConnectAttestation?: boolean;
+  /**
+   * Local Sell: Cloud Seller Stripe Connect is ready via seller-link (#709).
+   * Local hub DB may have no acct_ row; treat linked Cloud payout as ready.
+   */
+  linkedCloudPayoutReady?: boolean;
 }
 
 export function publishMarketplaceListing(
@@ -72,14 +77,16 @@ export function publishMarketplaceListing(
   }
 
   const sellerKind = input.sellerKind ?? "user";
-  let payoutReady = false;
+  let payoutReady = Boolean(input.linkedCloudPayoutReady);
   if (sellerKind === "user") {
     const acct = ensureSellerAccount(core, input.sellerUserId);
-    payoutReady = Boolean(
-      acct.stripe_connect_account_id ||
-        acct.paypal_merchant_id ||
-        acct.metamask_address
-    );
+    payoutReady =
+      payoutReady ||
+      Boolean(
+        acct.stripe_connect_account_id ||
+          acct.paypal_merchant_id ||
+          acct.metamask_address
+      );
     if (Number(input.priceCents ?? 0) > 0 && !payoutReady && input.kind !== PLUGIN_LISTING_KIND) {
       throw Object.assign(
         new Error("Connect Stripe, PayPal, or MetaMask before publishing a paid listing"),
@@ -363,6 +370,8 @@ export function claimOwnedCommunityCatalogListings(
     sellerUserId: string;
     sellerTenantId: string;
     githubLogin: string | null;
+    /** Local Sell: Cloud Seller Stripe ready via seller-link. */
+    linkedCloudPayoutReady?: boolean;
     entries: Array<{
       id: string;
       title: string;
@@ -388,8 +397,23 @@ export function claimOwnedCommunityCatalogListings(
         .all(opts.sellerUserId) as Array<{ catalog_entry_id: string }>
     ).map((r) => r.catalog_entry_id)
   );
+  const pendingPayout = new Set(
+    (
+      core
+        .prepare(
+          `SELECT catalog_entry_id FROM marketplace_listings
+           WHERE seller_user_id=? AND catalog_entry_id IS NOT NULL AND status='pending_payout'`
+        )
+        .all(opts.sellerUserId) as Array<{ catalog_entry_id: string }>
+    ).map((r) => r.catalog_entry_id)
+  );
   for (const entry of opts.entries) {
-    if (claimed.has(entry.id)) continue;
+    const alreadyClaimed = claimed.has(entry.id);
+    const upgradePayout =
+      alreadyClaimed &&
+      pendingPayout.has(entry.id) &&
+      Boolean(opts.linkedCloudPayoutReady);
+    if (alreadyClaimed && !upgradePayout) continue;
     if (!sellerOwnsCatalogEntry(entry, opts.githubLogin)) continue;
     try {
       const delivery =
@@ -411,8 +435,10 @@ export function claimOwnedCommunityCatalogListings(
         sellerKind: "user",
         deliveryMode: delivery,
         skipStripeConnectAttestation: true,
+        linkedCloudPayoutReady: opts.linkedCloudPayoutReady,
       });
       claimed.add(entry.id);
+      pendingPayout.delete(entry.id);
     } catch (err) {
       if (isUniqueConstraint(err)) {
         claimed.add(entry.id);
