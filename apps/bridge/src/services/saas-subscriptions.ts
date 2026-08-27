@@ -518,6 +518,36 @@ export function getSellerEntitlementForUser(userId: string): SellerEntitlement {
 }
 
 /**
+ * Seller seat is commerce-only. Workspace Cloud already includes Seller, so do not
+ * start a second Seller subscription for that email. Also reject when Seller is
+ * already active on its own seat.
+ */
+export function assertMayStartSellerCheckout(email: string): void {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return;
+  const core = getCloudDb();
+  const user = core
+    .prepare(`SELECT id FROM users WHERE lower(email)=? LIMIT 1`)
+    .get(normalized) as { id: string } | undefined;
+  if (!user) return;
+  const entitlement = getSellerEntitlementForUser(user.id);
+  if (entitlement.source === "workspace") {
+    throw Object.assign(
+      new Error(
+        "GodMode Cloud workspace already includes Seller. A separate Seller seat is not needed."
+      ),
+      { status: 409 }
+    );
+  }
+  if (entitlement.source === "seller" && entitlement.sellerActive) {
+    throw Object.assign(
+      new Error("Seller seat is already active for this account."),
+      { status: 409 }
+    );
+  }
+}
+
+/**
  * Grant complimentary GodMode Cloud access (no Stripe).
  * Restores a prior complimentary row when present; otherwise inserts one.
  * Does not change `is_admin`. Optional `expiresAt` uses `current_period_end`.

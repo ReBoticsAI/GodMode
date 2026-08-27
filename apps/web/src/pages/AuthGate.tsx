@@ -476,7 +476,9 @@ export default function AuthGate() {
                       : showSaasPlan
                         ? "Pick a plan to unlock signup. You create your account after payment."
                         : saas
-                          ? "Payment confirmed. Create your account to open your workspace."
+                          ? selectedPlanId === "seller"
+                            ? "Payment confirmed. Create your Seller account to finish (commerce only; no Cloud workspace)."
+                            : "Payment confirmed. Create your account to open your workspace."
                           : "Create your account. The first signup becomes platform admin."}
           </CardDescription>
         </CardHeader>
