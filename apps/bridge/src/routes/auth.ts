@@ -70,7 +70,11 @@ import {
 } from "../services/saas-billing.js";
 import {
   assertSaasUserMayAccess,
+  findSubscriptionBySessionId,
+  getSellerEntitlementForUser,
+  isSellerPlanId,
   linkSubscriptionToUser,
+  subscriptionGrantsAccess,
   touchUserLastSeen,
 } from "../services/saas-subscriptions.js";
 
@@ -107,6 +111,17 @@ export function createAuthRouter(): Router {
       if (!name) {
         res.status(400).json({ error: "name required" });
         return;
+      }
+      if (config.isSaas) {
+        const entitlement = getSellerEntitlementForUser(req.user!.id);
+        // Seller-only seats are commerce accounts; workspace is a Cloud plan.
+        if (entitlement.source === "seller" && entitlement.sellerActive) {
+          res.status(403).json({
+            error:
+              "GodMode Seller does not include a Cloud workspace. Upgrade to GodMode Cloud, or use Local Sell.",
+          });
+          return;
+        }
       }
       try {
         const created = createAdminTenantForUser(
@@ -244,6 +259,13 @@ export function createAuthRouter(): Router {
     }
 
     try {
+      let provisionDefaultTenant = true;
+      if (config.isSaas && paidSessionId) {
+        const sub = findSubscriptionBySessionId(core, paidSessionId);
+        if (sub && isSellerPlanId(sub.plan_id) && !subscriptionGrantsAccess(sub)) {
+          provisionDefaultTenant = false;
+        }
+      }
       const created = await executeCollectionAction(
         core,
         "User",
@@ -252,6 +274,7 @@ export function createAuthRouter(): Router {
           email: normalized,
           password,
           display_name: displayName,
+          provision_default_tenant: provisionDefaultTenant,
         },
         createSystemOperationContext({
           requestId: req.get("X-Request-Id") || undefined,

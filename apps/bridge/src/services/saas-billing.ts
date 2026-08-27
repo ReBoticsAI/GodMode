@@ -9,9 +9,11 @@ import {
 } from "./saas-entitlements.js";
 import {
   applyStripeSubscriptionObject,
+  assertMayStartSellerCheckout,
   findSubscriptionByCustomerId,
   findSubscriptionBySessionId,
   findSubscriptionByUserId,
+  isSellerPlanId,
   linkSubscriptionToUser,
   markSubscriptionPastDueByCustomer,
   upsertSubscriptionFromCheckout,
@@ -99,6 +101,9 @@ export async function createSaasCheckoutSession(opts: {
     : plans[0];
   if (!plan) {
     throw Object.assign(new Error("Unknown plan"), { status: 400 });
+  }
+  if (isSellerPlanId(plan.id)) {
+    assertMayStartSellerCheckout(email);
   }
 
   const params: Record<string, string> = {

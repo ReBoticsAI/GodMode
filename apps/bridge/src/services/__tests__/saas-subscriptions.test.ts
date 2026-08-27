@@ -49,6 +49,7 @@ vi.mock("../../config.js", () => ({
 import { handleSaasStripeWebhook } from "../saas-billing.js";
 import {
   applyStripeSubscriptionObject,
+  assertMayStartSellerCheckout,
   assertSaasUserMayAccess,
   getSellerEntitlementForUser,
   grantComplimentaryAccess,
@@ -449,5 +450,50 @@ describe("saas subscriptions", () => {
       planId: "monthly",
       source: "workspace",
     });
+  });
+
+  it("blocks Seller seat checkout when workspace already grants Seller", () => {
+    const user = insertUser({ email: "stack@example.com" });
+    upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_stack_ws",
+      email: "stack@example.com",
+      stripeCustomerId: "cus_stack_ws",
+      stripeSubscriptionId: "sub_stack_ws",
+      planId: "monthly",
+      priceId: "price_month",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_stack_ws",
+      stripeCustomerId: "cus_stack_ws",
+      email: "stack@example.com",
+    });
+    expect(() => assertMayStartSellerCheckout("stack@example.com")).toThrow(
+      /already includes Seller/i
+    );
+    expect(() => assertMayStartSellerCheckout("fresh-seller@example.com")).not.toThrow();
+  });
+
+  it("blocks Seller seat checkout when Seller seat is already active", () => {
+    const user = insertUser({ email: "seller-active@example.com" });
+    upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_seller_active",
+      email: "seller-active@example.com",
+      stripeCustomerId: "cus_seller_active",
+      stripeSubscriptionId: "sub_seller_active",
+      planId: "seller",
+      priceId: "price_seller",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_seller_active",
+      stripeCustomerId: "cus_seller_active",
+      email: "seller-active@example.com",
+    });
+    expect(() => assertMayStartSellerCheckout("seller-active@example.com")).toThrow(
+      /already active/i
+    );
   });
 });

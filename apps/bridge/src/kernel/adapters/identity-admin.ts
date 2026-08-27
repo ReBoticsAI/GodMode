@@ -57,7 +57,12 @@ interface TenantLifecycleRun {
 export interface IdentityAdminAdapterServices {
   signup(
     core: CoreDatabase,
-    input: { email: string; password: string; displayName?: string }
+    input: {
+      email: string;
+      password: string;
+      displayName?: string;
+      provisionDefaultTenant?: boolean;
+    }
   ): AdminUserDto;
   createTenant(
     core: CoreDatabase,
@@ -76,7 +81,7 @@ const defaultServices: IdentityAdminAdapterServices = {
       password: input.password,
       displayName: input.displayName,
       isAdmin: false,
-      provisionDefaultTenant: true,
+      provisionDefaultTenant: input.provisionDefaultTenant !== false,
     });
     promoteFirstSignupAdmin(core, created.id);
     return getAdminUser(core, created.id)!;
@@ -239,6 +244,7 @@ export const userAdminAdapter: RecordAdapter = {
           typeof input.display_name === "string"
             ? input.display_name
             : undefined,
+        provisionDefaultTenant: input.provision_default_tenant !== false,
       });
       return userRecord(def, created);
     },
@@ -933,6 +939,7 @@ export const IDENTITY_ADMIN_ACTIONS: Record<string, ActionDef[]> = {
           email: { type: "string" },
           password: { type: "string", minLength: 6 },
           display_name: { type: "string" },
+          provision_default_tenant: { type: "boolean" },
         },
         ["email", "password"]
       ),
