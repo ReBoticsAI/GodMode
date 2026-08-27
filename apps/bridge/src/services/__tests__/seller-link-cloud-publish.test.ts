@@ -7,7 +7,7 @@ const fetchCommunityCatalog = vi.fn(async () => ({
     {
       id: "community-ping",
       title: "Community Ping",
-      author: "Dane Schell",
+      author: "Alice Example",
       pluginRepo: "https://github.com/ReBoticsAI/gm-442-smoke-test",
       installType: "plugin",
     },
@@ -19,7 +19,7 @@ const getSellerEntitlementPayload = vi.fn(() => ({
   planId: "seller",
   source: "seller",
   githubConnected: true,
-  githubLogin: "DaneSchell",
+  githubLogin: "AliceExample",
   tosAccepted: true,
   stripePayoutReady: true,
 }));
@@ -66,7 +66,7 @@ describe("publishListingForSellerLinkUser (#709)", () => {
       planId: "seller",
       source: "seller",
       githubConnected: true,
-      githubLogin: "DaneSchell",
+      githubLogin: "AliceExample",
       tosAccepted: true,
       stripePayoutReady: true,
     });
@@ -90,7 +90,7 @@ describe("publishListingForSellerLinkUser (#709)", () => {
         sellerUserId: userId,
         sellerTenantId: "tenant-seller-1",
         catalogEntryId: "community-ping",
-        githubLogin: "DaneSchell",
+        githubLogin: "AliceExample",
         priceCents: 100,
       })
     );

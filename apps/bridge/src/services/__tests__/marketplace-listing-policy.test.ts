@@ -22,7 +22,7 @@ describe("sellerOwnsCatalogEntry", () => {
   });
 
   it("matches catalog display names with spaces to GitHub login (#709)", () => {
-    expect(sellerOwnsCatalogEntry({ author: "Dane Schell" }, "DaneSchell")).toBe(true);
+    expect(sellerOwnsCatalogEntry({ author: "Alice Example" }, "AliceExample")).toBe(true);
   });
 });
 
