@@ -4,13 +4,16 @@ import type { CoreDatabase } from "../../core-db.js";
 import {
   assertOfficialCatalogPluginPinForUpsert,
   auditOfficialCatalogPluginPins,
+  applyOfficialCatalogDefaultPrices,
   buildPublicOfficialCatalog,
+  ensureOfficialCatalogHydrated,
   listOfficialCatalogRows,
   syncOfficialCatalogFromPublicFeed,
   upsertOfficialCatalogEntry,
   type OfficialCatalogRow,
 } from "../marketplace-official-catalog.js";
 import { assertPluginInstallPin } from "../marketplace-plugin-pin.js";
+import { config } from "../../config.js";
 
 vi.mock("../marketplace-catalog.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../marketplace-catalog.js")>();
@@ -51,6 +54,16 @@ vi.mock("../marketplace-catalog.js", async (importOriginal) => {
           version: "1.1.0",
           author: "GodMode",
           bundlePath: "packs/research-agent-pack/bundle.json",
+        },
+        {
+          id: "work-starter-pack",
+          kind: "bundle",
+          installType: "clone" as const,
+          title: "Work Starter Department",
+          description: "pack",
+          version: "1.1.0",
+          author: "GodMode",
+          bundlePath: "packs/work-starter-pack/bundle.json",
         },
       ],
     })),
@@ -228,5 +241,47 @@ describe("marketplace-official-catalog pins (#292)", () => {
     expect(git?.sort_order).toBe(7);
     expect(git?.plugin_ref).toBe("b10fd98ff315262cfc815e1f6d90ae2f23489e02");
     expect(git?.plugin_digest).toBe("b10fd98ff315262cfc815e1f6d90ae2f23489e02");
+  });
+
+  it("applies default Cloud prices for new Official rows during sync", async () => {
+    const db = openOfficialCatalogDb();
+    const result = await syncOfficialCatalogFromPublicFeed(db);
+    expect(result.upserted).toContain("work-starter-pack");
+    const workStarter = listOfficialCatalogRows(db).find(
+      (r) => r.entry_id === "work-starter-pack"
+    );
+    expect(workStarter?.price_cents).toBe(100);
+  });
+
+  it("hydrates empty SaaS catalog and avoids all-free GitHub fallback", async () => {
+    const previousIsSaas = config.isSaas;
+    config.isSaas = true;
+    try {
+      const db = openOfficialCatalogDb();
+      const hydrated = await ensureOfficialCatalogHydrated(db);
+      expect(hydrated.synced).toBe(true);
+
+      const catalog = await buildPublicOfficialCatalog(db);
+      expect(catalog.entries.length).toBeGreaterThan(0);
+      expect(catalog.entries.find((e) => e.id === "work-starter-pack")?.priceCents).toBe(
+        100
+      );
+      expect(catalog.entries.every((e) => e.sourceName === "Official")).toBe(true);
+    } finally {
+      config.isSaas = previousIsSaas;
+    }
+  });
+
+  it("preserves admin prices when applying defaults", () => {
+    const db = openOfficialCatalogDb();
+    upsertOfficialCatalogEntry(db, {
+      entryId: "work-starter-pack",
+      title: "Work Starter",
+      installType: "clone",
+      priceCents: 499,
+    });
+    expect(applyOfficialCatalogDefaultPrices(db)).toBe(0);
+    const row = listOfficialCatalogRows(db).find((r) => r.entry_id === "work-starter-pack");
+    expect(row?.price_cents).toBe(499);
   });
 });
