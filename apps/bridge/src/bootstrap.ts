@@ -6,8 +6,8 @@ import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
 import "dotenv/config";
 import { config, isMarketingCorsOrigin } from "./config.js";
-import { initCoreDb, listAllTenantIds } from "./core-db.js";
-import { getTenantDb, pinTenantDb, closeAllTenantDbs } from "./tenant-registry.js";
+import { initCoreDb } from "./core-db.js";
+import { getTenantDb, pinTenantDb, closeAllTenantDbs, listTenantDbAccessors } from "./tenant-registry.js";
 import { closeAllPluginSqlite } from "./services/plugin-sqlite.js";
 import { closeAllUserDbs } from "./user-registry.js";
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
@@ -124,14 +124,8 @@ repairNonOperatorTenantStructure(coreDb);
 removeLegacyLifeDepartmentFromPersonalTenants(coreDb);
 const db: AppDatabase = getTenantDb(operatorTenantId);
 pinTenantDb(operatorTenantId);
-const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => {
-  return listAllTenantIds(coreDb).map((tenantId) => ({
-    tenantId,
-    get db() {
-      return getTenantDb(tenantId);
-    },
-  }));
-};
+const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> =>
+  listTenantDbAccessors(db);
 const kernelDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => [
   { tenantId: "core", db: coreDb },
   ...tenantDatabases(),

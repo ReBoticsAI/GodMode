@@ -2,8 +2,7 @@ import type { EventEmitter } from "node:events";
 import cron, { type ScheduledTask } from "node-cron";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
-import { getCloudDb, listAllTenantIds } from "../core-db.js";
-import { getTenantDb } from "../tenant-registry.js";
+import { getTenantDb, listTenantDbAccessors } from "../tenant-registry.js";
 import type { AiQueueWorker } from "./ai-queue-worker.js";
 import { AUTONOMOUS_RUNNER_ID } from "./ai-queue-worker.js";
 import { listWorkflows } from "./ai-workflows.js";
@@ -143,20 +142,11 @@ export class AiScheduler {
 
   /** All tenant DBs (operator first). Schedules + workflows are per-tenant. */
   private tenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
-    const out: Array<{ tenantId: string; db: AppDatabase }> = [];
-    try {
-      for (const id of listAllTenantIds(getCloudDb())) {
-        try {
-          out.push({ tenantId: id, db: getTenantDb(id) });
-        } catch {
-          /* skip */
-        }
-      }
-    } catch {
-      /* core unavailable */
-    }
-    if (out.length === 0) out.push({ tenantId: "", db: this.db });
-    return out;
+    return listTenantDbAccessors(this.db);
+  }
+
+  private tenantDbFor(tenantId: string): AppDatabase {
+    return tenantId ? getTenantDb(tenantId) : this.db;
   }
 
   private registerCronSchedules(): void {
@@ -170,7 +160,8 @@ export class AiScheduler {
         const task = cron.schedule(
           sched.cron_expr,
           () => {
-            db.prepare(`UPDATE ai_schedules SET last_run_at = datetime('now') WHERE id = ?`)
+            const liveDb = this.tenantDbFor(tenantId);
+            liveDb.prepare(`UPDATE ai_schedules SET last_run_at = datetime('now') WHERE id = ?`)
               .run(sched.id);
             // The autonomous runner self-re-enqueues until idle, so the cron is
             // only a wake-if-idle kick. Skip if a tick is already queued/running
