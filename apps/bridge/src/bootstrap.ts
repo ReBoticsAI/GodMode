@@ -84,6 +84,7 @@ import { EngineReconciler } from "./services/engines/reconciler.js";
 import { startDbMaintenance } from "./services/db-maintenance.js";
 import { startRetentionScheduler } from "./services/retention.js";
 import { startMarketplaceBillingScheduler } from "./services/marketplace-billing.js";
+import { ensureOfficialCatalogHydrated } from "./services/marketplace-official-catalog.js";
 import { refreshPeerHealth } from "./services/federation-peers.js";
 import { startTenantEventsRelay } from "./services/events-relay.js";
 import {
@@ -220,6 +221,21 @@ startDbMaintenance(db);
 startRetentionScheduler(db);
 if (config.isHub) {
   startMarketplaceBillingScheduler();
+  if (config.isSaas) {
+    try {
+      const hydrated = await ensureOfficialCatalogHydrated(coreDb);
+      if (hydrated.synced || hydrated.defaultPricesApplied > 0) {
+        console.log(
+          `[marketplace-official] hydrated catalog (synced=${hydrated.synced}, defaultPrices=${hydrated.defaultPricesApplied})`
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[marketplace-official] bootstrap hydrate failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
 }
 const stopEventsRelay = startTenantEventsRelay(kernelDatabases, bus);
 const workerPool = createWorkerPool();

@@ -46,6 +46,8 @@ On **GodMode Cloud** (`INSTALLATION_SURFACE=saas`), Official entries are curated
 - Authenticated: `GET /api/marketplace/catalog/official`
 - Public (local/private-hub pulls): `GET /api/marketplace/commerce/catalog/official/public`
 
+On first Cloud boot (or when the curated table is empty), Bridge syncs pinned rows from the free Official GitHub index, then applies default Cloud prices from `apps/bridge/data/marketplace-official-default-prices.json` where `price_cents` is still zero. GitHub carries pins and metadata only; paid Official commerce prices live in the Cloud table. Re-sync preserves existing Cloud prices. SaaS does not silently fall back to an all-free GitHub shelf when the curated table is empty after hydrate.
+
 Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` (defaults to the Cloud Official public feed) so they see ReBotics-selected prices. The same default applies to `MARKETPLACE_SAAS_COMMUNITY_URL` for Community listing ids and public clone/live cards. Set either variable to empty to disable that Cloud overlay.
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
@@ -118,6 +120,10 @@ and are served at the public Official feed. Active `installType: "plugin"` rows
 must have an immutable `pluginRef` (and preferably `pluginDigest`). Admin upsert
 fail-closes on floating refs. Admin checklist:
 
+0. Fresh Cloud: Bridge auto-syncs from the public Official index on boot when the
+   curated table is empty and applies default prices from
+   `apps/bridge/data/marketplace-official-default-prices.json` for known paid SKUs.
+   Add or edit defaults there when introducing a new paid Official pack.
 1. `GET /api/marketplace/commerce/admin/official-catalog` and check `pinAudit`
    (empty means all active plugins are pinned).
 2. Prefer `POST /api/marketplace/commerce/admin/official-catalog/sync-from-public`
