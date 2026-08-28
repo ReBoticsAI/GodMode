@@ -126,17 +126,26 @@ describe("formatMarketplaceAuthor", () => {
     ).toBe("ReBotics AI");
   });
 
-  it("shows Community authors as GitHub logins", () => {
+  it("shows Community authors as the plugin repo GitHub owner", () => {
     expect(
       formatMarketplaceAuthor({
         sourceName: "Community",
-        author: "Dane Schell",
-        pluginRepo: "https://github.com/DaneSchell/godmode-workspace-pulse",
+        author: "Legacy Display Name",
+        pluginRepo: "https://github.com/alice-dev/godmode-sample-plugin",
       })
-    ).toBe("DaneSchell");
+    ).toBe("alice-dev");
     expect(
-      formatMarketplaceAuthor({ sourceName: "Community", author: "Dane Schell" })
-    ).toBe("DaneSchell");
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "alice-dev",
+      })
+    ).toBe("alice-dev");
+    expect(
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "Legacy Display Name",
+      })
+    ).toBe("Unknown");
   });
 });
 

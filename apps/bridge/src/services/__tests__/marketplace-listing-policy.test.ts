@@ -39,21 +39,27 @@ describe("displayMarketplaceAuthor", () => {
     ).toBe("ReBotics AI");
   });
 
-  it("shows Community authors as GitHub logins, not spaced names", () => {
+  it("shows Community authors as the plugin repo GitHub owner", () => {
     expect(
-      displayCommunityCatalogAuthor("Dane Schell", "https://github.com/DaneSchell/godmode-workspace-pulse")
-    ).toBe("DaneSchell");
-    expect(displayCommunityCatalogAuthor("DaneSchell")).toBe("DaneSchell");
-    expect(displayCommunityCatalogAuthor("Dane Schell")).toBe("DaneSchell");
-    // Author login wins over org-hosted pluginRepo
+      displayCommunityCatalogAuthor(
+        "Legacy Display Name",
+        "https://github.com/alice-dev/godmode-sample-plugin"
+      )
+    ).toBe("alice-dev");
+    expect(displayCommunityCatalogAuthor("alice-dev")).toBe("alice-dev");
+    expect(displayCommunityCatalogAuthor("Legacy Display Name")).toBe("Unknown");
+    // Repo owner wins over a mismatched author login
     expect(
-      displayCommunityCatalogAuthor("Dane Schell", "https://github.com/ReBoticsAI/gm-442-smoke-test")
-    ).toBe("DaneSchell");
+      displayCommunityCatalogAuthor(
+        "other-login",
+        "https://github.com/alice-dev/godmode-sample-plugin"
+      )
+    ).toBe("alice-dev");
   });
 
   it("isGithubLoginAuthor rejects display names", () => {
-    expect(isGithubLoginAuthor("DaneSchell")).toBe(true);
-    expect(isGithubLoginAuthor("Dane Schell")).toBe(false);
+    expect(isGithubLoginAuthor("alice-dev")).toBe(true);
+    expect(isGithubLoginAuthor("Legacy Display Name")).toBe(false);
     expect(isGithubLoginAuthor("ReBotics AI")).toBe(false);
   });
 });

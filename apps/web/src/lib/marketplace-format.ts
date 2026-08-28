@@ -87,19 +87,26 @@ export function githubOwnerFromPluginRepo(
   return owner || null;
 }
 
+/** True when author looks like a GitHub login (no spaces). */
+function isGithubLoginAuthor(author: string | null | undefined): boolean {
+  const a = String(author ?? "").trim();
+  if (!a || /\s/.test(a)) return false;
+  return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(a);
+}
+
 /**
- * Community catalog author is the publisher's GitHub login (not a display name).
- * Spaced names like "Dane Schell" are collapsed to DaneSchell for display.
+ * Community catalog author is the GitHub owner of the plugin repo.
+ * Official cards use OFFICIAL_MARKETPLACE_AUTHOR separately; never here.
  */
 export function displayCommunityCatalogAuthor(
   author: string | null | undefined,
   pluginRepo?: string | null
 ): string {
+  const fromRepo = githubOwnerFromPluginRepo(pluginRepo);
+  if (fromRepo) return fromRepo;
   const raw = String(author ?? "").trim();
-  if (raw) {
-    return raw.includes(" ") ? raw.replace(/\s+/g, "") : raw;
-  }
-  return githubOwnerFromPluginRepo(pluginRepo) || "Unknown";
+  if (isGithubLoginAuthor(raw)) return raw;
+  return "Unknown";
 }
 
 /** Normalize catalog card author by shelf (Official vs Community). */

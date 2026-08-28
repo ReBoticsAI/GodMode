@@ -16,6 +16,7 @@ import {
   putGithubFileContent,
 } from "./coding/github-contents.js";
 import { resolveCodingGithubAccessToken } from "./coding/git-host-auth.js";
+import { githubOwnerFromPluginRepo } from "./marketplace-listing-policy.js";
 
 export const COMMUNITY_MARKETPLACE_UPSTREAM = {
   owner: "ReBoticsAI",
@@ -192,12 +193,13 @@ export async function prepareCommunityCatalogSubmission(opts: {
     blockers.push({
       code: "github_connect",
       message:
-        "Connect GitHub before submitting to the Community catalog. The catalog author is your GitHub login.",
+        "Connect GitHub before submitting to the Community catalog. The catalog author is the GitHub owner of the plugin repository.",
     });
   }
 
-  // Community author is always the submitter's GitHub login (never a display name).
-  const author = githubLogin ?? "";
+  // Community author is the plugin repo GitHub owner (submitter login when repo is missing).
+  const repoOwner = githubOwnerFromPluginRepo(opts.input.pluginRepo);
+  const author = repoOwner || githubLogin || "";
   const entry = buildCatalogEntry({ ...opts.input, id }, author || "unknown");
   blockers.push(...submissionBlockers(entry, opts.input.installType));
 

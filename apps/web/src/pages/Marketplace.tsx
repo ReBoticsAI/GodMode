@@ -2228,12 +2228,12 @@ export default function MarketplacePage() {
                   </ToggleGroup>
                   <FieldDescription>
                     {publishFamily === "plugin"
-                      ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the catalog author (GitHub login)."
+                      ? "Attach a Community catalog plugin after intake CI. GitHub Connect must match the plugin repo owner (catalog author)."
                       : publishFamily === "live"
                         ? "Catalog-backed live access on this host. Select a deliveryMode live catalog row, then bind a workspace resource whose export matches the pin. Free Shared sidebar stays outside Marketplace."
                         : publishFamily === "inference"
                           ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
-                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Catalog author is the publisher GitHub login."}
+                          : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Catalog author is the plugin repo GitHub owner."}
                   </FieldDescription>
                 </Field>
 

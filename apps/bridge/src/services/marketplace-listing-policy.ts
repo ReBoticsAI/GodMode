@@ -62,20 +62,19 @@ export function githubOwnerFromPluginRepo(
 }
 
 /**
- * Community catalog author is the publisher's GitHub login (not a display name).
- * Spaced names like "Dane Schell" are collapsed to DaneSchell for display/serve.
- * Repo owner is only a fallback when author is missing (not preferred over login).
+ * Community catalog author is the GitHub owner of the plugin repo.
+ * Official cards use OFFICIAL_MARKETPLACE_AUTHOR separately; never here.
+ * Prefer pluginRepo owner; fall back to author only when it already looks like a login.
  */
 export function displayCommunityCatalogAuthor(
   author: string | null | undefined,
   pluginRepo?: string | null
 ): string {
+  const fromRepo = githubOwnerFromPluginRepo(pluginRepo);
+  if (fromRepo) return fromRepo;
   const raw = String(author ?? "").trim();
-  if (raw) {
-    // GitHub logins never contain spaces; collapse legacy display names.
-    return raw.includes(" ") ? raw.replace(/\s+/g, "") : raw;
-  }
-  return githubOwnerFromPluginRepo(pluginRepo) || "Unknown";
+  if (isGithubLoginAuthor(raw)) return raw;
+  return "Unknown";
 }
 
 /** True when author looks like a GitHub login (no spaces). */
