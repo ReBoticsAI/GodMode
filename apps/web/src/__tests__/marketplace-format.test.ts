@@ -5,6 +5,7 @@ import {
   marketplaceCloudVaultMarketplaceUrl,
   marketplaceSellerStorefrontUrl,
   communityCheckoutBody,
+  formatMarketplaceAuthor,
   formatMarketplaceCents,
   installedEmptyHint,
   listingStatusLabel,
@@ -115,6 +116,36 @@ describe("formatMarketplaceCents", () => {
     expect(formatMarketplaceCents(0)).toBe("Free");
     expect(formatMarketplaceCents(null)).toBe("Free");
     expect(formatMarketplaceCents(999)).toBe("$9.99");
+  });
+});
+
+describe("formatMarketplaceAuthor", () => {
+  it("shows Official as ReBotics AI", () => {
+    expect(
+      formatMarketplaceAuthor({ sourceName: "Official", author: "GodMode" })
+    ).toBe("ReBotics AI");
+  });
+
+  it("shows Community authors as the plugin repo GitHub owner", () => {
+    expect(
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "Legacy Display Name",
+        pluginRepo: "https://github.com/alice-dev/godmode-sample-plugin",
+      })
+    ).toBe("alice-dev");
+    expect(
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "alice-dev",
+      })
+    ).toBe("alice-dev");
+    expect(
+      formatMarketplaceAuthor({
+        sourceName: "Community",
+        author: "Legacy Display Name",
+      })
+    ).toBe("Unknown");
   });
 });
 

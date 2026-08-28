@@ -3,6 +3,9 @@ import {
   attachListingCommerceToCatalogEntry,
   attachListingIdToCatalogEntry,
   communityPluginInstallBlock,
+  displayCommunityCatalogAuthor,
+  displayMarketplaceAuthor,
+  isGithubLoginAuthor,
   isCommunityCatalogSource,
   listingKindFromCatalogEntry,
   resolveListingPublishState,
@@ -23,6 +26,41 @@ describe("sellerOwnsCatalogEntry", () => {
 
   it("matches catalog display names with spaces to GitHub login (#709)", () => {
     expect(sellerOwnsCatalogEntry({ author: "Alice Example" }, "AliceExample")).toBe(true);
+  });
+});
+
+describe("displayMarketplaceAuthor", () => {
+  it("forces Official author to ReBotics AI", () => {
+    expect(
+      displayMarketplaceAuthor({
+        sourceName: "Official",
+        author: "GodMode",
+      })
+    ).toBe("ReBotics AI");
+  });
+
+  it("shows Community authors as the plugin repo GitHub owner", () => {
+    expect(
+      displayCommunityCatalogAuthor(
+        "Legacy Display Name",
+        "https://github.com/alice-dev/godmode-sample-plugin"
+      )
+    ).toBe("alice-dev");
+    expect(displayCommunityCatalogAuthor("alice-dev")).toBe("alice-dev");
+    expect(displayCommunityCatalogAuthor("Legacy Display Name")).toBe("Unknown");
+    // Repo owner wins over a mismatched author login
+    expect(
+      displayCommunityCatalogAuthor(
+        "other-login",
+        "https://github.com/alice-dev/godmode-sample-plugin"
+      )
+    ).toBe("alice-dev");
+  });
+
+  it("isGithubLoginAuthor rejects display names", () => {
+    expect(isGithubLoginAuthor("alice-dev")).toBe(true);
+    expect(isGithubLoginAuthor("Legacy Display Name")).toBe(false);
+    expect(isGithubLoginAuthor("ReBotics AI")).toBe(false);
   });
 });
 

@@ -70,6 +70,59 @@ export function formatMarketplaceCents(cents: number | null | undefined): string
   return `$${(n / 100).toFixed(2)}`;
 }
 
+/** Display author for every Official Marketplace card. */
+export const OFFICIAL_MARKETPLACE_AUTHOR = "ReBotics AI";
+
+/** GitHub owner/login from a github.com repo URL (or owner/repo path). */
+export function githubOwnerFromPluginRepo(
+  pluginRepo: string | null | undefined
+): string | null {
+  const repo = String(pluginRepo ?? "").trim();
+  if (!repo) return null;
+  const path = repo
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  const owner = path.split("/")[0]?.trim();
+  return owner || null;
+}
+
+/** True when author looks like a GitHub login (no spaces). */
+function isGithubLoginAuthor(author: string | null | undefined): boolean {
+  const a = String(author ?? "").trim();
+  if (!a || /\s/.test(a)) return false;
+  return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(a);
+}
+
+/**
+ * Community catalog author is the GitHub owner of the plugin repo.
+ * Official cards use OFFICIAL_MARKETPLACE_AUTHOR separately; never here.
+ */
+export function displayCommunityCatalogAuthor(
+  author: string | null | undefined,
+  pluginRepo?: string | null
+): string {
+  const fromRepo = githubOwnerFromPluginRepo(pluginRepo);
+  if (fromRepo) return fromRepo;
+  const raw = String(author ?? "").trim();
+  if (isGithubLoginAuthor(raw)) return raw;
+  return "Unknown";
+}
+
+/** Normalize catalog card author by shelf (Official vs Community). */
+export function formatMarketplaceAuthor(entry: {
+  sourceName?: string | null;
+  author?: string | null;
+  pluginRepo?: string | null;
+}): string {
+  const shelf = String(entry.sourceName ?? "").trim().toLowerCase();
+  if (shelf === "official") return OFFICIAL_MARKETPLACE_AUTHOR;
+  if (shelf === "community") {
+    return displayCommunityCatalogAuthor(entry.author, entry.pluginRepo);
+  }
+  return String(entry.author ?? "").trim() || "Unknown";
+}
+
 /**
  * Official tab empty-state copy (#434 / #380).
  * Cloud empty means feed/network/admin curation; local path is self-host/dev only.

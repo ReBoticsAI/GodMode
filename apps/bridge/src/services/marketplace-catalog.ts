@@ -22,7 +22,9 @@ import { assertDeployAllowed } from "./authority/deploy-authority.js";
 import {
   attachListingCommerceToCatalogEntry,
   communityPluginInstallBlock,
+  displayCommunityCatalogAuthor,
   isCommunityCatalogSource,
+  OFFICIAL_MARKETPLACE_AUTHOR,
 } from "./marketplace-listing-policy.js";
 import {
   applyCommunityCommerceOverlay,
@@ -266,6 +268,7 @@ export async function fetchOfficialCatalog(): Promise<{ url: string; entries: Ca
   const entries = index.entries.map((e) =>
     withOfficialVerifiedPublisher({
       ...e,
+      author: OFFICIAL_MARKETPLACE_AUTHOR,
       sourceCatalog: url,
       sourceName: "Official",
     })
@@ -292,6 +295,7 @@ export async function fetchCommunityCatalog(
   const index = await fetchCatalogIndex(url);
   let entries: CatalogEntry[] = index.entries.map((e) => ({
     ...e,
+    author: displayCommunityCatalogAuthor(e.author, e.pluginRepo),
     sourceCatalog: url,
     sourceName: "Community",
     verifiedPublisher: e.verifiedPublisher === true,

@@ -13,6 +13,7 @@ import {
   isFloatingPluginRef,
   normalizePluginRef,
 } from "./marketplace-plugin-pin.js";
+import { OFFICIAL_MARKETPLACE_AUTHOR } from "./marketplace-listing-policy.js";
 
 export type OfficialCatalogRow = {
   entry_id: string;
@@ -209,7 +210,7 @@ export function assertOfficialCatalogPluginPinForUpsert(
       title: entry.title,
       description: entry.description ?? "",
       version: entry.version ?? "0.0.0",
-      author: entry.author ?? "ReBotics",
+      author: entry.author ?? OFFICIAL_MARKETPLACE_AUTHOR,
       pluginRepo: entry.pluginRepo,
       pluginRef: entry.pluginRef,
       pluginDigest: entry.pluginDigest,
@@ -352,7 +353,7 @@ function rowToCatalogEntry(row: OfficialCatalogRow, sourceCatalog: string): Cata
     title: row.title,
     description: row.description ?? "",
     version: row.version ?? "0.0.0",
-    author: row.author ?? "ReBotics",
+    author: OFFICIAL_MARKETPLACE_AUTHOR,
     tags,
     bundlePath: row.bundle_path ?? undefined,
     pluginRepo: row.plugin_repo ?? undefined,
