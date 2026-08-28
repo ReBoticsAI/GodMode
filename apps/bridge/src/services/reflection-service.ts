@@ -1,8 +1,7 @@
 import type { EventEmitter } from "node:events";
 import cron, { type ScheduledTask } from "node-cron";
 import type { AppDatabase } from "../db.js";
-import { getCloudDb, listAllTenantIds } from "../core-db.js";
-import { getTenantDb } from "../tenant-registry.js";
+import { getTenantDb, listTenantDbAccessors } from "../tenant-registry.js";
 import type { LlmManager } from "./llm-manager.js";
 import type { AiQueueWorker } from "./ai-queue-worker.js";
 import {
@@ -97,20 +96,7 @@ export class ReflectionService {
 
   /** All tenant DBs (operator first). Reflection config is per-tenant. */
   private tenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
-    const out: Array<{ tenantId: string; db: AppDatabase }> = [];
-    try {
-      for (const id of listAllTenantIds(getCloudDb())) {
-        try {
-          out.push({ tenantId: id, db: getTenantDb(id) });
-        } catch {
-          /* skip */
-        }
-      }
-    } catch {
-      /* core unavailable */
-    }
-    if (out.length === 0) out.push({ tenantId: "", db: this.db });
-    return out;
+    return listTenantDbAccessors(this.db);
   }
 
   private tickIdle(): void {
