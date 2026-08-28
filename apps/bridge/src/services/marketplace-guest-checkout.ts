@@ -6,6 +6,8 @@ import {
 } from "../core-db.js";
 import {
   createMarketplaceOrder,
+  findOrderByProviderRef,
+  getMarketplaceOrder,
   MARKETPLACE_UPSTREAM_PAYMENT_STATUS,
   MarketplaceCommerceError,
   sellerSupportedProviders,
@@ -264,6 +266,84 @@ export function guestCheckoutStatus(
     status,
     listingId: typeof grant.listing_id === "string" ? grant.listing_id : null,
     catalogEntryId: typeof grant.catalog_entry_id === "string" ? grant.catalog_entry_id : null,
+  };
+}
+
+export function normalizeStripeCheckoutSessionId(raw: string): string {
+  const sessionId = String(raw ?? "").trim();
+  if (!sessionId.startsWith("cs_")) {
+    throw new MarketplaceCommerceError("Checkout session id must start with cs_", 400);
+  }
+  return sessionId;
+}
+
+export function assertReclaimEmailMatchesGrant(
+  grant: Record<string, unknown> | undefined,
+  buyerEmail?: string | null
+): void {
+  const normalized = String(buyerEmail ?? "").trim().toLowerCase();
+  if (!normalized) return;
+  const grantEmail = String(grant?.buyer_email ?? "").trim().toLowerCase();
+  if (!grantEmail) return;
+  if (grantEmail !== normalized) {
+    throw new MarketplaceCommerceError("Email does not match this purchase", 403);
+  }
+}
+
+/** Link a paid guest Checkout session to a signed-in Cloud buyer (#726). */
+export function linkGuestMarketplaceOrderToBuyer(
+  core: CoreDatabase,
+  opts: {
+    sessionId: string;
+    buyerUserId: string;
+    buyerTenantId: string;
+    buyerEmail?: string | null;
+  }
+): {
+  linked: boolean;
+  order: Record<string, unknown>;
+  listingId: string | null;
+  catalogEntryId: string | null;
+} {
+  const sessionId = normalizeStripeCheckoutSessionId(opts.sessionId);
+  const grant = getDeliveryGrantBySession(core, sessionId);
+  assertReclaimEmailMatchesGrant(grant, opts.buyerEmail);
+
+  const order = findOrderByProviderRef(core, "stripe", sessionId);
+  if (!order) {
+    throw new MarketplaceCommerceError("No Marketplace order for this Checkout session", 404);
+  }
+  const status = String(order.status);
+  if (status !== "paid" && status !== "delivered") {
+    throw new MarketplaceCommerceError("Payment is not complete for this session", 402);
+  }
+
+  const buyerUserId = opts.buyerUserId;
+  const currentBuyer = String(order.buyer_user_id);
+  let linked = false;
+  if (currentBuyer === MARKETPLACE_GUEST_USER_ID) {
+    core
+      .prepare(
+        `UPDATE marketplace_orders
+         SET buyer_user_id=?, buyer_tenant_id=?, updated_at=datetime('now')
+         WHERE id=?`
+      )
+      .run(buyerUserId, opts.buyerTenantId, order.id);
+    linked = true;
+  } else if (currentBuyer !== buyerUserId) {
+    throw new MarketplaceCommerceError("This purchase is linked to another account", 403);
+  }
+
+  const updated = getMarketplaceOrder(core, String(order.id));
+  if (!updated) {
+    throw new MarketplaceCommerceError("Order missing after reclaim", 500);
+  }
+  return {
+    linked,
+    order: updated,
+    listingId: typeof updated.listing_id === "string" ? updated.listing_id : null,
+    catalogEntryId:
+      typeof updated.catalog_entry_id === "string" ? updated.catalog_entry_id : null,
   };
 }
 
