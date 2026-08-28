@@ -32,6 +32,7 @@ import {
   removeLocalPlugin,
   startCloudMarketplaceCheckout,
   completeCloudMarketplaceCheckout,
+  reclaimCloudMarketplacePurchase,
   startMarketplaceCheckout,
   confirmMarketplaceStripeSession,
   uninstallWorkspacePlugin,
@@ -171,6 +172,90 @@ function clearMarketplaceCheckoutSessionClaim(sessionId: string): void {
 
 function formatPrice(entry: CatalogEntry): string {
   return formatMarketplaceCents(entry.priceCents);
+}
+
+function PurchaseRecoveryCard({
+  saas,
+  onSuccess,
+}: {
+  saas: boolean | null;
+  onSuccess: () => void;
+}) {
+  const [sessionId, setSessionId] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handleReclaim = async () => {
+    const trimmed = sessionId.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    try {
+      if (saas === true) {
+        const result = await reclaimCloudMarketplacePurchase({
+          sessionId: trimmed,
+          email: email.trim() || undefined,
+        });
+        toast.success(
+          result.linked
+            ? "Purchase linked to your account. Use Install on the listing."
+            : "Purchase is already on your account."
+        );
+      } else {
+        await completeCloudMarketplaceCheckout(trimmed);
+        toast.success("Purchase recovered and installed on this machine.");
+      }
+      setSessionId("");
+      setEmail("");
+      onSuccess();
+    } catch (err) {
+      toast.error(userFacingErrorMessage(err, "Could not recover this purchase"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Recover a past purchase</CardTitle>
+        <CardDescription>
+          {saas === true
+            ? "Paste the Stripe Checkout session id (cs_…) from your receipt to link a guest Local Buy to your Cloud account."
+            : "Paste the Stripe Checkout session id (cs_…) from your receipt to install a paid Community purchase on this machine without paying again."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="reclaim-session">Checkout session id</Label>
+          <Input
+            id="reclaim-session"
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            placeholder="cs_live_… or cs_test_…"
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="reclaim-email">Receipt email (optional verification)</Label>
+          <Input
+            id="reclaim-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="buyer@example.com"
+            autoComplete="email"
+          />
+        </div>
+        <Button
+          className="w-fit sm:col-span-2"
+          disabled={busy || !sessionId.trim()}
+          onClick={() => void handleReclaim()}
+        >
+          {busy ? "Recovering…" : saas === true ? "Link purchase" : "Recover and install"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 function EntryCard({
@@ -1461,6 +1546,7 @@ export default function MarketplacePage() {
 
         {showLocalTab ? (
         <TabsContent value="local" className="mt-4 space-y-6">
+          <PurchaseRecoveryCard saas={saas} onSuccess={() => void reload()} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Add local plugin folder</CardTitle>
@@ -1689,6 +1775,7 @@ export default function MarketplacePage() {
         </TabsContent>
 
         <TabsContent value="installed" className="mt-4 space-y-6">
+          <PurchaseRecoveryCard saas={saas} onSuccess={() => void reload()} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Workspace plugins</CardTitle>

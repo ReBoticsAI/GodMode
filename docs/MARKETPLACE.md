@@ -46,6 +46,8 @@ On **GodMode Cloud** (`INSTALLATION_SURFACE=saas`), Official entries are curated
 - Authenticated: `GET /api/marketplace/catalog/official`
 - Public (local/private-hub pulls): `GET /api/marketplace/commerce/catalog/official/public`
 
+On first Cloud boot (or when the curated table is empty), Bridge syncs pinned rows from the free Official GitHub index, then applies default Cloud prices from `apps/bridge/data/marketplace-official-default-prices.json` where `price_cents` is still zero. GitHub carries pins and metadata only; paid Official commerce prices live in the Cloud table. Re-sync preserves existing Cloud prices. SaaS does not silently fall back to an all-free GitHub shelf when the curated table is empty after hydrate.
+
 Point non-SaaS installs at the public URL with `MARKETPLACE_SAAS_OFFICIAL_URL` (defaults to the Cloud Official public feed) so they see ReBotics-selected prices. The same default applies to `MARKETPLACE_SAAS_COMMUNITY_URL` for Community listing ids and public clone/live cards. Set either variable to empty to disable that Cloud overlay.
 
 Open **Marketplace → Official** to browse. Free entries install immediately. Paid entries require checkout (card / PayPal / crypto), then **Install if owned**.
@@ -118,6 +120,10 @@ and are served at the public Official feed. Active `installType: "plugin"` rows
 must have an immutable `pluginRef` (and preferably `pluginDigest`). Admin upsert
 fail-closes on floating refs. Admin checklist:
 
+0. Fresh Cloud: Bridge auto-syncs from the public Official index on boot when the
+   curated table is empty and applies default prices from
+   `apps/bridge/data/marketplace-official-default-prices.json` for known paid SKUs.
+   Add or edit defaults there when introducing a new paid Official pack.
 1. `GET /api/marketplace/commerce/admin/official-catalog` and check `pinAudit`
    (empty means all active plugins are pinned).
 2. Prefer `POST /api/marketplace/commerce/admin/official-catalog/sync-from-public`
@@ -150,7 +156,7 @@ Every Community sale is a listing (`seller_kind=user`). **Catalog PRs are the on
 3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin. Not a plugin runtime. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
 4. **Live share:** catalog entry with `deliveryMode: live` (pinned `pluginRepo` / `pluginRef` / `bundlePath`). Seller **binds** a workspace resource whose export hash must match the pin. Buyers get a Shared grant on the seller host, not a copy. Drift or a catalog pin bump demotes the listing until re-bind. Free Shared sidebar grants stay outside Marketplace.
 5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace. Hub-only residual review path.
-6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid Stripe checkout then install. Local Buy does not need a GodMode Cloud account. Recovery of a purchase on a new machine (email / Stripe customer / paste `cs_` session) is a follow-up.
+6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid Stripe checkout then install. Local Buy does not need a GodMode Cloud account. To recover on a new machine, open Marketplace → **Local** or **Installed**, paste the Stripe Checkout session id (`cs_…`) from your receipt, and choose **Recover and install**. On Cloud, paste the same session id under **Installed** to **Link purchase** to your signed-in account. Optional receipt email must match the checkout email when the grant recorded one.
 
 Guest checkout return URLs may be `http://127.0.0.1` / `localhost` or `https://*.godmode.software`, and success URLs must include `{CHECKOUT_SESSION_ID}`.
 

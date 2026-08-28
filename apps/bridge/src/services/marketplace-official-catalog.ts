@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import type { CoreDatabase } from "../core-db.js";
 import type { CatalogEntry, CatalogIndex } from "./marketplace-catalog.js";
@@ -46,6 +49,105 @@ export type OfficialCatalogPinIssue = {
   issue: "missing_ref" | "floating_ref" | "invalid_digest";
   message: string;
 };
+
+type OfficialDefaultPrice = { priceCents: number; currency: string };
+
+function officialDefaultPricesPath(): string {
+  const override = process.env.GODMODE_OFFICIAL_DEFAULT_PRICES_PATH?.trim();
+  if (override) return path.resolve(override);
+  const fromRepo = path.join(
+    config.repoRoot,
+    "apps",
+    "bridge",
+    "data",
+    "marketplace-official-default-prices.json"
+  );
+  if (fs.existsSync(fromRepo)) return fromRepo;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, "../../data/marketplace-official-default-prices.json");
+}
+
+let cachedOfficialDefaultPrices: Map<string, OfficialDefaultPrice> | null = null;
+
+/** Cloud commerce defaults for Official SKUs (GitHub index carries pins only). */
+export function loadOfficialCatalogDefaultPrices(): Map<string, OfficialDefaultPrice> {
+  if (cachedOfficialDefaultPrices) return cachedOfficialDefaultPrices;
+  const file = officialDefaultPricesPath();
+  if (!fs.existsSync(file)) {
+    cachedOfficialDefaultPrices = new Map();
+    return cachedOfficialDefaultPrices;
+  }
+  const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<
+    string,
+    { priceCents?: number; currency?: string }
+  >;
+  const map = new Map<string, OfficialDefaultPrice>();
+  for (const [entryId, row] of Object.entries(raw)) {
+    const priceCents = Math.max(0, Math.floor(Number(row?.priceCents ?? 0)));
+    if (priceCents <= 0) continue;
+    map.set(entryId, {
+      priceCents,
+      currency: String(row?.currency ?? "usd").toLowerCase(),
+    });
+  }
+  cachedOfficialDefaultPrices = map;
+  return map;
+}
+
+export function resolveOfficialCatalogDefaultPrice(
+  entryId: string,
+  fallbackCents = 0
+): OfficialDefaultPrice | null {
+  const fromFeed = Math.max(0, Math.floor(Number(fallbackCents ?? 0)));
+  if (fromFeed > 0) {
+    return { priceCents: fromFeed, currency: "usd" };
+  }
+  return loadOfficialCatalogDefaultPrices().get(entryId) ?? null;
+}
+
+export function applyOfficialCatalogDefaultPrices(core: CoreDatabase): number {
+  const defaults = loadOfficialCatalogDefaultPrices();
+  if (defaults.size === 0) return 0;
+  let updated = 0;
+  for (const [entryId, price] of defaults) {
+    const result = core
+      .prepare(
+        `UPDATE marketplace_official_catalog
+         SET price_cents=?, currency=?, updated_at=datetime('now')
+         WHERE entry_id=? AND price_cents=0`
+      )
+      .run(price.priceCents, price.currency, entryId);
+    updated += result.changes;
+  }
+  return updated;
+}
+
+function countActiveOfficialCatalogRows(core: CoreDatabase): number {
+  const row = core
+    .prepare(`SELECT COUNT(*) AS n FROM marketplace_official_catalog WHERE status='active'`)
+    .get() as { n: number };
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * SaaS: import pinned Official rows when the curated table is empty, then apply
+ * default Cloud prices where price_cents is still zero.
+ */
+export async function ensureOfficialCatalogHydrated(core: CoreDatabase): Promise<{
+  synced: boolean;
+  defaultPricesApplied: number;
+}> {
+  if (!config.isSaas) {
+    return { synced: false, defaultPricesApplied: 0 };
+  }
+  let synced = false;
+  if (countActiveOfficialCatalogRows(core) === 0) {
+    await syncOfficialCatalogFromPublicFeed(core);
+    synced = true;
+  }
+  const defaultPricesApplied = applyOfficialCatalogDefaultPrices(core);
+  return { synced, defaultPricesApplied };
+}
 
 export type OfficialCatalogUpsertInput = {
   entryId: string;
@@ -274,6 +376,10 @@ function rowToCatalogEntry(row: OfficialCatalogRow, sourceCatalog: string): Cata
 export async function buildPublicOfficialCatalog(
   core: CoreDatabase
 ): Promise<CatalogIndex & { commerceHost?: string }> {
+  if (config.isSaas) {
+    await ensureOfficialCatalogHydrated(core);
+  }
+
   const rows = core
     .prepare(
       `SELECT * FROM marketplace_official_catalog
@@ -290,6 +396,16 @@ export async function buildPublicOfficialCatalog(
       repoBase: config.marketplace.saasOfficialCatalogUrl || undefined,
       entries: rows.map((r) => rowToCatalogEntry(r, sourceCatalog)),
       commerceHost: config.isSaas ? "local" : undefined,
+    };
+  }
+
+  if (config.isSaas) {
+    return {
+      version: 2,
+      updatedAt: new Date().toISOString(),
+      repoBase: config.marketplace.saasOfficialCatalogUrl || undefined,
+      entries: [],
+      commerceHost: "local",
     };
   }
 
@@ -344,6 +460,9 @@ export async function syncOfficialCatalogFromPublicFeed(core: CoreDatabase): Pro
       .prepare(`SELECT * FROM marketplace_official_catalog WHERE entry_id=?`)
       .get(entry.id) as OfficialCatalogRow | undefined;
 
+    const defaultPrice = existing
+      ? null
+      : resolveOfficialCatalogDefaultPrice(entry.id, entry.priceCents ?? 0);
     upsertOfficialCatalogEntry(core, {
       entryId: entry.id,
       title: entry.title,
@@ -358,8 +477,11 @@ export async function syncOfficialCatalogFromPublicFeed(core: CoreDatabase): Pro
       pluginRef: entry.pluginRef,
       pluginDigest: entry.pluginDigest,
       previewPath: entry.previewPath,
-      priceCents: existing ? Number(existing.price_cents ?? 0) : Number(entry.priceCents ?? 0),
-      currency: existing?.currency ?? entry.currency ?? "usd",
+      priceCents: existing
+        ? Number(existing.price_cents ?? 0)
+        : defaultPrice?.priceCents ?? Number(entry.priceCents ?? 0),
+      currency:
+        existing?.currency ?? defaultPrice?.currency ?? entry.currency ?? "usd",
       listingId: existing?.listing_id ?? entry.listingId ?? null,
       status: existing?.status ?? "active",
       sortOrder: existing?.sort_order ?? 0,

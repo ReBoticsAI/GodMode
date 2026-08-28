@@ -7,7 +7,7 @@ import { migrateTenantDb, type AppDatabase } from "./db.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { ensureTenantKindMeta, isOperatorTenantDb } from "./services/tenant-kind.js";
 import { seedDomainSkills } from "./services/ai-skills.js";
-import { getCloudDb } from "./core-db.js";
+import { getCloudDb, listAllTenantIds } from "./core-db.js";
 import { migrateWikiFromCloud } from "./services/wiki-workspace-migrate.js";
 import { migrateHooksFromCloud } from "./services/hooks-workspace-migrate.js";
 import { migratePlatformEventsFromCloud } from "./services/platform-events-workspace-migrate.js";
@@ -106,6 +106,31 @@ function ensureIdleTimer(): void {
 /** Keep a tenant DB open for the Bridge process lifetime (skip idle sweep). */
 export function pinTenantDb(tenantId: string): void {
   pinned.add(tenantId);
+}
+
+/**
+ * Tenant id + lazy DB accessor for SaaS-wide scans. Uses a getter so LRU eviction
+ * does not leave callers holding closed SQLite handles when many tenants are
+ * opened in one loop (MAX_OPEN is 8).
+ */
+export function listTenantDbAccessors(
+  fallbackDb: AppDatabase
+): Array<{ tenantId: string; db: AppDatabase }> {
+  let ids: string[];
+  try {
+    ids = listAllTenantIds(getCloudDb());
+  } catch {
+    return [{ tenantId: "", db: fallbackDb }];
+  }
+  if (ids.length === 0) {
+    return [{ tenantId: "", db: fallbackDb }];
+  }
+  return ids.map((tenantId) => ({
+    tenantId,
+    get db() {
+      return getTenantDb(tenantId);
+    },
+  }));
 }
 
 /** Open (or return cached) the SQLite handle for a tenant workspace. */

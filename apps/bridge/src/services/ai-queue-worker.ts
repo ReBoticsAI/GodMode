@@ -2,8 +2,8 @@ import type { EventEmitter } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
-import { getCloudDb, getOperatorTenantId, listAllTenantIds } from "../core-db.js";
-import { getTenantDb } from "../tenant-registry.js";
+import { getCloudDb, getOperatorTenantId } from "../core-db.js";
+import { getTenantDb, listTenantDbAccessors } from "../tenant-registry.js";
 import {
   executeWorkflow,
   resumeWorkflowRun,
@@ -132,22 +132,7 @@ export class AiQueueWorker {
 
   /** Open every tenant workspace DB (operator first) for cross-tenant polling. */
   private listTenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
-    const out: Array<{ tenantId: string; db: AppDatabase }> = [];
-    try {
-      for (const id of listAllTenantIds(getCloudDb())) {
-        try {
-          out.push({ tenantId: id, db: getTenantDb(id) });
-        } catch {
-          /* skip a tenant whose DB cannot be opened */
-        }
-      }
-    } catch {
-      /* core unavailable — fall back to the default db below */
-    }
-    if (out.length === 0) {
-      out.push({ tenantId: getOperatorTenantId(getCloudDb()) ?? "", db: this.db });
-    }
-    return out;
+    return listTenantDbAccessors(this.db);
   }
 
   listJobs(limit = 100): QueueJobRow[] {
@@ -245,7 +230,8 @@ export class AiQueueWorker {
       return;
     }
     if (!next) return;
-    const { tenantId, db, job } = next;
+    const { tenantId, job } = next;
+    const db = tenantId ? getTenantDb(tenantId) : this.db;
     this.running = true;
     try {
       db.prepare(

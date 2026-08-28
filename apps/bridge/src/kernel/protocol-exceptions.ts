@@ -485,6 +485,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "marketplace-purchase-reclaim",
+    methods: ["POST"],
+    pathPattern: "/api/marketplace/commerce/reclaim",
+    rationale:
+      "Link paid guest Local Buy Checkout session to signed-in Cloud buyer (#726); order ownership via marketplace services, not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "saas-seller-link-device",
     methods: ["POST"],
     pathPattern: "/api/saas/seller-link/device",

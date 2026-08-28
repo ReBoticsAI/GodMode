@@ -86,6 +86,7 @@ describe("legacy route wave", () => {
       "marketplace-commerce.ts:post:/admin/official-catalog/sync-from-public",
       "marketplace-commerce.ts:post:/checkout",
       "marketplace-commerce.ts:post:/paypal/capture",
+      "marketplace-commerce.ts:post:/reclaim",
       "marketplace.ts:delete:/seller-link",
       "marketplace.ts:post:/cloud-checkout",
       "marketplace.ts:post:/cloud-checkout/complete",
