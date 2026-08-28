@@ -6790,9 +6790,32 @@ export function completeCloudMarketplaceCheckout(sessionId: string) {
     deliveryKind: "plugin" | "clone";
     install?: Record<string, unknown>;
     import?: Record<string, unknown>;
+    alreadyInstalled?: boolean;
+    entryId?: string;
   }>("/marketplace/cloud-checkout/complete", {
     method: "POST",
     body: JSON.stringify({ sessionId }),
+  });
+}
+
+/** Link a paid guest Checkout session to the signed-in Cloud buyer (#726). */
+export function reclaimCloudMarketplacePurchase(body: {
+  sessionId: string;
+  email?: string;
+}) {
+  return api<{
+    linked: boolean;
+    listingId: string | null;
+    catalogEntryId: string | null;
+    order: {
+      id: string;
+      status: string;
+      listing_id: string | null;
+      catalog_entry_id: string | null;
+    };
+  }>("/marketplace/commerce/reclaim", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

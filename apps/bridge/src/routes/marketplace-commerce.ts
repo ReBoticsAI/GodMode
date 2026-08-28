@@ -31,6 +31,7 @@ import {
   createGuestMarketplaceCheckout,
   guestCheckoutDelivery,
   guestCheckoutStatus,
+  linkGuestMarketplaceOrderToBuyer,
 } from "../services/marketplace-guest-checkout.js";
 
 function requireSaasCommerce(_req: Request, res: Response): boolean {
@@ -208,6 +209,40 @@ export function createMarketplaceCommerceRouter(): Router {
       const status = err instanceof MarketplaceCommerceError ? err.status : 500;
       res.status(Number.isFinite(status) ? status : 500).json({
         error: err instanceof Error ? err.message : "Delivery lookup failed",
+      });
+    }
+  });
+
+  /** Link a paid guest Local Buy session to the signed-in Cloud buyer (#726). */
+  router.post("/reclaim", attachAuthContext, requireAuth, resolveTenant, (req, res) => {
+    if (!requireSaasCommerce(req, res)) return;
+    const sessionId = String(req.body?.sessionId ?? req.body?.session_id ?? "").trim();
+    if (!sessionId) {
+      res.status(400).json({ error: "sessionId required" });
+      return;
+    }
+    try {
+      const result = linkGuestMarketplaceOrderToBuyer(getCloudDb(), {
+        sessionId,
+        buyerUserId: req.user!.id,
+        buyerTenantId: req.tenantId!,
+        buyerEmail: typeof req.body?.email === "string" ? req.body.email : undefined,
+      });
+      res.json({
+        linked: result.linked,
+        listingId: result.listingId,
+        catalogEntryId: result.catalogEntryId,
+        order: {
+          id: String(result.order.id),
+          status: String(result.order.status),
+          listing_id: result.listingId,
+          catalog_entry_id: result.catalogEntryId,
+        },
+      });
+    } catch (err) {
+      const status = err instanceof MarketplaceCommerceError ? err.status : 500;
+      res.status(Number.isFinite(status) ? status : 500).json({
+        error: err instanceof Error ? err.message : "Purchase reclaim failed",
       });
     }
   });

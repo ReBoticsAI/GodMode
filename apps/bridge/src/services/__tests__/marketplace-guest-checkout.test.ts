@@ -12,6 +12,7 @@ import {
   guestCheckoutDelivery,
   guestCheckoutStatus,
   isAllowedMarketplaceReturnUrl,
+  linkGuestMarketplaceOrderToBuyer,
   upsertDeliveryGrant,
 } from "../marketplace-guest-checkout.js";
 
@@ -65,7 +66,9 @@ function openDb(): CoreDatabase {
       currency TEXT NOT NULL DEFAULT 'usd',
       provider TEXT NOT NULL,
       provider_ref TEXT,
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE marketplace_delivery_grants (
       id TEXT PRIMARY KEY,
@@ -179,5 +182,51 @@ describe("guest delivery grants", () => {
         tosAccepted: true,
       })
     ).rejects.toBeInstanceOf(MarketplaceCommerceError);
+  });
+
+  it("links paid guest orders to a signed-in buyer (#726)", () => {
+    const db = openDb();
+    db.prepare(
+      `INSERT INTO marketplace_listings (id, seller_user_id, kind, title, price_cents)
+       VALUES ('lst-pack', 'seller-1', 'skill', 'Pack', 100)`
+    ).run();
+    db.prepare(
+      `INSERT INTO marketplace_orders
+         (id, listing_id, buyer_user_id, buyer_tenant_id, seller_user_id, seller_kind,
+          amount_cents, platform_fee_cents, currency, provider, provider_ref, status)
+       VALUES ('ord-guest', 'lst-pack', ?, ?, 'seller-1', 'user', 100, 10, 'usd', 'stripe', 'cs_reclaim', 'paid')`
+    ).run(MARKETPLACE_GUEST_USER_ID, MARKETPLACE_GUEST_TENANT_ID);
+    upsertDeliveryGrant(db, {
+      stripeSessionId: "cs_reclaim",
+      orderId: "ord-guest",
+      listingId: "lst-pack",
+      deliveryKind: "clone",
+      status: "paid",
+      buyerEmail: "buyer@example.com",
+    });
+
+    const linked = linkGuestMarketplaceOrderToBuyer(db, {
+      sessionId: "cs_reclaim",
+      buyerUserId: "buyer-real",
+      buyerTenantId: "tenant-real",
+      buyerEmail: "buyer@example.com",
+    });
+    expect(linked.linked).toBe(true);
+    expect(String(linked.order.buyer_user_id)).toBe("buyer-real");
+
+    const again = linkGuestMarketplaceOrderToBuyer(db, {
+      sessionId: "cs_reclaim",
+      buyerUserId: "buyer-real",
+      buyerTenantId: "tenant-real",
+    });
+    expect(again.linked).toBe(false);
+
+    expect(() =>
+      linkGuestMarketplaceOrderToBuyer(db, {
+        sessionId: "cs_reclaim",
+        buyerUserId: "other-user",
+        buyerTenantId: "other-tenant",
+      })
+    ).toThrow(MarketplaceCommerceError);
   });
 });
