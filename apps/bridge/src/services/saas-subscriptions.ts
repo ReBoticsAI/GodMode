@@ -918,10 +918,21 @@ export function assertSaasUserMayAccess(user: CoreUser): {
 } | { ok: false; error: string; status: number } {
   if (!config.isSaas) return { ok: true };
   if (user.is_admin) return { ok: true };
-  if (user.access_disabled) {
+  if (user.deleted_at || user.deletion_status === "pending_wipe") {
     return {
       ok: false,
-      error: "Your account has been disabled. Contact support.",
+      error:
+        "Your account is scheduled for deletion. Contact support if this was a mistake.",
+      status: 403,
+    };
+  }
+  if (user.access_disabled) {
+    const reason = user.access_disabled_reason?.trim();
+    return {
+      ok: false,
+      error: reason
+        ? `Your account has been suspended: ${reason}`
+        : "Your account has been suspended. Contact support.",
       status: 403,
     };
   }
@@ -960,26 +971,21 @@ export function touchUserLastSeen(userId: string): void {
 
 export function setUserAccessDisabled(
   userId: string,
-  disabled: boolean
+  disabled: boolean,
+  reason?: string | null
 ): CoreUser | undefined {
   const core = getCloudDb();
+  const reasonText = disabled ? reason?.trim() || null : null;
   core
     .prepare(
-      `UPDATE users SET access_disabled=?, updated_at=datetime('now') WHERE id=?`
+      `UPDATE users SET
+         access_disabled=?,
+         access_disabled_reason=?,
+         updated_at=datetime('now')
+       WHERE id=?`
     )
-    .run(disabled ? 1 : 0, userId);
-  if (disabled) {
-    const sub = findSubscriptionByUserId(core, userId);
-    if (sub) {
-      core
-        .prepare(
-          `UPDATE saas_subscriptions
-           SET access_revoked=1, updated_at=datetime('now')
-           WHERE id=?`
-        )
-        .run(sub.id);
-    }
-  }
+    .run(disabled ? 1 : 0, reasonText, userId);
+  // Suspend is separate from billing access_revoked (past_due grace / Stripe cancel).
   return core.prepare(`SELECT * FROM users WHERE id=?`).get(userId) as
     | CoreUser
     | undefined;
@@ -1005,6 +1011,8 @@ export type SaasCustomerAdminRow = {
   tenantName: string | null;
   isAdmin: boolean;
   accessDisabled: boolean;
+  accessDisabledReason: string | null;
+  deletionStatus: string | null;
   lastSeenAt: string | null;
   planId: string | null;
   planLabel: string | null;
@@ -1042,6 +1050,8 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          u.display_name AS display_name,
          COALESCE(u.is_admin, 0) AS is_admin,
          COALESCE(u.access_disabled, 0) AS access_disabled,
+         u.access_disabled_reason AS access_disabled_reason,
+         u.deletion_status AS deletion_status,
          u.last_seen_at AS last_seen_at,
          t.id AS tenant_id,
          t.name AS tenant_name,
@@ -1083,6 +1093,8 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          u.display_name AS display_name,
          COALESCE(u.is_admin, 0) AS is_admin,
          COALESCE(u.access_disabled, 0) AS access_disabled,
+         u.access_disabled_reason AS access_disabled_reason,
+         u.deletion_status AS deletion_status,
          u.last_seen_at AS last_seen_at,
          t.id AS tenant_id,
          t.name AS tenant_name,
@@ -1148,6 +1160,10 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     tenantName: typeof r.tenant_name === "string" ? r.tenant_name : null,
     isAdmin: Boolean(r.is_admin),
     accessDisabled: Boolean(r.access_disabled),
+    accessDisabledReason:
+      typeof r.access_disabled_reason === "string" ? r.access_disabled_reason : null,
+    deletionStatus:
+      typeof r.deletion_status === "string" ? r.deletion_status : null,
     lastSeenAt: typeof r.last_seen_at === "string" ? r.last_seen_at : null,
     planId: meta.id ?? planId,
     planLabel,

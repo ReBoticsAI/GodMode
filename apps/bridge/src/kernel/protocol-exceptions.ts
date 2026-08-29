@@ -397,6 +397,30 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "saas-account-deletion-self",
+    methods: ["POST", "DELETE"],
+    pathPattern: "/api/saas/account/deletion",
+    rationale:
+      "Authenticated SaaS self-serve account deletion request / cancel (#729); soft-delete + retention wipe, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-admin-deletion-fulfill",
+    methods: ["POST"],
+    pathPattern: "/api/admin/saas/deletion-requests/:/fulfill",
+    rationale:
+      "Platform-admin fulfill of Cloud account deletion requests (#729); soft-delete lifecycle, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "saas-admin-soft-delete",
+    methods: ["POST"],
+    pathPattern: "/api/admin/saas/customers/:/soft-delete",
+    rationale:
+      "Platform-admin soft-delete of a SaaS customer (#729); schedules retention hard wipe, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "admin-platform-backup",
     methods: ["POST"],
     pathPattern: "/api/admin/marketplace/backup",

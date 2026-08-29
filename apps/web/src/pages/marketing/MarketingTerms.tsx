@@ -216,32 +216,27 @@ export default function MarketingTerms() {
                 We may suspend or terminate Cloud or Seller access, in whole or in part, for
                 violation of these Terms, non-payment, chargebacks or payment disputes we deem
                 abusive, security risk to the platform or other tenants, unlawful use, or
-                operational necessity. We are not obligated to provide advance notice where
-                doing so would increase risk or is impractical.
+                operational necessity. Suspended accounts remain on our systems until restored
+                or deleted; login is blocked and may show a suspension reason. We are not
+                obligated to provide advance notice where doing so would increase risk or is
+                impractical.
               </p>
 
               <h3>B6. Data deletion</h3>
               <p>
-                You may email{" "}
-                <a href="mailto:support@godmode.software">support@godmode.software</a> to
-                request deletion of your Cloud account or workspace data. We will attempt to
-                process reasonable deletion requests, subject to legal retention needs (for
-                example payment records).
+                On GodMode Cloud you may request deletion in Platform Vault (GodMode Cloud
+                settings), or email{" "}
+                <a href="mailto:support@godmode.software">support@godmode.software</a>.
+                Self-serve deletion soft-deletes your account immediately (login blocked). We
+                retain workspace data for thirty (30) days by default, then hard-delete tenant
+                workspaces and the account row, subject to legal retention needs (for example
+                payment records). Platform operators may fulfill support-originated deletion
+                requests the same way.
               </p>
               <p>
                 Separately, we may delete account or workspace data during operational cleanup,
-                inactivity handling, or infrastructure maintenance. There is{" "}
-                <strong>no fixed retention or deletion SLA</strong>. Self-serve lifecycle and
-                deletion tooling is incomplete; related work is tracked publicly (including
-                GitHub issue{" "}
-                <a
-                  href="https://github.com/ReBoticsAI/GodMode/issues/207"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  #207
-                </a>
-                ). Do not rely on Cloud as your sole backup.
+                inactivity handling, or infrastructure maintenance beyond that retention window.
+                Hard deletes are audited internally. Do not rely on Cloud as your sole backup.
               </p>
 
               <h3>B7. Agents</h3>

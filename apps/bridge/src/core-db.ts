@@ -52,7 +52,13 @@ export interface CoreUser {
   password_hash: string | null;
   /** Platform admin can disable SaaS customer login without deleting the account. */
   access_disabled: number;
+  /** Optional human-readable suspend reason shown on login when access_disabled. */
+  access_disabled_reason: string | null;
   last_seen_at: string | null;
+  /** Soft-delete timestamp; login blocked while set. */
+  deleted_at: string | null;
+  /** null | pending_wipe after soft-delete scheduled for retention hard wipe. */
+  deletion_status: string | null;
   /** ISO timestamp when email was verified; null = unverified. */
   email_verified_at: string | null;
   created_at: string;
@@ -247,7 +253,10 @@ export function initCoreDb(): CoreDatabase {
       is_admin INTEGER NOT NULL DEFAULT 0,
       password_hash TEXT,
       access_disabled INTEGER NOT NULL DEFAULT 0,
+      access_disabled_reason TEXT,
       last_seen_at TEXT,
+      deleted_at TEXT,
+      deletion_status TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -745,6 +754,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_saas_past_due_since_v1",
     up: ensureSaasPastDueSinceColumn,
   },
+  {
+    version: 24,
+    name: "core_saas_account_lifecycle_v1",
+    up: ensureSaasAccountLifecycleSchema,
+  },
 ];
 
 /** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
@@ -868,6 +882,43 @@ function ensureSaasSubscriptionSchema(db: CoreDatabase): void {
 function ensureSaasPastDueSinceColumn(db: CoreDatabase): void {
   if (!tableExists(db, "saas_subscriptions")) return;
   addCol(db, "saas_subscriptions", "past_due_since", "TEXT");
+}
+
+/** Suspend reason, soft-delete, deletion requests, lifecycle audit (#729). */
+function ensureSaasAccountLifecycleSchema(db: CoreDatabase): void {
+  if (tableExists(db, "users")) {
+    addCol(db, "users", "access_disabled_reason", "TEXT");
+    addCol(db, "users", "deleted_at", "TEXT");
+    addCol(db, "users", "deletion_status", "TEXT");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS account_deletion_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'requested'
+        CHECK (status IN ('requested', 'canceled', 'fulfilled', 'rejected')),
+      reason TEXT,
+      requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+      fulfilled_at TEXT,
+      fulfilled_by_user_id TEXT,
+      notes TEXT
+    );
+    CREATE INDEX IF NOT EXISTS account_deletion_requests_user_idx
+      ON account_deletion_requests(user_id);
+    CREATE INDEX IF NOT EXISTS account_deletion_requests_status_idx
+      ON account_deletion_requests(status);
+
+    CREATE TABLE IF NOT EXISTS saas_lifecycle_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_user_id TEXT,
+      action TEXT NOT NULL,
+      target_user_id TEXT,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS saas_lifecycle_audit_created_idx
+      ON saas_lifecycle_audit(created_at DESC);
+  `);
 }
 
 function ensureCoreMarketplaceColumns(db: CoreDatabase): void {

@@ -132,6 +132,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/delegation-timeout.test.ts",
       "apps/bridge/src/services/__tests__/saas-entitlements.test.ts",
       "apps/bridge/src/services/__tests__/saas-subscriptions.test.ts",
+      "apps/bridge/src/services/__tests__/account-lifecycle.test.ts",
       "apps/bridge/src/services/__tests__/seller-link.test.ts",
       "apps/bridge/src/services/__tests__/seller-link-cloud-publish.test.ts",
       "apps/bridge/src/services/__tests__/seller-listing-tenant.test.ts",

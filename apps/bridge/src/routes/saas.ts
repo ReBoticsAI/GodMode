@@ -43,6 +43,11 @@ import {
 } from "../services/marketplace-payments.js";
 import { getPublicSubscriptionForUser, getSellerEntitlementPayload } from "../services/saas-subscriptions.js";
 import {
+  cancelAccountDeletion,
+  getPendingDeletionRequest,
+  requestAccountDeletion,
+} from "../services/account-lifecycle.js";
+import {
   publishListingForSellerLinkUser,
 } from "../services/seller-link-cloud-publish.js";
 
@@ -698,6 +703,91 @@ export function createSaasRouter(): Router {
           error: err instanceof Error ? err.message : "Portal failed",
         });
       }
+    }
+  );
+
+  router.get(
+    "/account/deletion",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    (req, res) => {
+      const pending = getPendingDeletionRequest(req.user!.id);
+      const row = getCloudDb()
+        .prepare(
+          `SELECT deleted_at, deletion_status FROM users WHERE id=?`
+        )
+        .get(req.user!.id) as
+        | { deleted_at: string | null; deletion_status: string | null }
+        | undefined;
+      res.json({
+        pending: pending
+          ? {
+              id: pending.id,
+              status: pending.status,
+              reason: pending.reason,
+              requestedAt: pending.requested_at,
+            }
+          : null,
+        deletedAt: row?.deleted_at ?? null,
+        deletionStatus: row?.deletion_status ?? null,
+        retentionDays: Number(process.env.SAAS_ACCOUNT_RETENTION_DAYS ?? "30") || 30,
+      });
+    }
+  );
+
+  router.post(
+    "/account/deletion",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      try {
+        const reason =
+          typeof req.body?.reason === "string" ? req.body.reason : null;
+        const row = requestAccountDeletion(req.user!.id, reason);
+        res.json({
+          request: {
+            id: row.id,
+            status: row.status,
+            reason: row.reason,
+            requestedAt: row.requested_at,
+            fulfilledAt: row.fulfilled_at,
+          },
+        });
+      } catch (err) {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : 500;
+        res.status(Number.isFinite(status) && status >= 400 ? status : 500).json({
+          error: err instanceof Error ? err.message : "Deletion request failed",
+        });
+      }
+    }
+  );
+
+  router.delete(
+    "/account/deletion",
+    requireSaas,
+    attachAuthContext,
+    requireAuth,
+    limiter,
+    (req, res) => {
+      const canceled = cancelAccountDeletion(req.user!.id);
+      if (!canceled) {
+        res.status(404).json({ error: "No pending deletion request" });
+        return;
+      }
+      res.json({
+        request: {
+          id: canceled.id,
+          status: canceled.status,
+          reason: canceled.reason,
+          requestedAt: canceled.requested_at,
+        },
+      });
     }
   );
 

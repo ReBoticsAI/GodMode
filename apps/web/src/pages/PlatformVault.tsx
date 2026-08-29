@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubscriptionCard } from "@/components/settings/SubscriptionCard";
+import { AccountDeletionCard } from "@/components/settings/AccountDeletionCard";
 import {
   normalizePlatformVaultSection,
   normalizeVaultInferenceSub,
@@ -120,6 +121,7 @@ function PlatformVaultPanel({
                 </p>
               </div>
               <SubscriptionCard />
+              <AccountDeletionCard />
             </section>
           </TabsContent>
           <TabsContent value="inference" className="mt-4">

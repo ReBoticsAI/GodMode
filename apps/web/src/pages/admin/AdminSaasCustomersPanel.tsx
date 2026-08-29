@@ -5,6 +5,7 @@ import {
   fetchAdminSaasCustomers,
   setAdminSaasComplimentaryAccess,
   setAdminSaasCustomerAccess,
+  softDeleteAdminSaasCustomer,
   type AdminSaasCustomerRow,
 } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -49,13 +50,47 @@ export function AdminSaasCustomersPanel() {
       toast.error("This checkout has not created an account yet");
       return;
     }
+    const disabling = !row.accessDisabled;
+    let reason: string | null = null;
+    if (disabling) {
+      const entered = window.prompt(
+        "Suspend reason (shown to the user on login). Leave blank for a generic message.",
+        row.accessDisabledReason ?? ""
+      );
+      if (entered === null) return;
+      reason = entered.trim() || null;
+    }
     setBusyUserId(row.userId);
     try {
-      await setAdminSaasCustomerAccess(row.userId, !row.accessDisabled);
-      toast.success(row.accessDisabled ? "Access restored" : "Access disabled");
+      await setAdminSaasCustomerAccess(row.userId, disabling, reason);
+      toast.success(disabling ? "Account suspended" : "Access restored");
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const softDelete = async (row: AdminSaasCustomerRow) => {
+    if (!row.userId) {
+      toast.error("This checkout has not created an account yet");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Soft-delete ${row.email ?? row.displayName ?? "this user"}? Login stops now; data is wiped after retention.`
+      )
+    ) {
+      return;
+    }
+    setBusyUserId(row.userId);
+    try {
+      await softDeleteAdminSaasCustomer(row.userId);
+      toast.success("Account soft-deleted");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Soft-delete failed");
     } finally {
       setBusyUserId(null);
     }
@@ -176,10 +211,13 @@ export function AdminSaasCustomersPanel() {
                           <Badge variant="outline">complimentary Seller</Badge>
                         ) : null}
                         {row.accessDisabled ? (
-                          <Badge variant="destructive">disabled</Badge>
+                          <Badge variant="destructive">suspended</Badge>
+                        ) : null}
+                        {row.deletionStatus === "pending_wipe" ? (
+                          <Badge variant="destructive">pending wipe</Badge>
                         ) : null}
                         {row.accessRevoked ? (
-                          <Badge variant="outline">revoked</Badge>
+                          <Badge variant="outline">billing revoked</Badge>
                         ) : null}
                         {row.cancelAtPeriodEnd ? (
                           <Badge variant="outline">cancels EOP</Badge>
@@ -245,11 +283,22 @@ export function AdminSaasCustomersPanel() {
                               {busyUserId === row.userId ? (
                                 <Spinner className="size-3.5" />
                               ) : row.accessDisabled ? (
-                                "Enable access"
+                                "Unsuspend"
                               ) : (
-                                "Disable access"
+                                "Suspend"
                               )}
                             </Button>
+                            {row.deletionStatus !== "pending_wipe" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="destructive"
+                                disabled={busyUserId === row.userId}
+                                onClick={() => void softDelete(row)}
+                              >
+                                Soft-delete
+                              </Button>
+                            ) : null}
                           </>
                         ) : null}
                       </div>
