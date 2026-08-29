@@ -215,6 +215,26 @@ Kernel registration is ownership-safe and tenant visibility follows
 Express routes remain responsible for their own installed-plugin checks. See
 [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).
 
+### SaaS operator tenant (control plane)
+
+On `INSTALLATION_SURFACE=saas`, Bridge boot **does not** auto-install every
+host-loaded plugin onto the operator tenant (Admin's Project). That workspace
+is the Cloud control plane (billing, customers, authority, Official ops), not a
+sink for customer or dogfood installs. Local / private hub still auto-installs
+loaded plugins onto the operator tenant, which is the personal workspace there.
+
+**Prune existing Cloud residue** (Admin's Project already has dogfood
+departments from older reconciles):
+
+1. Sign in as platform admin, open **Admin's Project**.
+2. Marketplace → **Installed** (or Structure): uninstall each domain plugin that
+   is not needed for control-plane ops (Habit Tracker, Recipe Box, dogfood
+   scaffolds, and similar).
+3. Confirm a Bridge restart does not re-add them (fixed in #746).
+4. Optional: leave `marketplace.plugin_paths` entries in place so other tenants
+   that still need those roots can load them; uninstalling from Admin does not
+   remove the path registry.
+
 Bridge and web plugins receive the versioned kernel client API (`apiVersion: 1`).
 Executable manifests can declare `kernelApiVersion`; unsupported future
 versions fail validation. The coordinated ecosystem migration was delivered

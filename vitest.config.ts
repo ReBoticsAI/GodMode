@@ -18,6 +18,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/domain-plugin-dogfood-653.test.ts",
       "apps/bridge/src/services/__tests__/plugin-lifecycle-structure-657.test.ts",
       "apps/bridge/src/services/__tests__/plugin-lifecycle-uninstall-structure-658.test.ts",
+      "apps/bridge/src/services/__tests__/operator-plugin-reconcile-746.test.ts",
       "apps/bridge/src/services/__tests__/structure-tenant-ws-667.test.ts",
       "apps/bridge/src/services/__tests__/workflow-run-tools-659.test.ts",
       "apps/bridge/src/services/__tests__/workflow-install-idempotency-669.test.ts",
