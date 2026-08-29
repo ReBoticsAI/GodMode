@@ -17,6 +17,11 @@ import {
   userHasActiveComplimentaryAccess,
   userHasActiveComplimentarySellerAccess,
 } from "../services/saas-subscriptions.js";
+import {
+  fulfillDeletionRequest,
+  listDeletionRequests,
+  softDeleteUserAccount,
+} from "../services/account-lifecycle.js";
 import { syncMissingSaasSubscriptionsFromStripe } from "../services/saas-billing.js";
 
 export function createAdminSaasRouter(): Router {
@@ -51,7 +56,9 @@ export function createAdminSaasRouter(): Router {
       res.status(400).json({ error: "You cannot disable your own account" });
       return;
     }
-    const user = setUserAccessDisabled(userId, disabled);
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : null;
+    const user = setUserAccessDisabled(userId, disabled, reason);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -59,7 +66,89 @@ export function createAdminSaasRouter(): Router {
     res.json({
       userId: user.id,
       accessDisabled: Boolean(user.access_disabled),
+      accessDisabledReason: user.access_disabled_reason ?? null,
     });
+  });
+
+  router.get("/deletion-requests", (_req, res) => {
+    const statusRaw =
+      typeof _req.query.status === "string" ? _req.query.status.trim() : "";
+    const status =
+      statusRaw === "requested" ||
+      statusRaw === "canceled" ||
+      statusRaw === "fulfilled" ||
+      statusRaw === "rejected"
+        ? statusRaw
+        : undefined;
+    res.json({
+      requests: listDeletionRequests(status).map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        email: r.email,
+        displayName: r.display_name,
+        status: r.status,
+        reason: r.reason,
+        requestedAt: r.requested_at,
+        fulfilledAt: r.fulfilled_at,
+        fulfilledByUserId: r.fulfilled_by_user_id,
+        notes: r.notes,
+      })),
+    });
+  });
+
+  router.post("/deletion-requests/:id/fulfill", (req, res) => {
+    const id = typeof req.params.id === "string" ? req.params.id.trim() : "";
+    if (!id) {
+      res.status(400).json({ error: "id required" });
+      return;
+    }
+    try {
+      const user = fulfillDeletionRequest(id, req.user!.id);
+      res.json({
+        userId: user.id,
+        deletedAt: user.deleted_at,
+        deletionStatus: user.deletion_status,
+      });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: unknown }).status)
+          : 500;
+      res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: err instanceof Error ? err.message : "Fulfill failed",
+      });
+    }
+  });
+
+  router.post("/customers/:userId/soft-delete", (req, res) => {
+    const userId =
+      typeof req.params.userId === "string" ? req.params.userId.trim() : "";
+    if (!userId) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+    try {
+      const reason =
+        typeof req.body?.reason === "string" ? req.body.reason : null;
+      const user = softDeleteUserAccount({
+        userId,
+        actorUserId: req.user!.id,
+        reason,
+      });
+      res.json({
+        userId: user.id,
+        deletedAt: user.deleted_at,
+        deletionStatus: user.deletion_status,
+      });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: unknown }).status)
+          : 500;
+      res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: err instanceof Error ? err.message : "Soft-delete failed",
+      });
+    }
   });
 
   /**

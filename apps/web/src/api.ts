@@ -6439,6 +6439,8 @@ export type AdminSaasCustomerRow = {
   tenantName: string | null;
   isAdmin: boolean;
   accessDisabled: boolean;
+  accessDisabledReason?: string | null;
+  deletionStatus?: string | null;
   lastSeenAt: string | null;
   planId: string | null;
   planLabel: string | null;
@@ -6460,14 +6462,88 @@ export function fetchAdminSaasCustomers() {
   return api<{ customers: AdminSaasCustomerRow[] }>("/admin/saas/customers");
 }
 
-export function setAdminSaasCustomerAccess(userId: string, disabled: boolean) {
-  return api<{ userId: string; accessDisabled: boolean }>(
-    `/admin/saas/customers/${encodeURIComponent(userId)}/access`,
-    {
-      method: "POST",
-      body: JSON.stringify({ disabled }),
-    }
-  );
+export function setAdminSaasCustomerAccess(
+  userId: string,
+  disabled: boolean,
+  reason?: string | null
+) {
+  return api<{
+    userId: string;
+    accessDisabled: boolean;
+    accessDisabledReason?: string | null;
+  }>(`/admin/saas/customers/${encodeURIComponent(userId)}/access`, {
+    method: "POST",
+    body: JSON.stringify({ disabled, reason: reason ?? null }),
+  });
+}
+
+export function fetchAccountDeletionStatus() {
+  return api<{
+    pending: {
+      id: string;
+      status: string;
+      reason: string | null;
+      requestedAt: string;
+    } | null;
+    deletedAt: string | null;
+    deletionStatus: string | null;
+    retentionDays: number;
+  }>("/saas/account/deletion");
+}
+
+export function requestAccountDeletion(reason?: string) {
+  return api<{
+    request: {
+      id: string;
+      status: string;
+      reason: string | null;
+      requestedAt: string;
+      fulfilledAt: string | null;
+    };
+  }>("/saas/account/deletion", {
+    method: "POST",
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+export function fetchAdminDeletionRequests(status?: string) {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return api<{
+    requests: Array<{
+      id: string;
+      userId: string;
+      email: string | null;
+      displayName: string | null;
+      status: string;
+      reason: string | null;
+      requestedAt: string;
+      fulfilledAt: string | null;
+      fulfilledByUserId: string | null;
+      notes: string | null;
+    }>;
+  }>(`/admin/saas/deletion-requests${q}`);
+}
+
+export function fulfillAdminDeletionRequest(id: string) {
+  return api<{
+    userId: string;
+    deletedAt: string | null;
+    deletionStatus: string | null;
+  }>(`/admin/saas/deletion-requests/${encodeURIComponent(id)}/fulfill`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function softDeleteAdminSaasCustomer(userId: string, reason?: string) {
+  return api<{
+    userId: string;
+    deletedAt: string | null;
+    deletionStatus: string | null;
+  }>(`/admin/saas/customers/${encodeURIComponent(userId)}/soft-delete`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
 }
 
 export function setAdminSaasComplimentaryAccess(

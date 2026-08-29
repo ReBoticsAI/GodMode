@@ -87,7 +87,10 @@ function seedSchema(): void {
       is_admin INTEGER NOT NULL DEFAULT 0,
       password_hash TEXT,
       access_disabled INTEGER NOT NULL DEFAULT 0,
+      access_disabled_reason TEXT,
       last_seen_at TEXT,
+      deleted_at TEXT,
+      deletion_status TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -304,7 +307,7 @@ describe("saas subscriptions", () => {
     expect(pub?.accessRevoked).toBe(false);
   });
 
-  it("assertSaasUserMayAccess exempts admins and blocks disabled users", () => {
+  it("assertSaasUserMayAccess exempts admins and blocks suspended users", () => {
     const admin = insertUser({ email: "admin@example.com", isAdmin: true });
     expect(assertSaasUserMayAccess(admin).ok).toBe(true);
 
@@ -312,8 +315,44 @@ describe("saas subscriptions", () => {
       email: "blocked@example.com",
       accessDisabled: true,
     });
-    const denied = assertSaasUserMayAccess(user);
+    mem
+      .prepare(
+        `UPDATE users SET access_disabled_reason=? WHERE id=?`
+      )
+      .run("ToS violation", user.id);
+    const refreshed = mem
+      .prepare(`SELECT * FROM users WHERE id=?`)
+      .get(user.id) as CoreUser;
+    const denied = assertSaasUserMayAccess(refreshed);
     expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.error).toMatch(/suspended: ToS violation/i);
+  });
+
+  it("setUserAccessDisabled does not flip billing access_revoked", () => {
+    const user = insertUser({ email: "suspend@example.com" });
+    upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_suspend",
+      email: "suspend@example.com",
+      stripeCustomerId: "cus_suspend",
+      stripeSubscriptionId: "sub_suspend",
+      planId: "monthly",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_suspend",
+      stripeCustomerId: "cus_suspend",
+    });
+    setUserAccessDisabled(user.id, true, "security review");
+    const sub = mem
+      .prepare(`SELECT * FROM saas_subscriptions WHERE user_id=?`)
+      .get(user.id) as SaasSubscription;
+    expect(sub.access_revoked).toBe(0);
+    const refreshed = mem
+      .prepare(`SELECT * FROM users WHERE id=?`)
+      .get(user.id) as CoreUser;
+    expect(refreshed.access_disabled).toBe(1);
+    expect(refreshed.access_disabled_reason).toBe("security review");
   });
 
   it("assertSaasUserMayAccess blocks canceled subscribers", () => {

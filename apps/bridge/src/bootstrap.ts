@@ -83,6 +83,7 @@ import { EngineRegistry } from "./services/engines/registry.js";
 import { EngineReconciler } from "./services/engines/reconciler.js";
 import { startDbMaintenance } from "./services/db-maintenance.js";
 import { startRetentionScheduler } from "./services/retention.js";
+import { startAccountRetentionScheduler } from "./services/account-lifecycle.js";
 import { startMarketplaceBillingScheduler } from "./services/marketplace-billing.js";
 import { ensureOfficialCatalogHydrated } from "./services/marketplace-official-catalog.js";
 import { refreshPeerHealth } from "./services/federation-peers.js";
@@ -213,6 +214,9 @@ if (hasSierra) {
 
 startDbMaintenance(db);
 startRetentionScheduler(db);
+if (config.isSaas) {
+  startAccountRetentionScheduler();
+}
 if (config.isHub) {
   startMarketplaceBillingScheduler();
   if (config.isSaas) {

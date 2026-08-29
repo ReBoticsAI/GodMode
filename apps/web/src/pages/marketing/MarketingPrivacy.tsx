@@ -429,41 +429,30 @@ export default function MarketingPrivacy() {
           <AccordionTrigger className={privacyAccordionTriggerClass}>
             <SectionTrigger
               title="Retention and deletion"
-              overview="Email support@godmode.software to request Cloud account or workspace deletion. No fixed deletion SLA. Payment records may be kept where required. Do not rely on Cloud as your only backup."
+              overview="Request Cloud account deletion in Platform Vault or email support@godmode.software. Soft-delete blocks login; default 30-day retention then hard wipe. Payment records may be kept where required. Do not rely on Cloud as your only backup."
             />
           </AccordionTrigger>
           <AccordionContent className="text-base">
             <LegalBlock>
               <p>
                 We keep account, billing, Marketplace, log, and workspace data as needed to
-                operate Cloud, handle disputes, and meet legal retention duties. Retention
-                periods are not fixed product SLAs. If a Cloud subscription becomes past due,
-                access continues for a seven (7) day grace period from the first past-due mark,
-                then may be revoked until payment succeeds; that does not by itself delete your
-                workspace.
+                operate Cloud, handle disputes, and meet legal retention duties. If a Cloud
+                subscription becomes past due, access continues for a seven (7) day grace period
+                from the first past-due mark, then may be revoked until payment succeeds; that
+                does not by itself delete your workspace.
               </p>
               <p>
-                You may email{" "}
-                <a href="mailto:support@godmode.software">support@godmode.software</a> to
-                request deletion of your Cloud account or workspace data. We will attempt to
-                process reasonable deletion requests, subject to legal retention needs (for
-                example payment and tax records).
+                You may request deletion in Platform Vault (GodMode Cloud) or email{" "}
+                <a href="mailto:support@godmode.software">support@godmode.software</a>.
+                Self-serve deletion soft-deletes immediately (login blocked). By default we
+                retain workspace data for thirty (30) days, then hard-delete tenant workspaces
+                and the account, subject to legal retention needs (for example payment and tax
+                records). Hard deletes are audited.
               </p>
               <p>
                 Separately, we may delete account or workspace data during operational cleanup,
-                inactivity handling, or infrastructure maintenance. There is{" "}
-                <strong>no fixed retention or deletion SLA</strong>. Self-serve lifecycle and
-                deletion tooling is incomplete; related work is tracked publicly (including
-                GitHub issue{" "}
-                <a
-                  href="https://github.com/ReBoticsAI/GodMode/issues/207"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  #207
-                </a>
-                ). Do not rely on Cloud as your sole backup. Deletion requests do not create
-                refund rights; see the{" "}
+                inactivity handling, or infrastructure maintenance. Do not rely on Cloud as your
+                sole backup. Deletion requests do not create refund rights; see the{" "}
                 <Link to={`${MARKETING_BASE}/refund`}>Refund policy</Link> and{" "}
                 <Link to={`${MARKETING_BASE}/terms`}>Terms</Link>.
               </p>

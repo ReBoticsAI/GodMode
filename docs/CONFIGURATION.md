@@ -277,6 +277,8 @@ unless a trusted signature-verification policy is configured.
 | `STRIPE_SAAS_CHECKOUT_MODE` | `subscription` (default when plan prices set) or `payment` |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` (`checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) |
 | `SAAS_PAST_DUE_GRACE_DAYS` | `7` | Days of Cloud access after a subscription first becomes `past_due` before `access_revoked`. Repeated `invoice.payment_failed` does not reset the clock. Recovering to `active` / `trialing` clears the clock. |
+| `SAAS_ACCOUNT_RETENTION_DAYS` | `30` | Days after soft-delete (`users.deleted_at`) before the Cloud retention job hard-wipes workspaces and the user row. Audited in `saas_lifecycle_audit`. |
+| `SAAS_ACCOUNT_RETENTION_INTERVAL_MS` | `3600000` | How often the SaaS account retention pass runs. |
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 
 On SaaS installs, authenticated users open Stripe Customer Portal via
