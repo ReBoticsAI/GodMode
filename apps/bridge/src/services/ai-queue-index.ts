@@ -3,6 +3,7 @@
  * Workspace DBs hold full payloads; this table is pointers only so the worker
  * never poll-opens every tenant to find pending work.
  */
+import type { AppDatabase } from "../db.js";
 import { getCloudDb, type CoreDatabase } from "../core-db.js";
 import { config } from "../config.js";
 
@@ -186,11 +187,7 @@ export function listStaleRunningIndexRows(
 
 export type TenantQueueAccessor = {
   tenantId: string;
-  db: {
-    prepare: (sql: string) => {
-      all: (...params: unknown[]) => unknown[];
-    };
-  };
+  db: AppDatabase;
 };
 
 /**
