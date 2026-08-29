@@ -36,7 +36,7 @@ Documentation for installing, using, and extending GodMode.
 | [architecture.md](architecture.md) | System design and data model |
 | [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) | Canonical durable ObjectType, Record, action, adapter, tenancy, recovery, and protocol-exception contract |
 | [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md) | Build and install plugins (contributors) |
-| [multi-tenant-model.md](multi-tenant-model.md) | Cloud + Users + User + Workspace data planes (contributors) |
+| [multi-tenant-model.md](multi-tenant-model.md) | Cloud + Users + User + Workspace data planes; SaaS job index and workspace DB open policy (contributors) |
 
 ## Project
 
