@@ -2,7 +2,12 @@ import type { EventEmitter } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import type { AppDatabase } from "../db.js";
 import type { LlmManager } from "./llm-manager.js";
-import { getCloudDb, getOperatorTenantId } from "../core-db.js";
+import {
+  getCloudDb,
+  getOperatorTenantId,
+  getPlatformMeta,
+  setPlatformMeta,
+} from "../core-db.js";
 import { getTenantDb, listTenantDbAccessors } from "../tenant-registry.js";
 import {
   executeWorkflow,
@@ -16,6 +21,21 @@ import { runWikiSynthesize } from "./wiki-synthesize.js";
 import type { EmbeddingManager } from "./embeddings/embedding-manager.js";
 import { config } from "../config.js";
 import { assertSpendAllowed } from "./authority/spend-authority.js";
+import {
+  AI_QUEUE_INDEX_BACKFILL_META_KEY,
+  AI_QUEUE_WAKE_EVENT,
+  backfillAiQueueIndexFromTenants,
+  hasPendingOrRunningIndex,
+  hasPendingOrRunningWorkflowIndex,
+  indexTenantId,
+  listStaleRunningIndexRows,
+  markAiQueueIndexDone,
+  markAiQueueIndexError,
+  markAiQueueIndexRunning,
+  markAiQueueIndexStaleError,
+  nextPendingIndexRow,
+  upsertAiQueueIndex,
+} from "./ai-queue-index.js";
 
 /** Workflow id of the durable autonomous executor (routed to the tick engine). */
 export const AUTONOMOUS_RUNNER_ID = "autonomous-task-runner";
@@ -75,16 +95,16 @@ export interface EnqueueInput {
 }
 
 /**
- * Processes ai_prompt_queue rows one at a time. A job either runs a workflow
- * (when workflow_id is set) or a standalone prompt against the LLM. The worker
- * polls across ALL tenant workspace DBs so newly enqueued jobs (from the
- * scheduler, the UI, or tools) are picked up without an explicit kick, and each
- * job runs against its own tenant's DB. Execution stays globally serialized so
- * the single LLM server is never contended.
+ * Processes ai_prompt_queue rows one at a time. Discovery uses Cloud.sqlite
+ * `ai_queue_index` (#737) so empty tenants are never opened on the hot path.
+ * Enqueue dual-writes the workspace row + Cloud index and emits `ai_queue_wake`.
+ * Execution stays globally serialized so the single LLM server is never contended.
  */
 export class AiQueueWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private wakeHandler: (() => void) | null = null;
+  private backfilled = false;
 
   constructor(
     private readonly db: AppDatabase,
@@ -99,6 +119,14 @@ export class AiQueueWorker {
 
   start(): void {
     if (this.timer) return;
+    this.ensureIndexBackfill();
+    const bus = this.opts.bus;
+    if (bus && !this.wakeHandler) {
+      this.wakeHandler = () => {
+        void this.tick();
+      };
+      bus.on(AI_QUEUE_WAKE_EVENT, this.wakeHandler);
+    }
     const pollMs = this.opts.pollMs ?? 2000;
     this.timer = setInterval(() => void this.tick(), pollMs);
   }
@@ -108,11 +136,44 @@ export class AiQueueWorker {
       clearInterval(this.timer);
       this.timer = null;
     }
+    if (this.wakeHandler && this.opts.bus) {
+      this.opts.bus.off(AI_QUEUE_WAKE_EVENT, this.wakeHandler);
+      this.wakeHandler = null;
+    }
+  }
+
+  /** One-shot Cloud index seed from existing pending/running workspace rows. */
+  ensureIndexBackfill(): void {
+    if (this.backfilled) return;
+    this.backfilled = true;
+    try {
+      const core = getCloudDb();
+      if (getPlatformMeta(core, AI_QUEUE_INDEX_BACKFILL_META_KEY) === "1") {
+        return;
+      }
+      const accessors = listTenantDbAccessors(this.db).map(({ tenantId, db }) => ({
+        tenantId,
+        db,
+      }));
+      const { upserted } = backfillAiQueueIndexFromTenants(accessors, core);
+      setPlatformMeta(core, AI_QUEUE_INDEX_BACKFILL_META_KEY, "1");
+      if (upserted > 0) {
+        console.info(`[ai-queue] backfilled ${upserted} job(s) into Cloud index`);
+      }
+    } catch (err) {
+      this.backfilled = false;
+      console.warn(
+        "[ai-queue] Cloud index backfill failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 
   enqueue(input: EnqueueInput): string {
     const id = uuidv4();
     const tenantId = input.tenantId ?? null;
+    const priority = Number.isFinite(input.priority) ? Number(input.priority) : 0;
+    const workflowId = input.workflowId ?? null;
     const db = tenantId ? getTenantDb(tenantId) : this.db;
     db.prepare(
       `INSERT INTO ai_prompt_queue
@@ -120,19 +181,33 @@ export class AiQueueWorker {
          VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
-      Number.isFinite(input.priority) ? Number(input.priority) : 0,
-      input.workflowId ?? null,
+      priority,
+      workflowId,
       input.adapterIds ? JSON.stringify(input.adapterIds) : null,
       input.prompt ?? null,
       input.context ? JSON.stringify(input.context) : null,
       tenantId
     );
+    try {
+      upsertAiQueueIndex({
+        jobId: id,
+        tenantId: indexTenantId(tenantId),
+        status: "pending",
+        priority,
+        workflowId,
+      });
+    } catch (err) {
+      console.error(
+        "[ai-queue] Cloud index write failed after workspace enqueue; job will surface after boot backfill:",
+        err instanceof Error ? err.message : err
+      );
+    }
+    try {
+      this.opts.bus?.emit(AI_QUEUE_WAKE_EVENT);
+    } catch {
+      /* ignore */
+    }
     return id;
-  }
-
-  /** Open every tenant workspace DB (operator first) for cross-tenant polling. */
-  private listTenantDbs(): Array<{ tenantId: string; db: AppDatabase }> {
-    return listTenantDbAccessors(this.db);
   }
 
   listJobs(limit = 100): QueueJobRow[] {
@@ -147,80 +222,95 @@ export class AiQueueWorker {
   }
 
   hasPendingOrRunning(): boolean {
-    for (const { db } of this.listTenantDbs()) {
-      try {
-        const row = db
-          .prepare(
-            `SELECT id FROM ai_prompt_queue WHERE status IN ('pending', 'running') LIMIT 1`
-          )
-          .get();
-        if (row) return true;
-      } catch {
-        /* skip */
-      }
-    }
-    return false;
+    return hasPendingOrRunningIndex();
   }
 
   /** True if a job for this workflow is already queued or executing (any tenant).
    * Used by the scheduler to avoid piling up overlapping autonomous runs. */
   hasPendingOrRunningWorkflow(workflowId: string): boolean {
-    for (const { db } of this.listTenantDbs()) {
-      try {
-        const row = db
-          .prepare(
-            `SELECT id FROM ai_prompt_queue WHERE workflow_id = ? AND status IN ('pending', 'running') LIMIT 1`
-          )
-          .get(workflowId);
-        if (row) return true;
-      } catch {
-        /* skip */
-      }
-    }
-    return false;
+    return hasPendingOrRunningWorkflowIndex(workflowId);
   }
 
-  /** Highest-priority pending job across all tenants (priority, then FIFO). */
+  /** Highest-priority pending job from Cloud index, then open that tenant only. */
   private nextPending(): { tenantId: string; db: AppDatabase; job: QueueJobRow } | null {
-    let best: { tenantId: string; db: AppDatabase; job: QueueJobRow } | null = null;
-    for (const { tenantId, db } of this.listTenantDbs()) {
-      let job: QueueJobRow | undefined;
+    const indexRow = nextPendingIndexRow();
+    if (!indexRow) return null;
+    const tenantId = indexRow.tenant_id;
+    const db = tenantId ? getTenantDb(tenantId) : this.db;
+    let job: QueueJobRow | undefined;
+    try {
+      job = db
+        .prepare(`SELECT * FROM ai_prompt_queue WHERE id = ?`)
+        .get(indexRow.job_id) as QueueJobRow | undefined;
+    } catch (err) {
+      console.warn(
+        "[ai-queue] failed to load job from tenant after index hit:",
+        err instanceof Error ? err.message : err
+      );
+      return null;
+    }
+    if (!job) {
+      // Workspace row missing: drop index pointer so we do not loop.
       try {
-        job = db
-          .prepare(
-            `SELECT * FROM ai_prompt_queue WHERE status = 'pending'
-             ORDER BY priority DESC, created_at ASC LIMIT 1`
-          )
-          .get() as QueueJobRow | undefined;
+        markAiQueueIndexError(indexRow.job_id);
       } catch {
-        continue;
+        /* ignore */
       }
-      if (!job) continue;
-      if (
-        !best ||
-        job.priority > best.job.priority ||
-        (job.priority === best.job.priority && job.created_at < best.job.created_at)
-      ) {
-        best = { tenantId, db, job };
+      return null;
+    }
+    if (job.status !== "pending") {
+      // Index drifted; sync terminal statuses and skip.
+      if (job.status === "done") markAiQueueIndexDone(job.id);
+      else if (job.status === "error") markAiQueueIndexError(job.id);
+      else if (job.status === "running") markAiQueueIndexRunning(job.id);
+      return null;
+    }
+    return { tenantId, db, job };
+  }
+
+  private recoverStaleFromIndex(): void {
+    const stale = listStaleRunningIndexRows();
+    const seenTenants = new Set<string>();
+    for (const row of stale) {
+      const key = row.tenant_id;
+      if (!seenTenants.has(key)) {
+        seenTenants.add(key);
+        try {
+          const db = key ? getTenantDb(key) : this.db;
+          const n = recoverStaleQueueJobs(db);
+          if (n > 0) {
+            console.warn(`[ai-queue] recovered ${n} stale running job(s)`);
+          }
+        } catch (err) {
+          console.warn(
+            "[ai-queue] stale recovery skipped:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+      try {
+        const db = key ? getTenantDb(key) : this.db;
+        const job = db
+          .prepare(`SELECT status FROM ai_prompt_queue WHERE id = ?`)
+          .get(row.job_id) as { status: string } | undefined;
+        if (!job || job.status === "error" || job.status === "done") {
+          markAiQueueIndexStaleError(row.job_id);
+        }
+      } catch {
+        /* ignore */
       }
     }
-    return best;
   }
 
   private async tick(): Promise<void> {
     if (this.running) return;
-    for (const { db } of this.listTenantDbs()) {
-      try {
-        const n = recoverStaleQueueJobs(db);
-        if (n > 0) {
-          console.warn(`[ai-queue] recovered ${n} stale running job(s)`);
-        }
-      } catch (err) {
-        console.warn(
-          "[ai-queue] stale recovery skipped:",
-          err instanceof Error ? err.message : err
-        );
-      }
+    try {
+      this.recoverStaleFromIndex();
+    } catch (err) {
+      console.warn(
+        "[ai-queue] stale index recovery skipped:",
+        err instanceof Error ? err.message : err
+      );
     }
     let next: { tenantId: string; db: AppDatabase; job: QueueJobRow } | null;
     try {
@@ -237,6 +327,7 @@ export class AiQueueWorker {
       db.prepare(
         `UPDATE ai_prompt_queue SET status = 'running', started_at = datetime('now') WHERE id = ?`
       ).run(job.id);
+      markAiQueueIndexRunning(job.id);
     } catch (err) {
       this.running = false;
       console.warn("[ai-queue] failed to mark job running:", err instanceof Error ? err.message : err);
@@ -247,10 +338,12 @@ export class AiQueueWorker {
       db.prepare(
         `UPDATE ai_prompt_queue SET status = 'done', result_json = ?, finished_at = datetime('now') WHERE id = ?`
       ).run(JSON.stringify(result), job.id);
+      markAiQueueIndexDone(job.id);
     } catch (err) {
       db.prepare(
         `UPDATE ai_prompt_queue SET status = 'error', error = ?, finished_at = datetime('now') WHERE id = ?`
       ).run(err instanceof Error ? err.message : String(err), job.id);
+      markAiQueueIndexError(job.id);
     } finally {
       this.running = false;
     }

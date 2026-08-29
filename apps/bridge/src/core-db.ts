@@ -734,7 +734,36 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_marketplace_seller_listing_tenant_v1",
     up: ensureMarketplaceSellerListingTenantColumn,
   },
+  {
+    version: 22,
+    name: "core_ai_queue_index_v1",
+    up: ensureAiQueueIndexSchema,
+  },
 ];
+
+/** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
+function ensureAiQueueIndexSchema(db: CoreDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_queue_index (
+      job_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'done', 'error')),
+      priority INTEGER NOT NULL DEFAULT 0,
+      workflow_id TEXT,
+      run_after TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS ai_queue_index_pending_idx
+      ON ai_queue_index(status, priority DESC, created_at ASC);
+    CREATE INDEX IF NOT EXISTS ai_queue_index_tenant_status_idx
+      ON ai_queue_index(tenant_id, status);
+    CREATE INDEX IF NOT EXISTS ai_queue_index_workflow_status_idx
+      ON ai_queue_index(workflow_id, status);
+  `);
+}
 
 function ensureSellerLinkMigration(db: CoreDatabase): void {
   db.exec(`
