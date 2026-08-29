@@ -5,3 +5,4 @@ export const CLOUD_APP_ORIGIN =
 
 export const CLOUD_APP_HOME = `${CLOUD_APP_ORIGIN}/`;
 export const CLOUD_APP_LOGIN = `${CLOUD_APP_ORIGIN}/login`;
+export const CLOUD_APP_SIGNUP = `${CLOUD_APP_ORIGIN}/signup`;

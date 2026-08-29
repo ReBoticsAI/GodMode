@@ -31,8 +31,10 @@ import {
   marketingSectionDescriptionClass,
   marketingSectionTitleClass,
 } from "./MarketingLayout";
+import { marketingSelfHostedSellUrl } from "./marketingBase";
 import { cn } from "@/lib/utils";
 import { CLOUD_APP_HOME } from "./cloudAppUrl";
+import { cloudSellUrl } from "./marketplacePublicApi";
 import { GODMODE_BODY_ANALOGY_PARAS, GODMODE_MANIFESTO } from "@/lib/product-copy";
 
 function SectionHeading({
@@ -301,8 +303,8 @@ export default function MarketingHome() {
       <section className="flex flex-col gap-4">
         <SectionHeading
           badge="Marketplace"
-          title="Earn on what you build"
-          description="List the packs, plugins and workflows you already figured out. Other people install them instead of burning time and tokens from zero. Sellers keep 90%."
+          title="Your data stays local. Earn on Community."
+          description="Run GodMode on your machine, publish plugins and packs to the Community Marketplace, and keep 90%. Self-Hosted is your workshop. GodMode Cloud handles seller commerce."
         />
         <Card className={cn(marketingCardClass, "gap-0 overflow-hidden py-0")}>
           <div className="grid items-stretch lg:grid-cols-2">
@@ -319,11 +321,16 @@ export default function MarketingHome() {
                 Community Marketplace
               </CardTitle>
               <CardDescription className={cn(marketingCardDescriptionClass, "text-base")}>
-                GodMode is a place to earn. Publish what you built, set a price and get paid when
-                someone skips reinventing it. Buyers get a head start. You keep most of the sale.
+                Build on Self-Hosted GodMode. Your workspace data stays on your machine. List
+                what you already figured out on the Community Marketplace and get paid when
+                someone skips reinventing it.
               </CardDescription>
               <div className="flex flex-wrap gap-2">
+                <Button render={<Link to={marketingSelfHostedSellUrl()} />}>
+                  Sell from Self-Hosted
+                </Button>
                 <Button
+                  variant="outline"
                   render={<Link to={`${MARKETING_BASE}/features/plugin-pipeline`} />}
                 >
                   Build and List a Plugin
@@ -347,14 +354,23 @@ export default function MarketingHome() {
                 Sell once. Earn repeatedly.
               </CardTitle>
               <CardDescription className={marketingCardDescriptionClass}>
-                Person-to-Person listings with Stripe Connect. Sellers keep{" "}
-                <strong className="text-foreground">90%</strong>. The platform takes 10%.
+                Person-to-person Community listings with Stripe Connect. Sellers keep{" "}
+                <strong className="text-foreground">90%</strong>. Add a GodMode Seller seat
+                ($4.99/mo) on Self-Hosted, or use Sell on a full Cloud workspace.
               </CardDescription>
             </CardHeader>
             <CardContent className="text-base leading-relaxed text-muted-foreground">
-              Connect payouts, publish a listing and get paid for real products. The same pack that
-              saves you time and tokens can help the next person save theirs.
+              Publish from Marketplace → Sell on the install you already use. Private experiments
+              stay on your machine until you list them for the Community shelf.
             </CardContent>
+            <CardFooter className="flex flex-wrap gap-2">
+              <Button size="sm" render={<Link to={marketingSelfHostedSellUrl()} />}>
+                Self-Hosted sellers
+              </Button>
+              <Button size="sm" variant="outline" render={<a href={cloudSellUrl()} />}>
+                Cloud sellers
+              </Button>
+            </CardFooter>
           </Card>
 
           <Card className={marketingCardClass}>

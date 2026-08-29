@@ -29,6 +29,7 @@ import {
   marketingPageDescriptionClass,
   marketingSectionDescriptionClass,
 } from "./MarketingLayout";
+import { cloudSellUrl } from "./marketplacePublicApi";
 import {
   type ChannelRelease,
   fetchStableAndNightly,
@@ -249,6 +250,31 @@ export default function MarketingDownloads() {
           error={error}
         />
       </div>
+
+      <Card id="seller-seat" className={marketingCardClass}>
+        <CardHeader>
+          <CardTitle className={marketingCardTitleClass}>Earn on Community Marketplace</CardTitle>
+          <CardDescription className={marketingCardDescriptionClass}>
+            Install GodMode on your machine, add a GodMode Seller seat ($4.99/mo), and publish
+            from Marketplace → Sell. Your workspace data stays local. Sellers keep 90% on Community
+            sales.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-base leading-relaxed text-muted-foreground">
+          After install, open Marketplace → Sell on this machine and complete the seller checklist
+          (Seller seat, GitHub, Stripe Connect, Marketplace ToS). Full Cloud workspace subscribers
+          can sell from Cloud without a separate Seller seat.
+        </CardContent>
+        <CardFooter className="flex flex-wrap gap-2">
+          <Button render={<Link to={`${MARKETING_BASE}/pricing`} />}>Seller pricing</Button>
+          <Button variant="outline" render={<Link to={`${MARKETING_BASE}/features/marketplace`} />}>
+            Marketplace feature
+          </Button>
+          <Button variant="outline" render={<a href={cloudSellUrl()} />}>
+            Sell on Cloud
+          </Button>
+        </CardFooter>
+      </Card>
 
       <Card className={marketingCardClass}>
         <CardHeader>

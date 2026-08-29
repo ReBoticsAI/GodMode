@@ -40,3 +40,8 @@ export const MARKETING_BASE = resolveMarketingBase();
 export const MARKETING_HOME = MARKETING_BASE || "/";
 
 export const marketingAtRoot = MARKETING_BASE === "";
+
+/** Self-Hosted install path for Community sellers (Local Sell checklist in-app). */
+export function marketingSelfHostedSellUrl(): string {
+  return `${MARKETING_BASE}/downloads#seller-seat`;
+}
