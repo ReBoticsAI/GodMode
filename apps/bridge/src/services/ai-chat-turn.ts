@@ -67,6 +67,10 @@ export type PreparedAiChatTurn = {
   work: AiChatWorkScope;
   workDb: AppDatabase;
   contributeDb: AppDatabase | undefined;
+  /** Tenant ids pinned for this turn; run must unpin in finally (#738). */
+  pinnedTenantIds: string[];
+  /** When set, toolCtx.contributeDb live-resolves this owner tenant. */
+  contributeTenantId?: string;
   activeChatId: string;
   userMsgId: string;
   chatKernelContext: OperationContext;
