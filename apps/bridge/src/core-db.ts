@@ -866,6 +866,7 @@ function ensureSaasSubscriptionSchema(db: CoreDatabase): void {
 
 /** Clock start for past_due grace (#729). Idempotent addCol for DBs that already ran v10. */
 function ensureSaasPastDueSinceColumn(db: CoreDatabase): void {
+  if (!tableExists(db, "saas_subscriptions")) return;
   addCol(db, "saas_subscriptions", "past_due_since", "TEXT");
 }
 
