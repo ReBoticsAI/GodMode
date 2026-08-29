@@ -40,10 +40,21 @@ import {
   isPluginLoopError,
   toPluginLoopError,
 } from "./plugin-loop-error.js";
+import { config } from "../config.js";
 
 const hostRequire = createRequire(import.meta.url);
 const HOST_LINKED_PACKAGES = ["plugin-api", "plugin-host"] as const;
 const PLUGIN_PATHS_KEY = "marketplace.plugin_paths";
+
+/**
+ * Local / private hub: operator tenant is the personal workspace, so boot may
+ * auto-install every host-loaded plugin onto it.
+ * SaaS: operator is the control plane (Admin's Project). Never sink customer /
+ * dogfood paths from `marketplace.plugin_paths` into that tenant (#746).
+ */
+export function shouldAutoInstallLoadedPluginsOntoOperator(): boolean {
+  return !config.isSaas;
+}
 
 export interface ActivatePluginResult {
   pluginId: string;
@@ -462,33 +473,48 @@ export async function reconcilePluginLifecycle(
   operatorDb: AppDatabase
 ): Promise<void> {
   ensureTenantPluginsStorage(core);
-  for (const plugin of pluginRuntime.loaded) {
-    try {
-      const row = core
-        .prepare(
-          `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
-        )
-        .get(operatorTenantId, plugin.manifest.id) as
-        | { state: string; desired_state: string }
-        | undefined;
-      if (!row) {
-        const hasExistingStructure = (plugin.manifest.departments ?? []).some((departmentId) =>
-          Boolean(operatorDb.prepare(`SELECT 1 FROM structure_nodes WHERE id=?`).get(departmentId))
-        );
-        if (hasExistingStructure) {
-          core
-            .prepare(
-              `INSERT INTO tenant_plugins
-               (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
-               VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
-            )
-            .run(
+
+  if (shouldAutoInstallLoadedPluginsOntoOperator()) {
+    for (const plugin of pluginRuntime.loaded) {
+      try {
+        const row = core
+          .prepare(
+            `SELECT state, desired_state FROM tenant_plugins WHERE tenant_id=? AND plugin_id=?`
+          )
+          .get(operatorTenantId, plugin.manifest.id) as
+          | { state: string; desired_state: string }
+          | undefined;
+        if (!row) {
+          const hasExistingStructure = (plugin.manifest.departments ?? []).some(
+            (departmentId) =>
+              Boolean(
+                operatorDb
+                  .prepare(`SELECT 1 FROM structure_nodes WHERE id=?`)
+                  .get(departmentId)
+              )
+          );
+          if (hasExistingStructure) {
+            core
+              .prepare(
+                `INSERT INTO tenant_plugins
+                 (tenant_id, plugin_id, version, plugin_root, state, desired_state, updated_at)
+                 VALUES (?, ?, ?, ?, 'active', 'active', datetime('now'))`
+              )
+              .run(
+                operatorTenantId,
+                plugin.manifest.id,
+                plugin.manifest.version,
+                plugin.pluginRoot
+              );
+          } else {
+            await installPluginForTenant(
+              core,
               operatorTenantId,
               plugin.manifest.id,
-              plugin.manifest.version,
               plugin.pluginRoot
             );
-        } else {
+          }
+        } else if (row.state !== "active" && row.desired_state !== "absent") {
           await installPluginForTenant(
             core,
             operatorTenantId,
@@ -496,20 +522,17 @@ export async function reconcilePluginLifecycle(
             plugin.pluginRoot
           );
         }
-      } else if (row.state !== "active" && row.desired_state !== "absent") {
-        await installPluginForTenant(
-          core,
-          operatorTenantId,
-          plugin.manifest.id,
-          plugin.pluginRoot
+      } catch (error) {
+        console.warn(
+          `[plugins] operator lifecycle reconcile failed for ${plugin.manifest.id}:`,
+          error instanceof Error ? error.message : error
         );
       }
-    } catch (error) {
-      console.warn(
-        `[plugins] operator lifecycle reconcile failed for ${plugin.manifest.id}:`,
-        error instanceof Error ? error.message : error
-      );
     }
+  } else {
+    console.log(
+      "[plugins] SaaS: skipping operator auto-install of host-wide loaded plugins (control plane)"
+    );
   }
 
   const interrupted = core
