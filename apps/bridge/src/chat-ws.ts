@@ -25,7 +25,7 @@ import type { MembershipRole } from "./core-db.js";
 import { resolveSession, parseSessionCookie } from "./services/auth/session-store.js";
 import { coreUserToAuth } from "./types/express-auth.js";
 import { mfaEnabled } from "./services/auth/mfa-and-tokens.js";
-import { getTenantDb } from "./tenant-registry.js";
+import { getTenantDb, pinTenantDb, unpinTenantDb } from "./tenant-registry.js";
 import { assertSaasUserMayAccess } from "./services/saas-subscriptions.js";
 import {
   getAiChatTurnHandlers,
@@ -175,6 +175,8 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
       return;
     }
     const auth = authResult;
+    const pinnedTenantId = auth.tenantId;
+    pinTenantDb(pinnedTenantId);
 
     const inflight = new Map<string, AbortController>();
 
@@ -183,6 +185,10 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
         ac.abort();
         inflight.delete(id);
       }
+    };
+
+    const releasePin = () => {
+      unpinTenantDb(pinnedTenantId);
     };
 
     ws.send(
@@ -237,7 +243,13 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
 
         if (msg.type !== "chat_turn") return;
 
-        if (ROLE_RANK[auth.tenantRole as MembershipRole] < ROLE_RANK.editor) {
+        // Refresh live DB handle each turn (WS auth must not hold a closed snapshot).
+        const turnAuth: AiChatAuthContext = {
+          ...auth,
+          tenantDb: getTenantDb(auth.tenantId),
+        };
+
+        if (ROLE_RANK[turnAuth.tenantRole as MembershipRole] < ROLE_RANK.editor) {
           ws.send(
             JSON.stringify({
               type: "ai_chat_event",
@@ -287,7 +299,7 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
           toolAutonomy: msg.toolAutonomy,
         };
 
-        const preparedResult = await handlers.prepare(auth, body);
+        const preparedResult = await handlers.prepare(turnAuth, body);
         if (!preparedResult.ok) {
           ws.send(
             JSON.stringify({
@@ -355,6 +367,10 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
 
     ws.on("close", () => {
       abortAll();
+      releasePin();
+    });
+    ws.on("error", () => {
+      /* close handler also runs; unpin is idempotent via refcount on close only once */
     });
   });
 }

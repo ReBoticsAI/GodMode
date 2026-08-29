@@ -46,10 +46,17 @@ interface CachedTenant {
 }
 
 const cache = new Map<string, CachedTenant>();
-/** Tenants kept open for the Bridge process lifetime (never idle-swept). */
-const pinned = new Set<string>();
+/**
+ * Refcounted pins: while count > 0 the tenant skips LRU and idle sweep.
+ * Bootstrap pins the operator once and never unpins (permanent hold).
+ */
+const pinCounts = new Map<string, number>();
 const MAX_OPEN = 8;
 const IDLE_MS = 10 * 60 * 1000;
+
+function isPinned(tenantId: string): boolean {
+  return (pinCounts.get(tenantId) ?? 0) > 0;
+}
 
 /** Workspace DB handle → tenantId (Platform Vault fallthrough via workspace owner). */
 const tenantDbIdentity = new WeakMap<AppDatabase, { tenantId: string }>();
@@ -72,7 +79,7 @@ function evictIfNeeded(): void {
   );
   while (cache.size > MAX_OPEN && entries.length > 0) {
     const [id, entry] = entries.shift()!;
-    if (pinned.has(id)) continue;
+    if (isPinned(id)) continue;
     try {
       entry.db.close();
     } catch {
@@ -85,7 +92,7 @@ function evictIfNeeded(): void {
 function sweepIdle(): void {
   const now = Date.now();
   for (const [id, entry] of cache) {
-    if (pinned.has(id)) continue;
+    if (isPinned(id)) continue;
     if (now - entry.lastAccess > IDLE_MS) {
       try {
         entry.db.close();
@@ -103,9 +110,28 @@ function ensureIdleTimer(): void {
   idleTimer.unref?.();
 }
 
-/** Keep a tenant DB open for the Bridge process lifetime (skip idle sweep). */
+/** Increment pin count so this tenant skips LRU and idle sweep while held. */
 export function pinTenantDb(tenantId: string): void {
-  pinned.add(tenantId);
+  const id = tenantId?.trim();
+  if (!id) return;
+  pinCounts.set(id, (pinCounts.get(id) ?? 0) + 1);
+}
+
+/**
+ * Decrement pin count. At 0 the tenant may be reclaimed by LRU/idle again.
+ * Does not close the handle. No-op for empty ids or already-zero counts.
+ */
+export function unpinTenantDb(tenantId: string): void {
+  const id = tenantId?.trim();
+  if (!id) return;
+  const next = (pinCounts.get(id) ?? 0) - 1;
+  if (next <= 0) pinCounts.delete(id);
+  else pinCounts.set(id, next);
+}
+
+/** Test helper: current pin refcount (0 if unpinned). */
+export function getTenantDbPinCount(tenantId: string): number {
+  return pinCounts.get(tenantId?.trim() ?? "") ?? 0;
 }
 
 /**
@@ -220,7 +246,7 @@ export function getTenantDb(tenantId: string): AppDatabase {
  * file locked (unlink would fail with EBUSY/EPERM). Also unpins it.
  */
 export function evictTenantDb(tenantId: string): void {
-  pinned.delete(tenantId);
+  pinCounts.delete(tenantId);
   const entry = cache.get(tenantId);
   if (!entry) return;
   try {
@@ -232,7 +258,7 @@ export function evictTenantDb(tenantId: string): void {
 }
 
 export function closeAllTenantDbs(): void {
-  pinned.clear();
+  pinCounts.clear();
   for (const [, entry] of cache) {
     try {
       entry.db.close();

@@ -193,7 +193,7 @@ import {
 } from "../core-db.js";
 import { resolveShareAccess } from "../services/share-service.js";
 import { refreshScheduler } from "../services/scheduler.js";
-import { getTenantDb } from "../tenant-registry.js";
+import { getTenantDb, pinTenantDb, unpinTenantDb } from "../tenant-registry.js";
 import { getShareBroker, broadcastCardActivity } from "../ws-broker.js";
 import { createRecord, KernelError } from "../kernel/record-api.js";
 import type { OperationContext } from "../kernel/adapter-registry.js";
@@ -1692,11 +1692,27 @@ export function createAiRouter(
     // The work DB (always the actor's own tenant, or a shared session's home)
     // owns produced work: chats, messages, artifacts, and memory WRITES. For an
     // owned agent engineDb === workDb so behavior is byte-for-byte unchanged.
-    const engineDb = scope.db;
     const work = resolveChatWorkScope(req, chatId);
-    const workDb = work.db;
+    const pinnedTenantIds = [
+      ...new Set(
+        [work.tenantId, scope.tenantId].filter(
+          (id): id is string => Boolean(id && String(id).trim())
+        )
+      ),
+    ];
+    for (const id of pinnedTenantIds) pinTenantDb(id);
+
+    const releaseTurnPins = () => {
+      for (const id of pinnedTenantIds) unpinTenantDb(id);
+    };
+
+    // Live handles after pin (do not keep closed snapshots from req/auth).
+    const engineDb = getTenantDb(scope.tenantId);
+    const workDb = getTenantDb(work.tenantId);
+    const scopeLive = { ...scope, db: engineDb };
+    const workLive = { ...work, db: workDb };
     const chatKernelContext: OperationContext = {
-      tenantId: work.tenantId,
+      tenantId: workLive.tenantId,
       userId: auth.user.id,
       isAdmin: auth.user.isAdmin,
       role: (auth.tenantRole as OperationContext["role"]) ?? "editor",
@@ -1705,18 +1721,23 @@ export function createAiRouter(
     };
     // Contribute-back: mirror new memories into the owner's engine DB only when
     // the caller opts in AND the agent is shared (no-op for owned agents).
-    const contributeDb =
-      contributeMemory && !scope.owned ? engineDb : undefined;
+    const contributeTenantId =
+      contributeMemory && !scopeLive.owned ? scopeLive.tenantId : undefined;
+    const contributeDb = contributeTenantId
+      ? getTenantDb(contributeTenantId)
+      : undefined;
 
     let activeChatId = chatId;
     let userMsgId: string;
     try {
       if (body.resumeInterrupted) {
         if (!activeChatId) {
+          releaseTurnPins();
           return { ok: false, status: 400, body: { error: "chatId required to resume" } };
         }
         const turn = readChatTurnState(workDb, activeChatId);
         if (!turn?.userMessageId) {
+          releaseTurnPins();
           return { ok: false, status: 409, body: { error: "No interrupted turn to resume" } };
         }
         userMsgId = turn.userMessageId;
@@ -1752,6 +1773,7 @@ export function createAiRouter(
         userId: auth.user.id,
       });
     } catch (err) {
+      releaseTurnPins();
       if (err instanceof KernelError) {
         return { ok: false, status: err.status, body: { error: err.message } };
       }
@@ -1767,10 +1789,10 @@ export function createAiRouter(
           messageId: userMsgId,
           role: "user",
           agentId: resolvedAgentId,
-          shared: !scope.owned,
-          sharedSession: Boolean(work.session),
+          shared: !scopeLive.owned,
+          sharedSession: Boolean(workLive.session),
         },
-        work.tenantId
+        workLive.tenantId
       );
     }
 
@@ -1782,11 +1804,13 @@ export function createAiRouter(
         sessionAutonomy,
         resolvedAgentId,
         agent,
-        scope,
+        scope: scopeLive,
         engineDb,
-        work,
+        work: workLive,
         workDb,
         contributeDb,
+        pinnedTenantIds,
+        contributeTenantId,
         activeChatId: activeChatId!,
         userMsgId,
         chatKernelContext,
@@ -1814,6 +1838,8 @@ export function createAiRouter(
       work,
       workDb,
       contributeDb,
+      pinnedTenantIds,
+      contributeTenantId,
       activeChatId,
       chatKernelContext,
       images,
@@ -1822,6 +1848,10 @@ export function createAiRouter(
       message,
     } = prepared;
 
+    const workTenantId = work.tenantId;
+    const engineTenantId = scope.tenantId;
+
+    try {
     const userParts: ChatMessagePart[] = [];
     if (message?.trim()) userParts.push({ type: "text", text: message.trim() });
     for (const img of images) {
@@ -2223,8 +2253,14 @@ export function createAiRouter(
             topK: harnessProfile.sampling.topK,
           },
           toolCtx: {
-            db: workDb,
-            contributeDb,
+            get db() {
+              return getTenantDb(workTenantId);
+            },
+            get contributeDb() {
+              return contributeTenantId
+                ? getTenantDb(contributeTenantId)
+                : undefined;
+            },
             chatId: activeChatId,
             bridgePort,
             llm,
@@ -2238,7 +2274,7 @@ export function createAiRouter(
             activeTaskCardId: activeWorkCardId ?? undefined,
             userId: auth.user.id,
             isAdmin: Boolean(auth.user.isAdmin),
-            tenantId: work.tenantId,
+            tenantId: workTenantId,
             sessionAutonomy,
             abortSignal: abortController.signal,
             onTerminalOutput: (chunk) => {
@@ -2531,11 +2567,15 @@ export function createAiRouter(
     bus?.emit("chat_completed", {
       chatId: activeChatId,
       agentId: agent.id,
-      workTenantId: work.tenantId,
-      engineTenantId: scope.tenantId,
-      contributeMemory: Boolean(contributeDb),
+      workTenantId,
+      engineTenantId,
+      contributeMemory: Boolean(contributeTenantId ?? contributeDb),
       owned: scope.owned,
     });
+
+    } finally {
+      for (const id of pinnedTenantIds) unpinTenantDb(id);
+    }
 
   }
 
