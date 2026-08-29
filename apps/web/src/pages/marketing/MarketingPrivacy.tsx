@@ -437,7 +437,10 @@ export default function MarketingPrivacy() {
               <p>
                 We keep account, billing, Marketplace, log, and workspace data as needed to
                 operate Cloud, handle disputes, and meet legal retention duties. Retention
-                periods are not fixed product SLAs.
+                periods are not fixed product SLAs. If a Cloud subscription becomes past due,
+                access continues for a seven (7) day grace period from the first past-due mark,
+                then may be revoked until payment succeeds; that does not by itself delete your
+                workspace.
               </p>
               <p>
                 You may email{" "}

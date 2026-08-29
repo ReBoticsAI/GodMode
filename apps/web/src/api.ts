@@ -6414,6 +6414,10 @@ export type SaasSubscriptionPublic = {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   hasCustomer: boolean;
+  accessRevoked?: boolean;
+  pastDueSince?: string | null;
+  graceEndsAt?: string | null;
+  graceDaysRemaining?: number | null;
 };
 
 export function fetchSaasSubscription() {

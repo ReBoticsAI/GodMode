@@ -51,11 +51,13 @@ import {
   applyStripeSubscriptionObject,
   assertMayStartSellerCheckout,
   assertSaasUserMayAccess,
+  getPublicSubscriptionForUser,
   getSellerEntitlementForUser,
   grantComplimentaryAccess,
   grantComplimentarySellerAccess,
   linkSubscriptionToUser,
   listSaasCustomersForAdmin,
+  markSubscriptionPastDueByCustomer,
   revokeComplimentaryAccess,
   revokeComplimentarySellerAccess,
   setUserAccessDisabled,
@@ -121,6 +123,7 @@ function seedSchema(): void {
       current_period_end TEXT,
       cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
       access_revoked INTEGER NOT NULL DEFAULT 0,
+      past_due_since TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -219,7 +222,86 @@ describe("saas subscriptions", () => {
       status: "past_due",
       current_period_end: Math.floor(Date.now() / 1000) + 86400,
     });
+    expect(pastDue?.past_due_since).toBeTruthy();
     expect(subscriptionGrantsAccess(pastDue!)).toBe(true);
+  });
+
+  it("revokes past_due access after grace and recovers on active", () => {
+    const prev = process.env.SAAS_PAST_DUE_GRACE_DAYS;
+    process.env.SAAS_PAST_DUE_GRACE_DAYS = "7";
+    try {
+      upsertSubscriptionFromCheckout({
+        stripeSessionId: "cs_grace_1",
+        email: "grace@example.com",
+        stripeCustomerId: "cus_grace",
+        stripeSubscriptionId: "sub_grace",
+        planId: "monthly",
+        status: "active",
+      });
+      const marked = markSubscriptionPastDueByCustomer("cus_grace");
+      expect(marked?.status).toBe("past_due");
+      expect(marked?.past_due_since).toBeTruthy();
+      expect(subscriptionGrantsAccess(marked!)).toBe(true);
+
+      const firstSince = marked!.past_due_since;
+      const again = markSubscriptionPastDueByCustomer("cus_grace");
+      expect(again?.past_due_since).toBe(firstSince);
+
+      mem
+        .prepare(
+          `UPDATE saas_subscriptions
+           SET past_due_since=datetime('now', '-8 days')
+           WHERE id=?`
+        )
+        .run(marked!.id);
+      const expired = mem
+        .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+        .get(marked!.id) as SaasSubscription;
+      expect(subscriptionGrantsAccess(expired)).toBe(false);
+      const revoked = mem
+        .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+        .get(marked!.id) as SaasSubscription;
+      expect(revoked.access_revoked).toBe(1);
+
+      const recovered = applyStripeSubscriptionObject({
+        id: "sub_grace",
+        customer: "cus_grace",
+        status: "active",
+        current_period_end: Math.floor(Date.now() / 1000) + 86400,
+        metadata: { godmode_plan: "monthly", godmode_saas: "1" },
+      });
+      expect(recovered?.status).toBe("active");
+      expect(recovered?.past_due_since).toBeNull();
+      expect(recovered?.access_revoked).toBe(0);
+      expect(subscriptionGrantsAccess(recovered!)).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.SAAS_PAST_DUE_GRACE_DAYS;
+      else process.env.SAAS_PAST_DUE_GRACE_DAYS = prev;
+    }
+  });
+
+  it("exposes past_due grace fields on the public subscription payload", () => {
+    const user = insertUser({ email: "pub@example.com" });
+    upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_pub",
+      email: "pub@example.com",
+      stripeCustomerId: "cus_pub",
+      stripeSubscriptionId: "sub_pub",
+      planId: "monthly",
+      status: "active",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_pub",
+      stripeCustomerId: "cus_pub",
+    });
+    markSubscriptionPastDueByCustomer("cus_pub");
+    const pub = getPublicSubscriptionForUser(user.id);
+    expect(pub?.status).toBe("past_due");
+    expect(pub?.pastDueSince).toBeTruthy();
+    expect(pub?.graceEndsAt).toBeTruthy();
+    expect(pub?.graceDaysRemaining).toBeGreaterThan(0);
+    expect(pub?.accessRevoked).toBe(false);
   });
 
   it("assertSaasUserMayAccess exempts admins and blocks disabled users", () => {

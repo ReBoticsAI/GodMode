@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 function formatPeriodEnd(iso: string | null): string | null {
   if (!iso) return null;
@@ -76,6 +77,12 @@ export function SubscriptionCard() {
     }
   };
 
+  const pastDue = sub?.status === "past_due";
+  const revoked = Boolean(sub?.accessRevoked);
+  const daysLeft = sub?.graceDaysRemaining ?? null;
+  const inGrace = pastDue && !revoked && daysLeft !== null && daysLeft > 0;
+  const graceExpired = pastDue && (revoked || daysLeft === 0);
+
   return (
     <Card>
       <CardHeader>
@@ -109,6 +116,25 @@ export function SubscriptionCard() {
                 Current period ends {formatPeriodEnd(sub.currentPeriodEnd)}
               </p>
             ) : null}
+            {inGrace ? (
+              <Alert>
+                <AlertTitle>Payment past due</AlertTitle>
+                <AlertDescription>
+                  Update your payment method in the billing portal. Cloud access continues for{" "}
+                  {daysLeft === 1 ? "1 more day" : `${daysLeft} more days`}, then pauses until
+                  payment succeeds.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {graceExpired ? (
+              <Alert variant="destructive">
+                <AlertTitle>Access paused</AlertTitle>
+                <AlertDescription>
+                  The past-due grace period has ended. Renew in the billing portal to restore
+                  GodMode Cloud.
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -118,17 +144,12 @@ export function SubscriptionCard() {
         <Button
           type="button"
           variant="outline"
-          disabled={opening || (sub ? !sub.hasCustomer : true)}
+          disabled={opening || loading || (sub ? !sub.hasCustomer : false)}
           onClick={() => void openPortal()}
-          className="w-fit"
         >
-          {opening ? (
-            <Spinner className="size-4" data-icon="inline-start" />
-          ) : (
-            <CreditCardIcon data-icon="inline-start" />
-          )}
-          Manage subscription
-          <ExternalLinkIcon className="size-3.5 opacity-70" data-icon="inline-end" />
+          <CreditCardIcon data-icon="inline-start" />
+          {opening ? "Opening…" : "Open billing portal"}
+          <ExternalLinkIcon data-icon="inline-end" />
         </Button>
       </CardContent>
     </Card>

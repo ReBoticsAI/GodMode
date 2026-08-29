@@ -202,6 +202,7 @@ function seedSchema(): void {
       current_period_end TEXT,
       cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
       access_revoked INTEGER NOT NULL DEFAULT 0,
+      past_due_since TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

@@ -276,6 +276,7 @@ unless a trusted signature-verification policy is configured.
 | `STRIPE_SAAS_PRICE_ID` | Optional single-price fallback if monthly/yearly/seller unset |
 | `STRIPE_SAAS_CHECKOUT_MODE` | `subscription` (default when plan prices set) or `payment` |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/saas/stripe/webhook` (`checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) |
+| `SAAS_PAST_DUE_GRACE_DAYS` | `7` | Days of Cloud access after a subscription first becomes `past_due` before `access_revoked`. Repeated `invoice.payment_failed` does not reset the clock. Recovering to `active` / `trialing` clears the clock. |
 | `STRIPE_CREDITS_PER_USD` | Marketplace credit conversion rate |
 
 On SaaS installs, authenticated users open Stripe Customer Portal via
