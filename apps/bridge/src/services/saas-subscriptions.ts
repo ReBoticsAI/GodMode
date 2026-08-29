@@ -105,6 +105,8 @@ export interface SaasSubscription {
   current_period_end: string | null;
   cancel_at_period_end: number;
   access_revoked: number;
+  /** ISO or SQLite datetime when status first became past_due; null when not past_due. */
+  past_due_since: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -117,6 +119,81 @@ const TERMINAL_STATUSES = new Set([
 
 const ALLOWED_STATUSES = new Set(["active", "trialing", "past_due"]);
 
+/** Days of Cloud access after first past_due before access_revoked. */
+export function pastDueGraceDays(): number {
+  const n = Number(process.env.SAAS_PAST_DUE_GRACE_DAYS ?? "7");
+  if (!Number.isFinite(n) || n < 0) return 7;
+  return Math.floor(n);
+}
+
+function parseDbDatetimeMs(value: string | null | undefined): number | null {
+  if (!value || !value.trim()) return null;
+  const raw = value.trim();
+  const asIso =
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(raw) &&
+    !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)
+      ? `${raw.replace(" ", "T")}Z`
+      : raw;
+  const t = Date.parse(asIso);
+  return Number.isFinite(t) ? t : null;
+}
+
+export function graceEndsAtIso(pastDueSince: string | null | undefined): string | null {
+  const start = parseDbDatetimeMs(pastDueSince);
+  if (start === null) return null;
+  return new Date(start + pastDueGraceDays() * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function graceDaysRemaining(pastDueSince: string | null | undefined): number | null {
+  const ends = graceEndsAtIso(pastDueSince);
+  if (!ends) return null;
+  const remainingMs = Date.parse(ends) - Date.now();
+  if (!Number.isFinite(remainingMs)) return null;
+  if (remainingMs <= 0) return 0;
+  return Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+}
+
+function pastDueGraceExpired(pastDueSince: string | null | undefined): boolean {
+  const ends = graceEndsAtIso(pastDueSince);
+  if (!ends) return false;
+  return Date.parse(ends) <= Date.now();
+}
+
+/**
+ * For past_due rows: backfill past_due_since once, then revoke after grace.
+ * Returns the (possibly updated) subscription row used for access checks.
+ */
+export function enforcePastDueGrace(sub: SaasSubscription): SaasSubscription {
+  if (sub.status !== "past_due" || sub.access_revoked) return sub;
+  const core = getCloudDb();
+  if (!sub.past_due_since) {
+    core
+      .prepare(
+        `UPDATE saas_subscriptions
+         SET past_due_since=datetime('now'), updated_at=datetime('now')
+         WHERE id=? AND past_due_since IS NULL`
+      )
+      .run(sub.id);
+    const refreshed = core
+      .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
+      .get(sub.id) as SaasSubscription | undefined;
+    if (!refreshed) return sub;
+    sub = refreshed;
+  }
+  if (!pastDueGraceExpired(sub.past_due_since)) return sub;
+  core
+    .prepare(
+      `UPDATE saas_subscriptions
+       SET access_revoked=1, updated_at=datetime('now')
+       WHERE id=?`
+    )
+    .run(sub.id);
+  return {
+    ...sub,
+    access_revoked: 1,
+  };
+}
+
 function isoFromUnix(sec: unknown): string | null {
   const n = typeof sec === "number" ? sec : Number(sec);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -127,6 +204,10 @@ function periodStillActive(periodEnd: string | null): boolean {
   if (!periodEnd) return false;
   const t = Date.parse(periodEnd);
   return Number.isFinite(t) && t > Date.now();
+}
+
+function statusClearsPastDueClock(status: string): boolean {
+  return status === "active" || status === "trialing";
 }
 
 export function findSubscriptionByUserId(
@@ -209,6 +290,8 @@ export function upsertSubscriptionFromCheckout(opts: {
   const accessRevoked = TERMINAL_STATUSES.has(status) && !periodStillActive(opts.currentPeriodEnd ?? null) ? 1 : 0;
 
   if (existing) {
+    const clearPastDue = statusClearsPastDueClock(status);
+    const setPastDue = status === "past_due";
     core
       .prepare(
         `UPDATE saas_subscriptions SET
@@ -221,7 +304,16 @@ export function upsertSubscriptionFromCheckout(opts: {
           status=?,
           current_period_end=COALESCE(?, current_period_end),
           cancel_at_period_end=?,
-          access_revoked=CASE WHEN ?=1 THEN 1 ELSE access_revoked END,
+          access_revoked=CASE
+            WHEN ?=1 THEN 1
+            WHEN ?=1 THEN 0
+            ELSE access_revoked
+          END,
+          past_due_since=CASE
+            WHEN ?=1 THEN NULL
+            WHEN ?=1 THEN COALESCE(past_due_since, datetime('now'))
+            ELSE past_due_since
+          END,
           updated_at=datetime('now')
          WHERE id=?`
       )
@@ -236,6 +328,9 @@ export function upsertSubscriptionFromCheckout(opts: {
         opts.currentPeriodEnd ?? null,
         cancelAt,
         accessRevoked,
+        clearPastDue ? 1 : 0,
+        clearPastDue ? 1 : 0,
+        setPastDue ? 1 : 0,
         existing.id
       );
     return findSubscriptionBySessionId(core, opts.stripeSessionId) ??
@@ -247,8 +342,9 @@ export function upsertSubscriptionFromCheckout(opts: {
     .prepare(
       `INSERT INTO saas_subscriptions (
         id, email, stripe_customer_id, stripe_subscription_id, stripe_session_id,
-        plan_id, price_id, status, current_period_end, cancel_at_period_end, access_revoked
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        plan_id, price_id, status, current_period_end, cancel_at_period_end, access_revoked,
+        past_due_since
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -261,7 +357,8 @@ export function upsertSubscriptionFromCheckout(opts: {
       status,
       opts.currentPeriodEnd ?? null,
       cancelAt,
-      accessRevoked
+      accessRevoked,
+      status === "past_due" ? new Date().toISOString() : null
     );
 
   return core
@@ -304,6 +401,8 @@ export function applyStripeSubscriptionObject(sub: {
     (customerId ? findSubscriptionByCustomerId(core, customerId) : undefined);
 
   if (existing) {
+    const clearPastDue = statusClearsPastDueClock(status);
+    const setPastDue = status === "past_due";
     core
       .prepare(
         `UPDATE saas_subscriptions SET
@@ -315,6 +414,11 @@ export function applyStripeSubscriptionObject(sub: {
           current_period_end=?,
           cancel_at_period_end=?,
           access_revoked=CASE WHEN ? THEN 1 ELSE 0 END,
+          past_due_since=CASE
+            WHEN ?=1 THEN NULL
+            WHEN ?=1 THEN COALESCE(past_due_since, datetime('now'))
+            ELSE past_due_since
+          END,
           updated_at=datetime('now')
          WHERE id=?`
       )
@@ -327,6 +431,8 @@ export function applyStripeSubscriptionObject(sub: {
         periodEnd,
         cancelAt ? 1 : 0,
         shouldRevoke ? 1 : 0,
+        clearPastDue ? 1 : 0,
+        setPastDue ? 1 : 0,
         existing.id
       );
     return findSubscriptionByStripeSubscriptionId(core, subscriptionId)!;
@@ -337,8 +443,8 @@ export function applyStripeSubscriptionObject(sub: {
     .prepare(
       `INSERT INTO saas_subscriptions (
         id, stripe_customer_id, stripe_subscription_id, plan_id, price_id,
-        status, current_period_end, cancel_at_period_end, access_revoked
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        status, current_period_end, cancel_at_period_end, access_revoked, past_due_since
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -349,7 +455,8 @@ export function applyStripeSubscriptionObject(sub: {
       status,
       periodEnd,
       cancelAt ? 1 : 0,
-      shouldRevoke ? 1 : 0
+      shouldRevoke ? 1 : 0,
+      status === "past_due" ? new Date().toISOString() : null
     );
   return core
     .prepare(`SELECT * FROM saas_subscriptions WHERE id=?`)
@@ -365,7 +472,9 @@ export function markSubscriptionPastDueByCustomer(
   core
     .prepare(
       `UPDATE saas_subscriptions
-       SET status='past_due', updated_at=datetime('now')
+       SET status='past_due',
+           past_due_since=COALESCE(past_due_since, datetime('now')),
+           updated_at=datetime('now')
        WHERE id=?`
     )
     .run(existing.id);
@@ -403,19 +512,23 @@ function subscriptionStatusGrantsCommerce(
   sub: SaasSubscription | undefined
 ): boolean {
   if (!sub) return false;
-  if (sub.access_revoked) return false;
-  if (ALLOWED_STATUSES.has(sub.status)) {
+  const enforced = enforcePastDueGrace(sub);
+  if (enforced.access_revoked) return false;
+  if (ALLOWED_STATUSES.has(enforced.status)) {
     if (
-      (isComplimentarySubscription(sub) ||
-        isComplimentarySellerSubscription(sub)) &&
-      sub.current_period_end &&
-      !periodStillActive(sub.current_period_end)
+      (isComplimentarySubscription(enforced) ||
+        isComplimentarySellerSubscription(enforced)) &&
+      enforced.current_period_end &&
+      !periodStillActive(enforced.current_period_end)
     ) {
       return false;
     }
     return true;
   }
-  if (sub.status === "canceled" && periodStillActive(sub.current_period_end)) {
+  if (
+    enforced.status === "canceled" &&
+    periodStillActive(enforced.current_period_end)
+  ) {
     return true;
   }
   return false;
@@ -1066,9 +1179,13 @@ export function getPublicSubscriptionForUser(userId: string): {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   hasCustomer: boolean;
+  accessRevoked: boolean;
+  pastDueSince: string | null;
+  graceEndsAt: string | null;
+  graceDaysRemaining: number | null;
 } | null {
-  const sub = findSubscriptionByUserId(getCloudDb(), userId);
-  if (!sub) {
+  const raw = findSubscriptionByUserId(getCloudDb(), userId);
+  if (!raw) {
     const entitlement = getCloudDb()
       .prepare(
         `SELECT stripe_customer_id FROM saas_entitlements
@@ -1084,9 +1201,15 @@ export function getPublicSubscriptionForUser(userId: string): {
       currentPeriodEnd: null,
       cancelAtPeriodEnd: false,
       hasCustomer: Boolean(entitlement.stripe_customer_id),
+      accessRevoked: false,
+      pastDueSince: null,
+      graceEndsAt: null,
+      graceDaysRemaining: null,
     };
   }
+  const sub = enforcePastDueGrace(raw);
   const plan = planMeta(sub.plan_id ?? sub.price_id);
+  const pastDueSince = sub.status === "past_due" ? sub.past_due_since : null;
   return {
     planId: sub.plan_id,
     planLabel: plan.label ?? sub.plan_id ?? "GodMode Cloud",
@@ -1095,5 +1218,9 @@ export function getPublicSubscriptionForUser(userId: string): {
     currentPeriodEnd: sub.current_period_end,
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
     hasCustomer: Boolean(sub.stripe_customer_id),
+    accessRevoked: Boolean(sub.access_revoked),
+    pastDueSince,
+    graceEndsAt: pastDueSince ? graceEndsAtIso(pastDueSince) : null,
+    graceDaysRemaining: pastDueSince ? graceDaysRemaining(pastDueSince) : null,
   };
 }

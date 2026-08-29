@@ -454,6 +454,7 @@ export function initCoreDb(): CoreDatabase {
       current_period_end TEXT,
       cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
       access_revoked INTEGER NOT NULL DEFAULT 0,
+      past_due_since TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -739,6 +740,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_ai_queue_index_v1",
     up: ensureAiQueueIndexSchema,
   },
+  {
+    version: 23,
+    name: "core_saas_past_due_since_v1",
+    up: ensureSaasPastDueSinceColumn,
+  },
 ];
 
 /** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
@@ -844,6 +850,7 @@ function ensureSaasSubscriptionSchema(db: CoreDatabase): void {
       current_period_end TEXT,
       cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
       access_revoked INTEGER NOT NULL DEFAULT 0,
+      past_due_since TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -854,6 +861,13 @@ function ensureSaasSubscriptionSchema(db: CoreDatabase): void {
     CREATE INDEX IF NOT EXISTS saas_subscriptions_status_idx
       ON saas_subscriptions(status);
   `);
+  ensureSaasPastDueSinceColumn(db);
+}
+
+/** Clock start for past_due grace (#729). Idempotent addCol for DBs that already ran v10. */
+function ensureSaasPastDueSinceColumn(db: CoreDatabase): void {
+  if (!tableExists(db, "saas_subscriptions")) return;
+  addCol(db, "saas_subscriptions", "past_due_since", "TEXT");
 }
 
 function ensureCoreMarketplaceColumns(db: CoreDatabase): void {

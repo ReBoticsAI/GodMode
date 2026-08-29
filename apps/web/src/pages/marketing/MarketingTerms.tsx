@@ -192,8 +192,11 @@ export default function MarketingTerms() {
                 Paid Cloud and Seller access is billed through Stripe (or successor processors
                 we configure). Plans renew until you cancel in the billing portal. Canceling
                 stops future renewals; it does not create a refund for the current paid period.
-                Failure to pay may suspend or terminate access. Designated platform operators
-                may be exempt from the paywall so we can operate the service.
+                If a renewal payment fails, the subscription may move to past due. Cloud access
+                continues for a grace period of seven (7) days from the first past-due mark
+                (configurable for the deployment). After grace ends without successful payment,
+                Cloud access is revoked until you renew in the billing portal. Designated
+                platform operators may be exempt from the paywall so we can operate the service.
               </p>
 
               <h3>B4. No refunds</h3>
