@@ -713,7 +713,13 @@ export function createSaasRouter(): Router {
     requireAuth,
     (req, res) => {
       const pending = getPendingDeletionRequest(req.user!.id);
-      const user = req.user!;
+      const row = getCloudDb()
+        .prepare(
+          `SELECT deleted_at, deletion_status FROM users WHERE id=?`
+        )
+        .get(req.user!.id) as
+        | { deleted_at: string | null; deletion_status: string | null }
+        | undefined;
       res.json({
         pending: pending
           ? {
@@ -723,8 +729,8 @@ export function createSaasRouter(): Router {
               requestedAt: pending.requested_at,
             }
           : null,
-        deletedAt: user.deleted_at ?? null,
-        deletionStatus: user.deletion_status ?? null,
+        deletedAt: row?.deleted_at ?? null,
+        deletionStatus: row?.deletion_status ?? null,
         retentionDays: Number(process.env.SAAS_ACCOUNT_RETENTION_DAYS ?? "30") || 30,
       });
     }
