@@ -33,6 +33,7 @@ Installation-wide identity and commerce (not hub chat surfaces):
 | `marketplace_acquisition_operations`, steps/audit/outbox | Durable cross-DB acquisition saga |
 | `releases`, `installation_update_state`, history/attempts/snapshots/receipts | Signed release discovery, deduplicated notification, update and rollback evidence |
 | `events` (legacy PlatformEvent) | May hold orphan rows with null `tenant_id` until cleaned; live SoR is Workspace `platform_events` |
+| `ai_queue_index` | Cross-tenant AI job **discovery** pointers (`tenant_id`, `job_id`, status, priority, `run_after`, workflow id). Job payload and results stay in workspace `ai_prompt_queue` |
 
 ### Host Users (`Users.sqlite`)
 
@@ -127,6 +128,23 @@ confirmation state, and trusted system capability where applicable.
 ### Background jobs
 
 - Queue rows include `tenant_id`; workers open `getTenantDb(tenantId)` per job.
+- SaaS discovery uses Cloud `ai_queue_index` (see [Workspace DB open policy](#workspace-db-open-policy-saas)). Empty tenants are not opened by the AI queue poll loop.
+
+### Workspace DB open policy (SaaS)
+
+24/7 agents do **not** mean opening every workspace SQLite 24/7. Bridge opens a workspace DB when that tenant has due background work, or when an interactive session holds a pin (chat WebSocket lifetime or an Intelligence turn). Idle and empty tenants stay closed on the AI queue hot path.
+
+| Plane | Role for jobs / sessions |
+|-------|--------------------------|
+| `Cloud.sqlite` | Installation-wide registry **and** the cross-tenant pending/running job index |
+| `Users.sqlite` | Hub surfaces only (DMs, Support, Notifications, platform groups). Not the job index |
+| `tenants/<workspaceId>.sqlite` | Workspace SoR, including full `ai_prompt_queue` payload and results |
+
+**Queue path.** Enqueue dual-writes the workspace queue row and a Cloud `ai_queue_index` row, then wakes the worker (`ai_queue_wake`). Discovery reads the Cloud index first, then opens `getTenantDb(tenantId)` only for that job’s tenant. A low-frequency safety poll remains index-only (not a walk of every tenant file).
+
+**Interactive Intelligence.** Live chat turns (HTTP and chat WebSocket) do not require the queue path for the live turn. Work and engine tenants are refcount-pinned for the turn (and for the WebSocket while connected). Tool context resolves the DB via live `getTenantDb(tenantId)` so the tenant LRU (`MAX_OPEN`) cannot leave mid-turn tools on a closed handle.
+
+**Scheduler and reflection.** Do not probe every historical signup on a hot timer. Register due work from the Cloud index and/or an explicit enabled-tenant set. Open a workspace only when there is due work or an active session pin. AI queue discovery already follows this rule; other timers follow the same open policy.
 
 ### ObjectType routing
 
