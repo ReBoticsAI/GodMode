@@ -164,6 +164,32 @@ Public browse listings: `GET /api/marketplace/listings?seller_kind=user` (status
 
 Attaching a home llama-server to Cloud Intelligence is not Marketplace. That follow-up is #576.
 
+## Self-Hosted sellers (GodMode Seller seat)
+
+Self-Hosted and private-hub installs can sell on the **Community** Marketplace without paying for a full GodMode Cloud workspace ($9.99/mo). Add a **GodMode Seller** seat (~$4.99/mo, `STRIPE_SAAS_PRICE_SELLER_MONTHLY` in `CONFIGURATION.md`). Seller is commerce-only: it does not grant Structure, agents, chat storage, or other full workspace features.
+
+**Where work lives**
+
+| Surface | Role |
+|---------|------|
+| **Your machine (Self-Hosted)** | Workshop: Marketplace → **Sell** (ToS, GitHub Connect, publish wizard, My listings). Workspace data stays in your local SQLite files. |
+| **GodMode Cloud (commerce authority)** | Seller-of-record for paid Community listings: Seller seat billing, Stripe Connect onboarding, listing ids, and the 10% platform fee on Community sales. |
+
+Self-Hosted alone is **not** merchant of record for paid Community listings. Sellers connect a GodMode Seller seat on Cloud, then return to Local to finish the Sell checklist and manage listings on this install.
+
+**Local Sell checklist** (Marketplace → Sell on Self-Hosted, locked until complete):
+
+1. Connect GodMode Seller seat (Cloud sign-in or Seller checkout, then redirect back to Local).
+2. Connect GitHub (Personal Vault / Seller account).
+3. Connect Stripe payouts (Seller Stripe Connect on Cloud).
+4. Accept Marketplace ToS.
+
+When the checklist completes, Local unlocks the full Sell dashboard (catalog submit, claim, publish, My listings). Device-code linking remains a secondary fallback if redirect bind fails.
+
+**Full Cloud workspace users** keep today's Sell path. A separate Seller-only gate is not required when you already have an active Cloud workspace subscription.
+
+**Local Buy** (guest checkout without a Cloud account) is unchanged and separate from Seller.
+
 ## Seller payouts (Stripe Connect)
 
 Community sellers onboard with **Stripe Connect Express Account Links** from

@@ -29,6 +29,7 @@ import {
   marketingCardTitleClass,
   marketingPageDescriptionClass,
 } from "./MarketingLayout";
+import { marketingSelfHostedSellUrl } from "./marketingBase";
 import {
   cloudCommunityMarketplaceUrl,
   cloudOfficialMarketplaceUrl,
@@ -64,7 +65,7 @@ function useDocumentMeta(title: string, description: string) {
 export default function MarketingMarketplace() {
   useDocumentMeta(
     "Marketplace · GodMode",
-    "Browse Official and Community Marketplace listings. Buy and install on GodMode Cloud."
+    "Browse Official and Community Marketplace listings. Sell from Self-Hosted GodMode with a Seller seat while your data stays local."
   );
 
   const [official, setOfficial] = useState<PublicOfficialEntry[]>([]);
@@ -102,14 +103,17 @@ export default function MarketingMarketplace() {
     <Page>
       <PageHeader
         title="Marketplace"
-        description="Browse Official and Community listings. Checkout and install happen on GodMode Cloud."
+        description="Browse Official and Community listings on GodMode Cloud. Sell from Self-Hosted GodMode: your workspace data stays on your machine, and you earn on the Community shelf with a GodMode Seller seat."
         descriptionClassName={marketingPageDescriptionClass}
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Button render={<a href={cloudOfficialMarketplaceUrl()} />}>Open Official on Cloud</Button>
+        <Button render={<a href={cloudOfficialMarketplaceUrl()} />}>Browse Official on Cloud</Button>
         <Button variant="outline" render={<a href={cloudCommunityMarketplaceUrl()} />}>
-          Open Community on Cloud
+          Browse Community on Cloud
+        </Button>
+        <Button variant="outline" render={<Link to={marketingSelfHostedSellUrl()} />}>
+          Sell from Self-Hosted
         </Button>
         <Button variant="outline" render={<a href={cloudSellUrl()} />}>
           Sell on Cloud
@@ -188,7 +192,8 @@ export default function MarketingMarketplace() {
                 </EmptyMedia>
                 <EmptyTitle>No Community listings yet</EmptyTitle>
                 <EmptyDescription>
-                  Sellers publish from Cloud.{" "}
+                  Community sellers publish from Self-Hosted GodMode (with a Seller seat) or from
+                  a full Cloud workspace.{" "}
                   <Link
                     to={`${MARKETING_BASE}/marketplace`}
                     className="underline underline-offset-2"

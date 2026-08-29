@@ -17,29 +17,30 @@ import {
   marketingPageDescriptionClass,
 } from "./MarketingLayout";
 import { CLOUD_APP_HOME } from "./cloudAppUrl";
+import { marketingSelfHostedSellUrl } from "./marketingBase";
 
 export default function MarketingPricing() {
   return (
     <Page>
       <PageHeader
         title="Pricing"
-        description="Open-source GodMode in the cloud or on your machine. GodMode Cloud is the easiest way in from any device. Self-host stays free. Marketplace packs are separate from your Cloud plan. Bring your own AI keys."
+        description="Open-source GodMode on your machine or hosted in Cloud. Self-Hosted is free. Add a Seller seat to earn on the Community Marketplace while your data stays local. Full Cloud is the easiest way in from any device. Bring your own AI keys."
         descriptionClassName={marketingPageDescriptionClass}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className={marketingCardClass}>
           <CardHeader>
             <CardTitle className={marketingCardTitleClass}>Self-hosted</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
-              Install on your machine or run your own private server. Best if you want full
-              control and do not mind setup.
+              Install on your machine or run your own private server. Your workspace
+              data stays with you. Open source on GitHub.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">$0</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
-              Your data stays with you. Open source on GitHub.
+              Free to run. Add a Seller seat below to earn on Community Marketplace.
             </p>
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2">
@@ -57,6 +58,31 @@ export default function MarketingPricing() {
               }
             >
               GitHub
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card className={marketingCardClass}>
+          <CardHeader>
+            <CardTitle className={marketingCardTitleClass}>GodMode Seller</CardTitle>
+            <CardDescription className={marketingCardDescriptionClass}>
+              Earn on the Community Marketplace from Self-Hosted GodMode. Your builds and
+              workspace data stay on your machine. Seller is commerce-only, not a full Cloud
+              workspace.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">$4.99</p>
+            <p className="mt-1 text-base leading-relaxed text-muted-foreground">
+              Per month. Sellers keep 90% on Community sales. Cancel from the billing portal.
+            </p>
+          </CardContent>
+          <CardFooter className="flex flex-wrap gap-2">
+            <Button render={<Link to={marketingSelfHostedSellUrl()} />}>
+              Sell from Self-Hosted
+            </Button>
+            <Button variant="outline" render={<a href={CLOUD_APP_HOME} />}>
+              Already on Cloud
             </Button>
           </CardFooter>
         </Card>
