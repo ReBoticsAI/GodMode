@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Page, PageHeader } from "@/components/PageHeader";
+import { cn } from "@/lib/utils";
 import {
   MARKETING_BASE,
   marketingCardClass,
@@ -17,7 +18,11 @@ import {
   marketingPageDescriptionClass,
 } from "./MarketingLayout";
 import { CLOUD_APP_HOME } from "./cloudAppUrl";
-import { marketingSelfHostedSellUrl } from "./marketingBase";
+
+const pricingCardClass = cn(marketingCardClass, "h-full");
+const pricingHeaderClass = "flex-1";
+const pricingContentClass = "mt-auto";
+const pricingFooterClass = "flex flex-wrap gap-2";
 
 export default function MarketingPricing() {
   return (
@@ -28,22 +33,22 @@ export default function MarketingPricing() {
         descriptionClassName={marketingPageDescriptionClass}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className={marketingCardClass}>
-          <CardHeader>
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className={pricingCardClass}>
+          <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>Self-hosted</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
               Install on your machine or run your own private server. Your workspace
               data stays with you. Open source on GitHub.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className={pricingContentClass}>
             <p className="text-3xl font-bold">$0</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
-              Free to run. Add a Seller seat below to earn on Community Marketplace.
+              Free to run. Add a Seller seat to earn on Community Marketplace.
             </p>
           </CardContent>
-          <CardFooter className="flex flex-wrap gap-2">
+          <CardFooter className={pricingFooterClass}>
             <Button render={<Link to={`${MARKETING_BASE}/downloads`} />}>
               Downloads
             </Button>
@@ -62,8 +67,8 @@ export default function MarketingPricing() {
           </CardFooter>
         </Card>
 
-        <Card className={marketingCardClass}>
-          <CardHeader>
+        <Card className={pricingCardClass}>
+          <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>GodMode Seller</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
               Earn on the Community Marketplace from Self-Hosted GodMode. Your builds and
@@ -71,55 +76,50 @@ export default function MarketingPricing() {
               workspace.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className={pricingContentClass}>
             <p className="text-3xl font-bold">$4.99</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Per month. Sellers keep 90% on Community sales. Cancel from the billing portal.
             </p>
           </CardContent>
-          <CardFooter className="flex flex-wrap gap-2">
-            <Button render={<Link to={marketingSelfHostedSellUrl()} />}>
-              Sell from Self-Hosted
-            </Button>
-            <Button variant="outline" render={<a href={CLOUD_APP_HOME} />}>
-              Already on Cloud
-            </Button>
+          <CardFooter className={pricingFooterClass}>
+            <Button render={<a href={CLOUD_APP_HOME} />}>Start Seller Signup</Button>
           </CardFooter>
         </Card>
 
-        <Card className={marketingCardClass}>
-          <CardHeader>
+        <Card className={pricingCardClass}>
+          <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>Cloud Monthly</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
               We host GodMode for you. Choose a plan, pay with Stripe, then create your
               account and verify email.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className={pricingContentClass}>
             <p className="text-3xl font-bold">$9.99</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Per month. Cancel anytime from the billing portal.
             </p>
           </CardContent>
-          <CardFooter>
+          <CardFooter className={pricingFooterClass}>
             <Button render={<a href={CLOUD_APP_HOME} />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
 
-        <Card className={marketingCardClass}>
-          <CardHeader>
+        <Card className={pricingCardClass}>
+          <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>Cloud Yearly</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
               Same Cloud experience, billed once a year at a lower total cost.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className={pricingContentClass}>
             <p className="text-3xl font-bold">$74.99</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Lower yearly total than twelve monthly payments (about 4.5 months of savings).
             </p>
           </CardContent>
-          <CardFooter>
+          <CardFooter className={pricingFooterClass}>
             <Button render={<a href={CLOUD_APP_HOME} />}>Start Cloud signup</Button>
           </CardFooter>
         </Card>
