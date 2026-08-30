@@ -428,6 +428,35 @@ describe("saas subscriptions", () => {
     ).toBe(true);
   });
 
+  it("lists one admin row per user when they own multiple workspaces", () => {
+    const user = insertUser({ email: "multi@example.com" });
+    mem.prepare(
+      `INSERT INTO tenants (id, name, slug, owner_user_id) VALUES (?, ?, ?, ?)`
+    ).run("tenant-a", "Project A", "project-a", user.id);
+    mem.prepare(
+      `INSERT INTO tenants (id, name, slug, owner_user_id) VALUES (?, ?, ?, ?)`
+    ).run("tenant-b", "Project B", "project-b", user.id);
+    upsertSubscriptionFromCheckout({
+      stripeSessionId: "cs_multi",
+      email: "multi@example.com",
+      stripeCustomerId: "cus_multi",
+      stripeSubscriptionId: "sub_multi",
+      planId: "monthly",
+    });
+    linkSubscriptionToUser({
+      userId: user.id,
+      stripeSessionId: "cs_multi",
+      stripeCustomerId: "cus_multi",
+    });
+    const customers = listSaasCustomersForAdmin();
+    const rows = customers.filter((c) => c.userId === user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.ownedWorkspaces.map((w) => w.name).sort()).toEqual([
+      "Project A",
+      "Project B",
+    ]);
+  });
+
   it("lists customers and can disable access", () => {
     const user = insertUser({ email: "list@example.com" });
     upsertSubscriptionFromCheckout({

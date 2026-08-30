@@ -26,6 +26,14 @@ function formatWhen(iso: string | null): string {
   return new Date(t).toLocaleString();
 }
 
+function formatOwnedWorkspaces(
+  workspaces: Array<{ id: string; name: string }>
+): string | null {
+  if (workspaces.length === 0) return null;
+  if (workspaces.length === 1) return workspaces[0]!.name;
+  return `${workspaces.length} workspaces: ${workspaces.map((w) => w.name).join(", ")}`;
+}
+
 export function AdminSaasCustomersPanel() {
   const [rows, setRows] = useState<AdminSaasCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +176,9 @@ export function AdminSaasCustomersPanel() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
+                {rows.map((row, idx) => {
+                  const workspaceLabel = formatOwnedWorkspaces(row.ownedWorkspaces);
+                  return (
                   <tr
                     key={`${row.userId ?? row.email ?? "row"}-${idx}`}
                     className="border-b border-border/60 align-top"
@@ -178,9 +188,9 @@ export function AdminSaasCustomersPanel() {
                         {row.displayName ?? row.email ?? "Pending signup"}
                       </div>
                       <div className="text-muted-foreground">{row.email ?? "n/a"}</div>
-                      {row.tenantName ? (
+                      {workspaceLabel ? (
                         <div className="text-xs text-muted-foreground">
-                          {row.tenantName}
+                          {workspaceLabel}
                         </div>
                       ) : null}
                     </td>
@@ -304,7 +314,8 @@ export function AdminSaasCustomersPanel() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
