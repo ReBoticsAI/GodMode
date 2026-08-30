@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveCodingRoot } from "./coding/fs-tools.js";
 import { createRequire } from "node:module";
-import type { CoreDatabase } from "../core-db.js";
+import { getPlatformMeta, setPlatformMeta, type CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
 import { readGodmodePluginManifest } from "@godmode/plugin-api";
 import { ensurePluginBuilt } from "./plugin-build.js";
@@ -45,6 +45,7 @@ import { config } from "../config.js";
 const hostRequire = createRequire(import.meta.url);
 const HOST_LINKED_PACKAGES = ["plugin-api", "plugin-host"] as const;
 const PLUGIN_PATHS_KEY = "marketplace.plugin_paths";
+const REPAIR_SAAS_OPERATOR_PLUGINS_META = "repair_saas_operator_tenant_plugins_v1";
 
 /**
  * Local / private hub: operator tenant is the personal workspace, so boot may
@@ -54,6 +55,50 @@ const PLUGIN_PATHS_KEY = "marketplace.plugin_paths";
  */
 export function shouldAutoInstallLoadedPluginsOntoOperator(): boolean {
   return !config.isSaas;
+}
+
+/**
+ * One-time SaaS repair (#746): Admin's Project accumulated host-wide plugin
+ * installs before boot stopped auto-installing onto the operator tenant. Remove
+ * those rows and structure so the control plane is not a customer/dogfood sink.
+ */
+export async function pruneSaasOperatorTenantPluginResidueOnce(
+  core: CoreDatabase,
+  operatorTenantId: string
+): Promise<{ pruned: string[] }> {
+  if (!config.isSaas) return { pruned: [] };
+  if (getPlatformMeta(core, REPAIR_SAAS_OPERATOR_PLUGINS_META) === "done") {
+    return { pruned: [] };
+  }
+
+  const rows = core
+    .prepare(
+      `SELECT plugin_id FROM tenant_plugins WHERE tenant_id=? ORDER BY plugin_id`
+    )
+    .all(operatorTenantId) as Array<{ plugin_id: string }>;
+
+  const pruned: string[] = [];
+  for (const { plugin_id } of rows) {
+    try {
+      await uninstallPluginForTenant(core, operatorTenantId, plugin_id, {
+        authorityExempt: true,
+      });
+      pruned.push(plugin_id);
+    } catch (error) {
+      console.warn(
+        `[plugins] SaaS operator tenant plugin prune failed for ${plugin_id}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  setPlatformMeta(core, REPAIR_SAAS_OPERATOR_PLUGINS_META, "done");
+  if (pruned.length > 0) {
+    console.log(
+      `[plugins] SaaS operator tenant: pruned ${pruned.length} leaked plugin(s): ${pruned.join(", ")}`
+    );
+  }
+  return { pruned };
 }
 
 export interface ActivatePluginResult {
@@ -601,6 +646,8 @@ export async function reconcilePluginLifecycle(
       }
     }
   }
+
+  await pruneSaasOperatorTenantPluginResidueOnce(core, operatorTenantId);
 }
 
 export function syncInstalledPluginKnowledge(core: CoreDatabase, tenantId: string): void {
