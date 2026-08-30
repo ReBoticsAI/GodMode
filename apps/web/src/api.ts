@@ -6435,8 +6435,7 @@ export type AdminSaasCustomerRow = {
   userId: string | null;
   email: string | null;
   displayName: string | null;
-  tenantId: string | null;
-  tenantName: string | null;
+  ownedWorkspaces: Array<{ id: string; name: string }>;
   isAdmin: boolean;
   accessDisabled: boolean;
   accessDisabledReason?: string | null;

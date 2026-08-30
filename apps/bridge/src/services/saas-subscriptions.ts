@@ -1007,8 +1007,7 @@ export type SaasCustomerAdminRow = {
   userId: string | null;
   email: string | null;
   displayName: string | null;
-  tenantId: string | null;
-  tenantName: string | null;
+  ownedWorkspaces: Array<{ id: string; name: string }>;
   isAdmin: boolean;
   accessDisabled: boolean;
   accessDisabledReason: string | null;
@@ -1040,8 +1039,67 @@ function stripeDashboardCustomerUrl(customerId: string | null): string | null {
     : `https://dashboard.stripe.com/customers/${customerId}`;
 }
 
+function loadOwnedWorkspacesByUser(
+  core: CoreDatabase
+): Map<string, Array<{ id: string; name: string }>> {
+  const rows = core
+    .prepare(
+      `SELECT id, name, owner_user_id FROM tenants
+       WHERE is_operator=0
+       ORDER BY name COLLATE NOCASE`
+    )
+    .all() as Array<{ id: string; name: string; owner_user_id: string }>;
+  const map = new Map<string, Array<{ id: string; name: string }>>();
+  for (const row of rows) {
+    const list = map.get(row.owner_user_id) ?? [];
+    list.push({ id: row.id, name: row.name });
+    map.set(row.owner_user_id, list);
+  }
+  return map;
+}
+
+function adminCustomerRowKey(row: SaasCustomerAdminRow): string {
+  if (row.userId) return `user:${row.userId}`;
+  if (row.stripeCustomerId) return `cus:${row.stripeCustomerId}`;
+  if (row.email) return `email:${row.email.toLowerCase()}`;
+  return `created:${row.createdAt ?? "unknown"}`;
+}
+
+/** Prefer subscription-backed rows over entitlement-only checkout rows. */
+function pickPreferredAdminCustomerRow(
+  current: SaasCustomerAdminRow,
+  candidate: SaasCustomerAdminRow
+): SaasCustomerAdminRow {
+  if (current.stripeSubscriptionId && !candidate.stripeSubscriptionId) {
+    return current;
+  }
+  if (candidate.stripeSubscriptionId && !current.stripeSubscriptionId) {
+    return candidate;
+  }
+  if (!current.accessRevoked && candidate.accessRevoked) return current;
+  if (current.accessRevoked && !candidate.accessRevoked) return candidate;
+  return current;
+}
+
+function dedupeSaasCustomerAdminRows(
+  rows: SaasCustomerAdminRow[]
+): SaasCustomerAdminRow[] {
+  const byKey = new Map<string, SaasCustomerAdminRow>();
+  for (const row of rows) {
+    const key = adminCustomerRowKey(row);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, row);
+      continue;
+    }
+    byKey.set(key, pickPreferredAdminCustomerRow(existing, row));
+  }
+  return [...byKey.values()];
+}
+
 export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
   const core = getCloudDb();
+  const workspacesByUser = loadOwnedWorkspacesByUser(core);
   const fromSubs = core
     .prepare(
       `SELECT
@@ -1053,8 +1111,6 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          u.access_disabled_reason AS access_disabled_reason,
          u.deletion_status AS deletion_status,
          u.last_seen_at AS last_seen_at,
-         t.id AS tenant_id,
-         t.name AS tenant_name,
          s.plan_id AS plan_id,
          s.price_id AS price_id,
          s.status AS status,
@@ -1067,7 +1123,6 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          s.created_at AS created_at
        FROM saas_subscriptions s
        LEFT JOIN users u ON u.id = s.user_id
-       LEFT JOIN tenants t ON t.owner_user_id = u.id
        ORDER BY datetime(s.updated_at) DESC`
     )
     .all() as Array<Record<string, unknown>>;
@@ -1096,8 +1151,6 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          u.access_disabled_reason AS access_disabled_reason,
          u.deletion_status AS deletion_status,
          u.last_seen_at AS last_seen_at,
-         t.id AS tenant_id,
-         t.name AS tenant_name,
          e.status AS status,
          e.stripe_customer_id AS stripe_customer_id,
          e.stripe_session_id AS stripe_session_id,
@@ -1105,7 +1158,6 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
          CASE WHEN e.status='revoked' THEN 1 ELSE 0 END AS access_revoked
        FROM saas_entitlements e
        LEFT JOIN users u ON u.id = e.consumed_by_user_id
-       LEFT JOIN tenants t ON t.owner_user_id = u.id
        ORDER BY datetime(e.created_at) DESC`
     )
     .all() as Array<Record<string, unknown>>;
@@ -1128,7 +1180,8 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     });
   }
 
-  return rows.map((r) => {
+  return dedupeSaasCustomerAdminRows(
+    rows.map((r) => {
     const planId = typeof r.plan_id === "string" ? r.plan_id : null;
     const priceId = typeof r.price_id === "string" ? r.price_id : null;
     const meta = planMeta(planId ?? priceId);
@@ -1152,12 +1205,12 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
       complimentarySellerAccess && meta.id === SELLER_PLAN_ID
         ? "Complimentary Seller"
         : meta.label;
+    const userId = typeof r.user_id === "string" ? r.user_id : null;
     return {
-    userId: typeof r.user_id === "string" ? r.user_id : null,
+    userId,
     email: typeof r.email === "string" ? r.email : null,
     displayName: typeof r.display_name === "string" ? r.display_name : null,
-    tenantId: typeof r.tenant_id === "string" ? r.tenant_id : null,
-    tenantName: typeof r.tenant_name === "string" ? r.tenant_name : null,
+    ownedWorkspaces: userId ? (workspacesByUser.get(userId) ?? []) : [],
     isAdmin: Boolean(r.is_admin),
     accessDisabled: Boolean(r.access_disabled),
     accessDisabledReason:
@@ -1184,7 +1237,8 @@ export function listSaasCustomersForAdmin(): SaasCustomerAdminRow[] {
     ),
     createdAt: typeof r.created_at === "string" ? r.created_at : null,
   };
-  });
+  })
+  );
 }
 
 export function getPublicSubscriptionForUser(userId: string): {
