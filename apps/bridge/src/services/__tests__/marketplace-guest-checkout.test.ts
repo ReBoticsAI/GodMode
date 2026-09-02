@@ -78,7 +78,10 @@ function openDb(): CoreDatabase {
       catalog_entry_id TEXT,
       buyer_email TEXT,
       delivery_kind TEXT NOT NULL DEFAULT 'plugin',
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      delivery_claim_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE marketplace_bans (id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE);
     CREATE TABLE marketplace_tos_acceptances (
@@ -165,6 +168,62 @@ describe("guest delivery grants", () => {
     const delivery = guestCheckoutDelivery(db, "cs_paid");
     expect(delivery.deliveryKind).toBe("clone");
     expect(delivery.bundle).toEqual({ schemaVersion: 1 });
+    const claimed = db
+      .prepare(
+        `SELECT delivery_claim_count, status FROM marketplace_delivery_grants WHERE stripe_session_id=?`
+      )
+      .get("cs_paid") as { delivery_claim_count: number; status: string };
+    expect(claimed.delivery_claim_count).toBe(1);
+    expect(claimed.status).toBe("delivered");
+  });
+
+  it("caps delivery claims after original return plus one reclaim (#734)", () => {
+    const db = openDb();
+    upsertDeliveryGrant(db, {
+      stripeSessionId: "cs_cap",
+      listingId: "lst-cap",
+      deliveryKind: "plugin",
+      status: "paid",
+    });
+    db.prepare(
+      `INSERT INTO marketplace_listings (id, seller_user_id, kind, title)
+       VALUES ('lst-cap', 'seller-1', 'plugin', 'Cap Pack')`
+    ).run();
+
+    expect(guestCheckoutDelivery(db, "cs_cap").paid).toBe(true);
+    expect(guestCheckoutDelivery(db, "cs_cap").paid).toBe(true);
+    expect(() => guestCheckoutDelivery(db, "cs_cap")).toThrow(MarketplaceCommerceError);
+    try {
+      guestCheckoutDelivery(db, "cs_cap");
+    } catch (err) {
+      expect(err).toBeInstanceOf(MarketplaceCommerceError);
+      expect((err as MarketplaceCommerceError).status).toBe(403);
+      expect((err as Error).message).toMatch(/Reclaim limit reached/i);
+    }
+    const row = db
+      .prepare(
+        `SELECT delivery_claim_count FROM marketplace_delivery_grants WHERE stripe_session_id=?`
+      )
+      .get("cs_cap") as { delivery_claim_count: number };
+    expect(row.delivery_claim_count).toBe(2);
+  });
+
+  it("does not increment claim count on checkout status (#734)", () => {
+    const db = openDb();
+    upsertDeliveryGrant(db, {
+      stripeSessionId: "cs_status",
+      listingId: "lst-1",
+      deliveryKind: "plugin",
+      status: "paid",
+    });
+    guestCheckoutStatus(db, "cs_status");
+    guestCheckoutStatus(db, "cs_status");
+    const row = db
+      .prepare(
+        `SELECT delivery_claim_count FROM marketplace_delivery_grants WHERE stripe_session_id=?`
+      )
+      .get("cs_status") as { delivery_claim_count: number };
+    expect(row.delivery_claim_count).toBe(0);
   });
 
   it("rejects live share listings before Stripe", async () => {
