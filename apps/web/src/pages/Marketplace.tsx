@@ -220,8 +220,8 @@ function PurchaseRecoveryCard({
         <CardTitle className="text-base">Recover a past purchase</CardTitle>
         <CardDescription>
           {saas === true
-            ? "Paste the Stripe Checkout session id (cs_…) from your receipt to link a guest Local Buy to your Cloud account."
-            : "Paste the Stripe Checkout session id (cs_…) from your receipt to install a paid Community purchase on this machine without paying again."}
+            ? "Paste the Stripe Checkout session id (cs_…) from your receipt to link a guest Local Buy to your Cloud account. Each session links to one Cloud account."
+            : "Paste the Stripe Checkout session id (cs_…) from your receipt to install a paid Community purchase on this machine without paying again. Each session allows a limited number of recovers (original checkout return plus one reclaim by default)."}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">

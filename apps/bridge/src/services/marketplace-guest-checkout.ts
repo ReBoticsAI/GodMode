@@ -16,6 +16,21 @@ import { startMarketplaceCheckout } from "./marketplace-payments.js";
 
 export type GuestDeliveryKind = "plugin" | "clone";
 
+/**
+ * Extra successful `/commerce/delivery` calls allowed after the original checkout return.
+ * Default 1 → max deliveries = 2 (original + one reclaim). Env: MARKETPLACE_CHECKOUT_RECLAIM_LIMIT.
+ */
+export function marketplaceCheckoutReclaimLimit(): number {
+  const n = Number(process.env.MARKETPLACE_CHECKOUT_RECLAIM_LIMIT ?? "1");
+  if (!Number.isFinite(n) || n < 0) return 1;
+  return Math.floor(n);
+}
+
+/** Max successful paid delivery payloads per Checkout session (original + reclaims). */
+export function marketplaceCheckoutDeliveryClaimMax(): number {
+  return 1 + marketplaceCheckoutReclaimLimit();
+}
+
 export function isAllowedMarketplaceReturnUrl(raw: string): boolean {
   let url: URL;
   try {
@@ -363,6 +378,25 @@ export function guestCheckoutDelivery(
   if (status !== "paid" && status !== "delivered") {
     throw new MarketplaceCommerceError("Payment is not complete", 402);
   }
+
+  const maxClaims = marketplaceCheckoutDeliveryClaimMax();
+  const claim = core
+    .prepare(
+      `UPDATE marketplace_delivery_grants
+       SET delivery_claim_count = delivery_claim_count + 1,
+           status = 'delivered',
+           updated_at = datetime('now')
+       WHERE stripe_session_id = ?
+         AND delivery_claim_count < ?`
+    )
+    .run(sessionId, maxClaims);
+  if (claim.changes === 0) {
+    throw new MarketplaceCommerceError(
+      "Reclaim limit reached for this Checkout session. Contact support if you need another install.",
+      403
+    );
+  }
+
   const listingId = typeof grant.listing_id === "string" ? grant.listing_id : null;
   const catalogEntryId =
     typeof grant.catalog_entry_id === "string" ? grant.catalog_entry_id : null;

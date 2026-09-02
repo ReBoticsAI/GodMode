@@ -82,6 +82,7 @@ function openDb(): CoreDatabase {
       buyer_email TEXT,
       delivery_kind TEXT NOT NULL DEFAULT 'plugin',
       status TEXT NOT NULL DEFAULT 'pending',
+      delivery_claim_count INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT
     );
   `);

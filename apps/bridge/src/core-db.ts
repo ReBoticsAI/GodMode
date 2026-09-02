@@ -759,6 +759,11 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_saas_account_lifecycle_v1",
     up: ensureSaasAccountLifecycleSchema,
   },
+  {
+    version: 25,
+    name: "core_marketplace_delivery_claim_count_v1",
+    up: ensureMarketplaceDeliveryClaimCount,
+  },
 ];
 
 /** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
@@ -1291,6 +1296,7 @@ function ensureMarketplaceGuestDeliveryGrants(db: CoreDatabase): void {
       buyer_email TEXT,
       delivery_kind TEXT NOT NULL DEFAULT 'plugin',
       status TEXT NOT NULL DEFAULT 'pending',
+      delivery_claim_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -1299,6 +1305,18 @@ function ensureMarketplaceGuestDeliveryGrants(db: CoreDatabase): void {
     CREATE INDEX IF NOT EXISTS marketplace_delivery_grants_catalog_idx
       ON marketplace_delivery_grants(catalog_entry_id, status);
   `);
+}
+
+/** Cap Local recover installs per Checkout session (#734). */
+function ensureMarketplaceDeliveryClaimCount(db: CoreDatabase): void {
+  if (!tableExists(db, "marketplace_delivery_grants")) return;
+  addCol(db, "marketplace_delivery_grants", "delivery_claim_count", "INTEGER NOT NULL DEFAULT 0");
+  // Existing delivered grants already used the original return slot; leave one reclaim.
+  db.prepare(
+    `UPDATE marketplace_delivery_grants
+     SET delivery_claim_count=1
+     WHERE status='delivered' AND COALESCE(delivery_claim_count, 0)=0`
+  ).run();
 }
 
 function ensureAuthSecurityMigration(db: CoreDatabase): void {
