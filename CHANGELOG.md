@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-04
+
+Minor stable cut of `main` since 0.9.1: Cursor parity for Intelligence,
+embeddings/code search, production CSP and glibc image hardening, Coding
+Terminal/Files fixes, and subagent/delegation reliability.
+
 ### Fixed
 
 - **Coding Terminal blank PTY (#210)** - route `/ws` and `/ws/terminal` through
@@ -232,7 +238,8 @@ First public release of GodMode — a local-first personal OS.
 - **Docker deployment** — client and production compose stacks
 - Documentation — [Getting started](docs/GETTING_STARTED.md), [Configuration](docs/CONFIGURATION.md), and [Features](docs/FEATURES.md)
 
-[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/ReBoticsAI/GodMode/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.10.0
 [0.9.1]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.0
 [0.1.0]: https://github.com/ReBoticsAI/GodMode/releases/tag/v0.1.0
