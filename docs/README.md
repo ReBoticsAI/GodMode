@@ -35,9 +35,11 @@ Documentation for installing, using, and extending GodMode.
 |-------|-------------|
 | [../DEPLOY.md](../DEPLOY.md) | Desktop download, Docker hub/client, and bare-metal deployment |
 | [architecture.md](architecture.md) | System design and data model |
+| [SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md) | Target: one SQLite file per actor/surface; Graph topology; WindowSpec; open-set API |
+| [GRAPH_MISSIONS.md](GRAPH_MISSIONS.md) | Graph attention missions, degree-weighted points, Cloud leaderboard |
 | [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) | Canonical durable ObjectType, Record, action, adapter, tenancy, recovery, and protocol-exception contract |
 | [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md) | Build and install plugins (contributors) |
-| [multi-tenant-model.md](multi-tenant-model.md) | Cloud + Users + User + Workspace data planes; SaaS job index and workspace DB open policy (contributors) |
+| [multi-tenant-model.md](multi-tenant-model.md) | Legacy Cloud + Users + User + Workspace planes until SQLite-universe migration (contributors) |
 
 ## Project
 

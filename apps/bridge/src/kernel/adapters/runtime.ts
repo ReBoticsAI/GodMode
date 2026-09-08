@@ -76,6 +76,7 @@ import {
   type PromptFlowConfig,
 } from "../../services/prompt-assembler.js";
 import { getAgent } from "../../services/agents/agents-db.js";
+import { ensureChatUniverseFile } from "../../services/sqlite-universe-registry.js";
 import {
   CURSOR_API_KEY_SECRET_ID,
   getCursorAuthStatus,
@@ -505,7 +506,7 @@ function chatRow(
 ): Record<string, unknown> | undefined {
   return db
     .prepare(
-      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
+      `SELECT id, title, user_id, agent_id, turn_state_json, created_at, updated_at
        FROM ai_chats
        WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     )
@@ -607,7 +608,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     const userId = requiredUser(ctx);
     const rows = db
       .prepare(
-      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
+      `SELECT id, title, user_id, agent_id, turn_state_json, created_at, updated_at
        FROM ai_chats
        WHERE user_id IS NULL OR user_id = ?
        ORDER BY updated_at DESC`
@@ -619,6 +620,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
       records: result.rows.map((row) =>
         record(def, String(row.id), {
           title: row.title,
+          agent_id: row.agent_id ?? "intelligence",
           turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -632,6 +634,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     return row
       ? record(def, id, {
           title: row.title,
+          agent_id: (row as { agent_id?: string }).agent_id ?? "intelligence",
           turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -645,14 +648,31 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
         ? data.title.trim().slice(0, 120)
         : "New chat";
     db.prepare(
-      `INSERT INTO ai_chats (id, title, user_id, created_at, updated_at)
-       VALUES (?, ?, ?, datetime('now'), datetime('now'))`
-    ).run(id, title, requiredUser(ctx));
+      `INSERT INTO ai_chats (id, title, user_id, agent_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
+    ).run(
+      id,
+      title,
+      requiredUser(ctx),
+      typeof data.agent_id === "string" && data.agent_id.trim()
+        ? data.agent_id.trim()
+        : ctx.agentId ?? "intelligence"
+    );
     const row = db
-      .prepare(`SELECT created_at, updated_at FROM ai_chats WHERE id = ?`)
-      .get(id) as { created_at: string; updated_at: string };
+      .prepare(
+        `SELECT created_at, updated_at, agent_id FROM ai_chats WHERE id = ?`
+      )
+      .get(id) as { created_at: string; updated_at: string; agent_id: string | null };
+    const agentId = row.agent_id ?? "intelligence";
+    // SQLite-universe Phase 3: dual-write chat file + parent agent child link.
+    ensureChatUniverseFile({
+      chatId: id,
+      ownerAgentId: agentId,
+      label: title,
+    });
     return record(def, id, {
       title,
+      agent_id: agentId,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });
@@ -3308,7 +3328,7 @@ export const runtimeAdapterRegistrations = [
     adapterId: "chat_session_runtime",
     database: "tenant",
     operations: ["list", "get", "create", "delete"],
-    fields: ["id", "title", "turn_state", "created_at", "updated_at"],
+    fields: ["id", "title", "agent_id", "turn_state", "created_at", "updated_at"],
     // Chat turn streaming remains on the authorized SSE protocol endpoint and
     // is not declared as a Record action.
     actions: CHAT_SESSION_ACTIONS,

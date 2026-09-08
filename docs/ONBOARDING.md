@@ -63,3 +63,35 @@ For a tested Gemma 4 26B + 16 GB GPU profile, Docker hub + host `llama-server`, 
 After LLM setup, enable federation under **Shared → Network** if you plan to share across homes. See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 
 Full walkthrough: [VERIFICATION.md](./VERIFICATION.md)
+
+## The Graph (first land)
+
+First land (Local + Cloud) opens **The Graph**: You (Human) ↔ Intelligence, with Chat bubbles left of the spine and **Heart** on a right-hand ray of **Support → Shared → Marketplace → Workspaces**. Expand **Workspaces** for exemplar Personal / Project trees (Agents, Structure, Chat). **Vault** holds secrets and Bank → Wallet. Each side has a **Life** hub. Click **You** or **Intelligence** for Information (Account, Cloud, LLM keys on You). Click Chat bubbles or specialized agent nodes for Chat. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
+
+Nodes with open **missions** show an attention dot. Completing a mission awards connection-weighted points once; the global leaderboard lives on GodMode Cloud (see [GRAPH_MISSIONS.md](./GRAPH_MISSIONS.md)).
+
+Click **You** to finish signup / open profile. Target storage is one SQLite file per actor/surface; until migrated, Bridge still uses legacy planes in [multi-tenant-model.md](./multi-tenant-model.md).
+
+Route: `GET /api/graph/projection?focusType=architecture`.
+
+### First-land journey (acceptance)
+
+1. Land / open GodMode → The Graph (User → Intelligence spine).
+2. Click Intelligence → Information; click Intelligence Chat bubble → Chat.
+3. Expand Workspaces for Personal / Project Agents; explore Vaults and Life.
+4. Click You → finish profile / signup.
+
+## First-land Intelligence + trial inference (#758)
+
+On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence seeds the greeting:
+
+> Hey, you're in control. Put us to work.
+
+That line is shown client-side even when no model is ready. In the background the client calls `POST /api/trial-inference/ensure`:
+
+1. Soft visitor cookie + hashed IP heuristics (not a fake login).
+2. Prefer OpenRouter Management API mint when `OPENROUTER_MANAGEMENT_API_KEY` is set (authenticated users; Vault upsert + `llmReady`).
+3. Fall back to `TRIAL_PLATFORM_API_KEY` / `OPENROUTER_API_KEY` platform shared path.
+4. Browser / computerUse / terminal provisioners are scaffolded in the order env only (not implemented here).
+
+Ops: set management and/or platform trial keys on Cloud (and Local when phoning home). Per-user mint still waits for sign-in unless `TRIAL_ALLOW_VISITOR_MINT=true`. Prompt-threshold convert, key revoke/expiry, credentials-saved modal, and affiliate signup URL remain on issue #758.

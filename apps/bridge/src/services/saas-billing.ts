@@ -19,6 +19,7 @@ import {
   upsertSubscriptionFromCheckout,
   type SaasSubscription,
 } from "./saas-subscriptions.js";
+import { completeUnlockCheckoutSession } from "./chat-unlock.js";
 
 export type SaasPlanPublic = {
   id: string;
@@ -323,7 +324,10 @@ export function handleSaasStripeWebhook(
       godmode_saas?: string;
       godmode_plan?: string;
     };
-    if (metadata.godmode_saas !== "1") return { ok: true };
+    if (metadata.godmode_saas !== "1") {
+      completeUnlockCheckoutSession(obj);
+      return { ok: true };
+    }
 
     const customerDetails = obj.customer_details as
       | { email?: string | null }

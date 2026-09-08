@@ -23,6 +23,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -93,6 +94,7 @@ import {
   type MsgPart,
 } from "./chat-parts";
 import { IntelligenceComposer, type ComposerSubmit } from "./IntelligenceComposer";
+import { syncMissionsAfterChat } from "@/components/graph/GraphMissionsPanel";
 
 interface UiMessage {
   id: string;
@@ -198,7 +200,19 @@ function clampPanelPos(
   };
 }
 
-export function IntelligencePanel() {
+export function IntelligencePanel({
+  chromeLocks,
+}: {
+  chromeLocks?: {
+    lockClose?: boolean;
+    lockResize?: boolean;
+    lockCreate?: boolean;
+    onLockedClose?: () => void;
+    onLockedResize?: () => void;
+    onLockedCreate?: () => void;
+    onActiveChatId?: (id: string | null) => void;
+  };
+} = {}) {
   const {
     panelOpen,
     setPanelOpen,
@@ -234,10 +248,18 @@ export function IntelligencePanel() {
     chatMode,
     openPanel,
   } = useIntelligence();
+  const lockClose = chromeLocks?.lockClose ?? false;
+  const lockResize = chromeLocks?.lockResize ?? false;
+  const lockCreate = chromeLocks?.lockCreate ?? false;
+  const onLockedClose = chromeLocks?.onLockedClose;
+  const onLockedResize = chromeLocks?.onLockedResize;
+  const onLockedCreate = chromeLocks?.onLockedCreate;
   const { user } = useTenant();
   const { status } = useAiStatus();
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const isMobile = useIsMobile();
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
   const allowedTabs: PanelTab[] = isDmMode
     ? ["chat", "dms", "channels"]
@@ -578,7 +600,7 @@ export function IntelligencePanel() {
     try {
       await startSharedChatSession(activeChatId, activeAgentId);
       setSharedSession(true);
-      toast.success("Conversation shared — collaborators can now join live.");
+      toast.success("Conversation shared. Collaborators can now join live.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to share conversation");
     } finally {
@@ -1137,6 +1159,7 @@ export function IntelligencePanel() {
           busyRef.current = false;
           abortRef.current = null;
           refreshChats();
+          void syncMissionsAfterChat();
         },
         onError: (error, code) => {
           const raw =
@@ -1292,6 +1315,13 @@ export function IntelligencePanel() {
 
   if (!panelOpen) return null;
 
+  const panelAccent = isDmMode ? "#38bdf8" : "#a78bfa";
+  const panelShadow = isLight
+    ? `0 18px 40px -18px rgb(15 23 42 / 0.28), 0 0 0 1px ${panelAccent}40`
+    : `0 16px 48px -16px ${panelAccent}99`;
+  const panelBorder = isLight ? `${panelAccent}55` : `${panelAccent}88`;
+  const panelBorderMax = isLight ? `${panelAccent}40` : `${panelAccent}66`;
+
   return (
     <aside
       ref={asideRef}
@@ -1306,6 +1336,7 @@ export function IntelligencePanel() {
                 height: bounds.height,
                 maxWidth: bounds.width,
                 maxHeight: bounds.height,
+                borderColor: panelBorderMax,
               }
             : {
                 left: pos.x,
@@ -1314,16 +1345,18 @@ export function IntelligencePanel() {
                 height: currentHeight,
                 maxWidth: bounds.width,
                 maxHeight: bounds.height,
+                borderColor: panelBorder,
+                boxShadow: panelShadow,
               }
       }
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-popover",
+        "flex min-h-0 flex-col overflow-hidden bg-card/95 text-card-foreground backdrop-blur-md",
         isMobile
           ? "fixed inset-0 z-50"
-          : "absolute z-40 rounded-xl border shadow-2xl"
+          : "absolute z-40 rounded-xl border-2 shadow-2xl"
       )}
     >
-      {!isMobile && !isMaximized && (
+      {!isMobile && !isMaximized && !lockResize && (
         <>
           <div
             role="separator"
@@ -1360,17 +1393,27 @@ export function IntelligencePanel() {
         </>
       )}
 
+      <div
+        className="h-1 w-full shrink-0"
+        style={{ backgroundColor: panelAccent }}
+        aria-hidden
+      />
+
       <header
         onPointerDown={isMobile || isMaximized ? undefined : handleDrag}
         className={cn(
           "flex h-9 shrink-0 items-center gap-2 border-b px-2",
           !isMobile && !isMaximized && "cursor-move"
         )}
+        style={{
+          borderColor: `${panelAccent}40`,
+          backgroundColor: `${panelAccent}14`,
+        }}
       >
         {isDmMode ? (
-          <MessageCircleIcon className="size-4 text-primary" />
+          <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
         ) : (
-          <BotIcon className="size-4 text-foreground" />
+          <BotIcon className="size-4" style={{ color: panelAccent }} />
         )}
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -1457,9 +1500,20 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockCreate && "godmode-chrome-entice")}
             aria-label="New chat"
-            title="New chat"
-            onClick={newChat}
+            title={
+              lockCreate
+                ? "Unlock create chat (tutorial or pay to skip)"
+                : "New chat"
+            }
+            onClick={() => {
+              if (lockCreate) {
+                onLockedCreate?.();
+                return;
+              }
+              newChat();
+            }}
           >
             <PlusIcon />
           </Button>
@@ -1468,9 +1522,22 @@ export function IntelligencePanel() {
               type="button"
               variant="ghost"
               size="icon-xs"
+              className={cn(lockResize && "godmode-chrome-entice")}
               aria-label={isMaximized ? "Restore" : "Maximize"}
-              title={isMaximized ? "Restore" : "Maximize"}
-              onClick={() => setPanelMaximized(!isMaximized)}
+              title={
+                lockResize
+                  ? "Unlock window controls (tutorial or pay to skip)"
+                  : isMaximized
+                    ? "Restore"
+                    : "Maximize"
+              }
+              onClick={() => {
+                if (lockResize) {
+                  onLockedResize?.();
+                  return;
+                }
+                setPanelMaximized(!isMaximized);
+              }}
             >
               {isMaximized ? <Minimize2Icon /> : <Maximize2Icon />}
             </Button>
@@ -1479,9 +1546,20 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockClose && "godmode-chrome-entice")}
             aria-label="Close"
-            title="Close (Ctrl/Cmd+L)"
-            onClick={() => setPanelOpen(false)}
+            title={
+              lockClose
+                ? "Unlock close (tutorial or pay to skip)"
+                : "Close (Ctrl/Cmd+L)"
+            }
+            onClick={() => {
+              if (lockClose) {
+                onLockedClose?.();
+                return;
+              }
+              setPanelOpen(false);
+            }}
           >
             <XIcon />
           </Button>
@@ -1516,7 +1594,7 @@ export function IntelligencePanel() {
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <BotIcon className="size-3 text-amber-400" />
-              Shared agent — chats save to{" "}
+              Shared agent. Chats save to{" "}
               <span className="font-medium text-foreground">your project</span>
             </span>
             <label

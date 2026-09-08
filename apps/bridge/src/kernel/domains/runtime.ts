@@ -49,7 +49,7 @@ const FIELD_TYPES: Record<string, FieldSpec> = {
 };
 
 const WRITABLE: Record<string, string[]> = {
-  ChatSession: ["title"],
+  ChatSession: ["title", "agent_id"],
   ChatMessage: ["chat_id", "role", "content"],
   ModelAdapter: [
     "name",

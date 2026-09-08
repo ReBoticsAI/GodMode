@@ -9,6 +9,8 @@ SQLite shards): [DATA_ISOLATION.md](DATA_ISOLATION.md)
 source of truth for storage planes that ship today; see DATA_ISOLATION for
 where those planes live relative to the user box.
 
+> **Target storage** is the [SQLite universe](./SQLITE_UNIVERSE.md): one file per actor, chat thread, vault, Heart, and surface, plus `registry.sqlite`. The planes below are the **current** production layout until each plane is migrated.
+
 ## Storage planes (Cloud + Users + User + Workspace)
 
 | Plane | Path | Scope |

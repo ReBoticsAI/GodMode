@@ -41,10 +41,19 @@ There are two storage models:
    changing the type of a field requires an explicit migration outside the
    generic materializer.
 
-The strict static audit discovers 74 deployed ObjectTypes, including
-`StructureNode`. All authenticated durable-domain mutations cross this kernel
-boundary. Service-backed adapters preserve authoritative business logic; that
-implementation choice does not create a second mutation path.
+The strict static audit discovers the deployed ObjectTypes (including
+`StructureNode` and the chat unlock types). All authenticated durable-domain
+mutations cross this kernel boundary. Service-backed adapters preserve
+authoritative business logic; that implementation choice does not create a
+second mutation path.
+
+**The Graph** is a client R3F viewer over `GET /api/graph/projection`. Default land uses `focusType=architecture`: the versioned catalog (`graph-architecture-catalog.ts`) rooted at **You (Human)** ↔ **Intelligence**, with **Chat** bubbles left of that spine and **Heart** on the right ray **Support → Shared → Marketplace → Workspaces**. **Workspaces** expand into exemplar **Personal** / **Project** trees with **Agents**, Structure, and Chat (specialized agents are not spine hubs). **Vaults** hold secrets and Bank → Wallet. Account, Cloud, and LLM keys are described on **You**'s Information panel (not separate Graph hubs). Each side has a **Life** hub (Structure, Knowledge including Wiki, Automations, Calendar). **Unlock hubs are not on the map.** Click selects (You / Intelligence open Information; chat and agent nodes with chat WindowSpecs open Chat). Double-click activates other WindowSpec recipes. No secrets or memory bodies on the public map. Authenticated requests may enrich vault-connected booleans and merge a capped live agent/chat neighborhood. Target storage: [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md). Layout sidecars remain in `chat_graph_docs` until registry migration. WebXR and Tickers ([#759](https://github.com/ReBoticsAI/GodMode/issues/759)) are later chrome on this canvas.
+
+### Chat unlock ObjectTypes (retiring)
+
+Capability unlocks (`Unlockable`, `UnlockEntitlement`, `UnlockTransaction`) are a legacy commerce plane for chat chrome gates. They are **removed from The Graph** and first-land chrome is open by default. Full ObjectType retirement is tracked under the SQLite-universe Unlock retirement phase. Do not add new Unlock hubs to the architecture catalog.
+
+Adapters (until removed) live under `apps/bridge/src/kernel/adapters/chat-unlock.ts`.
 
 ## Operations and actions
 

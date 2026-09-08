@@ -4,6 +4,10 @@ import { NOTIFICATION_ACTIONS } from "../adapters/content.js";
 import { PLATFORM_ACTION_METADATA } from "../adapters/platform-actions.js";
 import { IDENTITY_ADMIN_ACTIONS } from "../adapters/identity-admin.js";
 import { PLATFORM_CONFIG_ACTIONS } from "../adapters/platform-config.js";
+import {
+  UNLOCKABLE_ACTIONS,
+  UNLOCK_TRANSACTION_ACTIONS,
+} from "../adapters/chat-unlock.js";
 
 const UPDATE_ADMIN_ROLES = ["owner", "intelligence"] as const;
 const UPDATE_EMPTY_INPUT = { type: "object", additionalProperties: false };
@@ -328,6 +332,68 @@ export const PLATFORM_SPECS: BuiltinSpec[] = [
     operations: ["list", "get"],
     actions: PLATFORM_CONFIG_ACTIONS.TenantOnboardingConfig,
     fields: ["id", "tenant_id", ["completed", "Check"], ["llm_ready", "Check"], ["cursor_connected", "Check"], ["llm_status", "JSON"]],
+  },
+  {
+    name: "Unlockable",
+    label: "Unlockable (retired)",
+    module: "platform",
+    id: "unlockable_service",
+    table: "unlockables",
+    database: "cloud",
+    accessPolicy: "platform-public",
+    operations: ["list", "get"],
+    actions: UNLOCKABLE_ACTIONS,
+    fields: [
+      "id",
+      "label",
+      "description",
+      "tutorial_id",
+      ["skip_price_cents", "Int"],
+      "stripe_price_id",
+      "module",
+      ["gates_json", "JSON"],
+    ],
+  },
+  {
+    name: "UnlockEntitlement",
+    label: "Unlock Entitlement (retired)",
+    module: "platform",
+    id: "unlock_entitlement_service",
+    table: "unlock_entitlements",
+    database: "cloud",
+    accessPolicy: "user-private",
+    operations: ["list", "get"],
+    fields: [
+      "id",
+      "user_id",
+      "unlockable_id",
+      "method",
+      "granted_at",
+      "transaction_id",
+    ],
+  },
+  {
+    name: "UnlockTransaction",
+    label: "Unlock Transaction (retired)",
+    module: "platform",
+    id: "unlock_transaction_service",
+    table: "unlock_transactions",
+    database: "cloud",
+    accessPolicy: "user-private",
+    operations: ["list", "get"],
+    actions: UNLOCK_TRANSACTION_ACTIONS,
+    fields: [
+      "id",
+      "user_id",
+      "unlockable_id",
+      ["amount_cents", "Int"],
+      "currency",
+      "provider",
+      "provider_ref",
+      "status",
+      "created_at",
+      "updated_at",
+    ],
   },
   { name: "ShareGrant", label: "Share Grant", module: "platform", id: "share_grant_read", table: "share_grants", database: "cloud", scope: "tenant", scopeColumn: "owner_tenant_id", defaultSort: "updated_at", writable: ["resource_kind", "resource_id", "grantee_user_id", "grantee_tenant_id", "role", "expires_at"], required: ["resource_kind", "resource_id"], operations: ["list", "get", "create", "delete"], actions: PLATFORM_ACTION_METADATA.ShareGrant, fields: ["id", "owner_tenant_id", "owner_user_id", "resource_kind", "resource_id", "grantee_user_id", "grantee_tenant_id", "role", "expires_at", "created_at", "updated_at"] },
 ];
