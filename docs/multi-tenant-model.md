@@ -2,6 +2,13 @@
 
 This document defines how the GodMode platform partitions data, routes requests, and handles collaboration and marketplace features.
 
+Target compute and finer data isolation (GodMode Cloud platform, per-user
+runtime box on the shared VPS, one disposable job throwaway, Data Router /
+SQLite shards): [DATA_ISOLATION.md](DATA_ISOLATION.md)
+([#777](https://github.com/ReBoticsAI/GodMode/issues/777)). This file remains the
+source of truth for storage planes that ship today; see DATA_ISOLATION for
+where those planes live relative to the user box.
+
 ## Storage planes (Cloud + Users + User + Workspace)
 
 | Plane | Path | Scope |
