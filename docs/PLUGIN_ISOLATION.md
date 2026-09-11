@@ -9,8 +9,11 @@ This is the design note for [#314](https://github.com/ReBoticsAI/GodMode/issues/
 and the Community runner in [#559](https://github.com/ReBoticsAI/GodMode/issues/559).
 
 **Not this document:** coding-job isolation (Layers 1–4, bubblewrap terminal,
-Cursor SDK sandbox, ephemeral Docker builds). That surface is [SECURITY.md](SECURITY.md)
-and [#112](https://github.com/ReBoticsAI/GodMode/issues/112) / [#172](https://github.com/ReBoticsAI/GodMode/issues/172).
+Cursor SDK sandbox, ephemeral Docker builds) and the broader Data Router /
+SQLite shard / VM-container ladder. Those surfaces are [SECURITY.md](SECURITY.md),
+[DATA_ISOLATION.md](DATA_ISOLATION.md), and [#112](https://github.com/ReBoticsAI/GodMode/issues/112) /
+[#172](https://github.com/ReBoticsAI/GodMode/issues/172) /
+[#777](https://github.com/ReBoticsAI/GodMode/issues/777).
 Do not reuse the coding jail as the plugin runtime.
 
 ## What ships today (keep forever)
@@ -91,3 +94,6 @@ Do not change the grant file format for v1.
 
 Official remains in-process until this Community runner is proven in production.
 Coding VM work stays on [#172](https://github.com/ReBoticsAI/GodMode/issues/172).
+The broader shared-Cloud data + Router + VM/container ladder (not plugin
+`register()`) is [DATA_ISOLATION.md](DATA_ISOLATION.md)
+([#777](https://github.com/ReBoticsAI/GodMode/issues/777)).
