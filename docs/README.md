@@ -21,6 +21,7 @@ Documentation for installing, using, and extending GodMode.
 | [MARKETPLACE.md](MARKETPLACE.md) | Official/paid catalog, seller payouts, install UX |
 | [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md) | Official connector quality bar (auth, webhooks, grants, teardown) |
 | [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) | Community plugin runtime sandbox design (grants vs child process) |
+| [DATA_ISOLATION.md](DATA_ISOLATION.md) | Shared-Cloud SQLite shards, Data Router, VM/container ladder (#777) |
 | [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md) | Marketplace Terms (chargebacks, fees, digital goods) |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
