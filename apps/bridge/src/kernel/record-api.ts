@@ -40,6 +40,10 @@ import {
   recoverLeasedOperationRuns,
   type OperationRunRow,
 } from "./operation-run-worker.js";
+import {
+  dataRouterRead,
+  isDataRouterListDigest,
+} from "../services/data-router/index.js";
 
 export class KernelError extends Error {
   status: number;
@@ -532,7 +536,8 @@ export function materializeAllNativeTypes(
   }
 }
 
-export function listRecords(
+/** SoR list path without Data Router (used by the Router query step). */
+export function listRecordsDirect(
   db: AppDatabase,
   objectType: string,
   opts: RecordQuery = {},
@@ -568,7 +573,8 @@ export function listRecords(
   throw new KernelError(501, `No adapter for ObjectType ${objectType}`);
 }
 
-export function getRecord(
+/** SoR get path without Data Router (used by the Router query step). */
+export function getRecordDirect(
   db: AppDatabase,
   objectType: string,
   id: string,
@@ -593,6 +599,53 @@ export function getRecord(
   }
   if (!row) throw new KernelError(404, `${objectType} record not found: ${id}`);
   return row;
+}
+
+const dataRouterQueryFns = {
+  listRecordsDirect,
+  getRecordDirect,
+};
+
+export function listRecords(
+  db: AppDatabase,
+  objectType: string,
+  opts: RecordQuery = {},
+  ctx: OperationContext
+): ListRecordsResult {
+  const routed = dataRouterRead(
+    { objectType, op: "list", db, ctx, query: opts },
+    dataRouterQueryFns
+  );
+  if (routed != null) {
+    if (!isDataRouterListDigest(routed)) {
+      throw new KernelError(500, "Data Router list returned a non-list digest", {
+        code: "DATA_ROUTER_LIST_SHAPE",
+      });
+    }
+    return routed;
+  }
+  return listRecordsDirect(db, objectType, opts, ctx);
+}
+
+export function getRecord(
+  db: AppDatabase,
+  objectType: string,
+  id: string,
+  ctx: OperationContext
+): RecordRow {
+  const routed = dataRouterRead(
+    { objectType, op: "get", db, ctx, id },
+    dataRouterQueryFns
+  );
+  if (routed != null) {
+    if (isDataRouterListDigest(routed)) {
+      throw new KernelError(500, "Data Router get returned a list digest", {
+        code: "DATA_ROUTER_GET_SHAPE",
+      });
+    }
+    return routed;
+  }
+  return getRecordDirect(db, objectType, id, ctx);
 }
 
 function createRecordImpl(

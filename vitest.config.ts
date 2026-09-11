@@ -66,6 +66,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/cursor-cloud-sdk-options.test.ts",
       "apps/bridge/src/services/__tests__/cursor-cloud-resume.test.ts",
       "apps/bridge/src/services/__tests__/chat-turn-state.test.ts",
+      "apps/bridge/src/services/data-router/__tests__/chat-read-router.test.ts",
       "apps/bridge/src/services/__tests__/cursor-subscription-cache.test.ts",
       "apps/bridge/src/services/__tests__/git-workspace.test.ts",
       "apps/bridge/src/services/__tests__/git-tools.test.ts",

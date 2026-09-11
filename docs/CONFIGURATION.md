@@ -54,6 +54,7 @@ Sign-in OAuth (Google / GitHub App) is documented below. **LLM subscription OAut
 | `CODING_PTY_MAX_PER_TENANT` | hub/SaaS: `3`; local: unlimited | Max open shared PTY sessions per tenant |
 | `CODING_HOOK_EXECUTION` | `on` | Run Automations gates on coding write/shell tools. Set `off` for discovery-only (create/list hooks, no coding execution) |
 | `CURSOR_SDK_SANDBOX` | hub/client Linux: `required`; else `off` | Enable Cursor SDK `sandboxOptions` for `cursor_cloud` built-in Shell/FS (#171). GodMode customTools still use Bridge Layer 3. Fail closed when `required` and the SDK sandbox helper is missing |
+| `DATA_ROUTER_CHAT_READS` | `on` (default) | Phase 1 Data Router (#778): ChatSession/ChatMessage `list`/`get` return JSON digests via `services/data-router` (no live DB on the return path). Set `0` / `false` / `off` for the legacy direct adapter path |
 
 ### SaaS coding + Layer 4 (staging/prod)
 
