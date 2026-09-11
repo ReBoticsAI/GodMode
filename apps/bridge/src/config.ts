@@ -8,15 +8,22 @@ import {
 } from "./services/data-dir-migration.js";
 
 const bridgeDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** Treat blank env values (common after copying `.env.example`) as unset. */
+function envNonEmpty(name: string): string | undefined {
+  const v = process.env[name]?.trim();
+  return v ? v : undefined;
+}
+
 const repoRoot =
-  process.env.PLATFORM_REPO_ROOT ??
+  envNonEmpty("PLATFORM_REPO_ROOT") ??
   path.resolve(bridgeDir, "../../..");
 
 const appDataRoot =
-  process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+  envNonEmpty("APPDATA") ?? path.join(os.homedir(), "AppData", "Roaming");
 
 const appData =
-  process.env.PLATFORM_DATA_DIR ?? defaultPlatformDataDir(appDataRoot);
+  envNonEmpty("PLATFORM_DATA_DIR") ?? defaultPlatformDataDir(appDataRoot);
 
 const deploymentModeRaw = (process.env.DEPLOYMENT_MODE ?? "local").toLowerCase();
 const deploymentMode =
