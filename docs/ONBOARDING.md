@@ -66,7 +66,7 @@ Full walkthrough: [VERIFICATION.md](./VERIFICATION.md)
 
 ## The Graph (first land)
 
-First land (Local + Cloud) opens **The Graph**: You (Human) ↔ Intelligence, with Chat bubbles left of the spine and **Heart** on a right-hand ray of **Support → Shared → Marketplace → Workspaces**. Expand **Workspaces** for exemplar Personal / Project trees (Agents, Structure, Chat). **Vault** holds secrets and Bank → Wallet. Each side has a **Life** hub. Click **You** or **Intelligence** for Information (Account, Cloud, LLM keys on You). Click Chat bubbles or specialized agent nodes for Chat. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
+First land (Local + Cloud) opens **The Graph**: You (Human) ↔ Intelligence, with Chat bubbles left of the spine and **Heart** on a right-hand ray of **Support → Shared → Marketplace → Workspaces**. Marketplace shows Official at full depth by default (Community / Local / Installed / Sell collapsed). Expand **Workspaces** for Personal (default full depth) / Project / Family. **Vault** holds secrets and Bank → Wallet. Each side has a **Life** hub. Click **You** for Information (Auth, Cloud, LLM keys) plus Kernel and Coding canvas tabs. Contacts, DMs, and Channels live in the Chat window. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
 
 Nodes with open **missions** show an attention dot. Completing a mission awards connection-weighted points once; the global leaderboard lives on GodMode Cloud (see [GRAPH_MISSIONS.md](./GRAPH_MISSIONS.md)).
 

@@ -16,6 +16,18 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  focusWindowAnchors,
+  snapToFocusAnchor,
+} from "@/lib/floating-window-anchors";
+import { getFloatingWindowBounds } from "@/lib/floating-window-bounds";
+import type { FloatingWindowRole } from "@/lib/floating-window-registry";
+import {
+  anchorWindowAndMirror,
+  registerFloatingWindow,
+  setActiveFloatingWindow,
+} from "@/lib/floating-window-registry";
+import { snapRectToGrid } from "@/lib/floating-window-grid";
 
 export type FloatingWindowBounds = {
   x: number;
@@ -24,32 +36,7 @@ export type FloatingWindowBounds = {
   height: number;
 };
 
-/**
- * Bounds for floating windows: the center column content area (same space as
- * the Intelligence chat window), relative to the column's offset parent.
- */
-export function getFloatingWindowBounds(): FloatingWindowBounds {
-  const main = document.querySelector("main");
-  const parent = main?.parentElement;
-  if (main && parent) {
-    const m = main.getBoundingClientRect();
-    const p = parent.getBoundingClientRect();
-    if (m.width > 0 && m.height > 0) {
-      return {
-        x: Math.round(m.left - p.left),
-        y: Math.round(m.top - p.top),
-        width: Math.round(m.width),
-        height: Math.round(m.height),
-      };
-    }
-  }
-  return {
-    x: 0,
-    y: 36,
-    width: window.innerWidth,
-    height: Math.max(240, window.innerHeight - 72),
-  };
-}
+export { getFloatingWindowBounds };
 
 function clampPos(
   x: number,
@@ -66,7 +53,12 @@ function clampPos(
   };
 }
 
-export type FloatingWindowPlacement = "left" | "right" | "center";
+export type FloatingWindowPlacement =
+  | "left"
+  | "right"
+  | "center"
+  | "focus-left"
+  | "focus-right";
 
 export type FloatingWindowProps = {
   open: boolean;
@@ -79,8 +71,17 @@ export type FloatingWindowProps = {
   defaultHeight?: number;
   minWidth?: number;
   minHeight?: number;
-  /** Where to place on first open. */
+  /** Where to place on first open (horizontal). */
   placement?: FloatingWindowPlacement;
+  /**
+   * Vertical edge on first open when not using focus anchors.
+   * Prefer focus-left / focus-right placement for Graph companion windows.
+   */
+  anchorY?: "top" | "bottom";
+  /** Registry id for Grid / Anchor (required for multi-window snap). */
+  windowId?: string;
+  role?: FloatingWindowRole;
+  pairGroup?: "focus-pair";
   onClose: () => void;
   headerActions?: ReactNode;
   children: ReactNode;
@@ -102,6 +103,10 @@ export function FloatingWindow({
   minWidth = 280,
   minHeight = 240,
   placement = "right",
+  anchorY = "top",
+  windowId,
+  role = "generic",
+  pairGroup,
   onClose,
   headerActions,
   children,
@@ -111,6 +116,7 @@ export function FloatingWindow({
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
   const asideRef = useRef<HTMLElement | null>(null);
+  const [anchorPickMode, setAnchorPickMode] = useState(false);
 
   const [bounds, setBounds] = useState<FloatingWindowBounds>(() =>
     getFloatingWindowBounds()
@@ -155,10 +161,21 @@ export function FloatingWindow({
     const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 24));
     setWidth(w);
     setHeight(h);
-    let nextX = b.x + 12;
-    if (placement === "right") nextX = b.x + b.width - w - 16;
-    if (placement === "center") nextX = b.x + Math.max(12, (b.width - w) / 2);
-    const nextY = b.y + 12;
+    const focus = focusWindowAnchors(b, w, h);
+    let nextX: number;
+    let nextY: number;
+    if (placement === "focus-left") {
+      nextX = focus.left.x;
+      nextY = focus.left.y;
+    } else if (placement === "focus-right") {
+      nextX = focus.right.x;
+      nextY = focus.right.y;
+    } else {
+      nextX = b.x + 12;
+      if (placement === "right") nextX = b.x + b.width - w - 12;
+      if (placement === "center") nextX = b.x + Math.max(12, (b.width - w) / 2);
+      nextY = anchorY === "bottom" ? b.y + b.height - h - 12 : b.y + 12;
+    }
     const pos = clampPos(nextX, nextY, w, h, b);
     setX(pos.x);
     setY(pos.y);
@@ -171,6 +188,7 @@ export function FloatingWindow({
     minWidth,
     minHeight,
     placement,
+    anchorY,
   ]);
 
   const currentWidth = maximized ? bounds.width : width;
@@ -179,6 +197,47 @@ export function FloatingWindow({
     maximized || x == null || y == null
       ? { x: bounds.x, y: bounds.y }
       : clampPos(x, y, currentWidth, currentHeight, bounds);
+
+  const layoutRef = useRef({
+    x: pos.x,
+    y: pos.y,
+    width: currentWidth,
+    height: currentHeight,
+  });
+  layoutRef.current = {
+    x: pos.x,
+    y: pos.y,
+    width: currentWidth,
+    height: currentHeight,
+  };
+
+  useEffect(() => {
+    const onPick = (ev: Event) => {
+      const active = Boolean(
+        (ev as CustomEvent<{ active?: boolean }>).detail?.active
+      );
+      setAnchorPickMode(active);
+    };
+    window.addEventListener("godmode:anchor-pick-mode", onPick);
+    return () => window.removeEventListener("godmode:anchor-pick-mode", onPick);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !windowId || maximized || isMobile) return;
+    return registerFloatingWindow({
+      id: windowId,
+      role,
+      pairGroup,
+      getLayout: () => layoutRef.current,
+      applyLayout: (rect) => {
+        setX(rect.x);
+        setY(rect.y);
+        setWidth(rect.width);
+        setHeight(rect.height);
+        placedForOpen.current = true;
+      },
+    });
+  }, [open, windowId, role, pairGroup, maximized, isMobile]);
 
   const handleDrag = useCallback(
     (e: ReactPointerEvent<HTMLElement>) => {
@@ -191,6 +250,21 @@ export function FloatingWindow({
       ) {
         return;
       }
+
+      if (anchorPickMode && windowId) {
+        e.preventDefault();
+        e.stopPropagation();
+        anchorWindowAndMirror(windowId);
+        window.dispatchEvent(
+          new CustomEvent("godmode:anchor-pick-mode", {
+            detail: { active: false },
+          })
+        );
+        return;
+      }
+
+      if (windowId) setActiveFloatingWindow(windowId);
+
       e.preventDefault();
       e.stopPropagation();
       const activeBounds = getFloatingWindowBounds();
@@ -201,6 +275,8 @@ export function FloatingWindow({
       const originY = y ?? pos.y;
       const el = e.currentTarget;
       el.setPointerCapture?.(e.pointerId);
+      let lastX = originX;
+      let lastY = originY;
       const onMove = (ev: PointerEvent) => {
         const next = clampPos(
           originX + (ev.clientX - startX),
@@ -209,6 +285,8 @@ export function FloatingWindow({
           height,
           activeBounds
         );
+        lastX = next.x;
+        lastY = next.y;
         setX(next.x);
         setY(next.y);
       };
@@ -222,14 +300,79 @@ export function FloatingWindow({
         window.removeEventListener("pointerup", onUp);
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        const gridSnapped = snapRectToGrid(
+          { x: lastX, y: lastY, width, height },
+          activeBounds
+        );
+        // Prefer soft focus-slot snap when near Chat/Info defaults; else grid.
+        const focusSnapped = snapToFocusAnchor(
+          lastX,
+          lastY,
+          width,
+          height,
+          activeBounds
+        );
+        if (focusSnapped) {
+          setX(focusSnapped.x);
+          setY(focusSnapped.y);
+        } else {
+          setX(gridSnapped.x);
+          setY(gridSnapped.y);
+        }
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       document.body.style.cursor = "move";
       document.body.style.userSelect = "none";
     },
-    [maximized, isMobile, x, y, pos.x, pos.y, width, height]
+    [
+      maximized,
+      isMobile,
+      x,
+      y,
+      pos.x,
+      pos.y,
+      width,
+      height,
+      anchorPickMode,
+      windowId,
+    ]
   );
+
+  useEffect(() => {
+    const onReset = () => {
+      if (!open || maximized) return;
+      const b = getFloatingWindowBounds();
+      setBounds(b);
+      const w = Math.min(defaultWidth, Math.max(minWidth, b.width - 24));
+      const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 24));
+      setWidth(w);
+      setHeight(h);
+      const focus = focusWindowAnchors(b, w, h);
+      const slot =
+        placement === "focus-left"
+          ? focus.left
+          : placement === "focus-right"
+            ? focus.right
+            : placement === "left"
+              ? focus.left
+              : focus.right;
+      setX(slot.x);
+      setY(slot.y);
+      placedForOpen.current = true;
+    };
+    window.addEventListener("godmode:reset-window-anchors", onReset);
+    return () =>
+      window.removeEventListener("godmode:reset-window-anchors", onReset);
+  }, [
+    open,
+    maximized,
+    defaultWidth,
+    defaultHeight,
+    minWidth,
+    minHeight,
+    placement,
+  ]);
 
   const startResize = useCallback(
     (

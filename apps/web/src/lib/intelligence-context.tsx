@@ -218,6 +218,7 @@ interface IntelligenceContextValue {
 
 export type PanelTab =
   | "chat"
+  | "contacts"
   | "notifications"
   | "calendar"
   | "projects"
@@ -262,6 +263,7 @@ function readStoredPanelTab(): PanelTab {
     v === "bank" ||
     v === "vault" ||
     v === "support" ||
+    v === "contacts" ||
     v === "dms" ||
     v === "channels"
     ? v

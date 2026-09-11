@@ -5,12 +5,16 @@
  *
  * Account, Cloud, and LLM keys are described on You's Information panel (not
  * Graph nodes). Vault is secrets plus Bank (with Wallet). Life fans from each
- * owner. Chat bubbles sit left of the You→Intelligence spine. Heart sits on
+ * owner. Chat bubbles sit left of You and Intelligence, and off each
+ * specialized agent under Workspaces (not off the workspace root). Hub sits on
  * the right; Support, Shared, Marketplace, and Workspaces extend further right.
- * Specialized agents live under Workspaces (catalog exemplars), not on the spine.
+ * You and Intelligence connect only through Hub (no direct spine edge).
+ * Research and Ops sit on the platform plane under Intelligence visually,
+ * but each links to Hub (not Intelligence) and owns Vault + Life + Chat.
+ * Other exemplar agents (Builder, Coordinator) live under Workspaces.
  */
 
-export const ARCHITECTURE_CATALOG_VERSION = 14;
+export const ARCHITECTURE_CATALOG_VERSION = 24;
 
 export type GraphCtaAction =
   | { type: "open_chat" }
@@ -81,14 +85,38 @@ function offset(base: Vec3, dx: number, dy: number, dz = 0): Vec3 {
   return { x: base.x + dx, y: base.y + dy, z: base.z + dz };
 }
 
-type Side = "you" | "intelligence";
+type Side = "you" | "intelligence" | "research" | "ops";
+
+const SIDE_OWNER_ID: Record<Side, string> = {
+  you: "hub:you",
+  intelligence: "hub:intelligence",
+  research: "hub:agent-research",
+  ops: "hub:agent-ops",
+};
+
+const SIDE_EDGE_PREFIX: Record<Side, string> = {
+  you: "you",
+  intelligence: "intel",
+  research: "research",
+  ops: "ops",
+};
 
 function sideLabel(side: Side, noun: string): string {
-  return side === "you" ? `Your ${noun}` : `Intelligence ${noun}`;
+  if (side === "you") return `Your ${noun}`;
+  return `${ownerLabel(side)} ${noun}`;
 }
 
 function ownerLabel(side: Side): string {
-  return side === "you" ? "You" : "Intelligence";
+  switch (side) {
+    case "you":
+      return "You";
+    case "intelligence":
+      return "Intelligence";
+    case "research":
+      return "Research";
+    case "ops":
+      return "Ops";
+  }
 }
 
 /**
@@ -127,7 +155,7 @@ function lifeSurfaceNodes(
       description:
         side === "you"
           ? "Your living surfaces: Structure, Knowledge, Automations, and Calendar. The personal OS body around You (not Vault secrets)."
-          : "Intelligence's living surfaces: Structure, Knowledge, Automations, and Calendar. Parallel to your Life, owned by the platform agent.",
+          : `${owner}'s living surfaces: Structure, Knowledge, Automations, and Calendar. Parallel Life body for this agent on The Graph.`,
       securityNote:
         "Life is a map hub. Durable rows live in surface SQLite files after auth.",
       connectionLabels: [
@@ -151,8 +179,8 @@ function lifeSurfaceNodes(
       description:
         side === "you"
           ? "Your anatomy: departments (regions), divisions, and pages (surfaces)."
-          : "Intelligence's anatomy view: how it grows departments, divisions, and pages.",
-      securityNote: `${sideLabel(side, "Structure")} is separate from the other side's Structure.`,
+          : `${owner}'s anatomy view: how it grows departments, divisions, and pages.`,
+      securityNote: `${sideLabel(side, "Structure")} is separate from other owners' Structure.`,
       connectionLabels: [sideLabel(side, "Life"), "Departments", "Divisions", "Pages"],
       ctaLabel: "Open Structure",
       cta: { type: "navigate", path: "/structure" },
@@ -287,7 +315,7 @@ function lifeSurfaceNodes(
       refId: `tools-${suffix}`,
       position: offset(knowledgePos, -0.6, gy * 0.6, 2.8),
       description: "Callable tools available to this owner's agents.",
-      securityNote: "Tool allow-lists bound what Heart will execute.",
+      securityNote: "Tool allow-lists bound what Hub will execute.",
       connectionLabels: ["Knowledge"],
       ctaLabel: "Open Knowledge",
       cta: { type: "open_panel", tab: "knowledge" },
@@ -315,7 +343,7 @@ function lifeSurfaceNodes(
       refId: `automations-${suffix}`,
       position: autoPos,
       description: "Workflows, schedules, and hooks under this owner.",
-      securityNote: "Runs under Heart with auth and tool policy.",
+      securityNote: "Runs under Hub with auth and tool policy.",
       connectionLabels: [
         sideLabel(side, "Life"),
         "Workflows",
@@ -420,8 +448,8 @@ function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
   const knowledge = `hub:knowledge-${s}`;
   const auto = `hub:automations-${s}`;
   const cal = `hub:calendar-${s}`;
-  const owner = side === "you" ? "hub:you" : "hub:intelligence";
-  const p = side === "you" ? "you" : "intel";
+  const owner = SIDE_OWNER_ID[side];
+  const p = SIDE_EDGE_PREFIX[side];
 
   return [
     { id: `e:${p}-life`, source: owner, target: life, kind: "life" },
@@ -534,19 +562,238 @@ function agentChatWindows(agentId: string): GraphWindowSpec[] {
 }
 
 /**
+ * Vault → Bank → Wallet plane for an agent (or You) on The Graph.
+ */
+function agentVaultNodes(opts: {
+  suffix: string;
+  ownerId: string;
+  ownerLabel: string;
+  vaultLabel: string;
+  position: Vec3;
+}): ArchitectureCatalogNode[] {
+  const vaultId = `hub:vault-${opts.suffix}`;
+  const bankId = `hub:bank-${opts.suffix}`;
+  const walletId = `hub:wallet-${opts.suffix}`;
+  const bankPos = offset(opts.position, -1.0, 0, -1.2);
+  const walletPos = offset(opts.position, -2.6, 0, -1.7);
+
+  return [
+    {
+      id: vaultId,
+      kind: "system",
+      label: opts.vaultLabel,
+      objectType: "VaultSecret",
+      refId: `vault-${opts.suffix}`,
+      position: opts.position,
+      description: `${opts.ownerLabel}'s Vault: approved agent secrets and Bank. Distinct from other owners' Vaults.`,
+      securityNote: "Agent-scoped secrets. Values never appear on The Graph.",
+      connectionLabels: [opts.ownerLabel, "Bank"],
+      ctaLabel: "Open Agent Vault",
+      cta: { type: "open_panel", tab: "vault" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: bankId,
+      kind: "system",
+      label: "Bank",
+      objectType: "FinanceConnection",
+      refId: `bank-${opts.suffix}`,
+      position: bankPos,
+      description: `${opts.ownerLabel} finance connections under ${opts.vaultLabel}. Wallet sits under Bank.`,
+      securityNote: "No balances on the public graph.",
+      connectionLabels: [opts.vaultLabel, "Wallet"],
+      ctaLabel: "Open Bank",
+      cta: { type: "open_panel", tab: "bank" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: walletId,
+      kind: "system",
+      label: "Wallet",
+      objectType: "Wallet",
+      refId: `wallet-${opts.suffix}`,
+      position: walletPos,
+      description: `${opts.ownerLabel}'s connected wallets under its Bank. Agent-scoped holdings.`,
+      securityNote: "Addresses and balances stay off The Graph.",
+      connectionLabels: ["Bank"],
+      ctaLabel: "Open Vault wallets",
+      cta: { type: "open_panel", tab: "vault" },
+      windows: INFO_ONLY,
+    },
+  ];
+}
+
+function agentVaultEdges(suffix: string, ownerId: string): ArchitectureCatalogEdge[] {
+  const p = suffix === "intelligence" ? "intel" : suffix;
+  return [
+    {
+      id: `e:${p}-vault`,
+      source: ownerId,
+      target: `hub:vault-${suffix}`,
+      kind: "vault",
+    },
+    {
+      id: `e:vault-${p}-bank`,
+      source: `hub:vault-${suffix}`,
+      target: `hub:bank-${suffix}`,
+      kind: "vault-child",
+    },
+    {
+      id: `e:bank-${p}-wallet`,
+      source: `hub:bank-${suffix}`,
+      target: `hub:wallet-${suffix}`,
+      kind: "bank-child",
+    },
+  ];
+}
+
+/**
+ * Research and Ops on the platform plane (stacked below Intelligence visually).
+ * Each links to Hub, not Intelligence, and owns Vault + Life + Chat.
+ */
+function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
+  // Stacked under Intelligence (y=-0.2); tight spacing while Life/Vault stay collapsed.
+  const researchPos = { x: 0, y: -1.35, z: 0 };
+  const opsPos = { x: 0, y: -2.5, z: 0 };
+
+  return [
+    {
+      id: "hub:agent-research",
+      kind: "agent",
+      label: "Research",
+      objectType: "Agent",
+      refId: "research",
+      position: researchPos,
+      description:
+        "Platform research agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault, Life, and Chat. Runs scoped research jobs through Hub.",
+      securityNote: "No secret values on The Graph.",
+      connectionLabels: ["Hub", "Research Vault", "Life", "Chat"],
+      ctaLabel: "Chat with Research",
+      cta: { type: "open_chat" },
+      openImmediate: true,
+      windows: agentChatWindows("research"),
+    },
+    ...agentVaultNodes({
+      suffix: "research",
+      ownerId: "hub:agent-research",
+      ownerLabel: "Research",
+      vaultLabel: "Research Vault",
+      position: offset(researchPos, -3.6, 0, 0.2),
+    }),
+    ...lifeSurfaceNodes("research", offset(researchPos, 3.6, 0, 0), -1),
+    agentChatBubble({
+      id: "hub:chat-agent-research",
+      agentId: "research",
+      agentLabel: "Research",
+      position: offset(researchPos, -1.8, 0.8, 0),
+    }),
+    {
+      id: "hub:agent-ops",
+      kind: "agent",
+      label: "Ops",
+      objectType: "Agent",
+      refId: "ops",
+      position: opsPos,
+      description:
+        "Platform ops agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault, Life, and Chat. Handles recurring operational work through Hub.",
+      securityNote: "No secret values on The Graph.",
+      connectionLabels: ["Hub", "Ops Vault", "Life", "Chat"],
+      ctaLabel: "Chat with Ops",
+      cta: { type: "open_chat" },
+      openImmediate: true,
+      windows: agentChatWindows("ops"),
+    },
+    ...agentVaultNodes({
+      suffix: "ops",
+      ownerId: "hub:agent-ops",
+      ownerLabel: "Ops",
+      vaultLabel: "Ops Vault",
+      position: offset(opsPos, -3.6, 0, 0.2),
+    }),
+    ...lifeSurfaceNodes("ops", offset(opsPos, 3.6, 0, 0), -1),
+    agentChatBubble({
+      id: "hub:chat-agent-ops",
+      agentId: "ops",
+      agentLabel: "Ops",
+      position: offset(opsPos, -1.8, 0.8, 0),
+    }),
+  ];
+}
+
+function platformSpineAgentEdges(): ArchitectureCatalogEdge[] {
+  return [
+    {
+      id: "e:heart-research",
+      source: "hub:heart",
+      target: "hub:agent-research",
+      kind: "runtime",
+    },
+    {
+      id: "e:heart-ops",
+      source: "hub:heart",
+      target: "hub:agent-ops",
+      kind: "runtime",
+    },
+    ...agentVaultEdges("research", "hub:agent-research"),
+    ...agentVaultEdges("ops", "hub:agent-ops"),
+    ...lifeSurfaceEdges("research"),
+    ...lifeSurfaceEdges("ops"),
+    {
+      id: "e:research-chat",
+      source: "hub:agent-research",
+      target: "hub:chat-agent-research",
+      kind: "chat-agent",
+    },
+    {
+      id: "e:ops-chat",
+      source: "hub:agent-ops",
+      target: "hub:chat-agent-ops",
+      kind: "chat-agent",
+    },
+  ];
+}
+
+/** Chat bubble hanging off a specialized agent (who you are talking to). */
+function agentChatBubble(opts: {
+  id: string;
+  agentId: string;
+  agentLabel: string;
+  position: Vec3;
+}): ArchitectureCatalogNode {
+  return {
+    id: opts.id,
+    kind: "chat",
+    label: "Chat",
+    objectType: "ChatSession",
+    refId: `${opts.agentId}-chat`,
+    position: opts.position,
+    description: `Chat with ${opts.agentLabel}. Connected to that agent on The Graph, not to the workspace root.`,
+    securityNote: "Message bodies stay in chat SQLite files.",
+    connectionLabels: [opts.agentLabel],
+    ctaLabel: `Chat with ${opts.agentLabel}`,
+    cta: { type: "open_chat" },
+    openImmediate: true,
+    windows: agentChatWindows(opts.agentId),
+  };
+}
+
+/**
  * Catalog exemplar workspaces under the Workspaces hub (guest-safe map pins).
- * Personal fans up-right; Project Alpha fans down-right of Workspaces.
+ * Personal fans up-right; Project Alpha fans down-right; Family fans further
+ * right on the ray.
  */
 function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] {
   const personalPos = offset(workspacesPos, 2.0, 1.8, 0);
   const projectPos = offset(workspacesPos, 2.0, -1.8, 0);
+  const familyPos = offset(workspacesPos, 3.8, 0, 0.6);
 
-  const personalAgentsPos = offset(personalPos, 2.0, 0.9, 0.2);
   const personalStructurePos = offset(personalPos, 2.0, -0.7, -0.4);
-  const personalChatPos = offset(personalPos, 1.2, 1.6, -0.6);
 
   const projectAgentsPos = offset(projectPos, 2.0, -0.4, 0.2);
-  const projectChatPos = offset(projectPos, 1.2, -1.4, -0.4);
+  const builderPos = offset(projectAgentsPos, 1.8, -0.5, 0.3);
+
+  const familyAgentsPos = offset(familyPos, 2.0, 0.6, 0.2);
+  const coordinatorPos = offset(familyAgentsPos, 1.8, 0.4, 0.3);
 
   return [
     {
@@ -557,60 +804,13 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       refId: "ws-personal",
       position: personalPos,
       description:
-        "Exemplar personal workspace. Holds specialized Agents, Structure, and workspace Chat. Live tenant workspaces enrich here when you are signed in.",
+        "Exemplar personal workspace. Holds Structure for this sandbox. Platform agents Research and Ops link to Hub on the platform plane, not under Personal. Live tenant workspaces enrich here when you are signed in.",
       securityNote:
         "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
-      connectionLabels: ["Workspaces", "Agents", "Structure", "Chat"],
+      connectionLabels: ["Workspaces", "Structure"],
       ctaLabel: "Open Structure",
       cta: { type: "navigate", path: "/structure" },
       windows: INFO_ONLY,
-    },
-    {
-      id: "hub:agents-personal",
-      kind: "system",
-      label: "Agents",
-      objectType: "Agent",
-      refId: "agents-personal",
-      position: personalAgentsPos,
-      description:
-        "Specialized agents (muscles) for the Personal workspace. Distinct from Intelligence on the spine.",
-      securityNote: "Agent configs require auth. Graph shows structure only.",
-      connectionLabels: ["Personal", "Research", "Ops"],
-      ctaLabel: "Open Agents",
-      cta: { type: "navigate", path: "/agents" },
-      windows: INFO_ONLY,
-    },
-    {
-      id: "hub:agent-research",
-      kind: "agent",
-      label: "Research",
-      objectType: "Agent",
-      refId: "research",
-      position: offset(personalAgentsPos, 1.8, 0.8, 0.4),
-      description:
-        "Exemplar research agent under Personal. Owns a job and executes with a scoped allow-list.",
-      securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Agents"],
-      ctaLabel: "Chat with Research",
-      cta: { type: "open_chat" },
-      openImmediate: true,
-      windows: agentChatWindows("research"),
-    },
-    {
-      id: "hub:agent-ops",
-      kind: "agent",
-      label: "Ops",
-      objectType: "Agent",
-      refId: "ops",
-      position: offset(personalAgentsPos, 1.8, -0.6, -0.3),
-      description:
-        "Exemplar ops agent under Personal. Handles recurring operational work in this workspace.",
-      securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Agents"],
-      ctaLabel: "Chat with Ops",
-      cta: { type: "open_chat" },
-      openImmediate: true,
-      windows: agentChatWindows("ops"),
     },
     {
       id: "hub:structure-personal",
@@ -642,25 +842,6 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       cta: { type: "navigate", path: "/structure" },
       windows: INFO_ONLY,
     },
-    {
-      id: "hub:chat-ws-personal",
-      kind: "chat",
-      label: "Chat",
-      objectType: "ChatSession",
-      refId: "ws-personal-chat",
-      position: personalChatPos,
-      description:
-        "Workspace chat for Personal. Thread bodies stay in chat SQLite files.",
-      securityNote: "Message bodies stay off The Graph.",
-      connectionLabels: ["Personal"],
-      ctaLabel: "Open workspace chat",
-      cta: { type: "open_chat" },
-      openImmediate: true,
-      windows: [
-        { kind: "chat", placement: "left", width: 560, height: 480 },
-        { kind: "information", placement: "right", width: 400, height: 520 },
-      ],
-    },
 
     {
       id: "hub:ws-project-alpha",
@@ -670,10 +851,10 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       refId: "ws-project-alpha",
       position: projectPos,
       description:
-        "Exemplar project workspace. Holds Agents and Chat for collaborative work. Live tenant workspaces enrich here when you are signed in.",
+        "Exemplar project workspace. Holds Agents for collaborative work. Chat hangs off Builder, not the workspace root. Live tenant workspaces enrich here when you are signed in.",
       securityNote:
         "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
-      connectionLabels: ["Workspaces", "Agents", "Chat"],
+      connectionLabels: ["Workspaces", "Agents"],
       ctaLabel: "Open Structure",
       cta: { type: "navigate", path: "/structure" },
       windows: INFO_ONLY,
@@ -699,35 +880,76 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       label: "Builder",
       objectType: "Agent",
       refId: "builder",
-      position: offset(projectAgentsPos, 1.8, -0.5, 0.3),
+      position: builderPos,
       description:
         "Exemplar builder agent under Project Alpha. Implements and iterates on project work.",
       securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Agents"],
+      connectionLabels: ["Agents", "Chat"],
       ctaLabel: "Chat with Builder",
       cta: { type: "open_chat" },
       openImmediate: true,
       windows: agentChatWindows("builder"),
     },
+    agentChatBubble({
+      id: "hub:chat-agent-builder",
+      agentId: "builder",
+      agentLabel: "Builder",
+      position: offset(builderPos, 1.5, -0.6, -0.3),
+    }),
+
     {
-      id: "hub:chat-ws-project-alpha",
-      kind: "chat",
-      label: "Chat",
-      objectType: "ChatSession",
-      refId: "ws-project-alpha-chat",
-      position: projectChatPos,
+      id: "hub:ws-family",
+      kind: "system",
+      label: "Family",
+      objectType: "Workspace",
+      refId: "ws-family",
+      position: familyPos,
       description:
-        "Workspace chat for Project Alpha. Thread bodies stay in chat SQLite files.",
-      securityNote: "Message bodies stay off The Graph.",
-      connectionLabels: ["Project Alpha"],
-      ctaLabel: "Open workspace chat",
+        "Exemplar family workspace. Holds Agents for household coordination. Chat hangs off Coordinator, not the workspace root. Live tenant workspaces enrich here when you are signed in.",
+      securityNote:
+        "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
+      connectionLabels: ["Workspaces", "Agents"],
+      ctaLabel: "Open Structure",
+      cta: { type: "navigate", path: "/structure" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:agents-family",
+      kind: "system",
+      label: "Agents",
+      objectType: "Agent",
+      refId: "agents-family",
+      position: familyAgentsPos,
+      description:
+        "Specialized agents for the Family workspace. Coordinate shared plans and reminders.",
+      securityNote: "Agent configs require auth. Graph shows structure only.",
+      connectionLabels: ["Family", "Coordinator"],
+      ctaLabel: "Open Agents",
+      cta: { type: "navigate", path: "/agents" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:agent-coordinator",
+      kind: "agent",
+      label: "Coordinator",
+      objectType: "Agent",
+      refId: "coordinator",
+      position: coordinatorPos,
+      description:
+        "Exemplar coordinator agent under Family. Keeps shared plans and household tasks aligned.",
+      securityNote: "No secret values on The Graph.",
+      connectionLabels: ["Agents", "Chat"],
+      ctaLabel: "Chat with Coordinator",
       cta: { type: "open_chat" },
       openImmediate: true,
-      windows: [
-        { kind: "chat", placement: "left", width: 560, height: 480 },
-        { kind: "information", placement: "right", width: 400, height: 520 },
-      ],
+      windows: agentChatWindows("coordinator"),
     },
+    agentChatBubble({
+      id: "hub:chat-agent-coordinator",
+      agentId: "coordinator",
+      agentLabel: "Coordinator",
+      position: offset(coordinatorPos, 1.5, 0.5, -0.3),
+    }),
   ];
 }
 
@@ -745,36 +967,18 @@ function workspaceExemplarEdges(): ArchitectureCatalogEdge[] {
       target: "hub:ws-project-alpha",
       kind: "workspace-child",
     },
-
     {
-      id: "e:personal-agents",
-      source: "hub:ws-personal",
-      target: "hub:agents-personal",
-      kind: "workspace-agents",
+      id: "e:workspace-family",
+      source: "hub:workspace",
+      target: "hub:ws-family",
+      kind: "workspace-child",
     },
+
     {
       id: "e:personal-structure",
       source: "hub:ws-personal",
       target: "hub:structure-personal",
       kind: "workspace-structure",
-    },
-    {
-      id: "e:personal-chat",
-      source: "hub:ws-personal",
-      target: "hub:chat-ws-personal",
-      kind: "workspace-chat",
-    },
-    {
-      id: "e:agents-personal-research",
-      source: "hub:agents-personal",
-      target: "hub:agent-research",
-      kind: "agent-child",
-    },
-    {
-      id: "e:agents-personal-ops",
-      source: "hub:agents-personal",
-      target: "hub:agent-ops",
-      kind: "agent-child",
     },
     {
       id: "e:structure-personal-departments",
@@ -790,37 +994,474 @@ function workspaceExemplarEdges(): ArchitectureCatalogEdge[] {
       kind: "workspace-agents",
     },
     {
-      id: "e:project-alpha-chat",
-      source: "hub:ws-project-alpha",
-      target: "hub:chat-ws-project-alpha",
-      kind: "workspace-chat",
-    },
-    {
       id: "e:agents-project-builder",
       source: "hub:agents-project-alpha",
       target: "hub:agent-builder",
       kind: "agent-child",
+    },
+    {
+      id: "e:builder-chat",
+      source: "hub:agent-builder",
+      target: "hub:chat-agent-builder",
+      kind: "chat-agent",
+    },
+
+    {
+      id: "e:family-agents",
+      source: "hub:ws-family",
+      target: "hub:agents-family",
+      kind: "workspace-agents",
+    },
+    {
+      id: "e:agents-family-coordinator",
+      source: "hub:agents-family",
+      target: "hub:agent-coordinator",
+      kind: "agent-child",
+    },
+    {
+      id: "e:coordinator-chat",
+      source: "hub:agent-coordinator",
+      target: "hub:chat-agent-coordinator",
+      kind: "chat-agent",
+    },
+  ];
+}
+
+/**
+ * Side trees off Support / Shared / Marketplace (fan upward so Workspaces can
+ * keep Personal depth on the right). Expanded by default on first land.
+ */
+function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
+  const supportPos = { x: 5.0, y: 2.5, z: 0.8 };
+  const sharedPos = { x: 6.8, y: 2.5, z: 0.8 };
+  const marketPos = { x: 8.6, y: 2.5, z: 0.8 };
+
+  return [
+    {
+      id: "hub:support-tickets",
+      kind: "system",
+      label: "Tickets",
+      objectType: "Support",
+      refId: "support-tickets",
+      position: offset(supportPos, -0.2, 1.7, 1.0),
+      description:
+        "Support tickets: platform bugs and shared-resource issues. Cloud tickets live on the Users hub DB.",
+      securityNote: "Ticket bodies stay off The Graph.",
+      connectionLabels: ["Support"],
+      ctaLabel: "Open Support",
+      cta: { type: "open_panel", tab: "support" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:support-chat",
+      kind: "system",
+      label: "Support Chat",
+      objectType: "Support",
+      refId: "support-chat",
+      position: offset(supportPos, 0.3, 1.7, -1.0),
+      description:
+        "Chat → Support for help requests. Staffed by the hub Support group when configured.",
+      securityNote: "Support chat bodies stay off The Graph.",
+      connectionLabels: ["Support"],
+      ctaLabel: "Open Support",
+      cta: { type: "open_panel", tab: "support" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:shared-grants",
+      kind: "system",
+      label: "Grants",
+      objectType: "SharedSurface",
+      refId: "shared-grants",
+      position: offset(sharedPos, -0.2, 1.7, 1.0),
+      description:
+        "Live grants: resources another user shared with you. Access is live, not a static copy.",
+      securityNote: "Grant payloads require auth.",
+      connectionLabels: ["Shared"],
+      ctaLabel: "Open Shared",
+      cta: { type: "navigate", path: "/shared" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:shared-network",
+      kind: "system",
+      label: "Network",
+      objectType: "SharedSurface",
+      refId: "shared-network",
+      position: offset(sharedPos, 0.3, 1.7, -1.0),
+      description:
+        "Federation and network tooling for cross-home collaboration (including Tailscale panel).",
+      securityNote: "Network config requires auth.",
+      connectionLabels: ["Shared"],
+      ctaLabel: "Open Shared",
+      cta: { type: "navigate", path: "/shared" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:marketplace-official",
+      kind: "system",
+      label: "Official",
+      objectType: "Marketplace",
+      refId: "marketplace-official",
+      position: offset(marketPos, -0.6, 1.6, 1.2),
+      description:
+        "Curated Official catalog (free and paid). Expand for Packs and Connectors. Default open Marketplace depth on The Graph.",
+      securityNote: "Installs require auth. The Graph shows structure only.",
+      connectionLabels: ["Marketplace", "Packs", "Connectors"],
+      ctaLabel: "Open Marketplace",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-official-packs",
+      kind: "system",
+      label: "Packs",
+      objectType: "Marketplace",
+      refId: "marketplace-official-packs",
+      position: offset(marketPos, -1.0, 3.0, 1.4),
+      description:
+        "Official starter packs and curated plugins published by the platform.",
+      securityNote: "Installs require auth.",
+      connectionLabels: ["Official"],
+      ctaLabel: "Open Official",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-official-connectors",
+      kind: "system",
+      label: "Connectors",
+      objectType: "Marketplace",
+      refId: "marketplace-official-connectors",
+      position: offset(marketPos, 0.2, 3.0, 1.6),
+      description:
+        "Official account-link and host connectors (quality bar in OFFICIAL_CONNECTORS).",
+      securityNote: "Connect flows require auth.",
+      connectionLabels: ["Official"],
+      ctaLabel: "Open Official",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:marketplace-community",
+      kind: "system",
+      label: "Community",
+      objectType: "Marketplace",
+      refId: "marketplace-community",
+      position: offset(marketPos, 0.8, 1.6, 0.2),
+      description:
+        "Community listings and user-to-user packs. Sellers keep 90%. The platform takes 10%.",
+      securityNote: "Purchases and installs require auth.",
+      connectionLabels: ["Marketplace", "Listings", "Sellers"],
+      ctaLabel: "Open Community",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-community-listings",
+      kind: "system",
+      label: "Listings",
+      objectType: "Marketplace",
+      refId: "marketplace-community-listings",
+      position: offset(marketPos, 0.4, 3.0, 0.4),
+      description: "Browse and buy Community Marketplace listings.",
+      securityNote: "Checkout requires auth.",
+      connectionLabels: ["Community"],
+      ctaLabel: "Open Community",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-community-sellers",
+      kind: "system",
+      label: "Sellers",
+      objectType: "Marketplace",
+      refId: "marketplace-community-sellers",
+      position: offset(marketPos, 1.4, 3.0, 0),
+      description: "Seller storefronts and publisher identity on Community.",
+      securityNote: "Seller profiles require auth.",
+      connectionLabels: ["Community"],
+      ctaLabel: "Open Community",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:marketplace-local",
+      kind: "system",
+      label: "Local",
+      objectType: "Marketplace",
+      refId: "marketplace-local",
+      position: offset(marketPos, -1.0, 1.5, -0.4),
+      description:
+        "Local plugin folders and third-party indexes (self-host / desktop). Not arbitrary folders on Cloud.",
+      securityNote: "Local installs stay on this machine.",
+      connectionLabels: ["Marketplace", "Folders", "Indexes"],
+      ctaLabel: "Open Local",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-local-folders",
+      kind: "system",
+      label: "Folders",
+      objectType: "Marketplace",
+      refId: "marketplace-local-folders",
+      position: offset(marketPos, -1.6, 2.9, -0.2),
+      description: "Filesystem plugin folders discovered on this install.",
+      securityNote: "Paths stay local.",
+      connectionLabels: ["Local"],
+      ctaLabel: "Open Local",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-local-indexes",
+      kind: "system",
+      label: "Indexes",
+      objectType: "Marketplace",
+      refId: "marketplace-local-indexes",
+      position: offset(marketPos, -0.6, 2.9, -0.8),
+      description: "Third-party plugin indexes for Local discovery.",
+      securityNote: "Index fetches are opt-in.",
+      connectionLabels: ["Local"],
+      ctaLabel: "Open Local",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:marketplace-installed",
+      kind: "system",
+      label: "Installed",
+      objectType: "Marketplace",
+      refId: "marketplace-installed",
+      position: offset(marketPos, 0.2, 1.5, -1.2),
+      description:
+        "Workspace plugins and install history for this GodMode instance.",
+      securityNote: "Install rows require auth.",
+      connectionLabels: ["Marketplace", "Plugins", "History"],
+      ctaLabel: "Open Installed",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-installed-plugins",
+      kind: "system",
+      label: "Plugins",
+      objectType: "Marketplace",
+      refId: "marketplace-installed-plugins",
+      position: offset(marketPos, -0.3, 2.9, -1.4),
+      description: "Active plugins installed in the current workspace.",
+      securityNote: "Plugin configs require auth.",
+      connectionLabels: ["Installed"],
+      ctaLabel: "Open Installed",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-installed-history",
+      kind: "system",
+      label: "History",
+      objectType: "Marketplace",
+      refId: "marketplace-installed-history",
+      position: offset(marketPos, 0.8, 2.9, -1.5),
+      description: "Install and uninstall history for Marketplace packs.",
+      securityNote: "History rows require auth.",
+      connectionLabels: ["Installed"],
+      ctaLabel: "Open Installed",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+
+    {
+      id: "hub:marketplace-sell",
+      kind: "system",
+      label: "Sell",
+      objectType: "Marketplace",
+      refId: "marketplace-sell",
+      position: offset(marketPos, 1.4, 1.5, -0.6),
+      description:
+        "Seller dashboard: ToS, payouts, publish wizard, and My listings. Seller seat unlocks Local Sell.",
+      securityNote: "Seller commerce requires auth and Cloud authority for paid listings.",
+      connectionLabels: ["Marketplace", "My listings", "Payouts"],
+      ctaLabel: "Open Sell",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-sell-listings",
+      kind: "system",
+      label: "My listings",
+      objectType: "Marketplace",
+      refId: "marketplace-sell-listings",
+      position: offset(marketPos, 1.2, 2.9, -0.4),
+      description: "Publish and manage your Community listings.",
+      securityNote: "Listing drafts require auth.",
+      connectionLabels: ["Sell"],
+      ctaLabel: "Open Sell",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-sell-payouts",
+      kind: "system",
+      label: "Payouts",
+      objectType: "Marketplace",
+      refId: "marketplace-sell-payouts",
+      position: offset(marketPos, 2.0, 2.9, -0.9),
+      description: "Seller payouts and Stripe Connect status for Community sales.",
+      securityNote: "Payout details never appear on The Graph.",
+      connectionLabels: ["Sell"],
+      ctaLabel: "Open Sell",
+      cta: { type: "navigate", path: "/marketplace" },
+      windows: INFO_ONLY,
+    },
+  ];
+}
+
+function platformRaySurfaceEdges(): ArchitectureCatalogEdge[] {
+  return [
+    {
+      id: "e:support-tickets",
+      source: "hub:support",
+      target: "hub:support-tickets",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:support-chat",
+      source: "hub:support",
+      target: "hub:support-chat",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:shared-grants",
+      source: "hub:shared",
+      target: "hub:shared-grants",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:shared-network",
+      source: "hub:shared",
+      target: "hub:shared-network",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-official",
+      source: "hub:marketplace",
+      target: "hub:marketplace-official",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-official-packs",
+      source: "hub:marketplace-official",
+      target: "hub:marketplace-official-packs",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-official-connectors",
+      source: "hub:marketplace-official",
+      target: "hub:marketplace-official-connectors",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-community",
+      source: "hub:marketplace",
+      target: "hub:marketplace-community",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-community-listings",
+      source: "hub:marketplace-community",
+      target: "hub:marketplace-community-listings",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-community-sellers",
+      source: "hub:marketplace-community",
+      target: "hub:marketplace-community-sellers",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-local",
+      source: "hub:marketplace",
+      target: "hub:marketplace-local",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-local-folders",
+      source: "hub:marketplace-local",
+      target: "hub:marketplace-local-folders",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-local-indexes",
+      source: "hub:marketplace-local",
+      target: "hub:marketplace-local-indexes",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-installed",
+      source: "hub:marketplace",
+      target: "hub:marketplace-installed",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-installed-plugins",
+      source: "hub:marketplace-installed",
+      target: "hub:marketplace-installed-plugins",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-installed-history",
+      source: "hub:marketplace-installed",
+      target: "hub:marketplace-installed-history",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-sell",
+      source: "hub:marketplace",
+      target: "hub:marketplace-sell",
+      kind: "platform-surface",
+    },
+    {
+      id: "e:marketplace-sell-listings",
+      source: "hub:marketplace-sell",
+      target: "hub:marketplace-sell-listings",
+      kind: "marketplace-child",
+    },
+    {
+      id: "e:marketplace-sell-payouts",
+      source: "hub:marketplace-sell",
+      target: "hub:marketplace-sell-payouts",
+      kind: "marketplace-child",
     },
   ];
 }
 
 /**
  * Living instance map:
- * You (top) ↔ Intelligence (below). Heart sits on the right with
- * Support → Shared → Marketplace → Workspaces. Workspaces fan into exemplar
- * Personal / Project trees (Agents, Structure, Chat). Account, Cloud, and LLM
- * keys live on You's Information panel. Life fans away from each owner.
+ * You (top) and Intelligence (below) meet only at Hub (Bridge). Hub sits
+ * on the right with Support → Shared → Marketplace → Workspaces. Each of
+ * Support / Shared / Marketplace fans a side tree (expanded by default).
+ * Workspaces fans into exemplar Personal / Project / Family trees (one
+ * workspace open to full depth). Account, Cloud, and LLM keys live on You's
+ * Information panel. Life fans away from each owner.
  */
 export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
   // You Life grows upward; Intelligence Life grows downward clear of the hub.
   const youLife = lifeSurfaceNodes("you", { x: 2.8, y: 7.0, z: 0 }, 1);
   const intelLife = lifeSurfaceNodes(
     "intelligence",
-    { x: 2.8, y: -2.2, z: 0 },
+    { x: 3.8, y: -0.2, z: 0 },
     -1
   );
   const workspacesPos = { x: 10.4, y: 2.5, z: 0.8 };
   const workspaceTree = workspaceExemplarNodes(workspacesPos);
+  const platformSurfaces = platformRaySurfaceNodes();
 
   return [
     {
@@ -831,12 +1472,11 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "local",
       position: { x: 0, y: 5.2, z: 0 },
       description:
-        "You are the root of this GodMode instance. Your Vault holds secrets and Bank. Life and personal Chat sit on your plane (Chat left of the spine to Intelligence). Heart (Bridge) sits on the right and fans out to Support, Shared, Marketplace, and Workspaces. Account, Cloud membership, and LLM keys are part of your identity (see Information), not separate Graph hubs.",
+        "You are the root of this GodMode instance. Your Vault holds secrets and Bank. Life and personal Chat sit on your plane (Chat to the left). Hub (Bridge) is the only Graph link to Intelligence, and fans out to Support, Shared, Marketplace, and Workspaces. Account, Cloud membership, and LLM keys are part of your identity (see Information), not separate Graph hubs.",
       securityNote:
         "Credentials and LLM key values live in Vault APIs. This node never exposes passwords, tokens, or key material.",
       connectionLabels: [
-        "Intelligence",
-        "Heart",
+        "Hub",
         "User Vault",
         "Life",
         "Your Chat",
@@ -856,12 +1496,11 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "intelligence",
       position: { x: 0, y: -0.2, z: 0 },
       description:
-        "GodMode's platform agent under You. Owns its Vault, Life surfaces, and Chat. Links through Heart (Bridge). Specialized agents live under Workspaces on The Graph, not as spine hubs.",
+        "GodMode's platform agent under You. Owns its Vault, Life surfaces, and Chat. Links to You only through Hub (Bridge). Research and Ops sit nearby on this plane but each link to Hub on their own. Workspace agents like Builder live under Workspaces.",
       securityNote:
-        "Runs through Heart with vault-backed credentials. Tool allow-lists bound what it can call.",
+        "Runs through Hub with vault-backed credentials. Tool allow-lists bound what it can call.",
       connectionLabels: [
-        "You",
-        "Heart",
+        "Hub",
         "Intelligence Vault",
         "Life",
         "Intelligence Chat",
@@ -874,16 +1513,16 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
     {
       id: "hub:heart",
       kind: "system",
-      label: "Heart",
+      label: "Hub",
       objectType: "BridgeConnection",
       refId: "bridge",
       position: { x: 3.2, y: 2.5, z: 0.8 },
       description:
-        "The Bridge process between You and Intelligence: HTTP API, kernel ObjectTypes, plugins, and IPC. On The Graph, Heart sits right of the spine and opens one ray: Support → Shared → Marketplace → Workspaces. Chat bubbles sit left of You→Intelligence. Heart's SQLite holds ops/logs only, not your chat bodies.",
+        "The Bridge process between You and Intelligence: HTTP API, kernel ObjectTypes, plugins, and IPC. On The Graph, Hub is the only edge between You and Intelligence, and opens one ray: Support → Shared → Marketplace → Workspaces. Research and Ops each have their own Hub edge. Chat bubbles sit left of each owner. Hub's SQLite holds ops/logs only, not your chat bodies.",
       securityNote:
-        "All product mutations go through Bridge auth and tenant middleware. Heart is structural, not a secret store.",
-      connectionLabels: ["You", "Intelligence", "Support"],
-      ctaLabel: "Learn about Heart",
+        "All product mutations go through Bridge auth and tenant middleware. Hub is structural, not a secret store.",
+      connectionLabels: ["You", "Intelligence", "Research", "Ops", "Support"],
+      ctaLabel: "Learn about Hub",
       cta: { type: "none" },
       windows: INFO_ONLY,
     },
@@ -937,7 +1576,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       windows: INFO_ONLY,
     },
 
-    // --- Platform ray right of Heart: Support → Shared → Marketplace → Workspaces ---
+    // --- Platform ray right of Hub: Support → Shared → Marketplace → Workspaces ---
     {
       id: "hub:support",
       kind: "system",
@@ -945,9 +1584,10 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       objectType: "Support",
       refId: "support",
       position: { x: 5.0, y: 2.5, z: 0.8 },
-      description: "Help and support surfaces on Heart's platform ray.",
+      description:
+        "Help and support on Hub's platform ray. Expanded tree: Tickets and Support Chat.",
       securityNote: "Support tickets and chat stay off The Graph.",
-      connectionLabels: ["Heart", "Shared"],
+      connectionLabels: ["Hub", "Shared", "Tickets", "Support Chat"],
       ctaLabel: "Open Support",
       cta: { type: "open_panel", tab: "support" },
       windows: INFO_ONLY,
@@ -959,9 +1599,10 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       objectType: "SharedSurface",
       refId: "shared",
       position: { x: 6.8, y: 2.5, z: 0.8 },
-      description: "Shared spaces and collaborations on Heart's platform ray.",
+      description:
+        "Shared spaces and collaboration on Hub's platform ray. Expanded tree: Grants and Network.",
       securityNote: "Shared content requires auth.",
-      connectionLabels: ["Support", "Marketplace"],
+      connectionLabels: ["Support", "Marketplace", "Grants", "Network"],
       ctaLabel: "Open Shared",
       cta: { type: "navigate", path: "/shared" },
       windows: INFO_ONLY,
@@ -973,9 +1614,18 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       objectType: "Marketplace",
       refId: "marketplace",
       position: { x: 8.6, y: 2.5, z: 0.8 },
-      description: "Discover and install marketplace offerings on Heart's platform ray.",
+      description:
+        "Discover and install packs on Hub's platform ray. Tabs on the map: Official (default full depth), Community, Local, Installed, and Sell. Only one Marketplace branch is open at a time.",
       securityNote: "Installs require auth. The Graph shows structure only.",
-      connectionLabels: ["Shared", "Workspaces"],
+      connectionLabels: [
+        "Shared",
+        "Workspaces",
+        "Official",
+        "Community",
+        "Local",
+        "Installed",
+        "Sell",
+      ],
       ctaLabel: "Open Marketplace",
       cta: { type: "navigate", path: "/marketplace" },
       windows: INFO_ONLY,
@@ -988,15 +1638,16 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "workspace",
       position: workspacesPos,
       description:
-        "Workspaces you own. Reached via Heart → Support → Shared → Marketplace. Expand for exemplar Personal and Project Alpha trees (Agents, Structure, Chat). Ownership is yours; the ray is how you reach them through Bridge. They may retrieve approved secrets from User Vault (no Vault edge on the map).",
+        "Workspaces you own. Reached via Hub → Support → Shared → Marketplace. Expand for exemplar Personal, Project Alpha, and Family trees (Agents with Chat off each agent, Structure). Ownership is yours; the ray is how you reach them through Bridge. They may retrieve approved secrets from User Vault (no Vault edge on the map).",
       securityNote:
         "Workspace rows stay in tenant / surface files. This hub is the map pin for the set.",
-      connectionLabels: ["Marketplace", "Personal", "Project Alpha"],
+      connectionLabels: ["Marketplace", "Personal", "Project Alpha", "Family"],
       ctaLabel: "Open Structure",
       cta: { type: "navigate", path: "/structure" },
       windows: INFO_ONLY,
     },
 
+    ...platformSurfaces,
     ...workspaceTree,
 
     ...youLife,
@@ -1009,7 +1660,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "digital-you",
       position: { x: -1.8, y: 3.8, z: 0 },
       description:
-        "Chat with Digital You, your personal twin. Connected to You on The Graph, left of the You→Intelligence spine.",
+        "Chat with Digital You, your personal twin. Connected to You on The Graph, left of your plane.",
       securityNote: "Message bodies stay in chat DB files.",
       connectionLabels: ["You"],
       ctaLabel: "Chat with Digital You",
@@ -1076,6 +1727,8 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
 
     ...intelLife,
 
+    ...platformSpineAgentNodes(),
+
     {
       id: "hub:chat-intelligence",
       kind: "chat",
@@ -1084,7 +1737,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "intelligence",
       position: { x: -1.8, y: 1.2, z: 0 },
       description:
-        "Chat with Intelligence, the platform agent. Connected to Intelligence on The Graph, left of the You→Intelligence spine.",
+        "Chat with Intelligence, the platform agent. Connected to Intelligence on The Graph, left of its plane.",
       securityNote: "Message bodies stay in chat DB files.",
       connectionLabels: ["Intelligence"],
       ctaLabel: "Chat with Intelligence",
@@ -1106,15 +1759,16 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
 
 export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
   return [
-    // Spine: You ↔ Intelligence, both meet Heart (Bridge). No Chat→Heart doubles.
-    { id: "e:you-intel", source: "hub:you", target: "hub:intelligence", kind: "agent-user" },
+    // You and Intelligence meet only at Hub (Bridge). No direct You↔Intelligence edge.
     { id: "e:you-heart", source: "hub:you", target: "hub:heart", kind: "runtime" },
     { id: "e:intel-heart", source: "hub:intelligence", target: "hub:heart", kind: "runtime" },
+
+    ...platformSpineAgentEdges(),
 
     { id: "e:you-vault", source: "hub:you", target: "hub:vault-you", kind: "vault" },
     { id: "e:intel-vault", source: "hub:intelligence", target: "hub:vault-intelligence", kind: "vault" },
 
-    // One ray from Heart (not a star plus a chain): Support → Shared → Marketplace → Workspaces.
+    // One ray from Hub (not a star plus a chain): Support → Shared → Marketplace → Workspaces.
     { id: "e:heart-support", source: "hub:heart", target: "hub:support", kind: "platform" },
     {
       id: "e:support-shared",
@@ -1136,6 +1790,7 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
     },
 
     ...workspaceExemplarEdges(),
+    ...platformRaySurfaceEdges(),
 
     { id: "e:vault-you-bank", source: "hub:vault-you", target: "hub:bank-you", kind: "vault-child" },
     {

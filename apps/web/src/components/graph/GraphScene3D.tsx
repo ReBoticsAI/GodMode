@@ -16,6 +16,7 @@ import type {
   GraphProjectionNode,
 } from "@/api";
 import { GraphNodeGlyph } from "@/components/graph/GraphNodeGlyph";
+import { buildGraphNodeColors, graphNodeColor } from "@/lib/graph-node-style";
 import { useTheme } from "next-themes";
 
 const DEFAULT_EYE = new THREE.Vector3(5.2, 5.8, 16);
@@ -24,23 +25,95 @@ const SCENE_BG_DARK = "#0a0a0b";
 const SCENE_BG_LIGHT = "#f4f4f5";
 
 /**
- * Default land: expand You's Life + Vault trees; keep Intelligence mirrors and
- * the Workspaces exemplar tree collapsed unless the user expands them.
+ * Default land:
+ * - Expand You's Life + Vault; keep other agent Life/Vault mirrors collapsed
+ *   (Intelligence, Research, Ops).
+ * - Expand Support / Shared side trees.
+ * - Marketplace: only Official open to full depth (Packs + Connectors).
+ * - Workspaces: only Personal open to full depth.
  */
 const DEFAULT_COLLAPSED_IDS = [
   "hub:life-intelligence",
   "hub:vault-intelligence",
-  "hub:workspace",
+  "hub:life-research",
+  "hub:vault-research",
+  "hub:life-ops",
+  "hub:vault-ops",
+  "hub:ws-project-alpha",
+  "hub:ws-family",
+  "hub:marketplace-community",
+  "hub:marketplace-local",
+  "hub:marketplace-installed",
+  "hub:marketplace-sell",
 ] as const;
 
-/** Expanding one of these collapses its peer(s). */
+/** Exclusive Life trees: only one owner Life open at a time. */
+const LIFE_TREE_IDS = [
+  "hub:life-you",
+  "hub:life-intelligence",
+  "hub:life-research",
+  "hub:life-ops",
+] as const;
+
+/** Exclusive Vault trees: only one owner Vault open at a time. */
+const VAULT_TREE_IDS = [
+  "hub:vault-you",
+  "hub:vault-intelligence",
+  "hub:vault-research",
+  "hub:vault-ops",
+] as const;
+
+function exclusivePeers(
+  ids: readonly string[]
+): Record<string, readonly string[]> {
+  const out: Record<string, readonly string[]> = {};
+  for (const id of ids) {
+    out[id] = ids.filter((peer) => peer !== id);
+  }
+  return out;
+}
+
+/**
+ * Expanding one of these collapses its peer(s).
+ * Life/Vault pairs are owner mirrors (You, Intelligence, Research, Ops).
+ * Workspace and Marketplace branches are distinct trees; exclusive open keeps depth readable.
+ */
 const TREE_PEERS: Record<string, readonly string[]> = {
-  "hub:life-you": ["hub:life-intelligence"],
-  "hub:life-intelligence": ["hub:life-you"],
-  "hub:vault-you": ["hub:vault-intelligence"],
-  "hub:vault-intelligence": ["hub:vault-you"],
-  "hub:ws-personal": ["hub:ws-project-alpha"],
-  "hub:ws-project-alpha": ["hub:ws-personal"],
+  ...exclusivePeers(LIFE_TREE_IDS),
+  ...exclusivePeers(VAULT_TREE_IDS),
+  "hub:ws-personal": ["hub:ws-project-alpha", "hub:ws-family"],
+  "hub:ws-project-alpha": ["hub:ws-personal", "hub:ws-family"],
+  "hub:ws-family": ["hub:ws-personal", "hub:ws-project-alpha"],
+  "hub:marketplace-official": [
+    "hub:marketplace-community",
+    "hub:marketplace-local",
+    "hub:marketplace-installed",
+    "hub:marketplace-sell",
+  ],
+  "hub:marketplace-community": [
+    "hub:marketplace-official",
+    "hub:marketplace-local",
+    "hub:marketplace-installed",
+    "hub:marketplace-sell",
+  ],
+  "hub:marketplace-local": [
+    "hub:marketplace-official",
+    "hub:marketplace-community",
+    "hub:marketplace-installed",
+    "hub:marketplace-sell",
+  ],
+  "hub:marketplace-installed": [
+    "hub:marketplace-official",
+    "hub:marketplace-community",
+    "hub:marketplace-local",
+    "hub:marketplace-sell",
+  ],
+  "hub:marketplace-sell": [
+    "hub:marketplace-official",
+    "hub:marketplace-community",
+    "hub:marketplace-local",
+    "hub:marketplace-installed",
+  ],
 };
 
 function defaultCollapsedSet(): Set<string> {
@@ -50,6 +123,8 @@ function defaultCollapsedSet(): Set<string> {
 export type GraphScene3DHandle = {
   fitAll: () => void;
   reset: () => void;
+  /** Zoom the camera onto one node (keeps it in the open strip between side panels). */
+  focusNode: (nodeId: string) => void;
 };
 
 type Vec3 = { x: number; y: number; z: number };
@@ -165,6 +240,7 @@ function KeyboardTruck({
 function NodeGlyph({
   node,
   position,
+  color,
   selected,
   adjacent,
   collapsed,
@@ -177,6 +253,7 @@ function NodeGlyph({
 }: {
   node: GraphProjectionNode;
   position: Vec3;
+  color: string;
   selected: boolean;
   adjacent: boolean;
   collapsed: boolean;
@@ -269,6 +346,9 @@ function NodeGlyph({
       >
         <GraphNodeGlyph
           kind={node.kind}
+          nodeId={node.id}
+          objectType={node.objectType}
+          color={color}
           label={node.label}
           selected={selected}
           adjacent={adjacent}
@@ -407,6 +487,11 @@ function SceneBody({
     return m;
   }, [projection.nodes, positionOverrides]);
 
+  const nodeColors = useMemo(
+    () => buildGraphNodeColors(projection.nodes, projection.edges),
+    [projection.nodes, projection.edges]
+  );
+
   const hidden = useMemo(
     () => hiddenDescendantIds(projection.edges, collapsedIds),
     [projection.edges, collapsedIds]
@@ -520,6 +605,7 @@ function SceneBody({
           key={n.id}
           node={n}
           position={positions.get(n.id) ?? { x: 0, y: 0, z: 0 }}
+          color={nodeColors.get(n.id) ?? graphNodeColor(n.kind, n.id)}
           selected={selectedId === n.id}
           adjacent={adjacentIds.has(n.id)}
           collapsed={collapsedIds.has(n.id)}
@@ -611,21 +697,55 @@ export const GraphScene3D = forwardRef<
     });
   }, [projection.edges, projection.nodes]);
 
-  useImperativeHandle(ref, () => ({ fitAll, reset }), [fitAll, reset]);
+  const focusNode = useCallback(
+    (nodeId: string) => {
+      const c = controlsRef.current;
+      if (!c) return;
+      const node = projection.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const o = positionOverrides[nodeId];
+      const framed = {
+        ...node,
+        position: {
+          x: o?.x ?? node.position?.x ?? 0,
+          y: o?.y ?? node.position?.y ?? 0,
+          z: o?.z ?? node.position?.z ?? 0,
+        },
+      };
+      const box = boundsForNodes([framed]);
+      // Keep the node readable between left Chat and right Information panels.
+      box.expandByScalar(1.15);
+      void c.fitToBox(box, true, {
+        cover: false,
+        paddingTop: 0.65,
+        paddingBottom: 0.65,
+        paddingLeft: 1.15,
+        paddingRight: 1.15,
+      });
+    },
+    [projection.nodes, positionOverrides]
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({ fitAll, reset, focusNode }),
+    [fitAll, reset, focusNode]
+  );
 
   const onSelect = useCallback(
     (node: GraphProjectionNode) => {
       setSelectedId(node.id);
+      focusNode(node.id);
       onNodeSelect?.(node);
     },
-    [onNodeSelect]
+    [focusNode, onNodeSelect]
   );
 
   const onToggleCollapse = useCallback((nodeId: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(nodeId)) {
-        // Expanding: open this tree, collapse peer mirrors.
+        // Expanding: open this tree; collapse peers (mirrors or sibling workspaces).
         next.delete(nodeId);
         for (const peer of TREE_PEERS[nodeId] ?? []) {
           next.add(peer);

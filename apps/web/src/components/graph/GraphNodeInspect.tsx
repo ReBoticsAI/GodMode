@@ -10,20 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import type { GraphCtaAction, GraphProjectionNode } from "@/api";
 import { GraphNodeMissionsSection } from "@/components/graph/GraphMissionsPanel";
-
-const KIND_COLOR: Record<string, string> = {
-  chat: "#38bdf8",
-  agent: "#a78bfa",
-  user: "#34d399",
-  memory: "#fbbf24",
-  skill: "#fb7185",
-  tool: "#94a3b8",
-  workflow: "#f472b6",
-  schedule: "#2dd4bf",
-  page: "#60a5fa",
-  unlock: "#eab308",
-  system: "#a8a29e",
-};
+import { graphNodeColor } from "@/lib/graph-node-style";
 
 export function GraphNodeInspect({
   node,
@@ -37,7 +24,7 @@ export function GraphNodeInspect({
   onCta: (action: GraphCtaAction, node: GraphProjectionNode) => void;
 }) {
   if (!node) return null;
-  const color = KIND_COLOR[node.kind] ?? "#94a3b8";
+  const color = graphNodeColor(node.kind, node.id, null, node.objectType, node.label);
   const statusBits = node.status
     ? Object.entries(node.status).map(([k, v]) =>
         typeof v === "boolean" ? `${k}: ${v ? "yes" : "no"}` : `${k}: ${v}`

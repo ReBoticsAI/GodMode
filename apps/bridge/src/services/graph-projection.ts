@@ -66,7 +66,7 @@ export type GraphProjection = {
   catalogVersion?: number;
 };
 
-const MAX_NODES = 80;
+const MAX_NODES = 160;
 const MAX_EDGES = 150;
 const MEM_LIMIT = 12;
 const SKILL_LIMIT = 8;

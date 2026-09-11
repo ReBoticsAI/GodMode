@@ -114,21 +114,88 @@ describe("graph-projection", () => {
     expect(proj.nodes.some((n) => n.id === "hub:marketplace")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:shared")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:support")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:support-tickets")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:support-chat")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:shared-grants")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:shared-network")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-official")).toBe(
+      true
+    );
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-official-packs")).toBe(
+      true
+    );
+    expect(
+      proj.nodes.some((n) => n.id === "hub:marketplace-official-connectors")
+    ).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-community")).toBe(
+      true
+    );
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-local")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-installed")).toBe(
+      true
+    );
+    expect(proj.nodes.some((n) => n.id === "hub:marketplace-sell")).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.source === "hub:marketplace-official" &&
+          e.target === "hub:marketplace-official-packs"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:support" && e.target === "hub:support-tickets"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.source === "hub:marketplace" &&
+          e.target === "hub:marketplace-sell"
+      )
+    ).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:agents")).toBe(false);
     expect(proj.nodes.some((n) => n.id === "hub:agent-department")).toBe(false);
     expect(proj.nodes.some((n) => n.id === "hub:ws-personal")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:ws-project-alpha")).toBe(true);
-    expect(proj.nodes.some((n) => n.id === "hub:agents-personal")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:ws-family")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:agents-personal")).toBe(false);
     expect(proj.nodes.some((n) => n.id === "hub:agents-project-alpha")).toBe(
       true
     );
+    expect(proj.nodes.some((n) => n.id === "hub:agents-family")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:agent-research")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:agent-ops")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:agent-builder")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:agent-coordinator")).toBe(
+      true
+    );
     expect(proj.nodes.some((n) => n.id === "hub:structure-personal")).toBe(
       true
     );
-    expect(proj.nodes.some((n) => n.id === "hub:chat-ws-personal")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:chat-ws-personal")).toBe(false);
+    expect(proj.nodes.some((n) => n.id === "hub:chat-agent-research")).toBe(
+      true
+    );
+    expect(proj.nodes.some((n) => n.id === "hub:chat-agent-ops")).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.source === "hub:agent-research" &&
+          e.target === "hub:chat-agent-research"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.source === "hub:agent-ops" && e.target === "hub:chat-agent-ops"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:ws-personal" && e.target === "hub:chat-ws-personal"
+      )
+    ).toBe(false);
     expect(
       proj.edges.some(
         (e) => e.source === "hub:workspace" && e.target === "hub:ws-personal"
@@ -137,7 +204,26 @@ describe("graph-projection", () => {
     expect(
       proj.edges.some(
         (e) =>
-          e.source === "hub:agents-personal" && e.target === "hub:agent-research"
+          e.source === "hub:intelligence" && e.target === "hub:agent-research"
+      )
+    ).toBe(false);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:intelligence" && e.target === "hub:agent-ops"
+      )
+    ).toBe(false);
+    expect(proj.nodes.some((n) => n.id === "hub:vault-research")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:life-research")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:vault-ops")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:life-ops")).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:heart" && e.target === "hub:agent-research"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:heart" && e.target === "hub:agent-ops"
       )
     ).toBe(true);
     expect(
@@ -176,7 +262,26 @@ describe("graph-projection", () => {
       proj.nodes.find((n) => n.id === "hub:intelligence")?.windows?.length
     ).toBe(1);
     expect(proj.nodes.every((n) => !("secret" in (n.status ?? {})))).toBe(true);
-    expect(proj.catalogVersion).toBeGreaterThanOrEqual(14);
+    expect(proj.catalogVersion).toBeGreaterThanOrEqual(24);
+    expect(
+      proj.edges.some(
+        (e) =>
+          (e.source === "hub:you" && e.target === "hub:intelligence") ||
+          (e.source === "hub:intelligence" && e.target === "hub:you")
+      )
+    ).toBe(false);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:you" && e.target === "hub:heart"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          (e.source === "hub:intelligence" && e.target === "hub:heart") ||
+          (e.source === "hub:heart" && e.target === "hub:intelligence")
+      )
+    ).toBe(true);
     expect(proj.nodes.find((n) => n.id === "hub:chat-you")?.position.x).toBeLessThan(
       0
     );

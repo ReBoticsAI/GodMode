@@ -43,6 +43,16 @@ import {
 import { AI_NAME } from "@/lib/navigation";
 import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  focusWindowAnchors,
+  snapToFocusAnchor,
+} from "@/lib/floating-window-anchors";
+import { snapRectToGrid } from "@/lib/floating-window-grid";
+import {
+  anchorWindowAndMirror,
+  registerFloatingWindow,
+  setActiveFloatingWindow,
+} from "@/lib/floating-window-registry";
 import { useAgentMentionSources } from "@/hooks/use-agent-mention-sources";
 import { useKanbanTodosForChat } from "@/hooks/use-kanban-todos-for-chat";
 import {
@@ -262,8 +272,20 @@ export function IntelligencePanel({
   const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
   const allowedTabs: PanelTab[] = isDmMode
-    ? ["chat", "dms", "channels"]
-    : ["chat", "notifications", "calendar", "projects", "knowledge", "bank", "vault", "support"];
+    ? ["chat", "contacts", "dms", "channels"]
+    : [
+        "chat",
+        "contacts",
+        "dms",
+        "channels",
+        "notifications",
+        "calendar",
+        "projects",
+        "knowledge",
+        "bank",
+        "vault",
+        "support",
+      ];
   const effectiveTab: PanelTab = allowedTabs.includes(panelTab)
     ? panelTab
     : "chat";
@@ -360,8 +382,9 @@ export function IntelligencePanel({
       const height = clampPanelHeight(panelHeight, nextBounds.height);
       setComposerWidth(width);
       setPanelHeight(height);
-      const defaultX = nextBounds.x + 12;
-      const defaultY = nextBounds.y + nextBounds.height - height - 12;
+      const focus = focusWindowAnchors(nextBounds, width, height);
+      const defaultX = focus.left.x;
+      const defaultY = focus.left.y;
       const pos = clampPanelPos(
         panelX ?? defaultX,
         panelY ?? defaultY,
@@ -386,19 +409,75 @@ export function IntelligencePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onReset = () => {
+      if (isMaximized) return;
+      const activeBounds = getPanelBounds();
+      setBounds(activeBounds);
+      const width = clampComposerWidth(composerWidth, activeBounds.width);
+      const height = clampPanelHeight(panelHeight, activeBounds.height);
+      setComposerWidth(width);
+      setPanelHeight(height);
+      const focus = focusWindowAnchors(activeBounds, width, height);
+      setPanelPos(focus.left.x, focus.left.y);
+      if (!panelOpen) setPanelOpen(true);
+    };
+    window.addEventListener("godmode:reset-window-anchors", onReset);
+    return () =>
+      window.removeEventListener("godmode:reset-window-anchors", onReset);
+  }, [
+    isMaximized,
+    composerWidth,
+    panelHeight,
+    panelOpen,
+    setComposerWidth,
+    setPanelHeight,
+    setPanelPos,
+    setPanelOpen,
+  ]);
+
+  const [anchorPickMode, setAnchorPickMode] = useState(false);
+  useEffect(() => {
+    const onPick = (ev: Event) => {
+      setAnchorPickMode(
+        Boolean((ev as CustomEvent<{ active?: boolean }>).detail?.active)
+      );
+    };
+    window.addEventListener("godmode:anchor-pick-mode", onPick);
+    return () => window.removeEventListener("godmode:anchor-pick-mode", onPick);
+  }, []);
+
+  const chatLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
   const handleDrag = (e: ReactPointerEvent<HTMLElement>) => {
     const target = e.target;
     if (target instanceof Element && target.closest("button,[role='button']")) {
       return;
     }
+
+    if (anchorPickMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      anchorWindowAndMirror("chat");
+      window.dispatchEvent(
+        new CustomEvent("godmode:anchor-pick-mode", {
+          detail: { active: false },
+        })
+      );
+      return;
+    }
+
+    setActiveFloatingWindow("chat");
     e.preventDefault();
     const activeBounds = getPanelBounds();
     setBounds(activeBounds);
     const startX = e.clientX;
     const startY = e.clientY;
-    const startPanelX = panelX ?? activeBounds.x + 12;
-    const startPanelY =
-      panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
+    const focus = focusWindowAnchors(activeBounds, composerWidth, panelHeight);
+    const startPanelX = panelX ?? focus.left.x;
+    const startPanelY = panelY ?? focus.left.y;
+    let lastX = startPanelX;
+    let lastY = startPanelY;
     const onMove = (ev: PointerEvent) => {
       const pos = clampPanelPos(
         startPanelX + ev.clientX - startX,
@@ -407,6 +486,8 @@ export function IntelligencePanel({
         panelHeight,
         activeBounds
       );
+      lastX = pos.x;
+      lastY = pos.y;
       setPanelPos(pos.x, pos.y);
     };
     const onUp = () => {
@@ -414,6 +495,27 @@ export function IntelligencePanel({
       window.removeEventListener("pointerup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      const focusSnapped = snapToFocusAnchor(
+        lastX,
+        lastY,
+        composerWidth,
+        panelHeight,
+        activeBounds
+      );
+      if (focusSnapped) {
+        setPanelPos(focusSnapped.x, focusSnapped.y);
+      } else {
+        const gridSnapped = snapRectToGrid(
+          {
+            x: lastX,
+            y: lastY,
+            width: composerWidth,
+            height: panelHeight,
+          },
+          activeBounds
+        );
+        setPanelPos(gridSnapped.x, gridSnapped.y);
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -428,7 +530,9 @@ export function IntelligencePanel({
     setBounds(activeBounds);
     const startX = e.clientX;
     const startWidth = composerWidth;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const onMove = (ev: PointerEvent) => {
       const available = activeBounds.x + activeBounds.width - currentX;
       setComposerWidth(
@@ -483,7 +587,9 @@ export function IntelligencePanel({
     const startY = e.clientY;
     const startWidth = composerWidth;
     const startHeight = panelHeight;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const currentY =
       panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
     const onMove = (ev: PointerEvent) => {
@@ -1303,8 +1409,9 @@ export function IntelligencePanel({
 
   const currentWidth = clampComposerWidth(composerWidth, bounds.width);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
-  const defaultX = bounds.x + 12;
-  const defaultY = bounds.y + bounds.height - currentHeight - 12;
+  const focus = focusWindowAnchors(bounds, currentWidth, currentHeight);
+  const defaultX = focus.left.x;
+  const defaultY = focus.left.y;
   const pos = clampPanelPos(
     panelX ?? defaultX,
     panelY ?? defaultY,
@@ -1312,6 +1419,35 @@ export function IntelligencePanel({
     currentHeight,
     bounds
   );
+
+  chatLayoutRef.current = {
+    x: pos.x,
+    y: pos.y,
+    width: currentWidth,
+    height: currentHeight,
+  };
+
+  useEffect(() => {
+    if (!panelOpen || isMaximized || isMobile) return;
+    return registerFloatingWindow({
+      id: "chat",
+      role: "chat",
+      pairGroup: "focus-pair",
+      getLayout: () => chatLayoutRef.current,
+      applyLayout: (rect) => {
+        setPanelPos(rect.x, rect.y);
+        setComposerWidth(rect.width);
+        setPanelHeight(rect.height);
+      },
+    });
+  }, [
+    panelOpen,
+    isMaximized,
+    isMobile,
+    setPanelPos,
+    setComposerWidth,
+    setPanelHeight,
+  ]);
 
   if (!panelOpen) return null;
 
@@ -1569,23 +1705,21 @@ export function IntelligencePanel({
       <Tabs value={effectiveTab} onValueChange={(v) => setPanelTab(v as PanelTab)} className="shrink-0 px-2 pt-1">
         <TabsList variant="line" className="h-8 w-full justify-start">
           <TabsTrigger value="chat" className="text-xs">Chat</TabsTrigger>
-          {isDmMode ? (
+          <TabsTrigger value="contacts" className="text-xs">Contacts</TabsTrigger>
+          <TabsTrigger value="dms" className="text-xs">DMs</TabsTrigger>
+          <TabsTrigger value="channels" className="text-xs">Channels</TabsTrigger>
+          {!isDmMode ? (
             <>
-              <TabsTrigger value="dms" className="text-xs">DMs</TabsTrigger>
-              <TabsTrigger value="channels" className="text-xs">Channels</TabsTrigger>
+              <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
+              <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
+              {/* Internal id remains "projects" for stored panel tab preference. */}
+              <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
+              <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
+              <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
+              <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
+              <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
             </>
-    ) : (
-      <>
-        <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
-        <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
-        {/* Internal id remains "projects" for stored panel tab preference. */}
-        <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
-        <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
-        <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
-        <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
-        <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
-      </>
-    )}
+          ) : null}
         </TabsList>
       </Tabs>
 
@@ -1855,6 +1989,20 @@ export function IntelligencePanel({
         {effectiveTab === "support" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <Support />
+          </div>
+        )}
+
+        {effectiveTab === "contacts" && (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ConversationList
+              conversations={[]}
+              contacts={dmContacts}
+              activeId={activeConversationId}
+              onSelect={(id) =>
+                setChatTarget({ kind: "conversation", conversationId: id })
+              }
+              onCreated={() => void refreshDmConversations()}
+            />
           </div>
         )}
 

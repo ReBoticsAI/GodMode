@@ -39,7 +39,7 @@ flowchart TB
 |------|---------|
 | **Human User** | Graph root. Own SQLite. Owns User Vault, Workspaces, **Life**, and personal Chat. |
 | **Intelligence** | Platform agent under User. Own SQLite. Owns Intelligence Vault, **Life**, Chat, and Heart link. |
-| **Workspaces** | End of Heart's platform ray (not under Vault). Catalog exemplars: Personal and Project Alpha with Agents, Structure, and Chat. Many workspaces may read approved secrets from User Vault. |
+| **Workspaces** | End of Heart's platform ray (not under Vault). Catalog exemplars: Personal, Project Alpha, and Family with Agents, Structure, and Chat. Many workspaces may read approved secrets from User Vault. |
 | **Heart** | Bridge, right of the You↔Intelligence spine. Ops/logs SQLite only. Does not store user chat bodies. |
 | **Vaults** | User Vault (secrets, Bank → Wallet; LLM key storage) and Intelligence Vault (Bank → Wallet). Account / Cloud / LLM purpose live on You's Information panel. |
 | **Life** | Per-owner hub for Structure, Knowledge, Automations, Calendar (each expanded into child nodes on The Graph). Chat stays outside Life. |
