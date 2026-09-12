@@ -265,7 +265,7 @@ export function IntelligencePanel({
   const onLockedResize = chromeLocks?.onLockedResize;
   const onLockedCreate = chromeLocks?.onLockedCreate;
   const { user } = useTenant();
-  const { status } = useAiStatus();
+  const { status } = useAiStatus({ enabled: panelOpen });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const isMobile = useIsMobile();
   const { resolvedTheme } = useTheme();

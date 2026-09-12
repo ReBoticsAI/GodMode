@@ -1,4 +1,8 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import {
+  memo,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -570,7 +574,7 @@ function textAnchorY(glyph: GraphGlyphKey): number {
   }
 }
 
-export function GraphNodeGlyph({
+function GraphNodeGlyphInner({
   kind,
   label,
   nodeId,
@@ -618,17 +622,20 @@ export function GraphNodeGlyph({
   const display = fitLabel(label, 18);
   const fontSize = labelFontSize(display);
   const ty = textAnchorY(glyph);
-  const glow = selected
-    ? isLight
-      ? `drop-shadow(0 2px 10px ${color}66)`
-      : `drop-shadow(0 0 12px ${color}cc)`
-    : adjacent
-      ? isLight
-        ? `drop-shadow(0 2px 8px ${color}44)`
-        : `drop-shadow(0 0 8px ${color}88)`
-      : isLight
-        ? `drop-shadow(0 4px 10px rgb(15 23 42 / 0.18))`
-        : `drop-shadow(0 6px 14px ${color}55)`;
+  // CSS filter:drop-shadow on every glyph is a major paint cost under Html
+  // overlays (recomposited on every camera move). Prefer a cheap SVG ring.
+  const ring =
+    selected || adjacent ? (
+      <circle
+        cx="60"
+        cy="60"
+        r="56"
+        fill="none"
+        stroke={color}
+        strokeWidth={selected ? 4 : 2.5}
+        opacity={selected ? 0.95 : 0.55}
+      />
+    ) : null;
 
   return (
     <div
@@ -638,12 +645,11 @@ export function GraphNodeGlyph({
       <button
         type="button"
         className={cn(
-          "relative block size-full cursor-pointer border-0 bg-transparent p-0 outline-none transition-transform",
-          selected ? "scale-110" : "hover:scale-105",
-          muted ? "opacity-75" : "opacity-100",
+          "relative block size-full cursor-pointer border-0 bg-transparent p-0 outline-none",
+          selected ? "scale-110" : null,
+          muted ? "opacity-70" : "opacity-100",
           className
         )}
-        style={{ filter: glow }}
         {...buttonProps}
       >
         <svg
@@ -653,6 +659,7 @@ export function GraphNodeGlyph({
           aria-hidden
           className="pointer-events-none block"
         >
+          {ring}
           <GlyphShape glyph={glyph} color={color} ink={ink} />
           <text
             x="60"
@@ -714,5 +721,8 @@ export function GraphNodeGlyph({
     </div>
   );
 }
+
+/** Memoized: parent Html LOD swaps should not redraw unchanged glyphs. */
+export const GraphNodeGlyph = memo(GraphNodeGlyphInner);
 
 export { graphKindColor, graphNodeColor } from "@/lib/graph-node-style";

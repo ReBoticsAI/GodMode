@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, invalidate } from "@react-three/fiber";
 import { CameraControls, CameraControlsImpl, Html, Line } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
@@ -25,26 +25,32 @@ const SCENE_BG_DARK = "#0a0a0b";
 const SCENE_BG_LIGHT = "#f4f4f5";
 
 /**
- * Default land:
- * - Expand You's Life + Vault; keep other agent Life/Vault mirrors collapsed
- *   (Intelligence, Research, Ops).
- * - Expand Support / Shared side trees.
- * - Marketplace: only Official open to full depth (Packs + Connectors).
- * - Workspaces: only Personal open to full depth.
+ * Default land (perf-first):
+ * - Spine hubs visible (You, Intelligence, Hub, Research, Ops + chats).
+ * - Life / Vault trees, platform ray branches, and Workspaces collapsed.
+ *   Expand to explore. Cuts Html overlay count for smoother pan/zoom.
  */
 const DEFAULT_COLLAPSED_IDS = [
+  "hub:life-you",
   "hub:life-intelligence",
-  "hub:vault-intelligence",
   "hub:life-research",
-  "hub:vault-research",
   "hub:life-ops",
+  "hub:vault-you",
+  "hub:vault-intelligence",
+  "hub:vault-research",
   "hub:vault-ops",
+  "hub:workspace",
   "hub:ws-project-alpha",
   "hub:ws-family",
+  "hub:ws-personal",
+  "hub:support",
+  "hub:shared",
+  "hub:marketplace",
   "hub:marketplace-community",
   "hub:marketplace-local",
   "hub:marketplace-installed",
   "hub:marketplace-sell",
+  "hub:marketplace-official",
 ] as const;
 
 /** Exclusive Life trees: only one owner Life open at a time. */
@@ -171,6 +177,11 @@ function hiddenDescendantIds(
   return hidden;
 }
 
+/** Shared proxy / hit geometries (avoid per-node SphereGeometry alloc). */
+const PROXY_GEO = new THREE.SphereGeometry(0.22, 8, 8);
+const PROXY_GEO_FOCUS = new THREE.SphereGeometry(0.3, 8, 8);
+const HIT_GEO = new THREE.SphereGeometry(0.42, 6, 6);
+
 function KeyboardTruck({
   controlsRef,
   enabled,
@@ -178,6 +189,7 @@ function KeyboardTruck({
   controlsRef: React.RefObject<CameraControlsImpl | null>;
   enabled: boolean;
 }) {
+  const invalidate = useThree((s) => s.invalidate);
   const pressed = useRef({
     w: false,
     a: false,
@@ -210,6 +222,7 @@ function KeyboardTruck({
     const onDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
       setKey(e.key, true);
+      invalidate();
     };
     const onUp = (e: KeyboardEvent) => setKey(e.key, false);
     window.addEventListener("keydown", onDown);
@@ -218,20 +231,22 @@ function KeyboardTruck({
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup", onUp);
     };
-  }, []);
+  }, [invalidate]);
 
   useFrame((_, dt) => {
     if (!enabled) return;
     const c = controlsRef.current;
     if (!c) return;
-    const speed = 2.4 * dt;
     const p = pressed.current;
+    if (!(p.a || p.d || p.w || p.s || p.q || p.e)) return;
+    const speed = 2.4 * dt;
     if (p.a) c.truck(-speed, 0, false);
     if (p.d) c.truck(speed, 0, false);
     if (p.w) c.forward(speed, false);
     if (p.s) c.forward(-speed, false);
     if (p.q) c.elevate(-speed, false);
     if (p.e) c.elevate(speed, false);
+    invalidate();
   });
 
   return null;
@@ -245,6 +260,7 @@ function NodeGlyph({
   adjacent,
   collapsed,
   collapsible,
+  showHtml,
   onSelect,
   onActivate,
   onToggleCollapse,
@@ -258,6 +274,7 @@ function NodeGlyph({
   adjacent: boolean;
   collapsed: boolean;
   collapsible: boolean;
+  showHtml: boolean;
   onSelect: (node: GraphProjectionNode) => void;
   onActivate: (node: GraphProjectionNode) => void;
   onToggleCollapse: (nodeId: string) => void;
@@ -283,6 +300,7 @@ function NodeGlyph({
     const alt = Boolean(e.altKey ?? e.nativeEvent?.altKey);
     onSelect(node);
     if (alt && collapsible) onToggleCollapse(node.id);
+    invalidate();
   };
 
   const onPointerDown = (e: {
@@ -300,6 +318,7 @@ function NodeGlyph({
     if (!dragging.current) return;
     dragging.current = false;
     setCameraEnabled(true);
+    invalidate();
   };
 
   const onPointerMove = (e: {
@@ -318,12 +337,14 @@ function NodeGlyph({
       y: -e.movementY * scale,
       z: 0,
     });
+    invalidate();
   };
 
   return (
     <group position={[position.x, position.y, position.z]}>
       <mesh
-        visible={false}
+        visible={!showHtml}
+        geometry={selected || adjacent ? PROXY_GEO_FOCUS : PROXY_GEO}
         onClick={handleSelect}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -334,69 +355,136 @@ function NodeGlyph({
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerUp}
       >
-        <sphereGeometry args={[0.42, 8, 8]} />
-        <meshBasicMaterial />
-      </mesh>
-      <Html
-        center
-        sprite
-        distanceFactor={distanceFactor}
-        zIndexRange={[100, 0]}
-        style={{ pointerEvents: "auto" }}
-      >
-        <GraphNodeGlyph
-          kind={node.kind}
-          nodeId={node.id}
-          objectType={node.objectType}
+        <meshBasicMaterial
           color={color}
-          label={node.label}
-          selected={selected}
-          adjacent={adjacent}
-          muted={!selected && !adjacent && !primary}
-          attention={Boolean(node.status?.attention)}
-          collapsible={collapsible}
-          collapsed={collapsed}
-          onToggleCollapse={() => onToggleCollapse(node.id)}
-          aria-label={`${node.kind}: ${node.label}${collapsed ? " (collapsed)" : ""}`}
-          onClick={handleSelect}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            onActivate(node);
-          }}
-          onPointerDown={(e) => {
-            if (!e.shiftKey) return;
-            e.stopPropagation();
-            dragging.current = true;
-            setCameraEnabled(false);
-          }}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
-          onPointerMove={(e) => {
-            if (!dragging.current) return;
-            e.stopPropagation();
-            const dist = camera.position.distanceTo(
-              new THREE.Vector3(position.x, position.y, position.z)
-            );
-            const scale = (dist * 0.0025) / Math.max(size.height / 900, 0.5);
-            onNudge(node.id, {
-              x: e.movementX * scale,
-              y: -e.movementY * scale,
-              z: 0,
-            });
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onActivate(node);
-            }
-            if ((e.key === "c" || e.key === "C") && collapsible) {
-              e.preventDefault();
-              onToggleCollapse(node.id);
-            }
-          }}
+          transparent
+          opacity={selected ? 1 : adjacent ? 0.92 : 0.78}
+          depthWrite={false}
         />
-      </Html>
+      </mesh>
+      {showHtml ? (
+        <>
+          <mesh
+            visible={false}
+            geometry={HIT_GEO}
+            onClick={handleSelect}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              onActivate(node);
+            }}
+            onPointerDown={onPointerDown}
+            onPointerUp={onPointerUp}
+            onPointerMove={onPointerMove}
+            onPointerLeave={onPointerUp}
+          >
+            <meshBasicMaterial />
+          </mesh>
+          <Html
+            center
+            sprite
+            transform={false}
+            occlude={false}
+            distanceFactor={distanceFactor}
+            zIndexRange={[100, 0]}
+            style={{ pointerEvents: "auto", willChange: "transform" }}
+          >
+            <GraphNodeGlyph
+              kind={node.kind}
+              nodeId={node.id}
+              objectType={node.objectType}
+              color={color}
+              label={node.label}
+              selected={selected}
+              adjacent={adjacent}
+              muted={!selected && !adjacent && !primary}
+              attention={Boolean(node.status?.attention)}
+              collapsible={collapsible}
+              collapsed={collapsed}
+              onToggleCollapse={() => onToggleCollapse(node.id)}
+              aria-label={`${node.kind}: ${node.label}${collapsed ? " (collapsed)" : ""}`}
+              onClick={handleSelect}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onActivate(node);
+              }}
+              onPointerDown={(e) => {
+                if (!e.shiftKey) return;
+                e.stopPropagation();
+                dragging.current = true;
+                setCameraEnabled(false);
+              }}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
+              onPointerMove={(e) => {
+                if (!dragging.current) return;
+                e.stopPropagation();
+                const dist = camera.position.distanceTo(
+                  new THREE.Vector3(position.x, position.y, position.z)
+                );
+                const scale = (dist * 0.0025) / Math.max(size.height / 900, 0.5);
+                onNudge(node.id, {
+                  x: e.movementX * scale,
+                  y: -e.movementY * scale,
+                  z: 0,
+                });
+                invalidate();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onActivate(node);
+                }
+                if ((e.key === "c" || e.key === "C") && collapsible) {
+                  e.preventDefault();
+                  onToggleCollapse(node.id);
+                }
+              }}
+            />
+          </Html>
+        </>
+      ) : null}
     </group>
+  );
+}
+
+/** One LineSegments draw for all non-highlighted edges (far cheaper than N Lines). */
+function EdgeBatch({
+  edges,
+  positions,
+  isLight,
+}: {
+  edges: Array<{ source: string; target: string }>;
+  positions: Map<string, Vec3>;
+  isLight: boolean;
+}) {
+  const geom = useMemo(() => {
+    const positionsArr: number[] = [];
+    for (const e of edges) {
+      const a = positions.get(e.source);
+      const b = positions.get(e.target);
+      if (!a || !b) continue;
+      positionsArr.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positionsArr, 3)
+    );
+    return g;
+  }, [edges, positions]);
+
+  useEffect(() => () => geom.dispose(), [geom]);
+
+  if (geom.getAttribute("position").count === 0) return null;
+  return (
+    <lineSegments geometry={geom}>
+      <lineBasicMaterial
+        color={isLight ? "#94a3b8" : "#64748b"}
+        transparent
+        opacity={isLight ? 0.7 : 0.55}
+        depthWrite={false}
+      />
+    </lineSegments>
   );
 }
 
@@ -441,6 +529,8 @@ function EdgeLine({
     />
   );
 }
+
+const _lodTmp = new THREE.Vector3();
 
 function SceneBody({
   projection,
@@ -528,10 +618,84 @@ function SceneBody({
     return s;
   }, [projection.edges]);
 
+  /**
+   * Cap expensive DOM Html overlays; far / off-focus nodes use colored mesh
+   * proxies. Default collapsed land is ~18 nodes: keep that fully glyph so
+   * land never reads as random colored circles. Mesh LOD only kicks in when
+   * expanded trees push past the budget.
+   */
+  const [htmlIds, setHtmlIds] = useState<Set<string>>(() => new Set());
+  const htmlIdsRef = useRef(htmlIds);
+  htmlIdsRef.current = htmlIds;
+  const htmlTick = useRef(0);
+  const { camera } = useThree();
+  useFrame(() => {
+    htmlTick.current += 1;
+    const c = controlsRef.current;
+    if (c?.active) invalidate();
+    // Seed immediately while empty; otherwise LOD every ~8 frames.
+    const seed = htmlIdsRef.current.size === 0;
+    if (!seed && htmlTick.current % 8 !== 0) return;
+
+    // Covers default land (~18) with headroom; mesh proxies only when expanded.
+    const maxHtml = lowPower ? 22 : 28;
+    const maxDist = lowPower ? 12 : 18;
+    const scored: Array<{ id: string; dist: number; force: boolean }> = [];
+    for (const n of visibleNodes) {
+      const p = positions.get(n.id) ?? { x: 0, y: 0, z: 0 };
+      const dist = camera.position.distanceTo(_lodTmp.set(p.x, p.y, p.z));
+      const force = n.id === selectedId || adjacentIds.has(n.id);
+      scored.push({ id: n.id, dist, force });
+    }
+
+    let next: Set<string>;
+    if (visibleNodes.length <= maxHtml) {
+      next = new Set(visibleNodes.map((n) => n.id));
+    } else {
+      scored.sort((a, b) => {
+        if (a.force !== b.force) return a.force ? -1 : 1;
+        return a.dist - b.dist;
+      });
+      next = new Set<string>();
+      for (const s of scored) {
+        if (next.size >= maxHtml) break;
+        if (s.force || s.dist <= maxDist) {
+          next.add(s.id);
+        }
+      }
+      // Guarantee selection / adjacency even if somehow skipped above.
+      if (selectedId) next.add(selectedId);
+      for (const id of adjacentIds) {
+        if (next.size >= maxHtml) break;
+        next.add(id);
+      }
+    }
+
+    const prev = htmlIdsRef.current;
+    let changed = next.size !== prev.size;
+    if (!changed) {
+      for (const id of next) {
+        if (!prev.has(id)) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) {
+      setHtmlIds(next);
+      invalidate();
+    }
+  });
+
   const didFit = useRef(false);
   useEffect(() => {
     didFit.current = false;
+    invalidate();
   }, [projection.focusId, projection.nodes.length]);
+
+  useEffect(() => {
+    invalidate();
+  }, [selectedId, collapsedIds, visibleNodes.length]);
 
   useEffect(() => {
     if (didFit.current) return;
@@ -559,6 +723,32 @@ function SceneBody({
     c.enabled = cameraEnabled;
   }, [cameraEnabled, controlsRef]);
 
+  const dimEdges = useMemo(
+    () =>
+      visibleEdges.filter(
+        (e) =>
+          !(
+            Boolean(selectedId) &&
+            (e.source === selectedId ||
+              e.target === selectedId ||
+              (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
+          )
+      ),
+    [visibleEdges, selectedId, adjacentIds]
+  );
+
+  const hiEdges = useMemo(
+    () =>
+      visibleEdges.filter(
+        (e) =>
+          Boolean(selectedId) &&
+          (e.source === selectedId ||
+            e.target === selectedId ||
+            (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
+      ),
+    [visibleEdges, selectedId, adjacentIds]
+  );
+
   return (
     <>
       <color attach="background" args={[background]} />
@@ -571,7 +761,7 @@ function SceneBody({
         maxDistance={48}
         dollySpeed={0.85}
         truckSpeed={1.4}
-        draggingSmoothTime={0.12}
+        draggingSmoothTime={0.08}
         mouseButtons={{
           left: CameraControlsImpl.ACTION.TRUCK,
           middle: CameraControlsImpl.ACTION.DOLLY,
@@ -585,19 +775,15 @@ function SceneBody({
         }}
       />
       <KeyboardTruck controlsRef={controlsRef} enabled={cameraEnabled} />
-      {visibleEdges.map((e) => (
+      <EdgeBatch edges={dimEdges} positions={positions} isLight={isLight} />
+      {hiEdges.map((e) => (
         <EdgeLine
           key={e.id}
           source={e.source}
           target={e.target}
           positions={positions}
           isLight={isLight}
-          highlighted={
-            Boolean(selectedId) &&
-            (e.source === selectedId ||
-              e.target === selectedId ||
-              (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
-          }
+          highlighted
         />
       ))}
       {visibleNodes.map((n) => (
@@ -610,6 +796,7 @@ function SceneBody({
           adjacent={adjacentIds.has(n.id)}
           collapsed={collapsedIds.has(n.id)}
           collapsible={collapsibleIds.has(n.id)}
+          showHtml={htmlIds.has(n.id)}
           onSelect={onSelect}
           onActivate={onActivate}
           onToggleCollapse={onToggleCollapse}
@@ -832,11 +1019,22 @@ export const GraphScene3D = forwardRef<
 
   return (
     <Canvas
-      dpr={lowPower ? [1, 1.25] : [1, 1.75]}
+      frameloop="demand"
+      dpr={lowPower ? [1, 1] : [1, 1.25]}
       camera={{ position: [DEFAULT_EYE.x, DEFAULT_EYE.y, DEFAULT_EYE.z], fov: 50 }}
-      gl={{ antialias: !lowPower, powerPreference: "default" }}
+      gl={{
+        antialias: !lowPower,
+        powerPreference: "high-performance",
+        alpha: false,
+        stencil: false,
+        depth: true,
+      }}
+      performance={{ min: 0.5 }}
       className="h-full w-full"
-      onPointerMissed={() => setSelectedId(null)}
+      onPointerMissed={() => {
+        setSelectedId(null);
+        invalidate();
+      }}
     >
       <SceneBody
         projection={projection}

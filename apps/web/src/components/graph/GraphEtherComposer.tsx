@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { SendIcon } from "lucide-react";
 import { streamAiChat } from "@/api";
 import {
@@ -32,8 +38,15 @@ function formatTime(at: number): string {
 /**
  * Transparent graph chatroom: full-height left ether log + faint composer.
  * Does not open the floating Chat window.
+ * `composerTrailing` sits on the same row as the message box (theme, chat hide, etc.).
  */
-export function GraphEtherComposer({ className }: { className?: string }) {
+export function GraphEtherComposer({
+  className,
+  composerTrailing,
+}: {
+  className?: string;
+  composerTrailing?: ReactNode;
+}) {
   const { activeAgentId } = useIntelligence();
   const [draft, setDraft] = useState("");
   const [lines, setLines] = useState<EtherLine[]>([]);
@@ -187,34 +200,41 @@ export function GraphEtherComposer({ className }: { className?: string }) {
         </div>
       </div>
 
-      <InputGroup className="h-9 shrink-0 border-border/30 bg-transparent shadow-none dark:bg-transparent">
-        <InputGroupInput
-          className="bg-transparent text-sm text-foreground/90 placeholder:text-foreground/40"
-          placeholder="Message Intelligence…"
-          value={draft}
-          disabled={busy}
-          aria-label="Graph chat composer"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            disabled={busy || !draft.trim()}
-            aria-label="Send message"
-            onClick={send}
-          >
-            <SendIcon className="opacity-70" />
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
+      <div className="flex shrink-0 items-center gap-2">
+        <InputGroup className="h-9 min-w-0 flex-1 border-border/30 bg-transparent shadow-none dark:bg-transparent">
+          <InputGroupInput
+            className="bg-transparent text-sm text-foreground/90 placeholder:text-foreground/40"
+            placeholder="Message Intelligence…"
+            value={draft}
+            disabled={busy}
+            aria-label="Graph chat composer"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={busy || !draft.trim()}
+              aria-label="Send message"
+              onClick={send}
+            >
+              <SendIcon className="opacity-70" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        {composerTrailing ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {composerTrailing}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
