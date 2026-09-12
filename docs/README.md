@@ -23,6 +23,7 @@ Documentation for installing, using, and extending GodMode.
 | [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) | Community plugin runtime sandbox design (grants vs child process) |
 | [DATA_ISOLATION.md](DATA_ISOLATION.md) | Graph-first map + SQLite shards, Data Router, per-user box ladder (#777) |
 | [ROADMAP_GRAPH_ISOLATION.md](ROADMAP_GRAPH_ISOLATION.md) | Near-term working order: Graph WIP then #779→#781 (local) |
+| [STATE_GRAPH_ISOLATION.md](STATE_GRAPH_ISOLATION.md) | Truth snapshot: map ≠ storage ≠ compute (as of PR #788) |
 | [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md) | Marketplace Terms (chargebacks, fees, digital goods) |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
