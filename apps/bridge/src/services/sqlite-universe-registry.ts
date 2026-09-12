@@ -54,14 +54,14 @@ export function getRegistryDb(): Database.Database {
   `);
   // Older pilots had UNIQUE(relative_path); vault slots share a vault file path.
   migrateUniverseEntriesDropPathUnique(registryDb);
-  // Ensure heart entry + file exist (ops/logs SoR; no user chat bodies).
+  // Hub (Bridge) ops/logs SoR; on-disk path stays heart/ until a dual-read migration.
   upsertUniverseEntry({
     id: "heart:bridge",
     kind: "heart",
     relativePath: "heart/bridge.sqlite",
     ownerKind: "system",
     ownerId: "bridge",
-    label: "Heart",
+    label: "Hub",
   });
   prepareOpenSet(["heart/bridge.sqlite"]);
   return registryDb;
@@ -196,7 +196,7 @@ export function listUniverseManifest(): Array<
   });
 }
 
-/** Ensure Human User actor file (Phase 3/4 pilot). */
+/** Ensure You (User) actor file (Phase 3/4 pilot). */
 export function ensureUserUniverseFile(opts: {
   userId: string;
   label?: string;

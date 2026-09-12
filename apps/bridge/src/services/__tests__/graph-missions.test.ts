@@ -49,7 +49,7 @@ describe("graph-missions", () => {
     ensureGraphLeaderboardTables(cloud);
 
     const first = completeGraphMission({
-      missionId: "heart.check",
+      missionId: "hub.check",
       userId: "user-1",
       displayName: "Dane",
       cloudDb: cloud,
@@ -59,7 +59,7 @@ describe("graph-missions", () => {
     expect(first.pointsAwarded).toBeGreaterThan(0);
 
     const second = completeGraphMission({
-      missionId: "heart.check",
+      missionId: "hub.check",
       userId: "user-1",
       displayName: "Dane",
       cloudDb: cloud,
@@ -76,7 +76,7 @@ describe("graph-missions", () => {
 
     const status = getGraphMissionsStatus({ userId: "user-1" });
     expect(status.attentionByNode["hub:heart"]).toBeUndefined();
-    expect(status.missions.find((m) => m.id === "heart.check")?.done).toBe(
+    expect(status.missions.find((m) => m.id === "hub.check")?.done).toBe(
       true
     );
     expect(status.scoreByNode["hub:heart"]?.earned).toBe(first.pointsAwarded);

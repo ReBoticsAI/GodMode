@@ -78,7 +78,7 @@ describe("graph-node-style", () => {
     expect(Math.abs(a.h - root.h)).toBeLessThan(30);
   });
 
-  it("gives Life, Vault, Heart, Support distinct glyphs", () => {
+  it("gives Life, Vault, Hub, Support distinct glyphs", () => {
     expect(
       resolveGraphGlyphKey({
         kind: "system",
@@ -97,7 +97,7 @@ describe("graph-node-style", () => {
       resolveGraphGlyphKey({
         kind: "system",
         objectType: "BridgeConnection",
-        label: "Heart",
+        label: "Hub",
       })
     ).toBe("heart");
     expect(

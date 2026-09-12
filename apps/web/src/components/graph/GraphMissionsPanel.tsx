@@ -25,7 +25,7 @@ import { toast } from "sonner";
 const NODE_LABELS: Record<string, string> = {
   "hub:you": "You",
   "hub:intelligence": "Intelligence",
-  "hub:heart": "Heart",
+  "hub:heart": "Hub",
   "hub:vault-you": "User Vault",
   "hub:vault-intelligence": "Intelligence Vault",
   "hub:workspace": "Workspaces",

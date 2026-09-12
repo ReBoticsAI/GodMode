@@ -67,6 +67,12 @@ function openUserScoreDb(userId: string): Database.Database {
   return db;
 }
 
+/** Normalize legacy Heart mission completion rows to Hub ids. */
+function canonicalizeMissionId(missionId: string): string {
+  if (missionId === "heart.check") return "hub.check";
+  return missionId;
+}
+
 function readLocalCompletions(userId: string): Map<string, { points: number; completedAt: string }> {
   const db = openUserScoreDb(userId);
   try {
@@ -77,7 +83,7 @@ function readLocalCompletions(userId: string): Map<string, { points: number; com
       .all() as Array<{ mission_id: string; points: number; completed_at: string }>;
     return new Map(
       rows.map((r) => [
-        r.mission_id,
+        canonicalizeMissionId(r.mission_id),
         { points: r.points, completedAt: r.completed_at },
       ])
     );

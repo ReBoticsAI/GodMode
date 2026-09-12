@@ -1,6 +1,6 @@
 # Graph missions
 
-Gamified attention loop on The Graph. Nodes with open missions show a notification dot. Humans visit a node, finish the mission work, then claim points. Scores publish to a **global leaderboard on GodMode Cloud**.
+Gamified attention loop on The Graph. Nodes with open missions show a notification dot. You visit a node, finish the mission work, then claim points. Scores publish to a **global leaderboard on GodMode Cloud**.
 
 ## Rules
 
@@ -16,7 +16,7 @@ Gamified attention loop on The Graph. Nodes with open missions show a notificati
 |-------|--------|--------|
 | Mission defs | Code catalog (`graph-missions-catalog.ts`) | Titles, predicates, base points |
 | Local score | `sqlite-universe/actors/users/<userId>.sqlite` | Completions + total |
-| Global board | Cloud `graph_leaderboard_scores` / `graph_leaderboard_events` | Ranked Humans |
+| Global board | Cloud `graph_leaderboard_scores` / `graph_leaderboard_events` | Ranked users (display name) |
 
 Missions are not memories. Memories are Knowledge facts. Mission completions are score ledger rows. Registry path links remain structural.
 
@@ -40,4 +40,4 @@ Architecture projection adds safe `status.attention` / `attentionCount` for glyp
 
 ## MVP missions
 
-Claim You, Connect LLM keys, Open User Vault, Meet Intelligence, Open Structure, Open Knowledge, Heart check.
+Claim You, Connect LLM keys, Open User Vault, Meet Intelligence, Open Structure, Open Knowledge, Hub check.

@@ -3,7 +3,7 @@
  * 1. Icon is resolved from objectType / role first, then kind. Two hubs must
  *    not share a silhouette just because both are kind "system".
  * 2. Colors belong to a role family (Person = green, Agent = purple,
- *    Chat = bright yellow, Life / Vault / Heart each have their own family).
+ *    Chat = bright yellow, Life / Vault / Hub each have their own family).
  *    Each instance is a shade of that family.
  * 3. Child shades are derivatives of their parent.
  */
@@ -144,7 +144,7 @@ export type GraphGlyphInput = {
 
 /**
  * Pick a unique silhouette for this node. objectType / label / id win over
- * bare kind so Life, Vault, Heart, Support are not all the system hex.
+ * bare kind so Life, Vault, Hub, Support are not all the system hex.
  */
 export function resolveGraphGlyphKey(input: GraphGlyphInput): GraphGlyphKey {
   const ot = (input.objectType ?? "").trim();

@@ -94,10 +94,10 @@ export function listGraphMissionDefs(): GraphMissionDef[] {
       basePoints: 12,
     },
     {
-      id: "heart.check",
+      id: "hub.check",
       nodeId: "hub:heart",
-      title: "Heart check",
-      description: "Confirm Heart (Bridge) is reachable and acknowledge the runtime hub.",
+      title: "Hub check",
+      description: "Confirm Hub (Bridge) is reachable and acknowledge the runtime hub.",
       kind: "confirm",
       completeWhen: "bridge_ok",
       basePoints: 8,
@@ -105,8 +105,14 @@ export function listGraphMissionDefs(): GraphMissionDef[] {
   ];
 }
 
+/** Legacy mission ids remapped after Heart → Hub rename. */
+const MISSION_ID_ALIASES: Record<string, string> = {
+  "heart.check": "hub.check",
+};
+
 export function getGraphMissionDef(id: string): GraphMissionDef | undefined {
-  return listGraphMissionDefs().find((m) => m.id === id);
+  const canonical = MISSION_ID_ALIASES[id] ?? id;
+  return listGraphMissionDefs().find((m) => m.id === canonical);
 }
 
 /** Outbound edge count + unique child targets for a catalog node. */

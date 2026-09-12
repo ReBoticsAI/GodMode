@@ -5,11 +5,12 @@ This document defines how the GodMode platform partitions data, routes requests,
 Target compute and finer data isolation (GodMode Cloud platform, per-user
 runtime box on the shared VPS, one disposable job throwaway, Data Router /
 SQLite shards): [DATA_ISOLATION.md](DATA_ISOLATION.md)
-([#777](https://github.com/ReBoticsAI/GodMode/issues/777)). This file remains the
-source of truth for storage planes that ship today; see DATA_ISOLATION for
-where those planes live relative to the user box.
+([#777](https://github.com/ReBoticsAI/GodMode/issues/777)). The Graph is the
+user-facing map of that instance ([SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md)).
+This file remains the source of truth for storage planes that ship today; see
+DATA_ISOLATION for where those planes live relative to the user box.
 
-> **Target storage** is the [SQLite universe](./SQLITE_UNIVERSE.md): one file per actor, chat thread, vault, Heart, and surface, plus `registry.sqlite`. The planes below are the **current** production layout until each plane is migrated.
+> **Target storage** is the [SQLite universe](./SQLITE_UNIVERSE.md): one file per actor, chat thread, vault, Hub, and surface, plus `registry.sqlite`. The planes below are the **current** production layout until each plane is migrated.
 
 ## Storage planes (Cloud + Users + User + Workspace)
 
