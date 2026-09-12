@@ -94,9 +94,11 @@ export const KIND_COLOR_FAMILY: Record<GraphNodeKindId, KindColorFamily> = {
 
 /** Role / objectType color families (hubs must not all share "system" gray). */
 export const ROLE_COLOR_FAMILY: Record<string, KindColorFamily> = {
-  LifeSurface: { h: 140, s: 72, lMin: 40, lMax: 58, canonical: "#4ade80" },
+  /** Life surfaces: red (heart / vital). */
+  LifeSurface: { h: 350, s: 78, lMin: 48, lMax: 64, canonical: "#f43f5e" },
   VaultSecret: { h: 45, s: 88, lMin: 42, lMax: 58, canonical: "#f59e0b" },
-  BridgeConnection: { h: 350, s: 78, lMin: 48, lMax: 64, canonical: "#f43f5e" },
+  /** Hub (Bridge): green. */
+  BridgeConnection: { h: 140, s: 72, lMin: 40, lMax: 58, canonical: "#4ade80" },
   Support: { h: 190, s: 78, lMin: 45, lMax: 62, canonical: "#22d3ee" },
   SharedSurface: { h: 250, s: 70, lMin: 52, lMax: 68, canonical: "#818cf8" },
   Marketplace: { h: 285, s: 72, lMin: 52, lMax: 68, canonical: "#c084fc" },

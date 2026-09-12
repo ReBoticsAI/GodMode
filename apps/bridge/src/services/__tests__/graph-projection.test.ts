@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { buildArchitectureProjection, buildGraphProjection } from "../graph-projection.js";
+import { buildArchitectureProjection, buildGraphProjection, chatParentHubId } from "../graph-projection.js";
 import { ensureChatUnlockTables } from "../chat-unlock-schema.js";
 import type { AppDatabase } from "../../db.js";
 import type { CoreDatabase } from "../../core-db.js";
@@ -296,6 +296,99 @@ describe("graph-projection", () => {
     expect(proj.nodes.find((n) => n.id === "hub:chat-you")?.label).toBe(
       "Digital You"
     );
+  });
+
+  it("lays out live enrichment near catalog anchors (not chat-focus origin)", () => {
+    const tenant = memoryTenant();
+    const cloud = memoryCloud();
+    tenant
+      .prepare(
+        `INSERT INTO ai_workflows (id, agent_id, name) VALUES ('w1', 'intelligence', 'Flow')`
+      )
+      .run();
+    tenant
+      .prepare(
+        `INSERT INTO ai_chats (id, title, user_id, agent_id) VALUES
+          ('c-you', 'My notes', 'u1', 'digital-you'),
+          ('c-res', 'Research dig', 'u1', 'research')`
+      )
+      .run();
+    const proj = buildArchitectureProjection({
+      userId: "u1",
+      userLabel: "A",
+      tenantDb: tenant,
+      cloudDb: cloud,
+      enrichLiveNeighborhood: true,
+    });
+    const chatHub = proj.nodes.find((n) => n.id === "hub:chat-intelligence");
+    expect(chatHub?.position).toBeTruthy();
+    const liveIntel = proj.nodes.find(
+      (n) => n.id === "chat:c1" && n.status?.liveInstance
+    );
+    expect(liveIntel).toBeTruthy();
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.kind === "live-instance" &&
+          e.source === "hub:chat-intelligence" &&
+          e.target === "chat:c1"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.kind === "live-instance" &&
+          e.source === "hub:chat-you" &&
+          e.target === "chat:c-you"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.kind === "live-instance" &&
+          e.source === "hub:chat-agent-research" &&
+          e.target === "chat:c-res"
+      )
+    ).toBe(true);
+    const liveFlows = proj.nodes.filter(
+      (n) => n.kind === "workflow" && n.status?.liveInstance
+    );
+    expect(liveFlows.length).toBeGreaterThan(0);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.kind === "live-instance" &&
+          e.source === "hub:automations-intelligence"
+      )
+    ).toBe(true);
+    const toolSummary = proj.nodes.find((n) => n.id === "live:tools:intelligence");
+    expect(toolSummary?.label).toMatch(/tools \(\d+\)$/i);
+    expect(Number(toolSummary?.status?.toolCount)).toBeGreaterThan(0);
+    expect(proj.nodes.filter((n) => n.id.startsWith("tool:")).length).toBe(0);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.kind === "live-instance" &&
+          e.source === "hub:heart" &&
+          e.target === "live:tools:intelligence"
+      )
+    ).toBe(true);
+  });
+
+  it("maps chat agent_id to the correct Chat bubble hub", () => {
+    const ids = new Set([
+      "hub:chat-you",
+      "hub:chat-intelligence",
+      "hub:chat-agent-research",
+      "hub:chat-agent-ops",
+      "hub:chat-agent-builder",
+    ]);
+    expect(chatParentHubId("intelligence", ids)).toBe("hub:chat-intelligence");
+    expect(chatParentHubId("digital-you", ids)).toBe("hub:chat-you");
+    expect(chatParentHubId(null, ids)).toBe("hub:chat-you");
+    expect(chatParentHubId("research", ids)).toBe("hub:chat-agent-research");
+    expect(chatParentHubId("ops", ids)).toBe("hub:chat-agent-ops");
+    expect(chatParentHubId("builder", ids)).toBe("hub:chat-agent-builder");
   });
 
   it("ALTERs ai_chats.agent_id when the column is missing", () => {

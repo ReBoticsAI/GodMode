@@ -491,6 +491,384 @@ function slotConnected(hints: Set<string>, needles: string[]): boolean {
   return false;
 }
 
+/** Caps for live instances on the architecture map (keep catalog readable). */
+const LIVE_ARCH_CAPS: Partial<Record<GraphNodeKind, number>> = {
+  chat: 16, // total across parents; per-parent cap is LIVE_CHAT_PER_PARENT
+  workflow: 4,
+  page: 6,
+  skill: 4,
+  tool: 4,
+  schedule: 4,
+};
+
+/** Max live chats hung under a single Chat bubble. */
+const LIVE_CHAT_PER_PARENT = 4;
+
+type Vec3 = { x: number; y: number; z?: number };
+
+function catalogAnchor(
+  nodes: GraphProjectionNode[],
+  id: string,
+  fallback: Vec3
+): Vec3 {
+  const n = nodes.find((x) => x.id === id);
+  return n?.position ? { ...n.position } : fallback;
+}
+
+/**
+ * Chat bubble (or agent hub) that should own a live chat on the architecture map.
+ * Digital You / empty → hub:chat-you; platform agents → their chat hubs.
+ */
+export function chatParentHubId(
+  agentId: string | null | undefined,
+  catalogNodeIds: Set<string>
+): string {
+  const raw = (agentId ?? "").trim().toLowerCase();
+  const aid =
+    !raw || raw === "user" || raw === "digital-you" || raw === "you"
+      ? "digital-you"
+      : raw;
+
+  const byAgent: Record<string, string> = {
+    "digital-you": "hub:chat-you",
+    intelligence: "hub:chat-intelligence",
+    research: "hub:chat-agent-research",
+    ops: "hub:chat-agent-ops",
+    builder: "hub:chat-agent-builder",
+    coordinator: "hub:chat-agent-coordinator",
+  };
+
+  const preferred = byAgent[aid] ?? `hub:chat-agent-${aid}`;
+  if (catalogNodeIds.has(preferred)) return preferred;
+
+  const agentHub = `hub:agent-${aid}`;
+  if (aid !== "digital-you" && catalogNodeIds.has(agentHub)) return agentHub;
+
+  if (catalogNodeIds.has("hub:chat-you")) return "hub:chat-you";
+  return "hub:chat-intelligence";
+}
+
+/** Parent hub + bay direction for each live kind on the architecture map. */
+function liveArchPlacement(kind: GraphNodeKind): {
+  parentId: string;
+  /** Unit direction from parent into the live bay (catalog space). */
+  dir: Vec3;
+} {
+  switch (kind) {
+    case "chat":
+      return {
+        parentId: "hub:chat-intelligence",
+        dir: { x: -1, y: -0.35, z: 0.15 },
+      };
+    case "workflow":
+      return {
+        parentId: "hub:automations-intelligence",
+        dir: { x: -0.9, y: -0.5, z: -0.2 },
+      };
+    case "page":
+      return {
+        parentId: "hub:knowledge-intelligence",
+        dir: { x: 0.85, y: -0.55, z: -0.25 },
+      };
+    case "schedule":
+      return {
+        parentId: "hub:calendar-intelligence",
+        dir: { x: -0.7, y: -0.55, z: 0.35 },
+      };
+    case "skill":
+    case "tool":
+      return {
+        parentId: "hub:intelligence",
+        dir: { x: -1.1, y: 0.2, z: 0.55 },
+      };
+    default:
+      return {
+        parentId: "hub:intelligence",
+        dir: { x: -0.9, y: -0.4, z: 0.4 },
+      };
+  }
+}
+
+function liveBayPosition(anchor: Vec3, dir: Vec3, index: number): Vec3 {
+  const cols = 3;
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  const along = 1.15 + row * 0.85;
+  const side = (col - 1) * 0.7;
+  // Perpendicular in XY for a small grid beside the ray.
+  const px = -dir.y;
+  const py = dir.x;
+  return {
+    x: anchor.x + dir.x * along + px * side,
+    y: anchor.y + dir.y * along + py * side,
+    z: (anchor.z ?? 0) + (dir.z ?? 0) * along + (col - 1) * 0.2,
+  };
+}
+
+function mergeLiveNeighborhoodIntoArchitecture(opts: {
+  nodes: GraphProjectionNode[];
+  edges: GraphProjectionEdge[];
+  seenN: Set<string>;
+  seenE: Set<string>;
+  tenantDb: AppDatabase;
+  userId: string;
+  userLabel?: string;
+  cloudDb?: CoreDatabase;
+}): void {
+  const db = opts.tenantDb;
+  ensureAiChatsAgentId(db);
+
+  const catalogIds = new Set(opts.nodes.map((n) => n.id));
+  const chatDir = liveArchPlacement("chat").dir;
+  const FALLBACK: Vec3 = { x: -2, y: 2, z: 0 };
+
+  let focusChatId = "session-local";
+  const recentChats: Array<{
+    id: string;
+    title: string | null;
+    agentId: string | null;
+  }> = [];
+  try {
+    if (tableExists(db, "ai_chats")) {
+      const hasAgent = columnExists(db, "ai_chats", "agent_id");
+      const rows = hasAgent
+        ? (db
+            .prepare(
+              `SELECT id, title, agent_id AS agentId FROM ai_chats
+               ORDER BY updated_at DESC
+               LIMIT ?`
+            )
+            .all(24) as Array<{
+            id: string;
+            title: string | null;
+            agentId: string | null;
+          }>)
+        : (
+            db
+              .prepare(
+                `SELECT id, title FROM ai_chats
+                 ORDER BY updated_at DESC
+                 LIMIT ?`
+              )
+              .all(24) as Array<{ id: string; title: string | null }>
+          ).map((r) => ({ ...r, agentId: "intelligence" as string | null }));
+      for (const r of rows) {
+        if (r.id && r.id !== "session-local") {
+          recentChats.push({
+            id: r.id,
+            title: r.title,
+            agentId: r.agentId,
+          });
+        }
+      }
+      if (recentChats[0]) focusChatId = recentChats[0].id;
+    }
+  } catch {
+    /* optional */
+  }
+
+  const live = buildGraphProjection({
+    tenantDb: db,
+    focusType: focusChatId !== "session-local" ? "chat" : "agent",
+    focusId: focusChatId !== "session-local" ? focusChatId : "intelligence",
+    userId: opts.userId,
+    userLabel: opts.userLabel,
+    cloudDb: opts.cloudDb,
+  });
+
+  // Live chats: place under the owning agent's Chat bubble (Phase A / #789).
+  const chatsPerParent = new Map<string, number>();
+  let chatTotal = 0;
+  const chatCapTotal = LIVE_ARCH_CAPS.chat ?? 16;
+
+  for (const c of recentChats) {
+    if (chatTotal >= chatCapTotal) break;
+    const parentId = chatParentHubId(c.agentId, catalogIds);
+    const used = chatsPerParent.get(parentId) ?? 0;
+    if (used >= LIVE_CHAT_PER_PARENT) continue;
+
+    const anchor = catalogAnchor(opts.nodes, parentId, FALLBACK);
+    const position = liveBayPosition(anchor, chatDir, used);
+    const nid = `chat:${c.id}`;
+
+    if (
+      !pushNode(opts.nodes, opts.seenN, {
+        id: nid,
+        kind: "chat",
+        label: (c.title || "Chat").slice(0, 48),
+        objectType: "ChatSession",
+        refId: c.id,
+        position,
+        description: undefined,
+        securityNote: "Live workspace chat. Open Chat for message bodies.",
+        connectionLabels: [parentId.replace(/^hub:/, "")],
+        ctaLabel: "Open chat",
+        cta: { type: "open_chat" },
+        openImmediate: true,
+        status: {
+          liveInstance: true,
+          ownerAgent: (c.agentId ?? "digital-you").trim() || "digital-you",
+        },
+      })
+    ) {
+      continue;
+    }
+
+    pushEdge(opts.edges, opts.seenE, {
+      id: `edge:live:${parentId}:${nid}`,
+      source: parentId,
+      target: nid,
+      kind: "live-instance",
+    });
+    chatsPerParent.set(parentId, used + 1);
+    chatTotal += 1;
+  }
+
+  // Non-chat live kinds (workflows, pages, …) keep Intelligence-side bays for now.
+  const candidates: GraphProjectionNode[] = [];
+  for (const n of live.nodes) {
+    if (n.kind === "memory" || n.kind === "user" || n.kind === "agent") continue;
+    if (n.kind === "chat") continue;
+    if (n.kind === "tool" || n.kind === "skill") continue;
+    if (candidates.some((c) => c.id === n.id)) continue;
+    candidates.push(n);
+  }
+
+  const counts: Partial<Record<GraphNodeKind, number>> = {};
+
+  for (const n of candidates) {
+    const cap = LIVE_ARCH_CAPS[n.kind] ?? 3;
+    const used = counts[n.kind] ?? 0;
+    if (used >= cap) continue;
+
+    const place = liveArchPlacement(n.kind);
+    const anchor = catalogAnchor(opts.nodes, place.parentId, FALLBACK);
+    const position = liveBayPosition(anchor, place.dir, used);
+
+    if (
+      !pushNode(opts.nodes, opts.seenN, {
+        ...n,
+        position,
+        description: undefined,
+        securityNote:
+          "Live workspace instance. Open Chat or Knowledge for contents.",
+        connectionLabels: [place.parentId.replace(/^hub:/, "")],
+        ctaLabel:
+          n.kind === "workflow"
+            ? "Open Automations"
+            : n.kind === "schedule"
+              ? "Open Calendar"
+              : n.kind === "page"
+                ? "Open Knowledge"
+                : "Open",
+        cta:
+          n.kind === "workflow"
+            ? { type: "open_panel", tab: "projects" }
+            : n.kind === "schedule"
+              ? { type: "open_panel", tab: "calendar" }
+              : n.kind === "page"
+                ? { type: "open_panel", tab: "knowledge" }
+                : { type: "none" },
+        openImmediate: false,
+        status: { ...(n.status ?? {}), liveInstance: true },
+      })
+    ) {
+      continue;
+    }
+
+    pushEdge(opts.edges, opts.seenE, {
+      id: `edge:live:${place.parentId}:${n.id}`,
+      source: place.parentId,
+      target: n.id,
+      kind: "live-instance",
+    });
+    counts[n.kind] = used + 1;
+  }
+
+  pushPlatformAgentToolSummaries({
+    nodes: opts.nodes,
+    edges: opts.edges,
+    seenN: opts.seenN,
+    seenE: opts.seenE,
+    tenantDb: db,
+  });
+}
+
+/** Tools hang off Hub (Bridge): runtime that executes allowlisted tools. */
+function pushPlatformAgentToolSummaries(opts: {
+  nodes: GraphProjectionNode[];
+  edges: GraphProjectionEdge[];
+  seenN: Set<string>;
+  seenE: Set<string>;
+  tenantDb: AppDatabase;
+}): void {
+  if (!tableExists(opts.tenantDb, "ai_agents")) return;
+
+  const hubId = "hub:heart";
+  if (!opts.nodes.some((n) => n.id === hubId)) return;
+
+  const agents: Array<{ agentId: string; label: string }> = [
+    { agentId: "intelligence", label: "Intelligence" },
+    { agentId: "research", label: "Research" },
+    { agentId: "ops", label: "Ops" },
+  ];
+
+  const FALLBACK: Vec3 = { x: 3.2, y: 2.5, z: 0.8 };
+  const hubAnchor = catalogAnchor(opts.nodes, hubId, FALLBACK);
+  // Bay below/along Hub's platform ray so tools read as Bridge-owned.
+  const dir: Vec3 = { x: 0.35, y: -1, z: 0.2 };
+  let bayIndex = 0;
+
+  for (const a of agents) {
+    let tools: string[] = [];
+    try {
+      const row = opts.tenantDb
+        .prepare(`SELECT tool_allow_json FROM ai_agents WHERE id = ?`)
+        .get(a.agentId) as { tool_allow_json: string | null } | undefined;
+      tools = parseToolAllow(row?.tool_allow_json);
+    } catch {
+      continue;
+    }
+    if (tools.length === 0) continue;
+
+    const position = liveBayPosition(hubAnchor, dir, bayIndex);
+    bayIndex += 1;
+
+    const nid = `live:tools:${a.agentId}`;
+    if (
+      !pushNode(opts.nodes, opts.seenN, {
+        id: nid,
+        kind: "tool",
+        label: `${a.label} tools (${tools.length})`,
+        objectType: "ToolDefinition",
+        refId: a.agentId,
+        position,
+        description: `${a.label} tool allowlist (${tools.length}). Hub (Bridge) owns execution; agents inherit grants.`,
+        securityNote:
+          "Architecture map shows counts on Hub. Tool names stay on agent / Chat Information panels.",
+        connectionLabels: ["Hub", a.label],
+        ctaLabel: "Inspect Hub",
+        cta: { type: "none" },
+        status: {
+          liveInstance: true,
+          toolCount: tools.length,
+          ownerAgent: a.agentId,
+          toolPreview: tools.slice(0, 8).join(", "),
+        },
+      })
+    ) {
+      continue;
+    }
+
+    pushEdge(opts.edges, opts.seenE, {
+      id: `edge:live:tools:${a.agentId}`,
+      source: hubId,
+      target: nid,
+      kind: "live-instance",
+    });
+  }
+}
+
 /**
  * Public-safe GodMode architecture map. Optional auth enrichment adds
  * entitlement / vault-connected booleans and a capped live chat neighborhood
@@ -577,57 +955,20 @@ export function buildArchitectureProjection(opts: {
     pushEdge(edges, seenE, e);
   }
 
-  // Auth enrichment: merge capped chat neighborhood under hubs (no memory text).
+  // Auth enrichment: merge capped live instances into architecture space.
+  // Do NOT reuse chat-focus coordinates (those sit near origin and scramble Fit all).
   if (opts.enrichLiveNeighborhood && opts.tenantDb && opts.userId) {
     try {
-      const live = buildGraphProjection({
+      mergeLiveNeighborhoodIntoArchitecture({
+        nodes,
+        edges,
+        seenN,
+        seenE,
         tenantDb: opts.tenantDb,
-        focusType: "chat",
-        focusId: "session-local",
         userId: opts.userId,
         userLabel: opts.userLabel,
         cloudDb: opts.cloudDb,
       });
-      for (const n of live.nodes) {
-        if (n.kind === "memory") continue; // never project memory bodies onto architecture
-        if (n.kind === "user" || n.kind === "agent") continue; // hubs already represent these
-        if (n.kind === "chat" && n.refId === "session-local") continue;
-        const offset = {
-          x: (n.position?.x ?? 0) + 0.8,
-          y: (n.position?.y ?? 0) - 1.2,
-          z: (n.position?.z ?? 0) + 0.4,
-        };
-        if (
-          pushNode(nodes, seenN, {
-            ...n,
-            position: offset,
-            description: undefined,
-            securityNote:
-              "Live workspace instance. Open Chat or Knowledge for contents.",
-            connectionLabels: ["Chat", "Intelligence", "Knowledge"],
-            ctaLabel:
-              n.kind === "chat"
-                ? "Open chat"
-                : n.kind === "workflow"
-                  ? "Open Automations"
-                  : "Open Knowledge",
-            cta:
-              n.kind === "chat"
-                ? { type: "open_chat" }
-                : n.kind === "workflow"
-                  ? { type: "open_panel", tab: "projects" }
-                  : { type: "open_panel", tab: "knowledge" },
-            openImmediate: n.kind === "chat",
-          })
-        ) {
-          pushEdge(edges, seenE, {
-            id: `edge:hub-chat-live:${n.id}`,
-            source: "hub:chat-intelligence",
-            target: n.id,
-            kind: "live-instance",
-          });
-        }
-      }
     } catch {
       /* enrichment optional */
     }
