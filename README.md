@@ -159,6 +159,9 @@ transfer stay specialized transports (not Record CRUD). Details for contributors
 git clone https://github.com/ReBoticsAI/GodMode.git
 cd GodMode
 npm install
+# Root .npmrc sets ignore-scripts=true (Cloudflare Pages). Rebuild Bridge natives once,
+# or rely on `npm run dev` which runs scripts/ensure-native-addons.mjs when needed:
+npm run rebuild:natives
 copy apps\bridge\.env.example apps\bridge\.env
 npm run dev
 ```

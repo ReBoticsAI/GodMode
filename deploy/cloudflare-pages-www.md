@@ -29,9 +29,11 @@ unset. Pages Production and Preview env are separate; Pages also runs
 addon compiles.
 
 `NPM_CONFIG_IGNORE_SCRIPTS` / `--ignore-scripts` / `.npmrc` is required so
-monorepo `npm ci` does not try to compile native addons such as `node-pty`
-(bridge) on the Pages Linux builder. After a local `npm ci`, rebuild bridge
-natives with `npm rebuild node-pty` if the coding terminal is needed.
+monorepo `npm ci` does not try to compile native addons such as `node-pty`,
+`better-sqlite3`, and `duckdb` (bridge) on the Pages Linux builder. After a
+local `npm ci` / `npm install`, rebuild from the repo root with
+`npm run rebuild:natives` (or let `npm run dev` ensure them). Do not rebuild
+under `apps/bridge` alone; that leaves a nested `node_modules` copy.
 
 `build:packages` is required after ignore-scripts so workspace TypeScript packages
 (`kernel`, `flow-core`, `plugin-api`, `plugin-host`) emit `dist/` before `@godmode/web`

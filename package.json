@@ -9,8 +9,9 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:packages": "npm run build -w @godmode/kernel -w @godmode/flow-core -w @godmode/plugin-api -w @godmode/plugin-host",
-    "dev": "concurrently -r \"npm run dev -w @godmode/bridge\" \"npm run dev -w @godmode/web\"",
-    "dev:bridge": "npm run dev -w @godmode/bridge",
+    "rebuild:natives": "node scripts/ensure-native-addons.mjs --force",
+    "dev": "node scripts/ensure-native-addons.mjs && concurrently -r \"npm run dev -w @godmode/bridge\" \"npm run dev -w @godmode/web\"",
+    "dev:bridge": "node scripts/ensure-native-addons.mjs && npm run dev -w @godmode/bridge",
     "dev:web": "npm run dev -w @godmode/web",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "audit:oss": "node scripts/audit-oss-core.mjs",

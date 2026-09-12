@@ -6,13 +6,14 @@ Thank you for contributing. GodMode core is released under the [Apache License 2
 
 ```bash
 npm install
+npm run rebuild:natives
 npm run dev
 ```
 
 - Web: http://localhost:5173
 - Bridge: http://localhost:3847
 
-Fresh clone = **Control Center only** (Intelligence, wiki, tasks, structure). Copy `apps/bridge/.env.example` → `.env` before `npm run dev`. Domain integrations ship as optional external plugin repos; see [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
+Fresh clone = **Control Center only** (Intelligence, wiki, tasks, structure). Copy `apps/bridge/.env.example` → `.env` before `npm run dev`. Root `.npmrc` sets `ignore-scripts=true` for Cloudflare Pages, so Bridge natives (`better-sqlite3`, `duckdb`, `node-pty`) need `npm run rebuild:natives` (or `NPM_CONFIG_IGNORE_SCRIPTS=false npm ci`). `npm run dev` / `dev:bridge` also ensure those addons before starting. Rebuild from the repo root only. Domain integrations ship as optional external plugin repos; see [docs/PLUGIN_AUTHORING.md](docs/PLUGIN_AUTHORING.md).
 
 ## Development mode
 

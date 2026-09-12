@@ -27,6 +27,7 @@ Open the app, create an account, and use **Admin → Updates** when a new releas
 git clone https://github.com/ReBoticsAI/GodMode.git
 cd GodMode
 npm install
+npm run rebuild:natives   # root .npmrc skips native install scripts (Cloudflare Pages)
 copy apps\bridge\.env.example apps\bridge\.env   # Windows
 # cp apps/bridge/.env.example apps/bridge/.env    # macOS/Linux
 npm run dev
