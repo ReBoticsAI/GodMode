@@ -1659,6 +1659,43 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   // --- DM / chat ---
   {
+    name: "list_sqlite_universe",
+    description:
+      "List SQLite-universe registry entries and backup manifest (path index only; no message bodies). Allowlisted under PLATFORM_DATA_DIR/sqlite-universe.",
+    mode: "auto",
+    category: "platform",
+    parameters: {
+      type: "object",
+      properties: {
+        ownerKind: { type: "string", description: "Optional owner kind filter" },
+        ownerId: { type: "string", description: "Optional owner id filter" },
+      },
+    },
+  },
+  {
+    name: "query_sqlite_universe",
+    description:
+      "Run a read-only SELECT/WITH/PRAGMA against an allowlisted SQLite-universe file (path jail + open-set).",
+    mode: "auto",
+    category: "platform",
+    parameters: {
+      type: "object",
+      properties: {
+        relativePath: {
+          type: "string",
+          description: "Relative path under sqlite-universe (e.g. chats/<id>.sqlite)",
+        },
+        sql: { type: "string", description: "Read-only SQL" },
+        params: {
+          type: "array",
+          items: {},
+          description: "Optional bind parameters",
+        },
+      },
+      required: ["relativePath", "sql"],
+    },
+  },
+  {
     name: "list_conversations",
     description: "List DM/group conversations for the current user.",
     mode: "auto",

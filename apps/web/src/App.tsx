@@ -20,6 +20,9 @@ import {
 } from "./pages/marketing/marketingBase";
 import { FirstRunWizard, OnboardingWizardProvider, useOnboardingGate } from "@/components/FirstRunWizard";
 import { NoWorkspaceGate } from "@/components/NoWorkspaceGate";
+import { PreAuthChatCanvas } from "@/components/PreAuthChatCanvas";
+import { ChatUnlockProvider } from "@/lib/chat-unlock-context";
+import { ChatGraphCanvas } from "@/components/ChatGraphCanvas";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
 import UserCalendarPage from "./pages/UserCalendar";
@@ -86,14 +89,16 @@ import SellerLinkStripePage, {
 import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
 import { pageElementFor } from "@/lib/page-registry";
 import { loadWebPlugins } from "@/plugins/loader";
 import { webPluginRuntime } from "@/plugins/runtime";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useEffect, useMemo, useState, createElement, type ComponentType } from "react";
+import { useEffect, useMemo, useState, useRef, createElement, type ComponentType } from "react";
 import { autoChatAgentIdForPagePath } from "@/lib/structure-agents";
 import { toast } from "sonner";
-import { connectWebSocket, fetchBridgeHealth } from "@/api";
+import { connectWebSocket, fetchBridgeHealth, ensureTrialInference } from "@/api";
+import { useChatUnlock } from "@/lib/chat-unlock-context";
 
 interface AiNotificationPayload {
   kind?: string;
@@ -131,12 +136,31 @@ function AiNotifications() {
   return null;
 }
 
+/**
+ * Authenticated land: The Graph is primary. Trial ensure (#758) runs in background.
+ * Chat opens when the user clicks Chat or Intelligence on the canvas.
+ */
+function FirstLandChatBootstrap() {
+  const { loading } = useChatUnlock();
+  const trialStarted = useRef(false);
+
+  useEffect(() => {
+    if (loading || trialStarted.current) return;
+    trialStarted.current = true;
+    void ensureTrialInference().catch(() => {
+      /* soft-fail: Vault Connect / FirstRunWizard remain */
+    });
+  }, [loading]);
+
+  return null;
+}
+
 const AI_SETTINGS_PATH = "/settings/ai";
 
 function AppShell() {
   const { pathname } = useLocation();
   const { departments, nodes, loading } = useStructure();
-  const { openPanel } = useIntelligence();
+  const { openPanel, panelOpen } = useIntelligence();
   const isMobile = useIsMobile();
 
   // Auto-open chat with page-bound agents only on divisions that use the price sidebar.
@@ -200,6 +224,7 @@ function AppShell() {
       </Sheet>
 
       <div className="relative flex min-w-0 flex-1 flex-col">
+        <ChatGraphCanvas />
         <AppHeader
           onOpenNav={() => setNavOpen(true)}
           onOpenRightPanel={
@@ -207,10 +232,18 @@ function AppShell() {
           }
           rightPanelKind={hasRightPanel ? division?.rightSidebar ?? undefined : undefined}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <main
+          className={
+            panelOpen
+              ? "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background/90"
+              : "pointer-events-none invisible relative z-10 min-h-0 flex-1 overflow-hidden"
+          }
+          aria-hidden={!panelOpen}
+        >
           <AppRoutes departments={departments} loading={loading} />
         </main>
         <IntelligencePanel />
+        <InformationFloatingPanel />
         <AppFooter />
       </div>
 
@@ -235,6 +268,7 @@ function AppShell() {
         </Sheet>
       )}
 
+      <FirstLandChatBootstrap />
       <AiNotifications />
       <Toaster richColors position="top-right" />
     </div>
@@ -391,6 +425,7 @@ function AuthGatedApp() {
   const [pluginsReady, setPluginsReady] = useState(false);
   const [pluginsEpoch, setPluginsEpoch] = useState(0);
   const [saas, setSaas] = useState(false);
+  const [forceAuth, setForceAuth] = useState(false);
   const { pathname, search } = useLocation();
   const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
   const isSellerLinkGithub = pathname.startsWith("/seller-link/github");
@@ -462,6 +497,16 @@ function AuthGatedApp() {
     };
   }, [authenticated, needsAuthInterstitial, needsWorkspace]);
 
+  useEffect(() => {
+    const onOpenAuth = () => setForceAuth(true);
+    window.addEventListener("godmode:open-auth", onOpenAuth);
+    return () => window.removeEventListener("godmode:open-auth", onOpenAuth);
+  }, []);
+
+  // User node navigates to /?auth=1; honor the query so AuthGate survives remount/HMR.
+  const forceAuthFromUrl = new URLSearchParams(search).get("auth") === "1";
+  const showAuthGate = forceAuth || forceAuthFromUrl;
+
   if (loading) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
@@ -470,7 +515,26 @@ function AuthGatedApp() {
     );
   }
 
-  if (!authenticated || needsAuthInterstitial) {
+  // Pre-auth (Local + Cloud): The Graph is the main site; AuthGate only when ?auth=1.
+  if (!authenticated) {
+    if (showAuthGate) {
+      return (
+        <>
+          <AuthGate />
+          <Toaster richColors position="top-right" />
+        </>
+      );
+    }
+    return (
+      <StructureProvider>
+        <IntelligenceProvider>
+          <PreAuthChatCanvas />
+        </IntelligenceProvider>
+      </StructureProvider>
+    );
+  }
+
+  if (needsAuthInterstitial) {
     return (
       <>
         <AuthGate />
@@ -551,19 +615,21 @@ export default function App() {
   return (
     <TooltipProvider delay={200}>
       <TenantProvider>
-        <Routes>
-          {marketingAtRoot ? (
-            <Route path="/*" element={<MarketingRoutes />} />
-          ) : (
-            <>
-              <Route
-                path={`${MARKETING_BASE}/*`}
-                element={<MarketingRoutes />}
-              />
-              <Route path="*" element={<AuthGatedApp />} />
-            </>
-          )}
-        </Routes>
+        <ChatUnlockProvider>
+          <Routes>
+            {marketingAtRoot ? (
+              <Route path="/*" element={<MarketingRoutes />} />
+            ) : (
+              <>
+                <Route
+                  path={`${MARKETING_BASE}/*`}
+                  element={<MarketingRoutes />}
+                />
+                <Route path="*" element={<AuthGatedApp />} />
+              </>
+            )}
+          </Routes>
+        </ChatUnlockProvider>
       </TenantProvider>
     </TooltipProvider>
   );

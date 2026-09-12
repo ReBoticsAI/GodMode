@@ -6585,6 +6585,305 @@ export function fetchOnboardingDetect() {
   }>("/onboarding/detect");
 }
 
+export type ChatUnlockStatus = {
+  canCloseResize: boolean;
+  canCreateChat: boolean;
+  stripeConfigured: boolean;
+  canAdminGrant?: boolean;
+  unlockables: Array<{
+    id: string;
+    label: string;
+    description: string;
+    tutorial_id: string;
+    skip_price_cents: number;
+    stripe_price_id: string;
+    gates: string[];
+    entitled: boolean;
+    method: "tutorial" | "purchase" | "admin" | null;
+    tutorialSteps: string[];
+    tutorialProgress: Record<string, boolean>;
+  }>;
+};
+
+export function fetchChatUnlockStatus() {
+  return api<ChatUnlockStatus>("/chat-unlock/status");
+}
+
+/** Exact first-land Intelligence greeting (also returned by Bridge trial status). */
+export const FIRST_LAND_GREETING =
+  "Hey, you're in control. Put us to work.";
+
+/** Follow-on steering after the greeting: free tutorial over pay-to-skip. */
+export const FIRST_LAND_CONTROLS_HINT =
+  "Those flashing controls (X, resize, +) are locked on purpose. Do not stress about them. Finish the free tutorial with me and they unlock. Paying only skips the tutorial. I want you to take the free path.";
+
+export const CHAT_WINDOW_TUTORIAL_LINES: string[] = [
+  "Tutorial time. This chat window is your home base. The X closes it into the universe graph. Resize restores or maximizes. Plus starts another thread once unlocked.",
+  "When you click X after we finish, this chat becomes a node in 3D space, connected to me (your Agent) and to you (User). That graph is GodMode.",
+  "I just explained the controls. They are unlocked now. Click X when you are ready to see the universe. Then click the User node to finish your profile.",
+];
+
+export type TrialInferenceStatus = {
+  ready: boolean;
+  mechanism:
+    | "mgmtApi"
+    | "platformShared"
+    | "browser"
+    | "computerUse"
+    | "terminal"
+    | "none";
+  modelId: string;
+  greeting: string;
+  status:
+    | "active"
+    | "converted"
+    | "expired"
+    | "revoked"
+    | "failed"
+    | "unconfigured"
+    | "deferred_until_auth"
+    | "deferred_mechanism";
+  expiresAt: string | null;
+  promptThreshold: number;
+  ttlDays: number;
+  detail?: string;
+  configured: {
+    mgmtApi: boolean;
+    platformShared: boolean;
+  };
+  remainingOps: string[];
+};
+
+export function fetchTrialInferenceStatus() {
+  return api<TrialInferenceStatus>("/trial-inference/status");
+}
+
+export function ensureTrialInference() {
+  return api<TrialInferenceStatus>("/trial-inference/ensure", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function startChatUnlockCheckout(opts: {
+  unlockableId: string;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return api<{ url: string; sessionId: string; transactionId: string }>(
+    "/chat-unlock/checkout",
+    {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }
+  );
+}
+
+export function startChatUnlockTutorial(unlockableId: string) {
+  return api("/chat-unlock/tutorial/start", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId }),
+  });
+}
+
+export function markChatUnlockTutorialStep(
+  unlockableId: string,
+  step: string
+) {
+  return api("/chat-unlock/tutorial/step", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId, step }),
+  });
+}
+
+export function completeChatUnlockTutorial(unlockableId: string) {
+  return api("/chat-unlock/tutorial/complete", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId }),
+  });
+}
+
+/** Admin / local-preview: grant unlocks without tutorial or Stripe. */
+export function adminGrantChatUnlock(unlockableIds: string[]) {
+  return api<ChatUnlockStatus & { ok: boolean }>("/chat-unlock/admin/grant", {
+    method: "POST",
+    body: JSON.stringify({ unlockableIds }),
+  });
+}
+
+export type ChatGraphDoc = {
+  nodes: Array<{
+    id: string;
+    chatId: string;
+    label: string;
+    position: { x: number; y: number };
+  }>;
+  edges: Array<{ id: string; source: string; target: string }>;
+};
+
+export function fetchChatGraph() {
+  return api<ChatGraphDoc>("/chat-unlock/graph");
+}
+
+export function saveChatGraph(doc: ChatGraphDoc) {
+  return api<ChatGraphDoc>("/chat-unlock/graph", {
+    method: "PUT",
+    body: JSON.stringify(doc),
+  });
+}
+
+export function dockChatOnGraph(opts: { chatId: string; label?: string }) {
+  return api<ChatGraphDoc>("/chat-unlock/graph/dock", {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export type GraphCtaAction =
+  | { type: "open_chat" }
+  | { type: "open_panel"; tab: string }
+  | { type: "navigate"; path: string }
+  | { type: "open_auth" }
+  | { type: "open_unlock"; capability?: string }
+  | { type: "none" };
+
+export type GraphWindowSpec = {
+  kind: "chat" | "information" | "canvas" | string;
+  width?: number;
+  height?: number;
+  placement?: "left" | "right" | "center";
+  agentId?: string;
+  title?: string;
+};
+
+export type GraphProjectionNode = {
+  id: string;
+  kind:
+    | "chat"
+    | "agent"
+    | "user"
+    | "memory"
+    | "skill"
+    | "tool"
+    | "workflow"
+    | "schedule"
+    | "page"
+    | "unlock"
+    | "system";
+  label: string;
+  objectType?: string;
+  refId?: string;
+  position?: { x: number; y: number; z?: number };
+  description?: string;
+  securityNote?: string;
+  connectionLabels?: string[];
+  ctaLabel?: string;
+  cta?: GraphCtaAction;
+  openImmediate?: boolean;
+  windows?: GraphWindowSpec[];
+  status?: Record<string, boolean | string | number>;
+};
+
+export type GraphProjectionEdge = {
+  id: string;
+  source: string;
+  target: string;
+  kind: string;
+};
+
+export type GraphProjection = {
+  focusType: string;
+  focusId: string;
+  nodes: GraphProjectionNode[];
+  edges: GraphProjectionEdge[];
+  truncated: boolean;
+  catalogVersion?: number;
+};
+
+export function fetchGraphProjection(opts: {
+  focusType: "chat" | "agent" | "user" | "architecture";
+  focusId?: string;
+}) {
+  const q = new URLSearchParams({
+    focusType: opts.focusType,
+  });
+  if (opts.focusId) q.set("focusId", opts.focusId);
+  return api<GraphProjection>(`/graph/projection?${q.toString()}`);
+}
+
+export type GraphMissionView = {
+  id: string;
+  nodeId: string;
+  title: string;
+  description: string;
+  kind: string;
+  completeWhen: string;
+  completeKey?: string;
+  basePoints: number;
+  points: number;
+  degree: number;
+  done: boolean;
+  open: boolean;
+  completedAt: string | null;
+};
+
+export type GraphMissionsStatus = {
+  catalogVersion: number;
+  totalPoints: number;
+  missionsCompleted: number;
+  missions: GraphMissionView[];
+  attentionByNode: Record<string, number>;
+  scoreByNode?: Record<
+    string,
+    { earned: number; available: number; open: number; done: number }
+  >;
+  autoAwarded?: Array<{ missionId: string; points: number }>;
+};
+
+export function fetchGraphMissions() {
+  return api<GraphMissionsStatus>("/graph-missions");
+}
+
+export function syncGraphMissions() {
+  return api<
+    GraphMissionsStatus & {
+      ok: true;
+      awarded: Array<{ missionId: string; points: number }>;
+    }
+  >("/graph-missions/sync", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function completeGraphMission(missionId: string) {
+  return api<{
+    ok: true;
+    alreadyDone: boolean;
+    pointsAwarded: number;
+    totalPoints: number;
+    mission: GraphMissionView;
+  }>(`/graph-missions/${encodeURIComponent(missionId)}/complete`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export type GraphLeaderboardEntry = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  totalPoints: number;
+  missionsCompleted: number;
+  updatedAt: string;
+};
+
+export function fetchGraphLeaderboard(limit = 50) {
+  return api<{ entries: GraphLeaderboardEntry[] }>(
+    `/graph-missions/leaderboard?limit=${limit}`
+  );
+}
+
 export function startOnboardingLocalLlm(modelPath: string) {
   return actionDto(
     "ModelRuntime",

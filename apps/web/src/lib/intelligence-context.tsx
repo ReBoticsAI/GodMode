@@ -17,6 +17,7 @@ import {
   fetchNotificationUnreadCount,
   type DmConversation,
   type DmMessage,
+  type GraphProjectionNode,
 } from "@/api";
 import {
   chromelessHeaderSegments,
@@ -119,6 +120,20 @@ interface IntelligenceContextValue {
     artifactId?: string;
     artifactName?: string;
   }) => void;
+  /** Companion floating Information window for the selected Graph node. */
+  informationPanelOpen: boolean;
+  informationNode: GraphProjectionNode | null;
+  openInformationPanel: (node: GraphProjectionNode) => void;
+  closeInformationPanel: () => void;
+  /** Open Canvas pages (Information and future kinds) for Chat "Select a page". */
+  openCanvases: Array<{
+    id: string;
+    title: string;
+    kind: string;
+    nodeId?: string;
+  }>;
+  focusedCanvasId: string | null;
+  setFocusedCanvasId: (id: string | null) => void;
   /** Unified chat target: agent-only (ai_chats) or a dm/group conversation. */
   chatTarget: ChatTarget;
   setChatTarget: (target: ChatTarget) => void;
@@ -196,10 +211,14 @@ interface IntelligenceContextValue {
   /** Tool autonomy profile for the session. */
   toolAutonomy: ToolAutonomyLevel;
   setToolAutonomy: (level: ToolAutonomyLevel) => void;
+  /** Recent chat lines for the minimized bottom ticker (pre-auth / dock). */
+  chatTickerLines: string[];
+  publishChatTicker: (lines: string[]) => void;
 }
 
 export type PanelTab =
   | "chat"
+  | "contacts"
   | "notifications"
   | "calendar"
   | "projects"
@@ -244,6 +263,7 @@ function readStoredPanelTab(): PanelTab {
     v === "bank" ||
     v === "vault" ||
     v === "support" ||
+    v === "contacts" ||
     v === "dms" ||
     v === "channels"
     ? v
@@ -439,6 +459,12 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setAutoAcceptToolsState(level === "full");
     writeStorageKey(AUTO_ACCEPT_TOOLS_KEY, level === "full" ? "1" : "0");
   }, []);
+  const [chatTickerLines, setChatTickerLines] = useState<string[]>([]);
+  const publishChatTicker = useCallback((lines: string[]) => {
+    setChatTickerLines(
+      lines.map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).slice(-8)
+    );
+  }, []);
   const [activeAgentId, setActiveAgentIdState] = useState(() => {
     if (typeof window === "undefined") return "intelligence";
     const stored =
@@ -578,6 +604,45 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const togglePanel = useCallback(() => setPanelOpen((o) => !o), []);
 
+  const [informationPanelOpen, setInformationPanelOpen] = useState(false);
+  const [informationNode, setInformationNode] =
+    useState<GraphProjectionNode | null>(null);
+  const [openCanvases, setOpenCanvases] = useState<
+    Array<{ id: string; title: string; kind: string; nodeId?: string }>
+  >([]);
+  const [focusedCanvasId, setFocusedCanvasId] = useState<string | null>(null);
+
+  const openInformationPanel = useCallback((node: GraphProjectionNode) => {
+    setInformationNode(node);
+    setInformationPanelOpen(true);
+    const canvasId = `information:${node.id}`;
+    setOpenCanvases((prev) => {
+      if (prev.some((c) => c.id === canvasId)) return prev;
+      return [
+        ...prev,
+        {
+          id: canvasId,
+          title: `Information · ${node.label}`,
+          kind: "information",
+          nodeId: node.id,
+        },
+      ];
+    });
+    setFocusedCanvasId(canvasId);
+  }, []);
+
+  const closeInformationPanel = useCallback(() => {
+    setInformationPanelOpen(false);
+    setOpenCanvases((prev) => {
+      const nodeId = informationNode?.id;
+      if (!nodeId) return prev.filter((c) => c.kind !== "information");
+      return prev.filter((c) => c.id !== `information:${nodeId}`);
+    });
+    setFocusedCanvasId((id) =>
+      id?.startsWith("information:") ? null : id
+    );
+  }, [informationNode?.id]);
+
   const openPanel = useCallback(
     (opts?: {
       tab?: PanelTab;
@@ -617,7 +682,9 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         setPanelTab("knowledge");
         setArtifactViewer({ id: opts.artifactId, name: opts.artifactName });
       }
-      if (opts?.maximized) setPanelMaximized(true);
+      if (typeof opts?.maximized === "boolean") {
+        setPanelMaximized(opts.maximized);
+      }
       if (opts?.prompt) {
         if (opts.autoSend) setAutoSendPrompt(opts.prompt);
         else setSeedText(opts.prompt);
@@ -834,6 +901,13 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       panelMaximized,
       setPanelMaximized,
       openPanel,
+      informationPanelOpen,
+      informationNode,
+      openInformationPanel,
+      closeInformationPanel,
+      openCanvases,
+      focusedCanvasId,
+      setFocusedCanvasId,
       seedText,
       setSeedText,
       autoSendPrompt,
@@ -882,6 +956,8 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setChatMode,
       toolAutonomy,
       setToolAutonomy,
+      chatTickerLines,
+      publishChatTicker,
     }),
     [
       crumb,
@@ -895,6 +971,13 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       togglePanel,
       panelMaximized,
       openPanel,
+      informationPanelOpen,
+      informationNode,
+      openInformationPanel,
+      closeInformationPanel,
+      openCanvases,
+      focusedCanvasId,
+      setFocusedCanvasId,
       seedText,
       autoSendPrompt,
       pendingChatId,
@@ -940,6 +1023,8 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setChatMode,
       toolAutonomy,
       setToolAutonomy,
+      chatTickerLines,
+      publishChatTicker,
     ]
   );
 

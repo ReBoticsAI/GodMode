@@ -8,6 +8,7 @@ import { encryptSecret, decryptSecret } from "../holdings/crypto-box.js";
 import { getTenantOwnerUserId } from "../user-scope.js";
 import { isUserAgentId } from "./user-agent-prompt.js";
 import { defaultKnowsUserForAgent } from "./agent-profile-prompt.js";
+import { ensureAgentUniverseFile } from "../sqlite-universe-registry.js";
 import {
   DEFAULT_SAMPLING,
   DEFAULT_THINKING,
@@ -566,6 +567,11 @@ export function createAgent(
       /* per-agent state tables optional during early migration */
     }
   }
+  // SQLite-universe Phase 3: dual-write agent actor file.
+  ensureAgentUniverseFile({
+    agentId: id,
+    label: input.name,
+  });
   return getAgent(db, id)!;
 }
 

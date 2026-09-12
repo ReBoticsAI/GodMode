@@ -1716,6 +1716,7 @@ export function createAiRouter(
       userId: auth.user.id,
       isAdmin: auth.user.isAdmin,
       role: (auth.tenantRole as OperationContext["role"]) ?? "editor",
+      agentId: resolvedAgentId,
       source: "http",
       bus,
     };
@@ -1750,7 +1751,7 @@ export function createAiRouter(
           activeChatId = createRecord(
             workDb,
             "ChatSession",
-            { title },
+            { title, agent_id: resolvedAgentId },
             chatKernelContext
           ).id;
         }

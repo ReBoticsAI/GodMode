@@ -14,6 +14,9 @@ import {
 } from "./services/db-migrations.js";
 import { ensureAuthSecuritySchema } from "./services/auth/mfa-and-tokens.js";
 import { migrateHubTablesFromCore } from "./host-users-db.js";
+import { ensureChatUnlockTables } from "./services/chat-unlock-schema.js";
+import { ensureTrialInferenceTables } from "./services/trial-inference-schema.js";
+import { ensureGraphLeaderboardTables } from "./services/graph-missions-schema.js";
 
 export type MembershipRole = "viewer" | "editor" | "owner";
 export type ShareGrantRole = "viewer" | "editor" | "owner";
@@ -763,6 +766,21 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     version: 25,
     name: "core_marketplace_delivery_claim_count_v1",
     up: ensureMarketplaceDeliveryClaimCount,
+  },
+  {
+    version: 26,
+    name: "core_chat_unlock_v1",
+    up: ensureChatUnlockTables,
+  },
+  {
+    version: 27,
+    name: "core_trial_inference_v1",
+    up: ensureTrialInferenceTables,
+  },
+  {
+    version: 28,
+    name: "core_graph_leaderboard_v1",
+    up: ensureGraphLeaderboardTables,
   },
 ];
 
