@@ -26,6 +26,7 @@ import {
   fetchGoogleAiStatus,
   type GoogleAiAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Google AI Studio chat catalog snapshot (2026-08-03).
@@ -126,6 +127,7 @@ export function GoogleAiStudioCard({
           OpenAI-compatible transport with a Google AI harness (Flash, Pro, or
           generic). Not Gemini Advanced consumer login, and not Vertex.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="google-ai" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

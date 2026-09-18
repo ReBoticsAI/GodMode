@@ -145,6 +145,15 @@ import {
   upsertDeepSeekApiKey,
 } from "../../services/deepseek-platform.js";
 import {
+  getDashScopeAuthStatus,
+  isDashScopePlatformReady,
+  isDashScopeVaultSecretId,
+  isDashScopeVaultSecretName,
+  DASHSCOPE_API_KEY_SECRET_ID,
+  removeDashScopeApiKey,
+  upsertDashScopeApiKey,
+} from "../../services/dashscope-platform.js";
+import {
   getGoogleAiAuthStatus,
   isGoogleAiPlatformReady,
   isGoogleAiVaultSecretId,
@@ -1240,6 +1249,8 @@ function isManagedPlatformSecret(secret: {
     isFireworksVaultSecretName(secret.name) ||
     isDeepSeekVaultSecretId(secret.id) ||
     isDeepSeekVaultSecretName(secret.name) ||
+    isDashScopeVaultSecretId(secret.id) ||
+    isDashScopeVaultSecretName(secret.name) ||
     isGoogleAiVaultSecretId(secret.id) ||
     isGoogleAiVaultSecretName(secret.name) ||
     isXaiVaultSecretId(secret.id) ||
@@ -1333,6 +1344,12 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isDeepSeekVaultSecretName(name)) {
       throw httpError(400, "DeepSeek API keys must use the DeepSeek credential flow");
+    }
+    if (isDashScopeVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "DashScope / Qwen API keys must use the DashScope credential flow"
+      );
     }
     if (isGoogleAiVaultSecretName(name)) {
       throw httpError(
@@ -1541,6 +1558,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
             kind: "api_key",
             provider: "deepseek",
             display_name: "DeepSeek",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === DASHSCOPE_API_KEY_SECRET_ID) {
+      const status = getDashScopeAuthStatus(db, scope);
+      return status.connected
+        ? record(def, DASHSCOPE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "dashscope",
+            display_name: "DashScope (Qwen)",
             status: "active",
             masked_token: status.masked ?? "****",
           })
@@ -1820,6 +1850,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "dashscope" ||
+      requiredText(data, "provider").toLowerCase() === "qwen"
+    ) {
+      upsertDashScopeApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getDashScopeAuthStatus(db, scope);
+      return record(def, DASHSCOPE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "dashscope",
+        display_name: "DashScope (Qwen)",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "google_ai" ||
       requiredText(data, "provider").toLowerCase() === "google-ai" ||
       requiredText(data, "provider").toLowerCase() === "gemini"
@@ -2067,6 +2112,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
     }
     if (id === DEEPSEEK_API_KEY_SECRET_ID) {
       removeDeepSeekApiKey(db, scope);
+      return;
+    }
+    if (id === DASHSCOPE_API_KEY_SECRET_ID) {
+      removeDashScopeApiKey(db, scope);
       return;
     }
     if (id === GOOGLE_AI_API_KEY_SECRET_ID) {
@@ -2344,6 +2393,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
+      // Custom DashScope / Qwen slug when Vault is connected.
+      if (!selected) {
+        const dashscopeCustom =
+          /^provider:openai_compatible:dashscope:(.+)$/.exec(modelId);
+        if (dashscopeCustom?.[1] && isDashScopePlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Qwen · ${dashscopeCustom[1]}`,
+            model: dashscopeCustom[1],
+            provider: "openai_compatible",
+            transport: "dashscope",
+          };
+        }
+      }
       // Custom Google AI Studio slug when Vault is connected.
       if (!selected) {
         const googleAiCustom =
@@ -2469,6 +2533,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("together:") &&
           !custom[1].startsWith("fireworks:") &&
           !custom[1].startsWith("deepseek:") &&
+          !custom[1].startsWith("dashscope:") &&
           !custom[1].startsWith("google_ai:") &&
           !custom[1].startsWith("xai:") &&
           !custom[1].startsWith("zai:") &&
@@ -2519,6 +2584,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                 ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
                 : transport === "deepseek"
                   ? { transport: "deepseek", apiKeyRef: DEEPSEEK_API_KEY_SECRET_ID }
+                  : transport === "dashscope"
+                    ? {
+                        transport: "dashscope",
+                        apiKeyRef: DASHSCOPE_API_KEY_SECRET_ID,
+                      }
                   : transport === "google_ai"
                     ? { transport: "google_ai", apiKeyRef: GOOGLE_AI_API_KEY_SECRET_ID }
                     : transport === "xai"

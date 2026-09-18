@@ -16,6 +16,11 @@ import type {
   GraphProjectionNode,
 } from "@/api";
 import { GraphNodeGlyph } from "@/components/graph/GraphNodeGlyph";
+import {
+  defaultCollapsedSet,
+  hiddenDescendantIds,
+  recollapsePlatformRayBeyond,
+} from "@/lib/graph-collapse";
 import { buildGraphNodeColors, graphNodeColor } from "@/lib/graph-node-style";
 import { useTheme } from "next-themes";
 
@@ -24,42 +29,33 @@ const DEFAULT_TARGET = new THREE.Vector3(1.8, 4.6, 0);
 const SCENE_BG_DARK = "#0a0a0b";
 const SCENE_BG_LIGHT = "#f4f4f5";
 
-/**
- * Default land (perf-first):
- * - Spine hubs visible (You, Intelligence, Hub, Research, Ops + chats).
- * - Life / Vault trees, platform ray branches, and Workspaces collapsed.
- *   Expand to explore. Cuts Html overlay count for smoother pan/zoom.
- */
-const DEFAULT_COLLAPSED_IDS = [
-  "hub:life-you",
-  "hub:life-intelligence",
-  "hub:life-research",
-  "hub:life-ops",
-  "hub:vault-you",
-  "hub:vault-intelligence",
-  "hub:vault-research",
-  "hub:vault-ops",
-  "hub:workspace",
-  "hub:ws-project-alpha",
-  "hub:ws-family",
-  "hub:ws-personal",
-  "hub:support",
-  "hub:shared",
-  "hub:marketplace",
-  "hub:marketplace-community",
-  "hub:marketplace-local",
-  "hub:marketplace-installed",
-  "hub:marketplace-sell",
-  "hub:marketplace-official",
-] as const;
-
-/** Exclusive Life trees: only one owner Life open at a time. */
-const LIFE_TREE_IDS = [
-  "hub:life-you",
-  "hub:life-intelligence",
-  "hub:life-research",
-  "hub:life-ops",
-] as const;
+/** Exclusive owner surface wings: only one owner's surfaces open at a time. */
+const OWNER_SURFACE_WINGS: readonly (readonly string[])[] = [
+  [
+    "hub:structure-you",
+    "hub:knowledge-you",
+    "hub:automations-you",
+    "hub:calendar-you",
+  ],
+  [
+    "hub:structure-intelligence",
+    "hub:knowledge-intelligence",
+    "hub:automations-intelligence",
+    "hub:calendar-intelligence",
+  ],
+  [
+    "hub:structure-research",
+    "hub:knowledge-research",
+    "hub:automations-research",
+    "hub:calendar-research",
+  ],
+  [
+    "hub:structure-ops",
+    "hub:knowledge-ops",
+    "hub:automations-ops",
+    "hub:calendar-ops",
+  ],
+];
 
 /** Exclusive Vault trees: only one owner Vault open at a time. */
 const VAULT_TREE_IDS = [
@@ -79,13 +75,24 @@ function exclusivePeers(
   return out;
 }
 
+/** Expanding any surface root collapses every other owner's surface roots. */
+function exclusiveOwnerSurfacePeers(): Record<string, readonly string[]> {
+  const out: Record<string, readonly string[]> = {};
+  for (let i = 0; i < OWNER_SURFACE_WINGS.length; i++) {
+    const wing = OWNER_SURFACE_WINGS[i]!;
+    const peers = OWNER_SURFACE_WINGS.flatMap((w, j) => (j === i ? [] : [...w]));
+    for (const id of wing) out[id] = peers;
+  }
+  return out;
+}
+
 /**
  * Expanding one of these collapses its peer(s).
- * Life/Vault pairs are owner mirrors (You, Intelligence, Research, Ops).
+ * Owner surface / Vault pairs are owner mirrors (You, Intelligence, Research, Ops).
  * Workspace and Marketplace branches are distinct trees; exclusive open keeps depth readable.
  */
 const TREE_PEERS: Record<string, readonly string[]> = {
-  ...exclusivePeers(LIFE_TREE_IDS),
+  ...exclusiveOwnerSurfacePeers(),
   ...exclusivePeers(VAULT_TREE_IDS),
   "hub:ws-personal": ["hub:ws-project-alpha", "hub:ws-family"],
   "hub:ws-project-alpha": ["hub:ws-personal", "hub:ws-family"],
@@ -122,15 +129,13 @@ const TREE_PEERS: Record<string, readonly string[]> = {
   ],
 };
 
-function defaultCollapsedSet(): Set<string> {
-  return new Set(DEFAULT_COLLAPSED_IDS);
-}
-
 export type GraphScene3DHandle = {
   fitAll: () => void;
   reset: () => void;
   /** Zoom the camera onto one node (keeps it in the open strip between side panels). */
   focusNode: (nodeId: string) => void;
+  /** Highlight a node and frame it (same as clicking the glyph). */
+  selectNode: (nodeId: string) => void;
 };
 
 type Vec3 = { x: number; y: number; z: number };
@@ -153,33 +158,7 @@ function boundsForNodes(nodes: GraphProjectionNode[]): THREE.Box3 {
   return box;
 }
 
-/** Descendants of collapsed roots (outgoing edge BFS). Roots stay visible. */
-function hiddenDescendantIds(
-  edges: GraphProjection["edges"],
-  collapsed: Set<string>
-): Set<string> {
-  const children = new Map<string, string[]>();
-  for (const e of edges) {
-    const list = children.get(e.source);
-    if (list) list.push(e.target);
-    else children.set(e.source, [e.target]);
-  }
-  const hidden = new Set<string>();
-  const stack = [...collapsed];
-  while (stack.length) {
-    const id = stack.pop()!;
-    for (const child of children.get(id) ?? []) {
-      if (hidden.has(child)) continue;
-      hidden.add(child);
-      stack.push(child);
-    }
-  }
-  return hidden;
-}
-
-/** Shared proxy / hit geometries (avoid per-node SphereGeometry alloc). */
-const PROXY_GEO = new THREE.SphereGeometry(0.22, 8, 8);
-const PROXY_GEO_FOCUS = new THREE.SphereGeometry(0.3, 8, 8);
+/** Shared hit geometry for pointer events under Html glyphs. */
 const HIT_GEO = new THREE.SphereGeometry(0.42, 6, 6);
 
 function KeyboardTruck({
@@ -260,7 +239,6 @@ function NodeGlyph({
   adjacent,
   collapsed,
   collapsible,
-  showHtml,
   onSelect,
   onActivate,
   onToggleCollapse,
@@ -274,7 +252,6 @@ function NodeGlyph({
   adjacent: boolean;
   collapsed: boolean;
   collapsible: boolean;
-  showHtml: boolean;
   onSelect: (node: GraphProjectionNode) => void;
   onActivate: (node: GraphProjectionNode) => void;
   onToggleCollapse: (nodeId: string) => void;
@@ -343,8 +320,8 @@ function NodeGlyph({
   return (
     <group position={[position.x, position.y, position.z]}>
       <mesh
-        visible={!showHtml}
-        geometry={selected || adjacent ? PROXY_GEO_FOCUS : PROXY_GEO}
+        visible={false}
+        geometry={HIT_GEO}
         onClick={handleSelect}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -355,94 +332,71 @@ function NodeGlyph({
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerUp}
       >
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={selected ? 1 : adjacent ? 0.92 : 0.78}
-          depthWrite={false}
-        />
+        <meshBasicMaterial />
       </mesh>
-      {showHtml ? (
-        <>
-          <mesh
-            visible={false}
-            geometry={HIT_GEO}
-            onClick={handleSelect}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
+      <Html
+        center
+        sprite
+        transform={false}
+        occlude={false}
+        distanceFactor={distanceFactor}
+        zIndexRange={[100, 0]}
+        style={{ pointerEvents: "auto", willChange: "transform" }}
+      >
+        <GraphNodeGlyph
+          kind={node.kind}
+          nodeId={node.id}
+          objectType={node.objectType}
+          color={color}
+          label={node.label}
+          selected={selected}
+          adjacent={adjacent}
+          muted={!selected && !adjacent && !primary}
+          attention={Boolean(node.status?.attention)}
+          working={Boolean(node.status?.working)}
+          collapsible={collapsible}
+          collapsed={collapsed}
+          onToggleCollapse={() => onToggleCollapse(node.id)}
+          aria-label={`${node.kind}: ${node.label}${collapsed ? " (collapsed)" : ""}`}
+          onClick={handleSelect}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onActivate(node);
+          }}
+          onPointerDown={(e) => {
+            if (!e.shiftKey) return;
+            e.stopPropagation();
+            dragging.current = true;
+            setCameraEnabled(false);
+          }}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+          onPointerMove={(e) => {
+            if (!dragging.current) return;
+            e.stopPropagation();
+            const dist = camera.position.distanceTo(
+              new THREE.Vector3(position.x, position.y, position.z)
+            );
+            const scale = (dist * 0.0025) / Math.max(size.height / 900, 0.5);
+            onNudge(node.id, {
+              x: e.movementX * scale,
+              y: -e.movementY * scale,
+              z: 0,
+            });
+            invalidate();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
               onActivate(node);
-            }}
-            onPointerDown={onPointerDown}
-            onPointerUp={onPointerUp}
-            onPointerMove={onPointerMove}
-            onPointerLeave={onPointerUp}
-          >
-            <meshBasicMaterial />
-          </mesh>
-          <Html
-            center
-            sprite
-            transform={false}
-            occlude={false}
-            distanceFactor={distanceFactor}
-            zIndexRange={[100, 0]}
-            style={{ pointerEvents: "auto", willChange: "transform" }}
-          >
-            <GraphNodeGlyph
-              kind={node.kind}
-              nodeId={node.id}
-              objectType={node.objectType}
-              color={color}
-              label={node.label}
-              selected={selected}
-              adjacent={adjacent}
-              muted={!selected && !adjacent && !primary}
-              attention={Boolean(node.status?.attention)}
-              collapsible={collapsible}
-              collapsed={collapsed}
-              onToggleCollapse={() => onToggleCollapse(node.id)}
-              aria-label={`${node.kind}: ${node.label}${collapsed ? " (collapsed)" : ""}`}
-              onClick={handleSelect}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                onActivate(node);
-              }}
-              onPointerDown={(e) => {
-                if (!e.shiftKey) return;
-                e.stopPropagation();
-                dragging.current = true;
-                setCameraEnabled(false);
-              }}
-              onPointerUp={onPointerUp}
-              onPointerLeave={onPointerUp}
-              onPointerMove={(e) => {
-                if (!dragging.current) return;
-                e.stopPropagation();
-                const dist = camera.position.distanceTo(
-                  new THREE.Vector3(position.x, position.y, position.z)
-                );
-                const scale = (dist * 0.0025) / Math.max(size.height / 900, 0.5);
-                onNudge(node.id, {
-                  x: e.movementX * scale,
-                  y: -e.movementY * scale,
-                  z: 0,
-                });
-                invalidate();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onActivate(node);
-                }
-                if ((e.key === "c" || e.key === "C") && collapsible) {
-                  e.preventDefault();
-                  onToggleCollapse(node.id);
-                }
-              }}
-            />
-          </Html>
-        </>
-      ) : null}
+            }
+            if ((e.key === "c" || e.key === "C") && collapsible) {
+              e.preventDefault();
+              onToggleCollapse(node.id);
+            }
+          }}
+        />
+      </Html>
     </group>
   );
 }
@@ -529,8 +483,6 @@ function EdgeLine({
     />
   );
 }
-
-const _lodTmp = new THREE.Vector3();
 
 function SceneBody({
   projection,
@@ -619,72 +571,15 @@ function SceneBody({
   }, [projection.edges]);
 
   /**
-   * Cap expensive DOM Html overlays; far / off-focus nodes use colored mesh
-   * proxies. Default collapsed land is ~18 nodes: keep that fully glyph so
-   * land never reads as random colored circles. Mesh LOD only kicks in when
-   * expanded trees push past the budget.
+   * Always render SVG Html glyphs for visible nodes. Mesh-sphere LOD was
+   * turning default land into colored circles once the open Hub/surface/Vault
+   * count exceeded the Html budget and camera fit pushed nodes past maxDist.
    */
-  const [htmlIds, setHtmlIds] = useState<Set<string>>(() => new Set());
-  const htmlIdsRef = useRef(htmlIds);
-  htmlIdsRef.current = htmlIds;
   const htmlTick = useRef(0);
-  const { camera } = useThree();
   useFrame(() => {
     htmlTick.current += 1;
     const c = controlsRef.current;
     if (c?.active) invalidate();
-    // Seed immediately while empty; otherwise LOD every ~8 frames.
-    const seed = htmlIdsRef.current.size === 0;
-    if (!seed && htmlTick.current % 8 !== 0) return;
-
-    // Covers default land (~18) with headroom; mesh proxies only when expanded.
-    const maxHtml = lowPower ? 22 : 28;
-    const maxDist = lowPower ? 12 : 18;
-    const scored: Array<{ id: string; dist: number; force: boolean }> = [];
-    for (const n of visibleNodes) {
-      const p = positions.get(n.id) ?? { x: 0, y: 0, z: 0 };
-      const dist = camera.position.distanceTo(_lodTmp.set(p.x, p.y, p.z));
-      const force = n.id === selectedId || adjacentIds.has(n.id);
-      scored.push({ id: n.id, dist, force });
-    }
-
-    let next: Set<string>;
-    if (visibleNodes.length <= maxHtml) {
-      next = new Set(visibleNodes.map((n) => n.id));
-    } else {
-      scored.sort((a, b) => {
-        if (a.force !== b.force) return a.force ? -1 : 1;
-        return a.dist - b.dist;
-      });
-      next = new Set<string>();
-      for (const s of scored) {
-        if (next.size >= maxHtml) break;
-        if (s.force || s.dist <= maxDist) {
-          next.add(s.id);
-        }
-      }
-      // Guarantee selection / adjacency even if somehow skipped above.
-      if (selectedId) next.add(selectedId);
-      for (const id of adjacentIds) {
-        if (next.size >= maxHtml) break;
-        next.add(id);
-      }
-    }
-
-    const prev = htmlIdsRef.current;
-    let changed = next.size !== prev.size;
-    if (!changed) {
-      for (const id of next) {
-        if (!prev.has(id)) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (changed) {
-      setHtmlIds(next);
-      invalidate();
-    }
   });
 
   const didFit = useRef(false);
@@ -796,7 +691,6 @@ function SceneBody({
           adjacent={adjacentIds.has(n.id)}
           collapsed={collapsedIds.has(n.id)}
           collapsible={collapsibleIds.has(n.id)}
-          showHtml={htmlIds.has(n.id)}
           onSelect={onSelect}
           onActivate={onActivate}
           onToggleCollapse={onToggleCollapse}
@@ -913,10 +807,19 @@ export const GraphScene3D = forwardRef<
     [projection.nodes, positionOverrides]
   );
 
+  const selectNode = useCallback(
+    (nodeId: string) => {
+      if (!projection.nodes.some((n) => n.id === nodeId)) return;
+      setSelectedId(nodeId);
+      focusNode(nodeId);
+    },
+    [focusNode, projection.nodes]
+  );
+
   useImperativeHandle(
     ref,
-    () => ({ fitAll, reset, focusNode }),
-    [fitAll, reset, focusNode]
+    () => ({ fitAll, reset, focusNode, selectNode }),
+    [fitAll, reset, focusNode, selectNode]
   );
 
   const onSelect = useCallback(
@@ -938,7 +841,9 @@ export const GraphScene3D = forwardRef<
           next.add(peer);
         }
       } else {
+        // Collapsing: hide this branch; reset nested platform-row expands.
         next.add(nodeId);
+        recollapsePlatformRayBeyond(next, nodeId);
       }
       return next;
     });
@@ -956,6 +861,34 @@ export const GraphScene3D = forwardRef<
         onExternalToggle
       );
   }, [onToggleCollapse]);
+
+  useEffect(() => {
+    const onOrganizeCollapse = (ev: Event) => {
+      const action = (ev as CustomEvent<{ action?: string }>).detail?.action;
+      if (action === "expand-all") {
+        setCollapsedIds(new Set());
+        return;
+      }
+      if (action === "collapse-all") {
+        const next = new Set<string>();
+        for (const e of projection.edges) next.add(e.source);
+        setCollapsedIds(next);
+        return;
+      }
+      if (action === "reset-default") {
+        setCollapsedIds(defaultCollapsedSet());
+      }
+    };
+    window.addEventListener(
+      "godmode:graph-organize-collapse",
+      onOrganizeCollapse
+    );
+    return () =>
+      window.removeEventListener(
+        "godmode:graph-organize-collapse",
+        onOrganizeCollapse
+      );
+  }, [projection.edges]);
 
   useEffect(() => {
     const collapsible = new Set<string>();

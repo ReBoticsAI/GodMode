@@ -8,7 +8,7 @@ Use this when chat context is gone. Prefer this over assuming “Graph nodes = S
 
 | Layer | What it is | Status |
 |-------|------------|--------|
-| **Graph** | R3F map of You / Hub / Intelligence / Workspaces / Agents / Vaults / Life / Chat | Live on WIP; SVG glyphs in DOM `Html` overlays; edges are Lines |
+| **Graph** | R3F map of You / Hub / Intelligence / Workspaces / Agents / Vaults / Chat (Structure, Knowledge, Automations, Calendar fan off You and agents) | Live on WIP; SVG glyphs in DOM `Html` overlays; edges are Lines |
 | **SQLite universe + Data Router** | Storage execution | Mostly **target** + pilots; #778 digests chat **reads** only |
 | **Per-user box + job throwaway** | Compute isolation | **Not built** (#780, #781) |
 

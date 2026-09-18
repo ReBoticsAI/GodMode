@@ -12,11 +12,11 @@ flowchart TB
   UserVault["User Vault DB"]
   UserBank["Bank / Wallet"]
   Workspaces["Workspaces"]
-  UserLife["Your Life"]
+  UserSurfaces["Structure / Knowledge / Automations / Calendar"]
   Intel["Intelligence DB"]
   IntelVault["Intelligence Vault DB"]
   IntelBank["Bank / Wallet"]
-  IntelLife["Intelligence Life"]
+  IntelSurfaces["Structure / Knowledge / Automations / Calendar"]
   HubNode["Hub Bridge DB"]
   UserChat["Your Chat DB"]
   IntelChat["Intelligence Chat DB"]
@@ -27,22 +27,22 @@ flowchart TB
   UserVault --> UserBank
   YouNode --> Workspaces
   Workspaces -.-> UserVault
-  YouNode --> UserLife
+  YouNode --> UserSurfaces
   YouNode --> UserChat
   Intel --> IntelVault
   IntelVault --> IntelBank
-  Intel --> IntelLife
+  Intel --> IntelSurfaces
   Intel --> IntelChat
 ```
 
 | Role | Meaning |
 |------|---------|
-| **You** | Graph root (objectType `User`). Own SQLite. Owns User Vault, Workspaces, **Life**, and personal Chat. |
-| **Intelligence** | Platform agent under You. Own SQLite. Owns Intelligence Vault, **Life**, Chat, and Hub link. |
-| **Workspaces** | End of Hub's platform ray (not under Vault). Catalog exemplars: Personal, Project Alpha, and Family with Agents, Structure, and Chat. Many workspaces may read approved secrets from User Vault. |
+| **You** | Graph root (objectType `User`). Own SQLite. Owns User Vault, Workspaces, owner surfaces, and personal Chat. |
+| **Intelligence** | Platform agent under You. Own SQLite. Owns Intelligence Vault, owner surfaces, Chat, and Hub link. |
+| **Workspaces** | Hub child on The Graph (not under Vault, not chained under Marketplace). Catalog exemplars: Personal, Project Alpha, and Family with Agents, Structure, and Chat. Many workspaces may read approved secrets from User Vault. |
 | **Hub** | Bridge, right of the You↔Intelligence spine. Ops/logs SQLite only. Does not store user chat bodies. On-disk path remains `heart/` until a dual-read migration to `hub/`. |
 | **Vaults** | User Vault (secrets, Bank → Wallet; LLM key storage) and Intelligence Vault (Bank → Wallet). Account / Cloud / LLM purpose live on You's Information panel. |
-| **Life** | Per-owner hub for Structure, Knowledge, Automations, Calendar (each expanded into child nodes on The Graph). Chat stays outside Life. |
+| **Owner surfaces** | Structure, Knowledge, Automations, and Calendar hang directly off You or each agent on The Graph (no Life hub). Chat stays outside these trees. |
 | **Agents (specialized)** | Under Workspaces on The Graph (not on the spine). Intelligence remains the platform agent; Digital You is You's Chat bubble. |
 
 **Unlock hubs are not on The Graph.** Chat window chrome is open by default. Unlock commerce ObjectTypes are retired in a dedicated phase.

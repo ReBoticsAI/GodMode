@@ -1,20 +1,62 @@
 import {
+  BellIcon,
+  BookOpenIcon,
+  CalendarIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  HashIcon,
   InfoIcon,
+  KeyRoundIcon,
+  LandmarkIcon,
   LayersIcon,
+  LifeBuoyIcon,
+  MessageCircleIcon,
+  PackageIcon,
+  RocketIcon,
+  SettingsIcon,
+  Share2Icon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  StoreIcon,
+  UsersIcon,
+  WorkflowIcon,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
-import { useIntelligence } from "@/lib/intelligence-context";
+import { useIntelligence, type LeftRailTab } from "@/lib/intelligence-context";
 import { useTenant } from "@/lib/tenant-context";
 import { useChatUnlock } from "@/lib/chat-unlock-context";
 import { useNavigate } from "react-router-dom";
-import type { GraphCtaAction, GraphProjectionNode } from "@/api";
+import {
+  fetchDmContacts,
+  type DmContact,
+  type GraphCtaAction,
+  type GraphProjectionNode,
+} from "@/api";
+import { CalendarBoard } from "@/components/intelligence/calendar/CalendarBoard";
+import { AutomationsPanel } from "@/pages/Automations";
+import { KnowledgePanel } from "@/pages/intelligence-flow/KnowledgePanel";
+import Bank from "@/pages/Bank";
+import Vault from "@/pages/Vault";
+import { PlatformVaultContent } from "@/pages/PlatformVault";
+import { AdminContent } from "@/pages/Admin";
+import { WikiContent } from "@/pages/Wiki";
+import { SupportContent } from "@/pages/Support";
+import { SettingsContent } from "@/pages/Settings";
+import { SharedContent } from "@/pages/Shared";
+import { MarketplaceContent } from "@/pages/Marketplace";
+import { StructureContent } from "@/pages/StructureEditor";
+import { AgentsContent } from "@/pages/Agents";
+import { UsersContent } from "@/pages/Users";
+import { ContactsContent } from "@/pages/ContactsFlow";
+import { ReleasesContent } from "@/pages/ReleaseSubmissionsPage";
+import { TasksContent } from "@/pages/UserTasks";
+import { ConversationList } from "@/components/messages/ConversationList";
+import { NotificationsList } from "@/components/NotificationsList";
 import {
   GraphLeaderboardSection,
   GraphNodeMissionsSection,
@@ -25,6 +67,7 @@ import {
   type ObjectTypeClient,
 } from "@/lib/object-types-api";
 import { graphNodeColor } from "@/lib/graph-node-style";
+import { floatingSurfaceForTab } from "@/lib/graph-floating-surfaces";
 
 const CodingWorkspacePage = lazy(
   () => import("@/pages/coding/CodingWorkspacePage")
@@ -197,12 +240,18 @@ function KernelObjectTypeView({
 export function InformationFloatingPanel() {
   const {
     informationPanelOpen,
+    informationPanelMinimized,
+    setInformationPanelMinimized,
     informationNode,
     closeInformationPanel,
     openPanel,
-    openInformationPanel,
-    setPendingChatId,
+    activeLeftTab,
+    setActiveLeftTab,
+    activeAgentId,
+    chatTarget,
     setChatTarget,
+    dmConversations,
+    refreshDmConversations,
     composerWidth,
     panelHeight,
   } = useIntelligence();
@@ -214,6 +263,24 @@ export function InformationFloatingPanel() {
     () => new Set()
   );
   const [canvasMode, setCanvasMode] = useState<CanvasMode>("overview");
+
+  const [dmContacts, setDmContacts] = useState<DmContact[]>([]);
+  useEffect(() => {
+    fetchDmContacts()
+      .then((c) => setDmContacts(c.contacts))
+      .catch(() => undefined);
+  }, []);
+
+  const directConversations = useMemo(
+    () => dmConversations.filter((c) => c.kind !== "group"),
+    [dmConversations]
+  );
+  const groupConversations = useMemo(
+    () => dmConversations.filter((c) => c.kind === "group"),
+    [dmConversations]
+  );
+  const activeConversationId =
+    chatTarget.kind === "conversation" ? chatTarget.conversationId : null;
 
   useEffect(() => {
     const onCollapseChanged = (ev: Event) => {
@@ -247,43 +314,70 @@ export function InformationFloatingPanel() {
     switch (action.type) {
       case "open_chat":
         if (node.kind === "chat" && node.refId) {
-          setPendingChatId(node.refId);
-          openPanel({ tab: "chat", maximized: false });
+          setChatTarget({ kind: "agent", agentId: node.refId });
         } else if (node.kind === "agent" && node.refId) {
           setChatTarget({ kind: "agent", agentId: node.refId });
-          openPanel({
-            tab: "chat",
-            agentId: node.refId,
-            maximized: false,
-          });
-        } else {
-          openPanel({ tab: "chat", maximized: false });
         }
-        openInformationPanel(node);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+        }
         return;
-      case "open_panel":
-        openPanel({
-          tab: action.tab as
-            | "chat"
-            | "notifications"
-            | "calendar"
-            | "projects"
-            | "knowledge"
-            | "bank"
-            | "vault"
-            | "support"
-            | "dms"
-            | "channels"
-            | "contacts",
-          maximized: false,
-        });
-        openInformationPanel(node);
+      case "open_panel": {
+        const surface = floatingSurfaceForTab(action.tab);
+        if (surface) {
+          window.dispatchEvent(
+            new CustomEvent(surface.event, { detail: {} })
+          );
+          return;
+        }
+        if (action.tab) {
+          setActiveLeftTab(action.tab as LeftRailTab);
+        }
         return;
+      }
       case "navigate":
         if (!authenticated && action.path.startsWith("/settings")) {
           navigate("/?auth=1");
           window.dispatchEvent(new CustomEvent("godmode:open-auth"));
           return;
+        }
+        {
+          const surfaceMatch = [
+            floatingSurfaceForTab("platform-vault"),
+            floatingSurfaceForTab("admin"),
+            floatingSurfaceForTab("wiki"),
+            floatingSurfaceForTab("personal-vault"),
+            floatingSurfaceForTab("settings"),
+            floatingSurfaceForTab("shared"),
+            floatingSurfaceForTab("marketplace"),
+            floatingSurfaceForTab("structure"),
+            floatingSurfaceForTab("coding"),
+            floatingSurfaceForTab("releases"),
+            floatingSurfaceForTab("agents"),
+            floatingSurfaceForTab("users"),
+            floatingSurfaceForTab("support"),
+            floatingSurfaceForTab("tasks"),
+            floatingSurfaceForTab("contacts"),
+          ].find(
+            (s) =>
+              s &&
+              (action.path === s.path || action.path.startsWith(`${s.path}?`))
+          );
+          if (surfaceMatch) {
+            const q = action.path.includes("?")
+              ? new URLSearchParams(action.path.split("?")[1])
+              : null;
+            window.dispatchEvent(
+              new CustomEvent(surfaceMatch.event, {
+                detail: {
+                  vault: q?.get("vault"),
+                  sub: q?.get("sub"),
+                  tab: q?.get("tab"),
+                },
+              })
+            );
+            return;
+          }
         }
         navigate(action.path);
         openPanel({ maximized: false });
@@ -293,7 +387,9 @@ export function InformationFloatingPanel() {
           navigate("/?auth=1");
           window.dispatchEvent(new CustomEvent("godmode:open-auth"));
         } else {
-          navigate("/settings");
+          window.dispatchEvent(
+            new CustomEvent("godmode:open-settings", { detail: {} })
+          );
         }
         return;
       case "open_unlock": {
@@ -331,29 +427,291 @@ export function InformationFloatingPanel() {
         ? "Coding"
         : "Information";
 
+  let panelTitle = "Information";
+  let panelIcon: ReactNode = (
+    <InfoIcon className="size-4" style={{ color: accent }} />
+  );
+  let panelAccent = accent;
+
+  if (activeLeftTab === "calendar") {
+    panelTitle = "Calendar";
+    panelAccent = "#38bdf8";
+    panelIcon = (
+      <CalendarIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "projects") {
+    panelTitle = "Automations";
+    panelAccent = "#a78bfa";
+    panelIcon = (
+      <WorkflowIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "knowledge") {
+    panelTitle = "Knowledge";
+    panelAccent = "#34d399";
+    panelIcon = (
+      <BookOpenIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "bank") {
+    panelTitle = "Bank";
+    panelAccent = "#fbbf24";
+    panelIcon = (
+      <LandmarkIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "vault") {
+    panelTitle = "Agent Vault";
+    panelAccent = "#f87171";
+    panelIcon = (
+      <ShieldCheckIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "platform-vault") {
+    panelTitle = "Platform Vault";
+    panelAccent = "#fbbf24";
+    panelIcon = (
+      <KeyRoundIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "personal-vault") {
+    panelTitle = "Personal Vault";
+    panelAccent = "#f87171";
+    panelIcon = (
+      <ShieldCheckIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "admin") {
+    panelTitle = "Admin";
+    panelAccent = "#a78bfa";
+    panelIcon = (
+      <ShieldIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "wiki") {
+    panelTitle = "Wiki";
+    panelAccent = "#34d399";
+    panelIcon = (
+      <BookOpenIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "support") {
+    panelTitle = "Support";
+    panelAccent = "#818cf8";
+    panelIcon = (
+      <LifeBuoyIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "settings") {
+    panelTitle = "Settings";
+    panelAccent = "#94a3b8";
+    panelIcon = (
+      <SettingsIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "shared") {
+    panelTitle = "Shared";
+    panelAccent = "#818cf8";
+    panelIcon = (
+      <Share2Icon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "marketplace") {
+    panelTitle = "Marketplace";
+    panelAccent = "#fb923c";
+    panelIcon = (
+      <StoreIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "structure") {
+    panelTitle = "Structure";
+    panelAccent = "#60a5fa";
+    panelIcon = (
+      <LayersIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "coding") {
+    panelTitle = "Coding";
+    panelAccent = "#38bdf8";
+    panelIcon = (
+      <CodeIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "releases") {
+    panelTitle = "Releases";
+    panelAccent = "#f472b6";
+    panelIcon = (
+      <RocketIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "agents") {
+    panelTitle = "Agents";
+    panelAccent = "#a78bfa";
+    panelIcon = (
+      <WorkflowIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "users") {
+    panelTitle = "Profile";
+    panelAccent = "#34d399";
+    panelIcon = <UsersIcon className="size-4" style={{ color: panelAccent }} />;
+  } else if (activeLeftTab === "tasks") {
+    panelTitle = "Tasks";
+    panelAccent = "#a78bfa";
+    panelIcon = (
+      <PackageIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "notifications") {
+    panelTitle = "Notifications";
+    panelAccent = "#fb923c";
+    panelIcon = <BellIcon className="size-4" style={{ color: panelAccent }} />;
+  } else if (activeLeftTab === "contacts") {
+    panelTitle = "Contacts";
+    panelAccent = "#38bdf8";
+    panelIcon = <UsersIcon className="size-4" style={{ color: panelAccent }} />;
+  } else if (activeLeftTab === "dms") {
+    panelTitle = "Direct Messages";
+    panelAccent = "#38bdf8";
+    panelIcon = (
+      <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
+    );
+  } else if (activeLeftTab === "channels") {
+    panelTitle = "Channels";
+    panelAccent = "#38bdf8";
+    panelIcon = <HashIcon className="size-4" style={{ color: panelAccent }} />;
+  } else if (node) {
+    panelTitle = `${titlePrefix} · ${node.label}`;
+    panelIcon =
+      canvasMode === "coding" ? (
+        <CodeIcon className="size-4" style={{ color: accent }} />
+      ) : canvasMode === "kernel" ? (
+        <LayersIcon className="size-4" style={{ color: accent }} />
+      ) : (
+        <InfoIcon className="size-4" style={{ color: accent }} />
+      );
+  }
+
   return (
     <FloatingWindow
-      open={informationPanelOpen && Boolean(node)}
-      title={node ? `${titlePrefix} · ${node.label}` : "Information"}
-      icon={
-        canvasMode === "coding" ? (
-          <CodeIcon className="size-4" style={{ color: accent }} />
-        ) : canvasMode === "kernel" ? (
-          <LayersIcon className="size-4" style={{ color: accent }} />
-        ) : (
-          <InfoIcon className="size-4" style={{ color: accent }} />
-        )
-      }
-      accent={accent}
+      open={informationPanelOpen && (activeLeftTab !== "info" || Boolean(node))}
+      minimized={informationPanelMinimized}
+      onMinimize={() => setInformationPanelMinimized(true)}
+      title={panelTitle}
+      icon={panelIcon}
+      accent={panelAccent}
       windowId="information"
       role="information"
       pairGroup="focus-pair"
-      placement="focus-right"
+      placement="left"
       defaultWidth={composerWidth}
       defaultHeight={panelHeight}
       onClose={closeInformationPanel}
     >
-      {node ? (
+      {activeLeftTab === "calendar" ? (
+        <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
+          <CalendarBoard scope={{ kind: "agent", agentId: activeAgentId }} />
+        </div>
+      ) : activeLeftTab === "projects" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <AutomationsPanel agentId={activeAgentId} showTasks showEvents />
+        </div>
+      ) : activeLeftTab === "knowledge" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <KnowledgePanel />
+        </div>
+      ) : activeLeftTab === "bank" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <Bank embedded agentId={activeAgentId} />
+        </div>
+      ) : activeLeftTab === "vault" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <Vault mode="agent" agentId={activeAgentId} embedded />
+        </div>
+      ) : activeLeftTab === "personal-vault" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <Vault mode="user" embedded />
+        </div>
+      ) : activeLeftTab === "platform-vault" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <PlatformVaultContent embedded />
+        </div>
+      ) : activeLeftTab === "admin" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <AdminContent embedded />
+        </div>
+      ) : activeLeftTab === "wiki" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <WikiContent embedded />
+        </div>
+      ) : activeLeftTab === "support" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <SupportContent embedded />
+        </div>
+      ) : activeLeftTab === "settings" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <SettingsContent embedded />
+        </div>
+      ) : activeLeftTab === "shared" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <SharedContent embedded />
+        </div>
+      ) : activeLeftTab === "marketplace" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <MarketplaceContent embedded />
+        </div>
+      ) : activeLeftTab === "structure" ? (
+        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+          <StructureContent />
+        </div>
+      ) : activeLeftTab === "coding" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Suspense
+            fallback={
+              <p className="p-3 text-sm text-muted-foreground">Loading coding…</p>
+            }
+          >
+            <CodingWorkspacePage embedded />
+          </Suspense>
+        </div>
+      ) : activeLeftTab === "releases" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <ReleasesContent embedded />
+        </div>
+      ) : activeLeftTab === "agents" ? (
+        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+          <AgentsContent />
+        </div>
+      ) : activeLeftTab === "users" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <UsersContent />
+        </div>
+      ) : activeLeftTab === "tasks" ? (
+        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+          <TasksContent embedded />
+        </div>
+      ) : activeLeftTab === "notifications" ? (
+        <div className="min-h-0 flex-1 overflow-hidden px-3 py-2">
+          <NotificationsList compact />
+        </div>
+      ) : activeLeftTab === "contacts" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ContactsContent />
+        </div>
+      ) : activeLeftTab === "dms" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ConversationList
+            conversations={directConversations}
+            contacts={dmContacts}
+            activeId={activeConversationId}
+            onSelect={(id: string) => {
+              setChatTarget({ kind: "conversation", conversationId: id });
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+              }
+            }}
+            onCreated={() => void refreshDmConversations()}
+          />
+        </div>
+      ) : activeLeftTab === "channels" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ConversationList
+            conversations={groupConversations}
+            contacts={dmContacts}
+            activeId={activeConversationId}
+            onSelect={(id: string) => {
+              setChatTarget({ kind: "conversation", conversationId: id });
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+              }
+            }}
+            onCreated={() => void refreshDmConversations()}
+          />
+        </div>
+      ) : node ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <Tabs
             value={canvasMode}
@@ -394,6 +752,9 @@ export function InformationFloatingPanel() {
                   </Badge>
                   {node.status?.attention ? (
                     <Badge variant="destructive">Needs attention</Badge>
+                  ) : null}
+                  {node.status?.working ? (
+                    <Badge variant="secondary">In progress</Badge>
                   ) : null}
                   {node.objectType ? (
                     <span className="text-[11px] text-muted-foreground">
@@ -533,20 +894,20 @@ export function InformationFloatingPanel() {
                           className="mt-1 self-start"
                           onClick={() =>
                             runCta(
-                              { type: "navigate", path: "/settings" },
+                              { type: "open_panel", tab: "platform-vault" },
                               node
                             )
                           }
                         >
-                          Open Cloud settings
+                          Open Platform Vault · Cloud
                         </Button>
                       </div>
                       <div className="flex flex-col gap-1">
                         <p className="text-sm font-medium">LLM keys</p>
                         <p className="text-sm text-muted-foreground">
                           Model provider credentials you own. Values are stored
-                          in User Vault. Intelligence and agents use only keys
-                          you approve.
+                          in Platform Vault. Intelligence and agents use only
+                          keys you approve.
                         </p>
                         <Button
                           type="button"
@@ -554,10 +915,13 @@ export function InformationFloatingPanel() {
                           variant="outline"
                           className="mt-1 self-start"
                           onClick={() =>
-                            runCta({ type: "open_panel", tab: "vault" }, node)
+                            runCta(
+                              { type: "open_panel", tab: "platform-vault" },
+                              node
+                            )
                           }
                         >
-                          Open Vault
+                          Open Platform Vault
                         </Button>
                       </div>
                     </div>

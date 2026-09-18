@@ -3,7 +3,7 @@
  * 1. Icon is resolved from objectType / role first, then kind. Two hubs must
  *    not share a silhouette just because both are kind "system".
  * 2. Colors belong to a role family (Person = green, Agent = purple,
- *    Chat = bright yellow, Life / Vault / Hub each have their own family).
+ *    Chat = bright yellow, Vault / Hub each have their own family).
  *    Each instance is a shade of that family.
  * 3. Child shades are derivatives of their parent.
  */
@@ -42,7 +42,6 @@ export const GRAPH_GLYPH_KEYS = [
   "page",
   "unlock",
   "system",
-  "life",
   "vault",
   "heart",
   "support",
@@ -94,8 +93,6 @@ export const KIND_COLOR_FAMILY: Record<GraphNodeKindId, KindColorFamily> = {
 
 /** Role / objectType color families (hubs must not all share "system" gray). */
 export const ROLE_COLOR_FAMILY: Record<string, KindColorFamily> = {
-  /** Life surfaces: red (heart / vital). */
-  LifeSurface: { h: 350, s: 78, lMin: 48, lMax: 64, canonical: "#f43f5e" },
   VaultSecret: { h: 45, s: 88, lMin: 42, lMax: 58, canonical: "#f59e0b" },
   /** Hub (Bridge): green. */
   BridgeConnection: { h: 140, s: 72, lMin: 40, lMax: 58, canonical: "#4ade80" },
@@ -146,7 +143,7 @@ export type GraphGlyphInput = {
 
 /**
  * Pick a unique silhouette for this node. objectType / label / id win over
- * bare kind so Life, Vault, Hub, Support are not all the system hex.
+ * bare kind so Vault, Hub, Support are not all the system hex.
  */
 export function resolveGraphGlyphKey(input: GraphGlyphInput): GraphGlyphKey {
   const ot = (input.objectType ?? "").trim();
@@ -154,7 +151,6 @@ export function resolveGraphGlyphKey(input: GraphGlyphInput): GraphGlyphKey {
   const id = (input.id ?? "").toLowerCase();
 
   const byObjectType: Record<string, GraphGlyphKey> = {
-    LifeSurface: "life",
     VaultSecret: "vault",
     BridgeConnection: "heart",
     Support: "support",
@@ -215,7 +211,6 @@ export function resolveGraphGlyphKey(input: GraphGlyphInput): GraphGlyphKey {
     }
   }
 
-  if (label === "life" || id.includes(":life") || id.includes("life-")) return "life";
   if (label.includes("vault") || id.includes("vault")) return "vault";
   if (label === "heart" || id.includes("heart")) return "heart";
   if (label === "support" || id === "hub:support") return "support";
@@ -247,7 +242,6 @@ export function colorFamilyForNode(input: GraphGlyphInput): KindColorFamily {
   // Glyph-based family when objectType missing but role is clear from id/label.
   const glyph = resolveGraphGlyphKey(input);
   const glyphFamily: Partial<Record<GraphGlyphKey, KindColorFamily>> = {
-    life: ROLE_COLOR_FAMILY.LifeSurface,
     vault: ROLE_COLOR_FAMILY.VaultSecret,
     heart: ROLE_COLOR_FAMILY.BridgeConnection,
     support: ROLE_COLOR_FAMILY.Support,

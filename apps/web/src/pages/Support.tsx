@@ -36,6 +36,19 @@ const STATUS_TONE: Record<SupportTicketStatus, string> = {
 };
 
 export default function Support() {
+  return (
+    <Page>
+      <SupportContent />
+    </Page>
+  );
+}
+
+/** Support body for the full route or an embedded Graph floating window. */
+export function SupportContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inboxParam = searchParams.get("inbox") === "staff" ? "staff" : "mine";
@@ -132,7 +145,8 @@ export default function Support() {
   }, [active, navigate]);
 
   return (
-    <Page>
+    <div className={embedded ? "flex flex-col gap-4" : undefined}>
+      {!embedded ? (
       <PageHeader
         title="Support"
         description="Hub issues go to administrators and the Support group; open-source bugs go to GitHub."
@@ -143,7 +157,14 @@ export default function Support() {
           />
         }
       />
-
+      ) : (
+        <div className="mb-2 flex justify-end">
+          <SupportRequestDialog
+            trigger={<Button size="sm">New request</Button>}
+            onCreated={load}
+          />
+        </div>
+      )}
       <Tabs
         value={inbox}
         onValueChange={(v) => {
@@ -289,6 +310,6 @@ export default function Support() {
           </div>
         </TabsContent>
       </Tabs>
-    </Page>
+    </div>
   );
 }

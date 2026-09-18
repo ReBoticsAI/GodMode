@@ -3,6 +3,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useSearchParams,
 } from "react-router-dom";
 import Home from "./pages/Home";
 import AgentsPage from "./pages/Agents";
@@ -38,7 +39,6 @@ import RecordFormPage from "./pages/records/RecordFormPage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { SidebarShellContent } from "@/components/SidebarShellContent";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import {
@@ -90,12 +90,15 @@ import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
+import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
+import { GraphEscMenu } from "@/components/graph/GraphEscMenu";
 import { pageElementFor } from "@/lib/page-registry";
 import { loadWebPlugins } from "@/plugins/loader";
 import { webPluginRuntime } from "@/plugins/runtime";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useMemo, useState, useRef, createElement, type ComponentType } from "react";
 import { autoChatAgentIdForPagePath } from "@/lib/structure-agents";
+import { floatingSurfaceForPath, isGraphFloatingIndexPath } from "@/lib/graph-floating-surfaces";
 import { toast } from "sonner";
 import { connectWebSocket, fetchBridgeHealth, ensureTrialInference } from "@/api";
 import { useChatUnlock } from "@/lib/chat-unlock-context";
@@ -138,19 +141,27 @@ function AiNotifications() {
 
 /**
  * Authenticated land: The Graph is primary. Trial ensure (#758) runs in background.
+ * Re-runs when the active workspace changes so Vault attach / model select can
+ * recover on a fresh tenant DB (see ensureWorkspaceHasTrialKey).
  * Chat opens when the user clicks Chat or Intelligence on the canvas.
  */
 function FirstLandChatBootstrap() {
   const { loading } = useChatUnlock();
-  const trialStarted = useRef(false);
+  const { user, authenticated, activeTenantId } = useTenant();
+  const lastEnsureKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (loading || trialStarted.current) return;
-    trialStarted.current = true;
-    void ensureTrialInference().catch(() => {
+    if (loading || !authenticated || !user) return;
+    const key = `${user.id}:${activeTenantId ?? ""}`;
+    if (lastEnsureKey.current === key) return;
+    lastEnsureKey.current = key;
+    void ensureTrialInference({
+      email: user.email,
+      displayName: user.displayName,
+    }).catch(() => {
       /* soft-fail: Vault Connect / FirstRunWizard remain */
     });
-  }, [loading]);
+  }, [loading, authenticated, user, activeTenantId]);
 
   return null;
 }
@@ -159,6 +170,7 @@ const AI_SETTINGS_PATH = "/settings/ai";
 
 function AppShell() {
   const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
   const { departments, nodes, loading } = useStructure();
   const { openPanel, panelOpen } = useIntelligence();
   const isMobile = useIsMobile();
@@ -174,7 +186,22 @@ function AppShell() {
     openPanel({ agentId: autoChatAgentId });
   }, [autoChatAgentId, pathname, openPanel]);
 
-  const [navOpen, setNavOpen] = useState(false);
+  // Deep-link chrome index routes → Graph home + floating window.
+  useEffect(() => {
+    const surface = floatingSurfaceForPath(pathname);
+    if (!surface) return;
+    const detail: Record<string, string | null> = {};
+    if (surface.tab === "platform-vault") {
+      detail.vault = searchParams.get("vault");
+      detail.sub = searchParams.get("sub");
+    } else if (surface.tab === "admin" || surface.tab === "settings") {
+      detail.tab = searchParams.get("tab");
+    }
+    window.dispatchEvent(
+      new CustomEvent(surface.event, { detail })
+    );
+  }, [pathname, searchParams]);
+
   const [rightOpen, setRightOpen] = useState(false);
 
   const chromeless = isChromelessPath(pathname);
@@ -191,42 +218,31 @@ function AppShell() {
       ? webPluginRuntime.shellForSidebar(division.rightSidebar)
       : null;
 
-  // Close the off-canvas drawers whenever the route changes.
+  // Graph is the primary surface on Home. Chrome index deep-links open
+  // floating windows over the Graph (Settings, Vaults, Wiki index, …).
+  // Detail routes (e.g. /wiki/:slug) still paint in main.
+  const onGraphHome = pathname === HOME_PATH || pathname === "/";
+  const onFloatingIndex = isGraphFloatingIndexPath(pathname);
+  const showAppRoutes =
+    (panelOpen || !onGraphHome) && !onFloatingIndex;
+
+  // Close the plugin drawer whenever the route changes.
   useEffect(() => {
-    setNavOpen(false);
     setRightOpen(false);
   }, [pathname]);
 
-  // Drawers only exist in compact mode; clear them when growing to desktop.
+  // Plugin drawer only exists in compact mode; clear when growing to desktop.
   useEffect(() => {
     if (!isMobile) {
-      setNavOpen(false);
       setRightOpen(false);
     }
   }, [isMobile]);
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
-      {/* Desktop primary sidebar (static rail) */}
-      <aside className="hidden h-dvh w-56 shrink-0 flex-col gap-2 border-r bg-sidebar p-3 text-sidebar-foreground lg:flex">
-        <SidebarShellContent />
-      </aside>
-
-      {/* Compact-mode primary nav (off-canvas drawer) */}
-      <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent
-          side="left"
-          className="flex w-72 max-w-[85vw] flex-col gap-2 bg-sidebar p-3 text-sidebar-foreground"
-        >
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarShellContent onNavigate={() => setNavOpen(false)} />
-        </SheetContent>
-      </Sheet>
-
       <div className="relative flex min-w-0 flex-1 flex-col">
         <ChatGraphCanvas />
         <AppHeader
-          onOpenNav={() => setNavOpen(true)}
           onOpenRightPanel={
             hasRightPanel ? () => setRightOpen(true) : undefined
           }
@@ -234,16 +250,19 @@ function AppShell() {
         />
         <main
           className={
-            panelOpen
-              ? "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background/90"
+            showAppRoutes
+              ? panelOpen
+                ? "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background/90"
+                : "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background"
               : "pointer-events-none invisible relative z-10 min-h-0 flex-1 overflow-hidden"
           }
-          aria-hidden={!panelOpen}
+          aria-hidden={!showAppRoutes}
         >
           <AppRoutes departments={departments} loading={loading} />
         </main>
         <IntelligencePanel />
         <InformationFloatingPanel />
+        <MinimizedWindowsDock />
         <AppFooter />
       </div>
 
@@ -270,6 +289,7 @@ function AppShell() {
 
       <FirstLandChatBootstrap />
       <AiNotifications />
+      <GraphEscMenu />
       <Toaster richColors position="top-right" />
     </div>
   );

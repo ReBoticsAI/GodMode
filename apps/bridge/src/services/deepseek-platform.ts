@@ -5,6 +5,7 @@ import {
   removePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
+import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 
 /** Fixed secret id/name for DeepSeek (metered) API key (#231). */
 export const DEEPSEEK_API_KEY_SECRET_ID = "deepseek-api-key";
@@ -23,6 +24,7 @@ export const DEEPSEEK_CHAT_CATALOG = [
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
 ] as const;
 
+/** Vault UI sources only. Platform admin supply is separate (Admin → GodMode Inference). */
 export type DeepSeekAuthSource = "env" | "vault" | "none";
 
 export interface DeepSeekAuthStatus {
@@ -35,17 +37,20 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
+/**
+ * Chat / readiness resolve: personal vault BYOK → Admin platform supply → env.
+ */
 export function resolveDeepSeekApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const env = process.env.DEEPSEEK_API_KEY?.trim();
-  if (env) return env;
-  return resolvePlatformVaultSecret(db, {
+  const vault = resolvePlatformVaultSecret(db, {
     baseId: DEEPSEEK_API_KEY_SECRET_ID,
     name: DEEPSEEK_API_KEY_SECRET_NAME,
     agentId,
   });
+  if (vault) return vault;
+  return resolveGodModeInferenceSupplyKey("deepseek");
 }
 
 export function upsertDeepSeekApiKey(
@@ -72,14 +77,14 @@ export function removeDeepSeekApiKey(
   });
 }
 
+/**
+ * Personal / workspace BYOK status for Vault cards.
+ * Does not report Admin platform supply (that lives under Admin → GodMode Inference).
+ */
 export function getDeepSeekAuthStatus(
   db: AppDatabase,
   agentId?: string | null
 ): DeepSeekAuthStatus {
-  const env = process.env.DEEPSEEK_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
-  }
   const value = getPlatformVaultSecretInScope(db, {
     baseId: DEEPSEEK_API_KEY_SECRET_ID,
     name: DEEPSEEK_API_KEY_SECRET_NAME,
@@ -87,6 +92,10 @@ export function getDeepSeekAuthStatus(
   });
   if (value) {
     return { connected: true, source: "vault", masked: maskKey(value) };
+  }
+  const env = process.env.DEEPSEEK_API_KEY?.trim();
+  if (env) {
+    return { connected: true, source: "env", masked: maskKey(env) };
   }
   return { connected: false, source: "none" };
 }

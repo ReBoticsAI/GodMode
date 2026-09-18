@@ -62,6 +62,15 @@ import {
   DEEPSEEK_CHAT_CATALOG,
 } from "./deepseek-platform.js";
 import {
+  isDashScopeAgentConfig,
+  isDashScopePlatformReady,
+  isDashScopeVaultSecretId,
+  DASHSCOPE_API_BASE_URL,
+  DASHSCOPE_API_KEY_SECRET_ID,
+  DASHSCOPE_API_KEY_SECRET_NAME,
+  DASHSCOPE_CHAT_CATALOG,
+} from "./dashscope-platform.js";
+import {
   isGoogleAiAgentConfig,
   isGoogleAiPlatformReady,
   isGoogleAiVaultSecretId,
@@ -274,6 +283,16 @@ function deepseekHarnessInput(model: string) {
     provider: "openai_compatible" as const,
     transport: "deepseek",
     baseUrl: DEEPSEEK_API_BASE_URL,
+  };
+}
+
+function dashscopeHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "dashscope",
+    baseUrl: DASHSCOPE_API_BASE_URL,
   };
 }
 
@@ -516,6 +535,8 @@ export async function listModelCatalog(
       !isFireworksVaultSecretId(s.id) &&
       s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
       !isDeepSeekVaultSecretId(s.id) &&
+      s.name !== DASHSCOPE_API_KEY_SECRET_NAME &&
+      !isDashScopeVaultSecretId(s.id) &&
       s.name !== GOOGLE_AI_API_KEY_SECRET_NAME &&
       !isGoogleAiVaultSecretId(s.id) &&
       s.name !== XAI_API_KEY_SECRET_NAME &&
@@ -558,6 +579,7 @@ export async function listModelCatalog(
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
   const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
   const hasDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
+  const hasDashScope = isDashScopePlatformReady(db, catalogAgentId);
   const hasGoogleAi = isGoogleAiPlatformReady(db, catalogAgentId);
   const hasXai = isXaiPlatformReady(db, catalogAgentId);
   const hasZai = isZaiPlatformReady(db, catalogAgentId);
@@ -697,6 +719,23 @@ export async function listModelCatalog(
         provider: "openai_compatible",
         transport: "deepseek",
         active: Boolean(agentIsDeepSeek && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
+  if (hasDashScope) {
+    const agentIsDashScope =
+      agent?.backend === "provider" && isDashScopeAgentConfig(agent.config);
+    for (const m of DASHSCOPE_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(dashscopeHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:dashscope:${m.id}`,
+        source: "provider",
+        label: `Qwen · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "dashscope",
+        active: Boolean(agentIsDashScope && agent.config?.model === m.id),
         harnessProfileId: harness.id,
       });
     }
@@ -928,6 +967,7 @@ export async function listModelCatalog(
     const isTg = isTogetherAgentConfig(agent.config);
     const isFw = isFireworksAgentConfig(agent.config);
     const isDs = isDeepSeekAgentConfig(agent.config);
+    const isDash = isDashScopeAgentConfig(agent.config);
     const isGa = isGoogleAiAgentConfig(agent.config);
     const isXaiCfg = isXaiAgentConfig(agent.config);
     const isZaiPayg = isZaiAgentConfig(agent.config);
@@ -959,6 +999,8 @@ export async function listModelCatalog(
             ? resolveHarnessProfile(fireworksHarnessInput(model))
             : isDs
               ? resolveHarnessProfile(deepseekHarnessInput(model))
+              : isDash
+                ? resolveHarnessProfile(dashscopeHarnessInput(model))
               : isGa
                 ? resolveHarnessProfile(googleAiHarnessInput(model))
                 : isXaiCfg
@@ -1004,6 +1046,8 @@ export async function listModelCatalog(
           ? "fireworks"
           : isDs
             ? "deepseek"
+            : isDash
+              ? "dashscope"
             : isGa
               ? "google_ai"
               : isXaiCfg
@@ -1048,6 +1092,8 @@ export async function listModelCatalog(
                     ? "Fireworks"
                     : namespacedTransport === "deepseek"
                       ? "DeepSeek"
+                      : namespacedTransport === "dashscope"
+                        ? "Qwen"
                       : namespacedTransport === "google_ai"
                         ? "Google AI"
                         : namespacedTransport === "xai"
@@ -1117,6 +1163,8 @@ export async function listModelCatalog(
               ? { transport: "fireworks", baseUrl: FIREWORKS_API_BASE_URL }
               : active.transport === "deepseek"
                 ? { transport: "deepseek", baseUrl: DEEPSEEK_API_BASE_URL }
+                : active.transport === "dashscope"
+                  ? { transport: "dashscope", baseUrl: DASHSCOPE_API_BASE_URL }
                 : active.transport === "google_ai"
                   ? { transport: "google_ai", baseUrl: GOOGLE_AI_API_BASE_URL }
                   : active.transport === "xai"
@@ -1288,6 +1336,8 @@ export async function selectIntelligenceModel(
         !isFireworksVaultSecretId(s.id) &&
         s.name !== DEEPSEEK_API_KEY_SECRET_NAME &&
         !isDeepSeekVaultSecretId(s.id) &&
+        s.name !== DASHSCOPE_API_KEY_SECRET_NAME &&
+        !isDashScopeVaultSecretId(s.id) &&
         s.name !== GOOGLE_AI_API_KEY_SECRET_NAME &&
         !isGoogleAiVaultSecretId(s.id) &&
         s.name !== XAI_API_KEY_SECRET_NAME &&
@@ -1324,6 +1374,7 @@ export async function selectIntelligenceModel(
     const togetherReady = isTogetherPlatformReady(db, "intelligence");
     const fireworksReady = isFireworksPlatformReady(db, "intelligence");
     const deepseekReady = isDeepSeekPlatformReady(db, "intelligence");
+    const dashscopeReady = isDashScopePlatformReady(db, "intelligence");
     const googleAiReady = isGoogleAiPlatformReady(db, "intelligence");
     const xaiReady = isXaiPlatformReady(db, "intelligence");
     const zaiReady = isZaiPlatformReady(db, "intelligence");
@@ -1351,6 +1402,7 @@ export async function selectIntelligenceModel(
       | "together"
       | "fireworks"
       | "deepseek"
+      | "dashscope"
       | "google_ai"
       | "xai"
       | "zai"
@@ -1412,6 +1464,10 @@ export async function selectIntelligenceModel(
         transport === "deepseek" ||
         base.includes("api.deepseek.com") ||
         keyHint === DEEPSEEK_API_KEY_SECRET_ID;
+      const wantsDashScope =
+        transport === "dashscope" ||
+        (base.includes("dashscope") && base.includes("aliyuncs.com")) ||
+        keyHint === DASHSCOPE_API_KEY_SECRET_ID;
       const wantsGoogleAi =
         transport === "google_ai" ||
         base.includes("generativelanguage.googleapis.com") ||
@@ -1495,6 +1551,14 @@ export async function selectIntelligenceModel(
         }
         preferredId = DEEPSEEK_API_KEY_SECRET_ID;
         compatibleTransport = "deepseek";
+      } else if (wantsDashScope) {
+        if (!dashscopeReady) {
+          throw new Error(
+            "Connect DashScope / Qwen in Vault before using Qwen models"
+          );
+        }
+        preferredId = DASHSCOPE_API_KEY_SECRET_ID;
+        compatibleTransport = "dashscope";
       } else if (wantsGoogleAi) {
         if (!googleAiReady) {
           throw new Error(
@@ -1616,6 +1680,11 @@ export async function selectIntelligenceModel(
               ? { transport: "fireworks" as const, baseUrl: FIREWORKS_API_BASE_URL }
               : compatibleTransport === "deepseek"
                 ? { transport: "deepseek" as const, baseUrl: DEEPSEEK_API_BASE_URL }
+                : compatibleTransport === "dashscope"
+                  ? {
+                      transport: "dashscope" as const,
+                      baseUrl: DASHSCOPE_API_BASE_URL,
+                    }
                 : compatibleTransport === "google_ai"
                   ? {
                       transport: "google_ai" as const,
@@ -1713,6 +1782,8 @@ export async function selectIntelligenceModel(
       together: undefined,
       fireworks: undefined,
       deepseek: undefined,
+      dashscope: undefined,
+      qwen: undefined,
       googleAi: undefined,
       xai: undefined,
       zai: undefined,
@@ -1783,6 +1854,8 @@ export async function selectIntelligenceModel(
               ? "Fireworks"
               : compatibleTransport === "deepseek"
                 ? "DeepSeek"
+                : compatibleTransport === "dashscope"
+                  ? "Qwen"
                 : compatibleTransport === "google_ai"
                   ? "Google AI"
                   : compatibleTransport === "xai"

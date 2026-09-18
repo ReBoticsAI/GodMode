@@ -26,6 +26,7 @@ import {
   fetchDigitalOceanInferenceStatus,
   type DigitalOceanInferenceAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * DigitalOcean Inference chat catalog snapshot (2026-08-04).
@@ -135,6 +136,7 @@ export function DigitalOceanInferenceCard({
           transport at inference.do-ai.run. Per-tenant keys only. Not account
           OAuth.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="digitalocean" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

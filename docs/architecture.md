@@ -58,7 +58,7 @@ is documented there; the static write-tool inventory and P0 gate live in
 
 ## Data storage
 
-**Target:** every durable actor and surface is its own SQLite file (You, Intelligence, Agents, chat threads, Vaults, Hub/Bridge, Life surfaces), plus a tiny `registry.sqlite`. See [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md).
+**Target:** every durable actor and surface is its own SQLite file (You, Intelligence, Agents, chat threads, Vaults, Hub/Bridge, Structure / Knowledge / Automations / Calendar surfaces), plus a tiny `registry.sqlite`. See [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md).
 
 **Current (until migrated):** Cloud + Users + User + Workspace planes:
 

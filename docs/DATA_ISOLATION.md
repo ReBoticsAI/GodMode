@@ -31,7 +31,7 @@ Cloud isolation unit. A whole dedicated VPS per customer is a later billing SKU
 ## The Graph is the map
 
 **The Graph** is the user-facing architecture of a GodMode instance: **You**,
-**Intelligence**, **Hub** (Bridge), Workspaces, Agents, Vaults, Life, and Chat.
+**Intelligence**, **Hub** (Bridge), Workspaces, Agents, Vaults, owner surfaces, and Chat.
 It is the control-surface metaphor for what exists and how windows open
 ([SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md), [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md)).
 

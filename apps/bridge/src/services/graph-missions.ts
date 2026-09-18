@@ -485,8 +485,30 @@ export function publishLeaderboardScore(opts: {
   }
 }
 
+export type GraphLeaderboardTimeframe =
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "year"
+  | "decade"
+  | "all";
+
+const TIMEFRAME_MODIFIERS: Record<
+  Exclude<GraphLeaderboardTimeframe, "all">,
+  string
+> = {
+  hour: "-1 hour",
+  day: "-1 day",
+  week: "-7 days",
+  month: "-1 month",
+  year: "-1 year",
+  decade: "-10 years",
+};
+
 export function listGraphLeaderboard(opts?: {
   limit?: number;
+  timeframe?: GraphLeaderboardTimeframe;
   cloudDb?: CoreDatabase;
 }): Array<{
   rank: number;
@@ -499,6 +521,44 @@ export function listGraphLeaderboard(opts?: {
   const cloud = opts?.cloudDb ?? getCloudDb();
   ensureGraphLeaderboardTables(cloud);
   const limit = Math.min(100, Math.max(1, opts?.limit ?? 50));
+  const timeframe = opts?.timeframe;
+
+  if (timeframe && timeframe !== "all" && timeframe in TIMEFRAME_MODIFIERS) {
+    const modifier =
+      TIMEFRAME_MODIFIERS[timeframe as Exclude<GraphLeaderboardTimeframe, "all">];
+    const rows = cloud
+      .prepare(
+        `SELECT
+           e.user_id,
+           COALESCE(s.display_name, 'Human') AS display_name,
+           SUM(e.points) AS total_points,
+           COUNT(e.id) AS missions_completed,
+           MAX(e.created_at) AS updated_at
+         FROM graph_leaderboard_events e
+         LEFT JOIN graph_leaderboard_scores s ON e.user_id = s.user_id
+         WHERE e.created_at >= datetime('now', ?)
+         GROUP BY e.user_id
+         ORDER BY total_points DESC, updated_at ASC
+         LIMIT ?`
+      )
+      .all(modifier, limit) as Array<{
+        user_id: string;
+        display_name: string;
+        total_points: number;
+        missions_completed: number;
+        updated_at: string;
+      }>;
+
+    return rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.user_id,
+      displayName: r.display_name,
+      totalPoints: r.total_points,
+      missionsCompleted: r.missions_completed,
+      updatedAt: r.updated_at,
+    }));
+  }
+
   const rows = cloud
     .prepare(
       `SELECT user_id, display_name, total_points, missions_completed, updated_at
@@ -507,12 +567,12 @@ export function listGraphLeaderboard(opts?: {
        LIMIT ?`
     )
     .all(limit) as Array<{
-    user_id: string;
-    display_name: string;
-    total_points: number;
-    missions_completed: number;
-    updated_at: string;
-  }>;
+      user_id: string;
+      display_name: string;
+      total_points: number;
+      missions_completed: number;
+      updated_at: string;
+    }>;
   return rows.map((r, i) => ({
     rank: i + 1,
     userId: r.user_id,

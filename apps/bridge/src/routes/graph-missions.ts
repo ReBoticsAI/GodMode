@@ -11,6 +11,7 @@ import {
   getGraphMissionsStatus,
   listGraphLeaderboard,
   syncAutoCompleteMissions,
+  type GraphLeaderboardTimeframe,
 } from "../services/graph-missions.js";
 import { GRAPH_MISSIONS_CATALOG_VERSION } from "../services/graph-missions-catalog.js";
 
@@ -112,8 +113,13 @@ export function createGraphMissionsRouter(): Router {
     try {
       const limitRaw =
         typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
+      const timeframeRaw =
+        typeof req.query.timeframe === "string"
+          ? (req.query.timeframe.toLowerCase().trim() as GraphLeaderboardTimeframe)
+          : undefined;
       const entries = listGraphLeaderboard({
         limit: Number.isFinite(limitRaw) ? limitRaw : 50,
+        timeframe: timeframeRaw,
       });
       res.json({ entries });
     } catch (err) {

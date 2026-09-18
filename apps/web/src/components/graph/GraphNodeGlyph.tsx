@@ -3,7 +3,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, HardHatIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -224,19 +224,6 @@ const GLYPH_ICON: Record<GraphGlyphKey, (props: ShapeProps) => ReactNode> = {
       <path {...strokeFill(color)} d="M60 10 L102 34 L102 86 L60 110 L18 86 L18 34 Z" />
       <circle cx="60" cy="60" r="16" fill="none" stroke={color} strokeWidth={3} />
       <circle cx="60" cy="60" r="5" fill={color} />
-    </g>
-  ),
-
-  /** Sprout / leaf — Life */
-  life: ({ color }) => (
-    <g>
-      <path
-        {...strokeFill(color, "44")}
-        d="M60 108 C60 72 28 58 28 34 C28 18 44 12 60 28 C76 12 92 18 92 34 C92 58 60 72 60 108 Z"
-      />
-      <line x1="60" y1="48" x2="60" y2="108" stroke={color} strokeWidth={4} strokeLinecap="round" />
-      <path d="M60 70 C44 62 36 50 34 40" fill="none" stroke={color} strokeWidth={2.5} />
-      <path d="M60 70 C76 62 84 50 86 40" fill="none" stroke={color} strokeWidth={2.5} />
     </g>
   ),
 
@@ -565,7 +552,6 @@ function textAnchorY(glyph: GraphGlyphKey): number {
       return 100;
     case "system":
     case "heart":
-    case "life":
       return 88;
     case "artifact":
       return 64;
@@ -584,6 +570,7 @@ function GraphNodeGlyphInner({
   adjacent,
   muted,
   attention,
+  working,
   collapsible,
   collapsed,
   onToggleCollapse,
@@ -599,6 +586,8 @@ function GraphNodeGlyphInner({
   adjacent?: boolean;
   muted?: boolean;
   attention?: boolean;
+  /** Active work: running turn, in-progress card, or open workflow. */
+  working?: boolean;
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -679,6 +668,15 @@ function GraphNodeGlyphInner({
             {display}
           </text>
         </svg>
+        {working ? (
+          <span
+            className="absolute left-1.5 top-1.5 flex size-6 items-center justify-center rounded-full border border-border/80 bg-secondary text-secondary-foreground shadow-sm"
+            title="In progress"
+            aria-hidden
+          >
+            <HardHatIcon className="size-3.5" />
+          </span>
+        ) : null}
         {attention ? (
           <span
             className="absolute right-2 top-2 size-3 rounded-full bg-destructive ring-2 ring-background"
@@ -687,6 +685,7 @@ function GraphNodeGlyphInner({
         ) : null}
         <span className="sr-only">
           {kind}: {label}
+          {working ? " (in progress)" : ""}
           {attention ? " (needs attention)" : ""}
           {collapsible
             ? collapsed

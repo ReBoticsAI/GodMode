@@ -1291,6 +1291,9 @@ export function createAiRouter(
         s.id !== "deepseek-api-key" &&
         !s.id.startsWith("deepseek-api-key__agent__") &&
         s.name !== "deepseek_api_key" &&
+        s.id !== "dashscope-api-key" &&
+        !s.id.startsWith("dashscope-api-key__agent__") &&
+        s.name !== "dashscope_api_key" &&
         s.id !== "google-ai-api-key" &&
         !s.id.startsWith("google-ai-api-key__agent__") &&
         s.name !== "google_ai_api_key" &&

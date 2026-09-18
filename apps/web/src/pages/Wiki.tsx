@@ -42,8 +42,22 @@ import {
 import { WIKI_PATH } from "@/lib/navigation";
 import { WikiLayout } from "@/components/wiki/WikiLayout";
 import { WikiSearch } from "@/components/wiki/WikiSearch";
+import { cn } from "@/lib/utils";
 
 export default function Wiki() {
+  return (
+    <Page>
+      <WikiContent />
+    </Page>
+  );
+}
+
+/** Wiki body for the full route or an embedded Graph floating window. */
+export function WikiContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const [pages, setPages] = useState<WikiPageType[]>([]);
   const [proposals, setProposals] = useState<WikiPageProposal[]>([]);
   const [filter, setFilter] = useState<"all" | WikiVisibility | "proposals">("all");
@@ -114,15 +128,17 @@ export default function Wiki() {
     }
   }, [title, body, space, visibility, navigate]);
 
-  return (
-    <Page>
-      <PageHeader
-        title="Wiki"
-        description="Internal and published knowledge base."
-        actions={<Button onClick={() => setDialogOpen(true)}>New page</Button>}
-      />
+  const newPageButton = (
+    <Button
+      size={embedded ? "sm" : "default"}
+      onClick={() => setDialogOpen(true)}
+    >
+      New page
+    </Button>
+  );
 
-      <WikiLayout onNewPage={() => setDialogOpen(true)}>
+  const listBody = (
+    <>
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
           <TabsList variant="line">
@@ -142,14 +158,15 @@ export default function Wiki() {
             placeholder="Search title or content…"
           />
         )}
+        {embedded ? <div className="ml-auto">{newPageButton}</div> : null}
       </div>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : filter === "proposals" ? (
         proposals.length === 0 ? (
-          <Card>
-            <CardHeader>
+          <Card className={cn(embedded && "border-0 shadow-none")}>
+            <CardHeader className={cn(embedded && "px-0")}>
               <CardTitle className="text-base">No pending proposals</CardTitle>
               <CardDescription>
                 Wiki synthesize jobs stage create/update patches here for approval.
@@ -207,14 +224,14 @@ export default function Wiki() {
           </ul>
         )
       ) : pages.length === 0 ? (
-        <Card>
-          <CardHeader>
+        <Card className={cn(embedded && "border-0 shadow-none")}>
+          <CardHeader className={cn(embedded && "px-0")}>
             <CardTitle className="text-base">No pages</CardTitle>
             <CardDescription>Create the first knowledge base page.</CardDescription>
           </CardHeader>
         </Card>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className={cn("grid gap-3", !embedded && "md:grid-cols-2")}>
           {pages.map((p) => (
             <li key={p.id}>
               <button
@@ -244,62 +261,83 @@ export default function Wiki() {
           ))}
         </ul>
       )}
+    </>
+  );
 
-      </WikiLayout>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New wiki page</DialogTitle>
-            <DialogDescription>
-              Internal pages are visible to your workspace; published pages are
-              world-readable.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="space-y-1.5">
-              <Label>Title</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+  const dialog = (
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>New wiki page</DialogTitle>
+          <DialogDescription>
+            Internal pages are visible to your workspace; published pages are
+            world-readable.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1.5">
+              <Label>Space (optional)</Label>
+              <Input value={space} onChange={(e) => setSpace(e.target.value)} />
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-1.5">
-                <Label>Space (optional)</Label>
-                <Input value={space} onChange={(e) => setSpace(e.target.value)} />
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <Label>Visibility</Label>
-                <Select
-                  value={visibility}
-                  onValueChange={(v) => setVisibility(v as WikiVisibility)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="internal">Internal</SelectItem>
-                    <SelectItem value="external">Published (external)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Body (markdown)</Label>
-              <Textarea
-                rows={8}
-                className="font-mono text-xs"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-              />
+            <div className="flex-1 space-y-1.5">
+              <Label>Visibility</Label>
+              <Select
+                value={visibility}
+                onValueChange={(v) => setVisibility(v as WikiVisibility)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="internal">Internal</SelectItem>
+                  <SelectItem value="external">Published (external)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void create()}>Create</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Page>
+          <div className="space-y-1.5">
+            <Label>Body (markdown)</Label>
+            <Textarea
+              rows={8}
+              className="font-mono text-xs"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void create()}>Create</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex flex-col gap-4">
+        {listBody}
+        {dialog}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Wiki"
+        description="Internal and published knowledge base."
+        actions={newPageButton}
+      />
+      <WikiLayout onNewPage={() => setDialogOpen(true)}>{listBody}</WikiLayout>
+      {dialog}
+    </>
   );
 }

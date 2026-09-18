@@ -122,9 +122,11 @@ interface IntelligenceContextValue {
   }) => void;
   /** Companion floating Information window for the selected Graph node. */
   informationPanelOpen: boolean;
+  setInformationPanelOpen: (open: boolean) => void;
   informationNode: GraphProjectionNode | null;
   openInformationPanel: (node: GraphProjectionNode) => void;
   closeInformationPanel: () => void;
+  openLeftRailTab: (tab: LeftRailTab) => void;
   /** Open Canvas pages (Information and future kinds) for Chat "Select a page". */
   openCanvases: Array<{
     id: string;
@@ -199,6 +201,8 @@ interface IntelligenceContextValue {
     agentId?: string;
     prompt?: string;
   }) => void;
+  /** Open Intelligence chat and start a fresh thread once. */
+  startNewChat: () => void;
   /** When true, IntelligencePanel should start a fresh chat thread once. */
   requestNewChat: boolean;
   clearNewChatRequest: () => void;
@@ -214,7 +218,42 @@ interface IntelligenceContextValue {
   /** Recent chat lines for the minimized bottom ticker (pre-auth / dock). */
   chatTickerLines: string[];
   publishChatTicker: (lines: string[]) => void;
+  /** Floating Intelligence window minimize state. */
+  panelMinimized: boolean;
+  setPanelMinimized: (minimized: boolean) => void;
+  /** Floating Information window minimize state. */
+  informationPanelMinimized: boolean;
+  setInformationPanelMinimized: (minimized: boolean) => void;
+  /** Active tab for the left-side tool / information panel. */
+  activeLeftTab: LeftRailTab;
+  setActiveLeftTab: (tab: LeftRailTab) => void;
 }
+
+export type LeftRailTab =
+  | "info"
+  | "contacts"
+  | "dms"
+  | "channels"
+  | "notifications"
+  | "calendar"
+  | "projects"
+  | "tasks"
+  | "knowledge"
+  | "bank"
+  | "vault"
+  | "personal-vault"
+  | "platform-vault"
+  | "admin"
+  | "wiki"
+  | "support"
+  | "settings"
+  | "shared"
+  | "marketplace"
+  | "structure"
+  | "coding"
+  | "releases"
+  | "agents"
+  | "users";
 
 export type PanelTab =
   | "chat"
@@ -225,7 +264,20 @@ export type PanelTab =
   | "knowledge"
   | "bank"
   | "vault"
+  | "personal-vault"
+  | "platform-vault"
+  | "admin"
+  | "wiki"
   | "support"
+  | "settings"
+  | "shared"
+  | "marketplace"
+  | "structure"
+  | "coding"
+  | "releases"
+  | "agents"
+  | "users"
+  | "tasks"
   | "dms"
   | "channels";
 
@@ -602,7 +654,17 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const togglePanel = useCallback(() => setPanelOpen((o) => !o), []);
+  const [panelMinimized, setPanelMinimized] = useState(false);
+  const [informationPanelMinimized, setInformationPanelMinimized] =
+    useState(false);
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>("info");
+
+  const togglePanel = useCallback(() => {
+    setPanelOpen((o) => {
+      if (!o) setPanelMinimized(false);
+      return !o;
+    });
+  }, []);
 
   const [informationPanelOpen, setInformationPanelOpen] = useState(false);
   const [informationNode, setInformationNode] =
@@ -614,7 +676,9 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const openInformationPanel = useCallback((node: GraphProjectionNode) => {
     setInformationNode(node);
+    setActiveLeftTab("info");
     setInformationPanelOpen(true);
+    setInformationPanelMinimized(false);
     const canvasId = `information:${node.id}`;
     setOpenCanvases((prev) => {
       if (prev.some((c) => c.id === canvasId)) return prev;
@@ -633,6 +697,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const closeInformationPanel = useCallback(() => {
     setInformationPanelOpen(false);
+    setInformationPanelMinimized(false);
     setOpenCanvases((prev) => {
       const nodeId = informationNode?.id;
       if (!nodeId) return prev.filter((c) => c.kind !== "information");
@@ -642,6 +707,12 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       id?.startsWith("information:") ? null : id
     );
   }, [informationNode?.id]);
+
+  const openLeftRailTab = useCallback((tab: LeftRailTab) => {
+    setActiveLeftTab(tab);
+    setInformationPanelOpen(true);
+    setInformationPanelMinimized(false);
+  }, []);
 
   const openPanel = useCallback(
     (opts?: {
@@ -675,7 +746,17 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
           .catch(() => undefined);
       }
       setPanelOpen(true);
-      if (opts?.tab) setPanelTab(opts.tab);
+      setPanelMinimized(false);
+      if (opts?.tab) {
+        setPanelTab(opts.tab);
+        if (opts.tab !== "chat") {
+          setActiveLeftTab(opts.tab as LeftRailTab);
+          setInformationPanelOpen(true);
+          setInformationPanelMinimized(false);
+        } else if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+        }
+      }
       if (opts?.knowledgeSubTab) setKnowledgeSubTab(opts.knowledgeSubTab);
       if (opts?.artifactId) {
         setKnowledgeSubTab("artifacts");
@@ -708,6 +789,12 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     },
     [activeAgentId, setChatTarget, setPanelTab, addArtifactMention]
   );
+
+  const startNewChat = useCallback(() => {
+    setPanelTab("chat");
+    setPanelOpen(true);
+    setRequestNewChat(true);
+  }, [setPanelTab]);
 
   useEffect(() => {
     if (!user) return;
@@ -900,11 +987,19 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       togglePanel,
       panelMaximized,
       setPanelMaximized,
+      panelMinimized,
+      setPanelMinimized,
       openPanel,
       informationPanelOpen,
+      setInformationPanelOpen,
       informationNode,
+      informationPanelMinimized,
+      setInformationPanelMinimized,
+      activeLeftTab,
+      setActiveLeftTab,
       openInformationPanel,
       closeInformationPanel,
+      openLeftRailTab,
       openCanvases,
       focusedCanvasId,
       setFocusedCanvasId,
@@ -948,6 +1043,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       removeArtifactMention,
       clearArtifactMentions,
       discussArtifactInChat,
+      startNewChat,
       requestNewChat,
       clearNewChatRequest,
       autoAcceptTools,
@@ -970,11 +1066,16 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       panelOpen,
       togglePanel,
       panelMaximized,
+      panelMinimized,
       openPanel,
       informationPanelOpen,
+      setInformationPanelOpen,
       informationNode,
+      informationPanelMinimized,
+      activeLeftTab,
       openInformationPanel,
       closeInformationPanel,
+      openLeftRailTab,
       openCanvases,
       focusedCanvasId,
       setFocusedCanvasId,
@@ -1015,6 +1116,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       removeArtifactMention,
       clearArtifactMentions,
       discussArtifactInChat,
+      startNewChat,
       requestNewChat,
       clearNewChatRequest,
       autoAcceptTools,

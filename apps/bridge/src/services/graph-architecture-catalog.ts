@@ -3,18 +3,25 @@
  * Public-safe: prose + structure only. No secrets or tenant row dumps.
  * Unlock hubs are intentionally absent.
  *
- * Account, Cloud, and LLM keys are described on You's Information panel (not
- * Graph nodes). Vault is secrets plus Bank (with Wallet). Life fans from each
- * owner. Chat bubbles sit left of You and Intelligence, and off each
- * specialized agent under Workspaces (not off the workspace root). Hub sits on
- * the right; Support, Shared, Marketplace, and Workspaces extend further right.
- * You and Intelligence connect only through Hub (no direct spine edge).
- * Research and Ops sit on the platform plane under Intelligence visually,
- * but each links to Hub (not Intelligence) and owns Vault + Life + Chat.
- * Other exemplar agents (Builder, Coordinator) live under Workspaces.
+ * Account Connect secrets (Platform Vault) sit under Hub / Bridge
+ * (`hub:vault-platform`), distinct from User Vault (personal connects under
+ * You). Vault otherwise is secrets plus Bank (with Wallet). Each owner
+ * (You, Intelligence, Research, Ops) peers Vault behind the person/agent:
+ * rearward on -z plus a slight left/down offset so labels and Bank/Wallet do
+ * not stack on the owner (camera looks from +z). Structure, Knowledge,
+ * Automations, and Calendar fan directly off each owner (no Life hub). Hub
+ * sits on the right; Support, Shared, Marketplace, Workspaces, Wiki, Coding,
+ * Releases, and Platform Vault each link to Hub independently (fan, not a
+ * chain). Admin, Settings, Agents, and Profile are under You. You
+ * and Intelligence connect only through Hub (no direct spine edge). Research
+ * and Ops sit on the platform plane under Intelligence visually, but each
+ * links to Hub (not Intelligence) and owns Vault + surfaces. Other exemplar
+ * agents (Builder, Coordinator) live under Workspaces and have no
+ * Vault/surface catalog pairs yet. Canonical Wiki is Hub-shared knowledge
+ * (`hub:wiki`), not a You Knowledge child.
  */
 
-export const ARCHITECTURE_CATALOG_VERSION = 24;
+export const ARCHITECTURE_CATALOG_VERSION = 39;
 
 export type GraphCtaAction =
   | { type: "open_chat" }
@@ -34,13 +41,8 @@ export type GraphWindowSpec = {
   title?: string;
 };
 
-const CHAT_AND_INFO: GraphWindowSpec[] = [
-  { kind: "chat", placement: "left", width: 560, height: 480 },
-  { kind: "information", placement: "right", width: 400, height: 520 },
-];
-
 const INFO_ONLY: GraphWindowSpec[] = [
-  { kind: "information", placement: "right", width: 400, height: 520 },
+  { kind: "information", placement: "left", width: 440, height: 520 },
 ];
 
 export type ArchitectureCatalogNode = {
@@ -85,6 +87,23 @@ function offset(base: Vec3, dx: number, dy: number, dz = 0): Vec3 {
   return { x: base.x + dx, y: base.y + dy, z: base.z + dz };
 }
 
+/**
+ * Vault relative to its owner (You / agent). Peer under the owner, not under
+ * Structure. Pure same-x/y + -z stacks labels on the owner and collides with
+ * the rearward Knowledge/Automations fan; keep a clear depth + slight lateral
+ * separation. Bank/Wallet keep their relative offsets from Vault.
+ */
+const VAULT_BEHIND_OWNER = { x: -1.25, y: -0.55, z: -2.15 } as const;
+
+function vaultBehindOwner(ownerPos: Vec3): Vec3 {
+  return offset(
+    ownerPos,
+    VAULT_BEHIND_OWNER.x,
+    VAULT_BEHIND_OWNER.y,
+    VAULT_BEHIND_OWNER.z
+  );
+}
+
 type Side = "you" | "intelligence" | "research" | "ops";
 
 const SIDE_OWNER_ID: Record<Side, string> = {
@@ -120,55 +139,28 @@ function ownerLabel(side: Side): string {
 }
 
 /**
- * Life + Structure/Knowledge/Automations/Calendar trees for one side.
- * growY: +1 fans away upward (You), -1 fans away downward (Intelligence)
- * so Life never piles back onto the owner hub.
+ * Structure / Knowledge / Automations / Calendar trees for one side.
+ * growY: +1 fans away upward (You), -1 fans away downward (agents)
+ * so surfaces never pile back onto the owner hub.
  */
-function lifeSurfaceNodes(
+function ownerSurfaceNodes(
   side: Side,
-  lifePos: Vec3,
+  ownerPos: Vec3,
   growY: 1 | -1
 ): ArchitectureCatalogNode[] {
   const suffix = side;
   const owner = ownerLabel(side);
-  const lifeId = `hub:life-${suffix}`;
   const structureId = `hub:structure-${suffix}`;
   const knowledgeId = `hub:knowledge-${suffix}`;
   const autoId = `hub:automations-${suffix}`;
   const calId = `hub:calendar-${suffix}`;
   const gy = growY;
-
-  // Primary Life children: wide XY fan, all growing away from the owner.
-  const structurePos = offset(lifePos, 2.2, gy * 1.6, 1.2);
-  const knowledgePos = offset(lifePos, 0.7, gy * 1.9, -1.3);
-  const autoPos = offset(lifePos, -1.8, gy * 1.5, -1.1);
-  const calPos = offset(lifePos, -2.8, gy * 1.2, 1.1);
-
+  // Primary owner surfaces: wide XY fan, all growing away from the owner.
+  const structurePos = offset(ownerPos, 2.2, gy * 1.6, 1.2);
+  const knowledgePos = offset(ownerPos, 0.7, gy * 1.9, -1.3);
+  const autoPos = offset(ownerPos, -1.8, gy * 1.5, -1.1);
+  const calPos = offset(ownerPos, -2.8, gy * 1.2, 1.1);
   return [
-    {
-      id: lifeId,
-      kind: "system",
-      label: "Life",
-      objectType: "LifeSurface",
-      refId: `life-${suffix}`,
-      position: lifePos,
-      description:
-        side === "you"
-          ? "Your living surfaces: Structure, Knowledge, Automations, and Calendar. The personal OS body around You (not Vault secrets)."
-          : `${owner}'s living surfaces: Structure, Knowledge, Automations, and Calendar. Parallel Life body for this agent on The Graph.`,
-      securityNote:
-        "Life is a map hub. Durable rows live in surface SQLite files after auth.",
-      connectionLabels: [
-        owner,
-        "Structure",
-        "Knowledge",
-        "Automations",
-        "Calendar",
-      ],
-      ctaLabel: "Inspect Life",
-      cta: { type: "none" },
-      windows: INFO_ONLY,
-    },
     {
       id: structureId,
       kind: "page",
@@ -178,12 +170,12 @@ function lifeSurfaceNodes(
       position: structurePos,
       description:
         side === "you"
-          ? "Your anatomy: departments (regions), divisions, and pages (surfaces)."
-          : `${owner}'s anatomy view: how it grows departments, divisions, and pages.`,
+          ? "Your anatomy: departments (regions), divisions, and pages (surfaces). Default land keeps your Structure wing open. Workspace Personal still shows Structure → Pages depth once under Workspaces."
+          : `${owner}'s anatomy view: how it grows departments, divisions, and pages. Collapsed by default on The Graph.`,
       securityNote: `${sideLabel(side, "Structure")} is separate from other owners' Structure.`,
-      connectionLabels: [sideLabel(side, "Life"), "Departments", "Divisions", "Pages"],
+      connectionLabels: [owner, "Departments", "Divisions", "Pages"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -197,7 +189,7 @@ function lifeSurfaceNodes(
       securityNote: "Department rows require auth; Graph shows structure only.",
       connectionLabels: ["Structure"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -211,7 +203,7 @@ function lifeSurfaceNodes(
       securityNote: "Division rows require auth.",
       connectionLabels: ["Structure"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -225,7 +217,7 @@ function lifeSurfaceNodes(
       securityNote: "Page bodies stay in workspace / surface stores.",
       connectionLabels: ["Structure"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -236,16 +228,15 @@ function lifeSurfaceNodes(
       refId: `knowledge-${suffix}`,
       position: knowledgePos,
       description:
-        "Memories, rules, skills, artifacts, tools, and wiki under this owner.",
+        "Memories, rules, skills, artifacts, and tools under this owner. Shared Wiki lives under Hub.",
       securityNote: "Live memory and rule text stay off The Graph.",
       connectionLabels: [
-        sideLabel(side, "Life"),
+        owner,
         "Memories",
         "Rules",
         "Skills",
         "Artifacts",
         "Tools",
-        "Wiki",
       ],
       ctaLabel: "Open Knowledge",
       cta: { type: "open_panel", tab: "knowledge" },
@@ -322,20 +313,6 @@ function lifeSurfaceNodes(
       windows: INFO_ONLY,
     },
     {
-      id: `hub:wiki-${suffix}`,
-      kind: "page",
-      label: "Wiki",
-      objectType: "WikiPage",
-      refId: `wiki-${suffix}`,
-      position: offset(knowledgePos, -1.8, gy * 2.5, 0.5),
-      description: "Wiki pages in the knowledge plane for RAG and reference.",
-      securityNote: "Wiki bodies stay in surface / workspace stores.",
-      connectionLabels: ["Knowledge"],
-      ctaLabel: "Open Knowledge",
-      cta: { type: "open_panel", tab: "knowledge" },
-      windows: INFO_ONLY,
-    },
-    {
       id: autoId,
       kind: "workflow",
       label: "Automations",
@@ -344,12 +321,7 @@ function lifeSurfaceNodes(
       position: autoPos,
       description: "Workflows, schedules, and hooks under this owner.",
       securityNote: "Runs under Hub with auth and tool policy.",
-      connectionLabels: [
-        sideLabel(side, "Life"),
-        "Workflows",
-        "Schedules",
-        "Hooks",
-      ],
+      connectionLabels: [owner, "Workflows", "Schedules", "Hooks"],
       ctaLabel: "Open Automations",
       cta: { type: "open_panel", tab: "projects" },
       windows: INFO_ONLY,
@@ -405,7 +377,7 @@ function lifeSurfaceNodes(
       position: calPos,
       description: "Time surface: events and linked tasks.",
       securityNote: "Event details require auth.",
-      connectionLabels: [sideLabel(side, "Life"), "Events", "Tasks"],
+      connectionLabels: [owner, "Events", "Tasks"],
       ctaLabel: "Open Calendar",
       cta: { type: "open_panel", tab: "calendar" },
       windows: INFO_ONLY,
@@ -434,30 +406,26 @@ function lifeSurfaceNodes(
       description: "Tasks linked to calendar and work surfaces.",
       securityNote: "Task details require auth.",
       connectionLabels: ["Calendar"],
-      ctaLabel: "Open Calendar",
-      cta: { type: "open_panel", tab: "calendar" },
+      ctaLabel: "Open Tasks",
+      cta: { type: "open_panel", tab: "tasks" },
       windows: INFO_ONLY,
     },
   ];
 }
 
-function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
+function ownerSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
   const s = side;
-  const life = `hub:life-${s}`;
   const structure = `hub:structure-${s}`;
   const knowledge = `hub:knowledge-${s}`;
   const auto = `hub:automations-${s}`;
   const cal = `hub:calendar-${s}`;
   const owner = SIDE_OWNER_ID[side];
   const p = SIDE_EDGE_PREFIX[side];
-
   return [
-    { id: `e:${p}-life`, source: owner, target: life, kind: "life" },
-    { id: `e:life-${s}-structure`, source: life, target: structure, kind: "surface" },
-    { id: `e:life-${s}-knowledge`, source: life, target: knowledge, kind: "surface" },
-    { id: `e:life-${s}-auto`, source: life, target: auto, kind: "surface" },
-    { id: `e:life-${s}-cal`, source: life, target: cal, kind: "surface" },
-
+    { id: `e:${p}-structure`, source: owner, target: structure, kind: "surface" },
+    { id: `e:${p}-knowledge`, source: owner, target: knowledge, kind: "surface" },
+    { id: `e:${p}-auto`, source: owner, target: auto, kind: "surface" },
+    { id: `e:${p}-cal`, source: owner, target: cal, kind: "surface" },
     {
       id: `e:structure-${s}-departments`,
       source: structure,
@@ -476,7 +444,6 @@ function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
       target: `hub:pages-${s}`,
       kind: "structure-child",
     },
-
     {
       id: `e:knowledge-${s}-memories`,
       source: knowledge,
@@ -508,13 +475,6 @@ function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
       kind: "knowledge-child",
     },
     {
-      id: `e:knowledge-${s}-wiki`,
-      source: knowledge,
-      target: `hub:wiki-${s}`,
-      kind: "knowledge-child",
-    },
-
-    {
       id: `e:auto-${s}-workflows`,
       source: auto,
       target: `hub:workflows-${s}`,
@@ -532,7 +492,6 @@ function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
       target: `hub:hooks-${s}`,
       kind: "automation-child",
     },
-
     {
       id: `e:cal-${s}-events`,
       source: cal,
@@ -547,17 +506,9 @@ function lifeSurfaceEdges(side: Side): ArchitectureCatalogEdge[] {
     },
   ];
 }
-
 function agentChatWindows(agentId: string): GraphWindowSpec[] {
   return [
-    {
-      kind: "chat",
-      placement: "left",
-      width: 560,
-      height: 480,
-      agentId,
-    },
-    { kind: "information", placement: "right", width: 400, height: 520 },
+    { kind: "information", placement: "left", width: 440, height: 520, agentId },
   ];
 }
 
@@ -649,10 +600,10 @@ function agentVaultEdges(suffix: string, ownerId: string): ArchitectureCatalogEd
 
 /**
  * Research and Ops on the platform plane (stacked below Intelligence visually).
- * Each links to Hub, not Intelligence, and owns Vault + Life + Chat.
+ * Each links to Hub, not Intelligence, and owns Vault + owner surfaces + Chat.
  */
 function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
-  // Stacked under Intelligence (y=-0.2); tight spacing while Life/Vault stay collapsed.
+  // Stacked under Intelligence (y=-0.2); tight spacing while surfaces/Vault stay collapsed.
   const researchPos = { x: 0, y: -1.35, z: 0 };
   const opsPos = { x: 0, y: -2.5, z: 0 };
 
@@ -665,9 +616,16 @@ function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
       refId: "research",
       position: researchPos,
       description:
-        "Platform research agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault, Life, and Chat. Runs scoped research jobs through Hub.",
+        "Platform research agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault plus Structure, Knowledge, Automations, and Calendar. Runs scoped research jobs through Hub.",
       securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Hub", "Research Vault", "Life", "Chat"],
+      connectionLabels: [
+        "Hub",
+        "Research Vault",
+        "Structure",
+        "Knowledge",
+        "Automations",
+        "Calendar",
+      ],
       ctaLabel: "Chat with Research",
       cta: { type: "open_chat" },
       openImmediate: true,
@@ -678,15 +636,9 @@ function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
       ownerId: "hub:agent-research",
       ownerLabel: "Research",
       vaultLabel: "Research Vault",
-      position: offset(researchPos, -3.6, 0, 0.2),
+      position: vaultBehindOwner(researchPos),
     }),
-    ...lifeSurfaceNodes("research", offset(researchPos, 3.6, 0, 0), -1),
-    agentChatBubble({
-      id: "hub:chat-agent-research",
-      agentId: "research",
-      agentLabel: "Research",
-      position: offset(researchPos, -1.8, 0.8, 0),
-    }),
+    ...ownerSurfaceNodes("research", researchPos, -1),
     {
       id: "hub:agent-ops",
       kind: "agent",
@@ -695,9 +647,16 @@ function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
       refId: "ops",
       position: opsPos,
       description:
-        "Platform ops agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault, Life, and Chat. Handles recurring operational work through Hub.",
+        "Platform ops agent on the Intelligence plane. Links to Hub (Bridge), not Intelligence. Owns Vault plus Structure, Knowledge, Automations, and Calendar. Handles recurring operational work through Hub.",
       securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Hub", "Ops Vault", "Life", "Chat"],
+      connectionLabels: [
+        "Hub",
+        "Ops Vault",
+        "Structure",
+        "Knowledge",
+        "Automations",
+        "Calendar",
+      ],
       ctaLabel: "Chat with Ops",
       cta: { type: "open_chat" },
       openImmediate: true,
@@ -708,15 +667,9 @@ function platformSpineAgentNodes(): ArchitectureCatalogNode[] {
       ownerId: "hub:agent-ops",
       ownerLabel: "Ops",
       vaultLabel: "Ops Vault",
-      position: offset(opsPos, -3.6, 0, 0.2),
+      position: vaultBehindOwner(opsPos),
     }),
-    ...lifeSurfaceNodes("ops", offset(opsPos, 3.6, 0, 0), -1),
-    agentChatBubble({
-      id: "hub:chat-agent-ops",
-      agentId: "ops",
-      agentLabel: "Ops",
-      position: offset(opsPos, -1.8, 0.8, 0),
-    }),
+    ...ownerSurfaceNodes("ops", opsPos, -1),
   ];
 }
 
@@ -736,45 +689,9 @@ function platformSpineAgentEdges(): ArchitectureCatalogEdge[] {
     },
     ...agentVaultEdges("research", "hub:agent-research"),
     ...agentVaultEdges("ops", "hub:agent-ops"),
-    ...lifeSurfaceEdges("research"),
-    ...lifeSurfaceEdges("ops"),
-    {
-      id: "e:research-chat",
-      source: "hub:agent-research",
-      target: "hub:chat-agent-research",
-      kind: "chat-agent",
-    },
-    {
-      id: "e:ops-chat",
-      source: "hub:agent-ops",
-      target: "hub:chat-agent-ops",
-      kind: "chat-agent",
-    },
+    ...ownerSurfaceEdges("research"),
+    ...ownerSurfaceEdges("ops"),
   ];
-}
-
-/** Chat bubble hanging off a specialized agent (who you are talking to). */
-function agentChatBubble(opts: {
-  id: string;
-  agentId: string;
-  agentLabel: string;
-  position: Vec3;
-}): ArchitectureCatalogNode {
-  return {
-    id: opts.id,
-    kind: "chat",
-    label: "Chat",
-    objectType: "ChatSession",
-    refId: `${opts.agentId}-chat`,
-    position: opts.position,
-    description: `Chat with ${opts.agentLabel}. Connected to that agent on The Graph, not to the workspace root.`,
-    securityNote: "Message bodies stay in chat SQLite files.",
-    connectionLabels: [opts.agentLabel],
-    ctaLabel: `Chat with ${opts.agentLabel}`,
-    cta: { type: "open_chat" },
-    openImmediate: true,
-    windows: agentChatWindows(opts.agentId),
-  };
 }
 
 /**
@@ -809,7 +726,7 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
         "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
       connectionLabels: ["Workspaces", "Structure"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -822,9 +739,9 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       description:
         "Structure inside the Personal workspace: departments, divisions, and pages for this sandbox.",
       securityNote: "Structure rows require auth.",
-      connectionLabels: ["Personal", "Departments"],
+      connectionLabels: ["Personal", "Departments", "Pages"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -839,7 +756,22 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       securityNote: "Department rows require auth.",
       connectionLabels: ["Structure"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:pages-personal",
+      kind: "page",
+      label: "Pages",
+      objectType: "StructureNode",
+      refId: "pages-ws-personal",
+      position: offset(personalStructurePos, 2.2, 0.4, -1.2),
+      description:
+        "Pages inside the Personal workspace Structure. Default land opens Hub through Personal Structure down to this node once so you can see workspace depth.",
+      securityNote: "Page bodies stay in workspace / surface stores.",
+      connectionLabels: ["Structure"],
+      ctaLabel: "Open Structure",
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
 
@@ -856,7 +788,7 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
         "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
       connectionLabels: ["Workspaces", "Agents"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -884,18 +816,12 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       description:
         "Exemplar builder agent under Project Alpha. Implements and iterates on project work.",
       securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Agents", "Chat"],
+      connectionLabels: ["Agents"],
       ctaLabel: "Chat with Builder",
       cta: { type: "open_chat" },
       openImmediate: true,
       windows: agentChatWindows("builder"),
     },
-    agentChatBubble({
-      id: "hub:chat-agent-builder",
-      agentId: "builder",
-      agentLabel: "Builder",
-      position: offset(builderPos, 1.5, -0.6, -0.3),
-    }),
 
     {
       id: "hub:ws-family",
@@ -905,12 +831,12 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       refId: "ws-family",
       position: familyPos,
       description:
-        "Exemplar family workspace. Holds Agents for household coordination. Chat hangs off Coordinator, not the workspace root. Live tenant workspaces enrich here when you are signed in.",
+        "Exemplar family workspace. Holds Agents for household coordination. Live tenant workspaces enrich here when you are signed in.",
       securityNote:
         "Catalog pin only. Workspace rows stay in tenant SQLite files after auth.",
       connectionLabels: ["Workspaces", "Agents"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
       windows: INFO_ONLY,
     },
     {
@@ -938,18 +864,12 @@ function workspaceExemplarNodes(workspacesPos: Vec3): ArchitectureCatalogNode[] 
       description:
         "Exemplar coordinator agent under Family. Keeps shared plans and household tasks aligned.",
       securityNote: "No secret values on The Graph.",
-      connectionLabels: ["Agents", "Chat"],
+      connectionLabels: ["Agents"],
       ctaLabel: "Chat with Coordinator",
       cta: { type: "open_chat" },
       openImmediate: true,
       windows: agentChatWindows("coordinator"),
     },
-    agentChatBubble({
-      id: "hub:chat-agent-coordinator",
-      agentId: "coordinator",
-      agentLabel: "Coordinator",
-      position: offset(coordinatorPos, 1.5, 0.5, -0.3),
-    }),
   ];
 }
 
@@ -986,6 +906,12 @@ function workspaceExemplarEdges(): ArchitectureCatalogEdge[] {
       target: "hub:departments-personal",
       kind: "structure-child",
     },
+    {
+      id: "e:structure-personal-pages",
+      source: "hub:structure-personal",
+      target: "hub:pages-personal",
+      kind: "structure-child",
+    },
 
     {
       id: "e:project-alpha-agents",
@@ -998,12 +924,6 @@ function workspaceExemplarEdges(): ArchitectureCatalogEdge[] {
       source: "hub:agents-project-alpha",
       target: "hub:agent-builder",
       kind: "agent-child",
-    },
-    {
-      id: "e:builder-chat",
-      source: "hub:agent-builder",
-      target: "hub:chat-agent-builder",
-      kind: "chat-agent",
     },
 
     {
@@ -1018,23 +938,19 @@ function workspaceExemplarEdges(): ArchitectureCatalogEdge[] {
       target: "hub:agent-coordinator",
       kind: "agent-child",
     },
-    {
-      id: "e:coordinator-chat",
-      source: "hub:agent-coordinator",
-      target: "hub:chat-agent-coordinator",
-      kind: "chat-agent",
-    },
   ];
 }
 
 /**
- * Side trees off Support / Shared / Marketplace (fan upward so Workspaces can
- * keep Personal depth on the right). Expanded by default on first land.
+ * Side trees off Support / Shared / Marketplace (fan upward / outward so
+ * Workspaces can keep Personal depth on the right). Collapsed by default on
+ * land; open via each hub's chevron (not Hub's other platform children).
  */
 function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
-  const supportPos = { x: 5.0, y: 2.5, z: 0.8 };
-  const sharedPos = { x: 6.8, y: 2.5, z: 0.8 };
-  const marketPos = { x: 8.6, y: 2.5, z: 0.8 };
+  // Keep in sync with listArchitectureCatalogNodes platform fan positions.
+  const supportPos = { x: 5.2, y: 4.3, z: 0.8 };
+  const sharedPos = { x: 6.0, y: 3.3, z: 1.4 };
+  const marketPos = { x: 6.0, y: 1.7, z: 0.2 };
 
   return [
     {
@@ -1080,7 +996,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Grant payloads require auth.",
       connectionLabels: ["Shared"],
       ctaLabel: "Open Shared",
-      cta: { type: "navigate", path: "/shared" },
+      cta: { type: "open_panel", tab: "shared" },
       windows: INFO_ONLY,
     },
     {
@@ -1095,7 +1011,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Network config requires auth.",
       connectionLabels: ["Shared"],
       ctaLabel: "Open Shared",
-      cta: { type: "navigate", path: "/shared" },
+      cta: { type: "open_panel", tab: "shared" },
       windows: INFO_ONLY,
     },
 
@@ -1111,7 +1027,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Installs require auth. The Graph shows structure only.",
       connectionLabels: ["Marketplace", "Packs", "Connectors"],
       ctaLabel: "Open Marketplace",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1126,7 +1042,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Installs require auth.",
       connectionLabels: ["Official"],
       ctaLabel: "Open Official",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1141,7 +1057,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Connect flows require auth.",
       connectionLabels: ["Official"],
       ctaLabel: "Open Official",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
 
@@ -1157,7 +1073,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Purchases and installs require auth.",
       connectionLabels: ["Marketplace", "Listings", "Sellers"],
       ctaLabel: "Open Community",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1171,7 +1087,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Checkout requires auth.",
       connectionLabels: ["Community"],
       ctaLabel: "Open Community",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1185,7 +1101,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Seller profiles require auth.",
       connectionLabels: ["Community"],
       ctaLabel: "Open Community",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
 
@@ -1201,7 +1117,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Local installs stay on this machine.",
       connectionLabels: ["Marketplace", "Folders", "Indexes"],
       ctaLabel: "Open Local",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1215,7 +1131,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Paths stay local.",
       connectionLabels: ["Local"],
       ctaLabel: "Open Local",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1229,7 +1145,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Index fetches are opt-in.",
       connectionLabels: ["Local"],
       ctaLabel: "Open Local",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
 
@@ -1245,7 +1161,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Install rows require auth.",
       connectionLabels: ["Marketplace", "Plugins", "History"],
       ctaLabel: "Open Installed",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1259,7 +1175,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Plugin configs require auth.",
       connectionLabels: ["Installed"],
       ctaLabel: "Open Installed",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1273,7 +1189,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "History rows require auth.",
       connectionLabels: ["Installed"],
       ctaLabel: "Open Installed",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
 
@@ -1289,7 +1205,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Seller commerce requires auth and Cloud authority for paid listings.",
       connectionLabels: ["Marketplace", "My listings", "Payouts"],
       ctaLabel: "Open Sell",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1303,7 +1219,7 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Listing drafts require auth.",
       connectionLabels: ["Sell"],
       ctaLabel: "Open Sell",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
       windows: INFO_ONLY,
     },
     {
@@ -1317,7 +1233,23 @@ function platformRaySurfaceNodes(): ArchitectureCatalogNode[] {
       securityNote: "Payout details never appear on The Graph.",
       connectionLabels: ["Sell"],
       ctaLabel: "Open Sell",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:marketplace-sell-inference",
+      kind: "system",
+      label: "Inference listings",
+      objectType: "Marketplace",
+      refId: "marketplace-sell-inference",
+      position: offset(marketPos, 1.6, 2.4, -1.2),
+      description:
+        "Stub: sell spare provider credits or local capacity as GodMode Inference (or later as an Agent). Hub listing kind inference only. Routing and settlement are future. Not a working P2P marketplace.",
+      securityNote:
+        "Inference sell is hub/self-host only. Blocked on GodMode Cloud. Do not expose keys on The Graph.",
+      connectionLabels: ["Sell", "My listings"],
+      ctaLabel: "Open Sell",
+      cta: { type: "navigate", path: "/marketplace?tab=seller" },
       windows: INFO_ONLY,
     },
   ];
@@ -1439,27 +1371,58 @@ function platformRaySurfaceEdges(): ArchitectureCatalogEdge[] {
       target: "hub:marketplace-sell-payouts",
       kind: "marketplace-child",
     },
+    {
+      id: "e:marketplace-sell-inference",
+      source: "hub:marketplace-sell",
+      target: "hub:marketplace-sell-inference",
+      kind: "marketplace-child",
+    },
   ];
 }
 
 /**
  * Living instance map:
- * You (top) and Intelligence (below) meet only at Hub (Bridge). Hub sits
- * on the right with Support → Shared → Marketplace → Workspaces. Each of
- * Support / Shared / Marketplace fans a side tree (expanded by default).
- * Workspaces fans into exemplar Personal / Project / Family trees (one
- * workspace open to full depth). Account, Cloud, and LLM keys live on You's
- * Information panel. Life fans away from each owner.
+ * You (top) and Intelligence (below) meet only at Hub (Bridge). Hub sits on
+ * the right and fans to Support, Shared, Marketplace, Workspaces, Wiki, and
+ * Platform Vault independently. Default land keeps Hub expanded with one
+ * Workspace→Page depth reveal (Personal → Structure → Pages), You Vault open,
+ * and You owner surfaces open. User Vault sits behind You (shared owner→Vault
+ * offset; Bank → Wallet deepen further). Admin sits under You as operator
+ * control for the signed-in account. Sibling agent surfaces / Vault /
+ * workspace trees stay collapsed. Chevrons on Support / Shared / Marketplace
+ * open side trees only. Platform Vault (Cloud / Inference Connect) is a Hub
+ * child; Wiki is the shared Hub knowledge base; Admin is a You child (not Hub
+ * infrastructure).
  */
 export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
-  // You Life grows upward; Intelligence Life grows downward clear of the hub.
-  const youLife = lifeSurfaceNodes("you", { x: 2.8, y: 7.0, z: 0 }, 1);
-  const intelLife = lifeSurfaceNodes(
-    "intelligence",
-    { x: 3.8, y: -0.2, z: 0 },
-    -1
-  );
-  const workspacesPos = { x: 10.4, y: 2.5, z: 0.8 };
+  // You surfaces grow upward; Vault uses vaultBehindOwner (default camera at +z).
+  // Intelligence surfaces grow downward clear of the hub.
+  const youPos = { x: 0, y: 5.2, z: 0 };
+  const intelPos = { x: 0, y: -0.2, z: 0 };
+  const hubPos = { x: 3.2, y: 2.5, z: 0.8 };
+  const youVaultPos = vaultBehindOwner(youPos);
+  // Platform Vault peers behind Hub (same vaultBehindOwner offset as owner Vaults).
+  const platformVaultPos = vaultBehindOwner(hubPos);
+  const intelVaultPos = vaultBehindOwner(intelPos);
+  const youSurfaces = ownerSurfaceNodes("you", youPos, 1);
+  const intelSurfaces = ownerSurfaceNodes("intelligence", intelPos, -1);
+  // Hub children XY rays (dy/dx from Hub). Must stay unique:
+  // Platform Vault ≈ 0.44 (rear-left), Support 0.9, Shared ≈ 0.286,
+  // Marketplace ≈ -0.286, Workspaces 0, Wiki -0.75, Coding ≈ -0.8,
+  // Releases ≈ 1.6. Shared (+z) stays off Support's ray.
+  // Admin / Settings / Agents / Profile sit under You.
+  const supportPos = { x: 5.2, y: 4.3, z: 0.8 };
+  const sharedPos = { x: 6.0, y: 3.3, z: 1.4 };
+  const marketplacePos = { x: 6.0, y: 1.7, z: 0.2 };
+  const workspacesPos = { x: 7.8, y: 2.5, z: 0.8 };
+  // Distinct from Shared (≈0.286) and Support (0.9): below Hub on -y.
+  const wikiPos = offset(hubPos, 2.0, -1.5, 1.8);
+  const codingPos = offset(hubPos, 2.8, -2.25, -0.6);
+  const releasesPos = offset(hubPos, 1.5, 2.4, -1.0);
+  const adminPos = offset(youPos, 1.4, -1.3, 0.5);
+  const settingsPos = offset(youPos, -1.6, -1.1, 0.7);
+  const agentsIndexPos = offset(youPos, -2.1, 0.7, 0.3);
+  const usersPos = offset(youPos, 1.9, 0.5, -0.7);
   const workspaceTree = workspaceExemplarNodes(workspacesPos);
   const platformSurfaces = platformRaySurfaceNodes();
 
@@ -1470,23 +1433,24 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "You",
       objectType: "User",
       refId: "local",
-      position: { x: 0, y: 5.2, z: 0 },
+      position: youPos,
       description:
-        "You are the root of this GodMode instance. Your Vault holds secrets and Bank. Life and personal Chat sit on your plane (Chat to the left). Hub (Bridge) is the only Graph link to Intelligence, and fans out to Support, Shared, Marketplace, and Workspaces. Account, Cloud membership, and LLM keys are part of your identity (see Information), not separate Graph hubs.",
+        "You are the root of this GodMode instance. User Vault holds personal connects and Bank. Admin, Settings, Agents, and Profile are operator/account surfaces under You. Structure, Knowledge, Automations, and Calendar fan off your plane. Hub (Bridge) is the only Graph link to Intelligence, and independently parents Support, Shared, Marketplace, Workspaces, Wiki, Coding, Releases, and Platform Vault.",
       securityNote:
         "Credentials and LLM key values live in Vault APIs. This node never exposes passwords, tokens, or key material.",
       connectionLabels: [
         "Hub",
         "User Vault",
-        "Life",
-        "Your Chat",
+        "Admin",
+        "Structure",
+        "Knowledge",
+        "Automations",
+        "Calendar",
       ],
       ctaLabel: "Open profile or sign up",
       cta: { type: "open_auth" },
       openImmediate: true,
-      windows: [
-        { kind: "information", placement: "right", width: 400, height: 520 },
-      ],
+      windows: INFO_ONLY,
     },
     {
       id: "hub:intelligence",
@@ -1494,19 +1458,21 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Intelligence",
       objectType: "Agent",
       refId: "intelligence",
-      position: { x: 0, y: -0.2, z: 0 },
+      position: intelPos,
       description:
-        "GodMode's platform agent under You. Owns its Vault, Life surfaces, and Chat. Links to You only through Hub (Bridge). Research and Ops sit nearby on this plane but each link to Hub on their own. Workspace agents like Builder live under Workspaces.",
+        "GodMode's platform agent under You. Owns its Vault plus Structure, Knowledge, Automations, and Calendar. Links to You only through Hub (Bridge). Research and Ops sit nearby on this plane but each link to Hub on their own. Workspace agents like Builder live under Workspaces.",
       securityNote:
         "Runs through Hub with vault-backed credentials. Tool allow-lists bound what it can call.",
       connectionLabels: [
         "Hub",
         "Intelligence Vault",
-        "Life",
-        "Intelligence Chat",
+        "Structure",
+        "Knowledge",
+        "Automations",
+        "Calendar",
       ],
-      ctaLabel: "Open Intelligence details",
-      cta: { type: "none" },
+      ctaLabel: "Chat with Intelligence",
+      cta: { type: "open_chat" },
       openImmediate: true,
       windows: INFO_ONLY,
     },
@@ -1516,32 +1482,94 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Hub",
       objectType: "BridgeConnection",
       refId: "bridge",
-      position: { x: 3.2, y: 2.5, z: 0.8 },
+      position: hubPos,
       description:
-        "The Bridge process between You and Intelligence: HTTP API, kernel ObjectTypes, plugins, and IPC. On The Graph, Hub is the only edge between You and Intelligence, and opens one ray: Support → Shared → Marketplace → Workspaces. Research and Ops each have their own Hub edge. Chat bubbles sit left of each owner. Hub's SQLite holds ops/logs only, not your chat bodies.",
+        "The Bridge process between You and Intelligence: HTTP API, kernel ObjectTypes, plugins, and IPC. On The Graph, Hub is the only edge between You and Intelligence, and the land cutoff for the platform fan. Default land keeps Hub expanded so Support, Shared, Marketplace, Workspaces, Wiki, and Platform Vault are each visible as Hub children, with one Personal → Structure → Pages depth reveal. Chevrons on Support / Shared / Marketplace open side trees only. Research and Ops each have their own Hub edge. Hub's SQLite holds ops/logs only, not your chat bodies.",
       securityNote:
-        "All product mutations go through Bridge auth and tenant middleware. Hub is structural, not a secret store.",
-      connectionLabels: ["You", "Intelligence", "Research", "Ops", "Support"],
+        "All product mutations go through Bridge auth and tenant middleware. Hub is structural, not a secret store. Platform Vault Connect values stay in Vault APIs.",
+      connectionLabels: [
+        "You",
+        "Intelligence",
+        "Research",
+        "Ops",
+        "Support",
+        "Shared",
+        "Marketplace",
+        "Workspaces",
+        "Wiki",
+        "Platform Vault",
+      ],
       ctaLabel: "Learn about Hub",
       cta: { type: "none" },
       windows: INFO_ONLY,
     },
 
-    // --- You plane: Vault = secrets + Bank → Wallet ---
+    // --- You plane: Vault behind You = secrets + Bank → Wallet ---
     {
       id: "hub:vault-you",
       kind: "system",
       label: "User Vault",
       objectType: "VaultSecret",
       refId: "vault-user",
-      position: { x: -3.2, y: 5.2, z: 0.2 },
+      position: youVaultPos,
       description:
-        "Your Vault: encrypted secrets and Bank (with Wallet). LLM key values are stored here when you add providers. Account and Cloud are identity on You, not Vault children.",
+        "Your Vault: encrypted secrets and Bank (with Wallet). Sits behind You on The Graph. Default land keeps this wing open so Vault → Bank → Wallet depth is visible once. Other owners' Vaults stay collapsed.",
       securityNote:
         "The Graph only shows connected / not connected. Secret values never leave Vault APIs.",
       connectionLabels: ["You", "Bank (You)"],
-      ctaLabel: "Open Vault",
-      cta: { type: "open_panel", tab: "vault" },
+      ctaLabel: "Open Personal Vault",
+      cta: { type: "open_panel", tab: "personal-vault" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:vault-platform",
+      kind: "system",
+      label: "Platform Vault",
+      objectType: "VaultSecret",
+      refId: "vault-platform",
+      position: platformVaultPos,
+      description:
+        "Account Connect credentials: GodMode Cloud seats, LLM subscriptions, API keys, and Exa. Shared across your workspaces on the User database. Lives under Hub (Bridge) on The Graph. Distinct from User Vault (personal connects under You) and Agent Vaults.",
+      securityNote:
+        "The Graph only shows connected / not connected. Platform secret values never leave Vault APIs.",
+      connectionLabels: ["Hub"],
+      ctaLabel: "Open Platform Vault",
+      cta: { type: "open_panel", tab: "platform-vault" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:admin",
+      kind: "system",
+      label: "Admin",
+      objectType: "AdminConsole",
+      refId: "admin",
+      position: adminPos,
+      description:
+        "Operator Admin for the signed-in user account: GodMode Inference supply, billing, authority, observability, updates, workspace template, users, and support. Lives under You on The Graph (not Hub). Opens in a floating window over the Graph (same pattern as Platform Vault).",
+      securityNote:
+        "Admin requires platform administrator (isAdmin). Non-admins cannot open the panel body.",
+      connectionLabels: ["You"],
+      ctaLabel: "Open Admin",
+      cta: { type: "open_panel", tab: "admin" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:wiki",
+      kind: "page",
+      label: "Wiki",
+      objectType: "WikiPage",
+      refId: "wiki-platform",
+      position: wikiPos,
+      description:
+        "Shared Hub knowledge base: markdown spaces, visibility, backlinks, and RAG. Lives under Hub on The Graph (not under You Knowledge). Opens in a floating window over the Graph (same pattern as Platform Vault).",
+      securityNote: "Wiki bodies stay in surface / workspace stores.",
+      connectionLabels: ["Hub"],
+      ctaLabel: "Open Wiki",
+      cta: { type: "open_panel", tab: "wiki" },
+      openImmediate: true,
       windows: INFO_ONLY,
     },
     {
@@ -1550,7 +1578,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Bank",
       objectType: "FinanceConnection",
       refId: "bank-user",
-      position: { x: -4.6, y: 5.2, z: -1.0 },
+      position: offset(youVaultPos, -1.0, 0, -1.2),
       description:
         "Your finance connections and holdings under User Vault. Wallet sits under Bank.",
       securityNote:
@@ -1566,7 +1594,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Wallet",
       objectType: "Wallet",
       refId: "wallet-user",
-      position: { x: -6.2, y: 5.2, z: -1.5 },
+      position: offset(youVaultPos, -2.6, 0, -1.7),
       description:
         "Your connected wallets under Bank. Manage holdings from Vault → Wallets & Accounts.",
       securityNote: "Addresses and balances stay off The Graph.",
@@ -1576,18 +1604,18 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       windows: INFO_ONLY,
     },
 
-    // --- Platform ray right of Hub: Support → Shared → Marketplace → Workspaces ---
+    // --- Platform fan right of Hub: Support, Shared, Marketplace, Workspaces, Wiki ---
     {
       id: "hub:support",
       kind: "system",
       label: "Support",
       objectType: "Support",
       refId: "support",
-      position: { x: 5.0, y: 2.5, z: 0.8 },
+      position: supportPos,
       description:
-        "Help and support on Hub's platform ray. Expanded tree: Tickets and Support Chat.",
+        "Help and support as a Hub child. Chevron opens Tickets and Support Chat (side tree only).",
       securityNote: "Support tickets and chat stay off The Graph.",
-      connectionLabels: ["Hub", "Shared", "Tickets", "Support Chat"],
+      connectionLabels: ["Hub", "Tickets", "Support Chat"],
       ctaLabel: "Open Support",
       cta: { type: "open_panel", tab: "support" },
       windows: INFO_ONLY,
@@ -1598,13 +1626,14 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Shared",
       objectType: "SharedSurface",
       refId: "shared",
-      position: { x: 6.8, y: 2.5, z: 0.8 },
+      position: sharedPos,
       description:
-        "Shared spaces and collaboration on Hub's platform ray. Expanded tree: Grants and Network.",
+        "Shared spaces and collaboration as a Hub child. Chevron opens Grants and Network (side tree only).",
       securityNote: "Shared content requires auth.",
-      connectionLabels: ["Support", "Marketplace", "Grants", "Network"],
+      connectionLabels: ["Hub", "Grants", "Network"],
       ctaLabel: "Open Shared",
-      cta: { type: "navigate", path: "/shared" },
+      cta: { type: "open_panel", tab: "shared" },
+      openImmediate: true,
       windows: INFO_ONLY,
     },
     {
@@ -1613,13 +1642,12 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       label: "Marketplace",
       objectType: "Marketplace",
       refId: "marketplace",
-      position: { x: 8.6, y: 2.5, z: 0.8 },
+      position: marketplacePos,
       description:
-        "Discover and install packs on Hub's platform ray. Tabs on the map: Official (default full depth), Community, Local, Installed, and Sell. Only one Marketplace branch is open at a time.",
+        "Discover and install packs as a Hub child. Chevron opens Official, Community, Local, Installed, and Sell (side branches only; one branch open at a time).",
       securityNote: "Installs require auth. The Graph shows structure only.",
       connectionLabels: [
-        "Shared",
-        "Workspaces",
+        "Hub",
         "Official",
         "Community",
         "Local",
@@ -1627,7 +1655,8 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
         "Sell",
       ],
       ctaLabel: "Open Marketplace",
-      cta: { type: "navigate", path: "/marketplace" },
+      cta: { type: "open_panel", tab: "marketplace" },
+      openImmediate: true,
       windows: INFO_ONLY,
     },
     {
@@ -1638,122 +1667,113 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       refId: "workspace",
       position: workspacesPos,
       description:
-        "Workspaces you own. Reached via Hub → Support → Shared → Marketplace. Expand for exemplar Personal, Project Alpha, and Family trees (Agents with Chat off each agent, Structure). Ownership is yours; the ray is how you reach them through Bridge. They may retrieve approved secrets from User Vault (no Vault edge on the map).",
+        "Workspaces you own as a Hub child. Chevron opens exemplar Personal, Project Alpha, and Family trees (Agents and Structure). Ownership is yours; Hub is how you reach them through Bridge. They may retrieve approved secrets from User Vault (no Vault edge on the map).",
       securityNote:
         "Workspace rows stay in tenant / surface files. This hub is the map pin for the set.",
-      connectionLabels: ["Marketplace", "Personal", "Project Alpha", "Family"],
+      connectionLabels: ["Hub", "Personal", "Project Alpha", "Family"],
       ctaLabel: "Open Structure",
-      cta: { type: "navigate", path: "/structure" },
+      cta: { type: "open_panel", tab: "structure" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:coding",
+      kind: "page",
+      label: "Coding",
+      objectType: "CodingWorkspace",
+      refId: "coding",
+      position: codingPos,
+      description:
+        "Local coding workspace under Hub: browse, edit, and ship from GodMode. Opens in a floating window over the Graph.",
+      securityNote: "Workspace files stay on the Bridge host.",
+      connectionLabels: ["Hub", "Releases"],
+      ctaLabel: "Open Coding",
+      cta: { type: "open_panel", tab: "coding" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:releases",
+      kind: "page",
+      label: "Releases",
+      objectType: "ReleaseSubmission",
+      refId: "releases",
+      position: releasesPos,
+      description:
+        "Ship-from-GodMode release submissions under Hub. Opens in a floating window over the Graph.",
+      securityNote: "Release status requires auth and GitHub Connect.",
+      connectionLabels: ["Hub", "Coding"],
+      ctaLabel: "Open Releases",
+      cta: { type: "open_panel", tab: "releases" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:settings",
+      kind: "system",
+      label: "Settings",
+      objectType: "UserSettings",
+      refId: "settings",
+      position: settingsPos,
+      description:
+        "Account, appearance, storage, and session settings under You. Opens in a floating window over the Graph.",
+      securityNote: "Settings require sign-in.",
+      connectionLabels: ["You"],
+      ctaLabel: "Open Settings",
+      cta: { type: "open_panel", tab: "settings" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:agents",
+      kind: "system",
+      label: "Agents",
+      objectType: "Agent",
+      refId: "agents-index",
+      position: agentsIndexPos,
+      description:
+        "Agents organization chart, pipeline, workflows, and activity under You. Opens in a floating window over the Graph.",
+      securityNote: "Agent configs require auth.",
+      connectionLabels: ["You"],
+      ctaLabel: "Open Agents",
+      cta: { type: "open_panel", tab: "agents" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
+      id: "hub:users",
+      kind: "user",
+      label: "Profile",
+      objectType: "User",
+      refId: "profile",
+      position: usersPos,
+      description:
+        "Your profile, account security, and projects under You. Opens in a floating window over the Graph.",
+      securityNote: "Profile requires sign-in.",
+      connectionLabels: ["You"],
+      ctaLabel: "Open Profile",
+      cta: { type: "open_panel", tab: "users" },
+      openImmediate: true,
       windows: INFO_ONLY,
     },
 
     ...platformSurfaces,
     ...workspaceTree,
 
-    ...youLife,
+    ...youSurfaces,
 
-    {
-      id: "hub:chat-you",
-      kind: "chat",
-      label: "Digital You",
-      objectType: "ChatSession",
-      refId: "digital-you",
-      position: { x: -1.8, y: 3.8, z: 0 },
-      description:
-        "Chat with Digital You, your personal twin. Connected to You on The Graph, left of your plane.",
-      securityNote: "Message bodies stay in chat DB files.",
-      connectionLabels: ["You"],
-      ctaLabel: "Chat with Digital You",
-      cta: { type: "open_chat" },
-      openImmediate: true,
-      windows: [
-        {
-          kind: "chat",
-          placement: "left",
-          width: 560,
-          height: 480,
-          agentId: "digital-you",
-        },
-        { kind: "information", placement: "right", width: 400, height: 520 },
-      ],
-    },
+    // --- Intelligence plane: Vault behind owner (same offset as You / Research / Ops) ---
+    ...agentVaultNodes({
+      suffix: "intelligence",
+      ownerId: "hub:intelligence",
+      ownerLabel: "Intelligence",
+      vaultLabel: "Intelligence Vault",
+      position: intelVaultPos,
+    }),
 
-    // --- Intelligence plane: Vault ---
-    {
-      id: "hub:vault-intelligence",
-      kind: "system",
-      label: "Intelligence Vault",
-      objectType: "VaultSecret",
-      refId: "vault-intelligence",
-      position: { x: -3.6, y: -0.2, z: 0.2 },
-      description:
-        "Intelligence's Vault: approved agent secrets and its Bank. Distinct from User Vault.",
-      securityNote: "Agent-scoped secrets. Values never appear on The Graph.",
-      connectionLabels: ["Intelligence", "Bank (Intelligence)"],
-      ctaLabel: "Open Agent Vault",
-      cta: { type: "open_panel", tab: "vault" },
-      windows: INFO_ONLY,
-    },
-    {
-      id: "hub:bank-intelligence",
-      kind: "system",
-      label: "Bank",
-      objectType: "FinanceConnection",
-      refId: "bank-intelligence",
-      position: { x: -4.6, y: -0.2, z: -1.0 },
-      description:
-        "Intelligence finance connections under Intelligence Vault. Wallet sits under Bank.",
-      securityNote: "No balances on the public graph.",
-      connectionLabels: ["Intelligence Vault", "Wallet"],
-      ctaLabel: "Open Bank",
-      cta: { type: "open_panel", tab: "bank" },
-      windows: INFO_ONLY,
-    },
-    {
-      id: "hub:wallet-intelligence",
-      kind: "system",
-      label: "Wallet",
-      objectType: "Wallet",
-      refId: "wallet-intelligence",
-      position: { x: -6.2, y: -0.2, z: -1.5 },
-      description:
-        "Intelligence's connected wallets under its Bank. Agent-scoped holdings.",
-      securityNote: "Addresses and balances stay off The Graph.",
-      connectionLabels: ["Bank"],
-      ctaLabel: "Open Vault wallets",
-      cta: { type: "open_panel", tab: "vault" },
-      windows: INFO_ONLY,
-    },
-
-    ...intelLife,
+    ...intelSurfaces,
 
     ...platformSpineAgentNodes(),
-
-    {
-      id: "hub:chat-intelligence",
-      kind: "chat",
-      label: "Chat",
-      objectType: "ChatSession",
-      refId: "intelligence",
-      position: { x: -1.8, y: 1.2, z: 0 },
-      description:
-        "Chat with Intelligence, the platform agent. Connected to Intelligence on The Graph, left of its plane.",
-      securityNote: "Message bodies stay in chat DB files.",
-      connectionLabels: ["Intelligence"],
-      ctaLabel: "Chat with Intelligence",
-      cta: { type: "open_chat" },
-      openImmediate: true,
-      windows: [
-        {
-          kind: "chat",
-          placement: "left",
-          width: 560,
-          height: 480,
-          agentId: "intelligence",
-        },
-        { kind: "information", placement: "right", width: 400, height: 520 },
-      ],
-    },
   ];
 }
 
@@ -1766,27 +1786,74 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
     ...platformSpineAgentEdges(),
 
     { id: "e:you-vault", source: "hub:you", target: "hub:vault-you", kind: "vault" },
-    { id: "e:intel-vault", source: "hub:intelligence", target: "hub:vault-intelligence", kind: "vault" },
+    {
+      id: "e:you-admin",
+      source: "hub:you",
+      target: "hub:admin",
+      kind: "platform",
+    },
+    {
+      id: "e:you-settings",
+      source: "hub:you",
+      target: "hub:settings",
+      kind: "platform",
+    },
+    {
+      id: "e:you-agents",
+      source: "hub:you",
+      target: "hub:agents",
+      kind: "platform",
+    },
+    {
+      id: "e:you-users",
+      source: "hub:you",
+      target: "hub:users",
+      kind: "platform",
+    },
+    ...agentVaultEdges("intelligence", "hub:intelligence"),
 
-    // One ray from Hub (not a star plus a chain): Support → Shared → Marketplace → Workspaces.
+    // Platform fan from Hub: each hub is an independent Hub child.
+    // Expand Hub once for the whole fan; Support / Shared / Marketplace
+    // chevrons open side trees only. Platform Vault, Wiki, Coding, and
+    // Releases are Hub children. Admin is a You child (operator control),
+    // not part of this fan.
     { id: "e:heart-support", source: "hub:heart", target: "hub:support", kind: "platform" },
+    { id: "e:heart-shared", source: "hub:heart", target: "hub:shared", kind: "platform" },
     {
-      id: "e:support-shared",
-      source: "hub:support",
-      target: "hub:shared",
-      kind: "platform-chain",
-    },
-    {
-      id: "e:shared-marketplace",
-      source: "hub:shared",
+      id: "e:heart-marketplace",
+      source: "hub:heart",
       target: "hub:marketplace",
-      kind: "platform-chain",
+      kind: "platform",
     },
     {
-      id: "e:marketplace-workspace",
-      source: "hub:marketplace",
+      id: "e:heart-workspace",
+      source: "hub:heart",
       target: "hub:workspace",
-      kind: "platform-chain",
+      kind: "platform",
+    },
+    {
+      id: "e:heart-wiki",
+      source: "hub:heart",
+      target: "hub:wiki",
+      kind: "platform",
+    },
+    {
+      id: "e:heart-coding",
+      source: "hub:heart",
+      target: "hub:coding",
+      kind: "platform",
+    },
+    {
+      id: "e:heart-releases",
+      source: "hub:heart",
+      target: "hub:releases",
+      kind: "platform",
+    },
+    {
+      id: "e:heart-vault-platform",
+      source: "hub:heart",
+      target: "hub:vault-platform",
+      kind: "vault",
     },
 
     ...workspaceExemplarEdges(),
@@ -1799,29 +1866,9 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
       target: "hub:wallet-you",
       kind: "bank-child",
     },
-    {
-      id: "e:vault-intel-bank",
-      source: "hub:vault-intelligence",
-      target: "hub:bank-intelligence",
-      kind: "vault-child",
-    },
-    {
-      id: "e:bank-intel-wallet",
-      source: "hub:bank-intelligence",
-      target: "hub:wallet-intelligence",
-      kind: "bank-child",
-    },
 
-    ...lifeSurfaceEdges("you"),
-    ...lifeSurfaceEdges("intelligence"),
-
-    { id: "e:you-chat", source: "hub:you", target: "hub:chat-you", kind: "chat-user" },
-    {
-      id: "e:intel-chat",
-      source: "hub:intelligence",
-      target: "hub:chat-intelligence",
-      kind: "chat-agent",
-    },
+    ...ownerSurfaceEdges("you"),
+    ...ownerSurfaceEdges("intelligence"),
   ];
 }
 

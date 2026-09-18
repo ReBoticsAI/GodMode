@@ -16,6 +16,7 @@ import {
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
+  MinusIcon,
   PlusIcon,
   Share2Icon,
   Trash2Icon,
@@ -37,10 +38,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   clampComposerWidth,
   clampPanelHeight,
+  MIN_COMPOSER_WIDTH,
   useIntelligence,
   type PanelTab,
 } from "@/lib/intelligence-context";
 import { AI_NAME } from "@/lib/navigation";
+import { Link } from "react-router-dom";
 import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -77,6 +80,12 @@ import {
   markDmConversationRead,
   sendDmMessage,
   refreshCursorSession,
+  FIRST_LAND_GREETING,
+  TRIAL_PAY_GODMODE_PATH,
+  TRIAL_PRIMARY_CTA_LABEL,
+  TRIAL_PAY_CTA_LABEL,
+  TRIAL_PASTE_KEY_PATH,
+  readStoredTrialGreeting,
   type AiChat,
   type CatalogModel,
   type DmContact,
@@ -245,6 +254,8 @@ export function IntelligencePanel({
     activeAgentId,
     panelMaximized,
     setPanelMaximized,
+    panelMinimized,
+    setPanelMinimized,
     chatTarget,
     setChatTarget,
     dmConversations,
@@ -268,6 +279,51 @@ export function IntelligencePanel({
   const { status } = useAiStatus({ enabled: panelOpen });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const isMobile = useIsMobile();
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(max-width: 639px)").matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setIsPhone(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  const [trialGreeting, setTrialGreeting] = useState<string | null>(() =>
+    readStoredTrialGreeting()?.greeting ?? null
+  );
+  const [trialPayPath, setTrialPayPath] = useState(
+    () => readStoredTrialGreeting()?.payGodModePath ?? TRIAL_PAY_GODMODE_PATH
+  );
+  const [trialPrimaryCta, setTrialPrimaryCta] = useState(
+    () => readStoredTrialGreeting()?.primaryCtaLabel ?? TRIAL_PRIMARY_CTA_LABEL
+  );
+  const [trialPayCta, setTrialPayCta] = useState(
+    () => readStoredTrialGreeting()?.payCtaLabel ?? TRIAL_PAY_CTA_LABEL
+  );
+  useEffect(() => {
+    const onGreeting = (ev: Event) => {
+      const detail = (
+        ev as CustomEvent<{
+          greeting?: string;
+          payGodModePath?: string;
+          primaryCtaLabel?: string;
+          payCtaLabel?: string;
+          ready?: boolean;
+        }>
+      ).detail;
+      if (detail?.greeting) setTrialGreeting(detail.greeting);
+      if (detail?.payGodModePath) setTrialPayPath(detail.payGodModePath);
+      if (detail?.primaryCtaLabel) setTrialPrimaryCta(detail.primaryCtaLabel);
+      if (detail?.payCtaLabel) setTrialPayCta(detail.payCtaLabel);
+      if (detail?.ready) {
+        window.dispatchEvent(new CustomEvent("godmode:model-selected"));
+      }
+    };
+    window.addEventListener("godmode:trial-greeting", onGreeting);
+    return () => window.removeEventListener("godmode:trial-greeting", onGreeting);
+  }, []);
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
@@ -1407,7 +1463,11 @@ export function IntelligencePanel({
     };
   }, [panelOpen, isDmMode, activeAgentId]);
 
-  const currentWidth = clampComposerWidth(composerWidth, bounds.width);
+  const maxPairedWidth =
+    bounds.width < 1440
+      ? Math.max(MIN_COMPOSER_WIDTH, Math.floor((bounds.width - 120) / 2))
+      : bounds.width;
+  const currentWidth = clampComposerWidth(composerWidth, maxPairedWidth);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
   const focus = focusWindowAnchors(bounds, currentWidth, currentHeight);
   const defaultX = focus.left.x;
@@ -1461,38 +1521,41 @@ export function IntelligencePanel({
   return (
     <aside
       ref={asideRef}
+      aria-hidden={panelMinimized ? true : undefined}
       style={
-        isMobile
-          ? undefined
-          : isMaximized
-            ? {
-                left: bounds.x,
-                top: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-                borderColor: panelBorderMax,
-              }
-            : {
-                left: pos.x,
-                top: pos.y,
-                width: currentWidth,
-                height: currentHeight,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-                borderColor: panelBorder,
-                boxShadow: panelShadow,
-              }
+        panelMinimized
+          ? { display: "none" }
+          : isPhone
+            ? undefined
+            : isMaximized
+              ? {
+                  left: bounds.x,
+                  top: bounds.y,
+                  width: bounds.width,
+                  height: bounds.height,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorderMax,
+                }
+              : {
+                  left: pos.x,
+                  top: pos.y,
+                  width: currentWidth,
+                  height: currentHeight,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorder,
+                  boxShadow: panelShadow,
+                }
       }
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-card/95 text-card-foreground backdrop-blur-md",
-        isMobile
+        isPhone
           ? "fixed inset-0 z-50"
           : "absolute z-40 rounded-xl border-2 shadow-2xl"
       )}
     >
-      {!isMobile && !isMaximized && !lockResize && (
+      {!isPhone && !isMaximized && !lockResize && (
         <>
           <div
             role="separator"
@@ -1536,10 +1599,10 @@ export function IntelligencePanel({
       />
 
       <header
-        onPointerDown={isMobile || isMaximized ? undefined : handleDrag}
+        onPointerDown={isPhone || isMaximized ? undefined : handleDrag}
         className={cn(
           "flex h-9 shrink-0 items-center gap-2 border-b px-2",
-          !isMobile && !isMaximized && "cursor-move"
+          !isPhone && !isMaximized && "cursor-move"
         )}
         style={{
           borderColor: `${panelAccent}40`,
@@ -1653,7 +1716,17 @@ export function IntelligencePanel({
           >
             <PlusIcon />
           </Button>
-          {!isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Minimize"
+            title="Minimize"
+            onClick={() => setPanelMinimized(true)}
+          >
+            <MinusIcon />
+          </Button>
+          {!isPhone && (
             <Button
               type="button"
               variant="ghost"
@@ -1791,6 +1864,40 @@ export function IntelligencePanel({
               </p>
               {!isDmMode && activeAgentId === "intelligence" ? (
                 <div className="max-w-[340px] space-y-3 text-left text-xs leading-relaxed">
+                  <p className="text-foreground/90">
+                    {trialGreeting || FIRST_LAND_GREETING}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        // Primary: stay in chat on GodMode Inference.
+                        document
+                          .querySelector<HTMLTextAreaElement>(
+                            "[data-intelligence-composer], textarea"
+                          )
+                          ?.focus();
+                      }}
+                    >
+                      {trialPrimaryCta}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      render={<Link to={trialPayPath} />}
+                    >
+                      {trialPayCta}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Pay path is a placeholder until GodMode Inference billing
+                    ships. Advanced BYOK stays at {TRIAL_PASTE_KEY_PATH}.
+                  </p>
                   <p className="text-muted-foreground">
                     {agentDescription ||
                       "Intelligence is GodMode's built-in AI: your guide to the platform itself."}
@@ -1800,6 +1907,9 @@ export function IntelligencePanel({
                     <li>Create departments, pages, agents, wiki articles, and tasks</li>
                     <li>Wire automations and configure your workspace from chat</li>
                     <li>Hand off focused work to specialized subagents when you are ready</li>
+                    <li>
+                      Advanced: paste your own OpenRouter key in {TRIAL_PASTE_KEY_PATH}
+                    </li>
                   </ul>
                 </div>
               ) : (

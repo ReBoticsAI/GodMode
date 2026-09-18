@@ -78,14 +78,14 @@ describe("graph-node-style", () => {
     expect(Math.abs(a.h - root.h)).toBeLessThan(30);
   });
 
-  it("gives Life, Vault, Hub, Support distinct glyphs", () => {
+  it("gives Structure, Vault, Hub, Support distinct glyphs", () => {
     expect(
       resolveGraphGlyphKey({
-        kind: "system",
-        objectType: "LifeSurface",
-        label: "Life",
+        kind: "page",
+        objectType: "StructureNode",
+        label: "Structure",
       })
-    ).toBe("life");
+    ).toBe("structure");
     expect(
       resolveGraphGlyphKey({
         kind: "system",

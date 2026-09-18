@@ -5,24 +5,141 @@ import { getCloudDb } from "../core-db.js";
 import { ensureTrialInferenceTables } from "./trial-inference-schema.js";
 import {
   OPENROUTER_API_BASE_URL,
+  OPENROUTER_API_KEY_SECRET_ID,
+  OPENROUTER_API_KEY_SECRET_NAME,
   OPENROUTER_TOP10_CATALOG,
+  isOpenRouterPlatformReady,
   upsertOpenRouterApiKey,
 } from "./openrouter-platform.js";
+import { getPlatformVaultSecretInScope } from "./agents/agents-db.js";
 import { markLlmReady } from "./onboarding.js";
 import { selectIntelligenceModel } from "./model-catalog.js";
 import type { LlmManager } from "./llm-manager.js";
+import {
+  isGodModeInferenceSupplyReady,
+  pickGodModeInferenceSupplyTarget,
+  resolveGodModeInferenceSupplyKey,
+} from "./godmode-inference-supply.js";
 
-/** Exact first-land Intelligence greeting (UI may seed this without a model turn). */
+/**
+ * First-land trial inference (#758).
+ *
+ * Product decision (signup guide): DeepSeek + GLM (Z.ai) + Qwen (DashScope)
+ * platform token plans under OUR accounts. Hard per-user spend cap (default
+ * $0.10). These models exist only to guide new users through landing → talk →
+ * sign up for GodMode Inference (Local and/or Cloud). Not general chat.
+ * Personal BYOK remains advanced / after signup.
+ */
+
+/**
+ * Fallback first-land greeting (no display name).
+ * UI may seed this without a model turn. Keep in sync with buildFirstLandGreeting().
+ */
 export const FIRST_LAND_GREETING =
-  "Hey, you're in control. Put us to work.";
+  "Hey. I have a tiny welcome allowance to show you around. Ask about GodMode, the Graph, and signing up for GodMode Inference (with or without Cloud). When you are ready, create your account and we will keep going.";
 
-/** Greeting-capable default from the OpenRouter catalog (#758). */
+/** Vault path copy for advanced BYOK (personal provider key). */
+export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → API Keys";
+
+/**
+ * Placeholder path until GodMode Inference pay-as-you-go billing ships.
+ * Signup CTA for the welcome-guide funnel.
+ */
+export const TRIAL_PAY_GODMODE_PATH = "/?auth=1";
+
+export const TRIAL_PRIMARY_CTA_LABEL = "Sign up for GodMode Inference";
+export const TRIAL_PAY_CTA_LABEL = "Create account";
+
+/**
+ * Default welcome-guide model when only OpenRouter shared fallback is set.
+ * Prefer DeepSeek / GLM / Qwen via their platform keys when configured.
+ */
 export const TRIAL_DEFAULT_MODEL_ID =
-  OPENROUTER_TOP10_CATALOG[0]?.id ?? "deepseek/deepseek-v4-flash-0731";
+  OPENROUTER_TOP10_CATALOG[0]?.id ?? "openrouter/free";
+
+/** Default hard cap per new user on welcome-guide Inference. */
+export const TRIAL_DEFAULT_BUDGET_USD = 0.1;
+
+/**
+ * Advanced BYOK / personal keys page (secondary CTA only).
+ * Override with TRIAL_AFFILIATE_SIGNUP_URL when you have a tracked referral link.
+ */
+export const DEFAULT_TRIAL_AFFILIATE_SIGNUP_URL =
+  "https://openrouter.ai/keys";
+
+/**
+ * System / harness delta for signup-guide mode.
+ * Injected so the model stays on onboarding + GodMode Inference conversion.
+ */
+export const SIGNUP_GUIDE_HARNESS_DELTA = [
+  "<model_profile id=\"godmode-signup-guide\">",
+  "You are the GodMode welcome guide. Your only job is to help a new visitor understand the Graph and sign up for GodMode Inference (Local Bridge and/or GodMode Cloud).",
+  "Stay on: what GodMode is, Graph nodes (You, Hub, Intelligence, Workspaces, Vaults), auth/signup, Inference plans, Local vs Cloud.",
+  "If the user asks for unrelated coding, homework, general knowledge, or long free-form chat, briefly refuse and steer them back to signup / platform tour.",
+  "Do not invent billing that does not exist. Prefer short turns. End useful answers with a clear signup nudge.",
+  "</model_profile>",
+].join("\n");
+
+/** Topics allowed in signup-guide mode (substring match, case-insensitive). */
+const SIGNUP_GUIDE_ALLOW_TERMS = [
+  "godmode",
+  "inference",
+  "sign up",
+  "signup",
+  "sign-in",
+  "signin",
+  "account",
+  "auth",
+  "graph",
+  "workspace",
+  "vault",
+  "intelligence",
+  "hub",
+  "cloud",
+  "bridge",
+  "local",
+  "onboard",
+  "welcome",
+  "trial",
+  "plan",
+  "pricing",
+  "token",
+  "model",
+  "how do i",
+  "what is",
+  "where is",
+  "help",
+];
+
+export function isSignupGuideModeEnabled(): boolean {
+  const raw = readEnv("TRIAL_SIGNUP_GUIDE");
+  if (raw === "false" || raw === "0") return false;
+  return true;
+}
+
+/**
+ * Soft topic gate for welcome-guide chat.
+ * Empty / very short prompts pass (UI may send greetings).
+ */
+export function isSignupGuideTopic(message: string): boolean {
+  const text = (message || "").trim().toLowerCase();
+  if (text.length < 8) return true;
+  return SIGNUP_GUIDE_ALLOW_TERMS.some((t) => text.includes(t));
+}
+
+export const SIGNUP_GUIDE_REFUSAL =
+  "This welcome chat is only for learning GodMode and signing up for GodMode Inference. Ask about the Graph, Inference, Local vs Cloud, or how to create your account.";
+
+/**
+ * Best-effort personal OpenRouter signup entry (browser / email wall).
+ * Advanced BYOK only. OpenRouter has no public create-account-by-email API.
+ */
+export const DEFAULT_OPENROUTER_SIGNIN_URL = "https://openrouter.ai/sign-in";
 
 export type TrialProvisionMechanism =
   | "mgmtApi"
   | "platformShared"
+  | "godmodeInferenceSupply"
   | "browser"
   | "computerUse"
   | "terminal"
@@ -38,6 +155,12 @@ export type TrialGrantStatus =
   | "deferred_until_auth"
   | "deferred_mechanism";
 
+/** How far we got toward a *personal* OpenRouter account (not our mgmt mint). */
+export type OpenRouterSignupInitiation =
+  | "deep_link"
+  | "unavailable"
+  | "deferred_until_email";
+
 export interface TrialInferenceStatus {
   ready: boolean;
   mechanism: TrialProvisionMechanism;
@@ -48,11 +171,38 @@ export interface TrialInferenceStatus {
   promptThreshold: number;
   ttlDays: number;
   detail?: string;
+  /** Primary convert: keep chatting on GodMode Inference. */
+  primaryCtaLabel: string;
+  /** Pay-to-play path (placeholder until GodMode Inference billing ships). */
+  payGodModePath: string;
+  payCtaLabel: string;
+  /**
+   * Advanced BYOK: personal OpenRouter keys / credit top-up (secondary CTA).
+   * Not the primary convert playbook.
+   */
+  affiliateSignupUrl: string;
+  /**
+   * Best-effort personal OpenRouter signup URL (may include email query hint).
+   * Advanced BYOK only. OpenRouter does not expose account-create or magic-link APIs.
+   */
+  personalSignupUrl: string;
+  /** Whether we prepared a personal-account deep link (never a server-side invite). */
+  signupInitiation: OpenRouterSignupInitiation;
+  /** GodMode account email when known (also used for advanced OpenRouter deep-link hint). */
+  signupEmail: string | null;
+  /**
+   * OpenRouter username / handle. Advanced BYOK only; never used in the genie greeting.
+   * Null on the mgmt-mint / platform shared path.
+   */
+  openRouterUserName: string | null;
+  /** Where to paste an advanced BYOK OpenRouter key. */
+  pasteKeyPath: string;
   configured: {
     mgmtApi: boolean;
     platformShared: boolean;
+    godmodeInferenceSupply: boolean;
   };
-  /** Remaining ops for full #758 mint / convert (not built in this slice). */
+  /** Remaining ops for full #758 mint / convert / pay-GodMode (not built in this slice). */
   remainingOps: string[];
 }
 
@@ -61,6 +211,10 @@ export interface EnsureTrialInferenceOpts {
   visitorKey?: string | null;
   /** Client IP for soft visitor heuristics / rate subject (hashed, not stored raw). */
   clientIp?: string | null;
+  /** GodMode account email when known (auth or guest-with-email). */
+  email?: string | null;
+  /** Display name for personalized genie greeting. */
+  displayName?: string | null;
   tenantDb?: AppDatabase | null;
   llm?: LlmManager | null;
   /** When true, attempt mint / vault attach (authenticated path). */
@@ -70,13 +224,101 @@ export interface EnsureTrialInferenceOpts {
   db?: CoreDatabase;
 }
 
+/** Build personalized first-land / convert greeting (no em-dashes). */
+export function buildFirstLandGreeting(opts?: {
+  displayName?: string | null;
+  email?: string | null;
+  /** Ignored: greeting uses GodMode display name / email only. */
+  openRouterUserName?: string | null;
+}): string {
+  const display = opts?.displayName?.trim();
+  const first = display ? display.split(/\s+/)[0] : "";
+  const hey = first ? `Hey ${first}` : "Hey";
+  const email = opts?.email?.trim();
+  const brandBit = email
+    ? ` This welcome tour is for ${email}.`
+    : " This is your GodMode welcome tour.";
+  return `${hey}. I have a tiny allowance to show you around.${brandBit} Ask about the Graph and signing up for GodMode Inference (with or without Cloud). When you are ready, create your account.`;
+}
+
+/**
+ * Best-effort personal OpenRouter signup URL.
+ * Prefills email query params when known; OpenRouter may ignore unknown params.
+ */
+export function buildPersonalOpenRouterSignupUrl(opts?: {
+  email?: string | null;
+  baseSignupUrl?: string | null;
+}): { url: string; initiation: OpenRouterSignupInitiation; email: string | null } {
+  const email = opts?.email?.trim() || null;
+  const base =
+    (opts?.baseSignupUrl?.trim() ||
+      readEnv("TRIAL_AFFILIATE_SIGNUP_URL") ||
+      DEFAULT_OPENROUTER_SIGNIN_URL).replace(/\/$/, "") ||
+    DEFAULT_OPENROUTER_SIGNIN_URL;
+  if (!email) {
+    return {
+      url: base.includes("openrouter.ai")
+        ? base
+        : DEFAULT_OPENROUTER_SIGNIN_URL,
+      initiation: "deferred_until_email",
+      email: null,
+    };
+  }
+  try {
+    const u = new URL(
+      base.startsWith("http") ? base : DEFAULT_OPENROUTER_SIGNIN_URL
+    );
+    // Best-effort hints; OpenRouter OAuth docs do not document email prefill.
+    if (!u.searchParams.has("email")) u.searchParams.set("email", email);
+    if (!u.searchParams.has("login_hint")) {
+      u.searchParams.set("login_hint", email);
+    }
+    return { url: u.toString(), initiation: "deep_link", email };
+  } catch {
+    return {
+      url: `${DEFAULT_OPENROUTER_SIGNIN_URL}?email=${encodeURIComponent(email)}&login_hint=${encodeURIComponent(email)}`,
+      initiation: "deep_link",
+      email,
+    };
+  }
+}
+
+function resolveUserIdentity(
+  db: CoreDatabase,
+  opts: EnsureTrialInferenceOpts
+): { email: string | null; displayName: string | null } {
+  let email = opts.email?.trim() || null;
+  let displayName = opts.displayName?.trim() || null;
+  if (opts.userId && (!email || !displayName)) {
+    try {
+      const row = db
+        .prepare(`SELECT email, display_name FROM users WHERE id=?`)
+        .get(opts.userId) as
+        | { email: string; display_name: string }
+        | undefined;
+      if (row) {
+        email = email || row.email?.trim() || null;
+        displayName = displayName || row.display_name?.trim() || null;
+      }
+    } catch {
+      // users table may be absent in unit fixtures that only stub grants.
+    }
+  }
+  return { email, displayName };
+}
+
 function readEnv(name: string): string {
   return (process.env[name] ?? "").trim();
 }
 
+// buildPersonalOpenRouterSignupUrl uses readEnv (defined above).
+
 function parseOrder(): TrialProvisionMechanism[] {
-  const raw = readEnv("TRIAL_PROVISION_ORDER") || "mgmtApi,platformShared";
+  const raw =
+    readEnv("TRIAL_PROVISION_ORDER") ||
+    "godmodeInferenceSupply,mgmtApi,platformShared";
   const allowed = new Set<TrialProvisionMechanism>([
+    "godmodeInferenceSupply",
     "mgmtApi",
     "platformShared",
     "browser",
@@ -89,14 +331,16 @@ function parseOrder(): TrialProvisionMechanism[] {
     .filter((s): s is TrialProvisionMechanism =>
       allowed.has(s as TrialProvisionMechanism)
     );
-  return parts.length ? parts : ["mgmtApi", "platformShared"];
+  return parts.length
+    ? parts
+    : ["godmodeInferenceSupply", "mgmtApi", "platformShared"];
 }
 
 export function trialInferenceConfig() {
   const ttlDays = Math.max(1, Number(readEnv("TRIAL_KEY_TTL_DAYS") || 30));
   const budgetUsd = Math.max(
-    0.1,
-    Number(readEnv("TRIAL_INFERENCE_BUDGET_USD") || 5)
+    0.01,
+    Number(readEnv("TRIAL_INFERENCE_BUDGET_USD") || TRIAL_DEFAULT_BUDGET_USD)
   );
   const promptThreshold = Math.max(
     1,
@@ -106,8 +350,14 @@ export function trialInferenceConfig() {
   const mgmtKey = readEnv("OPENROUTER_MANAGEMENT_API_KEY");
   const platformKey =
     readEnv("TRIAL_PLATFORM_API_KEY") || readEnv("OPENROUTER_API_KEY");
+  const deepseekKey = resolveGodModeInferenceSupplyKey("deepseek") ?? "";
+  const zaiKey = resolveGodModeInferenceSupplyKey("zai") ?? "";
+  const dashscopeKey = resolveGodModeInferenceSupplyKey("dashscope") ?? "";
   const allowVisitorMint = readEnv("TRIAL_ALLOW_VISITOR_MINT") === "true";
   const cloudTrialUrl = readEnv("CLOUD_TRIAL_URL");
+  const affiliateSignupUrl =
+    readEnv("TRIAL_AFFILIATE_SIGNUP_URL") || DEFAULT_TRIAL_AFFILIATE_SIGNUP_URL;
+  const signupGuide = isSignupGuideModeEnabled();
   return {
     ttlDays,
     budgetUsd,
@@ -115,8 +365,13 @@ export function trialInferenceConfig() {
     modelId,
     mgmtKey,
     platformKey,
+    deepseekKey,
+    zaiKey,
+    dashscopeKey,
     allowVisitorMint,
     cloudTrialUrl,
+    affiliateSignupUrl,
+    signupGuide,
     order: parseOrder(),
   };
 }
@@ -147,7 +402,7 @@ function remainingOpsNote(cfg: ReturnType<typeof trialInferenceConfig>): string[
   const notes: string[] = [];
   if (!cfg.mgmtKey) {
     notes.push(
-      "Set OPENROUTER_MANAGEMENT_API_KEY for per-user OpenRouter Management API mint (POST /api/v1/keys)."
+      "Set OPENROUTER_MANAGEMENT_API_KEY for per-user OpenRouter Management API mint (POST /api/v1/keys under OUR OpenRouter account / GodMode Inference supply)."
     );
   }
   if (!cfg.platformKey) {
@@ -155,11 +410,31 @@ function remainingOpsNote(cfg: ReturnType<typeof trialInferenceConfig>): string[
       "Set TRIAL_PLATFORM_API_KEY (or OPENROUTER_API_KEY) for shared platform trial fallback."
     );
   }
+  if (!isGodModeInferenceSupplyReady()) {
+    notes.push(
+      "Configure Admin → GodMode Inference (DeepSeek / Z.AI / Qwen) or set DEEPSEEK_API_KEY / ZAI_API_KEY / DASHSCOPE_API_KEY for signup-guide supply."
+    );
+  }
+  notes.push(
+    `Pay-as-you-go GodMode Inference billing is not shipped. Placeholder path: ${TRIAL_PAY_GODMODE_PATH} (Platform Vault → Cloud seat billing today).`
+  );
+  notes.push(
+    "Prompt-threshold convert playbook should nudge pay-through-GodMode (not OpenRouter email). Key revoke/expiry job remains on #758."
+  );
+  notes.push(
+    "Personal OpenRouter signup / paste-key is advanced BYOK only (affiliateSignupUrl / personalSignupUrl / pasteKeyPath)."
+  );
+  notes.push(
+    `Advanced BYOK CTA URL: ${cfg.affiliateSignupUrl} (set TRIAL_AFFILIATE_SIGNUP_URL to override).`
+  );
+  notes.push(
+    "OpenRouter has no public create-account / magic-link / invite-by-email API. Personal accounts require browser signup or OAuth PKCE."
+  );
   notes.push(
     "Browser / computerUse / terminal provisioners are deferred (see GitHub #758)."
   );
   notes.push(
-    "Prompt-threshold convert playbook + key revoke/expiry job remain on #758."
+    "Marketplace P2P inference routing (sellers list spare capacity → GodMode routes trial/paid demand → settlement) is future. Hub listing kind inference exists; do not fake a working marketplace."
   );
   notes.push(
     "Full unlock tutorial cascade and 3D WebGL canvas are separate tracks (not this slice)."
@@ -169,22 +444,44 @@ function remainingOpsNote(cfg: ReturnType<typeof trialInferenceConfig>): string[
 
 function baseStatus(
   partial: Partial<TrialInferenceStatus> &
-    Pick<TrialInferenceStatus, "ready" | "mechanism" | "status">
+    Pick<TrialInferenceStatus, "ready" | "mechanism" | "status">,
+  identity?: { email?: string | null; displayName?: string | null }
 ): TrialInferenceStatus {
   const cfg = trialInferenceConfig();
+  const signup = buildPersonalOpenRouterSignupUrl({
+    email: identity?.email ?? partial.signupEmail,
+    baseSignupUrl:
+      readEnv("TRIAL_PERSONAL_SIGNUP_URL") || DEFAULT_OPENROUTER_SIGNIN_URL,
+  });
+  const greeting =
+    partial.greeting ??
+    buildFirstLandGreeting({
+      displayName: identity?.displayName,
+      email: identity?.email ?? signup.email,
+    });
   return {
     ready: partial.ready,
     mechanism: partial.mechanism,
     modelId: partial.modelId ?? cfg.modelId,
-    greeting: FIRST_LAND_GREETING,
+    greeting,
     status: partial.status,
     expiresAt: partial.expiresAt ?? null,
     promptThreshold: cfg.promptThreshold,
     ttlDays: cfg.ttlDays,
     detail: partial.detail,
+    primaryCtaLabel: partial.primaryCtaLabel ?? TRIAL_PRIMARY_CTA_LABEL,
+    payGodModePath: partial.payGodModePath ?? TRIAL_PAY_GODMODE_PATH,
+    payCtaLabel: partial.payCtaLabel ?? TRIAL_PAY_CTA_LABEL,
+    affiliateSignupUrl: cfg.affiliateSignupUrl,
+    personalSignupUrl: partial.personalSignupUrl ?? signup.url,
+    signupInitiation: partial.signupInitiation ?? signup.initiation,
+    signupEmail: partial.signupEmail ?? signup.email,
+    openRouterUserName: partial.openRouterUserName ?? null,
+    pasteKeyPath: partial.pasteKeyPath ?? TRIAL_PASTE_KEY_PATH,
     configured: {
       mgmtApi: Boolean(cfg.mgmtKey),
       platformShared: Boolean(cfg.platformKey),
+      godmodeInferenceSupply: isGodModeInferenceSupplyReady(),
     },
     remainingOps: remainingOpsNote(cfg),
   };
@@ -331,16 +628,169 @@ async function applyTrialToWorkspace(opts: {
         transport: "openrouter",
         baseUrl: OPENROUTER_API_BASE_URL,
       });
-    } catch {
+    } catch (err) {
       // Soft-fail model select: key is vaulted and llmReady is set; user can pick in UI.
+      console.warn(
+        "[trial-inference] selectIntelligenceModel soft-fail:",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 }
 
 /**
+ * Attach Admin GodMode Inference supply to a workspace without copying keys
+ * into the user's Platform Vault. Chat resolves keys from platform_meta / env.
+ */
+async function applyGodModeInferenceSupplyToWorkspace(opts: {
+  tenantDb: AppDatabase;
+  llm?: LlmManager | null;
+}): Promise<{ modelId: string; provider: string } | null> {
+  const target = pickGodModeInferenceSupplyTarget();
+  if (!target) return null;
+  markLlmReady(opts.tenantDb);
+  if (opts.llm) {
+    try {
+      await selectIntelligenceModel(opts.tenantDb, opts.llm, {
+        source: "provider",
+        model: target.modelId,
+        provider: "openai_compatible",
+        transport: target.transport,
+        baseUrl: target.baseUrl,
+        apiKeyRef: target.apiKeyRef,
+      });
+    } catch (err) {
+      console.warn(
+        "[trial-inference] GodMode Inference supply selectIntelligenceModel soft-fail:",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+  return { modelId: target.modelId, provider: target.provider };
+}
+
+/**
+ * When a grant already exists, still attach the shared platform key (or remint)
+ * if this workspace Vault is missing OpenRouter. Prevents ready:true with
+ * "No model ready" after workspace switch / fresh tenant DB.
+ */
+async function ensureWorkspaceHasTrialKey(opts: {
+  tenantDb: AppDatabase;
+  mechanism: TrialProvisionMechanism;
+  modelId: string;
+  llm?: LlmManager | null;
+  platformKey: string;
+  mgmtKey: string;
+  userId?: string | null;
+  visitorKey?: string | null;
+  expiresAt: string;
+  budgetUsd: number;
+  fetchImpl: typeof fetch;
+}): Promise<"attached" | "reminted" | "already" | "unavailable"> {
+  if (
+    opts.mechanism === "godmodeInferenceSupply" ||
+    isGodModeInferenceSupplyReady()
+  ) {
+    const applied = await applyGodModeInferenceSupplyToWorkspace({
+      tenantDb: opts.tenantDb,
+      llm: opts.llm,
+    });
+    if (applied) return "already";
+  }
+
+  const vaultKey = getPlatformVaultSecretInScope(opts.tenantDb, {
+    baseId: OPENROUTER_API_KEY_SECRET_ID,
+    name: OPENROUTER_API_KEY_SECRET_NAME,
+  });
+
+  // Env-only readiness is not enough after a workspace switch: still copy the
+  // platform shared key into this tenant Vault when missing.
+  if (vaultKey) {
+    if (opts.llm) {
+      try {
+        await selectIntelligenceModel(opts.tenantDb, opts.llm, {
+          source: "provider",
+          model: opts.modelId,
+          provider: "openai_compatible",
+          transport: "openrouter",
+          baseUrl: OPENROUTER_API_BASE_URL,
+        });
+      } catch {
+        /* soft-fail */
+      }
+    }
+    markLlmReady(opts.tenantDb);
+    return "already";
+  }
+
+  if (opts.mechanism === "platformShared" && opts.platformKey) {
+    await applyTrialToWorkspace({
+      tenantDb: opts.tenantDb,
+      apiKey: opts.platformKey,
+      modelId: opts.modelId,
+      llm: opts.llm,
+    });
+    return "attached";
+  }
+
+  if (opts.mechanism === "mgmtApi" && opts.mgmtKey) {
+    const minted = await mintOpenRouterKeyViaMgmtApi({
+      name: `godmode-trial-${opts.userId ?? opts.visitorKey ?? "visitor"}`.slice(
+        0,
+        64
+      ),
+      limitUsd: opts.budgetUsd,
+      expiresAt: opts.expiresAt,
+      mgmtKey: opts.mgmtKey,
+      fetchImpl: opts.fetchImpl,
+    });
+    await applyTrialToWorkspace({
+      tenantDb: opts.tenantDb,
+      apiKey: minted.key,
+      modelId: opts.modelId,
+      llm: opts.llm,
+    });
+    return "reminted";
+  }
+
+  if (opts.platformKey) {
+    await applyTrialToWorkspace({
+      tenantDb: opts.tenantDb,
+      apiKey: opts.platformKey,
+      modelId: opts.modelId,
+      llm: opts.llm,
+    });
+    return "attached";
+  }
+
+  // Last resort: process env makes chat work without a Vault row (rare).
+  if (isOpenRouterPlatformReady(opts.tenantDb)) {
+    if (opts.llm) {
+      try {
+        await selectIntelligenceModel(opts.tenantDb, opts.llm, {
+          source: "provider",
+          model: opts.modelId,
+          provider: "openai_compatible",
+          transport: "openrouter",
+          baseUrl: OPENROUTER_API_BASE_URL,
+        });
+      } catch {
+        /* soft-fail */
+      }
+    }
+    markLlmReady(opts.tenantDb);
+    return "already";
+  }
+
+  return "unavailable";
+}
+
+/**
  * Probe or provision trial inference for a first-land visitor or signed-in user.
- * Does not scrape affiliate UIs. Management API mint requires a management key;
- * platform shared key is the graceful fallback when configured.
+ * Does not scrape affiliate UIs. Management API mint requires a management key
+ * (keys are minted under OUR OpenRouter account, not the user's personal account).
+ * Platform shared key is the graceful fallback when configured.
+ * Personal OpenRouter signup is browser deep-link only (no create-account API).
  */
 export async function ensureTrialInference(
   opts: EnsureTrialInferenceOpts = {}
@@ -349,6 +799,7 @@ export async function ensureTrialInference(
   const db = opts.db ?? getCloudDb();
   const now = opts.now ?? new Date();
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const identity = resolveUserIdentity(db, opts);
   const subject = subjectKeyFor({
     userId: opts.userId,
     visitorKey: opts.visitorKey,
@@ -360,58 +811,162 @@ export async function ensureTrialInference(
 
   const existing = readActiveGrant(db, subject);
   if (existing) {
-    return baseStatus({
-      ready: true,
-      mechanism: existing.mechanism,
-      modelId: existing.model_id,
-      status: "active",
-      expiresAt: existing.expires_at,
-      detail: "Existing trial grant reused.",
-    });
+    if (!opts.tenantDb || opts.provision === false) {
+      return baseStatus(
+        {
+          ready: true,
+          mechanism: existing.mechanism,
+          modelId: existing.model_id,
+          status: "active",
+          expiresAt: existing.expires_at,
+          detail:
+            "Existing GodMode Inference trial grant reused. Keep chatting; when free runs out, pay through GodMode.",
+        },
+        identity
+      );
+    }
+
+    try {
+      const attach = await ensureWorkspaceHasTrialKey({
+        tenantDb: opts.tenantDb,
+        mechanism: existing.mechanism,
+        modelId: existing.model_id || cfg.modelId,
+        llm: opts.llm,
+        platformKey: cfg.platformKey,
+        mgmtKey: cfg.mgmtKey,
+        userId: opts.userId,
+        visitorKey: opts.visitorKey,
+        expiresAt,
+        budgetUsd: cfg.budgetUsd,
+        fetchImpl,
+      });
+
+      if (attach === "unavailable") {
+        // Fall through to fresh provision when we cannot recover the key.
+      } else {
+        if (attach === "reminted") {
+          upsertGrant(db, {
+            subjectKey: subject,
+            userId: opts.userId,
+            visitorKey: opts.visitorKey,
+            mechanism: "mgmtApi",
+            modelId: cfg.modelId,
+            expiresAt,
+            providerKeyHash: hashTrialSecret(`reminted:${expiresAt}`),
+          });
+        }
+        return baseStatus(
+          {
+            ready: true,
+            mechanism:
+              attach === "reminted" ? "mgmtApi" : existing.mechanism,
+            modelId:
+              attach === "reminted" ? cfg.modelId : existing.model_id,
+            status: "active",
+            expiresAt: attach === "reminted" ? expiresAt : existing.expires_at,
+            detail:
+              attach === "attached"
+                ? "Re-attached GodMode Inference trial key to workspace Vault. Keep chatting; when free runs out, pay through GodMode."
+                : attach === "reminted"
+                  ? "Re-minted GodMode Inference trial key for this workspace. Keep chatting; when free runs out, pay through GodMode."
+                  : "Existing GodMode Inference trial grant reused. Keep chatting; when free runs out, pay through GodMode.",
+          },
+          identity
+        );
+      }
+    } catch (err) {
+      if (
+        cfg.platformKey ||
+        isGodModeInferenceSupplyReady() ||
+        isOpenRouterPlatformReady(opts.tenantDb)
+      ) {
+        return baseStatus(
+          {
+            ready: true,
+            mechanism: existing.mechanism,
+            modelId: existing.model_id,
+            status: "active",
+            expiresAt: existing.expires_at,
+            detail:
+              err instanceof Error
+                ? err.message
+                : "Trial grant present; workspace attach soft-failed.",
+          },
+          identity
+        );
+      }
+      // Fall through to provision loop.
+    }
   }
 
   const provision = opts.provision !== false;
   const canMintForSubject = Boolean(opts.userId) || cfg.allowVisitorMint;
 
-  if (!cfg.mgmtKey && !cfg.platformKey) {
-    return baseStatus({
-      ready: false,
-      mechanism: "none",
-      status: "unconfigured",
-      detail:
-        "Trial inference is not configured. Set OPENROUTER_MANAGEMENT_API_KEY and/or TRIAL_PLATFORM_API_KEY. See GitHub #758.",
-    });
+  if (!cfg.mgmtKey && !cfg.platformKey && !isGodModeInferenceSupplyReady()) {
+    return baseStatus(
+      {
+        ready: false,
+        mechanism: "none",
+        status: "unconfigured",
+        detail:
+          "GodMode Inference is not configured. Set Admin → GodMode Inference (DeepSeek / Z.AI / Qwen), and/or OPENROUTER_MANAGEMENT_API_KEY / TRIAL_PLATFORM_API_KEY. See GitHub #758.",
+      },
+      identity
+    );
   }
 
   // Pre-auth visitors: report readiness of platform shared path without minting
-  // orphan per-IP keys (unless TRIAL_ALLOW_VISITOR_MINT=true).
+  // orphan per-IP keys (unless TRIAL_ALLOW_VISITOR_MINT=true). Chat completions
+  // still require sign-in; TRIAL_PLATFORM_API_KEY can serve Bridge after auth.
   if (!opts.userId && !cfg.allowVisitorMint) {
-    if (cfg.platformKey) {
-      return baseStatus({
-        ready: true,
-        mechanism: "platformShared",
-        status: "deferred_until_auth",
-        expiresAt,
-        detail:
-          "Platform trial key is configured. Per-user mint and Vault attach run after sign-in (GitHub #758).",
-      });
+    if (isGodModeInferenceSupplyReady() || cfg.platformKey) {
+      return baseStatus(
+        {
+          ready: true,
+          mechanism: isGodModeInferenceSupplyReady()
+            ? "godmodeInferenceSupply"
+            : "platformShared",
+          status: "deferred_until_auth",
+          expiresAt,
+          detail:
+            "Platform GodMode Inference supply is configured. Sign in so GodMode can attach Inference to your workspace and select a guide model.",
+        },
+        identity
+      );
     }
-    return baseStatus({
-      ready: false,
-      mechanism: "mgmtApi",
-      status: "deferred_until_auth",
-      detail:
-        "Management API mint waits for a signed-in GodMode user. Greeting still shows client-side.",
-    });
+    return baseStatus(
+      {
+        ready: false,
+        mechanism: "mgmtApi",
+        status: "deferred_until_auth",
+        detail:
+          "Management API mint waits for a signed-in GodMode user. Greeting still shows client-side.",
+      },
+      identity
+    );
   }
 
   if (!provision) {
-    return baseStatus({
-      ready: Boolean(cfg.platformKey || (cfg.mgmtKey && canMintForSubject)),
-      mechanism: cfg.mgmtKey ? "mgmtApi" : "platformShared",
-      status: cfg.platformKey || cfg.mgmtKey ? "deferred_until_auth" : "unconfigured",
-      detail: "Provision skipped (status probe only).",
-    });
+    return baseStatus(
+      {
+        ready: Boolean(
+          isGodModeInferenceSupplyReady() ||
+            cfg.platformKey ||
+            (cfg.mgmtKey && canMintForSubject)
+        ),
+        mechanism: isGodModeInferenceSupplyReady()
+          ? "godmodeInferenceSupply"
+          : cfg.mgmtKey
+            ? "mgmtApi"
+            : "platformShared",
+        status:
+          isGodModeInferenceSupplyReady() || cfg.platformKey || cfg.mgmtKey
+            ? "deferred_until_auth"
+            : "unconfigured",
+        detail: "Provision skipped (status probe only).",
+      },
+      identity
+    );
   }
 
   let lastError: string | undefined;
@@ -421,6 +976,56 @@ export async function ensureTrialInference(
       // Scaffold only: do not scrape or drive affiliate UIs in this slice.
       lastError = `${mechanism} provisioner is deferred (GitHub #758).`;
       continue;
+    }
+
+    if (mechanism === "godmodeInferenceSupply") {
+      if (!isGodModeInferenceSupplyReady()) continue;
+      if (!opts.tenantDb) {
+        return baseStatus(
+          {
+            ready: true,
+            mechanism: "godmodeInferenceSupply",
+            status: "deferred_until_auth",
+            expiresAt,
+            detail:
+              "Admin GodMode Inference supply is ready. Sign in to attach it to a workspace.",
+          },
+          identity
+        );
+      }
+      try {
+        const applied = await applyGodModeInferenceSupplyToWorkspace({
+          tenantDb: opts.tenantDb,
+          llm: opts.llm,
+        });
+        if (!applied) continue;
+        upsertGrant(db, {
+          subjectKey: subject,
+          userId: opts.userId,
+          visitorKey: opts.visitorKey,
+          mechanism: "godmodeInferenceSupply",
+          modelId: applied.modelId,
+          expiresAt,
+          providerKeyHash: hashTrialSecret(
+            `godmode-inference-supply:${applied.provider}`
+          ),
+        });
+        return baseStatus(
+          {
+            ready: true,
+            mechanism: "godmodeInferenceSupply",
+            modelId: applied.modelId,
+            status: "active",
+            expiresAt,
+            detail:
+              "Attached Admin GodMode Inference supply for signup-guide onboarding (no personal Vault key required). Keep chatting; when ready, add your own BYOK in Platform Vault.",
+          },
+          identity
+        );
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        continue;
+      }
     }
 
     if (mechanism === "mgmtApi") {
@@ -454,13 +1059,17 @@ export async function ensureTrialInference(
           providerKeyHash: minted.hash ?? hashTrialSecret(minted.key),
           providerKeyId: minted.id ?? null,
         });
-        return baseStatus({
-          ready: true,
-          mechanism: "mgmtApi",
-          status: "active",
-          expiresAt,
-          detail: "Minted OpenRouter trial key via Management API.",
-        });
+        return baseStatus(
+          {
+            ready: true,
+            mechanism: "mgmtApi",
+            status: "active",
+            expiresAt,
+            detail:
+              "Minted GodMode Inference trial key via OpenRouter Management API under our platform account. Keep chatting; when free runs out, pay through GodMode. Personal OpenRouter key remains advanced BYOK.",
+          },
+          identity
+        );
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);
         continue;
@@ -486,25 +1095,31 @@ export async function ensureTrialInference(
         expiresAt,
         providerKeyHash: hashTrialSecret(cfg.platformKey),
       });
-      return baseStatus({
-        ready: true,
-        mechanism: "platformShared",
-        status: "active",
-        expiresAt,
-        detail:
-          "Attached platform shared OpenRouter trial key to workspace Vault.",
-      });
+      return baseStatus(
+        {
+          ready: true,
+          mechanism: "platformShared",
+          status: "active",
+          expiresAt,
+          detail:
+            "Attached platform shared GodMode Inference trial key to workspace Vault. Keep chatting; when free runs out, pay through GodMode. Personal OpenRouter key remains advanced BYOK.",
+        },
+        identity
+      );
     }
   }
 
-  return baseStatus({
-    ready: false,
-    mechanism: "none",
-    status: "failed",
-    detail:
-      lastError ||
-      "No trial provision mechanism succeeded. Soft-fail to Vault Connect / FirstRunWizard.",
-  });
+  return baseStatus(
+    {
+      ready: false,
+      mechanism: "none",
+      status: "failed",
+      detail:
+        lastError ||
+        "No trial provision mechanism succeeded. Soft-fail to Vault Connect / FirstRunWizard.",
+    },
+    identity
+  );
 }
 
 /** Read-only status for UI (no side effects beyond schema ensure). */
@@ -513,6 +1128,7 @@ export function getTrialInferenceStatus(
 ): TrialInferenceStatus {
   const cfg = trialInferenceConfig();
   const db = opts.db ?? getCloudDb();
+  const identity = resolveUserIdentity(db, opts);
   const subject = subjectKeyFor({
     userId: opts.userId,
     visitorKey: opts.visitorKey,
@@ -520,37 +1136,49 @@ export function getTrialInferenceStatus(
   });
   const existing = readActiveGrant(db, subject);
   if (existing) {
-    return baseStatus({
-      ready: true,
-      mechanism: existing.mechanism,
-      modelId: existing.model_id,
-      status: "active",
-      expiresAt: existing.expires_at,
-    });
+    return baseStatus(
+      {
+        ready: true,
+        mechanism: existing.mechanism,
+        modelId: existing.model_id,
+        status: "active",
+        expiresAt: existing.expires_at,
+      },
+      identity
+    );
   }
   if (!cfg.mgmtKey && !cfg.platformKey) {
-    return baseStatus({
-      ready: false,
-      mechanism: "none",
-      status: "unconfigured",
-      detail:
-        "Trial inference is not configured. Greeting still displays; chat needs Vault Connect or trial env.",
-    });
+    return baseStatus(
+      {
+        ready: false,
+        mechanism: "none",
+        status: "unconfigured",
+        detail:
+          "Trial inference is not configured. Greeting still displays; chat needs Vault Connect or trial env.",
+      },
+      identity
+    );
   }
   if (!opts.userId) {
-    return baseStatus({
-      ready: Boolean(cfg.platformKey),
-      mechanism: cfg.platformKey ? "platformShared" : "mgmtApi",
-      status: "deferred_until_auth",
-      detail: cfg.platformKey
-        ? "Platform trial key present; full attach after sign-in."
-        : "Sign in to mint a per-user trial key.",
-    });
+    return baseStatus(
+      {
+        ready: Boolean(cfg.platformKey),
+        mechanism: cfg.platformKey ? "platformShared" : "mgmtApi",
+        status: "deferred_until_auth",
+        detail: cfg.platformKey
+          ? "Platform trial key present; full attach after sign-in."
+          : "Sign in to mint a per-user trial key.",
+      },
+      identity
+    );
   }
-  return baseStatus({
-    ready: false,
-    mechanism: cfg.mgmtKey ? "mgmtApi" : "platformShared",
-    status: "unconfigured",
-    detail: "Call POST /api/trial-inference/ensure to provision.",
-  });
+  return baseStatus(
+    {
+      ready: false,
+      mechanism: cfg.mgmtKey ? "mgmtApi" : "platformShared",
+      status: "unconfigured",
+      detail: "Call POST /api/trial-inference/ensure to provision.",
+    },
+    identity
+  );
 }

@@ -111,6 +111,7 @@ export const CORE_OBJECT_TYPE_NAMES = [
   "TenantMembership",
   "TenantProvisioningRun",
   "PlatformBillingConfig",
+  "GodModeInferenceConfig",
   "TenantOnboardingConfig",
   "Unlockable",
   "UnlockEntitlement",

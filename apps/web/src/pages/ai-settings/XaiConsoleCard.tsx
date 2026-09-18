@@ -26,6 +26,7 @@ import {
   fetchXaiStatus,
   type XaiAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * xAI console chat catalog snapshot (2026-08-03).
@@ -126,6 +127,7 @@ export function XaiConsoleCard({
           transport with an xAI harness. Not SuperGrok / X Premium OAuth (that is a
           subscription path).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="xai" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

@@ -74,6 +74,21 @@ describe("graph-missions", () => {
     expect(board[0]?.totalPoints).toBe(first.pointsAwarded);
     expect(board[0]?.missionsCompleted).toBe(1);
 
+    const dayBoard = listGraphLeaderboard({
+      cloudDb: cloud,
+      limit: 10,
+      timeframe: "day",
+    });
+    expect(dayBoard[0]?.displayName).toBe("Dane");
+    expect(dayBoard[0]?.totalPoints).toBe(first.pointsAwarded);
+
+    const allBoard = listGraphLeaderboard({
+      cloudDb: cloud,
+      limit: 10,
+      timeframe: "all",
+    });
+    expect(allBoard[0]?.displayName).toBe("Dane");
+
     const status = getGraphMissionsStatus({ userId: "user-1" });
     expect(status.attentionByNode["hub:heart"]).toBeUndefined();
     expect(status.missions.find((m) => m.id === "hub.check")?.done).toBe(

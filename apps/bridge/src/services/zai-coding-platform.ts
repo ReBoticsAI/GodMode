@@ -5,6 +5,7 @@ import {
   removePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
+import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 
 /**
  * Fixed secret id/name for Z.AI GLM Coding Plan (#230).
@@ -31,6 +32,7 @@ export const ZAI_CODING_CHAT_CATALOG = [
   { id: "glm-4.5-air", label: "GLM-4.5 Air" },
 ] as const;
 
+/** Vault UI sources only. Platform admin supply is separate. */
 export type ZaiCodingAuthSource = "env" | "vault" | "none";
 
 export interface ZaiCodingAuthStatus {
@@ -43,17 +45,18 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
+/** Chat / readiness: personal vault → Admin platform supply → env. */
 export function resolveZaiCodingApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const env = process.env.ZAI_CODING_API_KEY?.trim();
-  if (env) return env;
-  return resolvePlatformVaultSecret(db, {
+  const vault = resolvePlatformVaultSecret(db, {
     baseId: ZAI_CODING_API_KEY_SECRET_ID,
     name: ZAI_CODING_API_KEY_SECRET_NAME,
     agentId,
   });
+  if (vault) return vault;
+  return resolveGodModeInferenceSupplyKey("zai_coding");
 }
 
 export function upsertZaiCodingApiKey(
@@ -80,14 +83,11 @@ export function removeZaiCodingApiKey(
   });
 }
 
+/** Personal / workspace BYOK for Vault cards (not Admin platform supply). */
 export function getZaiCodingAuthStatus(
   db: AppDatabase,
   agentId?: string | null
 ): ZaiCodingAuthStatus {
-  const env = process.env.ZAI_CODING_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
-  }
   const value = getPlatformVaultSecretInScope(db, {
     baseId: ZAI_CODING_API_KEY_SECRET_ID,
     name: ZAI_CODING_API_KEY_SECRET_NAME,
@@ -95,6 +95,10 @@ export function getZaiCodingAuthStatus(
   });
   if (value) {
     return { connected: true, source: "vault", masked: maskKey(value) };
+  }
+  const env = process.env.ZAI_CODING_API_KEY?.trim();
+  if (env) {
+    return { connected: true, source: "env", masked: maskKey(env) };
   }
   return { connected: false, source: "none" };
 }

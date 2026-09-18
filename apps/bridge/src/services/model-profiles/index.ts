@@ -1016,6 +1016,43 @@ export function resolveDeepSeekHarnessProfile(
   return DEEPSEEK_GENERIC_PROFILE;
 }
 
+/** DashScope / Qwen optimized supply (BYOK via OpenAI-compatible tools). */
+const DASHSCOPE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const DASHSCOPE_QWEN_PROFILE: ModelHarnessProfile = {
+  id: "dashscope-qwen",
+  label: "Qwen (DashScope)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DASHSCOPE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="dashscope-qwen">',
+    "You are running via Alibaba DashScope / Qwen (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not Fireworks/Together/OpenRouter Qwen hosting.",
+    "Use native OpenAI-style function calling as exposed by the DashScope compatible-mode endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Qwen via DashScope: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveDashScopeHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return DASHSCOPE_QWEN_PROFILE;
+}
+
 /** Shared Google AI Studio transport middleware (BYOK via OpenAI-compatible tools). */
 const GOOGLE_AI_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1640,6 +1677,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   DEEPSEEK_FLASH_PROFILE,
   DEEPSEEK_PRO_PROFILE,
   DEEPSEEK_GENERIC_PROFILE,
+  DASHSCOPE_QWEN_PROFILE,
   GOOGLE_AI_FLASH_PROFILE,
   GOOGLE_AI_PRO_PROFILE,
   GOOGLE_AI_GENERIC_PROFILE,
@@ -1688,6 +1726,12 @@ function isDeepSeekTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "deepseek") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.deepseek.com");
+}
+
+function isDashScopeTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "dashscope") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("dashscope") && base.includes("aliyuncs.com");
 }
 
 function isGoogleAiTransport(input: ResolveProfileInput): boolean {
@@ -1839,6 +1883,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isDeepSeekTransport(input)) {
       return resolveDeepSeekHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isDashScopeTransport(input)) {
+      return resolveDashScopeHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isGoogleAiTransport(input)) {
       return resolveGoogleAiHarnessProfile(input.model);
     }
@@ -1927,6 +1974,13 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.deepseek.com")
       ) {
         transport = "deepseek";
+      } else if (
+        cfg.dashscope === true ||
+        cfg.qwen === true ||
+        ((baseUrl ?? "").toLowerCase().includes("dashscope") &&
+          (baseUrl ?? "").toLowerCase().includes("aliyuncs.com"))
+      ) {
+        transport = "dashscope";
       } else if (
         cfg.googleAi === true ||
         (baseUrl ?? "").toLowerCase().includes("generativelanguage.googleapis.com")

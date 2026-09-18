@@ -10,6 +10,7 @@ import {
 import {
   Maximize2Icon,
   Minimize2Icon,
+  MinusIcon,
   XIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -62,6 +63,8 @@ export type FloatingWindowPlacement =
 
 export type FloatingWindowProps = {
   open: boolean;
+  minimized?: boolean;
+  onMinimize?: () => void;
   title: ReactNode;
   icon?: ReactNode;
   /** Accent color for top bar / border (hex). */
@@ -94,10 +97,12 @@ export type FloatingWindowProps = {
  */
 export function FloatingWindow({
   open,
+  minimized = false,
+  onMinimize,
   title,
   icon,
   accent = "#a78bfa",
-  zIndexClassName = "z-50",
+  zIndexClassName = "z-30",
   defaultWidth = 400,
   defaultHeight = 520,
   minWidth = 280,
@@ -113,6 +118,17 @@ export function FloatingWindow({
   className,
 }: FloatingWindowProps) {
   const isMobile = useIsMobile();
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(max-width: 639px)").matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setIsPhone(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
   const asideRef = useRef<HTMLElement | null>(null);
@@ -157,7 +173,11 @@ export function FloatingWindow({
     if (!open || placedForOpen.current || maximized) return;
     const b = getFloatingWindowBounds();
     setBounds(b);
-    const w = Math.min(defaultWidth, Math.max(minWidth, b.width - 24));
+    const maxPairedWidth =
+      pairGroup === "focus-pair" && b.width < 1440
+        ? Math.max(minWidth, Math.floor((b.width - 120) / 2))
+        : b.width - 24;
+    const w = Math.min(defaultWidth, Math.max(minWidth, maxPairedWidth));
     const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 24));
     setWidth(w);
     setHeight(h);
@@ -165,19 +185,22 @@ export function FloatingWindow({
     let nextX: number;
     let nextY: number;
     if (placement === "focus-left") {
-      nextX = focus.left.x;
-      nextY = focus.left.y;
+      nextX = Math.max(b.x + 56, focus.left.x);
+      nextY = Math.max(104, focus.left.y);
     } else if (placement === "focus-right") {
       nextX = focus.right.x;
-      nextY = focus.right.y;
+      nextY = Math.max(104, focus.right.y);
+    } else if (placement === "left") {
+      nextX = b.x + 56;
+      nextY = b.y + Math.max(140, Math.round((b.height - h) / 2));
     } else {
       nextX = b.x + 12;
       if (placement === "right") nextX = b.x + b.width - w - 12;
       if (placement === "center") nextX = b.x + Math.max(12, (b.width - w) / 2);
-      nextY = anchorY === "bottom" ? b.y + b.height - h - 12 : b.y + 12;
+      nextY = anchorY === "bottom" ? b.y + b.height - h - 12 : b.y + Math.max(104, 12);
     }
     const pos = clampPos(nextX, nextY, w, h, b);
-    setX(pos.x);
+    setX(placement === "left" || placement === "focus-left" ? Math.max(b.x + 56, pos.x) : pos.x);
     setY(pos.y);
     placedForOpen.current = true;
   }, [
@@ -479,35 +502,38 @@ export function FloatingWindow({
   return (
     <aside
       ref={asideRef}
+      aria-hidden={minimized ? true : undefined}
       style={
-        isMobile
-          ? undefined
-          : maximized
-            ? {
-                left: bounds.x,
-                top: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                borderColor: isLight ? `${accent}40` : `${accent}66`,
-              }
-            : {
-                left: pos.x,
-                top: pos.y,
-                width: currentWidth,
-                height: currentHeight,
-                borderColor: isLight ? `${accent}55` : `${accent}88`,
-                boxShadow: shadow,
-              }
+        minimized
+          ? { display: "none" }
+          : isPhone
+            ? undefined
+            : maximized
+              ? {
+                  left: bounds.x,
+                  top: bounds.y,
+                  width: bounds.width,
+                  height: bounds.height,
+                  borderColor: isLight ? `${accent}40` : `${accent}66`,
+                }
+              : {
+                  left: pos.x,
+                  top: pos.y,
+                  width: currentWidth,
+                  height: currentHeight,
+                  borderColor: isLight ? `${accent}55` : `${accent}88`,
+                  boxShadow: shadow,
+                }
       }
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-card/95 text-card-foreground backdrop-blur-md",
-        isMobile
+        isPhone
           ? "fixed inset-0 z-50"
           : cn("absolute rounded-xl border-2", zIndexClassName),
         className
       )}
     >
-      {!isMobile && !maximized ? (
+      {!isPhone && !maximized ? (
         <>
           <div
             role="separator"
@@ -565,10 +591,10 @@ export function FloatingWindow({
       />
 
       <header
-        onPointerDown={isMobile || maximized ? undefined : handleDrag}
+        onPointerDown={isPhone || maximized ? undefined : handleDrag}
         className={cn(
           "flex h-9 shrink-0 items-center gap-2 border-b px-2",
-          !isMobile && !maximized && "cursor-move"
+          !isPhone && !maximized && "cursor-move"
         )}
         style={{
           borderColor: `${accent}40`,
@@ -580,7 +606,19 @@ export function FloatingWindow({
           {title}
         </span>
         {headerActions}
-        {!isMobile ? (
+        {onMinimize ? (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Minimize window"
+            title="Minimize"
+            onClick={onMinimize}
+          >
+            <MinusIcon />
+          </Button>
+        ) : null}
+        {!isPhone ? (
           <Button
             type="button"
             size="icon-sm"

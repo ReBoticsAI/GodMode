@@ -20,6 +20,8 @@ export function ensureTrialInferenceTables(db: Database.Database): void {
       provider_key_hash TEXT,
       provider_key_id TEXT,
       prompt_count INTEGER NOT NULL DEFAULT 0,
+      spent_usd REAL NOT NULL DEFAULT 0,
+      budget_usd REAL,
       expires_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -32,4 +34,17 @@ export function ensureTrialInferenceTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS trial_inference_grants_status_idx
       ON trial_inference_grants(status);
   `);
+  // Additive columns for DBs created before signup-guide hard caps.
+  const cols = db
+    .prepare(`PRAGMA table_info(trial_inference_grants)`)
+    .all() as Array<{ name: string }>;
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("spent_usd")) {
+    db.exec(
+      `ALTER TABLE trial_inference_grants ADD COLUMN spent_usd REAL NOT NULL DEFAULT 0`
+    );
+  }
+  if (!names.has("budget_usd")) {
+    db.exec(`ALTER TABLE trial_inference_grants ADD COLUMN budget_usd REAL`);
+  }
 }

@@ -66,7 +66,7 @@ Full walkthrough: [VERIFICATION.md](./VERIFICATION.md)
 
 ## The Graph (first land)
 
-First land (Local + Cloud) opens **The Graph**: **You** ↔ Intelligence, with Chat bubbles left of the spine and **Hub** on a right-hand ray of **Support → Shared → Marketplace → Workspaces**. Marketplace shows Official at full depth by default (Community / Local / Installed / Sell collapsed). Expand **Workspaces** for Personal (default full depth) / Project / Family. **Vault** holds secrets and Bank → Wallet. Each side has a **Life** hub. Click **You** for Information (Auth, Cloud, LLM keys) plus Kernel and Coding canvas tabs. Contacts, DMs, and Channels live in the Chat window. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
+First land (Local + Cloud) opens **The Graph**: **You** ↔ Intelligence, with Chat bubbles left of the spine and **Hub** on the right fanning independently to **Support**, **Shared**, **Marketplace**, and **Workspaces**. Marketplace shows Official at full depth by default (Community / Local / Installed / Sell collapsed). Expand **Workspaces** for Personal (default full depth) / Project / Family. **Vault** holds secrets and Bank → Wallet. Structure, Knowledge, Automations, and Calendar fan directly off You and each agent. Click **You** for Information (Auth, Cloud, LLM keys) plus Kernel and Coding canvas tabs. Contacts, DMs, and Channels live in the Chat window. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
 
 Nodes with open **missions** show an attention dot. Completing a mission awards connection-weighted points once; the global leaderboard lives on GodMode Cloud (see [GRAPH_MISSIONS.md](./GRAPH_MISSIONS.md)).
 
@@ -78,20 +78,31 @@ Route: `GET /api/graph/projection?focusType=architecture`.
 
 1. Land / open GodMode → The Graph (You → Intelligence spine).
 2. Click Intelligence → Information; click Intelligence Chat bubble → Chat.
-3. Expand Workspaces for Personal / Project Agents; explore Vaults and Life.
+3. Expand Workspaces for Personal / Project Agents; explore Vaults and owner surfaces.
 4. Click You → finish profile / signup.
 
 ## First-land Intelligence + trial inference (#758)
 
-On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence seeds the greeting:
+**Product decision:** Primary path is **GodMode Inference** (branded trial under our provisioned OpenRouter management / platform key; users pay through GodMode when free runs out). Personal OpenRouter OAuth or paste-key is advanced BYOK only. Do not land first-time users on a personal OpenRouter signup or OAuth flow.
 
-> Hey, you're in control. Put us to work.
+On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence (and the Graph ether chat) seeds a genie-style greeting from `POST /api/trial-inference/ensure` (also stored in sessionStorage and broadcast as `godmode:trial-greeting`):
 
-That line is shown client-side even when no model is ready. In the background the client calls `POST /api/trial-inference/ensure`:
+> Hey. We don't have many messages, so let's use them wisely, like a genie. This is GodMode Inference. After that, it's pay to play through GodMode.
+
+When the GodMode user has a display name / email, the greeting personalizes (`Hey {firstName}` and `GodMode Inference for {email}`). OpenRouter username is never used in the greeting (mgmt-mint / platform shared path has no personal OpenRouter identity).
+
+Background ensure flow:
 
 1. Soft visitor cookie + hashed IP heuristics (not a fake login).
-2. Prefer OpenRouter Management API mint when `OPENROUTER_MANAGEMENT_API_KEY` is set (authenticated users; Vault upsert + `llmReady`).
+2. Prefer OpenRouter Management API mint when `OPENROUTER_MANAGEMENT_API_KEY` is set (authenticated users; Vault upsert + `llmReady`). **These keys live under our OpenRouter account** and back **GodMode Inference**, not the user's personal OpenRouter account.
 3. Fall back to `TRIAL_PLATFORM_API_KEY` / `OPENROUTER_API_KEY` platform shared path.
-4. Browser / computerUse / terminal provisioners are scaffolded in the order env only (not implemented here).
+4. Advanced BYOK only: best-effort personal OpenRouter signup deep-link (`personalSignupUrl`, default `https://openrouter.ai/sign-in` with `email` / `login_hint` query hints) and paste-key path (`pasteKeyPath` = Vault → Inference → OpenRouter). OpenRouter does **not** expose create-account, magic-link, or invite-by-email APIs.
+5. Browser / computerUse / terminal provisioners are scaffolded in the order env only (not implemented here).
 
-Ops: set management and/or platform trial keys on Cloud (and Local when phoning home). Per-user mint still waits for sign-in unless `TRIAL_ALLOW_VISITOR_MINT=true`. Prompt-threshold convert, key revoke/expiry, credentials-saved modal, and affiliate signup URL remain on issue #758.
+**Primary CTAs:** Continue chatting on GodMode Inference. When free allowance / rate limits run out, pay through GodMode (`payGodModePath`, placeholder `/vault?vault=cloud` until Inference billing ships; see `remainingOps`). Do not fake payment.
+
+**Secondary / advanced CTAs:** `affiliateSignupUrl` (default `https://openrouter.ai/keys`) and `personalSignupUrl` for personal OpenRouter BYOK. Not in the genie greeting.
+
+**Supply-side vision (scaffold only):** Marketplace already has listing kind `inference` (hub Bridge endpoints). Future: sellers list spare provider credits / capacity as GodMode Inference or as an Agent; GodMode routes trial/paid demand; settlement later. OpenRouter (or BYOK) remains the supply backend. See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision). Do not treat the Graph Sell → Inference stub as a working P2P marketplace.
+
+Ops: set management and/or platform trial keys on Cloud (and Local when phoning home). Per-user mint still waits for sign-in unless `TRIAL_ALLOW_VISITOR_MINT=true`. Prompt-threshold convert, key revoke/expiry, and credentials-saved modal remain on issue #758.

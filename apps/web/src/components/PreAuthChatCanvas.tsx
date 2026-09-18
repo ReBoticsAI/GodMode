@@ -1,12 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { useEffect, useRef } from "react";
 import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
+import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
 import { ChatGraphCanvas } from "@/components/ChatGraphCanvas";
+import { GraphEscMenu } from "@/components/graph/GraphEscMenu";
 import { Toaster } from "@/components/ui/sonner";
-import {
-  ensureTrialInference,
-  type TrialInferenceStatus,
-} from "@/api";
+import { ensureTrialInference } from "@/api";
 
 /**
  * Main site surface (Local + Cloud): The Graph is the land.
@@ -14,37 +12,20 @@ import {
  */
 export function PreAuthChatCanvas() {
   const trialStarted = useRef(false);
-  const [trial, setTrial] = useState<TrialInferenceStatus | null>(null);
 
   useEffect(() => {
     if (trialStarted.current) return;
     trialStarted.current = true;
-    void ensureTrialInference()
-      .then(setTrial)
-      .catch(() => {
-        setTrial(null);
-      });
+    void ensureTrialInference().catch(() => undefined);
   }, []);
-
-  const showTrialHint =
-    trial != null &&
-    !trial.ready &&
-    (trial.status === "unconfigured" || trial.status === "failed");
 
   return (
     <div className="relative flex h-dvh w-full flex-col bg-background text-foreground">
       <main className="relative min-h-0 flex-1" aria-hidden />
       <ChatGraphCanvas />
-      {showTrialHint && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center p-3">
-          <p className="max-w-lg rounded-md border border-border/60 bg-background/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-            {trial.detail ??
-              "Trial inference is not configured yet. You can still explore The Graph; connect a model after sign-in."}
-          </p>
-        </div>
-      )}
-      <IntelligencePanel />
       <InformationFloatingPanel />
+      <MinimizedWindowsDock />
+      <GraphEscMenu />
       <Toaster richColors position="top-right" />
     </div>
   );

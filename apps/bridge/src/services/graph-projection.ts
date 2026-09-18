@@ -16,6 +16,7 @@ import {
   attentionStatusForNode,
   getGraphMissionsStatus,
 } from "./graph-missions.js";
+import { parseChatTurnState } from "./chat-turn-state.js";
 
 export type { GraphWindowSpec };
 
@@ -46,7 +47,7 @@ export type GraphProjectionNode = {
   cta?: GraphCtaAction;
   openImmediate?: boolean;
   windows?: GraphWindowSpec[];
-  /** Safe status flags only (e.g. entitled, connected, attention). */
+  /** Safe status flags only (e.g. entitled, connected, attention, working). */
   status?: Record<string, boolean | string | number>;
 };
 
@@ -493,16 +494,12 @@ function slotConnected(hints: Set<string>, needles: string[]): boolean {
 
 /** Caps for live instances on the architecture map (keep catalog readable). */
 const LIVE_ARCH_CAPS: Partial<Record<GraphNodeKind, number>> = {
-  chat: 16, // total across parents; per-parent cap is LIVE_CHAT_PER_PARENT
   workflow: 4,
   page: 6,
   skill: 4,
   tool: 4,
   schedule: 4,
 };
-
-/** Max live chats hung under a single Chat bubble. */
-const LIVE_CHAT_PER_PARENT = 4;
 
 type Vec3 = { x: number; y: number; z?: number };
 
@@ -516,8 +513,9 @@ function catalogAnchor(
 }
 
 /**
- * Chat bubble (or agent hub) that should own a live chat on the architecture map.
- * Digital You / empty → hub:chat-you; platform agents → their chat hubs.
+ * Owner hub that should own a live chat on the architecture map.
+ * Digital You / empty → hub:you; platform agents → their agent hubs.
+ * (Per-agent Chat bubble nodes were removed from the catalog.)
  */
 export function chatParentHubId(
   agentId: string | null | undefined,
@@ -530,22 +528,160 @@ export function chatParentHubId(
       : raw;
 
   const byAgent: Record<string, string> = {
-    "digital-you": "hub:chat-you",
-    intelligence: "hub:chat-intelligence",
-    research: "hub:chat-agent-research",
-    ops: "hub:chat-agent-ops",
-    builder: "hub:chat-agent-builder",
-    coordinator: "hub:chat-agent-coordinator",
+    "digital-you": "hub:you",
+    intelligence: "hub:intelligence",
+    research: "hub:agent-research",
+    ops: "hub:agent-ops",
+    builder: "hub:agent-builder",
+    coordinator: "hub:agent-coordinator",
   };
 
-  const preferred = byAgent[aid] ?? `hub:chat-agent-${aid}`;
+  const preferred = byAgent[aid] ?? `hub:agent-${aid}`;
   if (catalogNodeIds.has(preferred)) return preferred;
 
-  const agentHub = `hub:agent-${aid}`;
-  if (aid !== "digital-you" && catalogNodeIds.has(agentHub)) return agentHub;
+  if (aid !== "digital-you" && catalogNodeIds.has(`hub:agent-${aid}`)) {
+    return `hub:agent-${aid}`;
+  }
 
-  if (catalogNodeIds.has("hub:chat-you")) return "hub:chat-you";
-  return "hub:chat-intelligence";
+  if (catalogNodeIds.has("hub:you")) return "hub:you";
+  return "hub:intelligence";
+}
+
+/**
+ * Catalog side suffix for owner surfaces (tasks / automations / workflows).
+ * Unknown agents fall back to intelligence surfaces when present.
+ */
+function agentSurfaceSuffix(agentId: string | null | undefined): string {
+  const raw = (agentId ?? "").trim().toLowerCase();
+  if (!raw || raw === "user" || raw === "digital-you" || raw === "you") {
+    return "you";
+  }
+  if (
+    raw === "intelligence" ||
+    raw === "research" ||
+    raw === "ops"
+  ) {
+    return raw;
+  }
+  return "intelligence";
+}
+
+function bumpWorking(
+  workingByNode: Record<string, number>,
+  nodeId: string | null | undefined,
+  catalogNodeIds: Set<string>
+): void {
+  if (!nodeId || !catalogNodeIds.has(nodeId)) return;
+  workingByNode[nodeId] = (workingByNode[nodeId] ?? 0) + 1;
+}
+
+/**
+ * Collect architecture node ids that currently have active work:
+ * running/resuming chat turns, in-progress project cards, running workflows.
+ */
+export function collectWorkingByNode(
+  tenantDb: AppDatabase | null | undefined,
+  catalogNodeIds: Set<string>
+): Record<string, number> {
+  const workingByNode: Record<string, number> = {};
+  if (!tenantDb) return workingByNode;
+  const db = tenantDb;
+
+  // 1) Intelligence / agent chat turns mid-flight.
+  if (tableExists(db, "ai_chats") && columnExists(db, "ai_chats", "turn_state_json")) {
+    try {
+      const rows = db
+        .prepare(
+          `SELECT id, agent_id, turn_state_json FROM ai_chats
+           WHERE turn_state_json IS NOT NULL`
+        )
+        .all() as Array<{
+        id: string;
+        agent_id: string | null;
+        turn_state_json: string | null;
+      }>;
+      for (const row of rows) {
+        const state = parseChatTurnState(row.turn_state_json);
+        if (!state) continue;
+        if (state.status !== "running" && state.status !== "resuming") continue;
+        const agentId = state.agentId || row.agent_id || "intelligence";
+        bumpWorking(
+          workingByNode,
+          chatParentHubId(agentId, catalogNodeIds),
+          catalogNodeIds
+        );
+      }
+    } catch {
+      /* optional enrichment */
+    }
+  }
+
+  // 2) Active Work / Kanban cards currently in progress.
+  if (tableExists(db, "ai_project_cards")) {
+    try {
+      const cards = db
+        .prepare(
+          `SELECT assigned_agent_id
+           FROM ai_project_cards
+           WHERE column_id = 'in_progress' OR status = 'working'`
+        )
+        .all() as Array<{ assigned_agent_id: string | null }>;
+      for (const card of cards) {
+        const agentId = card.assigned_agent_id || "intelligence";
+        const suffix = agentSurfaceSuffix(agentId);
+        bumpWorking(
+          workingByNode,
+          chatParentHubId(agentId, catalogNodeIds),
+          catalogNodeIds
+        );
+        bumpWorking(workingByNode, `hub:tasks-${suffix}`, catalogNodeIds);
+      }
+    } catch {
+      /* optional enrichment */
+    }
+  }
+
+  // 3) Durable automation runs that are still open.
+  if (tableExists(db, "ai_workflow_runs") && tableExists(db, "ai_workflows")) {
+    try {
+      const runs = db
+        .prepare(
+          `SELECT w.agent_id AS agent_id
+           FROM ai_workflow_runs r
+           JOIN ai_workflows w ON w.id = r.workflow_id
+           WHERE r.status IN ('running', 'awaiting_input', 'pending')`
+        )
+        .all() as Array<{ agent_id: string | null }>;
+      for (const run of runs) {
+        const agentId = run.agent_id || "intelligence";
+        const suffix = agentSurfaceSuffix(agentId);
+        bumpWorking(
+          workingByNode,
+          chatParentHubId(agentId, catalogNodeIds),
+          catalogNodeIds
+        );
+        bumpWorking(workingByNode, `hub:automations-${suffix}`, catalogNodeIds);
+        bumpWorking(workingByNode, `hub:workflows-${suffix}`, catalogNodeIds);
+      }
+    } catch {
+      /* optional enrichment */
+    }
+  }
+
+  return workingByNode;
+}
+
+/** Working flags for graph projection status (safe booleans only). */
+export function workingStatusForNode(
+  nodeId: string,
+  workingByNode: Record<string, number>
+): Record<string, boolean | string | number> | undefined {
+  const count = workingByNode[nodeId] ?? 0;
+  if (count <= 0) return undefined;
+  return {
+    working: true,
+    workingCount: count,
+  };
 }
 
 /** Parent hub + bay direction for each live kind on the architecture map. */
@@ -557,7 +693,7 @@ function liveArchPlacement(kind: GraphNodeKind): {
   switch (kind) {
     case "chat":
       return {
-        parentId: "hub:chat-intelligence",
+        parentId: "hub:intelligence",
         dir: { x: -1, y: -0.35, z: 0.15 },
       };
     case "workflow":
@@ -618,50 +754,20 @@ function mergeLiveNeighborhoodIntoArchitecture(opts: {
   const db = opts.tenantDb;
   ensureAiChatsAgentId(db);
 
-  const catalogIds = new Set(opts.nodes.map((n) => n.id));
-  const chatDir = liveArchPlacement("chat").dir;
   const FALLBACK: Vec3 = { x: -2, y: 2, z: 0 };
 
   let focusChatId = "session-local";
-  const recentChats: Array<{
-    id: string;
-    title: string | null;
-    agentId: string | null;
-  }> = [];
   try {
     if (tableExists(db, "ai_chats")) {
-      const hasAgent = columnExists(db, "ai_chats", "agent_id");
-      const rows = hasAgent
-        ? (db
-            .prepare(
-              `SELECT id, title, agent_id AS agentId FROM ai_chats
-               ORDER BY updated_at DESC
-               LIMIT ?`
-            )
-            .all(24) as Array<{
-            id: string;
-            title: string | null;
-            agentId: string | null;
-          }>)
-        : (
-            db
-              .prepare(
-                `SELECT id, title FROM ai_chats
-                 ORDER BY updated_at DESC
-                 LIMIT ?`
-              )
-              .all(24) as Array<{ id: string; title: string | null }>
-          ).map((r) => ({ ...r, agentId: "intelligence" as string | null }));
-      for (const r of rows) {
-        if (r.id && r.id !== "session-local") {
-          recentChats.push({
-            id: r.id,
-            title: r.title,
-            agentId: r.agentId,
-          });
-        }
-      }
-      if (recentChats[0]) focusChatId = recentChats[0].id;
+      const row = db
+        .prepare(
+          `SELECT id FROM ai_chats
+           WHERE id != 'session-local'
+           ORDER BY updated_at DESC
+           LIMIT 1`
+        )
+        .get() as { id: string } | undefined;
+      if (row?.id) focusChatId = row.id;
     }
   } catch {
     /* optional */
@@ -676,53 +782,8 @@ function mergeLiveNeighborhoodIntoArchitecture(opts: {
     cloudDb: opts.cloudDb,
   });
 
-  // Live chats: place under the owning agent's Chat bubble (Phase A / #789).
-  const chatsPerParent = new Map<string, number>();
-  let chatTotal = 0;
-  const chatCapTotal = LIVE_ARCH_CAPS.chat ?? 16;
-
-  for (const c of recentChats) {
-    if (chatTotal >= chatCapTotal) break;
-    const parentId = chatParentHubId(c.agentId, catalogIds);
-    const used = chatsPerParent.get(parentId) ?? 0;
-    if (used >= LIVE_CHAT_PER_PARENT) continue;
-
-    const anchor = catalogAnchor(opts.nodes, parentId, FALLBACK);
-    const position = liveBayPosition(anchor, chatDir, used);
-    const nid = `chat:${c.id}`;
-
-    if (
-      !pushNode(opts.nodes, opts.seenN, {
-        id: nid,
-        kind: "chat",
-        label: (c.title || "Chat").slice(0, 48),
-        objectType: "ChatSession",
-        refId: c.id,
-        position,
-        description: undefined,
-        securityNote: "Live workspace chat. Open Chat for message bodies.",
-        connectionLabels: [parentId.replace(/^hub:/, "")],
-        ctaLabel: "Open chat",
-        cta: { type: "open_chat" },
-        openImmediate: true,
-        status: {
-          liveInstance: true,
-          ownerAgent: (c.agentId ?? "digital-you").trim() || "digital-you",
-        },
-      })
-    ) {
-      continue;
-    }
-
-    pushEdge(opts.edges, opts.seenE, {
-      id: `edge:live:${parentId}:${nid}`,
-      source: parentId,
-      target: nid,
-      kind: "live-instance",
-    });
-    chatsPerParent.set(parentId, used + 1);
-    chatTotal += 1;
-  }
+  // Live chat sessions stay off the architecture map (no per-agent Chat
+  // bubble nodes). Chat opens from agent/You CTAs and the ether composer.
 
   // Non-chat live kinds (workflows, pages, …) keep Intelligence-side bays for now.
   const candidates: GraphProjectionNode[] = [];
@@ -815,7 +876,7 @@ function pushPlatformAgentToolSummaries(opts: {
 
   const FALLBACK: Vec3 = { x: 3.2, y: 2.5, z: 0.8 };
   const hubAnchor = catalogAnchor(opts.nodes, hubId, FALLBACK);
-  // Bay below/along Hub's platform ray so tools read as Bridge-owned.
+  // Bay below/along Hub's platform fan so tools read as Bridge-owned.
   const dir: Vec3 = { x: 0.35, y: -1, z: 0.2 };
   let bayIndex = 0;
 
@@ -898,11 +959,19 @@ export function buildArchitectureProjection(opts: {
     tenantDb: opts.tenantDb ?? null,
   });
 
-  for (const n of listArchitectureCatalogNodes()) {
+  const catalogNodes = listArchitectureCatalogNodes();
+  const catalogNodeIds = new Set(catalogNodes.map((n) => n.id));
+  const workingByNode = collectWorkingByNode(
+    opts.tenantDb ?? null,
+    catalogNodeIds
+  );
+
+  for (const n of catalogNodes) {
     const status: Record<string, boolean | string | number> = {};
     if (
       n.id === "hub:vault-you" ||
       n.id === "hub:vault-intelligence" ||
+      n.id === "hub:vault-platform" ||
       n.id === "hub:vault"
     ) {
       status.connected = vaultAny;
@@ -929,6 +998,10 @@ export function buildArchitectureProjection(opts: {
     );
     if (attention) {
       Object.assign(status, attention);
+    }
+    const working = workingStatusForNode(n.id, workingByNode);
+    if (working) {
+      Object.assign(status, working);
     }
     pushNode(nodes, seenN, {
       id: n.id,

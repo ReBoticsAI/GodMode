@@ -17,6 +17,9 @@ import {
   getOpenRouterAuthStatus,
   isOpenRouterPlatformReady,
 } from "./openrouter-platform.js";
+import {
+  hasAdminGodModeInferenceSupply,
+} from "./godmode-inference-supply.js";
 import { getGroqAuthStatus, isGroqPlatformReady } from "./groq-platform.js";
 import {
   getTogetherAuthStatus,
@@ -30,6 +33,10 @@ import {
   getDeepSeekAuthStatus,
   isDeepSeekPlatformReady,
 } from "./deepseek-platform.js";
+import {
+  getDashScopeAuthStatus,
+  isDashScopePlatformReady,
+} from "./dashscope-platform.js";
 import {
   getGoogleAiAuthStatus,
   isGoogleAiPlatformReady,
@@ -123,7 +130,7 @@ function maybeMigrateLegacyPlatformOnboarding(db: AppDatabase): void {
 
 /**
  * Hub/SaaS: any Vault BYOK LLM provider (OpenAI / Anthropic / OpenRouter / Groq /
- * Together / Fireworks / DeepSeek / Google AI Studio / xAI / Z.AI / MiniMax /
+ * Together / Fireworks / DeepSeek / DashScope (Qwen) / Google AI Studio / xAI / Z.AI / MiniMax /
  * custom OpenAI-compatible / Z.AI Coding Plan / OpenCode Go / DigitalOcean
  * Inference / Snowflake Cortex / MiniMax Token Plan /
  * Kimi Code / Poe / OpenCode Zen) counts as
@@ -144,6 +151,7 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
     vaultReady(isTogetherPlatformReady(db), getTogetherAuthStatus(db).source) ||
     vaultReady(isFireworksPlatformReady(db), getFireworksAuthStatus(db).source) ||
     vaultReady(isDeepSeekPlatformReady(db), getDeepSeekAuthStatus(db).source) ||
+    vaultReady(isDashScopePlatformReady(db), getDashScopeAuthStatus(db).source) ||
     vaultReady(isGoogleAiPlatformReady(db), getGoogleAiAuthStatus(db).source) ||
     vaultReady(isXaiPlatformReady(db), getXaiAuthStatus(db).source) ||
     vaultReady(isZaiPlatformReady(db), getZaiAuthStatus(db).source) ||
@@ -204,7 +212,12 @@ export function getOnboardingStatus(
     cursorConnected &&
     (!config.isHub || getCursorAuthStatus(tenantDb).source === "vault");
   const llmReady =
-    llmReadyFlag || cursorReadyForTenant || isHubVaultCloudPlatformReady(tenantDb);
+    llmReadyFlag ||
+    cursorReadyForTenant ||
+    isHubVaultCloudPlatformReady(tenantDb) ||
+    // Admin → GodMode Inference platform_meta only (not env) so local GGUF
+    // onboarding is not skipped by leftover process env keys.
+    hasAdminGodModeInferenceSupply();
   return { completed, llmReady, llmStatus, cursorConnected };
 }
 

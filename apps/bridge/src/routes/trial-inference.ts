@@ -75,6 +75,8 @@ export function createTrialInferenceRouter(llm?: LlmManager): Router {
       userId: req.user?.id,
       visitorKey,
       clientIp: clientIp(req),
+      email: req.user?.email,
+      displayName: req.user?.displayName,
     });
     res.json(status);
   });
@@ -96,10 +98,20 @@ export function createTrialInferenceRouter(llm?: LlmManager): Router {
       const tenantDb: AppDatabase | null = req.user
         ? (req.tenantDb ?? null)
         : null;
+      const body =
+        req.body && typeof req.body === "object"
+          ? (req.body as { email?: unknown; displayName?: unknown })
+          : {};
+      const guestEmail =
+        typeof body.email === "string" ? body.email.trim() : "";
+      const guestDisplay =
+        typeof body.displayName === "string" ? body.displayName.trim() : "";
       const status = await ensureTrialInference({
         userId: req.user?.id,
         visitorKey,
         clientIp: clientIp(req),
+        email: req.user?.email || guestEmail || null,
+        displayName: req.user?.displayName || guestDisplay || null,
         tenantDb,
         llm: req.user ? llm ?? null : null,
         provision: true,

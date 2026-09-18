@@ -336,11 +336,16 @@ export default function ContactsFlow() {
     <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-4">
       <PageHeader
         title="Users"
-        description="Your network — you at the center, connected to everyone you collaborate with. Each line shows how you're related; click a contact to message them."
+        description="Your network: you at the center, connected to everyone you collaborate with. Each line shows how you are related; click a contact to message them."
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <ContactsFlowChart />
+        <ContactsContent />
       </div>
     </Page>
   );
+}
+
+/** Contacts relationship graph for the full route or Graph floating window. */
+export function ContactsContent() {
+  return <ContactsFlowChart />;
 }

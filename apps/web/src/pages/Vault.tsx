@@ -43,6 +43,9 @@ import { XaiConsoleCard } from "@/pages/ai-settings/XaiConsoleCard";
 import { ZaiPaygCard } from "@/pages/ai-settings/ZaiPaygCard";
 import { MinimaxPaygCard } from "@/pages/ai-settings/MinimaxPaygCard";
 import { CustomOpenAiCard } from "@/pages/ai-settings/CustomOpenAiCard";
+import { QwenDashScopeCard } from "@/pages/ai-settings/QwenDashScopeCard";
+import { OptimizedInferenceSection } from "@/pages/ai-settings/OptimizedInferenceSection";
+import { InferenceConnectOverview } from "@/pages/ai-settings/provider-connect-methods";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
 import {
@@ -343,6 +346,7 @@ export function InferenceTab({
       <TabsList variant="line" className="w-full flex-wrap justify-start">
         <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
         <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+        <TabsTrigger value="optimized">Preferred BYOK</TabsTrigger>
         <TabsTrigger value="search">Search</TabsTrigger>
       </TabsList>
 
@@ -351,11 +355,13 @@ export function InferenceTab({
           <div>
             <h2 className="text-sm font-medium">Subscriptions</h2>
             <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Cursor, Z.AI GLM Coding Plan,
-              OpenCode Go, DigitalOcean Inference, and Snowflake Cortex PAT are
-              available today. Stored in the Platform Vault.
+              Use your plan (billed by the provider). Each card shows only connect
+              methods that work today (subscription key, User API key / SDK, or PAT).
+              Stored in the Platform Vault. For metered Z.AI Platform payg, use the
+              Preferred BYOK tab; Coding Plan stays here.
             </p>
           </div>
+          <InferenceConnectOverview bucket="subscriptions" />
           <CursorSubscriptionCard vaultAgentId={null} />
           <ZaiCodingPlanCard vaultAgentId={null} />
           <OpencodeGoCard vaultAgentId={null} />
@@ -373,10 +379,15 @@ export function InferenceTab({
           <div>
             <h2 className="text-sm font-medium">API keys</h2>
             <p className="text-sm text-muted-foreground">
-              Metered BYOK. Each card stores a fixed credential and can apply a
-              provider-tuned harness in Intelligence.
+              Metered BYOK. Primary chat uses GodMode Inference (trial, then pay
+              through GodMode). Each card stores a fixed credential and applies a
+              provider-tuned harness. Connect method today is paste API key (no
+              LLM OAuth cards yet). DeepSeek, Z.AI payg, and Qwen are also featured
+              under Preferred BYOK (personal keys; platform supply is Admin →
+              GodMode Inference).
             </p>
           </div>
+          <InferenceConnectOverview bucket="api-keys" />
           <OpenAiPlatformCard vaultAgentId={null} />
           <AnthropicConsoleCard vaultAgentId={null} />
           <OpenRouterCard vaultAgentId={null} />
@@ -388,8 +399,13 @@ export function InferenceTab({
           <XaiConsoleCard vaultAgentId={null} />
           <ZaiPaygCard vaultAgentId={null} />
           <MinimaxPaygCard vaultAgentId={null} />
+          <QwenDashScopeCard vaultAgentId={null} />
           <CustomOpenAiCard vaultAgentId={null} />
         </section>
+      </TabsContent>
+
+      <TabsContent value="optimized" className="mt-4 flex flex-col gap-6">
+        <OptimizedInferenceSection vaultAgentId={null} />
       </TabsContent>
 
       <TabsContent value="search" className="mt-4 flex flex-col gap-6">
@@ -401,6 +417,7 @@ export function InferenceTab({
               Stored in the Platform Vault.
             </p>
           </div>
+          <InferenceConnectOverview bucket="search" />
           <ExaConnectCard vaultAgentId={null} />
         </section>
       </TabsContent>

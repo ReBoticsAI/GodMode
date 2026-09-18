@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Graph-first isolation (assumptions)
 
-GodMode’s 3D **Graph** is the control-surface **map** of an instance (You, Hub, Intelligence, Workspaces, Agents, Vaults, Life, Chat). It is not proof that each node has its own SQLite SoR or a VM/container.
+GodMode’s 3D **Graph** is the control-surface **map** of an instance (You, Hub, Intelligence, Workspaces, Agents, Vaults, Chat). It is not proof that each node has its own SQLite SoR or a VM/container.
 
 ## Layers
 
