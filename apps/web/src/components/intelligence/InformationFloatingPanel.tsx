@@ -1,6 +1,7 @@
 import {
   BellIcon,
   BookOpenIcon,
+  BotIcon,
   CalendarIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -44,7 +45,6 @@ import {
   type GraphProjectionNode,
 } from "@/api";
 import { CalendarBoard } from "@/components/intelligence/calendar/CalendarBoard";
-import { AutomationsPanel } from "@/pages/Automations";
 import { KnowledgePanel } from "@/pages/intelligence-flow/KnowledgePanel";
 import Bank from "@/pages/Bank";
 import Vault from "@/pages/Vault";
@@ -68,10 +68,6 @@ import {
   GraphNodeMissionsSection,
   GraphScoreboardSection,
 } from "@/components/graph/GraphMissionsPanel";
-import {
-  fetchObjectType,
-  type ObjectTypeClient,
-} from "@/lib/object-types-api";
 import { graphNodeColor } from "@/lib/graph-node-style";
 import { floatingSurfaceForTab } from "@/lib/graph-floating-surfaces";
 
@@ -79,169 +75,51 @@ const CodingWorkspacePage = lazy(
   () => import("@/pages/coding/CodingWorkspacePage")
 );
 
-type CanvasMode = "overview" | "kernel" | "coding";
+const AiBuilder = lazy(() =>
+  import("@/pages/intelligence-flow/AiBuilder").then((m) => ({
+    default: m.AiBuilder,
+  }))
+);
 
-function nodeWantsCodingCanvas(node: GraphProjectionNode): boolean {
-  const id = node.id.toLowerCase();
-  const ref = (node.refId ?? "").toLowerCase();
-  const label = node.label.toLowerCase();
+const AutomationsPanel = lazy(() =>
+  import("@/pages/Automations").then((m) => ({
+    default: m.AutomationsPanel,
+  }))
+);
+
+function EditorTabFallback({ label }: { label: string }) {
   return (
-    id.includes("coding") ||
-    ref.includes("coding") ||
-    label.includes("coding") ||
-    node.objectType === "CodingWorkspace"
-  );
-}
-
-function KernelObjectTypeView({
-  objectTypeName,
-}: {
-  objectTypeName: string | undefined;
-}) {
-  const navigate = useNavigate();
-  const { authenticated } = useTenant();
-  const [ot, setOt] = useState<ObjectTypeClient | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!objectTypeName) {
-      setOt(null);
-      setError(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void fetchObjectType(objectTypeName)
-      .then((row) => {
-        if (!cancelled) setOt(row);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setOt(null);
-          setError(
-            err instanceof Error ? err.message : "ObjectType not available"
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [objectTypeName]);
-
-  if (!objectTypeName) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        This Graph node has no ObjectType binding yet.
-      </p>
-    );
-  }
-
-  if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading kernel type…</p>;
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">
-          Kernel type <span className="font-medium text-foreground">{objectTypeName}</span>
-          : {error}
-        </p>
-        {authenticated ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="self-start"
-            onClick={() => navigate(`/records/${encodeURIComponent(objectTypeName)}`)}
-          >
-            Open Records
-          </Button>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (!ot) return null;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <p className="text-sm font-medium">{ot.label}</p>
-        <p className="text-[11px] text-muted-foreground">{ot.name}</p>
-        {ot.description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{ot.description}</p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Badge variant="outline">
-          storage: {ot.storage?.kind ?? "unknown"}
-        </Badge>
-        {(ot.operations ?? []).map((op) => (
-          <Badge key={op} variant="secondary" className="capitalize">
-            {op}
-          </Badge>
-        ))}
-      </div>
-      {ot.fields.length > 0 ? (
-        <div>
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Fields
-          </p>
-          <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-            {ot.fields.slice(0, 12).map((f) => (
-              <li key={f.name}>
-                <span className="text-foreground">{f.label}</span>
-                {" · "}
-                {f.fieldType}
-                {f.required ? " · required" : ""}
-              </li>
-            ))}
-            {ot.fields.length > 12 ? (
-              <li>+{ot.fields.length - 12} more</li>
-            ) : null}
-          </ul>
-        </div>
-      ) : null}
-      {(ot.actions?.length ?? 0) > 0 ? (
-        <div>
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Actions
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {ot.actions!.map((a) => (
-              <Badge key={a.name} variant="outline">
-                {a.label}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {authenticated ? (
-        <Button
-          type="button"
-          size="sm"
-          className="self-start"
-          onClick={() => navigate(`/records/${encodeURIComponent(ot.name)}`)}
-        >
-          Open ObjectType Records
-        </Button>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Sign in to browse ObjectType records.
-        </p>
-      )}
+    <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+      <Spinner />
+      <span>Loading {label}…</span>
     </div>
   );
 }
 
+type CanvasMode = "overview" | "pipeline" | "automations";
+
+const AUTOMATIONS_HUB_PREFIXES = [
+  "hub:automations-",
+  "hub:workflows-",
+  "hub:schedules-",
+  "hub:hooks-",
+] as const;
+
+function isAutomationsFamilyNode(node: GraphProjectionNode): boolean {
+  const id = node.id.toLowerCase();
+  const ref = (node.refId ?? "").toLowerCase();
+  return AUTOMATIONS_HUB_PREFIXES.some(
+    (prefix) => id.startsWith(prefix) || ref.startsWith(prefix.replace("hub:", ""))
+  );
+}
+
+function canvasModeForNode(node: GraphProjectionNode): CanvasMode {
+  if (isAutomationsFamilyNode(node)) return "automations";
+  return "overview";
+}
+
 /**
- * Information window: dynamic canvas (Overview / Kernel / Coding) for Graph nodes.
+ * Information window: dynamic canvas (Overview / Pipeline / Automations) for Graph nodes.
  */
 export function InformationFloatingPanel() {
   const {
@@ -312,10 +190,8 @@ export function InformationFloatingPanel() {
 
   useEffect(() => {
     if (!informationNode) return;
-    setCanvasMode(
-      nodeWantsCodingCanvas(informationNode) ? "coding" : "overview"
-    );
-  }, [informationNode?.id]);
+    setCanvasMode(canvasModeForNode(informationNode));
+  }, [informationNode?.id, informationNode?.kind]);
 
   const calendarScope = useMemo(() => {
     const fromOwner = productivityScopeFromFocusOwner(focusOwner);
@@ -445,10 +321,10 @@ export function InformationFloatingPanel() {
       : [];
 
   const titlePrefix =
-    canvasMode === "kernel"
-      ? "Kernel"
-      : canvasMode === "coding"
-        ? "Coding"
+    canvasMode === "pipeline"
+      ? "Pipeline"
+      : canvasMode === "automations"
+        ? "Automations"
         : "Information";
 
   let panelTitle = "Information";
@@ -590,10 +466,10 @@ export function InformationFloatingPanel() {
   } else if (node) {
     panelTitle = `${titlePrefix} · ${node.label}`;
     panelIcon =
-      canvasMode === "coding" ? (
-        <CodeIcon className="size-4" style={{ color: accent }} />
-      ) : canvasMode === "kernel" ? (
-        <LayersIcon className="size-4" style={{ color: accent }} />
+      canvasMode === "pipeline" ? (
+        <BotIcon className="size-4" style={{ color: accent }} />
+      ) : canvasMode === "automations" ? (
+        <WorkflowIcon className="size-4" style={{ color: accent }} />
       ) : (
         <InfoIcon className="size-4" style={{ color: accent }} />
       );
@@ -621,7 +497,9 @@ export function InformationFloatingPanel() {
         </div>
       ) : activeLeftTab === "projects" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <AutomationsPanel agentId={scopeAgentId} showTasks showEvents />
+          <Suspense fallback={<EditorTabFallback label="Automations" />}>
+            <AutomationsPanel agentId={scopeAgentId} showTasks showEvents />
+          </Suspense>
         </div>
       ) : activeLeftTab === "knowledge" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -756,17 +634,17 @@ export function InformationFloatingPanel() {
               <TabsTrigger value="overview" className="text-xs">
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="kernel" className="text-xs">
-                Kernel
+              <TabsTrigger value="pipeline" className="text-xs">
+                Pipeline
               </TabsTrigger>
-              <TabsTrigger value="coding" className="text-xs">
-                Coding
+              <TabsTrigger value="automations" className="text-xs">
+                Automations
               </TabsTrigger>
             </TabsList>
 
             <TabsContent
               value="overview"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto p-4"
+              className="mt-0 min-h-0 flex-1 overflow-y-auto p-4 data-[state=inactive]:hidden"
             >
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -979,31 +857,29 @@ export function InformationFloatingPanel() {
             </TabsContent>
 
             <TabsContent
-              value="kernel"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto p-4"
+              value="pipeline"
+              className="mt-0 min-h-0 flex-1 overflow-hidden p-2 data-[state=inactive]:hidden"
             >
-              <div className="flex flex-col gap-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  ObjectType kernel
-                </p>
-                <KernelObjectTypeView objectTypeName={node.objectType} />
-              </div>
+              {canvasMode === "pipeline" ? (
+                <Suspense fallback={<EditorTabFallback label="Pipeline" />}>
+                  <AiBuilder embedded />
+                </Suspense>
+              ) : null}
             </TabsContent>
 
             <TabsContent
-              value="coding"
-              className="mt-0 min-h-0 flex-1 overflow-hidden p-2"
+              value="automations"
+              className="mt-0 min-h-0 flex-1 overflow-hidden p-2 data-[state=inactive]:hidden"
             >
-              <Suspense
-                fallback={
-                  <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
-                    <Spinner />
-                    <span>Loading Coding canvas…</span>
-                  </div>
-                }
-              >
-                <CodingWorkspacePage embedded />
-              </Suspense>
+              {canvasMode === "automations" ? (
+                <Suspense fallback={<EditorTabFallback label="Automations" />}>
+                  <AutomationsPanel
+                    agentId={scopeAgentId}
+                    showTasks
+                    showEvents
+                  />
+                </Suspense>
+              ) : null}
             </TabsContent>
           </Tabs>
         </div>

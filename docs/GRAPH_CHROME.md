@@ -67,7 +67,14 @@ Do not invent a second empty language with one-off muted paragraphs when these p
 
 ## Embedded editors (density)
 
-Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avoid dumping multi-MB request bodies into the UI (see #791 / #798). Prefer `min-h-0` flex children so panels scroll inside the floating window. **Final LLM Request** defaults to a truncated head/tail preview with Copy full and Show full (#791). Broader Workflows / R3F budgets remain #798.
+Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avoid dumping multi-MB request bodies into the UI (see #791 / #798). Prefer `min-h-0` flex children so panels scroll inside the floating window. **Final LLM Request** defaults to a truncated head/tail preview with Copy full and Show full (#791).
+
+## Performance budgets
+
+- **Information tabs:** Overview / Pipeline / Automations mount heavy editors only while that tab is active. Switching away unmounts React Flow trees so they do not compete with The Graph (#798). Editors are `React.lazy` + `Suspense`.
+- **Final LLM Request:** truncated inspector preview by default (#791); copy / expand for the full prompt.
+- **R3F Graph:** [`GraphScene3D.tsx`](../apps/web/src/components/graph/GraphScene3D.tsx) uses `frameloop="demand"`, capped `dpr` (≤1.25), and SVG `Html` glyphs for `visibleNodes` only.
+- Prefer `min-h-0` flex children; do not dump multi-MB payloads into inspectors.
 
 ## Forbidden
 
@@ -81,6 +88,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 - Epic [#793](https://github.com/ReBoticsAI/GodMode/issues/793) Graph chrome cohesion
 - Issue [#790](https://github.com/ReBoticsAI/GodMode/issues/790) chat window title target picker
 - Issue [#791](https://github.com/ReBoticsAI/GodMode/issues/791) Pipeline Final LLM Request preview
+- Issue [#798](https://github.com/ReBoticsAI/GodMode/issues/798) embedded editor performance budgets
 - Issue [#794](https://github.com/ReBoticsAI/GodMode/issues/794) single `focusOwner`
 - Issue [#795](https://github.com/ReBoticsAI/GodMode/issues/795) style guide
 - [STATE_GRAPH_ISOLATION.md](./STATE_GRAPH_ISOLATION.md)
