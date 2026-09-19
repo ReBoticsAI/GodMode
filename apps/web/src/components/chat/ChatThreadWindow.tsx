@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BotIcon, HashIcon, MessageCircleIcon } from "lucide-react";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
+import { ChatTargetSearch } from "@/components/intelligence/ChatTargetSearch";
 import { MessageBubble } from "@/components/messages/MessageBubble";
 import {
   fetchDmMessages,
@@ -171,19 +172,18 @@ export function ChatThreadWindow({
       minimized={Boolean(win.minimized)}
       onMinimize={() => setChatWindowMinimized(win.id, true)}
       title={
-        <button
-          type="button"
-          className="appearance-none truncate bg-transparent text-left font-medium text-foreground outline-none select-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 active:bg-transparent"
-          aria-label={`Move ${win.title} window`}
+        <div
+          data-floating-chrome
+          className="flex min-w-0 items-center gap-1.5"
           onClick={activate}
         >
-          {win.title}
+          <ChatTargetSearch titleMode openFloatingOnSelect />
           {focused ? (
-            <span className="ml-1.5 text-[10px] font-normal text-primary">
+            <span className="shrink-0 text-[10px] font-normal text-primary">
               focused
             </span>
           ) : null}
-        </button>
+        </div>
       }
       icon={icon}
       accent={focused ? "#7c3aed" : "#a78bfa"}

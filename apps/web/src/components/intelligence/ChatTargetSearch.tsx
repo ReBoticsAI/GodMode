@@ -41,9 +41,15 @@ import { isChatTargetAgent } from "@/lib/chat-target-agents";
  */
 export function ChatTargetSearch({
   titleMode = false,
+  openFloatingOnSelect = false,
 }: {
   /** Render the trigger as the prominent panel title (larger, no leading icon). */
   titleMode?: boolean;
+  /**
+   * When true (Graph floating chat title), also open/focus a chat window for
+   * the selected target so multi-window Graph stays in sync.
+   */
+  openFloatingOnSelect?: boolean;
 } = {}) {
   const {
     chatTarget,
@@ -51,6 +57,7 @@ export function ChatTargetSearch({
     activeAgentId,
     dmConversations,
     refreshDmConversations,
+    openOrFocusChatWindow,
     pathname,
   } = useIntelligence();
   const { departments } = useStructure();
@@ -229,6 +236,14 @@ export function ChatTargetSearch({
 
   const selectAgent = (id: string) => {
     setChatTarget({ kind: "agent", agentId: id });
+    if (openFloatingOnSelect) {
+      const agent = agents.find((a) => a.id === id);
+      openOrFocusChatWindow({
+        kind: "agent",
+        agentId: id,
+        title: agent?.name ?? "Agent",
+      });
+    }
     setOpen(false);
     setQuery("");
   };
@@ -241,6 +256,17 @@ export function ChatTargetSearch({
       });
       setChatTarget({ kind: "conversation", conversationId: res.conversation.id });
       void refreshDmConversations();
+      if (openFloatingOnSelect) {
+        openOrFocusChatWindow({
+          kind: "dm",
+          conversationId: res.conversation.id,
+          title:
+            res.conversation.title ||
+            contact.displayName ||
+            contact.email ||
+            "Direct message",
+        });
+      }
       setOpen(false);
       setQuery("");
     } catch {
@@ -250,6 +276,17 @@ export function ChatTargetSearch({
 
   const selectConversation = (id: string) => {
     setChatTarget({ kind: "conversation", conversationId: id });
+    if (openFloatingOnSelect) {
+      const c = dmConversations.find((x) => x.id === id);
+      openOrFocusChatWindow({
+        kind: c?.kind === "group" ? "channel" : "dm",
+        conversationId: id,
+        title:
+          c?.displayTitle ||
+          c?.title ||
+          (c?.kind === "group" ? "Channel" : "Direct message"),
+      });
+    }
     setOpen(false);
     setQuery("");
   };
@@ -292,6 +329,16 @@ export function ChatTargetSearch({
         conversationId: res.conversation.id,
       });
       void refreshDmConversations();
+      if (openFloatingOnSelect) {
+        openOrFocusChatWindow({
+          kind: "channel",
+          conversationId: res.conversation.id,
+          title:
+            res.conversation.title ||
+            groupTitle.trim() ||
+            "Channel",
+        });
+      }
       setGroupOpen(false);
       setOpen(false);
       resetGroupDraft();
