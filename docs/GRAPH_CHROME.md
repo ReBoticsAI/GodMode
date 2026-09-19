@@ -67,7 +67,7 @@ Do not invent a second empty language with one-off muted paragraphs when these p
 
 ## Embedded editors (density)
 
-Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avoid dumping multi-MB request bodies into the UI (see #791 / #798). Prefer `min-h-0` flex children so panels scroll inside the floating window.
+Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avoid dumping multi-MB request bodies into the UI (see #791 / #798). Prefer `min-h-0` flex children so panels scroll inside the floating window. **Final LLM Request** defaults to a truncated head/tail preview with Copy full and Show full (#791). Broader Workflows / R3F budgets remain #798.
 
 ## Forbidden
 
@@ -80,6 +80,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 
 - Epic [#793](https://github.com/ReBoticsAI/GodMode/issues/793) Graph chrome cohesion
 - Issue [#790](https://github.com/ReBoticsAI/GodMode/issues/790) chat window title target picker
+- Issue [#791](https://github.com/ReBoticsAI/GodMode/issues/791) Pipeline Final LLM Request preview
 - Issue [#794](https://github.com/ReBoticsAI/GodMode/issues/794) single `focusOwner`
 - Issue [#795](https://github.com/ReBoticsAI/GodMode/issues/795) style guide
 - [STATE_GRAPH_ISOLATION.md](./STATE_GRAPH_ISOLATION.md)
