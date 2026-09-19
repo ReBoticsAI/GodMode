@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BotIcon, HashIcon, MessageCircleIcon } from "lucide-react";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
+import { GraphPhoneSheet } from "@/components/graph/GraphPhoneSheet";
 import { ChatTargetSearch } from "@/components/intelligence/ChatTargetSearch";
 import { MessageBubble } from "@/components/messages/MessageBubble";
 import {
@@ -12,6 +13,7 @@ import { useIntelligence } from "@/lib/intelligence-context";
 import type { OpenChatWindow } from "@/lib/chat-windows";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/lib/tenant-context";
+import { useIsPhone } from "@/hooks/use-mobile";
 
 function formatTime(at: number): string {
   try {
@@ -134,15 +136,49 @@ function ConversationTranscript({ conversationId }: { conversationId: string }) 
   );
 }
 
+function ChatThreadBody({
+  win,
+  focused,
+  activate,
+}: {
+  win: OpenChatWindow;
+  focused: boolean;
+  activate: () => void;
+}) {
+  return (
+    <div
+      className="flex h-full min-h-0 flex-col"
+      onPointerDown={() => {
+        if (!focused) activate();
+      }}
+    >
+      {win.kind === "agent" ? (
+        <AgentTranscript lines={win.etherLines ?? []} />
+      ) : win.conversationId ? (
+        <ConversationTranscript conversationId={win.conversationId} />
+      ) : (
+        <p className="p-3 text-xs text-muted-foreground">Missing conversation.</p>
+      )}
+      <p className="shrink-0 border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+        Reply with the bottom composer
+        {focused ? " (this window is focused)" : ". Click to focus."}
+      </p>
+    </div>
+  );
+}
+
 export function ChatThreadWindow({
   win,
   composerText,
   onComposerDraftChange,
+  phoneMode = false,
 }: {
   win: OpenChatWindow;
   /** Current bottom-composer text (for draft stash on focus). */
   composerText: string;
   onComposerDraftChange: (text: string) => void;
+  /** When true, render as GraphPhoneSheet (single focused chat on phone). */
+  phoneMode?: boolean;
 }) {
   const {
     focusedChatWindowId,
@@ -166,24 +202,38 @@ export function ChatThreadWindow({
       <MessageCircleIcon className="size-4" />
     );
 
+  const title = (
+    <div data-floating-chrome className="flex min-w-0 items-center gap-1.5">
+      <ChatTargetSearch titleMode openFloatingOnSelect />
+      {focused ? (
+        <span className="shrink-0 text-[10px] font-normal text-primary">
+          focused
+        </span>
+      ) : null}
+    </div>
+  );
+
+  if (phoneMode) {
+    return (
+      <GraphPhoneSheet
+        open={!win.minimized}
+        onOpenChange={(next) => {
+          if (!next) closeChatWindow(win.id);
+        }}
+        title={title}
+        icon={icon}
+      >
+        <ChatThreadBody win={win} focused={focused} activate={activate} />
+      </GraphPhoneSheet>
+    );
+  }
+
   return (
     <FloatingWindow
       open
       minimized={Boolean(win.minimized)}
       onMinimize={() => setChatWindowMinimized(win.id, true)}
-      title={
-        <div
-          data-floating-chrome
-          className="flex min-w-0 items-center gap-1.5"
-        >
-          <ChatTargetSearch titleMode openFloatingOnSelect />
-          {focused ? (
-            <span className="shrink-0 text-[10px] font-normal text-primary">
-              focused
-            </span>
-          ) : null}
-        </div>
-      }
+      title={title}
       icon={icon}
       accent={focused ? "#7c3aed" : "#a78bfa"}
       zIndexClassName={focused ? "z-[120]" : "z-[110]"}
@@ -195,24 +245,7 @@ export function ChatThreadWindow({
       onClose={() => closeChatWindow(win.id)}
       className={cn(focused && "ring-1 ring-primary/40")}
     >
-      <div
-        className="flex h-full min-h-0 flex-col"
-        onPointerDown={() => {
-          if (focusedChatWindowId !== win.id) activate();
-        }}
-      >
-        {win.kind === "agent" ? (
-          <AgentTranscript lines={win.etherLines ?? []} />
-        ) : win.conversationId ? (
-          <ConversationTranscript conversationId={win.conversationId} />
-        ) : (
-          <p className="p-3 text-xs text-muted-foreground">Missing conversation.</p>
-        )}
-        <p className="shrink-0 border-t px-3 py-1.5 text-[10px] text-muted-foreground">
-          Reply with the bottom composer
-          {focused ? " (this window is focused)" : ". Click to focus."}
-        </p>
-      </div>
+      <ChatThreadBody win={win} focused={focused} activate={activate} />
     </FloatingWindow>
   );
 }
@@ -224,7 +257,26 @@ export function ChatThreadWindowsHost({
   composerText: string;
   onComposerDraftChange: (text: string) => void;
 }) {
-  const { openChatWindows } = useIntelligence();
+  const { openChatWindows, focusedChatWindowId } = useIntelligence();
+  const isPhone = useIsPhone();
+
+  if (isPhone) {
+    const focused =
+      openChatWindows.find((w) => w.id === focusedChatWindowId && !w.minimized) ??
+      openChatWindows.find((w) => !w.minimized) ??
+      null;
+    if (!focused) return null;
+    return (
+      <ChatThreadWindow
+        key={focused.id}
+        win={focused}
+        composerText={composerText}
+        onComposerDraftChange={onComposerDraftChange}
+        phoneMode
+      />
+    );
+  }
+
   return (
     <>
       {openChatWindows.map((win) => (

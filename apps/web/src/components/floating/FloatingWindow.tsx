@@ -16,7 +16,8 @@ import {
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsPhone } from "@/hooks/use-mobile";
+import { GRAPH_COMPOSER_BAND } from "@/components/graph/GraphPhoneSheet";
 import {
   focusWindowAnchors,
   snapToFocusAnchor,
@@ -122,17 +123,7 @@ export function FloatingWindow({
   className,
 }: FloatingWindowProps) {
   const isMobile = useIsMobile();
-  const [isPhone, setIsPhone] = useState<boolean>(() =>
-    typeof window === "undefined"
-      ? false
-      : window.matchMedia("(max-width: 639px)").matches
-  );
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 639px)");
-    const onChange = () => setIsPhone(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  const isPhone = useIsPhone();
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
   const asideRef = useRef<HTMLElement | null>(null);
@@ -577,7 +568,10 @@ export function FloatingWindow({
         minimized
           ? { display: "none" }
           : isPhone
-            ? undefined
+            ? {
+                bottom: GRAPH_COMPOSER_BAND,
+                borderColor: isLight ? `${accent}40` : `${accent}66`,
+              }
             : maximized
               ? {
                   left: bounds.x,
@@ -598,7 +592,7 @@ export function FloatingWindow({
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
         isPhone
-          ? "fixed inset-0 z-50"
+          ? "fixed inset-x-0 top-0 z-[110] rounded-none border-b"
           : cn("absolute rounded-xl border-2", zIndexClassName),
         className
       )}

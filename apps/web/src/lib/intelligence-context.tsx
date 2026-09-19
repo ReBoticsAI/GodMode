@@ -66,6 +66,7 @@ import {
   type OpenChatWindowTarget,
 } from "./chat-windows";
 import { setActiveFloatingWindow } from "./floating-window-registry";
+import { isPhoneViewport } from "./graph-phone-shell";
 
 export interface PageContextSnapshot {
   /** Stable key for the publishing page, e.g. "trading-plan". */
@@ -653,6 +654,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const openOrFocusChatWindow = useCallback(
     (target: OpenChatWindowTarget, currentComposerText?: string) => {
+      if (isPhoneViewport()) {
+        setInformationPanelOpen(false);
+        setInformationPanelMinimized(false);
+      }
       const id =
         target.kind === "agent"
           ? chatWindowIdForAgent(target.agentId, target.agentChatId)
@@ -886,6 +891,11 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   }, [focusOwner, activeAgentId, setActiveAgentId]);
 
   const openInformationPanel = useCallback((node: GraphProjectionNode) => {
+    if (isPhoneViewport()) {
+      setOpenChatWindows([]);
+      setDraftByWindowId({});
+      setFocusedChatWindowId(null);
+    }
     setInformationNode(node);
     setActiveLeftTab("info");
     setInformationPanelOpen(true);
@@ -928,6 +938,11 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       }
       queueMicrotask(() => setActiveFloatingWindow("chat-inbox"));
       return;
+    }
+    if (isPhoneViewport()) {
+      setOpenChatWindows([]);
+      setDraftByWindowId({});
+      setFocusedChatWindowId(null);
     }
     setActiveLeftTab(tab);
     setInformationPanelOpen(true);

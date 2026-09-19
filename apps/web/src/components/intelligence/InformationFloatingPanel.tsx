@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
+import { GraphPhoneSheet } from "@/components/graph/GraphPhoneSheet";
+import { useIsPhone } from "@/hooks/use-mobile";
 import { useIntelligence, type LeftRailTab } from "@/lib/intelligence-context";
 import {
   agentIdFromFocusOwner,
@@ -143,6 +145,7 @@ export function InformationFloatingPanel() {
   const { authenticated } = useTenant();
   const { requestUnlock } = useChatUnlock();
   const navigate = useNavigate();
+  const isPhone = useIsPhone();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [collapsibleIds, setCollapsibleIds] = useState<Set<string>>(
     () => new Set()
@@ -455,23 +458,13 @@ export function InformationFloatingPanel() {
       );
   }
 
-  return (
-    <FloatingWindow
-      open={informationPanelOpen && (activeLeftTab !== "info" || Boolean(node))}
-      minimized={informationPanelMinimized}
-      onMinimize={() => setInformationPanelMinimized(true)}
-      title={panelTitle}
-      icon={panelIcon}
-      accent={panelAccent}
-      windowId="information"
-      role="information"
-      pairGroup="focus-pair"
-      placement="left"
-      defaultWidth={composerWidth}
-      defaultHeight={panelHeight}
-      onClose={closeInformationPanel}
-    >
-      {activeLeftTab === "calendar" ? (
+  const panelOpen =
+    informationPanelOpen &&
+    !informationPanelMinimized &&
+    (activeLeftTab !== "info" || Boolean(node));
+
+  const panelBody =
+    activeLeftTab === "calendar" ? (
         <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
           <CalendarBoard scope={calendarScope} />
         </div>
@@ -863,7 +856,43 @@ export function InformationFloatingPanel() {
             </TabsContent>
           </Tabs>
         </div>
-      ) : null}
+      ) : null;
+
+  if (isPhone) {
+    return (
+      <GraphPhoneSheet
+        open={panelOpen}
+        onOpenChange={(next) => {
+          if (!next) closeInformationPanel();
+        }}
+        title={panelTitle}
+        icon={panelIcon}
+      >
+        {panelBody}
+      </GraphPhoneSheet>
+    );
+  }
+
+  return (
+    <FloatingWindow
+      open={
+        informationPanelOpen &&
+        (activeLeftTab !== "info" || Boolean(node))
+      }
+      minimized={informationPanelMinimized}
+      onMinimize={() => setInformationPanelMinimized(true)}
+      title={panelTitle}
+      icon={panelIcon}
+      accent={panelAccent}
+      windowId="information"
+      role="information"
+      pairGroup="focus-pair"
+      placement="left"
+      defaultWidth={composerWidth}
+      defaultHeight={panelHeight}
+      onClose={closeInformationPanel}
+    >
+      {panelBody}
     </FloatingWindow>
   );
 }
