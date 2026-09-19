@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,7 @@ import {
 } from "@/api";
 import { fetchObjectTypes } from "@/lib/object-types-api";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -115,7 +117,12 @@ import type { GraphScene3DHandle } from "@/components/graph/GraphScene3D";
 import { GraphEtherComposer } from "@/components/graph/GraphEtherComposer";
 import {
   GRAPH_COMPOSER_BAND,
+  GRAPH_TOP_CHROME_BAND,
 } from "@/components/graph/GraphPhoneSheet";
+import {
+  GRAPH_CHROME_BANDS_EVENT,
+  GRAPH_PRIMARY_CHROME_Z,
+} from "@/lib/graph-chrome-layout";
 import { GraphRareFindsTicker } from "@/components/graph/GraphRareFindsTicker";
 import {
   buildSmartSuggestions,
@@ -278,6 +285,9 @@ export function ChatGraphCanvas({
   const [glOk] = useState(() => webglAvailable());
   const sceneRef = useRef<GraphScene3DHandle | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
+  const graphRootRef = useRef<HTMLDivElement | null>(null);
+  const topChromeRef = useRef<HTMLDivElement | null>(null);
+  const footerChromeRef = useRef<HTMLDivElement | null>(null);
   const bottomChromeRef = useRef<HTMLDivElement | null>(null);
   const [bottomChromeWidth, setBottomChromeWidth] = useState<number | null>(
     null
@@ -1799,6 +1809,48 @@ export function ChatGraphCanvas({
     return () => ro.disconnect();
   }, []);
 
+  // Live playfield bands: windows/sheets end above the focus pill + composer.
+  useLayoutEffect(() => {
+    const root = graphRootRef.current;
+    const top = topChromeRef.current;
+    const footer = footerChromeRef.current;
+    if (!root || !top || !footer) return;
+
+    const apply = () => {
+      const topBand = Math.max(0, Math.ceil(top.getBoundingClientRect().bottom));
+      const footerTop = footer.getBoundingClientRect().top;
+      const bottomBand = Math.max(
+        0,
+        Math.ceil(window.innerHeight - footerTop)
+      );
+      const topValue = `${topBand}px`;
+      const bottomValue = `${bottomBand}px`;
+      root.style.setProperty("--graph-top-chrome-band", topValue);
+      root.style.setProperty("--graph-composer-band", bottomValue);
+      // Portaled Sheets / fixed phone floats read from :root.
+      document.documentElement.style.setProperty(
+        "--graph-top-chrome-band",
+        topValue
+      );
+      document.documentElement.style.setProperty(
+        "--graph-composer-band",
+        bottomValue
+      );
+      window.dispatchEvent(new CustomEvent(GRAPH_CHROME_BANDS_EVENT));
+    };
+
+    apply();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    ro?.observe(top);
+    ro?.observe(footer);
+    window.addEventListener("resize", apply);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, []);
+
   const smartSuggestions = useMemo(
     () =>
       buildSmartSuggestions({
@@ -1884,7 +1936,26 @@ export function ChatGraphCanvas({
   );
 
   return (
-    <div className="absolute inset-0 z-0 bg-background">
+    <div
+      ref={graphRootRef}
+      className="absolute inset-0 z-0 bg-background"
+      style={
+        {
+          "--graph-top-chrome-band": GRAPH_TOP_CHROME_BAND,
+          "--graph-composer-band": GRAPH_COMPOSER_BAND,
+        } as CSSProperties
+      }
+    >
+      {/* Playfield for FloatingWindow bounds: under ticker/notice, above composer. */}
+      <div
+        data-graph-window-bounds
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 z-0"
+        style={{
+          top: "var(--graph-top-chrome-band)",
+          bottom: "var(--graph-composer-band)",
+        }}
+      />
       {!glOk ? (
         <div className="flex h-full items-center justify-center p-6">
           <p className="max-w-sm text-center text-sm text-muted-foreground">
@@ -1923,7 +1994,12 @@ export function ChatGraphCanvas({
       <WindowAnchorGridOverlay open={anchorGridOpen} anchorPickMode={anchorPickMode} />
 
       {/* Trophy (left) + light/dark (right): mirrored outer chrome */}
-      <div className="pointer-events-auto absolute top-4 left-4 z-50">
+      <div
+        className={cn(
+          "pointer-events-auto fixed top-4 left-4",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
+      >
         <Tooltip>
           <TooltipTrigger
             render={
@@ -1942,7 +2018,12 @@ export function ChatGraphCanvas({
           <TooltipContent side="bottom">Top 10 Board</TooltipContent>
         </Tooltip>
       </div>
-      <div className="pointer-events-auto absolute top-4 right-4 z-50">
+      <div
+        className={cn(
+          "pointer-events-auto fixed top-4 right-4",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
+      >
         <ModeToggle
           size="icon-sm"
           variant="outline"
@@ -1951,7 +2032,14 @@ export function ChatGraphCanvas({
       </div>
 
       {/* Centered top stack: ticker + system notice (full ticker width) */}
-      <div className="pointer-events-none absolute inset-x-0 top-4 z-50 flex justify-center px-14">
+      <div
+        ref={topChromeRef}
+        data-graph-top-chrome
+        className={cn(
+          "pointer-events-none fixed inset-x-0 top-4 flex justify-center px-14",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
+      >
         <div
           ref={bottomChromeRef}
           className="pointer-events-auto relative flex w-full max-w-2xl flex-col items-center gap-1.5"
@@ -1977,7 +2065,10 @@ export function ChatGraphCanvas({
         id="graph-left-tabs-rail"
         role="toolbar"
         aria-label="Workspace tools"
-        className="pointer-events-auto absolute top-1/2 left-3 z-50 flex -translate-y-1/2 flex-col gap-1.5"
+        className={cn(
+          "pointer-events-auto fixed top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1.5",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
       >
         <GraphLeftTabIconButton
           label="Notifications"
@@ -2041,7 +2132,10 @@ export function ChatGraphCanvas({
         id="graph-tools-rail"
         role="toolbar"
         aria-label="Graph tools"
-        className="pointer-events-auto absolute top-1/2 right-3 z-50 flex -translate-y-1/2 flex-col gap-1.5"
+        className={cn(
+          "pointer-events-auto fixed top-1/2 right-3 flex -translate-y-1/2 flex-col gap-1.5",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
       >
         <GraphToolIconButton
           label="Reset view"
@@ -2084,14 +2178,14 @@ export function ChatGraphCanvas({
         ) : null}
       </div>
 
-      {/* Bottom chrome: composer + chat toggle (above phone Sheets at z-[200]) */}
+      {/* Footer: composer + chat toggle locked to the page (primary chrome). */}
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-[210] flex items-end justify-center gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2"
-        style={
-          {
-            "--graph-composer-band": GRAPH_COMPOSER_BAND,
-          } as CSSProperties
-        }
+        ref={footerChromeRef}
+        data-graph-footer-chrome
+        className={cn(
+          "pointer-events-none fixed inset-x-0 bottom-0 flex items-end justify-center gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
       >
         <div
           className="pointer-events-auto flex w-full max-w-[calc(100%-3.5rem)] flex-col gap-2"

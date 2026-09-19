@@ -1,15 +1,17 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { GRAPH_WINDOW_Z } from "@/lib/graph-chrome-layout";
 import { cn } from "@/lib/utils";
 
-/** CSS length reserved for GraphEtherComposer + safe area on phone. */
-export const GRAPH_COMPOSER_BAND =
-  "calc(5.5rem + env(safe-area-inset-bottom, 0px))";
+export {
+  GRAPH_COMPOSER_BAND,
+  GRAPH_TOP_CHROME_BAND,
+} from "@/lib/graph-chrome-layout";
 
 type GraphPhoneSheetProps = {
   open: boolean;
@@ -20,6 +22,11 @@ type GraphPhoneSheetProps = {
   className?: string;
 };
 
+/**
+ * Phone primary surface: Sheet in the window playfield (under ticker/notice,
+ * above composer / reply pill). No modal blur; primary chrome stays interactive.
+ * Bands come from live `--graph-*-chrome-band` CSS vars on :root.
+ */
 export function GraphPhoneSheet({
   open,
   onOpenChange,
@@ -29,22 +36,19 @@ export function GraphPhoneSheet({
   className,
 }: GraphPhoneSheetProps) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
         side="bottom"
         showCloseButton
+        showOverlay={false}
         className={cn(
-          "gap-0 p-0",
-          // Sit above the composer band; overlay stays under composer z-[210].
-          "bottom-[var(--graph-composer-band)]! h-[calc(100dvh-var(--graph-composer-band))]! max-h-[calc(100dvh-var(--graph-composer-band))]!",
+          "gap-0 p-0 shadow-xl",
+          GRAPH_WINDOW_Z,
+          // Playfield: under top chrome, above composer / focus pill.
+          "inset-x-0! top-[var(--graph-top-chrome-band,5.625rem)]! bottom-[var(--graph-composer-band,7.25rem)]! h-auto! max-h-none!",
           "rounded-t-xl border-t",
           className
         )}
-        style={
-          {
-            "--graph-composer-band": GRAPH_COMPOSER_BAND,
-          } as CSSProperties
-        }
       >
         <SheetHeader className="flex shrink-0 flex-row items-center gap-2 border-b px-3 py-2.5 pr-12 text-left">
           {icon ? <span className="shrink-0">{icon}</span> : null}
