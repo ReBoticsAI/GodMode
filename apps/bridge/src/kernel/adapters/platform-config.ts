@@ -16,6 +16,10 @@ import {
   type GodModeInferenceSupplyStatus,
 } from "../../services/godmode-inference-supply.js";
 import {
+  defaultTrialBudgetUsd,
+  setDefaultTrialBudgetUsd,
+} from "../../services/godmode-inference-grants.js";
+import {
   markLlmReady,
   markOnboardingComplete,
   resetOnboarding,
@@ -46,6 +50,8 @@ export interface PlatformConfigAdapterServices {
     zaiCodingApiKey?: string;
     dashscopeApiKey?: string;
   }): GodModeInferenceSupplyStatus;
+  defaultTrialBudgetUsd(): number;
+  setDefaultTrialBudgetUsd(usd: number): number;
   getOnboardingStatus?(tenantDb: AppDatabase): {
     completed: boolean;
     llmReady: boolean;
@@ -60,6 +66,8 @@ const defaultServices: PlatformConfigAdapterServices = {
   testBillingConnection: testStripeConnection,
   getGodModeInferenceSupply: getGodModeInferenceSupplyStatus,
   setGodModeInferenceSupply: setGodModeInferenceSupplyKeys,
+  defaultTrialBudgetUsd,
+  setDefaultTrialBudgetUsd,
 };
 
 let services = defaultServices;
@@ -166,6 +174,7 @@ function godModeInferenceRecord(def: ObjectTypeDef): RecordRow {
     zai: inferenceProviderData(status.zai),
     zai_coding: inferenceProviderData(status.zaiCoding),
     dashscope: inferenceProviderData(status.dashscope),
+    default_trial_budget_usd: services.defaultTrialBudgetUsd(),
   });
 }
 
@@ -202,6 +211,14 @@ export const godModeInferenceConfigAdapter: RecordAdapter = {
             ? input.dashscope_api_key
             : undefined,
       });
+      if (
+        input.default_trial_budget_usd != null &&
+        input.default_trial_budget_usd !== ""
+      ) {
+        services.setDefaultTrialBudgetUsd(
+          Number(input.default_trial_budget_usd)
+        );
+      }
       return godModeInferenceRecord(def);
     },
   },

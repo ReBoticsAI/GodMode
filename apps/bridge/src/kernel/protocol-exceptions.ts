@@ -32,6 +32,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-admin-grants",
+    methods: ["GET", "PATCH", "POST", "PUT"],
+    pathPattern: "/api/godmode-inference/admin/",
+    rationale:
+      "Platform-admin Inference grant list/budget/revoke and default trial budget (#808); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "admin",
+  },
+  {
     id: "godmode-inference-config",
     methods: ["GET"],
     pathPattern: "/api/godmode-inference/config",

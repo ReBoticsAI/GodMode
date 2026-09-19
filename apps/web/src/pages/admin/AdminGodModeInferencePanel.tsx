@@ -5,8 +5,12 @@ import {
   fetchGodModeInferenceConfig,
   updateGodModeInferenceConfig,
   fetchAdminGodModeInferenceHealth,
+  fetchAdminGodModeInferenceGrants,
+  revokeAdminGodModeInferenceGrant,
+  setAdminDefaultTrialBudget,
   type GodModeInferenceConfig,
   type GodModeInferenceProviderStatus,
+  type AdminGodModeInferenceGrant,
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +25,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const SIGNUP_LINKS = [
   {
@@ -141,7 +153,10 @@ export function AdminGodModeInferencePanel() {
     totalBudgetUsd: number;
     supplyReady: boolean;
     plansConfigured: number;
+    defaultTrialBudgetUsd?: number;
   } | null>(null);
+  const [grants, setGrants] = useState<AdminGodModeInferenceGrant[]>([]);
+  const [defaultBudgetDraft, setDefaultBudgetDraft] = useState("0.10");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deepseekKey, setDeepseekKey] = useState("");
@@ -154,10 +169,17 @@ export function AdminGodModeInferencePanel() {
     Promise.all([
       fetchGodModeInferenceConfig(),
       fetchAdminGodModeInferenceHealth().catch(() => null),
+      fetchAdminGodModeInferenceGrants({ limit: 50 }).catch(() => null),
     ])
-      .then(([config, h]) => {
+      .then(([config, h, g]) => {
         setCfg(config);
         setHealth(h);
+        setGrants(g?.grants ?? []);
+        const budget =
+          g?.defaultTrialBudgetUsd ??
+          h?.defaultTrialBudgetUsd ??
+          config.defaultTrialBudgetUsd;
+        setDefaultBudgetDraft(String(budget));
       })
       .catch((err) =>
         toast.error(
@@ -176,6 +198,7 @@ export function AdminGodModeInferencePanel() {
     zaiApiKey?: string;
     zaiCodingApiKey?: string;
     dashscopeApiKey?: string;
+    defaultTrialBudgetUsd?: number;
   }) => {
     setBusy(true);
     try {
@@ -185,9 +208,44 @@ export function AdminGodModeInferencePanel() {
       if (patch.zaiApiKey !== undefined) setZaiKey("");
       if (patch.zaiCodingApiKey !== undefined) setZaiCodingKey("");
       if (patch.dashscopeApiKey !== undefined) setDashscopeKey("");
+      if (patch.defaultTrialBudgetUsd != null) {
+        setDefaultBudgetDraft(String(updated.defaultTrialBudgetUsd));
+      }
       toast.success("GodMode Inference supply updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDefaultBudget = async () => {
+    const n = Number(defaultBudgetDraft);
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.error("Enter a positive USD budget");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await setAdminDefaultTrialBudget(n);
+      setDefaultBudgetDraft(String(res.defaultTrialBudgetUsd));
+      toast.success("Default trial budget saved");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Budget save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeGrant = async (id: string) => {
+    setBusy(true);
+    try {
+      await revokeAdminGodModeInferenceGrant(id);
+      toast.success("Grant revoked");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Revoke failed");
     } finally {
       setBusy(false);
     }
@@ -250,6 +308,37 @@ export function AdminGodModeInferencePanel() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Default trial budget</CardTitle>
+          <CardDescription>
+            USD allowance for new trial grants. Env{" "}
+            <code className="text-xs">TRIAL_INFERENCE_BUDGET_USD</code> is the
+            fallback when this is unset.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end gap-3">
+          <div className="flex min-w-[10rem] flex-col gap-2">
+            <Label htmlFor="admin-trial-budget">Budget (USD)</Label>
+            <Input
+              id="admin-trial-budget"
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={defaultBudgetDraft}
+              onChange={(e) => setDefaultBudgetDraft(e.target.value)}
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => void saveDefaultBudget()}
+          >
+            {busy ? <Spinner className="size-4" /> : "Save budget"}
+          </Button>
+        </CardContent>
+      </Card>
+
       {health ? (
         <Card>
           <CardHeader>
@@ -266,6 +355,81 @@ export function AdminGodModeInferencePanel() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Recent grants</CardTitle>
+          <CardDescription>
+            Trial and paid allowances. Revoke to hard-stop Intelligence spend for
+            that subject.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {grants.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No grants yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Spent</TableHead>
+                  <TableHead className="text-right">Budget</TableHead>
+                  <TableHead className="text-right">Left</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {grants.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell className="max-w-[14rem] truncate font-mono text-xs">
+                      {g.user_id
+                        ? `user:${g.user_id.slice(0, 8)}…`
+                        : g.subject_key}
+                    </TableCell>
+                    <TableCell>{g.kind}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          g.status === "active" ? "default" : "secondary"
+                        }
+                      >
+                        {g.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      ${g.spent_usd.toFixed(3)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {g.budget_usd == null
+                        ? "∞"
+                        : `$${g.budget_usd.toFixed(2)}`}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {g.remaining_usd == null
+                        ? "∞"
+                        : `$${g.remaining_usd.toFixed(3)}`}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {g.status === "active" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => void revokeGrant(g.id)}
+                        >
+                          Revoke
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <ProviderKeyCard
         title="DeepSeek"

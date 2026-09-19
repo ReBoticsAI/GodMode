@@ -302,6 +302,15 @@ export function IntelligencePanel({
   const [trialPayCta, setTrialPayCta] = useState(
     () => readStoredTrialGreeting()?.payCtaLabel ?? TRIAL_PAY_CTA_LABEL
   );
+  const [trialConvertHint, setTrialConvertHint] = useState(
+    () => readStoredTrialGreeting()?.convertHint ?? ""
+  );
+  const [trialCloudSeatPath, setTrialCloudSeatPath] = useState(
+    () => readStoredTrialGreeting()?.cloudSeatPath ?? ""
+  );
+  const [trialCloudSeatCta, setTrialCloudSeatCta] = useState(
+    () => readStoredTrialGreeting()?.cloudSeatCtaLabel ?? ""
+  );
   useEffect(() => {
     const onGreeting = (ev: Event) => {
       const detail = (
@@ -310,6 +319,9 @@ export function IntelligencePanel({
           payGodModePath?: string;
           primaryCtaLabel?: string;
           payCtaLabel?: string;
+          convertHint?: string;
+          cloudSeatPath?: string;
+          cloudSeatCtaLabel?: string;
           ready?: boolean;
         }>
       ).detail;
@@ -317,6 +329,11 @@ export function IntelligencePanel({
       if (detail?.payGodModePath) setTrialPayPath(detail.payGodModePath);
       if (detail?.primaryCtaLabel) setTrialPrimaryCta(detail.primaryCtaLabel);
       if (detail?.payCtaLabel) setTrialPayCta(detail.payCtaLabel);
+      if (detail?.convertHint != null) setTrialConvertHint(detail.convertHint);
+      if (detail?.cloudSeatPath != null)
+        setTrialCloudSeatPath(detail.cloudSeatPath);
+      if (detail?.cloudSeatCtaLabel != null)
+        setTrialCloudSeatCta(detail.cloudSeatCtaLabel);
       if (detail?.ready) {
         window.dispatchEvent(new CustomEvent("godmode:model-selected"));
       }
@@ -1323,12 +1340,22 @@ export function IntelligencePanel({
           refreshChats();
           void syncMissionsAfterChat();
         },
-        onError: (error, code) => {
+        onError: (error, code, meta) => {
           const raw =
             String(error ?? "").trim() ||
             "Chat connection dropped. Try sending again.";
           const staleFromMsg = raw.includes("CURSOR_SESSION_STALE");
           const errorText = raw.replace(/^CURSOR_SESSION_STALE:\s*/i, "");
+          if (meta?.payPath) setTrialPayPath(meta.payPath);
+          if (meta?.convertHint) setTrialConvertHint(meta.convertHint);
+          if (meta?.cloudSeatPath != null)
+            setTrialCloudSeatPath(meta.cloudSeatPath);
+          if (meta?.cloudSeatCtaLabel != null)
+            setTrialCloudSeatCta(meta.cloudSeatCtaLabel);
+          const convertLine = meta?.convertHint
+            ? `\n\n${meta.convertHint}`
+            : "";
+          const display = `⚠️ ${errorText}${convertLine}`;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -1336,9 +1363,9 @@ export function IntelligencePanel({
                     ...m,
                     parts: [
                       ...builder.finalize(),
-                      { kind: "text", text: `⚠️ ${errorText}` },
+                      { kind: "text", text: display },
                     ],
-                    text: `⚠️ ${errorText}`,
+                    text: display,
                     streaming: false,
                     statusText: undefined,
                   }
@@ -1893,10 +1920,21 @@ export function IntelligencePanel({
                     >
                       {trialPayCta}
                     </Button>
+                    {trialCloudSeatPath && trialCloudSeatCta ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        render={<Link to={trialCloudSeatPath} />}
+                      >
+                        {trialCloudSeatCta}
+                      </Button>
+                    ) : null}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Pay path is a placeholder until GodMode Inference billing
-                    ships. Advanced BYOK stays at {TRIAL_PASTE_KEY_PATH}.
+                    {trialConvertHint ||
+                      `Buy GodMode Inference in Vault, or use Supported BYOK at ${TRIAL_PASTE_KEY_PATH}.`}
                   </p>
                   <p className="text-muted-foreground">
                     {agentDescription ||
