@@ -1,18 +1,31 @@
 /**
  * Registers Graph floating-window openers (godmode:open-* + node select).
  * Used by ChatGraphCanvas so chrome surfaces stay over the Graph.
+ * Canonical entry: openGraphSurface (left rail, deep links, menus, CTAs).
  */
 
 import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { GraphProjectionNode } from "@/api";
+import type { FocusOwner } from "@/lib/graph-focus-owner";
+import { resolveFloatingNodeId } from "@/lib/graph-focus-owner";
 import type { LeftRailTab } from "@/lib/intelligence-context";
 import {
   GRAPH_FLOATING_SURFACES,
+  resolveFloatingSurface,
   type GraphFloatingSurface,
 } from "@/lib/graph-floating-surfaces";
 import { HOME_PATH } from "@/lib/navigation";
+
+export type OpenGraphSurfaceInput = {
+  tab?: string;
+  path?: string;
+  event?: string;
+  focusOwner?: FocusOwner;
+  /** When false, skip sign-in gate (left-rail on Graph land). Default true. */
+  requireAuth?: boolean;
+};
 
 type OpenOpts = {
   authenticated: boolean;
@@ -20,21 +33,25 @@ type OpenOpts = {
   openInformationPanel: (node: GraphProjectionNode) => void;
   openLeftRailTab: (tab: LeftRailTab) => void;
   sceneSelectNode: (id: string) => void;
+  focusOwner: FocusOwner;
 };
 
 function openSurface(
   surface: GraphFloatingSurface,
   opts: OpenOpts,
-  navigate: ReturnType<typeof useNavigate>
+  navigate: ReturnType<typeof useNavigate>,
+  focusOwnerOverride?: FocusOwner,
+  requireAuth = true
 ) {
-  if (!opts.authenticated) {
+  if (requireAuth && !opts.authenticated) {
     toast.message(`Sign in to open ${surface.authLabel}`);
     navigate("/?auth=1");
     return;
   }
-  if (surface.nodeId) {
-    const node =
-      opts.projectionNodes?.find((n) => n.id === surface.nodeId) ?? null;
+  const owner = focusOwnerOverride ?? opts.focusOwner;
+  const nodeId = resolveFloatingNodeId(surface.nodeId, owner);
+  if (nodeId) {
+    const node = opts.projectionNodes?.find((n) => n.id === nodeId) ?? null;
     if (node) {
       opts.sceneSelectNode(node.id);
       opts.openInformationPanel(node);
@@ -55,13 +72,23 @@ function openSurface(
 
 export function useGraphFloatingOpeners(opts: OpenOpts) {
   const navigate = useNavigate();
-  const { authenticated, projectionNodes, openInformationPanel, openLeftRailTab, sceneSelectNode } =
-    opts;
+  const {
+    authenticated,
+    projectionNodes,
+    openInformationPanel,
+    openLeftRailTab,
+    sceneSelectNode,
+    focusOwner,
+  } = opts;
 
-  const openByTab = useCallback(
-    (tab: string) => {
-      const surface = GRAPH_FLOATING_SURFACES.find((s) => s.tab === tab);
-      if (!surface) return;
+  const openGraphSurface = useCallback(
+    (input: OpenGraphSurfaceInput) => {
+      const surface = resolveFloatingSurface(input);
+      if (!surface) return false;
+      // Platform Vault / Admin keep richer detail handlers in ChatGraphCanvas.
+      if (surface.tab === "platform-vault" || surface.tab === "admin") {
+        return false;
+      }
       openSurface(
         surface,
         {
@@ -70,12 +97,17 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
           openInformationPanel,
           openLeftRailTab,
           sceneSelectNode,
+          focusOwner,
         },
-        navigate
+        navigate,
+        input.focusOwner,
+        input.requireAuth !== false
       );
+      return true;
     },
     [
       authenticated,
+      focusOwner,
       navigate,
       openInformationPanel,
       openLeftRailTab,
@@ -84,28 +116,27 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
     ]
   );
 
+  const openByTab = useCallback(
+    (tab: string) => openGraphSurface({ tab }),
+    [openGraphSurface]
+  );
+
   useEffect(() => {
     const handlers: Array<{ event: string; fn: EventListener }> = [];
+    const current: OpenOpts = {
+      authenticated,
+      projectionNodes,
+      openInformationPanel,
+      openLeftRailTab,
+      sceneSelectNode,
+      focusOwner,
+    };
     for (const surface of GRAPH_FLOATING_SURFACES) {
-      // Platform Vault / Admin keep richer detail handlers in ChatGraphCanvas.
-      if (
-        surface.tab === "platform-vault" ||
-        surface.tab === "admin"
-      ) {
+      if (surface.tab === "platform-vault" || surface.tab === "admin") {
         continue;
       }
       const fn: EventListener = () => {
-        openSurface(
-          surface,
-          {
-            authenticated,
-            projectionNodes,
-            openInformationPanel,
-            openLeftRailTab,
-            sceneSelectNode,
-          },
-          navigate
-        );
+        openSurface(surface, current, navigate);
       };
       window.addEventListener(surface.event, fn);
       handlers.push({ event: surface.event, fn });
@@ -117,6 +148,7 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
     };
   }, [
     authenticated,
+    focusOwner,
     navigate,
     openInformationPanel,
     openLeftRailTab,
@@ -124,15 +156,5 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
     sceneSelectNode,
   ]);
 
-  // Select node once projection lands if a floating tab is already active.
-  useEffect(() => {
-    if (!projectionNodes?.length) return;
-    for (const surface of GRAPH_FLOATING_SURFACES) {
-      if (!surface.nodeId) continue;
-      // Active-tab selection is handled by ChatGraphCanvas for vault/admin/wiki;
-      // this covers the rest when openers fire before projection.
-    }
-  }, [projectionNodes]);
-
-  return { openByTab };
+  return { openByTab, openGraphSurface };
 }

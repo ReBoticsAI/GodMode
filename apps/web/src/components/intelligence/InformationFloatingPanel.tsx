@@ -69,7 +69,7 @@ import {
   GraphScoreboardSection,
 } from "@/components/graph/GraphMissionsPanel";
 import { graphNodeColor } from "@/lib/graph-node-style";
-import { floatingSurfaceForTab } from "@/lib/graph-floating-surfaces";
+import { floatingSurfaceForTab, resolveFloatingSurface } from "@/lib/graph-floating-surfaces";
 
 const CodingWorkspacePage = lazy(
   () => import("@/pages/coding/CodingWorkspacePage")
@@ -238,27 +238,7 @@ export function InformationFloatingPanel() {
           return;
         }
         {
-          const surfaceMatch = [
-            floatingSurfaceForTab("platform-vault"),
-            floatingSurfaceForTab("admin"),
-            floatingSurfaceForTab("wiki"),
-            floatingSurfaceForTab("personal-vault"),
-            floatingSurfaceForTab("settings"),
-            floatingSurfaceForTab("shared"),
-            floatingSurfaceForTab("marketplace"),
-            floatingSurfaceForTab("structure"),
-            floatingSurfaceForTab("coding"),
-            floatingSurfaceForTab("releases"),
-            floatingSurfaceForTab("agents"),
-            floatingSurfaceForTab("users"),
-            floatingSurfaceForTab("support"),
-            floatingSurfaceForTab("tasks"),
-            floatingSurfaceForTab("contacts"),
-          ].find(
-            (s) =>
-              s &&
-              (action.path === s.path || action.path.startsWith(`${s.path}?`))
-          );
+          const surfaceMatch = resolveFloatingSurface({ path: action.path });
           if (surfaceMatch) {
             const q = action.path.includes("?")
               ? new URLSearchParams(action.path.split("?")[1])

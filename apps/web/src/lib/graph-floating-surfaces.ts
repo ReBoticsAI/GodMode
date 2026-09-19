@@ -191,3 +191,46 @@ export function floatingSurfaceForTab(
 ): GraphFloatingSurface | undefined {
   return GRAPH_FLOATING_SURFACES.find((s) => s.tab === tab);
 }
+
+export function floatingSurfaceForEvent(
+  event: string
+): GraphFloatingSurface | undefined {
+  return GRAPH_FLOATING_SURFACES.find((s) => s.event === event);
+}
+
+/** Resolve a floating surface from tab, index path, or godmode:open-* event. */
+export function resolveFloatingSurface(input: {
+  tab?: string;
+  path?: string;
+  event?: string;
+}): GraphFloatingSurface | undefined {
+  if (input.tab) return floatingSurfaceForTab(input.tab);
+  if (input.event) return floatingSurfaceForEvent(input.event);
+  if (input.path) {
+    const pathOnly = input.path.split("?")[0] ?? input.path;
+    const exact = floatingSurfaceForPath(pathOnly);
+    if (exact) return exact;
+    return GRAPH_FLOATING_SURFACES.find(
+      (s) => input.path === s.path || input.path!.startsWith(`${s.path}?`)
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Match a projection node id to a floating surface, including owner-sided
+ * hubs (`hub:calendar-intelligence` → calendar surface catalogued as `-you`).
+ */
+export function floatingSurfaceForNodeId(
+  nodeId: string
+): GraphFloatingSurface | undefined {
+  const exact = GRAPH_FLOATING_SURFACES.find((s) => s.nodeId === nodeId);
+  if (exact) return exact;
+  const match = nodeId.match(
+    /^hub:([a-z0-9]+)-(you|intelligence|research|ops)$/
+  );
+  if (!match) return undefined;
+  return GRAPH_FLOATING_SURFACES.find(
+    (s) => s.nodeId === `hub:${match[1]}-you`
+  );
+}
