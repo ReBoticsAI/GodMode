@@ -63,3 +63,44 @@ For a tested Gemma 4 26B + 16 GB GPU profile, Docker hub + host `llama-server`, 
 After LLM setup, enable federation under **Shared → Network** if you plan to share across homes. See [SHARED_FEDERATION.md](./SHARED_FEDERATION.md).
 
 Full walkthrough: [VERIFICATION.md](./VERIFICATION.md)
+
+## The Graph (first land)
+
+First land (Local + Cloud) opens **The Graph**: **You** ↔ Intelligence, with Chat bubbles left of the spine and **Hub** on the right fanning independently to **Support**, **Shared**, **Marketplace**, and **Workspaces**. Marketplace shows Official at full depth by default (Community / Local / Installed / Sell collapsed). Expand **Workspaces** for Personal (default full depth) / Project / Family. **Vault** holds secrets and Bank → Wallet. Structure, Knowledge, Automations, and Calendar fan directly off You and each agent. Click **You** for Information (Auth, Cloud, LLM keys) plus Kernel and Coding canvas tabs. Contacts, DMs, and Channels live in the Chat window. Unlock hubs are not on the map (see [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)).
+
+Nodes with open **missions** show an attention dot. Completing a mission awards connection-weighted points once; the global leaderboard lives on GodMode Cloud (see [GRAPH_MISSIONS.md](./GRAPH_MISSIONS.md)).
+
+Click **You** to finish signup / open profile. Target storage is one SQLite file per actor/surface; until migrated, Bridge still uses legacy planes in [multi-tenant-model.md](./multi-tenant-model.md).
+
+Route: `GET /api/graph/projection?focusType=architecture`.
+
+### First-land journey (acceptance)
+
+1. Land / open GodMode → The Graph (You → Intelligence spine).
+2. Click Intelligence → Information; click Intelligence Chat bubble → Chat.
+3. Expand Workspaces for Personal / Project Agents; explore Vaults and owner surfaces.
+4. Click You → finish profile / signup.
+
+## First-land Intelligence + GodMode Inference
+
+**Product decision:** Primary path is **GodMode Inference**: managed chat on DeepSeek, Z.AI (GLM), and Qwen under operator accounts (Admin → GodMode Inference). Free welcome allowance, then $1 packs and subscription ladder. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
+
+Admin supply keys are isolated: Intelligence agent + active grant only. They never resolve for other agents and never appear as user Vault connections.
+
+On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence seeds a greeting from `POST /api/trial-inference/ensure`.
+
+Background ensure flow:
+
+1. Soft visitor cookie + hashed IP heuristics (not a fake login).
+2. Prefer Admin GodMode Inference supply (`godmodeInferenceSupply`) when DeepSeek / Z.AI / Qwen platform keys are configured.
+3. Optional legacy OpenRouter Management API / platform shared paths only when listed in `TRIAL_PROVISION_ORDER`.
+4. Supported BYOK: Vault → Inference → Supported. Advanced BYOK: other provider cards under Advanced tabs.
+5. Buy more: Vault → Inference → GodMode Inference (`/platform-vault?vault=inference&sub=godmode`).
+
+**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a $1 pack or subscribe (`payGodModePath`).
+
+**Secondary CTAs:** Connect Supported BYOK or use Local models.
+
+Ops: configure Admin → GodMode Inference keys. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
+
+See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision) for longer-term supply vision.

@@ -31,7 +31,8 @@ export const ZAI_CHAT_CATALOG = [
   { id: "glm-4.7", label: "GLM-4.7" },
 ] as const;
 
-export type ZaiAuthSource = "env" | "vault" | "none";
+/** Vault UI sources only. Platform admin supply is separate. */
+export type ZaiAuthSource = "vault" | "none";
 
 export interface ZaiAuthStatus {
   connected: boolean;
@@ -43,12 +44,11 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
+/** Personal Vault BYOK only. Supply is managed-chat gated. */
 export function resolveZaiApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const env = process.env.ZAI_API_KEY?.trim();
-  if (env) return env;
   return resolvePlatformVaultSecret(db, {
     baseId: ZAI_API_KEY_SECRET_ID,
     name: ZAI_API_KEY_SECRET_NAME,
@@ -80,14 +80,11 @@ export function removeZaiApiKey(
   });
 }
 
+/** Personal / workspace BYOK for Vault cards (not Admin / env supply). */
 export function getZaiAuthStatus(
   db: AppDatabase,
   agentId?: string | null
 ): ZaiAuthStatus {
-  const env = process.env.ZAI_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
-  }
   const value = getPlatformVaultSecretInScope(db, {
     baseId: ZAI_API_KEY_SECRET_ID,
     name: ZAI_API_KEY_SECRET_NAME,

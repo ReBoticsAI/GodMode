@@ -41,6 +41,7 @@ import {
   fetchEvents,
   fetchHookRuns,
   fetchHooks,
+  isUnauthorizedError,
   rejectHookRun,
   updateHook,
   type AiWorkflow,
@@ -160,7 +161,10 @@ function HooksManager({
       setAgentIds(h.agentIds);
       setEventTypes(e.eventTypes);
     } catch (err) {
-      toast.error((err as Error).message);
+      setHooks([]);
+      setAgentIds([]);
+      setEventTypes([]);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -188,7 +192,7 @@ function HooksManager({
       const res = await fetchHookRuns(hook.id);
       setRuns(res.runs);
     } catch (err) {
-      toast.error((err as Error).message);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
     }
   }, []);
 

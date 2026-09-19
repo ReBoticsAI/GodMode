@@ -8,11 +8,84 @@ export interface ProtocolException {
 
 export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
   {
-    id: "health",
+    id: "chat-unlock-status",
     methods: ["GET"],
-    pathPattern: "/api/health",
-    rationale: "Unauthenticated process and deployment readiness.",
+    pathPattern: "/api/chat-unlock/status",
+    rationale:
+      "Public unlock catalog and entitlement flags; Stripe Checkout and tutorials use sibling authenticated routes.",
     authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-status",
+    methods: ["GET"],
+    pathPattern: "/api/trial-inference/status",
+    rationale:
+      "First-land trial inference probe with soft visitor cookie; no durable identity theater.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-ensure",
+    methods: ["POST"],
+    pathPattern: "/api/trial-inference/ensure",
+    rationale:
+      "Provision or attach GodMode trial OpenRouter path (#758); visitor soft-fail, auth vault attach when configured.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-config",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/config",
+    rationale:
+      "Public GodMode Inference pack/subscription catalog and supply-ready flag; no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-stripe-webhook",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/stripe/webhook",
+    rationale:
+      "Alias Stripe webhook for GodMode Inference grant top-ups; same STRIPE_WEBHOOK_SECRET demux as /api/saas/stripe/webhook (metadata godmode_inference=1).",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-projection",
+    methods: ["GET"],
+    pathPattern: "/api/graph/projection",
+    rationale:
+      "Architecture catalog (public) and ObjectType neighborhood for The Graph; read-only, no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-admin-grant",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/admin/grant",
+    rationale:
+      "Platform admin or local allowAnonymous preview grant of UnlockEntitlement without tutorial or Stripe.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/checkout",
+    rationale:
+      "Stripe Checkout redirect for skip-tutorial unlock purchases (UnlockTransaction); durable grant is kernel UnlockEntitlement.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/*",
+    rationale:
+      "Tutorial start/step/complete for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-graph",
+    methods: ["GET", "PUT", "POST"],
+    pathPattern: "/api/chat-unlock/graph*",
+    rationale:
+      "Chat graph document persistence for docked Intelligence threads after window unlock.",
+    authenticatedDomainMutations: "kernel-delegated",
   },
   {
     id: "update-readiness",

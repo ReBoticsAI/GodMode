@@ -22,6 +22,13 @@ import {
 } from "./exa-web.js";
 import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
 import {
+  listSqliteUniverseTool,
+  querySqliteUniverseTool,
+} from "./sqlite-universe-tools.js";
+import {
+  listUniverseEntries,
+} from "./sqlite-universe-registry.js";
+import {
   GH_PR_CHECKS_JSON_FIELDS_CSV,
   corePrDoneAllowed,
   summarizePrChecks,
@@ -3501,6 +3508,30 @@ export async function executeTool(
       const convs = listConversationsForUser(hub, ctx.userId);
       const limit = args.limit != null ? Number(args.limit) : undefined;
       return limit ? convs.slice(0, limit) : convs;
+    }
+
+    case "list_sqlite_universe": {
+      const ownerKind =
+        typeof args.ownerKind === "string" ? args.ownerKind.trim() : "";
+      const ownerId =
+        typeof args.ownerId === "string" ? args.ownerId.trim() : "";
+      if (ownerKind && ownerId) {
+        return {
+          entries: listUniverseEntries({ ownerKind, ownerId }),
+          manifest: listSqliteUniverseTool().manifest.filter(
+            (f) => f.ownerKind === ownerKind && f.ownerId === ownerId
+          ),
+        };
+      }
+      return listSqliteUniverseTool();
+    }
+
+    case "query_sqlite_universe": {
+      return querySqliteUniverseTool({
+        relativePath: String(args.relativePath ?? ""),
+        sql: String(args.sql ?? ""),
+        params: Array.isArray(args.params) ? args.params : undefined,
+      });
     }
 
     case "read_conversation": {

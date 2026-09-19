@@ -529,7 +529,11 @@ function DiscoveredPluginRow({
   );
 }
 
-export default function MarketplacePage() {
+export default function MarketplacePage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(() =>
     normalizeMarketplaceTab(searchParams.get("tab"))
@@ -1463,18 +1467,8 @@ export default function MarketplacePage() {
 
   const feePercent = (platformFeeBps / 100).toFixed(0);
 
-  return (
-    <Page>
-      <PageHeader
-        title="Marketplace"
-        description="Official is ReBotics-curated. Community is the user seller path (Sell tab + gated community catalog). Paid Official goes 100% to ReBotics; Community sales take a 10% platform fee. Chargebacks ban Marketplace access."
-        actions={
-          <Button variant="outline" size="sm" render={<a href={OFFICIAL_REPO} target="_blank" rel="noreferrer" />}>
-            Community catalog PRs
-          </Button>
-        }
-      />
-
+  const body = (
+    <>
       {cryptoPrompt ? (
         <Card className="mb-4 border-amber-500/40">
           <CardHeader>
@@ -2232,7 +2226,7 @@ export default function MarketplacePage() {
                       : publishFamily === "live"
                         ? "Catalog-backed live access on this host. Select a deliveryMode live catalog row, then bind a workspace resource whose export matches the pin. Free Shared sidebar stays outside Marketplace."
                         : publishFamily === "inference"
-                          ? "Metered access to a model on this Bridge. Not available on GodMode Cloud."
+                          ? "Metered access to a model on this Bridge (GodMode Inference supply stub). List spare credits or capacity here. Routing and settlement are future. Not available on GodMode Cloud."
                           : "Attach a Community catalog pack (bundle.json in a pinned GitHub repo). Buyer installs a copy. Catalog author is the plugin repo GitHub owner."}
                   </FieldDescription>
                 </Field>
@@ -2495,6 +2489,31 @@ export default function MarketplacePage() {
         accepting={tosAccepting}
         onAccept={() => void handleAcceptTos()}
       />
+    </>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <Page>
+      <PageHeader
+        title="Marketplace"
+        description="Official is ReBotics-curated. Community is the user seller path (Sell tab + gated community catalog). Paid Official goes 100% to ReBotics; Community sales take a 10% platform fee. Chargebacks ban Marketplace access."
+        actions={
+          <Button variant="outline" size="sm" render={<a href={OFFICIAL_REPO} target="_blank" rel="noreferrer" />}>
+            Community catalog PRs
+          </Button>
+        }
+      />
+      {body}
     </Page>
   );
+}
+
+export function MarketplaceContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
+  return <MarketplacePage embedded={embedded} />;
 }

@@ -16,6 +16,7 @@ import {
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
+  MinusIcon,
   PlusIcon,
   Share2Icon,
   Trash2Icon,
@@ -23,6 +24,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,12 +38,24 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   clampComposerWidth,
   clampPanelHeight,
+  MIN_COMPOSER_WIDTH,
   useIntelligence,
   type PanelTab,
 } from "@/lib/intelligence-context";
 import { AI_NAME } from "@/lib/navigation";
+import { Link } from "react-router-dom";
 import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  focusWindowAnchors,
+  snapToFocusAnchor,
+} from "@/lib/floating-window-anchors";
+import { snapRectToGrid } from "@/lib/floating-window-grid";
+import {
+  anchorWindowAndMirror,
+  registerFloatingWindow,
+  setActiveFloatingWindow,
+} from "@/lib/floating-window-registry";
 import { useAgentMentionSources } from "@/hooks/use-agent-mention-sources";
 import { useKanbanTodosForChat } from "@/hooks/use-kanban-todos-for-chat";
 import {
@@ -66,6 +80,12 @@ import {
   markDmConversationRead,
   sendDmMessage,
   refreshCursorSession,
+  FIRST_LAND_GREETING,
+  TRIAL_PAY_GODMODE_PATH,
+  TRIAL_PRIMARY_CTA_LABEL,
+  TRIAL_PAY_CTA_LABEL,
+  TRIAL_PASTE_KEY_PATH,
+  readStoredTrialGreeting,
   type AiChat,
   type CatalogModel,
   type DmContact,
@@ -93,6 +113,7 @@ import {
   type MsgPart,
 } from "./chat-parts";
 import { IntelligenceComposer, type ComposerSubmit } from "./IntelligenceComposer";
+import { syncMissionsAfterChat } from "@/components/graph/GraphMissionsPanel";
 
 interface UiMessage {
   id: string;
@@ -198,7 +219,19 @@ function clampPanelPos(
   };
 }
 
-export function IntelligencePanel() {
+export function IntelligencePanel({
+  chromeLocks,
+}: {
+  chromeLocks?: {
+    lockClose?: boolean;
+    lockResize?: boolean;
+    lockCreate?: boolean;
+    onLockedClose?: () => void;
+    onLockedResize?: () => void;
+    onLockedCreate?: () => void;
+    onActiveChatId?: (id: string | null) => void;
+  };
+} = {}) {
   const {
     panelOpen,
     setPanelOpen,
@@ -221,6 +254,8 @@ export function IntelligencePanel() {
     activeAgentId,
     panelMaximized,
     setPanelMaximized,
+    panelMinimized,
+    setPanelMinimized,
     chatTarget,
     setChatTarget,
     dmConversations,
@@ -234,14 +269,79 @@ export function IntelligencePanel() {
     chatMode,
     openPanel,
   } = useIntelligence();
+  const lockClose = chromeLocks?.lockClose ?? false;
+  const lockResize = chromeLocks?.lockResize ?? false;
+  const lockCreate = chromeLocks?.lockCreate ?? false;
+  const onLockedClose = chromeLocks?.onLockedClose;
+  const onLockedResize = chromeLocks?.onLockedResize;
+  const onLockedCreate = chromeLocks?.onLockedCreate;
   const { user } = useTenant();
-  const { status } = useAiStatus();
+  const { status } = useAiStatus({ enabled: panelOpen });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const isMobile = useIsMobile();
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(max-width: 639px)").matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setIsPhone(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  const [trialGreeting, setTrialGreeting] = useState<string | null>(() =>
+    readStoredTrialGreeting()?.greeting ?? null
+  );
+  const [trialPayPath, setTrialPayPath] = useState(
+    () => readStoredTrialGreeting()?.payGodModePath ?? TRIAL_PAY_GODMODE_PATH
+  );
+  const [trialPrimaryCta, setTrialPrimaryCta] = useState(
+    () => readStoredTrialGreeting()?.primaryCtaLabel ?? TRIAL_PRIMARY_CTA_LABEL
+  );
+  const [trialPayCta, setTrialPayCta] = useState(
+    () => readStoredTrialGreeting()?.payCtaLabel ?? TRIAL_PAY_CTA_LABEL
+  );
+  useEffect(() => {
+    const onGreeting = (ev: Event) => {
+      const detail = (
+        ev as CustomEvent<{
+          greeting?: string;
+          payGodModePath?: string;
+          primaryCtaLabel?: string;
+          payCtaLabel?: string;
+          ready?: boolean;
+        }>
+      ).detail;
+      if (detail?.greeting) setTrialGreeting(detail.greeting);
+      if (detail?.payGodModePath) setTrialPayPath(detail.payGodModePath);
+      if (detail?.primaryCtaLabel) setTrialPrimaryCta(detail.primaryCtaLabel);
+      if (detail?.payCtaLabel) setTrialPayCta(detail.payCtaLabel);
+      if (detail?.ready) {
+        window.dispatchEvent(new CustomEvent("godmode:model-selected"));
+      }
+    };
+    window.addEventListener("godmode:trial-greeting", onGreeting);
+    return () => window.removeEventListener("godmode:trial-greeting", onGreeting);
+  }, []);
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
   const allowedTabs: PanelTab[] = isDmMode
-    ? ["chat", "dms", "channels"]
-    : ["chat", "notifications", "calendar", "projects", "knowledge", "bank", "vault", "support"];
+    ? ["chat", "contacts", "dms", "channels"]
+    : [
+        "chat",
+        "contacts",
+        "dms",
+        "channels",
+        "notifications",
+        "calendar",
+        "projects",
+        "knowledge",
+        "bank",
+        "vault",
+        "support",
+      ];
   const effectiveTab: PanelTab = allowedTabs.includes(panelTab)
     ? panelTab
     : "chat";
@@ -338,8 +438,9 @@ export function IntelligencePanel() {
       const height = clampPanelHeight(panelHeight, nextBounds.height);
       setComposerWidth(width);
       setPanelHeight(height);
-      const defaultX = nextBounds.x + 12;
-      const defaultY = nextBounds.y + nextBounds.height - height - 12;
+      const focus = focusWindowAnchors(nextBounds, width, height);
+      const defaultX = focus.left.x;
+      const defaultY = focus.left.y;
       const pos = clampPanelPos(
         panelX ?? defaultX,
         panelY ?? defaultY,
@@ -364,19 +465,75 @@ export function IntelligencePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onReset = () => {
+      if (isMaximized) return;
+      const activeBounds = getPanelBounds();
+      setBounds(activeBounds);
+      const width = clampComposerWidth(composerWidth, activeBounds.width);
+      const height = clampPanelHeight(panelHeight, activeBounds.height);
+      setComposerWidth(width);
+      setPanelHeight(height);
+      const focus = focusWindowAnchors(activeBounds, width, height);
+      setPanelPos(focus.left.x, focus.left.y);
+      if (!panelOpen) setPanelOpen(true);
+    };
+    window.addEventListener("godmode:reset-window-anchors", onReset);
+    return () =>
+      window.removeEventListener("godmode:reset-window-anchors", onReset);
+  }, [
+    isMaximized,
+    composerWidth,
+    panelHeight,
+    panelOpen,
+    setComposerWidth,
+    setPanelHeight,
+    setPanelPos,
+    setPanelOpen,
+  ]);
+
+  const [anchorPickMode, setAnchorPickMode] = useState(false);
+  useEffect(() => {
+    const onPick = (ev: Event) => {
+      setAnchorPickMode(
+        Boolean((ev as CustomEvent<{ active?: boolean }>).detail?.active)
+      );
+    };
+    window.addEventListener("godmode:anchor-pick-mode", onPick);
+    return () => window.removeEventListener("godmode:anchor-pick-mode", onPick);
+  }, []);
+
+  const chatLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
   const handleDrag = (e: ReactPointerEvent<HTMLElement>) => {
     const target = e.target;
     if (target instanceof Element && target.closest("button,[role='button']")) {
       return;
     }
+
+    if (anchorPickMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      anchorWindowAndMirror("chat");
+      window.dispatchEvent(
+        new CustomEvent("godmode:anchor-pick-mode", {
+          detail: { active: false },
+        })
+      );
+      return;
+    }
+
+    setActiveFloatingWindow("chat");
     e.preventDefault();
     const activeBounds = getPanelBounds();
     setBounds(activeBounds);
     const startX = e.clientX;
     const startY = e.clientY;
-    const startPanelX = panelX ?? activeBounds.x + 12;
-    const startPanelY =
-      panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
+    const focus = focusWindowAnchors(activeBounds, composerWidth, panelHeight);
+    const startPanelX = panelX ?? focus.left.x;
+    const startPanelY = panelY ?? focus.left.y;
+    let lastX = startPanelX;
+    let lastY = startPanelY;
     const onMove = (ev: PointerEvent) => {
       const pos = clampPanelPos(
         startPanelX + ev.clientX - startX,
@@ -385,6 +542,8 @@ export function IntelligencePanel() {
         panelHeight,
         activeBounds
       );
+      lastX = pos.x;
+      lastY = pos.y;
       setPanelPos(pos.x, pos.y);
     };
     const onUp = () => {
@@ -392,6 +551,27 @@ export function IntelligencePanel() {
       window.removeEventListener("pointerup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      const focusSnapped = snapToFocusAnchor(
+        lastX,
+        lastY,
+        composerWidth,
+        panelHeight,
+        activeBounds
+      );
+      if (focusSnapped) {
+        setPanelPos(focusSnapped.x, focusSnapped.y);
+      } else {
+        const gridSnapped = snapRectToGrid(
+          {
+            x: lastX,
+            y: lastY,
+            width: composerWidth,
+            height: panelHeight,
+          },
+          activeBounds
+        );
+        setPanelPos(gridSnapped.x, gridSnapped.y);
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -406,7 +586,9 @@ export function IntelligencePanel() {
     setBounds(activeBounds);
     const startX = e.clientX;
     const startWidth = composerWidth;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const onMove = (ev: PointerEvent) => {
       const available = activeBounds.x + activeBounds.width - currentX;
       setComposerWidth(
@@ -461,7 +643,9 @@ export function IntelligencePanel() {
     const startY = e.clientY;
     const startWidth = composerWidth;
     const startHeight = panelHeight;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const currentY =
       panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
     const onMove = (ev: PointerEvent) => {
@@ -578,7 +762,7 @@ export function IntelligencePanel() {
     try {
       await startSharedChatSession(activeChatId, activeAgentId);
       setSharedSession(true);
-      toast.success("Conversation shared — collaborators can now join live.");
+      toast.success("Conversation shared. Collaborators can now join live.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to share conversation");
     } finally {
@@ -1137,6 +1321,7 @@ export function IntelligencePanel() {
           busyRef.current = false;
           abortRef.current = null;
           refreshChats();
+          void syncMissionsAfterChat();
         },
         onError: (error, code) => {
           const raw =
@@ -1278,10 +1463,15 @@ export function IntelligencePanel() {
     };
   }, [panelOpen, isDmMode, activeAgentId]);
 
-  const currentWidth = clampComposerWidth(composerWidth, bounds.width);
+  const maxPairedWidth =
+    bounds.width < 1440
+      ? Math.max(MIN_COMPOSER_WIDTH, Math.floor((bounds.width - 120) / 2))
+      : bounds.width;
+  const currentWidth = clampComposerWidth(composerWidth, maxPairedWidth);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
-  const defaultX = bounds.x + 12;
-  const defaultY = bounds.y + bounds.height - currentHeight - 12;
+  const focus = focusWindowAnchors(bounds, currentWidth, currentHeight);
+  const defaultX = focus.left.x;
+  const defaultY = focus.left.y;
   const pos = clampPanelPos(
     panelX ?? defaultX,
     panelY ?? defaultY,
@@ -1290,40 +1480,82 @@ export function IntelligencePanel() {
     bounds
   );
 
+  chatLayoutRef.current = {
+    x: pos.x,
+    y: pos.y,
+    width: currentWidth,
+    height: currentHeight,
+  };
+
+  useEffect(() => {
+    if (!panelOpen || isMaximized || isMobile) return;
+    return registerFloatingWindow({
+      id: "chat",
+      role: "chat",
+      pairGroup: "focus-pair",
+      getLayout: () => chatLayoutRef.current,
+      applyLayout: (rect) => {
+        setPanelPos(rect.x, rect.y);
+        setComposerWidth(rect.width);
+        setPanelHeight(rect.height);
+      },
+    });
+  }, [
+    panelOpen,
+    isMaximized,
+    isMobile,
+    setPanelPos,
+    setComposerWidth,
+    setPanelHeight,
+  ]);
+
   if (!panelOpen) return null;
+
+  const panelAccent = isDmMode ? "#38bdf8" : "#a78bfa";
+  const panelShadow = isLight
+    ? `0 18px 40px -18px rgb(15 23 42 / 0.28), 0 0 0 1px ${panelAccent}40`
+    : `0 16px 48px -16px ${panelAccent}99`;
+  const panelBorder = isLight ? `${panelAccent}55` : `${panelAccent}88`;
+  const panelBorderMax = isLight ? `${panelAccent}40` : `${panelAccent}66`;
 
   return (
     <aside
       ref={asideRef}
+      aria-hidden={panelMinimized ? true : undefined}
       style={
-        isMobile
-          ? undefined
-          : isMaximized
-            ? {
-                left: bounds.x,
-                top: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-              }
-            : {
-                left: pos.x,
-                top: pos.y,
-                width: currentWidth,
-                height: currentHeight,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-              }
+        panelMinimized
+          ? { display: "none" }
+          : isPhone
+            ? undefined
+            : isMaximized
+              ? {
+                  left: bounds.x,
+                  top: bounds.y,
+                  width: bounds.width,
+                  height: bounds.height,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorderMax,
+                }
+              : {
+                  left: pos.x,
+                  top: pos.y,
+                  width: currentWidth,
+                  height: currentHeight,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorder,
+                  boxShadow: panelShadow,
+                }
       }
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-popover",
-        isMobile
+        "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
+        isPhone
           ? "fixed inset-0 z-50"
-          : "absolute z-40 rounded-xl border shadow-2xl"
+          : "absolute z-[110] rounded-xl border-2 shadow-2xl"
       )}
     >
-      {!isMobile && !isMaximized && (
+      {!isPhone && !isMaximized && !lockResize && (
         <>
           <div
             role="separator"
@@ -1360,17 +1592,27 @@ export function IntelligencePanel() {
         </>
       )}
 
+      <div
+        className="h-1 w-full shrink-0"
+        style={{ backgroundColor: panelAccent }}
+        aria-hidden
+      />
+
       <header
-        onPointerDown={isMobile || isMaximized ? undefined : handleDrag}
+        onPointerDown={isPhone || isMaximized ? undefined : handleDrag}
         className={cn(
           "flex h-9 shrink-0 items-center gap-2 border-b px-2",
-          !isMobile && !isMaximized && "cursor-move"
+          !isPhone && !isMaximized && "cursor-move"
         )}
+        style={{
+          borderColor: `${panelAccent}40`,
+          backgroundColor: `${panelAccent}14`,
+        }}
       >
         {isDmMode ? (
-          <MessageCircleIcon className="size-4 text-primary" />
+          <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
         ) : (
-          <BotIcon className="size-4 text-foreground" />
+          <BotIcon className="size-4" style={{ color: panelAccent }} />
         )}
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -1457,20 +1699,54 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockCreate && "godmode-chrome-entice")}
             aria-label="New chat"
-            title="New chat"
-            onClick={newChat}
+            title={
+              lockCreate
+                ? "Unlock create chat (tutorial or pay to skip)"
+                : "New chat"
+            }
+            onClick={() => {
+              if (lockCreate) {
+                onLockedCreate?.();
+                return;
+              }
+              newChat();
+            }}
           >
             <PlusIcon />
           </Button>
-          {!isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Minimize"
+            title="Minimize"
+            onClick={() => setPanelMinimized(true)}
+          >
+            <MinusIcon />
+          </Button>
+          {!isPhone && (
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
+              className={cn(lockResize && "godmode-chrome-entice")}
               aria-label={isMaximized ? "Restore" : "Maximize"}
-              title={isMaximized ? "Restore" : "Maximize"}
-              onClick={() => setPanelMaximized(!isMaximized)}
+              title={
+                lockResize
+                  ? "Unlock window controls (tutorial or pay to skip)"
+                  : isMaximized
+                    ? "Restore"
+                    : "Maximize"
+              }
+              onClick={() => {
+                if (lockResize) {
+                  onLockedResize?.();
+                  return;
+                }
+                setPanelMaximized(!isMaximized);
+              }}
             >
               {isMaximized ? <Minimize2Icon /> : <Maximize2Icon />}
             </Button>
@@ -1479,9 +1755,20 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockClose && "godmode-chrome-entice")}
             aria-label="Close"
-            title="Close (Ctrl/Cmd+L)"
-            onClick={() => setPanelOpen(false)}
+            title={
+              lockClose
+                ? "Unlock close (tutorial or pay to skip)"
+                : "Close (Ctrl/Cmd+L)"
+            }
+            onClick={() => {
+              if (lockClose) {
+                onLockedClose?.();
+                return;
+              }
+              setPanelOpen(false);
+            }}
           >
             <XIcon />
           </Button>
@@ -1491,23 +1778,21 @@ export function IntelligencePanel() {
       <Tabs value={effectiveTab} onValueChange={(v) => setPanelTab(v as PanelTab)} className="shrink-0 px-2 pt-1">
         <TabsList variant="line" className="h-8 w-full justify-start">
           <TabsTrigger value="chat" className="text-xs">Chat</TabsTrigger>
-          {isDmMode ? (
+          <TabsTrigger value="contacts" className="text-xs">Contacts</TabsTrigger>
+          <TabsTrigger value="dms" className="text-xs">DMs</TabsTrigger>
+          <TabsTrigger value="channels" className="text-xs">Channels</TabsTrigger>
+          {!isDmMode ? (
             <>
-              <TabsTrigger value="dms" className="text-xs">DMs</TabsTrigger>
-              <TabsTrigger value="channels" className="text-xs">Channels</TabsTrigger>
+              <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
+              <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
+              {/* Internal id remains "projects" for stored panel tab preference. */}
+              <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
+              <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
+              <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
+              <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
+              <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
             </>
-    ) : (
-      <>
-        <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
-        <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
-        {/* Internal id remains "projects" for stored panel tab preference. */}
-        <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
-        <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
-        <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
-        <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
-        <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
-      </>
-    )}
+          ) : null}
         </TabsList>
       </Tabs>
 
@@ -1516,7 +1801,7 @@ export function IntelligencePanel() {
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <BotIcon className="size-3 text-amber-400" />
-              Shared agent — chats save to{" "}
+              Shared agent. Chats save to{" "}
               <span className="font-medium text-foreground">your project</span>
             </span>
             <label
@@ -1579,6 +1864,40 @@ export function IntelligencePanel() {
               </p>
               {!isDmMode && activeAgentId === "intelligence" ? (
                 <div className="max-w-[340px] space-y-3 text-left text-xs leading-relaxed">
+                  <p className="text-foreground/90">
+                    {trialGreeting || FIRST_LAND_GREETING}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        // Primary: stay in chat on GodMode Inference.
+                        document
+                          .querySelector<HTMLTextAreaElement>(
+                            "[data-intelligence-composer], textarea"
+                          )
+                          ?.focus();
+                      }}
+                    >
+                      {trialPrimaryCta}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      render={<Link to={trialPayPath} />}
+                    >
+                      {trialPayCta}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Pay path is a placeholder until GodMode Inference billing
+                    ships. Advanced BYOK stays at {TRIAL_PASTE_KEY_PATH}.
+                  </p>
                   <p className="text-muted-foreground">
                     {agentDescription ||
                       "Intelligence is GodMode's built-in AI: your guide to the platform itself."}
@@ -1588,6 +1907,9 @@ export function IntelligencePanel() {
                     <li>Create departments, pages, agents, wiki articles, and tasks</li>
                     <li>Wire automations and configure your workspace from chat</li>
                     <li>Hand off focused work to specialized subagents when you are ready</li>
+                    <li>
+                      Advanced: paste your own OpenRouter key in {TRIAL_PASTE_KEY_PATH}
+                    </li>
                   </ul>
                 </div>
               ) : (
@@ -1777,6 +2099,20 @@ export function IntelligencePanel() {
         {effectiveTab === "support" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <Support />
+          </div>
+        )}
+
+        {effectiveTab === "contacts" && (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ConversationList
+              conversations={[]}
+              contacts={dmContacts}
+              activeId={activeConversationId}
+              onSelect={(id) =>
+                setChatTarget({ kind: "conversation", conversationId: id })
+              }
+              onCreated={() => void refreshDmConversations()}
+            />
           </div>
         )}
 

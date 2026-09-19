@@ -26,6 +26,7 @@ import {
   fetchAnthropicStatus,
   type AnthropicAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 const ANTHROPIC_MODELS = [
   { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
@@ -111,6 +112,7 @@ export function AnthropicConsoleCard({
           Metered Anthropic API key (BYOK). Uses the Anthropic Console harness, not Claude.ai
           Pro/Max login and not Cursor&apos;s Claude path.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="anthropic" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

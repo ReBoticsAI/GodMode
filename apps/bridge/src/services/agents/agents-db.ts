@@ -8,6 +8,7 @@ import { encryptSecret, decryptSecret } from "../holdings/crypto-box.js";
 import { getTenantOwnerUserId } from "../user-scope.js";
 import { isUserAgentId } from "./user-agent-prompt.js";
 import { defaultKnowsUserForAgent } from "./agent-profile-prompt.js";
+import { ensureAgentUniverseFile } from "../sqlite-universe-registry.js";
 import {
   DEFAULT_SAMPLING,
   DEFAULT_THINKING,
@@ -566,6 +567,11 @@ export function createAgent(
       /* per-agent state tables optional during early migration */
     }
   }
+  // SQLite-universe Phase 3: dual-write agent actor file.
+  ensureAgentUniverseFile({
+    agentId: id,
+    label: input.name,
+  });
   return getAgent(db, id)!;
 }
 
@@ -1317,7 +1323,11 @@ export function removePlatformVaultSecret(
 
 /**
  * Resolve apiKeyRef for a running agent: scoped id, direct id (agent/platform),
- * then name in agent → Platform.
+ * then name in agent → Platform Vault.
+ *
+ * Admin GodMode Inference supply is NOT a Vault miss fallback. Managed
+ * Intelligence chat resolves supply only via
+ * resolveGodModeInferenceSupplyForManagedChat (active grant + Intelligence).
  */
 export function resolveSecretRefForAgent(
   db: AppDatabase,

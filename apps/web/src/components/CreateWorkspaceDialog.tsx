@@ -15,9 +15,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function CreateWorkspaceDialog({ trigger }: { trigger?: React.ReactNode }) {
+export function CreateWorkspaceDialog({
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: {
+  /** Pass `null` to omit the trigger (controlled open only). */
+  trigger?: React.ReactNode | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { refresh, setTenant } = useTenant();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = openProp ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -43,22 +57,26 @@ export function CreateWorkspaceDialog({ trigger }: { trigger?: React.ReactNode }
   };
 
   const triggerButton =
-    trigger ?? (
+    trigger === undefined ? (
       <Button variant="outline" size="sm">
         <PlusIcon data-icon="inline-start" />
         New project
       </Button>
+    ) : (
+      trigger
     );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <span
-        role="presentation"
-        onClick={() => setOpen(true)}
-        onKeyDown={(e) => e.key === "Enter" && setOpen(true)}
-      >
-        {triggerButton}
-      </span>
+      {triggerButton != null ? (
+        <span
+          role="presentation"
+          onClick={() => setOpen(true)}
+          onKeyDown={(e) => e.key === "Enter" && setOpen(true)}
+        >
+          {triggerButton}
+        </span>
+      ) : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>

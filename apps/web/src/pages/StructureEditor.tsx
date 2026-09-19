@@ -711,11 +711,16 @@ export default function StructureEditor() {
     <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-4">
       <PageHeader
         title="Structure"
-        description="Canonical platform structure. The flow chart is the source of truth — drag pages to nest them, attach owner agents, and changes propagate to navigation and the sidebar."
+        description="Canonical platform structure. The flow chart is the source of truth: drag pages to nest them, attach owner agents, and changes propagate to navigation and the sidebar."
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <StructureEditorChart />
+        <StructureContent />
       </div>
     </Page>
   );
+}
+
+/** Structure body for the full route or an embedded Graph floating window. */
+export function StructureContent() {
+  return <StructureEditorChart />;
 }

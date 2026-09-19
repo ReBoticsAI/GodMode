@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   applyCursorToIntelligence,
   connectCursorApiKey,
@@ -30,6 +31,10 @@ import {
   type CursorAuthStatus,
   type CursorModelOption,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
+
+const DASHBOARD_INTEGRATIONS =
+  "https://cursor.com/dashboard?tab=integrations";
 
 /** Connect Cursor subscription for the Platform Vault. */
 export function CursorSubscriptionCard({
@@ -164,12 +169,13 @@ export function CursorSubscriptionCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <SparklesIcon className="size-4" />
-          Cursor subscription
+          Cursor
         </CardTitle>
         <CardDescription>
-          Use your Cursor plan models (Auto, Composer 2.5, and others) inside GodMode
-          Intelligence with native tools — billed to your Cursor account.
+          Subscription plan models (Auto, Composer 2.5, and others) inside GodMode
+          Intelligence with native tools. Billed to your Cursor account.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="cursor" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -193,27 +199,42 @@ export function CursorSubscriptionCard({
 
         {!status?.connected ? (
           <>
-            <p className="text-sm text-muted-foreground">
-              Generate a user API key from{" "}
-              <a
-                href="https://cursor.com/dashboard?tab=integrations"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
-              >
-                Cursor Dashboard → Integrations
-                <ExternalLinkIcon className="size-3" />
-              </a>
-              . This uses the same subscription as Cursor IDE.
-            </p>
+            <Alert>
+              <SparklesIcon />
+              <AlertTitle>User API key powers Cursor SDK</AlertTitle>
+              <AlertDescription>
+                Intelligence uses <span className="font-mono">cursor_cloud</span> via{" "}
+                <span className="font-mono">@cursor/sdk</span>. There is no separate
+                SDK login and no third-party OAuth for a billing key. Paste a User API
+                key below. (<span className="font-mono">cursor-agent login</span> is only
+                for the Cursor CLI contractor backend, not Auto.)
+              </AlertDescription>
+            </Alert>
+            <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+              <li>
+                Open{" "}
+                <a
+                  href={DASHBOARD_INTEGRATIONS}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                >
+                  Cursor Dashboard → Integrations
+                  <ExternalLinkIcon className="size-3" />
+                </a>
+              </li>
+              <li>Create a User API key (same subscription as Cursor IDE).</li>
+              <li>Paste it below and click Connect.</li>
+            </ol>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex flex-1 flex-col gap-1">
-                <Label className="text-xs">API key</Label>
+                <Label className="text-xs">User API key</Label>
                 <Input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="cur_…"
+                  autoComplete="off"
                 />
               </div>
               <Button type="button" disabled={busy} onClick={() => void connect()}>
@@ -255,14 +276,10 @@ export function CursorSubscriptionCard({
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              If Intelligence shows an Authentication error, use{" "}
-              <span className="font-medium">Refresh session</span> first. That
-              clears the Bridge Cursor SDK handle and keeps your existing API key
-              (keys are not calendar-expired when Cursor says they last until
-              2027). Prefer{" "}
-              <span className="font-medium">Auto (Cursor picks)</span> for everyday
-              use; pin a named model only when you need a fixed route. Manage MCP
-              servers on Agents → Pipeline →{" "}
+              Prefer <span className="font-medium">Auto (Cursor picks)</span> for everyday
+              use. If Intelligence shows an Authentication error, use{" "}
+              <span className="font-medium">Refresh session</span> first (clears the Bridge
+              SDK handle; same API key). Manage MCP on Agents → Pipeline →{" "}
               <Link
                 to="/agents?section=pipeline&node=mcp"
                 className="text-primary underline-offset-2 hover:underline"

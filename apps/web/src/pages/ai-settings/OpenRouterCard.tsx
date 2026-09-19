@@ -26,25 +26,26 @@ import {
   fetchOpenRouterStatus,
   type OpenRouterAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
- * OpenRouter usage top-10 snapshot (2026-08-03 weekly tokens).
- * Rankings drift; custom slug field covers anything outside the list.
+ * OpenRouter catalog for Vault BYOK picker (keep aligned with bridge
+ * OPENROUTER_TOP10_CATALOG; free router first for cheap trial defaults).
  */
 const OPENROUTER_TOP10 = [
+  { id: "openrouter/free", label: "OpenRouter Free Models Router" },
+  {
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    label: "Nemotron 3 Ultra (free)",
+  },
   { id: "deepseek/deepseek-v4-flash-0731", label: "DeepSeek V4 Flash 0731" },
   { id: "xiaomi/mimo-v2.5", label: "MiMo-V2.5" },
   { id: "tencent/hy3", label: "Hy3" },
   { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro" },
   { id: "z-ai/glm-5.2", label: "GLM 5.2" },
-  {
-    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    label: "Nemotron 3 Ultra (free)",
-  },
   { id: "minimax/minimax-m3", label: "MiniMax M3" },
   { id: "stepfun/step-3.7-flash", label: "Step 3.7 Flash" },
   { id: "moonshotai/kimi-k3", label: "Kimi K3" },
-  { id: "inclusionai/ling-3.0-flash:free", label: "Ling-3.0-flash (free)" },
 ] as const;
 
 const CUSTOM_VALUE = "__custom__";
@@ -129,13 +130,17 @@ export function OpenRouterCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRoundIcon className="size-4" />
-          OpenRouter
+          OpenRouter (advanced BYOK)
         </CardTitle>
         <CardDescription>
-          Metered OpenRouter API key (BYOK). Models run through OpenAI-compatible transport with
-          a family harness (DeepSeek, GLM, Nemotron, MiniMax, Kimi, or generic). Not a Cursor
-          subscription.
+          Advanced bring-your-own-key for GodMode Inference. Most users stay on the
+          provisioned GodMode Inference trial, then pay through GodMode when free
+          messages run out. Paste a personal OpenRouter key here only if you want
+          your own credits (Vault → Inference → OpenRouter). Models run through
+          OpenAI-compatible transport with a family harness (DeepSeek, GLM, Nemotron,
+          MiniMax, Kimi, or generic). Not a Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="openrouter" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -150,7 +155,7 @@ export function OpenRouterCard({
         {!status?.connected ? (
           <>
             <p className="text-sm text-muted-foreground">
-              Create a key in{" "}
+              Optional: create a personal key in{" "}
               <a
                 href="https://openrouter.ai/keys"
                 target="_blank"
@@ -160,8 +165,10 @@ export function OpenRouterCard({
                 OpenRouter → API keys
                 <ExternalLinkIcon className="size-3" />
               </a>
-              . Top-10 list is a weekly usage snapshot (2026-08-03); use custom slug for anything
-              else.
+              {" "}
+              and paste it below. This is advanced BYOK, not the primary GodMode
+              Inference path. Top-10 list is a weekly usage snapshot (2026-08-03); use
+              custom slug for anything else.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex flex-1 flex-col gap-1">

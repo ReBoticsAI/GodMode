@@ -1,7 +1,8 @@
 import { useLocation } from "react-router-dom";
-import { ChevronRightIcon, MenuIcon, PanelRightOpenIcon } from "lucide-react";
+import { ChevronRightIcon, PanelRightOpenIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/ModeToggle";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import {
   chromelessHeaderSegments,
   departmentFromPath,
@@ -55,12 +56,9 @@ function ChromelessBreadcrumb({ segments }: { segments: string[] }) {
 }
 
 export function AppHeader({
-  onOpenNav,
   onOpenRightPanel,
   rightPanelKind: _rightPanelKind,
 }: {
-  /** Opens the primary nav drawer (compact mode only). */
-  onOpenNav?: () => void;
   /** Opens the plugin right-sidebar drawer (compact mode only). */
   onOpenRightPanel?: () => void;
   rightPanelKind?: string;
@@ -90,18 +88,6 @@ export function AppHeader({
 
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b bg-sidebar/60 px-2 text-xs sm:px-3">
-      {onOpenNav && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="-ml-1 shrink-0 lg:hidden"
-          onClick={onOpenNav}
-          aria-label="Open navigation menu"
-        >
-          <MenuIcon />
-        </Button>
-      )}
       <nav
         aria-label="Breadcrumb"
         className="flex min-w-0 flex-1 items-center gap-1 truncate text-muted-foreground"
@@ -133,6 +119,10 @@ export function AppHeader({
       </nav>
 
       {headerOverride ? headerOverride : HeaderPluginChrome ? <HeaderPluginChrome /> : null}
+
+      <div className="w-36 shrink-0 sm:w-44">
+        <WorkspaceSwitcher />
+      </div>
 
       {onOpenRightPanel && (
         <Button

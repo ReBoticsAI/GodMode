@@ -68,6 +68,23 @@ export class ApiError extends Error {
   }
 }
 
+/** True for 401/403 or common auth failure messages (skip noisy load toasts). */
+export function isUnauthorizedError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    return err.status === 401 || err.status === 403;
+  }
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    return (
+      m.includes("unauthorized") ||
+      m.includes("authentication required") ||
+      m.includes("not authenticated") ||
+      m.includes("sign in")
+    );
+  }
+  return false;
+}
+
 function nonEmptyErrorText(value: unknown, fallback: string): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   return fallback;
@@ -2678,6 +2695,74 @@ export const applyDeepSeekToIntelligence = (model = "deepseek-v4-flash") =>
     "ModelRuntime",
     "select_model",
     { model_id: `provider:openai_compatible:deepseek:${model}` },
+    "runtime",
+    true
+  );
+
+export type DashScopeAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchDashScopeStatus = async (
+  agentId?: string | null
+): Promise<DashScopeAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "dashscope-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (
+      data?.status === "active" ||
+      data?.provider === "dashscope" ||
+      data?.provider === "qwen"
+    ) {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectDashScopeApiKey = (apiKey: string, agentId?: string | null) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "dashscope",
+      label: "DashScope (Qwen)",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDashScopeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectDashScopeApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "dashscope-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchDashScopeStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyDashScopeToIntelligence = (model = "qwen-plus") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:dashscope:${model}` },
     "runtime",
     true
   );
@@ -6585,6 +6670,424 @@ export function fetchOnboardingDetect() {
   }>("/onboarding/detect");
 }
 
+export type ChatUnlockStatus = {
+  canCloseResize: boolean;
+  canCreateChat: boolean;
+  stripeConfigured: boolean;
+  canAdminGrant?: boolean;
+  unlockables: Array<{
+    id: string;
+    label: string;
+    description: string;
+    tutorial_id: string;
+    skip_price_cents: number;
+    stripe_price_id: string;
+    gates: string[];
+    entitled: boolean;
+    method: "tutorial" | "purchase" | "admin" | null;
+    tutorialSteps: string[];
+    tutorialProgress: Record<string, boolean>;
+  }>;
+};
+
+export function fetchChatUnlockStatus() {
+  return api<ChatUnlockStatus>("/chat-unlock/status");
+}
+
+/** Exact first-land Intelligence greeting (also returned by Bridge trial status). */
+export const FIRST_LAND_GREETING =
+  "Hey. I have a tiny GodMode Inference allowance to show you around. This is your GodMode welcome tour. Ask about the Graph, buying more Inference, or connecting DeepSeek / Z.AI / Qwen. When you are ready, create your account or top up.";
+
+/** Supported BYOK path (DeepSeek / Z.AI / Qwen). */
+export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → Supported";
+
+/** GodMode Inference packs and subscriptions. */
+export const TRIAL_PAY_GODMODE_PATH =
+  "/platform-vault?vault=inference&sub=godmode";
+
+export const TRIAL_PRIMARY_CTA_LABEL = "Get GodMode Inference";
+export const TRIAL_PAY_CTA_LABEL = "Buy $1 more";
+
+/** Follow-on steering after the greeting: free tutorial over pay-to-skip. */
+export const FIRST_LAND_CONTROLS_HINT =
+  "Those flashing controls (X, resize, +) are locked on purpose. Do not stress about them. Finish the free tutorial with me and they unlock. Paying only skips the tutorial. I want you to take the free path.";
+
+export const CHAT_WINDOW_TUTORIAL_LINES: string[] = [
+  "Tutorial time. This chat window is your home base. The X closes it into the universe graph. Resize restores or maximizes. Plus starts another thread once unlocked.",
+  "When you click X after we finish, this chat becomes a node in 3D space, connected to me (your Agent) and to you (User). That graph is GodMode.",
+  "I just explained the controls. They are unlocked now. Click X when you are ready to see the universe. Then click the User node to finish your profile.",
+];
+
+export type TrialInferenceStatus = {
+  ready: boolean;
+  mechanism:
+    | "mgmtApi"
+    | "platformShared"
+    | "browser"
+    | "computerUse"
+    | "terminal"
+    | "none";
+  modelId: string;
+  greeting: string;
+  status:
+    | "active"
+    | "converted"
+    | "expired"
+    | "revoked"
+    | "failed"
+    | "unconfigured"
+    | "deferred_until_auth"
+    | "deferred_mechanism";
+  expiresAt: string | null;
+  promptThreshold: number;
+  ttlDays: number;
+  detail?: string;
+  primaryCtaLabel: string;
+  payGodModePath: string;
+  payCtaLabel: string;
+  /** Advanced BYOK: personal OpenRouter keys / credit top-up (secondary). */
+  affiliateSignupUrl: string;
+  /** Best-effort personal OpenRouter signup deep-link (advanced BYOK). */
+  personalSignupUrl: string;
+  signupInitiation: "deep_link" | "unavailable" | "deferred_until_email";
+  signupEmail: string | null;
+  /** Null until personal OpenRouter OAuth / probeable personal key. Not used in greeting. */
+  openRouterUserName: string | null;
+  pasteKeyPath: string;
+  configured: {
+    mgmtApi: boolean;
+    platformShared: boolean;
+  };
+  remainingOps: string[];
+};
+
+const TRIAL_GREETING_STORAGE_KEY = "gm_trial_greeting_v1";
+
+/** Persist + broadcast trial greeting so ether chat / Intelligence can seed it. */
+export function publishTrialGreeting(status: TrialInferenceStatus): void {
+  if (typeof window === "undefined") return;
+  const payload = {
+    greeting: status.greeting,
+    primaryCtaLabel: status.primaryCtaLabel || TRIAL_PRIMARY_CTA_LABEL,
+    payGodModePath: status.payGodModePath || TRIAL_PAY_GODMODE_PATH,
+    payCtaLabel: status.payCtaLabel || TRIAL_PAY_CTA_LABEL,
+    personalSignupUrl: status.personalSignupUrl,
+    affiliateSignupUrl: status.affiliateSignupUrl,
+    pasteKeyPath: status.pasteKeyPath || TRIAL_PASTE_KEY_PATH,
+    signupEmail: status.signupEmail,
+    ready: status.ready,
+    at: Date.now(),
+  };
+  try {
+    sessionStorage.setItem(TRIAL_GREETING_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    /* private mode */
+  }
+  window.dispatchEvent(
+    new CustomEvent("godmode:trial-greeting", { detail: payload })
+  );
+  if (status.ready) {
+    window.dispatchEvent(new CustomEvent("godmode:model-selected"));
+  }
+  const notice =
+    status.ready
+      ? "GodMode Inference trial is ready. Keep chatting. When free runs out, pay through GodMode."
+      : status.status === "unconfigured"
+        ? "GodMode Inference is not configured on this Bridge yet. Chat will work after the platform OpenRouter key is set."
+        : status.status === "deferred_until_auth"
+          ? "Sign in to attach GodMode Inference to your workspace, then keep chatting."
+          : "GodMode Inference is warming up. Keep chatting when ready. When free runs out, pay through GodMode.";
+  window.dispatchEvent(
+    new CustomEvent("godmode:system-notice", {
+      detail: {
+        message: notice,
+      },
+    })
+  );
+}
+
+export function readStoredTrialGreeting(): {
+  greeting: string;
+  primaryCtaLabel?: string;
+  payGodModePath?: string;
+  payCtaLabel?: string;
+  personalSignupUrl?: string;
+  affiliateSignupUrl?: string;
+  pasteKeyPath?: string;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(TRIAL_GREETING_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { greeting?: string };
+    if (!parsed?.greeting || typeof parsed.greeting !== "string") return null;
+    return parsed as {
+      greeting: string;
+      primaryCtaLabel?: string;
+      payGodModePath?: string;
+      payCtaLabel?: string;
+      personalSignupUrl?: string;
+      affiliateSignupUrl?: string;
+      pasteKeyPath?: string;
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function fetchTrialInferenceStatus() {
+  return api<TrialInferenceStatus>("/trial-inference/status");
+}
+
+export function ensureTrialInference(opts?: {
+  email?: string;
+  displayName?: string;
+}) {
+  return api<TrialInferenceStatus>("/trial-inference/ensure", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  }).then((status) => {
+    publishTrialGreeting(status);
+    return status;
+  });
+}
+
+export function startChatUnlockCheckout(opts: {
+  unlockableId: string;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return api<{ url: string; sessionId: string; transactionId: string }>(
+    "/chat-unlock/checkout",
+    {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }
+  );
+}
+
+export function startChatUnlockTutorial(unlockableId: string) {
+  return api("/chat-unlock/tutorial/start", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId }),
+  });
+}
+
+export function markChatUnlockTutorialStep(
+  unlockableId: string,
+  step: string
+) {
+  return api("/chat-unlock/tutorial/step", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId, step }),
+  });
+}
+
+export function completeChatUnlockTutorial(unlockableId: string) {
+  return api("/chat-unlock/tutorial/complete", {
+    method: "POST",
+    body: JSON.stringify({ unlockableId }),
+  });
+}
+
+/** Admin / local-preview: grant unlocks without tutorial or Stripe. */
+export function adminGrantChatUnlock(unlockableIds: string[]) {
+  return api<ChatUnlockStatus & { ok: boolean }>("/chat-unlock/admin/grant", {
+    method: "POST",
+    body: JSON.stringify({ unlockableIds }),
+  });
+}
+
+export type ChatGraphDoc = {
+  nodes: Array<{
+    id: string;
+    chatId: string;
+    label: string;
+    position: { x: number; y: number };
+  }>;
+  edges: Array<{ id: string; source: string; target: string }>;
+};
+
+export function fetchChatGraph() {
+  return api<ChatGraphDoc>("/chat-unlock/graph");
+}
+
+export function saveChatGraph(doc: ChatGraphDoc) {
+  return api<ChatGraphDoc>("/chat-unlock/graph", {
+    method: "PUT",
+    body: JSON.stringify(doc),
+  });
+}
+
+export function dockChatOnGraph(opts: { chatId: string; label?: string }) {
+  return api<ChatGraphDoc>("/chat-unlock/graph/dock", {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export type GraphCtaAction =
+  | { type: "open_chat" }
+  | { type: "open_panel"; tab: string }
+  | { type: "navigate"; path: string }
+  | { type: "open_auth" }
+  | { type: "open_unlock"; capability?: string }
+  | { type: "none" };
+
+export type GraphWindowSpec = {
+  kind: "chat" | "information" | "canvas" | string;
+  width?: number;
+  height?: number;
+  placement?: "left" | "right" | "center";
+  agentId?: string;
+  title?: string;
+};
+
+export type GraphProjectionNode = {
+  id: string;
+  kind:
+    | "chat"
+    | "agent"
+    | "user"
+    | "memory"
+    | "skill"
+    | "tool"
+    | "workflow"
+    | "schedule"
+    | "page"
+    | "unlock"
+    | "system";
+  label: string;
+  objectType?: string;
+  refId?: string;
+  position?: { x: number; y: number; z?: number };
+  description?: string;
+  securityNote?: string;
+  connectionLabels?: string[];
+  ctaLabel?: string;
+  cta?: GraphCtaAction;
+  openImmediate?: boolean;
+  windows?: GraphWindowSpec[];
+  status?: Record<string, boolean | string | number>;
+};
+
+export type GraphProjectionEdge = {
+  id: string;
+  source: string;
+  target: string;
+  kind: string;
+};
+
+export type GraphProjection = {
+  focusType: string;
+  focusId: string;
+  nodes: GraphProjectionNode[];
+  edges: GraphProjectionEdge[];
+  truncated: boolean;
+  catalogVersion?: number;
+};
+
+export function fetchGraphProjection(opts: {
+  focusType: "chat" | "agent" | "user" | "architecture";
+  focusId?: string;
+}) {
+  const q = new URLSearchParams({
+    focusType: opts.focusType,
+  });
+  if (opts.focusId) q.set("focusId", opts.focusId);
+  return api<GraphProjection>(`/graph/projection?${q.toString()}`);
+}
+
+export type GraphMissionView = {
+  id: string;
+  nodeId: string;
+  title: string;
+  description: string;
+  kind: string;
+  completeWhen: string;
+  completeKey?: string;
+  basePoints: number;
+  points: number;
+  degree: number;
+  done: boolean;
+  open: boolean;
+  completedAt: string | null;
+};
+
+export type GraphMissionsStatus = {
+  catalogVersion: number;
+  totalPoints: number;
+  missionsCompleted: number;
+  missions: GraphMissionView[];
+  attentionByNode: Record<string, number>;
+  scoreByNode?: Record<
+    string,
+    { earned: number; available: number; open: number; done: number }
+  >;
+  autoAwarded?: Array<{ missionId: string; points: number }>;
+};
+
+export function fetchGraphMissions() {
+  return api<GraphMissionsStatus>("/graph-missions");
+}
+
+export function syncGraphMissions() {
+  return api<
+    GraphMissionsStatus & {
+      ok: true;
+      awarded: Array<{ missionId: string; points: number }>;
+    }
+  >("/graph-missions/sync", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function completeGraphMission(missionId: string) {
+  return api<{
+    ok: true;
+    alreadyDone: boolean;
+    pointsAwarded: number;
+    totalPoints: number;
+    mission: GraphMissionView;
+  }>(`/graph-missions/${encodeURIComponent(missionId)}/complete`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export type GraphLeaderboardTimeframe =
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "year"
+  | "decade"
+  | "all";
+
+export type GraphLeaderboardEntry = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  totalPoints: number;
+  missionsCompleted: number;
+  updatedAt: string;
+};
+
+export function fetchGraphLeaderboard(
+  limit = 50,
+  timeframe?: GraphLeaderboardTimeframe
+) {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(limit));
+  if (timeframe && timeframe !== "all") {
+    qs.set("timeframe", timeframe);
+  }
+  return api<{ entries: GraphLeaderboardEntry[] }>(
+    `/graph-missions/leaderboard?${qs.toString()}`
+  );
+}
+
 export function startOnboardingLocalLlm(modelPath: string) {
   return actionDto(
     "ModelRuntime",
@@ -6676,6 +7179,113 @@ export function testAdminBillingConnection() {
     "platform-billing",
     true
   );
+}
+
+export type GodModeInferenceProviderStatus = {
+  connected: boolean;
+  source: "platform" | "env" | "none";
+  masked?: string | null;
+};
+
+export interface GodModeInferenceConfig {
+  configured: boolean;
+  deepseek: GodModeInferenceProviderStatus;
+  zai: GodModeInferenceProviderStatus;
+  zaiCoding: GodModeInferenceProviderStatus;
+  dashscope: GodModeInferenceProviderStatus;
+}
+
+function mapGodModeInferenceConfig(
+  raw: Record<string, unknown>
+): GodModeInferenceConfig {
+  const asStatus = (v: unknown): GodModeInferenceProviderStatus => {
+    const o = (v ?? {}) as Record<string, unknown>;
+    return {
+      connected: Boolean(o.connected),
+      source:
+        o.source === "platform" || o.source === "env" ? o.source : "none",
+      masked: typeof o.masked === "string" ? o.masked : null,
+    };
+  };
+  return {
+    configured: Boolean(raw.configured),
+    deepseek: asStatus(raw.deepseek),
+    zai: asStatus(raw.zai),
+    zaiCoding: asStatus(raw.zai_coding ?? raw.zaiCoding),
+    dashscope: asStatus(raw.dashscope),
+  };
+}
+
+export function fetchGodModeInferenceConfig() {
+  return fetchRecord("GodModeInferenceConfig", "godmode-inference").then(
+    (row) => mapGodModeInferenceConfig((row?.data ?? {}) as Record<string, unknown>)
+  );
+}
+
+export function updateGodModeInferenceConfig(body: {
+  deepseekApiKey?: string;
+  zaiApiKey?: string;
+  zaiCodingApiKey?: string;
+  dashscopeApiKey?: string;
+}) {
+  return actionDto<RecordRowClient>(
+    "GodModeInferenceConfig",
+    "configure",
+    {
+      deepseek_api_key: body.deepseekApiKey,
+      zai_api_key: body.zaiApiKey,
+      zai_coding_api_key: body.zaiCodingApiKey,
+      dashscope_api_key: body.dashscopeApiKey,
+    },
+    "godmode-inference",
+    true
+  ).then((row) =>
+    mapGodModeInferenceConfig((row?.data ?? {}) as Record<string, unknown>)
+  );
+}
+
+export type GodModeInferencePlan = {
+  id: string;
+  priceId: string;
+  label: string;
+  amountLabel: string;
+  interval: string;
+  budgetUsd: number;
+};
+
+export type GodModeInferenceUserStatus = {
+  supplyReady: boolean;
+  paymentsConfigured: boolean;
+  plans: GodModeInferencePlan[];
+  grant: {
+    kind: string;
+    status: string;
+    remainingUsd: number | null;
+    budgetUsd: number | null;
+    spentUsd: number;
+    promptCount: number;
+  } | null;
+};
+
+export function fetchGodModeInferenceStatus() {
+  return api<GodModeInferenceUserStatus>("/godmode-inference/status");
+}
+
+export function createGodModeInferenceCheckout(planId = "pack") {
+  return api<{ url: string; sessionId: string; planId: string }>(
+    "/godmode-inference/checkout",
+    { method: "POST", body: JSON.stringify({ planId }) }
+  );
+}
+
+export function fetchAdminGodModeInferenceHealth() {
+  return api<{
+    activeGrants: number;
+    totalSpentUsd: number;
+    totalBudgetUsd: number;
+    supplyReady: boolean;
+    plansConfigured: number;
+  }>("/godmode-inference/admin/health");
 }
 
 export interface WorkspaceTemplateNode {

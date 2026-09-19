@@ -26,6 +26,7 @@ import {
   fetchDeepSeekStatus,
   type DeepSeekAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * DeepSeek platform chat catalog snapshot (2026-08-03).
@@ -126,6 +127,7 @@ export function DeepSeekCard({
           or generic). Distinct from Fireworks/Together/OpenRouter DeepSeek routes.
           Not a Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="deepseek" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
