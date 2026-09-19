@@ -7359,6 +7359,8 @@ export type AdminGodModeInferenceGrant = {
   subject_key: string;
   user_id: string | null;
   visitor_key: string | null;
+  provider: string;
+  mechanism: string;
   status: string;
   kind: string;
   spent_usd: number;
@@ -7366,6 +7368,8 @@ export type AdminGodModeInferenceGrant = {
   remaining_usd: number | null;
   prompt_count: number;
   updated_at: string | null;
+  provider_key_id: string | null;
+  provider_key_hash_masked: string | null;
 };
 
 export function fetchAdminGodModeInferenceGrants(opts?: {

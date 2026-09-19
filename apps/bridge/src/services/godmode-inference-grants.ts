@@ -12,6 +12,12 @@ import {
   isGodModeInferenceSupplySecretId,
   resolveGodModeInferenceSupplyBySecretId,
 } from "./godmode-inference-supply.js";
+import { getUserDb } from "../user-registry.js";
+import { removePlatformVaultSecret } from "./agents/agents-db.js";
+import {
+  OPENROUTER_API_KEY_SECRET_ID,
+  OPENROUTER_API_KEY_SECRET_NAME,
+} from "./openrouter-platform.js";
 
 /** Keep in sync with trial-inference TRIAL_DEFAULT_BUDGET_USD. */
 const TRIAL_DEFAULT_BUDGET_USD = 0.1;
@@ -34,6 +40,10 @@ export type GodModeInferenceGrantRow = {
   expires_at: string | null;
   stripe_session_id: string | null;
   stripe_subscription_id: string | null;
+  /** OpenRouter Management key id when minted; never a secret. */
+  provider_key_id: string | null;
+  /** Full OpenRouter key hash for Management DELETE; do not send to clients. */
+  provider_key_hash: string | null;
 };
 
 const INTELLIGENCE_AGENT_ID = "intelligence";
@@ -87,7 +97,17 @@ function mapRow(row: Record<string, unknown>): GodModeInferenceGrantRow {
     stripe_session_id: (row.stripe_session_id as string | null) ?? null,
     stripe_subscription_id:
       (row.stripe_subscription_id as string | null) ?? null,
+    provider_key_id: (row.provider_key_id as string | null) ?? null,
+    provider_key_hash: (row.provider_key_hash as string | null) ?? null,
   };
+}
+
+/** Truncate OpenRouter key hash for Admin UI (never full hash). */
+export function maskProviderKeyHash(hash: string | null | undefined): string | null {
+  const h = (hash ?? "").trim();
+  if (!h) return null;
+  if (h.length <= 12) return `${h.slice(0, 4)}…`;
+  return `${h.slice(0, 8)}…`;
 }
 
 export function remainingBudgetUsd(grant: GodModeInferenceGrantRow): number {
@@ -338,10 +358,28 @@ export function setDefaultTrialBudgetUsd(
   return next;
 }
 
-export type AdminGodModeInferenceGrant = GodModeInferenceGrantRow & {
+export type AdminGodModeInferenceGrant = Omit<
+  GodModeInferenceGrantRow,
+  "provider_key_hash"
+> & {
   remaining_usd: number | null;
   updated_at: string | null;
+  provider_key_hash_masked: string | null;
 };
+
+export function toAdminGodModeInferenceGrant(
+  g: GodModeInferenceGrantRow,
+  updatedAt?: string | null
+): AdminGodModeInferenceGrant {
+  const rem = remainingBudgetUsd(g);
+  const { provider_key_hash, ...rest } = g;
+  return {
+    ...rest,
+    remaining_usd: Number.isFinite(rem) ? rem : null,
+    updated_at: updatedAt ?? null,
+    provider_key_hash_masked: maskProviderKeyHash(provider_key_hash),
+  };
+}
 
 export function listAdminGodModeInferenceGrants(opts?: {
   limit?: number;
@@ -370,15 +408,12 @@ export function listAdminGodModeInferenceGrants(opts?: {
           )
           .all(limit) as Array<Record<string, unknown>>)
   );
-  return rows.map((row) => {
-    const g = mapRow(row);
-    const rem = remainingBudgetUsd(g);
-    return {
-      ...g,
-      remaining_usd: Number.isFinite(rem) ? rem : null,
-      updated_at: (row.updated_at as string | null) ?? null,
-    };
-  });
+  return rows.map((row) =>
+    toAdminGodModeInferenceGrant(
+      mapRow(row),
+      (row.updated_at as string | null) ?? null
+    )
+  );
 }
 
 export function getGodModeInferenceGrantById(
@@ -405,6 +440,103 @@ export function revokeGodModeInferenceGrant(
      WHERE id=?`
   ).run(id);
   return getGodModeInferenceGrantById(id, db);
+}
+
+async function deleteOpenRouterManagedKey(opts: {
+  hash: string;
+  mgmtKey: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ ok: boolean; detail?: string }> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(
+      `https://openrouter.ai/api/v1/keys/${encodeURIComponent(opts.hash)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${opts.mgmtKey}` },
+      }
+    );
+    if (res.ok || res.status === 404) return { ok: true };
+    return {
+      ok: false,
+      detail: `OpenRouter DELETE failed (${res.status})`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function clearMintedOpenRouterVault(userId: string): void {
+  try {
+    removePlatformVaultSecret(getUserDb(userId), {
+      baseId: OPENROUTER_API_KEY_SECRET_ID,
+      name: OPENROUTER_API_KEY_SECRET_NAME,
+      userId,
+    });
+  } catch (err) {
+    console.warn(
+      "[godmode-inference] vault clear soft-fail:",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+/**
+ * Admin revoke: DB hard-stop, plus OpenRouter DELETE + Vault clear for mgmtApi mints.
+ */
+export async function revokeAdminGodModeInferenceGrant(
+  id: string,
+  opts?: {
+    db?: CoreDatabase;
+    fetchImpl?: typeof fetch;
+    mgmtKey?: string | null;
+  }
+): Promise<AdminGodModeInferenceGrant | null> {
+  const db = opts?.db ?? getCloudDb();
+  ensureSchema(db);
+  const existing = getGodModeInferenceGrantById(id, db);
+  if (!existing) return null;
+
+  if (
+    existing.mechanism === "mgmtApi" &&
+    existing.provider_key_hash
+  ) {
+    const mgmtKey =
+      opts?.mgmtKey ??
+      process.env.OPENROUTER_MANAGEMENT_API_KEY?.trim() ??
+      "";
+    if (mgmtKey) {
+      const deleted = await deleteOpenRouterManagedKey({
+        hash: existing.provider_key_hash,
+        mgmtKey,
+        fetchImpl: opts?.fetchImpl,
+      });
+      if (!deleted.ok) {
+        console.warn(
+          "[godmode-inference] OpenRouter key delete soft-fail:",
+          deleted.detail
+        );
+      }
+    } else {
+      console.warn(
+        "[godmode-inference] mgmtApi revoke without OPENROUTER_MANAGEMENT_API_KEY; DB revoke only"
+      );
+    }
+  }
+
+  if (existing.mechanism === "mgmtApi" && existing.user_id) {
+    clearMintedOpenRouterVault(existing.user_id);
+  }
+
+  const revoked = revokeGodModeInferenceGrant(id, db);
+  if (!revoked) return null;
+  const row = db
+    .prepare(`SELECT updated_at FROM trial_inference_grants WHERE id=?`)
+    .get(id) as { updated_at?: string } | undefined;
+  return toAdminGodModeInferenceGrant(revoked, row?.updated_at ?? null);
 }
 
 export function patchGodModeInferenceGrantBudget(

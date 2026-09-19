@@ -12,8 +12,9 @@ import {
   defaultTrialBudgetUsd,
   listAdminGodModeInferenceGrants,
   patchGodModeInferenceGrantBudget,
-  revokeGodModeInferenceGrant,
+  revokeAdminGodModeInferenceGrant,
   setDefaultTrialBudgetUsd,
+  toAdminGodModeInferenceGrant,
 } from "../services/godmode-inference-grants.js";
 import { config } from "../config.js";
 
@@ -110,7 +111,7 @@ export function createGodModeInferenceRouter(): Router {
         res.status(404).json({ error: "Grant not found" });
         return;
       }
-      res.json({ grant: updated });
+      res.json({ grant: toAdminGodModeInferenceGrant(updated) });
     } catch (err) {
       const status =
         err && typeof err === "object" && "status" in err
@@ -122,12 +123,12 @@ export function createGodModeInferenceRouter(): Router {
     }
   });
 
-  router.post("/admin/grants/:id/revoke", requireAuth, (req, res) => {
+  router.post("/admin/grants/:id/revoke", requireAuth, async (req, res) => {
     if (!req.user?.isAdmin) {
       res.status(403).json({ error: "Admin only" });
       return;
     }
-    const updated = revokeGodModeInferenceGrant(req.params.id);
+    const updated = await revokeAdminGodModeInferenceGrant(req.params.id);
     if (!updated) {
       res.status(404).json({ error: "Grant not found" });
       return;
