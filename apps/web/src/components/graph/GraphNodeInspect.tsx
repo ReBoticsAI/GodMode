@@ -11,6 +11,7 @@ import {
 import type { GraphCtaAction, GraphProjectionNode } from "@/api";
 import { GraphNodeMissionsSection } from "@/components/graph/GraphMissionsPanel";
 import { graphNodeColor } from "@/lib/graph-node-style";
+import { useTheme } from "next-themes";
 
 export function GraphNodeInspect({
   node,
@@ -23,8 +24,16 @@ export function GraphNodeInspect({
   onOpenChange: (open: boolean) => void;
   onCta: (action: GraphCtaAction, node: GraphProjectionNode) => void;
 }) {
+  const { resolvedTheme } = useTheme();
   if (!node) return null;
-  const color = graphNodeColor(node.kind, node.id, null, node.objectType, node.label);
+  const color = graphNodeColor(
+    node.kind,
+    node.id,
+    null,
+    node.objectType,
+    node.label,
+    { isLight: resolvedTheme === "light" }
+  );
   const statusBits = node.status
     ? Object.entries(node.status).map(([k, v]) =>
         typeof v === "boolean" ? `${k}: ${v ? "yes" : "no"}` : `${k}: ${v}`

@@ -1220,6 +1220,11 @@ export interface SelectModelInput {
   apiKeyRef?: string;
   baseUrl?: string;
   transport?: string;
+  /**
+   * When true, allow selecting DeepSeek / Z.AI / Qwen using Admin GodMode
+   * Inference supply without a personal Vault key (trial / paid attach only).
+   */
+  managedGodModeInference?: boolean;
 }
 
 function applyProfileToAgentPatch(
@@ -1546,18 +1551,18 @@ export async function selectIntelligenceModel(
         preferredId = FIREWORKS_API_KEY_SECRET_ID;
         compatibleTransport = "fireworks";
       } else if (wantsDeepSeek) {
-        if (!deepseekReady) {
+        if (!deepseekReady && !input.managedGodModeInference) {
           throw new Error("Connect DeepSeek in Vault before using DeepSeek models");
         }
-        preferredId = DEEPSEEK_API_KEY_SECRET_ID;
+        preferredId = input.apiKeyRef || DEEPSEEK_API_KEY_SECRET_ID;
         compatibleTransport = "deepseek";
       } else if (wantsDashScope) {
-        if (!dashscopeReady) {
+        if (!dashscopeReady && !input.managedGodModeInference) {
           throw new Error(
             "Connect DashScope / Qwen in Vault before using Qwen models"
           );
         }
-        preferredId = DASHSCOPE_API_KEY_SECRET_ID;
+        preferredId = input.apiKeyRef || DASHSCOPE_API_KEY_SECRET_ID;
         compatibleTransport = "dashscope";
       } else if (wantsGoogleAi) {
         if (!googleAiReady) {
@@ -1574,12 +1579,12 @@ export async function selectIntelligenceModel(
         preferredId = XAI_API_KEY_SECRET_ID;
         compatibleTransport = "xai";
       } else if (wantsZaiCoding) {
-        if (!zaiCodingReady) {
+        if (!zaiCodingReady && !input.managedGodModeInference) {
           throw new Error(
             "Connect Z.AI GLM Coding Plan in Vault before using Coding Plan models"
           );
         }
-        preferredId = ZAI_CODING_API_KEY_SECRET_ID;
+        preferredId = input.apiKeyRef || ZAI_CODING_API_KEY_SECRET_ID;
         compatibleTransport = "zai_coding";
       } else if (wantsOpencodeGo) {
         if (!opencodeGoReady) {
@@ -1630,10 +1635,10 @@ export async function selectIntelligenceModel(
         preferredId = OPENCODE_ZEN_API_KEY_SECRET_ID;
         compatibleTransport = "opencode_zen";
       } else if (wantsZai) {
-        if (!zaiReady) {
+        if (!zaiReady && !input.managedGodModeInference) {
           throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
         }
-        preferredId = ZAI_API_KEY_SECRET_ID;
+        preferredId = input.apiKeyRef || ZAI_API_KEY_SECRET_ID;
         compatibleTransport = "zai";
       } else if (wantsMinimax) {
         if (!minimaxReady) {

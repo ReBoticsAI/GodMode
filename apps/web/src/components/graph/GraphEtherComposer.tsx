@@ -13,7 +13,7 @@ import {
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
-import { streamAiChat, readStoredTrialGreeting } from "@/api";
+import { streamAiChat, readStoredTrialGreeting, sendDmMessage } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,15 +33,9 @@ import {
   useIntelligence,
   type IntelligenceChatMode,
 } from "@/lib/intelligence-context";
+import type { ChatEtherLine } from "@/lib/chat-windows";
+import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { cn } from "@/lib/utils";
-
-type EtherLine = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  at: number;
-  streaming?: boolean;
-};
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -63,29 +57,20 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-function formatTime(at: number): string {
-  try {
-    return new Date(at).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
 const MODE_LABEL: Record<IntelligenceChatMode, string> = {
   agent: "Agent",
   plan: "Plan",
   ask: "Ask",
 };
 
+function agentWindowTitle(agentId: string): string {
+  if (agentId === "intelligence") return "Intelligence";
+  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
+}
+
 /**
- * Transparent graph chatroom: optional ether log + Cursor-style pill message box.
- * Host anchors the composer bottom-center; show/hide chat toggles the log only.
- *
- * One messagebox: search/filter Graph, browse actions, or ask Intelligence.
- * Enter activates a smart suggestion when provided; Ctrl+Enter always asks.
+ * Cursor-style pill message box anchored bottom-center on the Graph.
+ * Agent / DM / Channel replies go to focused FloatingWindows (not an ether tray).
  */
 export function GraphEtherComposer({
   className,
@@ -93,7 +78,6 @@ export function GraphEtherComposer({
   value,
   onValueChange,
   placeholder = "Ask Intelligence, or filter the Graph…",
-  logOpen = true,
   browseActive = false,
   onBrowseEnter,
   onSuggestEnter,
@@ -109,8 +93,6 @@ export function GraphEtherComposer({
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
-  /** When false, only the message box is shown (ether log hidden). */
-  logOpen?: boolean;
   /** When true, Enter prefers browse/suggest pick over sending chat. */
   browseActive?: boolean;
   onBrowseEnter?: () => boolean;
@@ -122,38 +104,66 @@ export function GraphEtherComposer({
   /** Increment to force-send the current value to Intelligence. */
   sendRequestId?: number;
 }) {
-  const { activeAgentId, chatMode, setChatMode, setPanelOpen } =
-    useIntelligence();
-  const [lines, setLines] = useState<EtherLine[]>([]);
+  const {
+    activeAgentId,
+    chatMode,
+    setChatMode,
+    setPanelOpen,
+    chatTarget,
+    focusedChatWindowId,
+    openChatWindows,
+    openOrFocusChatWindow,
+    updateChatWindowEtherLines,
+    clearComposerDraft,
+  } = useIntelligence();
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<(() => void) | null>(null);
   const chatIdRef = useRef<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const linesRef = useRef(lines);
   const greetingSeeded = useRef(false);
   const workStartedAt = useRef<number | null>(null);
   const [workedLabel, setWorkedLabel] = useState<string | null>(null);
-  linesRef.current = lines;
+
+  const focusedWindow = openChatWindows.find((w) => w.id === focusedChatWindowId);
+
+  const ensureAgentWindow = useCallback(
+    (agentId: string, etherLines?: ChatEtherLine[]) => {
+      return openOrFocusChatWindow({
+        kind: "agent",
+        agentId,
+        title: agentWindowTitle(agentId),
+        agentChatId: chatIdRef.current,
+        etherLines,
+      });
+    },
+    [openOrFocusChatWindow]
+  );
 
   useEffect(() => {
     if (greetingSeeded.current) return;
     const seedGreeting = (greeting: string) => {
       if (greetingSeeded.current || !greeting.trim()) return;
       greetingSeeded.current = true;
-      setLines((prev) => {
-        if (prev.some((l) => l.id === "trial-greeting")) return prev;
-        return [
-          {
-            id: "trial-greeting",
-            role: "assistant",
-            text: greeting.trim(),
-            at: Date.now(),
-          },
-          ...prev,
-        ];
-      });
+      const line: ChatEtherLine = {
+        id: "trial-greeting",
+        role: "assistant",
+        text: greeting.trim(),
+        at: Date.now(),
+      };
+      const agentId =
+        chatTarget.kind === "agent" ? chatTarget.agentId : activeAgentId;
+      const existing = openChatWindows.find(
+        (w) => w.kind === "agent" && w.agentId === agentId
+      );
+      if (existing) {
+        if ((existing.etherLines ?? []).some((l) => l.id === "trial-greeting")) {
+          return;
+        }
+        updateChatWindowEtherLines(existing.id, (prev) => [line, ...prev]);
+        return;
+      }
+      ensureAgentWindow(agentId, [line]);
     };
     const stored = readStoredTrialGreeting();
     if (stored?.greeting) seedGreeting(stored.greeting);
@@ -163,12 +173,13 @@ export function GraphEtherComposer({
     };
     window.addEventListener("godmode:trial-greeting", onGreeting);
     return () => window.removeEventListener("godmode:trial-greeting", onGreeting);
-  }, []);
-
-  useEffect(() => {
-    if (!logOpen) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [lines, logOpen]);
+  }, [
+    activeAgentId,
+    chatTarget,
+    ensureAgentWindow,
+    openChatWindows,
+    updateChatWindowEtherLines,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -203,48 +214,89 @@ export function GraphEtherComposer({
     const text = value.trim();
     if (!text || busy) return;
     onValueChange("");
+    clearComposerDraft(focusedChatWindowId);
 
-    const userId = `u-${Date.now()}`;
-    const assistantId = `a-${Date.now()}`;
-    const history = linesRef.current
+    if (
+      focusedWindow &&
+      (focusedWindow.kind === "dm" || focusedWindow.kind === "channel") &&
+      focusedWindow.conversationId
+    ) {
+      setBusy(true);
+      void sendDmMessage(focusedWindow.conversationId, { bodyText: text })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "Failed to send";
+          setWorkedLabel(msg);
+          window.setTimeout(() => setWorkedLabel(null), 4000);
+        })
+        .finally(() => setBusy(false));
+      return;
+    }
+
+    const agentId =
+      focusedWindow?.kind === "agent" && focusedWindow.agentId
+        ? focusedWindow.agentId
+        : chatTarget.kind === "agent"
+          ? chatTarget.agentId
+          : activeAgentId;
+
+    const intoWindow =
+      focusedWindow?.kind === "agent"
+        ? focusedWindow.id
+        : ensureAgentWindow(agentId);
+
+    const windowAfterOpen = openChatWindows.find((w) => w.id === intoWindow);
+    const historySource =
+      (focusedWindow?.kind === "agent"
+        ? focusedWindow.etherLines
+        : windowAfterOpen?.etherLines) ?? [];
+
+    const history = historySource
       .filter((l) => l.role === "user" || l.role === "assistant")
       .filter((l) => l.text.trim().length > 0)
       .map((l) => ({ role: l.role, content: l.text }));
 
-    setLines((prev) => [
+    const userId = `u-${Date.now()}`;
+    const assistantId = `a-${Date.now()}`;
+
+    const pushTurn = (prev: ChatEtherLine[]) => [
       ...prev,
-      { id: userId, role: "user", text, at: Date.now() },
+      { id: userId, role: "user" as const, text, at: Date.now() },
       {
         id: assistantId,
-        role: "assistant",
+        role: "assistant" as const,
         text: "",
         at: Date.now(),
         streaming: true,
       },
-    ]);
+    ];
+
+    updateChatWindowEtherLines(intoWindow, pushTurn);
     setBusy(true);
 
     abortRef.current?.();
     abortRef.current = streamAiChat(
       {
-        chatId: chatIdRef.current ?? undefined,
+        chatId:
+          (focusedWindow?.kind === "agent"
+            ? focusedWindow.agentChatId
+            : chatIdRef.current) ?? undefined,
         message: text,
         history,
-        agentId: activeAgentId,
+        agentId,
       },
       {
         onChatId: (id) => {
           chatIdRef.current = id;
         },
         onToken: (chunk) => {
-          setLines((prev) =>
+          updateChatWindowEtherLines(intoWindow, (prev) =>
             prev.map((l) =>
               l.id === assistantId ? { ...l, text: l.text + chunk } : l
             )
           );
         },
         onDone: (data) => {
-          setLines((prev) =>
+          updateChatWindowEtherLines(intoWindow, (prev) =>
             prev.map((l) =>
               l.id === assistantId
                 ? {
@@ -261,19 +313,19 @@ export function GraphEtherComposer({
         onError: (err) => {
           const raw = (err || "").trim();
           const lower = raw.toLowerCase();
-          const text =
+          const errText =
             lower.includes("authentication required") ||
             lower.includes("unauthorized") ||
             lower.includes("401")
               ? "Sign in to chat with GodMode Inference. Open Auth (?auth=1) or use the account menu, then send again."
               : raw || "Something went wrong";
-          setLines((prev) =>
+          updateChatWindowEtherLines(intoWindow, (prev) =>
             prev.map((l) =>
               l.id === assistantId
                 ? {
                     ...l,
-                    role: "system",
-                    text,
+                    role: "system" as const,
+                    text: errText,
                     streaming: false,
                   }
                 : l
@@ -284,7 +336,19 @@ export function GraphEtherComposer({
         },
       }
     );
-  }, [activeAgentId, busy, onValueChange, value]);
+  }, [
+    activeAgentId,
+    busy,
+    chatTarget,
+    clearComposerDraft,
+    ensureAgentWindow,
+    focusedChatWindowId,
+    focusedWindow,
+    onValueChange,
+    openChatWindows,
+    updateChatWindowEtherLines,
+    value,
+  ]);
 
   const sendRequestSeen = useRef(0);
   useEffect(() => {
@@ -333,76 +397,42 @@ export function GraphEtherComposer({
   const hasText = value.trim().length > 0;
   const speechAvailable = typeof window !== "undefined" && !!getSpeechRecognition();
   const autoLabel = chatMode === "agent" ? "Auto" : MODE_LABEL[chatMode];
+  const focusChip = useGraphFocusChip();
+  const FocusIcon = focusChip?.Icon;
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 w-full flex-col gap-2",
-        logOpen && "min-h-[12rem] flex-1",
-        className
-      )}
-      style={
-        logOpen
-          ? {
-              maskImage:
-                "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)",
-              WebkitMaskImage:
-                "linear-gradient(to bottom, transparent 0%, black 8%, black 100%)",
-            }
-          : undefined
-      }
-    >
-      {logOpen ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
-          <div className="flex min-h-full flex-col justify-end gap-0.5 py-1">
-            {lines.length === 0 ? (
-              <p className="text-[11px] text-foreground/35">
-                Messages appear here in the graph.
-              </p>
-            ) : null}
-            {lines.map((l) => (
-              <p
-                key={l.id}
-                className={cn(
-                  "text-[12px] leading-snug",
-                  l.role === "system"
-                    ? "text-destructive/80"
-                    : "text-foreground/85"
-                )}
-              >
-                <span className="text-foreground/35">[{formatTime(l.at)}]</span>{" "}
-                <span
-                  className={cn(
-                    "font-medium",
-                    l.role === "assistant"
-                      ? "text-primary"
-                      : l.role === "user"
-                        ? "text-foreground"
-                        : "text-destructive"
-                  )}
-                >
-                  {l.role === "assistant"
-                    ? "Intelligence"
-                    : l.role === "user"
-                      ? "You"
-                      : "System"}
-                </span>
-                <span className="text-foreground/40">:</span>{" "}
-                <span className="whitespace-pre-wrap break-words">
-                  {l.text || (l.streaming ? "…" : "")}
-                </span>
-              </p>
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-      ) : null}
-
-      {(statusChips || workedLabel) && (
+    <div className={cn("flex w-full flex-col gap-2", className)}>
+      {(statusChips || workedLabel || focusChip) && (
         <div
           className="flex shrink-0 flex-wrap items-center gap-1.5"
           data-graph-action-chrome=""
         >
+          {focusChip && FocusIcon ? (
+            <span
+              className={cn(
+                "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 text-xs shadow-sm backdrop-blur-sm",
+                focusChip.mode === "replying"
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border/50 bg-card/80 text-muted-foreground"
+              )}
+              title={
+                focusChip.mode === "replying"
+                  ? `Replying to ${focusChip.label}`
+                  : `Focused on ${focusChip.label}`
+              }
+            >
+              <FocusIcon
+                className="size-3.5 shrink-0"
+                style={{ color: focusChip.accent }}
+                aria-hidden
+              />
+              <span className="truncate">
+                {focusChip.mode === "replying"
+                  ? `Replying to ${focusChip.label}`
+                  : `Focused on ${focusChip.label}`}
+              </span>
+            </span>
+          ) : null}
           {workedLabel ? (
             <span className="inline-flex h-7 items-center rounded-full border border-border/50 bg-card/80 px-2.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
               {workedLabel}
@@ -453,7 +483,6 @@ export function GraphEtherComposer({
                 <DropdownMenuItem
                   onClick={() => {
                     onValueChange(value || "create ");
-                    // Focus handled by input; parent smart-suggest filters actions.
                   }}
                 >
                   Type an action…

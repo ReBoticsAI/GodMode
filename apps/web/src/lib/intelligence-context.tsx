@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -53,6 +54,14 @@ import {
   writeMigratedKey,
   writeStorageKey,
 } from "./storage-keys";
+import {
+  chatWindowIdForAgent,
+  chatWindowIdForConversation,
+  type ChatEtherLine,
+  type OpenChatWindow,
+  type OpenChatWindowTarget,
+} from "./chat-windows";
+import { setActiveFloatingWindow } from "./floating-window-registry";
 
 export interface PageContextSnapshot {
   /** Stable key for the publishing page, e.g. "trading-plan". */
@@ -227,6 +236,28 @@ interface IntelligenceContextValue {
   /** Active tab for the left-side tool / information panel. */
   activeLeftTab: LeftRailTab;
   setActiveLeftTab: (tab: LeftRailTab) => void;
+  /** Graph multi-window chat threads (transcripts); bottom composer replies to focus. */
+  openChatWindows: OpenChatWindow[];
+  focusedChatWindowId: string | null;
+  draftByWindowId: Record<string, string>;
+  focusChatWindow: (id: string | null, currentComposerText?: string) => string;
+  openOrFocusChatWindow: (
+    target: OpenChatWindowTarget,
+    currentComposerText?: string
+  ) => string;
+  closeChatWindow: (id: string) => void;
+  closeAllChatWindows: () => void;
+  setChatWindowMinimized: (id: string, minimized: boolean) => void;
+  updateChatWindowEtherLines: (
+    id: string,
+    lines: ChatEtherLine[] | ((prev: ChatEtherLine[]) => ChatEtherLine[])
+  ) => void;
+  clearComposerDraft: (windowId: string | null) => void;
+  /** Inbox popover above the Graph composer (DMs / Channels search). */
+  chatInboxOpen: boolean;
+  setChatInboxOpen: (open: boolean) => void;
+  chatInboxMinimized: boolean;
+  setChatInboxMinimized: (minimized: boolean) => void;
 }
 
 export type LeftRailTab =
@@ -545,6 +576,23 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const [dmMessageListeners] = useState(
     () => new Set<(msg: DmMessage, conversationId: string) => void>()
   );
+  const [openChatWindows, setOpenChatWindows] = useState<OpenChatWindow[]>([]);
+  const [focusedChatWindowId, setFocusedChatWindowId] = useState<string | null>(
+    null
+  );
+  const [draftByWindowId, setDraftByWindowId] = useState<Record<string, string>>(
+    {}
+  );
+  const [chatInboxOpen, setChatInboxOpenState] = useState(false);
+  const [chatInboxMinimized, setChatInboxMinimized] = useState(false);
+  const setChatInboxOpen = useCallback((open: boolean) => {
+    setChatInboxOpenState(open);
+    if (open) setChatInboxMinimized(false);
+  }, []);
+  const focusedChatWindowIdRef = useRef(focusedChatWindowId);
+  focusedChatWindowIdRef.current = focusedChatWindowId;
+  const draftByWindowIdRef = useRef(draftByWindowId);
+  draftByWindowIdRef.current = draftByWindowId;
 
   const setChatTarget = useCallback((target: ChatTarget) => {
     setChatTargetState(target);
@@ -554,6 +602,149 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, target.agentId);
       }
     }
+  }, []);
+
+  const focusChatWindow = useCallback(
+    (id: string | null, currentComposerText?: string) => {
+      const prev = focusedChatWindowIdRef.current;
+      const draftKey = prev ?? "__ether__";
+      if (typeof currentComposerText === "string") {
+        const nextDrafts = {
+          ...draftByWindowIdRef.current,
+          [draftKey]: currentComposerText,
+        };
+        draftByWindowIdRef.current = nextDrafts;
+        setDraftByWindowId(nextDrafts);
+      }
+      setFocusedChatWindowId(id);
+      focusedChatWindowIdRef.current = id;
+      if (id) {
+        setActiveFloatingWindow(id);
+        setOpenChatWindows((wins) => {
+          const win = wins.find((w) => w.id === id);
+          if (!win) return wins;
+          if (win.kind === "agent" && win.agentId) {
+            setChatTarget({ kind: "agent", agentId: win.agentId });
+          } else if (win.conversationId) {
+            setChatTarget({
+              kind: "conversation",
+              conversationId: win.conversationId,
+            });
+          }
+          return wins.map((w) =>
+            w.id === id ? { ...w, minimized: false } : w
+          );
+        });
+      }
+      const nextKey = id ?? "__ether__";
+      return draftByWindowIdRef.current[nextKey] ?? "";
+    },
+    [setChatTarget]
+  );
+
+  const openOrFocusChatWindow = useCallback(
+    (target: OpenChatWindowTarget, currentComposerText?: string) => {
+      const id =
+        target.kind === "agent"
+          ? chatWindowIdForAgent(target.agentId, target.agentChatId)
+          : chatWindowIdForConversation(target.conversationId);
+
+      setOpenChatWindows((prev) => {
+        const existing = prev.find((w) => w.id === id);
+        if (existing) {
+          return prev.map((w) =>
+            w.id === id
+              ? {
+                  ...w,
+                  minimized: false,
+                  title: target.kind === "agent" ? target.title ?? w.title : target.title,
+                  etherLines:
+                    target.kind === "agent" && target.etherLines
+                      ? target.etherLines
+                      : w.etherLines,
+                  agentChatId:
+                    target.kind === "agent"
+                      ? target.agentChatId ?? w.agentChatId
+                      : w.agentChatId,
+                }
+              : w
+          );
+        }
+        const next: OpenChatWindow =
+          target.kind === "agent"
+            ? {
+                id,
+                kind: "agent",
+                title: target.title ?? "Intelligence",
+                agentId: target.agentId,
+                agentChatId: target.agentChatId ?? null,
+                etherLines: target.etherLines ?? [],
+                minimized: false,
+              }
+            : {
+                id,
+                kind: target.kind,
+                title: target.title,
+                conversationId: target.conversationId,
+                minimized: false,
+              };
+        return [...prev, next];
+      });
+
+      const restored = focusChatWindow(id, currentComposerText);
+      void restored;
+      return id;
+    },
+    [focusChatWindow]
+  );
+
+  const closeChatWindow = useCallback((id: string) => {
+    setOpenChatWindows((prev) => prev.filter((w) => w.id !== id));
+    setDraftByWindowId((d) => {
+      const next = { ...d };
+      delete next[id];
+      return next;
+    });
+    setFocusedChatWindowId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const closeAllChatWindows = useCallback(() => {
+    setOpenChatWindows([]);
+    setDraftByWindowId({});
+    setFocusedChatWindowId(null);
+  }, []);
+
+  const setChatWindowMinimized = useCallback((id: string, minimized: boolean) => {
+    setOpenChatWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, minimized } : w))
+    );
+  }, []);
+
+  const updateChatWindowEtherLines = useCallback(
+    (
+      id: string,
+      lines: ChatEtherLine[] | ((prev: ChatEtherLine[]) => ChatEtherLine[])
+    ) => {
+      setOpenChatWindows((prev) =>
+        prev.map((w) => {
+          if (w.id !== id) return w;
+          const next =
+            typeof lines === "function" ? lines(w.etherLines ?? []) : lines;
+          return { ...w, etherLines: next };
+        })
+      );
+    },
+    []
+  );
+
+  const clearComposerDraft = useCallback((windowId: string | null) => {
+    const key = windowId ?? "__ether__";
+    setDraftByWindowId((d) => {
+      if (!(key in d)) return d;
+      const next = { ...d };
+      delete next[key];
+      return next;
+    });
   }, []);
 
   const refreshDmConversations = useCallback(async () => {
@@ -679,6 +870,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveLeftTab("info");
     setInformationPanelOpen(true);
     setInformationPanelMinimized(false);
+    queueMicrotask(() => setActiveFloatingWindow("information"));
     const canvasId = `information:${node.id}`;
     setOpenCanvases((prev) => {
       if (prev.some((c) => c.id === canvasId)) return prev;
@@ -709,9 +901,18 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   }, [informationNode?.id]);
 
   const openLeftRailTab = useCallback((tab: LeftRailTab) => {
+    if (tab === "dms" || tab === "channels" || tab === "contacts") {
+      setChatInboxOpen(true);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+      }
+      queueMicrotask(() => setActiveFloatingWindow("chat-inbox"));
+      return;
+    }
     setActiveLeftTab(tab);
     setInformationPanelOpen(true);
     setInformationPanelMinimized(false);
+    queueMicrotask(() => setActiveFloatingWindow("information"));
   }, []);
 
   const openPanel = useCallback(
@@ -727,10 +928,29 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       artifactId?: string;
       artifactName?: string;
     }) => {
+      const openConversationWindow = (conversationId: string, title?: string) => {
+        const conv = dmConversations.find((c) => c.id === conversationId);
+        const kind = conv?.kind === "group" ? "channel" : "dm";
+        openOrFocusChatWindow({
+          kind,
+          conversationId,
+          title: title ?? conv?.title ?? "Conversation",
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+        }
+      };
+
       if (opts?.conversationId) {
         setChatTarget({ kind: "conversation", conversationId: opts.conversationId });
+        openConversationWindow(opts.conversationId);
       } else if (opts?.agentId) {
         setChatTarget({ kind: "agent", agentId: opts.agentId });
+        openOrFocusChatWindow({
+          kind: "agent",
+          agentId: opts.agentId,
+          title: opts.agentId === "intelligence" ? "Intelligence" : opts.agentId,
+        });
       } else if (opts?.contactUserId) {
         void createDmConversation({
           kind: "direct",
@@ -741,10 +961,28 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
               kind: "conversation",
               conversationId: r.conversation.id,
             });
+            openOrFocusChatWindow({
+              kind: "dm",
+              conversationId: r.conversation.id,
+              title: r.conversation.title || "Direct message",
+            });
             void refreshDmConversations();
           })
           .catch(() => undefined);
       }
+
+      if (
+        opts?.tab === "dms" ||
+        opts?.tab === "channels" ||
+        opts?.tab === "contacts"
+      ) {
+        setChatInboxOpen(true);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+        }
+        return;
+      }
+
       setPanelOpen(true);
       setPanelMinimized(false);
       if (opts?.tab) {
@@ -771,7 +1009,14 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         else setSeedText(opts.prompt);
       }
     },
-    [setPanelTab, setChatTarget, refreshDmConversations, setKnowledgeSubTab]
+    [
+      setPanelTab,
+      setChatTarget,
+      refreshDmConversations,
+      setKnowledgeSubTab,
+      openOrFocusChatWindow,
+      dmConversations,
+    ]
   );
 
   const discussArtifactInChat = useCallback(
@@ -997,6 +1242,20 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setInformationPanelMinimized,
       activeLeftTab,
       setActiveLeftTab,
+      openChatWindows,
+      focusedChatWindowId,
+      draftByWindowId,
+      focusChatWindow,
+      openOrFocusChatWindow,
+      closeChatWindow,
+      closeAllChatWindows,
+      setChatWindowMinimized,
+      updateChatWindowEtherLines,
+      clearComposerDraft,
+      chatInboxOpen,
+      setChatInboxOpen,
+      chatInboxMinimized,
+      setChatInboxMinimized,
       openInformationPanel,
       closeInformationPanel,
       openLeftRailTab,
@@ -1076,6 +1335,20 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       openInformationPanel,
       closeInformationPanel,
       openLeftRailTab,
+      openChatWindows,
+      focusedChatWindowId,
+      draftByWindowId,
+      focusChatWindow,
+      openOrFocusChatWindow,
+      closeChatWindow,
+      closeAllChatWindows,
+      setChatWindowMinimized,
+      updateChatWindowEtherLines,
+      clearComposerDraft,
+      chatInboxOpen,
+      setChatInboxOpen,
+      chatInboxMinimized,
+      setChatInboxMinimized,
       openCanvases,
       focusedCanvasId,
       setFocusedCanvasId,

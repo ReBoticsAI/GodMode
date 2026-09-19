@@ -5,7 +5,6 @@ import {
   removePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
-import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 
 /** Fixed secret id/name for DeepSeek (metered) API key (#231). */
 export const DEEPSEEK_API_KEY_SECRET_ID = "deepseek-api-key";
@@ -25,7 +24,7 @@ export const DEEPSEEK_CHAT_CATALOG = [
 ] as const;
 
 /** Vault UI sources only. Platform admin supply is separate (Admin → GodMode Inference). */
-export type DeepSeekAuthSource = "env" | "vault" | "none";
+export type DeepSeekAuthSource = "vault" | "none";
 
 export interface DeepSeekAuthStatus {
   connected: boolean;
@@ -38,19 +37,18 @@ function maskKey(value: string): string {
 }
 
 /**
- * Chat / readiness resolve: personal vault BYOK → Admin platform supply → env.
+ * Personal Vault BYOK only. Admin / env GodMode Inference supply is resolved
+ * only via resolveGodModeInferenceSupplyForManagedChat.
  */
 export function resolveDeepSeekApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const vault = resolvePlatformVaultSecret(db, {
+  return resolvePlatformVaultSecret(db, {
     baseId: DEEPSEEK_API_KEY_SECRET_ID,
     name: DEEPSEEK_API_KEY_SECRET_NAME,
     agentId,
   });
-  if (vault) return vault;
-  return resolveGodModeInferenceSupplyKey("deepseek");
 }
 
 export function upsertDeepSeekApiKey(
@@ -79,7 +77,7 @@ export function removeDeepSeekApiKey(
 
 /**
  * Personal / workspace BYOK status for Vault cards.
- * Does not report Admin platform supply (that lives under Admin → GodMode Inference).
+ * Does not report Admin platform supply or process env (operator supply).
  */
 export function getDeepSeekAuthStatus(
   db: AppDatabase,
@@ -92,10 +90,6 @@ export function getDeepSeekAuthStatus(
   });
   if (value) {
     return { connected: true, source: "vault", masked: maskKey(value) };
-  }
-  const env = process.env.DEEPSEEK_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
   }
   return { connected: false, source: "none" };
 }

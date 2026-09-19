@@ -68,6 +68,23 @@ export class ApiError extends Error {
   }
 }
 
+/** True for 401/403 or common auth failure messages (skip noisy load toasts). */
+export function isUnauthorizedError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    return err.status === 401 || err.status === 403;
+  }
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    return (
+      m.includes("unauthorized") ||
+      m.includes("authentication required") ||
+      m.includes("not authenticated") ||
+      m.includes("sign in")
+    );
+  }
+  return false;
+}
+
 function nonEmptyErrorText(value: unknown, fallback: string): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   return fallback;
@@ -6679,19 +6696,17 @@ export function fetchChatUnlockStatus() {
 
 /** Exact first-land Intelligence greeting (also returned by Bridge trial status). */
 export const FIRST_LAND_GREETING =
-  "Hey. We don't have many messages, so let's use them wisely, like a genie. This is GodMode Inference. After that, it's pay to play through GodMode.";
+  "Hey. I have a tiny GodMode Inference allowance to show you around. This is your GodMode welcome tour. Ask about the Graph, buying more Inference, or connecting DeepSeek / Z.AI / Qwen. When you are ready, create your account or top up.";
 
-/** Advanced BYOK path (personal OpenRouter key). Not the primary convert CTA. */
-export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → OpenRouter";
+/** Supported BYOK path (DeepSeek / Z.AI / Qwen). */
+export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → Supported";
 
-/**
- * Placeholder until GodMode Inference pay-as-you-go billing ships.
- * Platform Vault → Cloud is seat billing today.
- */
-export const TRIAL_PAY_GODMODE_PATH = "/vault?vault=cloud";
+/** GodMode Inference packs and subscriptions. */
+export const TRIAL_PAY_GODMODE_PATH =
+  "/platform-vault?vault=inference&sub=godmode";
 
-export const TRIAL_PRIMARY_CTA_LABEL = "Continue chatting";
-export const TRIAL_PAY_CTA_LABEL = "Pay through GodMode";
+export const TRIAL_PRIMARY_CTA_LABEL = "Get GodMode Inference";
+export const TRIAL_PAY_CTA_LABEL = "Buy $1 more";
 
 /** Follow-on steering after the greeting: free tutorial over pay-to-skip. */
 export const FIRST_LAND_CONTROLS_HINT =
@@ -7227,6 +7242,50 @@ export function updateGodModeInferenceConfig(body: {
   ).then((row) =>
     mapGodModeInferenceConfig((row?.data ?? {}) as Record<string, unknown>)
   );
+}
+
+export type GodModeInferencePlan = {
+  id: string;
+  priceId: string;
+  label: string;
+  amountLabel: string;
+  interval: string;
+  budgetUsd: number;
+};
+
+export type GodModeInferenceUserStatus = {
+  supplyReady: boolean;
+  paymentsConfigured: boolean;
+  plans: GodModeInferencePlan[];
+  grant: {
+    kind: string;
+    status: string;
+    remainingUsd: number | null;
+    budgetUsd: number | null;
+    spentUsd: number;
+    promptCount: number;
+  } | null;
+};
+
+export function fetchGodModeInferenceStatus() {
+  return api<GodModeInferenceUserStatus>("/godmode-inference/status");
+}
+
+export function createGodModeInferenceCheckout(planId = "pack") {
+  return api<{ url: string; sessionId: string; planId: string }>(
+    "/godmode-inference/checkout",
+    { method: "POST", body: JSON.stringify({ planId }) }
+  );
+}
+
+export function fetchAdminGodModeInferenceHealth() {
+  return api<{
+    activeGrants: number;
+    totalSpentUsd: number;
+    totalBudgetUsd: number;
+    supplyReady: boolean;
+    plansConfigured: number;
+  }>("/godmode-inference/admin/health");
 }
 
 export interface WorkspaceTemplateNode {

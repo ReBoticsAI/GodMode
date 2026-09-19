@@ -30,6 +30,10 @@ import { createGraphProjectionRouter } from "./routes/graph-projection.js";
 import { createGraphMissionsRouter } from "./routes/graph-missions.js";
 import { createSqliteUniverseRouter } from "./routes/sqlite-universe.js";
 import { createTrialInferenceRouter } from "./routes/trial-inference.js";
+import {
+  createGodModeInferenceRouter,
+  godModeInferenceStripeWebhookHandler,
+} from "./routes/godmode-inference.js";
 import { createSharesRouter } from "./routes/shares.js";
 import { shareChatSession } from "./services/share-service.js";
 import { createDmRouter } from "./routes/dm.js";
@@ -371,6 +375,11 @@ if (config.isSaas) {
     marketplaceStripeWebhookHandler
   );
 }
+app.post(
+  "/api/godmode-inference/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  godModeInferenceStripeWebhookHandler
+);
 // GitHub App webhooks (Projects sync) — raw body + HMAC.
 app.post(
   "/api/integrations/github/webhook",
@@ -477,6 +486,7 @@ app.use("/api/graph", createGraphProjectionRouter());
 app.use("/api/graph-missions", createGraphMissionsRouter());
 app.use("/api/sqlite-universe", createSqliteUniverseRouter());
 app.use("/api/trial-inference", createTrialInferenceRouter(llmManager));
+app.use("/api/godmode-inference", createGodModeInferenceRouter());
 app.use("/api/shares", createSharesRouter());
 app.use("/api/dm", createDmRouter({ llm: llmManager, bridgePort: config.port }));
 app.use("/api/notifications", createNotificationsRouter());

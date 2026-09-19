@@ -131,9 +131,10 @@ export const PLATFORM_VAULT_SECTIONS = [
 export type PlatformVaultSection = (typeof PLATFORM_VAULT_SECTIONS)[number];
 
 export const VAULT_INFERENCE_SUBTABS = [
+  "godmode",
+  "supported",
   "subscriptions",
   "api-keys",
-  "optimized",
   "search",
 ] as const;
 export type VaultInferenceSub = (typeof VAULT_INFERENCE_SUBTABS)[number];
@@ -181,20 +182,17 @@ export function normalizeVaultInferenceSub(
 ): VaultInferenceSub {
   // Legacy top-level Search tab.
   if (tabRaw === "search") return "search";
-  if (
-    raw === "api-keys" ||
-    raw === "subscriptions" ||
-    raw === "optimized" ||
-    raw === "search"
-  ) {
-    return raw;
+  // Preferred BYOK renamed to Supported.
+  if (raw === "optimized") return "supported";
+  if ((VAULT_INFERENCE_SUBTABS as readonly string[]).includes(raw ?? "")) {
+    return raw as VaultInferenceSub;
   }
-  return "subscriptions";
+  return "godmode";
 }
 
 /** Deep link into Platform Vault. */
 export function platformVaultHref(
-  target: VaultInferenceSub | PlatformVaultSection | "inference" = "subscriptions"
+  target: VaultInferenceSub | PlatformVaultSection | "inference" = "godmode"
 ): string {
   if (target === "cloud") {
     return `${PLATFORM_VAULT_PATH}?vault=cloud`;
@@ -203,7 +201,7 @@ export function platformVaultHref(
     return `${PLATFORM_VAULT_PATH}?vault=secrets`;
   }
   if (target === "inference") {
-    return `${PLATFORM_VAULT_PATH}?vault=inference&sub=subscriptions`;
+    return `${PLATFORM_VAULT_PATH}?vault=inference&sub=godmode`;
   }
   return `${PLATFORM_VAULT_PATH}?vault=inference&sub=${target}`;
 }

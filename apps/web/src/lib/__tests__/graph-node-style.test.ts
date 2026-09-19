@@ -34,10 +34,17 @@ describe("graph-node-style", () => {
     expect(agent.h).toBeLessThan(300);
   });
 
-  it("paints only the You hub white, not other person nodes", () => {
-    expect(graphNodeColor("user", "hub:you", null, "User", "You").toLowerCase()).toBe(
-      "#ffffff"
-    );
+  it("paints only the You hub with theme ink, not other person nodes", () => {
+    expect(
+      graphNodeColor("user", "hub:you", null, "User", "You", {
+        isLight: false,
+      }).toLowerCase()
+    ).toBe("#ffffff");
+    expect(
+      graphNodeColor("user", "hub:you", null, "User", "You", {
+        isLight: true,
+      }).toLowerCase()
+    ).toBe("#0a0a0b");
     const otherPerson = parseHexToHsl(
       graphNodeColor("user", "user:local", null, "User", "You")
     )!;

@@ -17,9 +17,6 @@ import {
   getOpenRouterAuthStatus,
   isOpenRouterPlatformReady,
 } from "./openrouter-platform.js";
-import {
-  hasAdminGodModeInferenceSupply,
-} from "./godmode-inference-supply.js";
 import { getGroqAuthStatus, isGroqPlatformReady } from "./groq-platform.js";
 import {
   getTogetherAuthStatus,
@@ -214,10 +211,7 @@ export function getOnboardingStatus(
   const llmReady =
     llmReadyFlag ||
     cursorReadyForTenant ||
-    isHubVaultCloudPlatformReady(tenantDb) ||
-    // Admin → GodMode Inference platform_meta only (not env) so local GGUF
-    // onboarding is not skipped by leftover process env keys.
-    hasAdminGodModeInferenceSupply();
+    isHubVaultCloudPlatformReady(tenantDb);
   return { completed, llmReady, llmStatus, cursorConnected };
 }
 

@@ -29,6 +29,10 @@ import {
   setActiveFloatingWindow,
 } from "@/lib/floating-window-registry";
 import { snapRectToGrid } from "@/lib/floating-window-grid";
+import {
+  readFloatingWindowLayout,
+  writeFloatingWindowLayout,
+} from "@/lib/floating-window-layout-store";
 
 export type FloatingWindowBounds = {
   x: number;
@@ -102,7 +106,7 @@ export function FloatingWindow({
   title,
   icon,
   accent = "#a78bfa",
-  zIndexClassName = "z-30",
+  zIndexClassName = "z-[110]",
   defaultWidth = 400,
   defaultHeight = 520,
   minWidth = 280,
@@ -144,16 +148,23 @@ export function FloatingWindow({
   const [maximized, setMaximized] = useState(false);
   const placedForOpen = useRef(false);
 
+  const persistLayout = useCallback(
+    (next: { x: number; y: number; width: number; height: number }) => {
+      if (!windowId || maximized) return;
+      writeFloatingWindowLayout(windowId, next);
+    },
+    [windowId, maximized]
+  );
+
   useEffect(() => {
     if (!open) {
       placedForOpen.current = false;
       setMaximized(false);
+      // Keep last in-memory size; restore from storage (or defaults) on next open.
       setX(null);
       setY(null);
-      setWidth(defaultWidth);
-      setHeight(defaultHeight);
     }
-  }, [open, defaultWidth, defaultHeight]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -173,6 +184,20 @@ export function FloatingWindow({
     if (!open || placedForOpen.current || maximized) return;
     const b = getFloatingWindowBounds();
     setBounds(b);
+
+    const saved = windowId ? readFloatingWindowLayout(windowId) : null;
+    if (saved) {
+      const w = Math.max(minWidth, Math.min(saved.width, b.width - 24));
+      const h = Math.max(minHeight, Math.min(saved.height, b.height - 24));
+      const pos = clampPos(saved.x, saved.y, w, h, b);
+      setWidth(w);
+      setHeight(h);
+      setX(pos.x);
+      setY(pos.y);
+      placedForOpen.current = true;
+      return;
+    }
+
     const maxPairedWidth =
       pairGroup === "focus-pair" && b.width < 1440
         ? Math.max(minWidth, Math.floor((b.width - 120) / 2))
@@ -212,6 +237,8 @@ export function FloatingWindow({
     minHeight,
     placement,
     anchorY,
+    windowId,
+    pairGroup,
   ]);
 
   const currentWidth = maximized ? bounds.width : width;
@@ -258,18 +285,20 @@ export function FloatingWindow({
         setWidth(rect.width);
         setHeight(rect.height);
         placedForOpen.current = true;
+        writeFloatingWindowLayout(windowId, rect);
       },
     });
   }, [open, windowId, role, pairGroup, maximized, isMobile]);
 
   const handleDrag = useCallback(
     (e: ReactPointerEvent<HTMLElement>) => {
-      if (maximized || isMobile) return;
+      // Phone fullscreen sheets are not draggable; desktop/tablet split panes still are.
+      if (maximized || isPhone) return;
       if (e.button !== 0) return;
       const target = e.target;
       if (
         target instanceof Element &&
-        target.closest("button, [role='button'], a, input, textarea, select")
+        target.closest("[data-floating-chrome]")
       ) {
         return;
       }
@@ -290,6 +319,7 @@ export function FloatingWindow({
 
       e.preventDefault();
       e.stopPropagation();
+      window.getSelection()?.removeAllRanges();
       const activeBounds = getFloatingWindowBounds();
       setBounds(activeBounds);
       const startX = e.clientX;
@@ -338,9 +368,21 @@ export function FloatingWindow({
         if (focusSnapped) {
           setX(focusSnapped.x);
           setY(focusSnapped.y);
+          persistLayout({
+            x: focusSnapped.x,
+            y: focusSnapped.y,
+            width,
+            height,
+          });
         } else {
           setX(gridSnapped.x);
           setY(gridSnapped.y);
+          persistLayout({
+            x: gridSnapped.x,
+            y: gridSnapped.y,
+            width: gridSnapped.width,
+            height: gridSnapped.height,
+          });
         }
       };
       window.addEventListener("pointermove", onMove);
@@ -350,7 +392,7 @@ export function FloatingWindow({
     },
     [
       maximized,
-      isMobile,
+      isPhone,
       x,
       y,
       pos.x,
@@ -359,6 +401,7 @@ export function FloatingWindow({
       height,
       anchorPickMode,
       windowId,
+      persistLayout,
     ]
   );
 
@@ -383,6 +426,14 @@ export function FloatingWindow({
       setX(slot.x);
       setY(slot.y);
       placedForOpen.current = true;
+      if (windowId) {
+        writeFloatingWindowLayout(windowId, {
+          x: slot.x,
+          y: slot.y,
+          width: w,
+          height: h,
+        });
+      }
     };
     window.addEventListener("godmode:reset-window-anchors", onReset);
     return () =>
@@ -395,6 +446,7 @@ export function FloatingWindow({
     minWidth,
     minHeight,
     placement,
+    windowId,
   ]);
 
   const startResize = useCallback(
@@ -407,7 +459,7 @@ export function FloatingWindow({
         | "southeast"
         | "southwest"
     ) => {
-      if (maximized || isMobile) return;
+      if (maximized || isPhone) return;
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
@@ -421,6 +473,10 @@ export function FloatingWindow({
       const originY = y ?? pos.y;
       const el = e.currentTarget;
       el.setPointerCapture?.(e.pointerId);
+      let lastW = originW;
+      let lastH = originH;
+      let lastX = originX;
+      let lastY = originY;
       const onMove = (ev: PointerEvent) => {
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
@@ -447,12 +503,19 @@ export function FloatingWindow({
           nextH = Math.max(minHeight, Math.min(maxH, originH + dy));
         }
 
+        lastW = nextW;
+        lastH = nextH;
         setWidth(nextW);
         setHeight(nextH);
         if (nextX !== originX || nextY !== originY) {
           const clamped = clampPos(nextX, nextY, nextW, nextH, activeBounds);
+          lastX = clamped.x;
+          lastY = clamped.y;
           setX(clamped.x);
           setY(clamped.y);
+        } else {
+          lastX = nextX;
+          lastY = nextY;
         }
       };
       const onUp = (ev: PointerEvent) => {
@@ -465,6 +528,12 @@ export function FloatingWindow({
         window.removeEventListener("pointerup", onUp);
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        persistLayout({
+          x: lastX,
+          y: lastY,
+          width: lastW,
+          height: lastH,
+        });
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
@@ -481,7 +550,7 @@ export function FloatingWindow({
     },
     [
       maximized,
-      isMobile,
+      isPhone,
       width,
       height,
       x,
@@ -490,6 +559,7 @@ export function FloatingWindow({
       pos.y,
       minWidth,
       minHeight,
+      persistLayout,
     ]
   );
 
@@ -526,12 +596,15 @@ export function FloatingWindow({
                 }
       }
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-card/95 text-card-foreground backdrop-blur-md",
+        "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
         isPhone
           ? "fixed inset-0 z-50"
           : cn("absolute rounded-xl border-2", zIndexClassName),
         className
       )}
+      onPointerDownCapture={() => {
+        if (windowId) setActiveFloatingWindow(windowId);
+      }}
     >
       {!isPhone && !maximized ? (
         <>
@@ -593,7 +666,7 @@ export function FloatingWindow({
       <header
         onPointerDown={isPhone || maximized ? undefined : handleDrag}
         className={cn(
-          "flex h-9 shrink-0 items-center gap-2 border-b px-2",
+          "flex h-9 shrink-0 items-center gap-2 border-b px-2 select-none",
           !isPhone && !maximized && "cursor-move"
         )}
         style={{
@@ -602,15 +675,20 @@ export function FloatingWindow({
         }}
       >
         {icon}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        <span className="min-w-0 flex-1 truncate bg-transparent text-sm font-medium text-foreground">
           {title}
         </span>
-        {headerActions}
+        {headerActions ? (
+          <div data-floating-chrome className="flex shrink-0 items-center gap-1">
+            {headerActions}
+          </div>
+        ) : null}
         {onMinimize ? (
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
+            data-floating-chrome
             aria-label="Minimize window"
             title="Minimize"
             onClick={onMinimize}
@@ -623,6 +701,7 @@ export function FloatingWindow({
             type="button"
             size="icon-sm"
             variant="ghost"
+            data-floating-chrome
             aria-label={maximized ? "Restore window" : "Maximize window"}
             title={maximized ? "Restore" : "Maximize"}
             onClick={() => setMaximized((m) => !m)}
@@ -634,6 +713,7 @@ export function FloatingWindow({
           type="button"
           size="icon-sm"
           variant="ghost"
+          data-floating-chrome
           aria-label="Close window"
           title="Close"
           onClick={onClose}

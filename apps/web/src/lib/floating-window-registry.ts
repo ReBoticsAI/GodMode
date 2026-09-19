@@ -52,7 +52,6 @@ export function registerFloatingWindow(entry: FloatingWindowRegistration): () =>
 }
 
 export function setActiveFloatingWindow(id: string) {
-  if (!registry.has(id)) return;
   lastActiveId = id;
   emit();
 }

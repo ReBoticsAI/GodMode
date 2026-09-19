@@ -16,6 +16,7 @@ export function ensureTrialInferenceTables(db: Database.Database): void {
       status TEXT NOT NULL CHECK (
         status IN ('active', 'converted', 'expired', 'revoked', 'failed')
       ),
+      kind TEXT NOT NULL DEFAULT 'trial',
       model_id TEXT NOT NULL,
       provider_key_hash TEXT,
       provider_key_id TEXT,
@@ -23,6 +24,8 @@ export function ensureTrialInferenceTables(db: Database.Database): void {
       spent_usd REAL NOT NULL DEFAULT 0,
       budget_usd REAL,
       expires_at TEXT,
+      stripe_session_id TEXT,
+      stripe_subscription_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (subject_key)
@@ -46,5 +49,20 @@ export function ensureTrialInferenceTables(db: Database.Database): void {
   }
   if (!names.has("budget_usd")) {
     db.exec(`ALTER TABLE trial_inference_grants ADD COLUMN budget_usd REAL`);
+  }
+  if (!names.has("kind")) {
+    db.exec(
+      `ALTER TABLE trial_inference_grants ADD COLUMN kind TEXT NOT NULL DEFAULT 'trial'`
+    );
+  }
+  if (!names.has("stripe_session_id")) {
+    db.exec(
+      `ALTER TABLE trial_inference_grants ADD COLUMN stripe_session_id TEXT`
+    );
+  }
+  if (!names.has("stripe_subscription_id")) {
+    db.exec(
+      `ALTER TABLE trial_inference_grants ADD COLUMN stripe_subscription_id TEXT`
+    );
   }
 }

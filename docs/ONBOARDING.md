@@ -81,28 +81,26 @@ Route: `GET /api/graph/projection?focusType=architecture`.
 3. Expand Workspaces for Personal / Project Agents; explore Vaults and owner surfaces.
 4. Click You → finish profile / signup.
 
-## First-land Intelligence + trial inference (#758)
+## First-land Intelligence + GodMode Inference
 
-**Product decision:** Primary path is **GodMode Inference** (branded trial under our provisioned OpenRouter management / platform key; users pay through GodMode when free runs out). Personal OpenRouter OAuth or paste-key is advanced BYOK only. Do not land first-time users on a personal OpenRouter signup or OAuth flow.
+**Product decision:** Primary path is **GodMode Inference**: managed chat on DeepSeek, Z.AI (GLM), and Qwen under operator accounts (Admin → GodMode Inference). Free welcome allowance, then $1 packs and subscription ladder. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
 
-On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence (and the Graph ether chat) seeds a genie-style greeting from `POST /api/trial-inference/ensure` (also stored in sessionStorage and broadcast as `godmode:trial-greeting`):
+Admin supply keys are isolated: Intelligence agent + active grant only. They never resolve for other agents and never appear as user Vault connections.
 
-> Hey. We don't have many messages, so let's use them wisely, like a genie. This is GodMode Inference. After that, it's pay to play through GodMode.
-
-When the GodMode user has a display name / email, the greeting personalizes (`Hey {firstName}` and `GodMode Inference for {email}`). OpenRouter username is never used in the greeting (mgmt-mint / platform shared path has no personal OpenRouter identity).
+On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence seeds a greeting from `POST /api/trial-inference/ensure`.
 
 Background ensure flow:
 
 1. Soft visitor cookie + hashed IP heuristics (not a fake login).
-2. Prefer OpenRouter Management API mint when `OPENROUTER_MANAGEMENT_API_KEY` is set (authenticated users; Vault upsert + `llmReady`). **These keys live under our OpenRouter account** and back **GodMode Inference**, not the user's personal OpenRouter account.
-3. Fall back to `TRIAL_PLATFORM_API_KEY` / `OPENROUTER_API_KEY` platform shared path.
-4. Advanced BYOK only: best-effort personal OpenRouter signup deep-link (`personalSignupUrl`, default `https://openrouter.ai/sign-in` with `email` / `login_hint` query hints) and paste-key path (`pasteKeyPath` = Vault → Inference → OpenRouter). OpenRouter does **not** expose create-account, magic-link, or invite-by-email APIs.
-5. Browser / computerUse / terminal provisioners are scaffolded in the order env only (not implemented here).
+2. Prefer Admin GodMode Inference supply (`godmodeInferenceSupply`) when DeepSeek / Z.AI / Qwen platform keys are configured.
+3. Optional legacy OpenRouter Management API / platform shared paths only when listed in `TRIAL_PROVISION_ORDER`.
+4. Supported BYOK: Vault → Inference → Supported. Advanced BYOK: other provider cards under Advanced tabs.
+5. Buy more: Vault → Inference → GodMode Inference (`/platform-vault?vault=inference&sub=godmode`).
 
-**Primary CTAs:** Continue chatting on GodMode Inference. When free allowance / rate limits run out, pay through GodMode (`payGodModePath`, placeholder `/vault?vault=cloud` until Inference billing ships; see `remainingOps`). Do not fake payment.
+**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a $1 pack or subscribe (`payGodModePath`).
 
-**Secondary / advanced CTAs:** `affiliateSignupUrl` (default `https://openrouter.ai/keys`) and `personalSignupUrl` for personal OpenRouter BYOK. Not in the genie greeting.
+**Secondary CTAs:** Connect Supported BYOK or use Local models.
 
-**Supply-side vision (scaffold only):** Marketplace already has listing kind `inference` (hub Bridge endpoints). Future: sellers list spare provider credits / capacity as GodMode Inference or as an Agent; GodMode routes trial/paid demand; settlement later. OpenRouter (or BYOK) remains the supply backend. See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision). Do not treat the Graph Sell → Inference stub as a working P2P marketplace.
+Ops: configure Admin → GodMode Inference keys. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
 
-Ops: set management and/or platform trial keys on Cloud (and Local when phoning home). Per-user mint still waits for sign-in unless `TRIAL_ALLOW_VISITOR_MINT=true`. Prompt-threshold convert, key revoke/expiry, and credentials-saved modal remain on issue #758.
+See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision) for longer-term supply vision.

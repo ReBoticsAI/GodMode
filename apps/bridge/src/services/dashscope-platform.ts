@@ -5,7 +5,6 @@ import {
   removePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
-import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 
 /** Fixed secret id/name for Alibaba DashScope / Qwen API key. */
 export const DASHSCOPE_API_KEY_SECRET_ID = "dashscope-api-key";
@@ -27,7 +26,7 @@ export const DASHSCOPE_CHAT_CATALOG = [
 ] as const;
 
 /** Vault UI sources only. Platform admin supply is separate. */
-export type DashScopeAuthSource = "env" | "vault" | "none";
+export type DashScopeAuthSource = "vault" | "none";
 
 export interface DashScopeAuthStatus {
   connected: boolean;
@@ -39,18 +38,16 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
-/** Chat / readiness: personal vault → Admin platform supply → env. */
+/** Personal Vault BYOK only. Supply is managed-chat gated. */
 export function resolveDashScopeApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const vault = resolvePlatformVaultSecret(db, {
+  return resolvePlatformVaultSecret(db, {
     baseId: DASHSCOPE_API_KEY_SECRET_ID,
     name: DASHSCOPE_API_KEY_SECRET_NAME,
     agentId,
   });
-  if (vault) return vault;
-  return resolveGodModeInferenceSupplyKey("dashscope");
 }
 
 export function upsertDashScopeApiKey(
@@ -77,7 +74,7 @@ export function removeDashScopeApiKey(
   });
 }
 
-/** Personal / workspace BYOK for Vault cards (not Admin platform supply). */
+/** Personal / workspace BYOK for Vault cards (not Admin / env supply). */
 export function getDashScopeAuthStatus(
   db: AppDatabase,
   agentId?: string | null
@@ -89,13 +86,6 @@ export function getDashScopeAuthStatus(
   });
   if (vault) {
     return { connected: true, source: "vault", masked: maskKey(vault) };
-  }
-  const env =
-    process.env.DASHSCOPE_API_KEY?.trim() ||
-    process.env.QWEN_API_KEY?.trim() ||
-    null;
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
   }
   return { connected: false, source: "none" };
 }

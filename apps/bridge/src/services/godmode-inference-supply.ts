@@ -2,10 +2,12 @@
  * Platform-wide GodMode Inference supply (Admin → GodMode Inference).
  *
  * Encrypted in Cloud.sqlite `platform_meta` (same pattern as Stripe billing).
- * These keys power signup-guide / trial onboarding for new tenants. They are
- * not personal BYOK and must not appear as the user's Platform Vault secrets.
+ * These keys power managed GodMode Inference chat only (Intelligence + active
+ * grant). They are not personal BYOK and must not appear as Platform Vault
+ * secrets or resolve for other agents.
  *
- * Resolution for chat: personal vault BYOK first, then this supply, then env.
+ * Chat resolution: personal Vault BYOK first. Supply only via
+ * resolveGodModeInferenceSupplyForManagedChat (see godmode-inference-grants).
  */
 
 import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../core-db.js";
@@ -142,6 +144,12 @@ export function resolveGodModeInferenceSupplyKey(
 }
 
 export function isGodModeInferenceSupplyReady(): boolean {
+  if (
+    process.env.GODMODE_INFERENCE_DISABLE_SUPPLY === "1" ||
+    process.env.GODMODE_INFERENCE_DISABLE_SUPPLY === "true"
+  ) {
+    return false;
+  }
   return (
     resolveGodModeInferenceSupplyKey("deepseek") != null ||
     resolveGodModeInferenceSupplyKey("zai") != null ||

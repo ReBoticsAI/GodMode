@@ -574,6 +574,7 @@ function GraphNodeGlyphInner({
   collapsible,
   collapsed,
   onToggleCollapse,
+  displayOnly,
   className,
   ...buttonProps
 }: {
@@ -591,6 +592,8 @@ function GraphNodeGlyphInner({
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Render as a non-interactive div (for chrome previews). */
+  displayOnly?: boolean;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
@@ -603,7 +606,7 @@ function GraphNodeGlyphInner({
   const color =
     colorOverride ??
     (nodeId
-      ? graphNodeColor(kind, nodeId, null, objectType, label)
+      ? graphNodeColor(kind, nodeId, null, objectType, label, { isLight })
       : graphKindColor(kind));
   const ink = isLight ? "#f4f4f5" : "#0a0a0b";
   const labelFill = isLight ? "#0f172a" : "#f8fafc";
@@ -626,63 +629,59 @@ function GraphNodeGlyphInner({
       />
     ) : null;
 
-  return (
-    <div
-      className="relative shrink-0"
-      style={{ width: GRAPH_GLYPH_PX, height: GRAPH_GLYPH_PX }}
-    >
-      <button
-        type="button"
-        className={cn(
-          "relative block size-full cursor-pointer border-0 bg-transparent p-0 outline-none",
-          selected ? "scale-110" : null,
-          muted ? "opacity-70" : "opacity-100",
-          className
-        )}
-        {...buttonProps}
+  const shellClass = cn(
+    "relative block size-full border-0 bg-transparent p-0",
+    displayOnly ? null : "cursor-pointer outline-none",
+    selected ? "scale-110" : null,
+    muted ? "opacity-70" : "opacity-100",
+    className
+  );
+
+  const glyphBody = (
+    <>
+      <svg
+        width={GRAPH_GLYPH_PX}
+        height={GRAPH_GLYPH_PX}
+        viewBox="0 0 120 120"
+        aria-hidden
+        className="pointer-events-none block"
       >
-        <svg
-          width={GRAPH_GLYPH_PX}
-          height={GRAPH_GLYPH_PX}
-          viewBox="0 0 120 120"
-          aria-hidden
-          className="pointer-events-none block"
+        {ring}
+        <GlyphShape glyph={glyph} color={color} ink={ink} />
+        <text
+          x="60"
+          y={ty}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill={labelFill}
+          fontSize={fontSize}
+          fontWeight={600}
+          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          style={{
+            paintOrder: "stroke",
+            stroke: labelStroke,
+            strokeWidth: 3,
+          }}
         >
-          {ring}
-          <GlyphShape glyph={glyph} color={color} ink={ink} />
-          <text
-            x="60"
-            y={ty}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={labelFill}
-            fontSize={fontSize}
-            fontWeight={600}
-            fontFamily="ui-sans-serif, system-ui, sans-serif"
-            style={{
-              paintOrder: "stroke",
-              stroke: labelStroke,
-              strokeWidth: 3,
-            }}
-          >
-            {display}
-          </text>
-        </svg>
-        {working ? (
-          <span
-            className="absolute left-1.5 top-1.5 flex size-6 items-center justify-center rounded-full border border-border/80 bg-secondary text-secondary-foreground shadow-sm"
-            title="In progress"
-            aria-hidden
-          >
-            <HardHatIcon className="size-3.5" />
-          </span>
-        ) : null}
-        {attention ? (
-          <span
-            className="absolute right-2 top-2 size-3 rounded-full bg-destructive ring-2 ring-background"
-            aria-hidden
-          />
-        ) : null}
+          {display}
+        </text>
+      </svg>
+      {working ? (
+        <span
+          className="absolute left-1.5 top-1.5 flex size-6 items-center justify-center rounded-full border border-border/80 bg-secondary text-secondary-foreground shadow-sm"
+          title="In progress"
+          aria-hidden
+        >
+          <HardHatIcon className="size-3.5" />
+        </span>
+      ) : null}
+      {attention ? (
+        <span
+          className="absolute right-2 top-2 size-3 rounded-full bg-destructive ring-2 ring-background"
+          aria-hidden
+        />
+      ) : null}
+      {!displayOnly ? (
         <span className="sr-only">
           {kind}: {label}
           {working ? " (in progress)" : ""}
@@ -693,8 +692,25 @@ function GraphNodeGlyphInner({
               : " (expanded)"
             : ""}
         </span>
-      </button>
-      {collapsible ? (
+      ) : null}
+    </>
+  );
+
+  return (
+    <div
+      className="relative shrink-0"
+      style={{ width: GRAPH_GLYPH_PX, height: GRAPH_GLYPH_PX }}
+    >
+      {displayOnly ? (
+        <div className={shellClass} aria-hidden>
+          {glyphBody}
+        </div>
+      ) : (
+        <button type="button" className={shellClass} {...buttonProps}>
+          {glyphBody}
+        </button>
+      )}
+      {collapsible && !displayOnly ? (
         <Button
           type="button"
           size="icon-sm"

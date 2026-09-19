@@ -24,6 +24,7 @@ import {
   deleteAiSkill,
   fetchAiSkills,
   importWorkspaceKnowledge,
+  isUnauthorizedError,
   rejectAiSkill,
   updateAiSkillContent,
   updateAiSkillState,
@@ -110,6 +111,7 @@ export function SkillsTab({ visible = true }: { visible?: boolean }) {
       .then((r) => setSkills(r.skills))
       .catch((err) => {
         setSkills([]);
+        if (isUnauthorizedError(err)) return;
         toast.error(
           err instanceof Error
             ? `Failed to load skills: ${err.message}`

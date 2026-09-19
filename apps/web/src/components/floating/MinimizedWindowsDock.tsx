@@ -25,6 +25,7 @@ import {
 import { useIntelligence } from "@/lib/intelligence-context";
 import { setActiveFloatingWindow } from "@/lib/floating-window-registry";
 import { graphNodeColor } from "@/lib/graph-node-style";
+import { useTheme } from "next-themes";
 
 export function MinimizedWindowsDock() {
   const {
@@ -38,12 +39,24 @@ export function MinimizedWindowsDock() {
     setInformationPanelMinimized,
     informationNode,
     activeLeftTab,
+    openChatWindows,
+    setChatWindowMinimized,
+    focusChatWindow,
+    chatInboxOpen,
+    chatInboxMinimized,
+    setChatInboxMinimized,
+    setChatInboxOpen,
   } = useIntelligence();
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
 
   const showChat = panelOpen && panelMinimized;
   const showInfo = informationPanelOpen && informationPanelMinimized;
+  const showInbox = chatInboxOpen && chatInboxMinimized;
+  const minimizedThreads = openChatWindows.filter((w) => w.minimized);
 
-  if (!showChat && !showInfo) return null;
+  if (!showChat && !showInfo && !showInbox && minimizedThreads.length === 0)
+    return null;
 
   const isDm = chatTarget.kind === "conversation";
   const chatTitle = isDm
@@ -61,7 +74,8 @@ export function MinimizedWindowsDock() {
         informationNode.id,
         null,
         informationNode.objectType,
-        informationNode.label
+        informationNode.label,
+        { isLight }
       )
     : "#a78bfa";
 
@@ -148,6 +162,60 @@ export function MinimizedWindowsDock() {
       role="toolbar"
       aria-label="Minimized windows"
     >
+      {showInbox ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label="Restore Messages"
+                onClick={() => {
+                  setChatInboxMinimized(false);
+                  setChatInboxOpen(true);
+                  setActiveFloatingWindow("chat-inbox");
+                }}
+                className="bg-background/80 shadow-xs"
+              />
+            }
+          >
+            <MessageCircleIcon className="size-4 text-sky-400" />
+          </TooltipTrigger>
+          <TooltipContent side="top">Restore Messages</TooltipContent>
+        </Tooltip>
+      ) : null}
+
+      {minimizedThreads.map((win) => (
+        <Tooltip key={win.id}>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label={`Restore ${win.title}`}
+                onClick={() => {
+                  setChatWindowMinimized(win.id, false);
+                  focusChatWindow(win.id);
+                  setActiveFloatingWindow(win.id);
+                }}
+                className="bg-background/80 shadow-xs"
+              />
+            }
+          >
+            {win.kind === "agent" ? (
+              <BotIcon className="size-4 text-primary" />
+            ) : win.kind === "channel" ? (
+              <HashIcon className="size-4 text-sky-400" />
+            ) : (
+              <MessageCircleIcon className="size-4 text-sky-400" />
+            )}
+          </TooltipTrigger>
+          <TooltipContent side="top">Restore {win.title}</TooltipContent>
+        </Tooltip>
+      ))}
+
       {showChat ? (
         <Tooltip>
           <TooltipTrigger

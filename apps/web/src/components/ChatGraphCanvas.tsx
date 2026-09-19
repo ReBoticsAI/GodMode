@@ -98,20 +98,14 @@ import {
   BookOpenIcon,
   CalendarIcon,
   Grid3x3Icon,
-  HashIcon,
-  InfoIcon,
-  LandmarkIcon,
   LayoutTemplateIcon,
   LifeBuoyIcon,
   Maximize2Icon,
-  MessageCircleIcon,
   MessageSquare,
   MessageSquareOff,
   RotateCcwIcon,
   SaveIcon,
-  ShieldCheckIcon,
   TrophyIcon,
-  UsersIcon,
   WorkflowIcon,
 } from "lucide-react";
 import type { GraphScene3DHandle } from "@/components/graph/GraphScene3D";
@@ -124,6 +118,10 @@ import {
 } from "@/components/graph/GraphSmartSuggest";
 import { GraphSystemNoticeBar } from "@/components/graph/GraphSystemNoticeBar";
 import { GraphTopTenBoardDialog } from "@/components/graph/GraphTopTenBoardDialog";
+import { ChatInboxWindow } from "@/components/chat/ChatInboxWindow";
+import { ChatThreadWindowsHost } from "@/components/chat/ChatThreadWindow";
+import { unreadCountsByKind } from "@/lib/chat-windows";
+import { Badge } from "@/components/ui/badge";
 
 const GRAPH_ACTION_MODES = [
   { id: "create", label: "Create" },
@@ -248,6 +246,14 @@ export function ChatGraphCanvas({
     setActiveLeftTab,
     startNewChat,
     setChatMode,
+    chatInboxOpen,
+    setChatInboxOpen,
+    dmConversations,
+    dmUnreadCount,
+    activeAgentId,
+    openOrFocusChatWindow,
+    closeAllChatWindows,
+    openChatWindows,
   } = useIntelligence();
   const { authenticated } = useTenant();
   const navigate = useNavigate();
@@ -1518,14 +1524,65 @@ export function ChatGraphCanvas({
   useEffect(() => {
     const onShowChat = () => {
       setEtherChatOpen(true);
+      setChatInboxOpen(true);
+      openOrFocusChatWindow({
+        kind: "agent",
+        agentId: activeAgentId,
+        title:
+          activeAgentId === "intelligence"
+            ? "Intelligence"
+            : activeAgentId.charAt(0).toUpperCase() + activeAgentId.slice(1),
+      });
     };
     window.addEventListener("godmode:show-chat", onShowChat);
     return () => window.removeEventListener("godmode:show-chat", onShowChat);
-  }, []);
+  }, [activeAgentId, openOrFocusChatWindow, setChatInboxOpen]);
+
+  const ensureDefaultAgentWindow = useCallback(() => {
+    openOrFocusChatWindow({
+      kind: "agent",
+      agentId: activeAgentId,
+      title:
+        activeAgentId === "intelligence"
+          ? "Intelligence"
+          : activeAgentId.charAt(0).toUpperCase() + activeAgentId.slice(1),
+    });
+  }, [activeAgentId, openOrFocusChatWindow]);
+
+  const chatSurfaceOpen =
+    chatInboxOpen || openChatWindows.some((w) => !w.minimized);
 
   const toggleEtherChat = useCallback(() => {
-    setEtherChatOpen((v) => !v);
-  }, []);
+    if (chatSurfaceOpen || etherChatOpen) {
+      setEtherChatOpen(false);
+      setChatInboxOpen(false);
+      closeAllChatWindows();
+      return;
+    }
+    setEtherChatOpen(true);
+    setChatInboxOpen(true);
+    ensureDefaultAgentWindow();
+  }, [
+    chatSurfaceOpen,
+    closeAllChatWindows,
+    ensureDefaultAgentWindow,
+    etherChatOpen,
+    setChatInboxOpen,
+  ]);
+
+  // Desktop default: open Intelligence as a floating window (no ether tray).
+  const bootstrappedChat = useRef(false);
+  useEffect(() => {
+    if (bootstrappedChat.current || !etherChatOpen) return;
+    bootstrappedChat.current = true;
+    ensureDefaultAgentWindow();
+  }, [etherChatOpen, ensureDefaultAgentWindow]);
+
+  const inboxUnread = useMemo(
+    () => unreadCountsByKind(dmConversations),
+    [dmConversations]
+  );
+  const showChatBadge = Math.max(dmUnreadCount, inboxUnread.total);
 
   const resetWindowAnchors = useCallback(() => {
     if (informationNode) openInformationPanel(informationNode);
@@ -1669,9 +1726,10 @@ export function ChatGraphCanvas({
     composerInputRef.current?.blur();
   }, [graphFilter]);
 
-  const composerPlaceholder = etherChatOpen
-    ? "Send follow-up"
-    : "Ask Intelligence, search the Graph, or type an action…";
+  const composerPlaceholder =
+    chatSurfaceOpen || etherChatOpen
+      ? "Send follow-up"
+      : "Ask Intelligence, search the Graph, or type an action…";
 
   useEffect(() => {
     const el = bottomChromeRef.current;
@@ -1811,7 +1869,26 @@ export function ChatGraphCanvas({
       ) : null}
       <WindowAnchorGridOverlay open={anchorGridOpen} anchorPickMode={anchorPickMode} />
 
-      {/* Light/dark toggle: top right over the canvas */}
+      {/* Trophy (left) + light/dark (right): mirrored outer chrome */}
+      <div className="pointer-events-auto absolute top-4 left-4 z-50">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-background/80 shadow-sm backdrop-blur-sm"
+                aria-label="Top 10 Board"
+                onClick={() => setTopTenOpen(true)}
+              />
+            }
+          >
+            <TrophyIcon className="text-amber-500" />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Top 10 Board</TooltipContent>
+        </Tooltip>
+      </div>
       <div className="pointer-events-auto absolute top-4 right-4 z-50">
         <ModeToggle
           size="icon-sm"
@@ -1820,11 +1897,11 @@ export function ChatGraphCanvas({
         />
       </div>
 
-      {/* Centered top stack: ticker + system notice bar */}
+      {/* Centered top stack: ticker + system notice (full ticker width) */}
       <div className="pointer-events-none absolute inset-x-0 top-4 z-50 flex justify-center px-14">
         <div
           ref={bottomChromeRef}
-          className="pointer-events-auto flex w-max max-w-full flex-col items-center gap-1.5"
+          className="pointer-events-auto relative flex w-full max-w-2xl flex-col items-center gap-1.5"
         >
           {topNotice ? (
             <div className="w-full break-words rounded-md border border-border/60 bg-background/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
@@ -1849,50 +1926,6 @@ export function ChatGraphCanvas({
         aria-label="Workspace tools"
         className="pointer-events-auto absolute top-1/2 left-3 z-50 flex -translate-y-1/2 flex-col gap-1.5"
       >
-        <GraphLeftTabIconButton
-          label="Node Information"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "info"
-          }
-          onClick={() => handleLeftTabClick("info")}
-        >
-          <InfoIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Contacts"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "contacts"
-          }
-          onClick={() => handleLeftTabClick("contacts")}
-        >
-          <UsersIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Direct Messages"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "dms"
-          }
-          onClick={() => handleLeftTabClick("dms")}
-        >
-          <MessageCircleIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Channels"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "channels"
-          }
-          onClick={() => handleLeftTabClick("channels")}
-        >
-          <HashIcon />
-        </GraphLeftTabIconButton>
         <GraphLeftTabIconButton
           label="Notifications"
           pressed={
@@ -1936,28 +1969,6 @@ export function ChatGraphCanvas({
           onClick={() => handleLeftTabClick("knowledge")}
         >
           <BookOpenIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Bank"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "bank"
-          }
-          onClick={() => handleLeftTabClick("bank")}
-        >
-          <LandmarkIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Agent Vault"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "vault"
-          }
-          onClick={() => handleLeftTabClick("vault")}
-        >
-          <ShieldCheckIcon />
         </GraphLeftTabIconButton>
         <GraphLeftTabIconButton
           label="Support"
@@ -2020,14 +2031,14 @@ export function ChatGraphCanvas({
         ) : null}
       </div>
 
-      {/* Bottom-center message box (matches top chrome width). Ether log optional. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-50 flex justify-center px-14">
+      {/* Bottom chrome: composer + chat toggle */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-50 flex items-end justify-center gap-3 px-4">
         <div
-          className="pointer-events-auto flex max-h-[min(42vh,28rem)] max-w-[calc(100%-2rem)] flex-col"
+          className="pointer-events-auto flex w-full max-w-[calc(100%-3.5rem)] flex-col gap-2"
           style={{
-            width: bottomChromeWidth
-              ? `${bottomChromeWidth}px`
-              : "min(100%, 42rem)",
+            maxWidth: bottomChromeWidth
+              ? `min(${bottomChromeWidth + 48}px, calc(100% - 3.5rem))`
+              : "min(100% - 3.5rem, 48rem)",
           }}
         >
           <GraphSmartSuggest
@@ -2041,12 +2052,12 @@ export function ChatGraphCanvas({
             value={graphFilter}
             onValueChange={setGraphFilter}
             placeholder={composerPlaceholder}
-            logOpen={etherChatOpen}
             browseActive={smartSuggestions.length > 0}
             onSuggestEnter={onSuggestEnter}
             onSuggestArrow={onSuggestArrow}
             onAskForce={() => {
               setEtherChatOpen(true);
+              ensureDefaultAgentWindow();
               setSendRequestId((n) => n + 1);
             }}
             sendRequestId={sendRequestId}
@@ -2067,31 +2078,58 @@ export function ChatGraphCanvas({
             }
           />
         </div>
+
+        {/*
+          Align with the h-12 composer input (not chips above it).
+          (48px input − 28px icon-sm) / 2 = 10px lift from the shared bottom edge.
+        */}
+        <div className="pointer-events-auto flex shrink-0 items-end pb-2.5">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={
+                    chatSurfaceOpen || etherChatOpen ? "secondary" : "outline"
+                  }
+                  className="relative bg-background/80 shadow-sm backdrop-blur-sm"
+                  aria-pressed={chatSurfaceOpen || etherChatOpen}
+                  aria-label={
+                    chatSurfaceOpen || etherChatOpen
+                      ? "Hide chat"
+                      : "Show chat"
+                  }
+                  onClick={toggleEtherChat}
+                />
+              }
+            >
+              {chatSurfaceOpen || etherChatOpen ? (
+                <MessageSquareOff />
+              ) : (
+                <MessageSquare />
+              )}
+              {showChatBadge > 0 ? (
+                <Badge className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px]">
+                  {showChatBadge > 99 ? "99+" : showChatBadge}
+                </Badge>
+              ) : null}
+            </TooltipTrigger>
+            <TooltipContent>
+              {chatSurfaceOpen || etherChatOpen ? "Hide chat" : "Show chat"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
-      {/* Show / hide ether chat log: bottom-right corner */}
-      <div className="pointer-events-auto absolute right-4 bottom-4 z-50">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                size="icon-sm"
-                variant={etherChatOpen ? "secondary" : "outline"}
-                className="bg-background/80 shadow-sm backdrop-blur-sm"
-                aria-pressed={etherChatOpen}
-                aria-label={etherChatOpen ? "Hide chat" : "Show chat"}
-                onClick={toggleEtherChat}
-              />
-            }
-          >
-            {etherChatOpen ? <MessageSquareOff /> : <MessageSquare />}
-          </TooltipTrigger>
-          <TooltipContent>
-            {etherChatOpen ? "Hide chat" : "Show chat"}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+      <ChatInboxWindow
+        composerText={graphFilter}
+        onComposerDraftChange={setGraphFilter}
+      />
+      <ChatThreadWindowsHost
+        composerText={graphFilter}
+        onComposerDraftChange={setGraphFilter}
+      />
 
       {/* focusId retained for future chat-focus merge */}
       <span className="sr-only" data-focus-chat={focusId} />

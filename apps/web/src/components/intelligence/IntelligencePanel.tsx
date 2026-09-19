@@ -1549,10 +1549,10 @@ export function IntelligencePanel({
                 }
       }
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-card/95 text-card-foreground backdrop-blur-md",
+        "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
         isPhone
           ? "fixed inset-0 z-50"
-          : "absolute z-40 rounded-xl border-2 shadow-2xl"
+          : "absolute z-[110] rounded-xl border-2 shadow-2xl"
       )}
     >
       {!isPhone && !isMaximized && !lockResize && (

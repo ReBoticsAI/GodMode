@@ -5,7 +5,6 @@ import {
   removePlatformVaultSecret,
   upsertPlatformVaultSecret,
 } from "./agents/agents-db.js";
-import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 
 /**
  * Fixed secret id/name for Z.AI GLM Coding Plan (#230).
@@ -33,7 +32,7 @@ export const ZAI_CODING_CHAT_CATALOG = [
 ] as const;
 
 /** Vault UI sources only. Platform admin supply is separate. */
-export type ZaiCodingAuthSource = "env" | "vault" | "none";
+export type ZaiCodingAuthSource = "vault" | "none";
 
 export interface ZaiCodingAuthStatus {
   connected: boolean;
@@ -45,18 +44,16 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
-/** Chat / readiness: personal vault → Admin platform supply → env. */
+/** Personal Vault BYOK only. Supply is managed-chat gated. */
 export function resolveZaiCodingApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const vault = resolvePlatformVaultSecret(db, {
+  return resolvePlatformVaultSecret(db, {
     baseId: ZAI_CODING_API_KEY_SECRET_ID,
     name: ZAI_CODING_API_KEY_SECRET_NAME,
     agentId,
   });
-  if (vault) return vault;
-  return resolveGodModeInferenceSupplyKey("zai_coding");
 }
 
 export function upsertZaiCodingApiKey(
@@ -83,7 +80,7 @@ export function removeZaiCodingApiKey(
   });
 }
 
-/** Personal / workspace BYOK for Vault cards (not Admin platform supply). */
+/** Personal / workspace BYOK for Vault cards (not Admin / env supply). */
 export function getZaiCodingAuthStatus(
   db: AppDatabase,
   agentId?: string | null
@@ -95,10 +92,6 @@ export function getZaiCodingAuthStatus(
   });
   if (value) {
     return { connected: true, source: "vault", masked: maskKey(value) };
-  }
-  const env = process.env.ZAI_CODING_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
   }
   return { connected: false, source: "none" };
 }

@@ -45,14 +45,14 @@ export function OptimizedInferenceSection({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-sm font-medium">Preferred BYOK</h2>
+        <h2 className="text-sm font-medium">Supported BYOK</h2>
         <p className="text-sm text-muted-foreground">
-          Your own DeepSeek, Z.AI (GLM payg), and Qwen keys after you graduate
-          from guided onboarding. Stored in your Platform Vault.
+          Your own DeepSeek, Z.AI (GLM payg), and Qwen keys. Supported by GodMode
+          Inference for personal use. Stored in your Platform Vault.
           {isAdmin ? (
             <>
               {" "}
-              Platform-wide keys for new-user GodMode Inference belong in{" "}
+              Platform-wide keys for managed GodMode Inference belong in{" "}
               <button
                 type="button"
                 className="font-medium text-primary underline-offset-2 hover:underline"

@@ -23,6 +23,7 @@ import {
   WorkflowIcon,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -404,9 +405,13 @@ export function InformationFloatingPanel() {
     }
   };
 
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
   const node = informationNode;
   const accent = node
-    ? graphNodeColor(node.kind, node.id, null, node.objectType, node.label)
+    ? graphNodeColor(node.kind, node.id, null, node.objectType, node.label, {
+        isLight,
+      })
     : "#a78bfa";
   const statusBits =
     node?.status

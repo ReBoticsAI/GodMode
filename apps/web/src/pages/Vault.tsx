@@ -45,6 +45,7 @@ import { MinimaxPaygCard } from "@/pages/ai-settings/MinimaxPaygCard";
 import { CustomOpenAiCard } from "@/pages/ai-settings/CustomOpenAiCard";
 import { QwenDashScopeCard } from "@/pages/ai-settings/QwenDashScopeCard";
 import { OptimizedInferenceSection } from "@/pages/ai-settings/OptimizedInferenceSection";
+import { GodModeInferencePanel } from "@/pages/ai-settings/GodModeInferencePanel";
 import { InferenceConnectOverview } from "@/pages/ai-settings/provider-connect-methods";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
@@ -344,21 +345,29 @@ export function InferenceTab({
   return (
     <Tabs value={sub} onValueChange={onSubChange} className="w-full">
       <TabsList variant="line" className="w-full flex-wrap justify-start">
-        <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
-        <TabsTrigger value="api-keys">API Keys</TabsTrigger>
-        <TabsTrigger value="optimized">Preferred BYOK</TabsTrigger>
+        <TabsTrigger value="godmode">GodMode Inference</TabsTrigger>
+        <TabsTrigger value="supported">Supported</TabsTrigger>
+        <TabsTrigger value="subscriptions">Advanced subscriptions</TabsTrigger>
+        <TabsTrigger value="api-keys">Advanced API keys</TabsTrigger>
         <TabsTrigger value="search">Search</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="godmode" className="mt-4 flex flex-col gap-6">
+        <GodModeInferencePanel />
+      </TabsContent>
+
+      <TabsContent value="supported" className="mt-4 flex flex-col gap-6">
+        <OptimizedInferenceSection vaultAgentId={null} />
+      </TabsContent>
 
       <TabsContent value="subscriptions" className="mt-4 flex flex-col gap-6">
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-sm font-medium">Subscriptions</h2>
+            <h2 className="text-sm font-medium">Advanced subscriptions</h2>
             <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Each card shows only connect
-              methods that work today (subscription key, User API key / SDK, or PAT).
-              Stored in the Platform Vault. For metered Z.AI Platform payg, use the
-              Preferred BYOK tab; Coding Plan stays here.
+              Unsupported bring-your-own plans. GodMode supports DeepSeek, Z.AI,
+              and Qwen for managed Inference and Supported BYOK. Other
+              subscriptions remain available for power users.
             </p>
           </div>
           <InferenceConnectOverview bucket="subscriptions" />
@@ -377,14 +386,11 @@ export function InferenceTab({
       <TabsContent value="api-keys" className="mt-4 flex flex-col gap-6">
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-sm font-medium">API keys</h2>
+            <h2 className="text-sm font-medium">Advanced API keys</h2>
             <p className="text-sm text-muted-foreground">
-              Metered BYOK. Primary chat uses GodMode Inference (trial, then pay
-              through GodMode). Each card stores a fixed credential and applies a
-              provider-tuned harness. Connect method today is paste API key (no
-              LLM OAuth cards yet). DeepSeek, Z.AI payg, and Qwen are also featured
-              under Preferred BYOK (personal keys; platform supply is Admin →
-              GodMode Inference).
+              Unsupported metered BYOK. DeepSeek, Z.AI payg, and Qwen are
+              featured under Supported. Primary chat uses GodMode Inference
+              (welcome allowance, then packs and subscriptions).
             </p>
           </div>
           <InferenceConnectOverview bucket="api-keys" />
@@ -402,10 +408,6 @@ export function InferenceTab({
           <QwenDashScopeCard vaultAgentId={null} />
           <CustomOpenAiCard vaultAgentId={null} />
         </section>
-      </TabsContent>
-
-      <TabsContent value="optimized" className="mt-4 flex flex-col gap-6">
-        <OptimizedInferenceSection vaultAgentId={null} />
       </TabsContent>
 
       <TabsContent value="search" className="mt-4 flex flex-col gap-6">

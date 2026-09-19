@@ -340,7 +340,7 @@ function NodeGlyph({
         transform={false}
         occlude={false}
         distanceFactor={distanceFactor}
-        zIndexRange={[100, 0]}
+        zIndexRange={[20, 0]}
         style={{ pointerEvents: "auto", willChange: "transform" }}
       >
         <GraphNodeGlyph
@@ -530,8 +530,11 @@ function SceneBody({
   }, [projection.nodes, positionOverrides]);
 
   const nodeColors = useMemo(
-    () => buildGraphNodeColors(projection.nodes, projection.edges),
-    [projection.nodes, projection.edges]
+    () =>
+      buildGraphNodeColors(projection.nodes, projection.edges, {
+        isLight,
+      }),
+    [projection.nodes, projection.edges, isLight]
   );
 
   const hidden = useMemo(
@@ -686,7 +689,12 @@ function SceneBody({
           key={n.id}
           node={n}
           position={positions.get(n.id) ?? { x: 0, y: 0, z: 0 }}
-          color={nodeColors.get(n.id) ?? graphNodeColor(n.kind, n.id)}
+          color={
+            nodeColors.get(n.id) ??
+            graphNodeColor(n.kind, n.id, null, n.objectType, n.label, {
+              isLight,
+            })
+          }
           selected={selectedId === n.id}
           adjacent={adjacentIds.has(n.id)}
           collapsed={collapsedIds.has(n.id)}
@@ -710,9 +718,11 @@ export const GraphScene3D = forwardRef<
     onNodeActivate: (node: GraphProjectionNode) => void;
     /** Called on single click (select). Does not open windows by itself. */
     onNodeSelect?: (node: GraphProjectionNode) => void;
+    /** Fires whenever selection changes (click or imperative selectNode). */
+    onSelectionChange?: (node: GraphProjectionNode | null) => void;
   }
 >(function GraphScene3D(
-  { projection, lowPower, onNodeActivate, onNodeSelect },
+  { projection, lowPower, onNodeActivate, onNodeSelect, onSelectionChange },
   ref
 ) {
   const { resolvedTheme } = useTheme();
@@ -809,11 +819,13 @@ export const GraphScene3D = forwardRef<
 
   const selectNode = useCallback(
     (nodeId: string) => {
-      if (!projection.nodes.some((n) => n.id === nodeId)) return;
+      const node = projection.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
       setSelectedId(nodeId);
       focusNode(nodeId);
+      onSelectionChange?.(node);
     },
-    [focusNode, projection.nodes]
+    [focusNode, onSelectionChange, projection.nodes]
   );
 
   useImperativeHandle(
@@ -826,9 +838,10 @@ export const GraphScene3D = forwardRef<
     (node: GraphProjectionNode) => {
       setSelectedId(node.id);
       focusNode(node.id);
+      onSelectionChange?.(node);
       onNodeSelect?.(node);
     },
-    [focusNode, onNodeSelect]
+    [focusNode, onNodeSelect, onSelectionChange]
   );
 
   const onToggleCollapse = useCallback((nodeId: string) => {

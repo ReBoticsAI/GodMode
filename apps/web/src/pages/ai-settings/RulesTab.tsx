@@ -24,6 +24,7 @@ import {
   deleteAiRule,
   fetchAiRules,
   importWorkspaceKnowledge,
+  isUnauthorizedError,
   rejectAiRule,
   updateAiRuleContent,
   updateAiRuleState,
@@ -119,6 +120,7 @@ export function RulesTab({ visible = true }: { visible?: boolean }) {
       .then((r) => setRules(r.rules))
       .catch((err) => {
         setRules([]);
+        if (isUnauthorizedError(err)) return;
         toast.error(
           err instanceof Error
             ? `Failed to load rules: ${err.message}`

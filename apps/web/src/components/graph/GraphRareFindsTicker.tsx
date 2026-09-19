@@ -1,12 +1,5 @@
 import { useState, useEffect, useId } from "react";
-import { TrophyIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export type RareFindRarity =
   | "common"
@@ -176,7 +169,7 @@ export function GraphRareFindsTicker({
   const displayItems = [...items, ...items];
 
   return (
-    <div className="relative flex h-8 w-full max-w-2xl items-center overflow-hidden rounded-md border border-border/60 bg-background/80 px-2 shadow-sm backdrop-blur-sm">
+    <div className="relative flex h-8 w-full items-center overflow-hidden rounded-md border border-border/60 bg-background/80 px-2 shadow-sm backdrop-blur-sm">
       <style>{`
         @keyframes ticker_${animationName} {
           0% { transform: translate3d(0, 0, 0); }
@@ -184,67 +177,44 @@ export function GraphRareFindsTicker({
         }
       `}</style>
 
-      <div className="flex h-full w-full items-center justify-between overflow-hidden">
+      <div
+        className="flex h-full w-full cursor-pointer items-center overflow-hidden"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onClick={() => onOpenLeaderboard?.()}
+        title="Click to view Top 10 Board"
+      >
         <div
-          className="flex flex-1 cursor-pointer items-center overflow-hidden"
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-          onClick={() => onOpenLeaderboard?.()}
-          title="Click to view Top 10 Board"
+          className="flex shrink-0 items-center gap-6 whitespace-nowrap will-change-transform"
+          style={{
+            animation: `ticker_${animationName} 45s linear infinite`,
+            animationPlayState: isPaused ? "paused" : "running",
+          }}
         >
-          <div
-            className="flex shrink-0 items-center gap-6 whitespace-nowrap will-change-transform"
-            style={{
-              animation: `ticker_${animationName} 45s linear infinite`,
-              animationPlayState: isPaused ? "paused" : "running",
-            }}
-          >
-            {displayItems.map((item, idx) => {
-              const style = getRarityStyle(item.rarity);
-              return (
-                <div
-                  key={`${item.id}-${idx}`}
-                  className="inline-flex items-center gap-1.5 text-xs select-none"
-                >
-                  <Badge
-                    variant="outline"
-                    className={`h-4.5 px-1.5 py-0 text-[10px] ${style.badgeClass}`}
-                  >
-                    {style.label}
-                  </Badge>
-                  <span className={style.textClass}>{item.title}</span>
-                  {item.points ? (
-                    <span className="font-mono text-[10px] font-semibold text-emerald-500 dark:text-emerald-400">
-                      +{item.points}
-                    </span>
-                  ) : null}
-                  <span className="text-muted-foreground/40">•</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {onOpenLeaderboard ? (
-          <div className="ml-2 flex shrink-0 items-center gap-1 border-l border-border/40 pl-1.5">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={onOpenLeaderboard}
-                    aria-label="Top 10 Board"
-                  />
-                }
+          {displayItems.map((item, idx) => {
+            const style = getRarityStyle(item.rarity);
+            return (
+              <div
+                key={`${item.id}-${idx}`}
+                className="inline-flex items-center gap-1.5 text-xs select-none"
               >
-                <TrophyIcon className="size-3.5 text-amber-500 hover:text-amber-400" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Top 10 Board</TooltipContent>
-            </Tooltip>
-          </div>
-        ) : null}
+                <Badge
+                  variant="outline"
+                  className={`h-4.5 px-1.5 py-0 text-[10px] ${style.badgeClass}`}
+                >
+                  {style.label}
+                </Badge>
+                <span className={style.textClass}>{item.title}</span>
+                {item.points ? (
+                  <span className="font-mono text-[10px] font-semibold text-emerald-500 dark:text-emerald-400">
+                    +{item.points}
+                  </span>
+                ) : null}
+                <span className="text-muted-foreground/40">•</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

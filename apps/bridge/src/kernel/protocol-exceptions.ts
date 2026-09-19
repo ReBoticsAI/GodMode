@@ -32,6 +32,22 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-config",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/config",
+    rationale:
+      "Public GodMode Inference pack/subscription catalog and supply-ready flag; no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-stripe-webhook",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/stripe/webhook",
+    rationale:
+      "Alias Stripe webhook for GodMode Inference grant top-ups; same STRIPE_WEBHOOK_SECRET demux as /api/saas/stripe/webhook (metadata godmode_inference=1).",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "graph-projection",
     methods: ["GET"],
     pathPattern: "/api/graph/projection",

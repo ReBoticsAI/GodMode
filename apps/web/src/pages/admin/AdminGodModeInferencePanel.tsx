@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   fetchGodModeInferenceConfig,
   updateGodModeInferenceConfig,
+  fetchAdminGodModeInferenceHealth,
   type GodModeInferenceConfig,
   type GodModeInferenceProviderStatus,
 } from "@/api";
@@ -134,6 +135,13 @@ function ProviderKeyCard({
  */
 export function AdminGodModeInferencePanel() {
   const [cfg, setCfg] = useState<GodModeInferenceConfig | null>(null);
+  const [health, setHealth] = useState<{
+    activeGrants: number;
+    totalSpentUsd: number;
+    totalBudgetUsd: number;
+    supplyReady: boolean;
+    plansConfigured: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deepseekKey, setDeepseekKey] = useState("");
@@ -143,8 +151,14 @@ export function AdminGodModeInferencePanel() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    fetchGodModeInferenceConfig()
-      .then(setCfg)
+    Promise.all([
+      fetchGodModeInferenceConfig(),
+      fetchAdminGodModeInferenceHealth().catch(() => null),
+    ])
+      .then(([config, h]) => {
+        setCfg(config);
+        setHealth(h);
+      })
       .catch((err) =>
         toast.error(
           err instanceof Error ? err.message : "Failed to load GodMode Inference"
@@ -196,10 +210,11 @@ export function AdminGodModeInferencePanel() {
             GodMode Inference
           </CardTitle>
           <CardDescription>
-            Platform-wide keys for new users&apos; guided onboarding Intelligence.
-            Stored encrypted in the platform database (not each user&apos;s Platform
-            Vault). Personal BYOK stays under Platform Vault after users graduate
-            from guidance.
+            Platform supply keys for managed GodMode Inference chat only
+            (Intelligence welcome guide and paid packs/subscriptions). Encrypted
+            in the platform database. Never appears as a user Vault connection.
+            Never powers other agents or Advanced BYOK. Not a vendor partnership
+            claim.
           </CardDescription>
           <CardAction>
             <Badge variant={cfg.configured ? "default" : "secondary"}>
@@ -210,8 +225,8 @@ export function AdminGodModeInferencePanel() {
         <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             Sign up with each provider under the operator account, then paste keys
-            below. New workspaces get Inference without entering their own keys
-            first.
+            below. New users get GodMode Inference without entering their own keys
+            first. Spend is limited to Intelligence with an active grant.
           </p>
           <ul className="flex flex-col gap-2">
             {SIGNUP_LINKS.map((link) => (
@@ -235,9 +250,26 @@ export function AdminGodModeInferencePanel() {
         </CardContent>
       </Card>
 
+      {health ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Grant health</CardTitle>
+            <CardDescription>
+              Active managed allowances across this instance.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+            <span>{health.activeGrants} active grants</span>
+            <span>${health.totalSpentUsd.toFixed(2)} spent</span>
+            <span>${health.totalBudgetUsd.toFixed(2)} budgeted</span>
+            <span>{health.plansConfigured} catalog plans</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <ProviderKeyCard
         title="DeepSeek"
-        description="Metered DeepSeek platform API key for signup-guide chat."
+        description="Metered DeepSeek platform API key for managed GodMode Inference only."
         status={cfg.deepseek}
         inputId="admin-deepseek-key"
         value={deepseekKey}

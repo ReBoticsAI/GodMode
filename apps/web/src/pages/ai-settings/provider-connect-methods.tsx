@@ -23,7 +23,11 @@ export type VaultInferenceBucket =
   | "subscriptions"
   | "api-keys"
   | "optimized"
+  | "supported"
+  | "godmode"
   | "search";
+
+export type InferenceSupportTier = "supported" | "advanced" | "search";
 
 export type InferenceProviderId =
   | "cursor"

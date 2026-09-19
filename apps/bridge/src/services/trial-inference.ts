@@ -36,19 +36,18 @@ import {
  * UI may seed this without a model turn. Keep in sync with buildFirstLandGreeting().
  */
 export const FIRST_LAND_GREETING =
-  "Hey. I have a tiny welcome allowance to show you around. Ask about GodMode, the Graph, and signing up for GodMode Inference (with or without Cloud). When you are ready, create your account and we will keep going.";
+  "Hey. I have a tiny GodMode Inference allowance to show you around. This is your GodMode welcome tour. Ask about the Graph, buying more Inference, or connecting DeepSeek / Z.AI / Qwen. When you are ready, create your account or top up.";
 
-/** Vault path copy for advanced BYOK (personal provider key). */
-export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → API Keys";
+/** Vault path copy for supported BYOK (DeepSeek / Z.AI / Qwen). */
+export const TRIAL_PASTE_KEY_PATH = "Vault → Inference → Supported";
 
 /**
- * Placeholder path until GodMode Inference pay-as-you-go billing ships.
- * Signup CTA for the welcome-guide funnel.
+ * GodMode Inference purchase / top-up path (Vault Inference panel).
  */
-export const TRIAL_PAY_GODMODE_PATH = "/?auth=1";
+export const TRIAL_PAY_GODMODE_PATH = "/platform-vault?vault=inference&sub=godmode";
 
-export const TRIAL_PRIMARY_CTA_LABEL = "Sign up for GodMode Inference";
-export const TRIAL_PAY_CTA_LABEL = "Create account";
+export const TRIAL_PRIMARY_CTA_LABEL = "Get GodMode Inference";
+export const TRIAL_PAY_CTA_LABEL = "Buy $1 more";
 
 /**
  * Default welcome-guide model when only OpenRouter shared fallback is set.
@@ -73,10 +72,10 @@ export const DEFAULT_TRIAL_AFFILIATE_SIGNUP_URL =
  */
 export const SIGNUP_GUIDE_HARNESS_DELTA = [
   "<model_profile id=\"godmode-signup-guide\">",
-  "You are the GodMode welcome guide. Your only job is to help a new visitor understand the Graph and sign up for GodMode Inference (Local Bridge and/or GodMode Cloud).",
-  "Stay on: what GodMode is, Graph nodes (You, Hub, Intelligence, Workspaces, Vaults), auth/signup, Inference plans, Local vs Cloud.",
-  "If the user asks for unrelated coding, homework, general knowledge, or long free-form chat, briefly refuse and steer them back to signup / platform tour.",
-  "Do not invent billing that does not exist. Prefer short turns. End useful answers with a clear signup nudge.",
+  "You are the GodMode welcome guide. Your only job is to help a new visitor understand the Graph and use GodMode Inference (managed chat on DeepSeek, Z.AI, and Qwen under GodMode accounts) or connect their own supported keys.",
+  "Stay on: what GodMode is, Graph nodes (You, Hub, Intelligence, Workspaces, Vaults), auth/signup, GodMode Inference packs and subscriptions, Local models, Supported BYOK (DeepSeek / Z.AI / Qwen).",
+  "If the user asks for unrelated coding, homework, general knowledge, or long free-form chat, briefly refuse and steer them to buy more GodMode Inference or connect a supported key in Vault.",
+  "Do not invent vendor partnerships. Prefer short turns. End useful answers with a clear GodMode Inference or Supported BYOK nudge.",
   "</model_profile>",
 ].join("\n");
 
@@ -105,6 +104,13 @@ const SIGNUP_GUIDE_ALLOW_TERMS = [
   "pricing",
   "token",
   "model",
+  "deepseek",
+  "qwen",
+  "z.ai",
+  "zai",
+  "glm",
+  "subscribe",
+  "subscription",
   "how do i",
   "what is",
   "where is",
@@ -128,7 +134,7 @@ export function isSignupGuideTopic(message: string): boolean {
 }
 
 export const SIGNUP_GUIDE_REFUSAL =
-  "This welcome chat is only for learning GodMode and signing up for GodMode Inference. Ask about the Graph, Inference, Local vs Cloud, or how to create your account.";
+  "This welcome chat is only for learning GodMode and using GodMode Inference. Ask about the Graph, buying more Inference, Local models, or connecting DeepSeek / Z.AI / Qwen in Vault.";
 
 /**
  * Best-effort personal OpenRouter signup entry (browser / email wall).
@@ -238,7 +244,7 @@ export function buildFirstLandGreeting(opts?: {
   const brandBit = email
     ? ` This welcome tour is for ${email}.`
     : " This is your GodMode welcome tour.";
-  return `${hey}. I have a tiny allowance to show you around.${brandBit} Ask about the Graph and signing up for GodMode Inference (with or without Cloud). When you are ready, create your account.`;
+  return `${hey}. I have a tiny GodMode Inference allowance to show you around.${brandBit} Ask about the Graph, buying more Inference, or connecting DeepSeek / Z.AI / Qwen. When you are ready, create your account or top up.`;
 }
 
 /**
@@ -316,7 +322,7 @@ function readEnv(name: string): string {
 function parseOrder(): TrialProvisionMechanism[] {
   const raw =
     readEnv("TRIAL_PROVISION_ORDER") ||
-    "godmodeInferenceSupply,mgmtApi,platformShared";
+    "godmodeInferenceSupply";
   const allowed = new Set<TrialProvisionMechanism>([
     "godmodeInferenceSupply",
     "mgmtApi",
@@ -416,13 +422,13 @@ function remainingOpsNote(cfg: ReturnType<typeof trialInferenceConfig>): string[
     );
   }
   notes.push(
-    `Pay-as-you-go GodMode Inference billing is not shipped. Placeholder path: ${TRIAL_PAY_GODMODE_PATH} (Platform Vault → Cloud seat billing today).`
+    `GodMode Inference packs and subscriptions: ${TRIAL_PAY_GODMODE_PATH} (POST /api/godmode-inference/checkout).`
   );
   notes.push(
-    "Prompt-threshold convert playbook should nudge pay-through-GodMode (not OpenRouter email). Key revoke/expiry job remains on #758."
+    "Prompt-threshold convert playbook should nudge buy more GodMode Inference or Supported BYOK. Key revoke/expiry job remains on #758."
   );
   notes.push(
-    "Personal OpenRouter signup / paste-key is advanced BYOK only (affiliateSignupUrl / personalSignupUrl / pasteKeyPath)."
+    "Supported BYOK is DeepSeek / Z.AI / Qwen (pasteKeyPath). Other providers are Advanced BYOK."
   );
   notes.push(
     `Advanced BYOK CTA URL: ${cfg.affiliateSignupUrl} (set TRIAL_AFFILIATE_SIGNUP_URL to override).`
@@ -533,35 +539,50 @@ function upsertGrant(
     expiresAt: string;
     providerKeyHash?: string | null;
     providerKeyId?: string | null;
+    budgetUsd?: number;
   }
 ): void {
   ensureTrialInferenceTables(db);
   const id = randomUUID();
+  const provider =
+    opts.mechanism === "godmodeInferenceSupply" ? "godmode" : "openrouter";
+  const budget =
+    opts.budgetUsd ??
+    Math.max(
+      0.01,
+      Number(readEnv("TRIAL_INFERENCE_BUDGET_USD") || TRIAL_DEFAULT_BUDGET_USD)
+    );
   db.prepare(
     `INSERT INTO trial_inference_grants (
        id, subject_key, user_id, visitor_key, provider, mechanism, status,
-       model_id, provider_key_hash, provider_key_id, expires_at
-     ) VALUES (?, ?, ?, ?, 'openrouter', ?, 'active', ?, ?, ?, ?)
+       kind, model_id, provider_key_hash, provider_key_id, expires_at,
+       budget_usd, spent_usd, prompt_count
+     ) VALUES (?, ?, ?, ?, ?, ?, 'active', 'trial', ?, ?, ?, ?, ?, 0, 0)
      ON CONFLICT(subject_key) DO UPDATE SET
        user_id=excluded.user_id,
        visitor_key=excluded.visitor_key,
+       provider=excluded.provider,
        mechanism=excluded.mechanism,
        status='active',
+       kind='trial',
        model_id=excluded.model_id,
        provider_key_hash=COALESCE(excluded.provider_key_hash, provider_key_hash),
        provider_key_id=COALESCE(excluded.provider_key_id, provider_key_id),
        expires_at=excluded.expires_at,
+       budget_usd=COALESCE(excluded.budget_usd, budget_usd),
        updated_at=datetime('now')`
   ).run(
     id,
     opts.subjectKey,
     opts.userId ?? null,
     opts.visitorKey ?? null,
+    provider,
     opts.mechanism,
     opts.modelId,
     opts.providerKeyHash ?? null,
     opts.providerKeyId ?? null,
-    opts.expiresAt
+    opts.expiresAt,
+    budget
   );
 }
 
@@ -658,6 +679,7 @@ async function applyGodModeInferenceSupplyToWorkspace(opts: {
         transport: target.transport,
         baseUrl: target.baseUrl,
         apiKeyRef: target.apiKeyRef,
+        managedGodModeInference: true,
       });
     } catch (err) {
       console.warn(
@@ -687,10 +709,7 @@ async function ensureWorkspaceHasTrialKey(opts: {
   budgetUsd: number;
   fetchImpl: typeof fetch;
 }): Promise<"attached" | "reminted" | "already" | "unavailable"> {
-  if (
-    opts.mechanism === "godmodeInferenceSupply" ||
-    isGodModeInferenceSupplyReady()
-  ) {
+  if (opts.mechanism === "godmodeInferenceSupply") {
     const applied = await applyGodModeInferenceSupplyToWorkspace({
       tenantDb: opts.tenantDb,
       llm: opts.llm,
@@ -915,21 +934,29 @@ export async function ensureTrialInference(
     );
   }
 
-  // Pre-auth visitors: report readiness of platform shared path without minting
-  // orphan per-IP keys (unless TRIAL_ALLOW_VISITOR_MINT=true). Chat completions
-  // still require sign-in; TRIAL_PLATFORM_API_KEY can serve Bridge after auth.
+  // Pre-auth visitors: report readiness without minting orphan keys
+  // (unless TRIAL_ALLOW_VISITOR_MINT=true). Respect TRIAL_PROVISION_ORDER.
   if (!opts.userId && !cfg.allowVisitorMint) {
-    if (isGodModeInferenceSupplyReady() || cfg.platformKey) {
+    const visitorMechanism = cfg.order.find((m) => {
+      if (m === "godmodeInferenceSupply") return isGodModeInferenceSupplyReady();
+      if (m === "platformShared") return Boolean(cfg.platformKey);
+      if (m === "mgmtApi") return Boolean(cfg.mgmtKey);
+      return false;
+    }) as TrialProvisionMechanism | undefined;
+    if (
+      visitorMechanism === "godmodeInferenceSupply" ||
+      visitorMechanism === "platformShared"
+    ) {
       return baseStatus(
         {
           ready: true,
-          mechanism: isGodModeInferenceSupplyReady()
-            ? "godmodeInferenceSupply"
-            : "platformShared",
+          mechanism: visitorMechanism,
           status: "deferred_until_auth",
           expiresAt,
           detail:
-            "Platform GodMode Inference supply is configured. Sign in so GodMode can attach Inference to your workspace and select a guide model.",
+            visitorMechanism === "godmodeInferenceSupply"
+              ? "Platform GodMode Inference supply is configured. Sign in so GodMode can attach Inference to your workspace and select a guide model."
+              : "Platform GodMode Inference key is configured. Sign in so GodMode can attach Inference to your workspace Vault and select a guide model.",
         },
         identity
       );

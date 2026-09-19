@@ -6,6 +6,12 @@ import { budgetToolResult, TOOL_OUTPUT_MAX_CHARS } from "../ai-agent.js";
 import { PROVIDER_AGENT_ITERATIONS } from "../agent-loop.js";
 import { resolveSecretRefForAgent, withSecretValue } from "./agents-db.js";
 import { resolveAgentCredential } from "./agent-accounts.js";
+import {
+  isGodModeInferenceSupplySecretId,
+} from "../godmode-inference-supply.js";
+import {
+  resolveGodModeInferenceSupplyForManagedChat,
+} from "../godmode-inference-grants.js";
 import type { AppDatabase } from "../../db.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
 import type { AgentProviderConfig } from "./types.js";
@@ -222,8 +228,21 @@ export class ProviderBackend implements AgentBackend {
         provider,
         secretId: keyRef ?? undefined,
       }) ??
-      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null);
-    if (!resolvedKey) throw new Error("API key not found for provider agent");
+      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null) ??
+      (keyRef && isGodModeInferenceSupplySecretId(keyRef)
+        ? resolveGodModeInferenceSupplyForManagedChat(keyRef, {
+            agentId: req.agent.id,
+            userId: req.toolCtx.userId ?? null,
+          })
+        : null);
+    if (!resolvedKey) {
+      if (keyRef && isGodModeInferenceSupplySecretId(keyRef)) {
+        throw new Error(
+          "GodMode Inference allowance exhausted or unavailable. Buy more GodMode Inference or connect a supported key in Vault."
+        );
+      }
+      throw new Error("API key not found for provider agent");
+    }
 
     return withSecretValue(resolvedKey, async (apiKey) => {
       const model =

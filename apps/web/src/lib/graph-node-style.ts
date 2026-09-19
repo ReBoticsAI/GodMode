@@ -359,10 +359,17 @@ function sameHueFamily(a: number, b: number): boolean {
   return Math.min(d, 360 - d) < 28;
 }
 
-/** Spine-only colors (e.g. white You) must not wash role families on descendants. */
+/** Spine-only colors (white/black You) must not wash role families on descendants. */
 function isSpineReservedColor(hex: string): boolean {
   const hsl = parseHexToHsl(hex);
-  return hsl !== null && hsl.l >= 92 && hsl.s <= 8;
+  if (!hsl) return false;
+  // Near-white (dark mode You) or near-black (light mode You).
+  return (hsl.l >= 92 && hsl.s <= 8) || (hsl.l <= 12 && hsl.s <= 8);
+}
+
+/** You hub: black on light surfaces, white on dark. */
+export function youHubColor(isLight: boolean): string {
+  return isLight ? "#0a0a0b" : "#ffffff";
 }
 
 /**
@@ -373,10 +380,11 @@ export function graphNodeColor(
   nodeId: string,
   parentColor?: string | null,
   objectType?: string | null,
-  label?: string | null
+  label?: string | null,
+  opts?: { isLight?: boolean }
 ): string {
-  // Only the You hub is white. Other User/person nodes keep the green family.
-  if (nodeId === "hub:you") return "#ffffff";
+  // Only the You hub uses theme ink. Other User/person nodes keep the green family.
+  if (nodeId === "hub:you") return youHubColor(Boolean(opts?.isLight));
 
   const family = colorFamilyForNode({
     kind,
@@ -419,7 +427,8 @@ export function buildGraphNodeColors(
     objectType?: string;
     label?: string;
   }>,
-  edges: Array<{ source: string; target: string }>
+  edges: Array<{ source: string; target: string }>,
+  opts?: { isLight?: boolean }
 ): Map<string, string> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const parentOf = new Map<string, string>();
@@ -431,13 +440,21 @@ export function buildGraphNodeColors(
 
   const colors = new Map<string, string>();
   const visiting = new Set<string>();
+  const colorOpts = opts?.isLight != null ? { isLight: opts.isLight } : undefined;
 
   const resolve = (id: string): string => {
     const cached = colors.get(id);
     if (cached) return cached;
     if (visiting.has(id)) {
       const n = byId.get(id);
-      return graphNodeColor(n?.kind ?? "system", id, null, n?.objectType, n?.label);
+      return graphNodeColor(
+        n?.kind ?? "system",
+        id,
+        null,
+        n?.objectType,
+        n?.label,
+        colorOpts
+      );
     }
     visiting.add(id);
     const node = byId.get(id);
@@ -452,7 +469,8 @@ export function buildGraphNodeColors(
       node.id,
       parentColor,
       node.objectType,
-      node.label
+      node.label,
+      colorOpts
     );
     colors.set(id, color);
     visiting.delete(id);

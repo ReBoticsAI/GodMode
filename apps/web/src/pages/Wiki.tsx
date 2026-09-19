@@ -35,6 +35,7 @@ import {
   fetchWikiProposals,
   approveWikiProposal,
   rejectWikiProposal,
+  isUnauthorizedError,
   type WikiPage as WikiPageType,
   type WikiPageProposal,
   type WikiVisibility,
@@ -95,7 +96,9 @@ export function WikiContent({
         setProposals(prop.proposals);
       }
     } catch (err) {
-      toast.error((err as Error).message);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
+      setPages([]);
+      setProposals([]);
     } finally {
       setLoading(false);
     }

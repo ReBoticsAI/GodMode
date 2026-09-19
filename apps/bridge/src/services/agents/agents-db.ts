@@ -5,7 +5,6 @@ import type { AppDatabase } from "../../db.js";
 import { getTenantDb, getTenantIdForDb } from "../../tenant-registry.js";
 import { ensureUserDb, getUserDb, getUserIdForDb } from "../../user-registry.js";
 import { encryptSecret, decryptSecret } from "../holdings/crypto-box.js";
-import { resolveGodModeInferenceSupplyBySecretId } from "../godmode-inference-supply.js";
 import { getTenantOwnerUserId } from "../user-scope.js";
 import { isUserAgentId } from "./user-agent-prompt.js";
 import { defaultKnowsUserForAgent } from "./agent-profile-prompt.js";
@@ -1324,8 +1323,11 @@ export function removePlatformVaultSecret(
 
 /**
  * Resolve apiKeyRef for a running agent: scoped id, direct id (agent/platform),
- * then name in agent → Platform, then Admin GodMode Inference supply for
- * DeepSeek / Z.AI / DashScope when the user has no personal BYOK.
+ * then name in agent → Platform Vault.
+ *
+ * Admin GodMode Inference supply is NOT a Vault miss fallback. Managed
+ * Intelligence chat resolves supply only via
+ * resolveGodModeInferenceSupplyForManagedChat (active grant + Intelligence).
  */
 export function resolveSecretRefForAgent(
   db: AppDatabase,
@@ -1337,9 +1339,7 @@ export function resolveSecretRefForAgent(
   if (fromScoped) return fromScoped;
   const direct = getSecretValueForAgent(db, keyRef, agentId);
   if (direct) return direct;
-  const byName = resolveSecretByName(db, keyRef, agentId);
-  if (byName) return byName;
-  return resolveGodModeInferenceSupplyBySecretId(keyRef);
+  return resolveSecretByName(db, keyRef, agentId);
 }
 
 export function createSecret(

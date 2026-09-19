@@ -78,9 +78,8 @@ const stubLlm = {
 describe("trial-inference", () => {
   it("exports the first-land greeting matching the builder", () => {
     expect(FIRST_LAND_GREETING).toBe(buildFirstLandGreeting());
-    expect(FIRST_LAND_GREETING).toContain("like a genie");
     expect(FIRST_LAND_GREETING).toContain("GodMode Inference");
-    expect(FIRST_LAND_GREETING).toContain("pay to play through GodMode");
+    expect(FIRST_LAND_GREETING).toContain("DeepSeek");
     expect(FIRST_LAND_GREETING).not.toContain("OpenRouter");
     expect(FIRST_LAND_GREETING).not.toContain(TRIAL_PASTE_KEY_PATH);
   });
@@ -91,8 +90,8 @@ describe("trial-inference", () => {
       email: "a@b.c",
     });
     expect(g.startsWith("Hey Alex.")).toBe(true);
-    expect(g).toContain("GodMode Inference for a@b.c");
-    expect(g).toContain("pay to play through GodMode");
+    expect(g).toContain("This welcome tour is for a@b.c");
+    expect(g).toContain("GodMode Inference");
     expect(g).not.toContain("OpenRouter");
     expect(g).not.toContain("—");
     expect(g).not.toContain("--");
@@ -147,6 +146,7 @@ describe("trial-inference", () => {
     const prevZaiCoding = process.env.ZAI_CODING_API_KEY;
     const prevDash = process.env.DASHSCOPE_API_KEY;
     const prevQwen = process.env.QWEN_API_KEY;
+    const prevDisable = process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     delete process.env.OPENROUTER_MANAGEMENT_API_KEY;
     delete process.env.TRIAL_PLATFORM_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
@@ -155,6 +155,7 @@ describe("trial-inference", () => {
     delete process.env.ZAI_CODING_API_KEY;
     delete process.env.DASHSCOPE_API_KEY;
     delete process.env.QWEN_API_KEY;
+    process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = "1";
     try {
       const db = memoryCloud();
       const status = await ensureTrialInference({
@@ -174,9 +175,6 @@ describe("trial-inference", () => {
       expect(status.payGodModePath).toBe(TRIAL_PAY_GODMODE_PATH);
       expect(status.primaryCtaLabel).toBe(TRIAL_PRIMARY_CTA_LABEL);
       expect(status.payCtaLabel).toBe(TRIAL_PAY_CTA_LABEL);
-      expect(status.remainingOps.some((n) => /pay-as-you-go|Pay-as-you-go/i.test(n))).toBe(
-        true
-      );
       expect(status.remainingOps.length).toBeGreaterThan(0);
       db.close();
     } finally {
@@ -196,6 +194,8 @@ describe("trial-inference", () => {
       else delete process.env.DASHSCOPE_API_KEY;
       if (prevQwen != null) process.env.QWEN_API_KEY = prevQwen;
       else delete process.env.QWEN_API_KEY;
+      if (prevDisable != null) process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = prevDisable;
+      else delete process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     }
   });
 
@@ -204,10 +204,14 @@ describe("trial-inference", () => {
     const prevTrial = process.env.TRIAL_PLATFORM_API_KEY;
     const prevOr = process.env.OPENROUTER_API_KEY;
     const prevAllow = process.env.TRIAL_ALLOW_VISITOR_MINT;
+    const prevOrder = process.env.TRIAL_PROVISION_ORDER;
+    const prevDisable = process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     process.env.OPENROUTER_MANAGEMENT_API_KEY = "mgmt-test";
     delete process.env.TRIAL_PLATFORM_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.TRIAL_ALLOW_VISITOR_MINT;
+    process.env.TRIAL_PROVISION_ORDER = "mgmtApi";
+    process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = "1";
     try {
       const db = memoryCloud();
       const status = await ensureTrialInference({
@@ -230,6 +234,10 @@ describe("trial-inference", () => {
       else delete process.env.OPENROUTER_API_KEY;
       if (prevAllow != null) process.env.TRIAL_ALLOW_VISITOR_MINT = prevAllow;
       else delete process.env.TRIAL_ALLOW_VISITOR_MINT;
+      if (prevOrder != null) process.env.TRIAL_PROVISION_ORDER = prevOrder;
+      else delete process.env.TRIAL_PROVISION_ORDER;
+      if (prevDisable != null) process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = prevDisable;
+      else delete process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     }
   });
 
@@ -313,10 +321,14 @@ describe("trial-inference", () => {
     const prevTrial = process.env.TRIAL_PLATFORM_API_KEY;
     const prevOr = process.env.OPENROUTER_API_KEY;
     const prevAllow = process.env.TRIAL_ALLOW_VISITOR_MINT;
+    const prevOrder = process.env.TRIAL_PROVISION_ORDER;
+    const prevDisable = process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     delete process.env.OPENROUTER_MANAGEMENT_API_KEY;
     process.env.TRIAL_PLATFORM_API_KEY = "sk-or-platform";
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.TRIAL_ALLOW_VISITOR_MINT;
+    process.env.TRIAL_PROVISION_ORDER = "platformShared";
+    process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = "1";
     try {
       const db = memoryCloud();
       const status = await ensureTrialInference({
@@ -339,6 +351,10 @@ describe("trial-inference", () => {
       else delete process.env.OPENROUTER_API_KEY;
       if (prevAllow != null) process.env.TRIAL_ALLOW_VISITOR_MINT = prevAllow;
       else delete process.env.TRIAL_ALLOW_VISITOR_MINT;
+      if (prevOrder != null) process.env.TRIAL_PROVISION_ORDER = prevOrder;
+      else delete process.env.TRIAL_PROVISION_ORDER;
+      if (prevDisable != null) process.env.GODMODE_INFERENCE_DISABLE_SUPPLY = prevDisable;
+      else delete process.env.GODMODE_INFERENCE_DISABLE_SUPPLY;
     }
   });
 

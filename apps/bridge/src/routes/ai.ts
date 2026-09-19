@@ -139,6 +139,21 @@ import {
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
 import {
+  isGodModeInferenceSupplySecretId,
+} from "../services/godmode-inference-supply.js";
+import {
+  findActiveGodModeInferenceGrant,
+  isGrantSpendable,
+  recordGodModeInferenceSpend,
+} from "../services/godmode-inference-grants.js";
+import {
+  isSignupGuideModeEnabled,
+  isSignupGuideTopic,
+  SIGNUP_GUIDE_HARNESS_DELTA,
+  SIGNUP_GUIDE_REFUSAL,
+  TRIAL_PAY_GODMODE_PATH,
+} from "../services/trial-inference.js";
+import {
   applyProfileSampling,
   filterSchemasForProfile,
   resolveProfileForAgent,
@@ -1938,6 +1953,43 @@ export function createAiRouter(
       agent,
       llm.getStatus().modelPath
     );
+    const managedSupplyKeyRef =
+      typeof (agent.config as { apiKeyRef?: unknown } | undefined)?.apiKeyRef ===
+      "string"
+        ? String((agent.config as { apiKeyRef?: string }).apiKeyRef)
+        : "";
+    const usingManagedSupply =
+      agent.id === "intelligence" &&
+      managedSupplyKeyRef &&
+      isGodModeInferenceSupplySecretId(managedSupplyKeyRef);
+    const activeInferenceGrant = usingManagedSupply
+      ? findActiveGodModeInferenceGrant({ userId: auth.user.id })
+      : null;
+    if (usingManagedSupply && !isGrantSpendable(activeInferenceGrant)) {
+      send("error", {
+        error:
+          "GodMode Inference allowance exhausted. Buy more in Vault → Inference or connect DeepSeek / Z.AI / Qwen.",
+        payPath: TRIAL_PAY_GODMODE_PATH,
+      });
+      clearInterval(statusHeartbeat);
+      markChatTurnIdle(workDb, activeChatId);
+      return;
+    }
+    const signupGuideActive =
+      usingManagedSupply &&
+      isSignupGuideModeEnabled() &&
+      activeInferenceGrant?.kind === "trial";
+    if (
+      signupGuideActive &&
+      message?.trim() &&
+      !isSignupGuideTopic(message)
+    ) {
+      send("token", { text: SIGNUP_GUIDE_REFUSAL });
+      send("done", { content: SIGNUP_GUIDE_REFUSAL });
+      clearInterval(statusHeartbeat);
+      markChatTurnIdle(workDb, activeChatId);
+      return;
+    }
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
@@ -2056,7 +2108,9 @@ export function createAiRouter(
       wikiOverride: wikiOverride || undefined,
       capabilitiesOverride,
       chatMode,
-      harnessDelta: harnessProfile.harnessDelta,
+      harnessDelta: signupGuideActive
+        ? `${harnessProfile.harnessDelta}\n\n${SIGNUP_GUIDE_HARNESS_DELTA}`
+        : harnessProfile.harnessDelta,
     });
     const systemPrompt = `${assembled.systemPrompt}\n\n${formatActiveWorkHostContext(activeWorkCardId)}`;
 
@@ -2400,6 +2454,9 @@ export function createAiRouter(
             completion_tokens: ct,
             total_tokens: pt + ct,
           };
+        }
+        if (usingManagedSupply && activeInferenceGrant) {
+          recordGodModeInferenceSpend({ grantId: activeInferenceGrant.id });
         }
       } else {
         const upstream = await fetch(`${baseUrl}/v1/chat/completions`, {
