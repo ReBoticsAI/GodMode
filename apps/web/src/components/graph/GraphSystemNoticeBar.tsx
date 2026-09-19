@@ -9,6 +9,11 @@ import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { fetchNotifications, type AppNotification } from "@/api";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 
 function formatNoticeTime(iso: string): string {
@@ -159,9 +164,13 @@ export function GraphSystemNoticeBar({
         <div className="min-h-0 overflow-hidden">
           <div className="mt-1 flex flex-col gap-0.5 rounded-md border border-border/60 bg-background/90 p-1.5 shadow-sm backdrop-blur-sm">
             {recentNotifications.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                No recent notifications
-              </p>
+              <Empty className="border-0 p-2">
+                <EmptyHeader>
+                  <EmptyTitle className="text-xs font-normal text-muted-foreground">
+                    No recent notifications
+                  </EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             ) : (
               recentNotifications.slice(0, 3).map((n) => (
                 <button

@@ -15,6 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
   Table,
   TableBody,
   TableCell,
@@ -170,17 +178,23 @@ export function GraphTopTenBoardDialog({
         {/* Board content */}
         <div className="min-h-64">
           {loading && entries.length === 0 ? (
-            <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              Loading rankings...
+            <div className="flex h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              <span>Loading rankings…</span>
             </div>
           ) : entries.length === 0 ? (
-            <div className="flex h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-              <SparklesIcon className="size-8 text-muted-foreground/50" />
-              <p>No scores recorded for this timeframe yet.</p>
-              <p className="text-xs text-muted-foreground/80">
-                Complete missions on The Graph to earn your place on the board.
-              </p>
-            </div>
+            <Empty className="h-64 border-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <SparklesIcon />
+                </EmptyMedia>
+                <EmptyTitle>No scores yet</EmptyTitle>
+                <EmptyDescription>
+                  Complete missions on The Graph to earn your place on the
+                  board.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <Table>
               <TableHeader>
