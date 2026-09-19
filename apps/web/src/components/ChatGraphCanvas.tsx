@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -112,6 +113,9 @@ import {
 } from "lucide-react";
 import type { GraphScene3DHandle } from "@/components/graph/GraphScene3D";
 import { GraphEtherComposer } from "@/components/graph/GraphEtherComposer";
+import {
+  GRAPH_COMPOSER_BAND,
+} from "@/components/graph/GraphPhoneSheet";
 import { GraphRareFindsTicker } from "@/components/graph/GraphRareFindsTicker";
 import {
   buildSmartSuggestions,
@@ -2080,8 +2084,15 @@ export function ChatGraphCanvas({
         ) : null}
       </div>
 
-      {/* Bottom chrome: composer + chat toggle */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-50 flex items-end justify-center gap-3 px-4">
+      {/* Bottom chrome: composer + chat toggle (above phone Sheets at z-[200]) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-[210] flex items-end justify-center gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2"
+        style={
+          {
+            "--graph-composer-band": GRAPH_COMPOSER_BAND,
+          } as CSSProperties
+        }
+      >
         <div
           className="pointer-events-auto flex w-full max-w-[calc(100%-3.5rem)] flex-col gap-2"
           style={{

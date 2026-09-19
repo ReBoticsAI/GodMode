@@ -86,6 +86,27 @@ Do not treat one as a dead path of the other; both stay until a later fold.
 - Hardcode `hub:calendar-you` (or other `-you` hubs) when opening from a non-You focus.
 - Grow incomplete `surfaceMatch` arrays that omit catalog surfaces (use `resolveFloatingSurface`).
 
+## Desktop vs phone
+
+| | Desktop (≥640px) | Phone (&lt;640px) |
+|--|------------------|-----------------|
+| Land | Graph + multi [`FloatingWindow`](../apps/web/src/components/floating/FloatingWindow.tsx) | Graph overview (`lowPower` OK) + **one** primary surface |
+| Primary surface | FloatingWindow (`z-[110]`, focused chat may `z-[120]`) | shadcn [`Sheet`](../apps/web/src/components/ui/sheet.tsx) via [`GraphPhoneSheet`](../apps/web/src/components/graph/GraphPhoneSheet.tsx) (`z-[200]`) |
+| Composer | [`GraphEtherComposer`](../apps/web/src/components/graph/GraphEtherComposer.tsx) bottom chrome | Same composer in a reserved bottom band (`z-[210]`, safe-area). Sheet content ends above the band |
+| Focus | Multiple floats OK | Opening Information / left-rail / chat closes sibling Graph floats (`isPhoneViewport`) |
+| Breakpoint | Tablets 640–1023 keep multi-window float | [`PHONE_BREAKPOINT`](../apps/web/src/hooks/use-mobile.ts) / `useIsPhone()` |
+
+### Smoke (phone viewport)
+
+1. DevTools width ~390px (or real device). Signed-in session preferred for deep links.
+2. Open Calendar (left rail or Intelligence → Calendar) → Sheet; composer still usable.
+3. Open Chat → single chat Sheet; Information closes.
+4. Open Automations left rail → list Sheet; no stuck full-bleed overlay burying the composer.
+
+PWA installability (manifest, service worker, Add to Home Screen) stays on [#75](https://github.com/ReBoticsAI/GodMode/issues/75) / [#419](https://github.com/ReBoticsAI/GodMode/issues/419) / [#387](https://github.com/ReBoticsAI/GodMode/issues/387). This issue owns the viewport shell contract only.
+
+Automations dual chrome from #797 still applies: left-rail `projects` list vs Information `canvasMode: automations` editor.
+
 ## Empty, loading, and errors
 
 Prefer installed shadcn primitives from `apps/web/src/components/ui/`:
@@ -113,6 +134,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 - Parallel component libraries (MUI, Chakra, …) on GodMode chrome
 - New ad-hoc `z-[N]` islands that ignore the stack contract above
 - New parallel floating shells that duplicate FloatingWindow (migrate callers over time; do not grow new ones)
+- Phone full-bleed floats at `z-50` that bury the bottom composer (use GraphPhoneSheet + composer band)
 
 ## Related
 
@@ -120,6 +142,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 - Issue [#790](https://github.com/ReBoticsAI/GodMode/issues/790) chat window title target picker
 - Issue [#791](https://github.com/ReBoticsAI/GodMode/issues/791) Pipeline Final LLM Request preview
 - Issue [#798](https://github.com/ReBoticsAI/GodMode/issues/798) embedded editor performance budgets
+- Issue [#796](https://github.com/ReBoticsAI/GodMode/issues/796) Graph mobile / phone shell
 - Issue [#797](https://github.com/ReBoticsAI/GodMode/issues/797) collapse parallel open paths
 - Issue [#794](https://github.com/ReBoticsAI/GodMode/issues/794) single `focusOwner`
 - Issue [#795](https://github.com/ReBoticsAI/GodMode/issues/795) style guide
