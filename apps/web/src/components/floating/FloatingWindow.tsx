@@ -17,12 +17,16 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useIsMobile, useIsPhone } from "@/hooks/use-mobile";
-import { GRAPH_COMPOSER_BAND } from "@/components/graph/GraphPhoneSheet";
 import {
   focusWindowAnchors,
   snapToFocusAnchor,
 } from "@/lib/floating-window-anchors";
 import { getFloatingWindowBounds } from "@/lib/floating-window-bounds";
+import {
+  GRAPH_CHROME_BANDS_EVENT,
+  GRAPH_WINDOW_BOUNDS_SELECTOR,
+  GRAPH_WINDOW_Z,
+} from "@/lib/graph-chrome-layout";
 import type { FloatingWindowRole } from "@/lib/floating-window-registry";
 import {
   anchorWindowAndMirror,
@@ -107,9 +111,10 @@ export function FloatingWindow({
   title,
   icon,
   accent = "#a78bfa",
-  zIndexClassName = "z-[110]",
+  zIndexClassName = GRAPH_WINDOW_Z,
   defaultWidth = 400,
-  defaultHeight = 520,
+  /** Fills the Graph playfield height when bounds are known; clamped on open. */
+  defaultHeight = 720,
   minWidth = 280,
   minHeight = 240,
   placement = "right",
@@ -162,12 +167,16 @@ export function FloatingWindow({
     const recompute = () => setBounds(getFloatingWindowBounds());
     recompute();
     window.addEventListener("resize", recompute);
+    window.addEventListener(GRAPH_CHROME_BANDS_EVENT, recompute);
     const main = document.querySelector("main");
-    const observer = main ? new ResizeObserver(recompute) : null;
-    if (main && observer) observer.observe(main);
+    const playfield = document.querySelector(GRAPH_WINDOW_BOUNDS_SELECTOR);
+    const observer = new ResizeObserver(recompute);
+    if (main) observer.observe(main);
+    if (playfield) observer.observe(playfield);
     return () => {
       window.removeEventListener("resize", recompute);
-      observer?.disconnect();
+      window.removeEventListener(GRAPH_CHROME_BANDS_EVENT, recompute);
+      observer.disconnect();
     };
   }, [open]);
 
@@ -179,7 +188,7 @@ export function FloatingWindow({
     const saved = windowId ? readFloatingWindowLayout(windowId) : null;
     if (saved) {
       const w = Math.max(minWidth, Math.min(saved.width, b.width - 24));
-      const h = Math.max(minHeight, Math.min(saved.height, b.height - 24));
+      const h = Math.max(minHeight, Math.min(saved.height, b.height - 16));
       const pos = clampPos(saved.x, saved.y, w, h, b);
       setWidth(w);
       setHeight(h);
@@ -194,7 +203,11 @@ export function FloatingWindow({
         ? Math.max(minWidth, Math.floor((b.width - 120) / 2))
         : b.width - 24;
     const w = Math.min(defaultWidth, Math.max(minWidth, maxPairedWidth));
-    const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 24));
+    // Default height fills the playfield (under ticker, above composer pill).
+    const h = Math.min(
+      defaultHeight,
+      Math.max(minHeight, b.height - 16)
+    );
     setWidth(w);
     setHeight(h);
     const focus = focusWindowAnchors(b, w, h);
@@ -202,18 +215,21 @@ export function FloatingWindow({
     let nextY: number;
     if (placement === "focus-left") {
       nextX = Math.max(b.x + 56, focus.left.x);
-      nextY = Math.max(104, focus.left.y);
+      nextY = focus.left.y;
     } else if (placement === "focus-right") {
       nextX = focus.right.x;
-      nextY = Math.max(104, focus.right.y);
+      nextY = focus.right.y;
     } else if (placement === "left") {
       nextX = b.x + 56;
-      nextY = b.y + Math.max(140, Math.round((b.height - h) / 2));
+      nextY = b.y + Math.max(8, Math.round((b.height - h) / 2));
     } else {
       nextX = b.x + 12;
       if (placement === "right") nextX = b.x + b.width - w - 12;
       if (placement === "center") nextX = b.x + Math.max(12, (b.width - w) / 2);
-      nextY = anchorY === "bottom" ? b.y + b.height - h - 12 : b.y + Math.max(104, 12);
+      nextY =
+        anchorY === "bottom"
+          ? b.y + b.height - h - 8
+          : b.y + 8;
     }
     const pos = clampPos(nextX, nextY, w, h, b);
     setX(placement === "left" || placement === "focus-left" ? Math.max(b.x + 56, pos.x) : pos.x);
@@ -232,8 +248,12 @@ export function FloatingWindow({
     pairGroup,
   ]);
 
-  const currentWidth = maximized ? bounds.width : width;
-  const currentHeight = maximized ? bounds.height : height;
+  const currentWidth = maximized
+    ? bounds.width
+    : Math.min(width, Math.max(minWidth, bounds.width - 24));
+  const currentHeight = maximized
+    ? bounds.height
+    : Math.min(height, Math.max(minHeight, bounds.height - 16));
   const pos =
     maximized || x == null || y == null
       ? { x: bounds.x, y: bounds.y }
@@ -402,7 +422,7 @@ export function FloatingWindow({
       const b = getFloatingWindowBounds();
       setBounds(b);
       const w = Math.min(defaultWidth, Math.max(minWidth, b.width - 24));
-      const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 24));
+      const h = Math.min(defaultHeight, Math.max(minHeight, b.height - 16));
       setWidth(w);
       setHeight(h);
       const focus = focusWindowAnchors(b, w, h);
@@ -569,7 +589,8 @@ export function FloatingWindow({
           ? { display: "none" }
           : isPhone
             ? {
-                bottom: GRAPH_COMPOSER_BAND,
+                top: "var(--graph-top-chrome-band, 5.625rem)",
+                bottom: "var(--graph-composer-band, 7.25rem)",
                 borderColor: isLight ? `${accent}40` : `${accent}66`,
               }
             : maximized
@@ -592,7 +613,10 @@ export function FloatingWindow({
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
         isPhone
-          ? "fixed inset-x-0 top-0 z-[110] rounded-none border-b"
+          ? cn(
+              "fixed inset-x-0 rounded-none border-b",
+              GRAPH_WINDOW_Z
+            )
           : cn("absolute rounded-xl border-2", zIndexClassName),
         className
       )}

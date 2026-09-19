@@ -33,13 +33,16 @@ Selecting a Graph node sets `informationNode` in Intelligence context. Owner-sco
 ## Z-stack
 
 ```text
-FloatingWindow / chat chrome     z-[110]  (focused chat may use z-[120])
-Dialog / Sheet / Select / Menu   z-[200]  (portals above floating chrome)
+FloatingWindow / phone Sheet     z-[110]  (focused chat may use z-[120]; secondary)
+Dialog / Select / Menu portals   z-50…200 (modals above windows when needed)
+Primary Graph chrome             z-[210]  (ticker, notice, rails, composer / reply pill)
 ```
 
-- Default FloatingWindow: [`FloatingWindow.tsx`](../apps/web/src/components/floating/FloatingWindow.tsx) `zIndexClassName = "z-[110]"`.
-- Portals: Dialog, Sheet, Select, DropdownMenu use `z-[200]` so overlays are not trapped under floating chrome.
-- Popovers that are not shadcn portals (for example fixed-position search lists) must also use `z-[200]` when they open over Graph windows.
+- Default FloatingWindow: [`FloatingWindow.tsx`](../apps/web/src/components/floating/FloatingWindow.tsx) uses `GRAPH_WINDOW_Z` (`z-[110]`).
+- Primary chrome is **page-locked** (`fixed`) via [`GRAPH_PRIMARY_CHROME_Z`](../apps/web/src/lib/graph-chrome-layout.ts). Windows and phone Sheets are secondary and must not cover the footer or top ticker/notice.
+- Window playfield bounds: `[data-graph-window-bounds]` between `GRAPH_TOP_CHROME_BAND` and `GRAPH_COMPOSER_BAND` ([`getFloatingWindowBounds`](../apps/web/src/lib/floating-window-bounds.ts)).
+- Graph phone Sheets: no modal backdrop blur (`showOverlay={false}`, `modal={false}`); sit in the same playfield band.
+- Popovers that are not shadcn portals (for example fixed-position search lists) must clear windows when they open over Graph chrome.
 
 ## Chat window title picker
 
@@ -91,9 +94,9 @@ Do not treat one as a dead path of the other; both stay until a later fold.
 | | Desktop (≥640px) | Phone (&lt;640px) |
 |--|------------------|-----------------|
 | Land | Graph + multi [`FloatingWindow`](../apps/web/src/components/floating/FloatingWindow.tsx) | Graph overview (`lowPower` OK) + **one** primary surface |
-| Primary surface | FloatingWindow (`z-[110]`, focused chat may `z-[120]`) | shadcn [`Sheet`](../apps/web/src/components/ui/sheet.tsx) via [`GraphPhoneSheet`](../apps/web/src/components/graph/GraphPhoneSheet.tsx) (`z-[200]`) |
-| Composer | [`GraphEtherComposer`](../apps/web/src/components/graph/GraphEtherComposer.tsx) bottom chrome | Same composer in a reserved bottom band (`z-[210]`, safe-area). Sheet content ends above the band |
-| Focus | Multiple floats OK | Opening Information / left-rail / chat closes sibling Graph floats (`isPhoneViewport`) |
+| Primary surface | FloatingWindow (`z-[110]`, focused chat may `z-[120]`) | shadcn Sheet via [`GraphPhoneSheet`](../apps/web/src/components/graph/GraphPhoneSheet.tsx) in the playfield (`z-[110]`, no blur overlay) |
+| Composer | [`GraphEtherComposer`](../apps/web/src/components/graph/GraphEtherComposer.tsx) fixed footer (`z-[210]`) | Same fixed footer band; Sheet ends above the reply pill / composer |
+| Focus | Multiple floats OK; windows stay under primary chrome | Opening Information / left-rail / chat closes sibling Graph floats (`isPhoneViewport`); no sheet backdrop blur |
 | Breakpoint | Tablets 640–1023 keep multi-window float | [`PHONE_BREAKPOINT`](../apps/web/src/hooks/use-mobile.ts) / `useIsPhone()` |
 
 ### Smoke (phone viewport)
@@ -134,7 +137,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 - Parallel component libraries (MUI, Chakra, …) on GodMode chrome
 - New ad-hoc `z-[N]` islands that ignore the stack contract above
 - New parallel floating shells that duplicate FloatingWindow (migrate callers over time; do not grow new ones)
-- Phone full-bleed floats at `z-50` that bury the bottom composer (use GraphPhoneSheet + composer band)
+- Phone full-bleed floats or modal sheet blur that bury the bottom composer (use GraphPhoneSheet playfield + fixed primary chrome)
 
 ## Related
 
