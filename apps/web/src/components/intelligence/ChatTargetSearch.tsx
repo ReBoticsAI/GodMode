@@ -353,7 +353,7 @@ export function ChatTargetSearch({
               left: rect.left,
               width: 288,
             }}
-            className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
             {responsible?.agent &&
               chatTarget.kind === "agent" &&

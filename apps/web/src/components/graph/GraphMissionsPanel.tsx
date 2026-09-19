@@ -3,6 +3,12 @@ import { TrophyIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
   Table,
   TableBody,
   TableCell,
@@ -305,9 +311,14 @@ export function GraphLeaderboardSection() {
         </p>
       </div>
       {entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No scores published yet. Complete missions while signed in to Cloud.
-        </p>
+        <Empty className="border-0 p-4">
+          <EmptyHeader>
+            <EmptyTitle>No scores published yet</EmptyTitle>
+            <EmptyDescription>
+              Complete missions while signed in to Cloud.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <Table>
           <TableHeader>

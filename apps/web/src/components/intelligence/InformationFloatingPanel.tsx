@@ -26,6 +26,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "re
 import { useTheme } from "next-themes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
 import { useIntelligence, type LeftRailTab } from "@/lib/intelligence-context";
@@ -678,7 +679,10 @@ export function InformationFloatingPanel() {
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense
             fallback={
-              <p className="p-3 text-sm text-muted-foreground">Loading coding…</p>
+              <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                <Spinner />
+                <span>Loading coding…</span>
+              </div>
             }
           >
             <CodingWorkspacePage embedded />
@@ -992,9 +996,10 @@ export function InformationFloatingPanel() {
             >
               <Suspense
                 fallback={
-                  <p className="p-2 text-sm text-muted-foreground">
-                    Loading Coding canvas…
-                  </p>
+                  <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
+                    <Spinner />
+                    <span>Loading Coding canvas…</span>
+                  </div>
                 }
               >
                 <CodingWorkspacePage embedded />
