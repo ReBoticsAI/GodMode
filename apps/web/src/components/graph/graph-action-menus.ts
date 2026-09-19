@@ -559,7 +559,7 @@ export const GRAPH_ACTION_EDIT_ITEMS = [
     icon: "Landmark",
     group: "Vault & Bank",
     systemOnly: true,
-    cta: { type: "navigate", path: "/bank" },
+    cta: { type: "open_panel", tab: "bank" },
   },
   {
     id: "wallet",
@@ -606,7 +606,7 @@ export const GRAPH_ACTION_EDIT_ITEMS = [
     group: "Settings",
     systemOnly: true,
     needsDashboard: true,
-    cta: { type: "navigate", path: "/notifications" },
+    cta: { type: "open_panel", tab: "notifications" },
   },
   {
     id: "slash-commands",
@@ -865,7 +865,7 @@ export const GRAPH_CONNECT_KINDS = GRAPH_ACTION_CONNECT_ITEMS.map((k) => ({
 // IDs match GraphMonitorKindMenu / ChatGraphCanvas selectMonitorKind.
 
 export const GRAPH_ACTION_MONITOR_ITEMS = [
-  { id: "notifications", label: "Notifications", description: "Platform alerts including signed-release availability.", icon: "Bell", group: "Alerts", cta: { type: "navigate", path: "/notifications" } },
+  { id: "notifications", label: "Notifications", description: "Platform alerts including signed-release availability.", icon: "Bell", group: "Alerts", cta: { type: "open_panel", tab: "notifications" } },
   { id: "attention", label: "Attention", description: "Graph nodes with open mission attention.", icon: "Eye", group: "Alerts", cta: { type: "none" } },
   { id: "system-notices", label: "System notices", description: "Graph system notice bar.", icon: "Megaphone", group: "Alerts", needsDashboard: true, cta: { type: "open_panel", tab: "notifications" } },
   { id: "autonomous-reviews", label: "Autonomous reviews", description: "Autonomous runner review / failure queue.", icon: "Bot", group: "Alerts", needsDashboard: true, cta: { type: "open_panel", tab: "projects" } },

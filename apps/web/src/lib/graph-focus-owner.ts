@@ -13,11 +13,46 @@ export type FocusOwner =
   | { kind: "none" };
 
 const SIDE_SUFFIXES = ["you", "intelligence", "research", "ops"] as const;
-type SideSuffix = (typeof SIDE_SUFFIXES)[number];
+export type SideSuffix = (typeof SIDE_SUFFIXES)[number];
 
 function sideFromSuffix(suffix: SideSuffix): FocusOwner {
   if (suffix === "you") return { kind: "user" };
   return { kind: "agent", agentId: suffix };
+}
+
+/** Catalog side suffix for You / Intelligence / Research / Ops; null for none or custom agents. */
+export function sideSuffixFromFocusOwner(owner: FocusOwner): SideSuffix | null {
+  if (owner.kind === "user") return "you";
+  if (owner.kind === "agent") {
+    if (
+      owner.agentId === "intelligence" ||
+      owner.agentId === "research" ||
+      owner.agentId === "ops"
+    ) {
+      return owner.agentId;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Rewrite owner-sided hub ids (`hub:calendar-you`, `hub:bank-you`, …) to the
+ * current focusOwner side. Non-sided catalog ids and unknown owners stay as-is.
+ */
+export function resolveFloatingNodeId(
+  catalogNodeId: string | null,
+  focusOwner?: FocusOwner | null
+): string | null {
+  if (!catalogNodeId) return null;
+  if (!focusOwner || focusOwner.kind === "none") return catalogNodeId;
+  const side = sideSuffixFromFocusOwner(focusOwner);
+  if (!side) return catalogNodeId;
+  const match = catalogNodeId.match(
+    /^hub:([a-z0-9]+)-(you|intelligence|research|ops)$/
+  );
+  if (!match) return catalogNodeId;
+  return `hub:${match[1]}-${side}`;
 }
 
 /** Normalize catalog / chat agent ids into FocusOwner. */

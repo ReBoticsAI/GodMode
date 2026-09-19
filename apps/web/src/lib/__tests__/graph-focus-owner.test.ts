@@ -7,6 +7,8 @@ import {
   focusOwnerFromGraphNode,
   focusOwnerLabel,
   productivityScopeFromFocusOwner,
+  resolveFloatingNodeId,
+  sideSuffixFromFocusOwner,
 } from "../graph-focus-owner";
 
 function node(
@@ -133,5 +135,44 @@ describe("focusOwnerFromAgentId / productivityScope / labels", () => {
     expect(focusOwnerLabel({ kind: "none" })).toBeNull();
     expect(agentIdFromFocusOwner({ kind: "agent", agentId: "ops" })).toBe("ops");
     expect(agentIdFromFocusOwner({ kind: "user" })).toBeNull();
+  });
+});
+
+describe("sideSuffixFromFocusOwner / resolveFloatingNodeId", () => {
+  it("maps FocusOwner to catalog side suffixes", () => {
+    expect(sideSuffixFromFocusOwner({ kind: "user" })).toBe("you");
+    expect(
+      sideSuffixFromFocusOwner({ kind: "agent", agentId: "intelligence" })
+    ).toBe("intelligence");
+    expect(sideSuffixFromFocusOwner({ kind: "agent", agentId: "research" })).toBe(
+      "research"
+    );
+    expect(sideSuffixFromFocusOwner({ kind: "agent", agentId: "ops" })).toBe(
+      "ops"
+    );
+    expect(sideSuffixFromFocusOwner({ kind: "none" })).toBeNull();
+    expect(
+      sideSuffixFromFocusOwner({ kind: "agent", agentId: "custom-1" })
+    ).toBeNull();
+  });
+
+  it("rewrites owner-sided hub ids from focusOwner", () => {
+    expect(
+      resolveFloatingNodeId("hub:calendar-you", {
+        kind: "agent",
+        agentId: "intelligence",
+      })
+    ).toBe("hub:calendar-intelligence");
+    expect(
+      resolveFloatingNodeId("hub:bank-you", { kind: "agent", agentId: "ops" })
+    ).toBe("hub:bank-ops");
+    expect(
+      resolveFloatingNodeId("hub:structure-you", { kind: "user" })
+    ).toBe("hub:structure-you");
+    expect(resolveFloatingNodeId("hub:wiki", { kind: "user" })).toBe("hub:wiki");
+    expect(
+      resolveFloatingNodeId("hub:calendar-you", { kind: "none" })
+    ).toBe("hub:calendar-you");
+    expect(resolveFloatingNodeId(null, { kind: "user" })).toBeNull();
   });
 });

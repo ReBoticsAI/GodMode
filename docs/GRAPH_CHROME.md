@@ -55,6 +55,37 @@ Canonical canvas strip on a Graph node Information window: **Overview / Pipeline
 
 Owner surfaces (Calendar, Structure, Knowledge, Automations list, Vault, …) open as left-rail / floating tabs and still follow `focusOwner`.
 
+## Open paths
+
+All Graph chrome entry points that open a floating Information surface go through **`openGraphSurface`** ([`use-graph-floating-openers.ts`](../apps/web/src/lib/use-graph-floating-openers.ts)), backed by [`GRAPH_FLOATING_SURFACES`](../apps/web/src/lib/graph-floating-surfaces.ts).
+
+### Inventory
+
+| Entry | How it opens |
+|-------|----------------|
+| Left-rail icon | `openGraphSurface({ tab })` when the tab is in the catalog; else `openLeftRailTab` (e.g. Knowledge, Automations/`projects`, agent Vault) |
+| Deep link (`/calendar`, `/wiki`, …) | `App.tsx` → `godmode:open-*` event → opener with current `focusOwner` |
+| Action menu / smart suggest | Prefer `open_panel` with a catalog tab; floating-index `navigate` paths are remapped via `resolveFloatingSurface` → `openGraphSurface` |
+| Architecture catalog CTA | Node select / activate → Information panel; `openImmediate` opens the matching left-rail tab |
+| Information Overview CTA | `runCta` dispatches the catalog event (or remaps navigate via `resolveFloatingSurface`); no incomplete parallel match list |
+
+### Owner-aware hubs
+
+Catalog defaults use the You-side node id (`hub:calendar-you`, `hub:bank-you`, …). `resolveFloatingNodeId` rewrites those to the current `focusOwner` side (`hub:calendar-intelligence`, …) so left rail, deep link, and menus agree on scope.
+
+### Automations (two chrome surfaces)
+
+- Left-rail **`projects`**: Automations list panel (tasks / workflows / hooks / schedules).
+- Information **`canvasMode: automations`**: embedded editor on automations-family Graph nodes.
+
+Do not treat one as a dead path of the other; both stay until a later fold.
+
+### Do not (open paths)
+
+- Add new Graph chrome `navigate` calls to floating index paths without remapping through `openGraphSurface`.
+- Hardcode `hub:calendar-you` (or other `-you` hubs) when opening from a non-You focus.
+- Grow incomplete `surfaceMatch` arrays that omit catalog surfaces (use `resolveFloatingSurface`).
+
 ## Empty, loading, and errors
 
 Prefer installed shadcn primitives from `apps/web/src/components/ui/`:
@@ -89,6 +120,7 @@ Pipeline and Workflows stay embedded in Information. Keep inspectors narrow; avo
 - Issue [#790](https://github.com/ReBoticsAI/GodMode/issues/790) chat window title target picker
 - Issue [#791](https://github.com/ReBoticsAI/GodMode/issues/791) Pipeline Final LLM Request preview
 - Issue [#798](https://github.com/ReBoticsAI/GodMode/issues/798) embedded editor performance budgets
+- Issue [#797](https://github.com/ReBoticsAI/GodMode/issues/797) collapse parallel open paths
 - Issue [#794](https://github.com/ReBoticsAI/GodMode/issues/794) single `focusOwner`
 - Issue [#795](https://github.com/ReBoticsAI/GodMode/issues/795) style guide
 - [STATE_GRAPH_ISOLATION.md](./STATE_GRAPH_ISOLATION.md)

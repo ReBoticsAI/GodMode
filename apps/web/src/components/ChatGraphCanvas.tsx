@@ -87,8 +87,10 @@ import {
 } from "@/lib/navigation";
 import {
   floatingSurfaceForTab,
-  GRAPH_FLOATING_SURFACES,
+  floatingSurfaceForNodeId,
+  resolveFloatingSurface,
 } from "@/lib/graph-floating-surfaces";
+import { resolveFloatingNodeId } from "@/lib/graph-focus-owner";
 import { useGraphFloatingOpeners } from "@/lib/use-graph-floating-openers";
 import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -240,6 +242,7 @@ export function ChatGraphCanvas({
     openPanel,
     setAgentsSection,
     informationNode,
+    focusOwner,
     informationPanelOpen,
     informationPanelMinimized,
     activeLeftTab,
@@ -662,21 +665,24 @@ export function ChatGraphCanvas({
     sceneRef.current?.selectNode(ADMIN_NODE_ID);
   }, [activeLeftTab, projection?.nodes]);
 
-  const { openByTab } = useGraphFloatingOpeners({
+  const { openByTab, openGraphSurface } = useGraphFloatingOpeners({
     authenticated,
     projectionNodes: projection?.nodes,
     openInformationPanel,
     openLeftRailTab,
     sceneSelectNode: (id) => sceneRef.current?.selectNode(id),
+    focusOwner,
   });
 
-  // Select catalog node once projection lands for any active floating tab.
+  // Select owner-aware catalog node once projection lands for any active floating tab.
   useEffect(() => {
-    const surface = GRAPH_FLOATING_SURFACES.find((s) => s.tab === activeLeftTab);
+    const surface = floatingSurfaceForTab(activeLeftTab);
     if (!surface?.nodeId) return;
-    if (!projection?.nodes.some((n) => n.id === surface.nodeId)) return;
-    sceneRef.current?.selectNode(surface.nodeId);
-  }, [activeLeftTab, projection?.nodes]);
+    const nodeId = resolveFloatingNodeId(surface.nodeId, focusOwner);
+    if (!nodeId) return;
+    if (!projection?.nodes.some((n) => n.id === nodeId)) return;
+    sceneRef.current?.selectNode(nodeId);
+  }, [activeLeftTab, focusOwner, projection?.nodes]);
 
   useEffect(() => {
     const onResetGraphView = () => {
@@ -698,8 +704,8 @@ export function ChatGraphCanvas({
         closeInformationPanel();
         return;
       }
-      setActiveLeftTab(tab);
       if (tab === "info") {
+        setActiveLeftTab(tab);
         if (informationNode) {
           openInformationPanel(informationNode);
         } else {
@@ -712,9 +718,19 @@ export function ChatGraphCanvas({
             openLeftRailTab("info");
           }
         }
-      } else {
-        openLeftRailTab(tab);
+        return;
       }
+      if (tab === "platform-vault" || tab === "admin") {
+        // Richer handlers below; fall through to openLeftRailTab for toggle UX.
+        setActiveLeftTab(tab);
+        openLeftRailTab(tab);
+        return;
+      }
+      if (openGraphSurface({ tab, focusOwner, requireAuth: false })) {
+        return;
+      }
+      setActiveLeftTab(tab);
+      openLeftRailTab(tab);
     },
     [
       informationPanelOpen,
@@ -726,6 +742,8 @@ export function ChatGraphCanvas({
       openInformationPanel,
       projection?.nodes,
       openLeftRailTab,
+      openGraphSurface,
+      focusOwner,
     ]
   );
 
@@ -972,12 +990,26 @@ export function ChatGraphCanvas({
           openAdmin({ tab: q?.get("tab") });
           return;
         }
-        const surface = GRAPH_FLOATING_SURFACES.find(
-          (s) =>
-            cta.path === s.path || cta.path.startsWith(`${s.path}?`)
-        );
+        const surface = resolveFloatingSurface({ path: cta.path });
         if (surface) {
-          openByTab(surface.tab);
+          if (surface.tab === "platform-vault") {
+            const q = cta.path.includes("?")
+              ? new URLSearchParams(cta.path.split("?")[1])
+              : null;
+            openPlatformVault({
+              vault: q?.get("vault"),
+              sub: q?.get("sub"),
+            });
+            return;
+          }
+          if (surface.tab === "admin") {
+            const q = cta.path.includes("?")
+              ? new URLSearchParams(cta.path.split("?")[1])
+              : null;
+            openAdmin({ tab: q?.get("tab") });
+            return;
+          }
+          openGraphSurface({ path: cta.path, focusOwner });
           return;
         }
         navigate(cta.path);
@@ -995,7 +1027,7 @@ export function ChatGraphCanvas({
           return;
         }
         if (floatingSurfaceForTab(panelTab)) {
-          openByTab(panelTab);
+          openGraphSurface({ tab: panelTab, focusOwner });
           return;
         }
         if ("subTab" in cta && cta.subTab) {
@@ -1022,10 +1054,11 @@ export function ChatGraphCanvas({
     },
     [
       authenticated,
+      focusOwner,
       navigate,
       handleLeftTabClick,
       openAdmin,
-      openByTab,
+      openGraphSurface,
       openInfoNode,
       openPanel,
       openPlatformVault,
@@ -1177,12 +1210,26 @@ export function ChatGraphCanvas({
           openAdmin({ tab: q?.get("tab") });
           return;
         }
-        const surface = GRAPH_FLOATING_SURFACES.find(
-          (s) =>
-            cta.path === s.path || cta.path.startsWith(`${s.path}?`)
-        );
+        const surface = resolveFloatingSurface({ path: cta.path });
         if (surface) {
-          openByTab(surface.tab);
+          if (surface.tab === "platform-vault") {
+            const q = cta.path.includes("?")
+              ? new URLSearchParams(cta.path.split("?")[1])
+              : null;
+            openPlatformVault({
+              vault: q?.get("vault"),
+              sub: q?.get("sub"),
+            });
+            return;
+          }
+          if (surface.tab === "admin") {
+            const q = cta.path.includes("?")
+              ? new URLSearchParams(cta.path.split("?")[1])
+              : null;
+            openAdmin({ tab: q?.get("tab") });
+            return;
+          }
+          openGraphSurface({ path: cta.path, focusOwner });
           return;
         }
         navigate(cta.path);
@@ -1200,7 +1247,7 @@ export function ChatGraphCanvas({
           return;
         }
         if (floatingSurfaceForTab(panelTab)) {
-          openByTab(panelTab);
+          openGraphSurface({ tab: panelTab, focusOwner });
           return;
         }
         handleLeftTabClick(cta.tab as LeftRailTab);
@@ -1215,7 +1262,15 @@ export function ChatGraphCanvas({
 
       stub();
     },
-    [authenticated, handleLeftTabClick, navigate, openAdmin, openByTab, openPlatformVault]
+    [
+      authenticated,
+      focusOwner,
+      handleLeftTabClick,
+      navigate,
+      openAdmin,
+      openGraphSurface,
+      openPlatformVault,
+    ]
   );
 
   const selectValidateKind = useCallback(
@@ -1642,10 +1697,8 @@ export function ChatGraphCanvas({
         floatingSurfaceForTab(node.cta.tab)
       ) {
         openLeftRailTab(node.cta.tab as LeftRailTab);
-      } else if (
-        GRAPH_FLOATING_SURFACES.some((s) => s.nodeId === node.id)
-      ) {
-        const surface = GRAPH_FLOATING_SURFACES.find((s) => s.nodeId === node.id);
+      } else if (floatingSurfaceForNodeId(node.id)) {
+        const surface = floatingSurfaceForNodeId(node.id);
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
@@ -1671,10 +1724,8 @@ export function ChatGraphCanvas({
         floatingSurfaceForTab(node.cta.tab)
       ) {
         openLeftRailTab(node.cta.tab as LeftRailTab);
-      } else if (
-        GRAPH_FLOATING_SURFACES.some((s) => s.nodeId === node.id)
-      ) {
-        const surface = GRAPH_FLOATING_SURFACES.find((s) => s.nodeId === node.id);
+      } else if (floatingSurfaceForNodeId(node.id)) {
+        const surface = floatingSurfaceForNodeId(node.id);
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
@@ -1780,9 +1831,7 @@ export function ChatGraphCanvas({
           ) {
             openLeftRailTab(node.cta.tab as LeftRailTab);
           } else {
-            const surface = GRAPH_FLOATING_SURFACES.find(
-              (s) => s.nodeId === node.id
-            );
+            const surface = floatingSurfaceForNodeId(node.id);
             if (surface) openLeftRailTab(surface.tab as LeftRailTab);
           }
         }
