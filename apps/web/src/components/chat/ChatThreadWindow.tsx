@@ -175,7 +175,6 @@ export function ChatThreadWindow({
         <div
           data-floating-chrome
           className="flex min-w-0 items-center gap-1.5"
-          onClick={activate}
         >
           <ChatTargetSearch titleMode openFloatingOnSelect />
           {focused ? (

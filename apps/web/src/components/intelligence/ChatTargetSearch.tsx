@@ -234,6 +234,15 @@ export function ChatTargetSearch({
     );
   }, [dmConversations, q]);
 
+  const closePicker = () => {
+    // Defer close so the selecting click cannot fall through onto the
+    // floating window underneath and re-focus the previous chat target.
+    window.setTimeout(() => {
+      setOpen(false);
+      setQuery("");
+    }, 0);
+  };
+
   const selectAgent = (id: string) => {
     setChatTarget({ kind: "agent", agentId: id });
     if (openFloatingOnSelect) {
@@ -244,8 +253,7 @@ export function ChatTargetSearch({
         title: agent?.name ?? "Agent",
       });
     }
-    setOpen(false);
-    setQuery("");
+    closePicker();
   };
 
   const selectContact = async (contact: DmContact) => {
@@ -267,8 +275,7 @@ export function ChatTargetSearch({
             "Direct message",
         });
       }
-      setOpen(false);
-      setQuery("");
+      closePicker();
     } catch {
       /* ignore */
     }
@@ -287,8 +294,7 @@ export function ChatTargetSearch({
           (c?.kind === "group" ? "Channel" : "Direct message"),
       });
     }
-    setOpen(false);
-    setQuery("");
+    closePicker();
   };
 
   const resetGroupDraft = () => {
@@ -340,7 +346,7 @@ export function ChatTargetSearch({
         });
       }
       setGroupOpen(false);
-      setOpen(false);
+      closePicker();
       resetGroupDraft();
     } catch (err) {
       toast.error(
@@ -394,6 +400,7 @@ export function ChatTargetSearch({
           <div
             ref={panelRef}
             onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
               top: rect.bottom + 4,
