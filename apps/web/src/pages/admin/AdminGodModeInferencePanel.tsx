@@ -310,9 +310,10 @@ export function AdminGodModeInferencePanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Default trial budget</CardTitle>
+          <CardTitle className="text-sm">Default trial / mint budget</CardTitle>
           <CardDescription>
-            USD allowance for new trial grants. Env{" "}
+            USD allowance for new trial grants and OpenRouter Management mint{" "}
+            <code className="text-xs">limit</code>. Env{" "}
             <code className="text-xs">TRIAL_INFERENCE_BUDGET_USD</code> is the
             fallback when this is unset.
           </CardDescription>
@@ -360,8 +361,10 @@ export function AdminGodModeInferencePanel() {
         <CardHeader>
           <CardTitle className="text-sm">Recent grants</CardTitle>
           <CardDescription>
-            Trial and paid allowances. Revoke to hard-stop Intelligence spend for
-            that subject.
+            Trial and paid allowances, including minted OpenRouter key metadata
+            (masked). Revoke hard-stops Intelligence spend; for Management API
+            mints it also deletes the provider key and clears Vault when
+            possible.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -373,6 +376,8 @@ export function AdminGodModeInferencePanel() {
                 <TableRow>
                   <TableHead>Subject</TableHead>
                   <TableHead>Kind</TableHead>
+                  <TableHead>Mechanism</TableHead>
+                  <TableHead>Key</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Spent</TableHead>
                   <TableHead className="text-right">Budget</TableHead>
@@ -389,6 +394,18 @@ export function AdminGodModeInferencePanel() {
                         : g.subject_key}
                     </TableCell>
                     <TableCell>{g.kind}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {g.mechanism || "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[10rem] truncate font-mono text-[10px] text-muted-foreground">
+                      {g.provider_key_id
+                        ? `id:${g.provider_key_id.slice(0, 10)}…`
+                        : g.provider_key_hash_masked
+                          ? `hash:${g.provider_key_hash_masked}`
+                          : "—"}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={

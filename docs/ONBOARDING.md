@@ -106,8 +106,8 @@ Background ensure flow:
 
 **Secondary CTAs:** Connect Supported BYOK or use Local models.
 
-**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget), sets default trial budget, and can revoke a grant so Intelligence hard-stops. Platform supply keys stay on the same tab.
+**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget, mechanism, masked minted key metadata), sets default trial / mint budget (also used as OpenRouter Management mint `limit`), and can revoke a grant so Intelligence hard-stops. For Management API mints, revoke also deletes the provider key and clears Vault when possible. Platform supply keys stay on the same tab.
 
-Ops: configure Admin → GodMode Inference keys and default trial budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
+Ops: configure Admin → GodMode Inference keys and default trial / mint budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
 
 See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision) for longer-term supply vision.
