@@ -32,19 +32,51 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/checkout",
+    rationale:
+      "Authenticated Stripe Checkout for GodMode Inference packs/subscriptions; grant top-up is durable via webhook, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-list",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/admin/grants",
+    rationale:
+      "Platform-admin list of Inference grants (spent vs budget); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-patch",
+    methods: ["PATCH"],
+    pathPattern: "/api/godmode-inference/admin/grants/:",
+    rationale:
+      "Platform-admin patch of a grant budget / expire; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-revoke",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/admin/grants/:/revoke",
+    rationale:
+      "Platform-admin revoke of an Inference grant so Intelligence hard-stops; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-default-trial-budget",
+    methods: ["PUT"],
+    pathPattern: "/api/godmode-inference/admin/default-trial-budget",
+    rationale:
+      "Platform-admin default trial budget USD on GodModeInferenceConfig meta; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "godmode-inference-config",
     methods: ["GET"],
     pathPattern: "/api/godmode-inference/config",
     rationale:
       "Public GodMode Inference pack/subscription catalog and supply-ready flag; no secrets.",
-    authenticatedDomainMutations: "none",
-  },
-  {
-    id: "godmode-inference-stripe-webhook",
-    methods: ["POST"],
-    pathPattern: "/api/godmode-inference/stripe/webhook",
-    rationale:
-      "Alias Stripe webhook for GodMode Inference grant top-ups; same STRIPE_WEBHOOK_SECRET demux as /api/saas/stripe/webhook (metadata godmode_inference=1).",
     authenticatedDomainMutations: "none",
   },
   {
@@ -72,19 +104,43 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "kernel-delegated",
   },
   {
-    id: "chat-unlock-tutorial",
+    id: "chat-unlock-tutorial-start",
     methods: ["POST"],
-    pathPattern: "/api/chat-unlock/tutorial/*",
+    pathPattern: "/api/chat-unlock/tutorial/start",
     rationale:
-      "Tutorial start/step/complete for free UnlockEntitlement grants.",
+      "Tutorial start for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial-step",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/step",
+    rationale:
+      "Tutorial step progress for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial-complete",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/complete",
+    rationale:
+      "Tutorial complete for free UnlockEntitlement grants.",
     authenticatedDomainMutations: "kernel-delegated",
   },
   {
     id: "chat-unlock-graph",
-    methods: ["GET", "PUT", "POST"],
-    pathPattern: "/api/chat-unlock/graph*",
+    methods: ["GET", "PUT"],
+    pathPattern: "/api/chat-unlock/graph",
     rationale:
       "Chat graph document persistence for docked Intelligence threads after window unlock.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-graph-dock",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/graph/dock",
+    rationale:
+      "Dock Intelligence chat graph into a floating window after unlock.",
     authenticatedDomainMutations: "kernel-delegated",
   },
   {

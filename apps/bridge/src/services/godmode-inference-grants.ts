@@ -6,7 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { CoreDatabase } from "../core-db.js";
-import { getCloudDb } from "../core-db.js";
+import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../core-db.js";
 import { ensureTrialInferenceTables } from "./trial-inference-schema.js";
 import {
   isGodModeInferenceSupplySecretId,
@@ -309,6 +309,130 @@ export function listGodModeInferenceGrantStats(db: CoreDatabase = getCloudDb()):
   };
 }
 
+const META_DEFAULT_TRIAL_BUDGET = "godmode_inference.default_trial_budget_usd";
+
+/** Admin-configured default trial budget, else env, else $0.10. */
+export function defaultTrialBudgetUsd(db: CoreDatabase = getCloudDb()): number {
+  try {
+    const rawMeta = getPlatformMeta(db, META_DEFAULT_TRIAL_BUDGET);
+    if (rawMeta) {
+      const n = Number(rawMeta);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  } catch {
+    /* Cloud DB unavailable in some unit tests */
+  }
+  const raw = Number(readEnv("TRIAL_INFERENCE_BUDGET_USD"));
+  return Number.isFinite(raw) && raw > 0 ? raw : TRIAL_DEFAULT_BUDGET_USD;
+}
+
+export function setDefaultTrialBudgetUsd(
+  usd: number,
+  db: CoreDatabase = getCloudDb()
+): number {
+  const next = Math.max(0.01, Number(usd));
+  if (!Number.isFinite(next)) {
+    throw Object.assign(new Error("Invalid trial budget"), { status: 400 });
+  }
+  setPlatformMeta(db, META_DEFAULT_TRIAL_BUDGET, String(next));
+  return next;
+}
+
+export type AdminGodModeInferenceGrant = GodModeInferenceGrantRow & {
+  remaining_usd: number | null;
+  updated_at: string | null;
+};
+
+export function listAdminGodModeInferenceGrants(opts?: {
+  limit?: number;
+  status?: string | null;
+  db?: CoreDatabase;
+}): AdminGodModeInferenceGrant[] {
+  const db = opts?.db ?? getCloudDb();
+  ensureSchema(db);
+  const limit = Math.min(200, Math.max(1, Number(opts?.limit) || 50));
+  const status = opts?.status?.trim() || null;
+  const rows = (
+    status
+      ? (db
+          .prepare(
+            `SELECT * FROM trial_inference_grants
+             WHERE status=?
+             ORDER BY updated_at DESC
+             LIMIT ?`
+          )
+          .all(status, limit) as Array<Record<string, unknown>>)
+      : (db
+          .prepare(
+            `SELECT * FROM trial_inference_grants
+             ORDER BY updated_at DESC
+             LIMIT ?`
+          )
+          .all(limit) as Array<Record<string, unknown>>)
+  );
+  return rows.map((row) => {
+    const g = mapRow(row);
+    const rem = remainingBudgetUsd(g);
+    return {
+      ...g,
+      remaining_usd: Number.isFinite(rem) ? rem : null,
+      updated_at: (row.updated_at as string | null) ?? null,
+    };
+  });
+}
+
+export function getGodModeInferenceGrantById(
+  id: string,
+  db: CoreDatabase = getCloudDb()
+): GodModeInferenceGrantRow | null {
+  ensureSchema(db);
+  const row = db
+    .prepare(`SELECT * FROM trial_inference_grants WHERE id=?`)
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? mapRow(row) : null;
+}
+
+export function revokeGodModeInferenceGrant(
+  id: string,
+  db: CoreDatabase = getCloudDb()
+): GodModeInferenceGrantRow | null {
+  ensureSchema(db);
+  const existing = getGodModeInferenceGrantById(id, db);
+  if (!existing) return null;
+  db.prepare(
+    `UPDATE trial_inference_grants
+     SET status='revoked', updated_at=datetime('now')
+     WHERE id=?`
+  ).run(id);
+  return getGodModeInferenceGrantById(id, db);
+}
+
+export function patchGodModeInferenceGrantBudget(
+  id: string,
+  budgetUsd: number,
+  db: CoreDatabase = getCloudDb()
+): GodModeInferenceGrantRow | null {
+  ensureSchema(db);
+  const existing = getGodModeInferenceGrantById(id, db);
+  if (!existing) return null;
+  const next = Math.max(0, Number(budgetUsd));
+  if (!Number.isFinite(next)) {
+    throw Object.assign(new Error("Invalid budget"), { status: 400 });
+  }
+  const status =
+    existing.status === "revoked" || existing.status === "converted"
+      ? existing.status
+      : next > existing.spent_usd
+        ? "active"
+        : "expired";
+  db.prepare(
+    `UPDATE trial_inference_grants
+     SET budget_usd=?, status=?, updated_at=datetime('now')
+     WHERE id=?`
+  ).run(next, status, id);
+  return getGodModeInferenceGrantById(id, db);
+}
+
 export type ManagedSupplyResolveCtx = {
   agentId: string;
   userId?: string | null;
@@ -342,9 +466,4 @@ export function resolveGodModeInferenceSupplyForManagedChat(
   }
 
   return resolveGodModeInferenceSupplyBySecretId(secretId);
-}
-
-export function defaultTrialBudgetUsd(): number {
-  const raw = Number(readEnv("TRIAL_INFERENCE_BUDGET_USD"));
-  return Number.isFinite(raw) && raw > 0 ? raw : TRIAL_DEFAULT_BUDGET_USD;
 }

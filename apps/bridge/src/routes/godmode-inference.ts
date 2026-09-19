@@ -8,6 +8,13 @@ import {
   handleGodModeInferenceStripeWebhook,
   getAdminGodModeInferenceHealth,
 } from "../services/godmode-inference-billing.js";
+import {
+  defaultTrialBudgetUsd,
+  listAdminGodModeInferenceGrants,
+  patchGodModeInferenceGrantBudget,
+  revokeGodModeInferenceGrant,
+  setDefaultTrialBudgetUsd,
+} from "../services/godmode-inference-grants.js";
 import { config } from "../config.js";
 
 export function createGodModeInferenceRouter(): Router {
@@ -60,7 +67,92 @@ export function createGodModeInferenceRouter(): Router {
       res.status(403).json({ error: "Admin only" });
       return;
     }
-    res.json(getAdminGodModeInferenceHealth());
+    res.json({
+      ...getAdminGodModeInferenceHealth(),
+      defaultTrialBudgetUsd: defaultTrialBudgetUsd(),
+      deploymentSurface: config.isSaas ? "saas" : "local",
+    });
+  });
+
+  router.get("/admin/grants", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const limit = Number(req.query.limit);
+    const status =
+      typeof req.query.status === "string" ? req.query.status : null;
+    res.json({
+      grants: listAdminGodModeInferenceGrants({
+        limit: Number.isFinite(limit) ? limit : 50,
+        status,
+      }),
+      defaultTrialBudgetUsd: defaultTrialBudgetUsd(),
+    });
+  });
+
+  router.patch("/admin/grants/:id", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    try {
+      const budgetRaw = req.body?.budgetUsd ?? req.body?.budget_usd;
+      if (budgetRaw == null) {
+        res.status(400).json({ error: "budgetUsd required" });
+        return;
+      }
+      const updated = patchGodModeInferenceGrantBudget(
+        req.params.id,
+        Number(budgetRaw)
+      );
+      if (!updated) {
+        res.status(404).json({ error: "Grant not found" });
+        return;
+      }
+      res.json({ grant: updated });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: number }).status) || 500
+          : 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Update failed",
+      });
+    }
+  });
+
+  router.post("/admin/grants/:id/revoke", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const updated = revokeGodModeInferenceGrant(req.params.id);
+    if (!updated) {
+      res.status(404).json({ error: "Grant not found" });
+      return;
+    }
+    res.json({ grant: updated });
+  });
+
+  router.put("/admin/default-trial-budget", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    try {
+      const raw = req.body?.budgetUsd ?? req.body?.budget_usd;
+      const next = setDefaultTrialBudgetUsd(Number(raw));
+      res.json({ defaultTrialBudgetUsd: next });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: number }).status) || 500
+          : 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Update failed",
+      });
+    }
   });
 
   return router;

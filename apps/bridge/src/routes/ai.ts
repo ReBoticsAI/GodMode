@@ -1967,9 +1967,16 @@ export function createAiRouter(
       : null;
     if (usingManagedSupply && !isGrantSpendable(activeInferenceGrant)) {
       send("error", {
-        error:
-          "GodMode Inference allowance exhausted. Buy more in Vault → Inference or connect DeepSeek / Z.AI / Qwen.",
+        error: config.isSaas
+          ? "GodMode Inference allowance exhausted. Keep a Cloud seat, buy Inference in Vault, or connect Supported BYOK."
+          : "GodMode Inference allowance exhausted. Buy Inference in Vault for this Local install, or connect Supported BYOK / a local model.",
         payPath: TRIAL_PAY_GODMODE_PATH,
+        convertHint: config.isSaas
+          ? "On GodMode Cloud: seat plus Inference (or BYOK)."
+          : "On GodMode Local: Inference or BYOK / local models.",
+        cloudSeatPath: config.isSaas ? "/settings?tab=account" : "",
+        cloudSeatCtaLabel: config.isSaas ? "Cloud seat" : "",
+        deploymentSurface: config.isSaas ? "saas" : "local",
       });
       clearInterval(statusHeartbeat);
       markChatTurnIdle(workDb, activeChatId);

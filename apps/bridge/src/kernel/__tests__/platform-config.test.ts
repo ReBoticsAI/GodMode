@@ -103,6 +103,8 @@ describe("platform configuration ObjectType adapters", () => {
         zaiCoding: { connected: false, source: "none" as const },
         dashscope: { connected: false, source: "none" as const },
       }),
+      defaultTrialBudgetUsd: () => 0.1,
+      setDefaultTrialBudgetUsd: (usd: number) => usd,
     });
     const def = definition("PlatformBillingConfig", "platform_billing_config_service", [
       "id",
@@ -138,6 +140,7 @@ describe("platform configuration ObjectType adapters", () => {
   it("configures GodMode Inference supply without projecting secrets", () => {
     const db = new Database(":memory:");
     let deepseek = "";
+    let trialBudget = 0.1;
     configurePlatformConfigAdapterServices({
       getBillingConfig: () => ({
         configured: false,
@@ -178,6 +181,11 @@ describe("platform configuration ObjectType adapters", () => {
           zaiCoding: { connected: false, source: "none" as const },
           dashscope: { connected: false, source: "none" as const },
         };
+      },
+      defaultTrialBudgetUsd: () => trialBudget,
+      setDefaultTrialBudgetUsd: (usd: number) => {
+        trialBudget = usd;
+        return usd;
       },
     });
     const def = definition(

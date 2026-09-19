@@ -1191,7 +1191,17 @@ export interface AiStreamHandlers {
     messageId: string;
   }) => void;
   onStatus?: (payload: { phase: string; message: string }) => void;
-  onError?: (error: string, code?: string) => void;
+  onError?: (
+    error: string,
+    code?: string,
+    meta?: {
+      payPath?: string;
+      convertHint?: string;
+      cloudSeatPath?: string;
+      cloudSeatCtaLabel?: string;
+      deploymentSurface?: string;
+    }
+  ) => void;
 }
 
 /** Open `/ws/chat` socket for the in-flight turn (Approve via same WS). */
@@ -1295,7 +1305,37 @@ export function streamAiChat(
           ).trim() || "Chat failed without a message. Try sending again.",
           typeof (parsed as { code?: unknown }).code === "string"
             ? String((parsed as { code: string }).code)
-            : undefined
+            : undefined,
+          {
+            payPath:
+              typeof (parsed as { payPath?: unknown }).payPath === "string"
+                ? String((parsed as { payPath: string }).payPath)
+                : undefined,
+            convertHint:
+              typeof (parsed as { convertHint?: unknown }).convertHint ===
+              "string"
+                ? String((parsed as { convertHint: string }).convertHint)
+                : undefined,
+            cloudSeatPath:
+              typeof (parsed as { cloudSeatPath?: unknown }).cloudSeatPath ===
+              "string"
+                ? String((parsed as { cloudSeatPath: string }).cloudSeatPath)
+                : undefined,
+            cloudSeatCtaLabel:
+              typeof (parsed as { cloudSeatCtaLabel?: unknown })
+                .cloudSeatCtaLabel === "string"
+                ? String(
+                    (parsed as { cloudSeatCtaLabel: string }).cloudSeatCtaLabel
+                  )
+                : undefined,
+            deploymentSurface:
+              typeof (parsed as { deploymentSurface?: unknown })
+                .deploymentSurface === "string"
+                ? String(
+                    (parsed as { deploymentSurface: string }).deploymentSurface
+                  )
+                : undefined,
+          }
         );
         break;
     }
@@ -6745,6 +6785,10 @@ export type TrialInferenceStatus = {
   primaryCtaLabel: string;
   payGodModePath: string;
   payCtaLabel: string;
+  deploymentSurface?: "saas" | "local";
+  convertHint?: string;
+  cloudSeatPath?: string;
+  cloudSeatCtaLabel?: string;
   /** Advanced BYOK: personal OpenRouter keys / credit top-up (secondary). */
   affiliateSignupUrl: string;
   /** Best-effort personal OpenRouter signup deep-link (advanced BYOK). */
@@ -6771,6 +6815,10 @@ export function publishTrialGreeting(status: TrialInferenceStatus): void {
     primaryCtaLabel: status.primaryCtaLabel || TRIAL_PRIMARY_CTA_LABEL,
     payGodModePath: status.payGodModePath || TRIAL_PAY_GODMODE_PATH,
     payCtaLabel: status.payCtaLabel || TRIAL_PAY_CTA_LABEL,
+    convertHint: status.convertHint ?? "",
+    cloudSeatPath: status.cloudSeatPath ?? "",
+    cloudSeatCtaLabel: status.cloudSeatCtaLabel ?? "",
+    deploymentSurface: status.deploymentSurface ?? "local",
     personalSignupUrl: status.personalSignupUrl,
     affiliateSignupUrl: status.affiliateSignupUrl,
     pasteKeyPath: status.pasteKeyPath || TRIAL_PASTE_KEY_PATH,
@@ -6811,6 +6859,10 @@ export function readStoredTrialGreeting(): {
   primaryCtaLabel?: string;
   payGodModePath?: string;
   payCtaLabel?: string;
+  convertHint?: string;
+  cloudSeatPath?: string;
+  cloudSeatCtaLabel?: string;
+  deploymentSurface?: "saas" | "local";
   personalSignupUrl?: string;
   affiliateSignupUrl?: string;
   pasteKeyPath?: string;
@@ -6826,6 +6878,10 @@ export function readStoredTrialGreeting(): {
       primaryCtaLabel?: string;
       payGodModePath?: string;
       payCtaLabel?: string;
+      convertHint?: string;
+      cloudSeatPath?: string;
+      cloudSeatCtaLabel?: string;
+      deploymentSurface?: "saas" | "local";
       personalSignupUrl?: string;
       affiliateSignupUrl?: string;
       pasteKeyPath?: string;
@@ -7193,6 +7249,7 @@ export interface GodModeInferenceConfig {
   zai: GodModeInferenceProviderStatus;
   zaiCoding: GodModeInferenceProviderStatus;
   dashscope: GodModeInferenceProviderStatus;
+  defaultTrialBudgetUsd: number;
 }
 
 function mapGodModeInferenceConfig(
@@ -7207,12 +7264,17 @@ function mapGodModeInferenceConfig(
       masked: typeof o.masked === "string" ? o.masked : null,
     };
   };
+  const budgetRaw = Number(
+    raw.default_trial_budget_usd ?? raw.defaultTrialBudgetUsd ?? 0.1
+  );
   return {
     configured: Boolean(raw.configured),
     deepseek: asStatus(raw.deepseek),
     zai: asStatus(raw.zai),
     zaiCoding: asStatus(raw.zai_coding ?? raw.zaiCoding),
     dashscope: asStatus(raw.dashscope),
+    defaultTrialBudgetUsd:
+      Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : 0.1,
   };
 }
 
@@ -7227,6 +7289,7 @@ export function updateGodModeInferenceConfig(body: {
   zaiApiKey?: string;
   zaiCodingApiKey?: string;
   dashscopeApiKey?: string;
+  defaultTrialBudgetUsd?: number;
 }) {
   return actionDto<RecordRowClient>(
     "GodModeInferenceConfig",
@@ -7236,6 +7299,7 @@ export function updateGodModeInferenceConfig(body: {
       zai_api_key: body.zaiApiKey,
       zai_coding_api_key: body.zaiCodingApiKey,
       dashscope_api_key: body.dashscopeApiKey,
+      default_trial_budget_usd: body.defaultTrialBudgetUsd,
     },
     "godmode-inference",
     true
@@ -7285,7 +7349,61 @@ export function fetchAdminGodModeInferenceHealth() {
     totalBudgetUsd: number;
     supplyReady: boolean;
     plansConfigured: number;
+    defaultTrialBudgetUsd?: number;
+    deploymentSurface?: "saas" | "local";
   }>("/godmode-inference/admin/health");
+}
+
+export type AdminGodModeInferenceGrant = {
+  id: string;
+  subject_key: string;
+  user_id: string | null;
+  visitor_key: string | null;
+  status: string;
+  kind: string;
+  spent_usd: number;
+  budget_usd: number | null;
+  remaining_usd: number | null;
+  prompt_count: number;
+  updated_at: string | null;
+};
+
+export function fetchAdminGodModeInferenceGrants(opts?: {
+  limit?: number;
+  status?: string;
+}) {
+  const q = new URLSearchParams();
+  if (opts?.limit) q.set("limit", String(opts.limit));
+  if (opts?.status) q.set("status", opts.status);
+  const suffix = q.toString() ? `?${q}` : "";
+  return api<{
+    grants: AdminGodModeInferenceGrant[];
+    defaultTrialBudgetUsd: number;
+  }>(`/godmode-inference/admin/grants${suffix}`);
+}
+
+export function revokeAdminGodModeInferenceGrant(id: string) {
+  return api<{ grant: AdminGodModeInferenceGrant }>(
+    `/godmode-inference/admin/grants/${encodeURIComponent(id)}/revoke`,
+    { method: "POST", body: "{}" }
+  );
+}
+
+export function patchAdminGodModeInferenceGrantBudget(
+  id: string,
+  budgetUsd: number
+) {
+  return api<{ grant: AdminGodModeInferenceGrant }>(
+    `/godmode-inference/admin/grants/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify({ budgetUsd }) }
+  );
+}
+
+export function setAdminDefaultTrialBudget(budgetUsd: number) {
+  return api<{ defaultTrialBudgetUsd: number }>(
+    "/godmode-inference/admin/default-trial-budget",
+    { method: "PUT", body: JSON.stringify({ budgetUsd }) }
+  );
 }
 
 export interface WorkspaceTemplateNode {

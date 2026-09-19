@@ -97,10 +97,17 @@ Background ensure flow:
 4. Supported BYOK: Vault → Inference → Supported. Advanced BYOK: other provider cards under Advanced tabs.
 5. Buy more: Vault → Inference → GodMode Inference (`/platform-vault?vault=inference&sub=godmode`).
 
-**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a $1 pack or subscribe (`payGodModePath`).
+**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a pack or subscribe (`payGodModePath`).
+
+**Convert paths (deployment-aware):**
+
+- **GodMode Cloud (SaaS):** keep a Cloud seat, then buy GodMode Inference (or Supported BYOK). Exhausted chat and welcome CTAs say so; optional Account / seat link.
+- **GodMode Local / hub:** buy GodMode Inference for this install, or connect Supported BYOK / a local model.
 
 **Secondary CTAs:** Connect Supported BYOK or use Local models.
 
-Ops: configure Admin → GodMode Inference keys. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
+**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget), sets default trial budget, and can revoke a grant so Intelligence hard-stops. Platform supply keys stay on the same tab.
+
+Ops: configure Admin → GodMode Inference keys and default trial budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
 
 See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision) for longer-term supply vision.

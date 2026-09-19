@@ -20,6 +20,8 @@ import {
   pickGodModeInferenceSupplyTarget,
   resolveGodModeInferenceSupplyKey,
 } from "./godmode-inference-supply.js";
+import { defaultTrialBudgetUsd } from "./godmode-inference-grants.js";
+import { config } from "../config.js";
 
 /**
  * First-land trial inference (#758).
@@ -48,6 +50,14 @@ export const TRIAL_PAY_GODMODE_PATH = "/platform-vault?vault=inference&sub=godmo
 
 export const TRIAL_PRIMARY_CTA_LABEL = "Get GodMode Inference";
 export const TRIAL_PAY_CTA_LABEL = "Buy $1 more";
+/** Cloud seat / account billing surface (SaaS). */
+export const TRIAL_CLOUD_SEAT_PATH = "/settings?tab=account";
+export const TRIAL_CLOUD_SEAT_CTA_LABEL = "Cloud seat";
+export const TRIAL_PAY_CTA_LABEL_SAAS = "Buy Inference";
+export const TRIAL_CONVERT_HINT_SAAS =
+  "On GodMode Cloud: keep a Cloud seat, then buy GodMode Inference (or use Supported BYOK).";
+export const TRIAL_CONVERT_HINT_LOCAL =
+  "On GodMode Local: buy GodMode Inference for this install, or connect Supported BYOK / a local model.";
 
 /**
  * Default welcome-guide model when only OpenRouter shared fallback is set.
@@ -179,9 +189,16 @@ export interface TrialInferenceStatus {
   detail?: string;
   /** Primary convert: keep chatting on GodMode Inference. */
   primaryCtaLabel: string;
-  /** Pay-to-play path (placeholder until GodMode Inference billing ships). */
+  /** Pay path: Vault GodMode Inference checkout. */
   payGodModePath: string;
   payCtaLabel: string;
+  /** saas | local: shapes convert copy. */
+  deploymentSurface: "saas" | "local";
+  /** Short convert hint under CTAs (Cloud seat + Inference vs Local Inference/BYOK). */
+  convertHint: string;
+  /** SaaS-only: Account / seat path. Empty on Local. */
+  cloudSeatPath: string;
+  cloudSeatCtaLabel: string;
   /**
    * Advanced BYOK: personal OpenRouter keys / credit top-up (secondary CTA).
    * Not the primary convert playbook.
@@ -344,10 +361,7 @@ function parseOrder(): TrialProvisionMechanism[] {
 
 export function trialInferenceConfig() {
   const ttlDays = Math.max(1, Number(readEnv("TRIAL_KEY_TTL_DAYS") || 30));
-  const budgetUsd = Math.max(
-    0.01,
-    Number(readEnv("TRIAL_INFERENCE_BUDGET_USD") || TRIAL_DEFAULT_BUDGET_USD)
-  );
+  const budgetUsd = Math.max(0.01, defaultTrialBudgetUsd());
   const promptThreshold = Math.max(
     1,
     Number(readEnv("TRIAL_PROMPT_THRESHOLD") || 5)
@@ -465,6 +479,13 @@ function baseStatus(
       displayName: identity?.displayName,
       email: identity?.email ?? signup.email,
     });
+  const deploymentSurface: "saas" | "local" =
+    partial.deploymentSurface ?? (config.isSaas ? "saas" : "local");
+  const convertHint =
+    partial.convertHint ??
+    (deploymentSurface === "saas"
+      ? TRIAL_CONVERT_HINT_SAAS
+      : TRIAL_CONVERT_HINT_LOCAL);
   return {
     ready: partial.ready,
     mechanism: partial.mechanism,
@@ -477,7 +498,19 @@ function baseStatus(
     detail: partial.detail,
     primaryCtaLabel: partial.primaryCtaLabel ?? TRIAL_PRIMARY_CTA_LABEL,
     payGodModePath: partial.payGodModePath ?? TRIAL_PAY_GODMODE_PATH,
-    payCtaLabel: partial.payCtaLabel ?? TRIAL_PAY_CTA_LABEL,
+    payCtaLabel:
+      partial.payCtaLabel ??
+      (deploymentSurface === "saas"
+        ? TRIAL_PAY_CTA_LABEL_SAAS
+        : TRIAL_PAY_CTA_LABEL),
+    deploymentSurface,
+    convertHint,
+    cloudSeatPath:
+      partial.cloudSeatPath ??
+      (deploymentSurface === "saas" ? TRIAL_CLOUD_SEAT_PATH : ""),
+    cloudSeatCtaLabel:
+      partial.cloudSeatCtaLabel ??
+      (deploymentSurface === "saas" ? TRIAL_CLOUD_SEAT_CTA_LABEL : ""),
     affiliateSignupUrl: cfg.affiliateSignupUrl,
     personalSignupUrl: partial.personalSignupUrl ?? signup.url,
     signupInitiation: partial.signupInitiation ?? signup.initiation,
@@ -547,11 +580,7 @@ function upsertGrant(
   const provider =
     opts.mechanism === "godmodeInferenceSupply" ? "godmode" : "openrouter";
   const budget =
-    opts.budgetUsd ??
-    Math.max(
-      0.01,
-      Number(readEnv("TRIAL_INFERENCE_BUDGET_USD") || TRIAL_DEFAULT_BUDGET_USD)
-    );
+    opts.budgetUsd ?? Math.max(0.01, defaultTrialBudgetUsd(db));
   db.prepare(
     `INSERT INTO trial_inference_grants (
        id, subject_key, user_id, visitor_key, provider, mechanism, status,
