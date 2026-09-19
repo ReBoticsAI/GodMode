@@ -13,6 +13,7 @@ import {
   isAgentScopedLeftTab,
   type FocusChrome,
 } from "@/lib/focus-chrome";
+import { focusOwnerLabel } from "@/lib/graph-focus-owner";
 
 export type FocusChip = FocusChrome & {
   /** Composer is sending to a focused chat window. */
@@ -38,6 +39,7 @@ export function useGraphFocusChip(): FocusChip | null {
     focusedChatWindowId,
     informationNode,
     activeAgentId,
+    focusOwner,
   } = useIntelligence();
 
   const [agentNames, setAgentNames] = useState<Record<string, string>>({});
@@ -60,13 +62,21 @@ export function useGraphFocusChip(): FocusChip | null {
   }, []);
 
   let scopeAgentLabel: string | null = null;
-  if (isAgentScopedLeftTab(activeLeftTab) && activeAgentId) {
-    const fromCatalog = agentNames[activeAgentId];
-    const fromWindow = openChatWindows.find(
-      (w) => w.kind === "agent" && w.agentId === activeAgentId && w.title
-    )?.title;
-    scopeAgentLabel =
-      fromCatalog || fromWindow || fallbackAgentLabel(activeAgentId);
+  if (isAgentScopedLeftTab(activeLeftTab)) {
+    const fromOwner = focusOwnerLabel(focusOwner);
+    if (fromOwner) {
+      scopeAgentLabel = fromOwner;
+    } else if (activeAgentId) {
+      const fromCatalog = agentNames[activeAgentId];
+      const fromWindow = openChatWindows.find(
+        (w) => w.kind === "agent" && w.agentId === activeAgentId && w.title
+      )?.title;
+      scopeAgentLabel =
+        fromCatalog || fromWindow || fallbackAgentLabel(activeAgentId);
+    }
+    if (focusOwner.kind === "agent" && agentNames[focusOwner.agentId]) {
+      scopeAgentLabel = agentNames[focusOwner.agentId];
+    }
   }
 
   const infoChrome = () =>

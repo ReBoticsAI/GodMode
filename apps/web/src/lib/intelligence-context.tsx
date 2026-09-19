@@ -30,6 +30,10 @@ import {
 import { useStructure } from "./structure-context";
 import { useTenant } from "./tenant-context";
 import {
+  focusOwnerFromGraphNode,
+  type FocusOwner,
+} from "./graph-focus-owner";
+import {
   ACTIVE_AGENT_KEY,
   AGENTS_SECTION_KEY,
   AUTO_ACCEPT_TOOLS_KEY,
@@ -133,6 +137,11 @@ interface IntelligenceContextValue {
   informationPanelOpen: boolean;
   setInformationPanelOpen: (open: boolean) => void;
   informationNode: GraphProjectionNode | null;
+  /**
+   * Owner for Calendar / Automations / Vault / Bank derived from
+   * `informationNode` (see docs/GRAPH_CHROME.md). Not a second write path.
+   */
+  focusOwner: FocusOwner;
   openInformationPanel: (node: GraphProjectionNode) => void;
   closeInformationPanel: () => void;
   openLeftRailTab: (tab: LeftRailTab) => void;
@@ -865,6 +874,17 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   >([]);
   const [focusedCanvasId, setFocusedCanvasId] = useState<string | null>(null);
 
+  const focusOwner = useMemo(
+    () => focusOwnerFromGraphNode(informationNode),
+    [informationNode]
+  );
+
+  useEffect(() => {
+    if (focusOwner.kind !== "agent") return;
+    if (focusOwner.agentId === activeAgentId) return;
+    setActiveAgentId(focusOwner.agentId);
+  }, [focusOwner, activeAgentId, setActiveAgentId]);
+
   const openInformationPanel = useCallback((node: GraphProjectionNode) => {
     setInformationNode(node);
     setActiveLeftTab("info");
@@ -1238,6 +1258,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       informationPanelOpen,
       setInformationPanelOpen,
       informationNode,
+      focusOwner,
       informationPanelMinimized,
       setInformationPanelMinimized,
       activeLeftTab,
@@ -1330,6 +1351,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       informationPanelOpen,
       setInformationPanelOpen,
       informationNode,
+      focusOwner,
       informationPanelMinimized,
       activeLeftTab,
       openInformationPanel,
