@@ -29,6 +29,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
 import { useIntelligence, type LeftRailTab } from "@/lib/intelligence-context";
+import {
+  agentIdFromFocusOwner,
+  productivityScopeFromFocusOwner,
+} from "@/lib/graph-focus-owner";
 import { useTenant } from "@/lib/tenant-context";
 import { useChatUnlock } from "@/lib/chat-unlock-context";
 import { useNavigate } from "react-router-dom";
@@ -249,6 +253,7 @@ export function InformationFloatingPanel() {
     activeLeftTab,
     setActiveLeftTab,
     activeAgentId,
+    focusOwner,
     chatTarget,
     setChatTarget,
     dmConversations,
@@ -310,6 +315,19 @@ export function InformationFloatingPanel() {
       nodeWantsCodingCanvas(informationNode) ? "coding" : "overview"
     );
   }, [informationNode?.id]);
+
+  const calendarScope = useMemo(() => {
+    const fromOwner = productivityScopeFromFocusOwner(focusOwner);
+    if (fromOwner) return fromOwner;
+    return { kind: "agent" as const, agentId: activeAgentId };
+  }, [focusOwner, activeAgentId]);
+
+  const scopeAgentId = useMemo(() => {
+    const fromOwner = agentIdFromFocusOwner(focusOwner);
+    if (fromOwner) return fromOwner;
+    if (focusOwner.kind === "user") return "digital-you";
+    return activeAgentId;
+  }, [focusOwner, activeAgentId]);
 
   const runCta = (action: GraphCtaAction, node: GraphProjectionNode) => {
     switch (action.type) {
@@ -598,11 +616,11 @@ export function InformationFloatingPanel() {
     >
       {activeLeftTab === "calendar" ? (
         <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
-          <CalendarBoard scope={{ kind: "agent", agentId: activeAgentId }} />
+          <CalendarBoard scope={calendarScope} />
         </div>
       ) : activeLeftTab === "projects" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <AutomationsPanel agentId={activeAgentId} showTasks showEvents />
+          <AutomationsPanel agentId={scopeAgentId} showTasks showEvents />
         </div>
       ) : activeLeftTab === "knowledge" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -610,11 +628,15 @@ export function InformationFloatingPanel() {
         </div>
       ) : activeLeftTab === "bank" ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-          <Bank embedded agentId={activeAgentId} />
+          <Bank embedded agentId={scopeAgentId} />
         </div>
       ) : activeLeftTab === "vault" ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-          <Vault mode="agent" agentId={activeAgentId} embedded />
+          {focusOwner.kind === "user" ? (
+            <Vault mode="user" embedded />
+          ) : (
+            <Vault mode="agent" agentId={scopeAgentId} embedded />
+          )}
         </div>
       ) : activeLeftTab === "personal-vault" ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">

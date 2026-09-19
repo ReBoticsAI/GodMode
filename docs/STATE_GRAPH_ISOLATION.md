@@ -56,3 +56,4 @@ Use this when chat context is gone. Prefer this over assuming “Graph nodes = S
 - [DATA_ISOLATION.md](./DATA_ISOLATION.md)
 - [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md)
 - [ROADMAP_GRAPH_ISOLATION.md](./ROADMAP_GRAPH_ISOLATION.md)
+- [GRAPH_CHROME.md](./GRAPH_CHROME.md) (Information `focusOwner` ownership rule)
