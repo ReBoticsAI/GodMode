@@ -315,17 +315,6 @@ export function InformationFloatingPanel() {
         isLight,
       })
     : "#a78bfa";
-  const statusBits =
-    node?.status
-      ? Object.entries(node.status)
-          .filter(
-            ([k]) =>
-              !["attention", "attentionCount", "openMissions"].includes(k)
-          )
-          .map(([k, v]) =>
-            typeof v === "boolean" ? `${k}: ${v ? "yes" : "no"}` : `${k}: ${v}`
-          )
-      : [];
 
   const titlePrefix =
     canvasMode === "pipeline"

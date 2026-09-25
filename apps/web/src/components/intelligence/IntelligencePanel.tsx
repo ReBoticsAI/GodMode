@@ -380,7 +380,6 @@ export function IntelligencePanel({
     clearNewChatRequest,
     toolAutonomy,
     chatMode,
-    openPanel,
     setSeedText,
   } = useIntelligence();
   const lockClose = chromeLocks?.lockClose ?? false;
@@ -1489,12 +1488,6 @@ export function IntelligencePanel({
             "Chat connection dropped. Try sending again.";
           const staleFromMsg = raw.includes("CURSOR_SESSION_STALE");
           const errorText = raw.replace(/^CURSOR_SESSION_STALE:\s*/i, "");
-          if (meta?.payPath) setTrialPayPath(meta.payPath);
-          if (meta?.convertHint) setTrialConvertHint(meta.convertHint);
-          if (meta?.cloudSeatPath != null)
-            setTrialCloudSeatPath(meta.cloudSeatPath);
-          if (meta?.cloudSeatCtaLabel != null)
-            setTrialCloudSeatCta(meta.cloudSeatCtaLabel);
           const convertLine = meta?.convertHint
             ? `\n\n${meta.convertHint}`
             : "";
@@ -2177,7 +2170,7 @@ export function IntelligencePanel({
             const deferTourReply = !own && m.id === tourReplyId;
             const visibleParts = deferTourReply
               ? (m.parts ?? []).filter((part) => part.kind !== "text")
-              : m.parts;
+              : (m.parts ?? []);
             if (deferTourReply && visibleParts.length === 0) return null;
             if (own) {
               return (
