@@ -62,7 +62,9 @@ async function openAiCompletion(
   body: Record<string, unknown>
 ): Promise<{ content: string; toolCalls: AgentMessage["tool_calls"] }> {
   const trimmed = baseUrl.replace(/\/$/, "");
-  const url = /\/v1$/i.test(trimmed)
+  // Bases that already end in /v1 or /v4 (Z.AI, DashScope-style) take
+  // /chat/completions. Bare hosts get /v1/chat/completions.
+  const url = /\/v\d+$/i.test(trimmed)
     ? `${trimmed}/chat/completions`
     : `${trimmed}/v1/chat/completions`;
   const res = await fetch(url, {
@@ -288,6 +290,10 @@ export class ProviderBackend implements AgentBackend {
           content = out.content;
           toolCalls = out.toolCalls;
         } else {
+          const overlay = req.samplingOverlay;
+          const temperature =
+            overlay?.temperature ?? req.agent.sampling.temperature;
+          const topP = overlay?.topP ?? req.agent.sampling.topP;
           const body: Record<string, unknown> = {
             messages: messages.map((m) => ({
               role: m.role,
@@ -295,10 +301,26 @@ export class ProviderBackend implements AgentBackend {
               ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
               ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
             })),
-            temperature: req.agent.sampling.temperature,
+            temperature,
             max_tokens:
               req.agent.sampling.maxTokens > 0 ? req.agent.sampling.maxTokens : undefined,
           };
+          // Z.AI / OpenAI-compatible: send top_p when the harness sets it.
+          // Skip top_k (not in Z.AI chat completions contract).
+          if (typeof topP === "number" && topP > 0 && topP < 1) {
+            body.top_p = topP;
+          }
+          const extras = req.providerExtras;
+          if (extras?.thinkingEnabled || extras?.reasoningEffort) {
+            const clearThinking = extras.clearThinking !== false;
+            body.thinking = {
+              type: "enabled",
+              clear_thinking: clearThinking,
+            };
+            if (extras.reasoningEffort) {
+              body.reasoning_effort = extras.reasoningEffort;
+            }
+          }
           if (
             !isLast &&
             req.agent.thinking.nativeTools &&

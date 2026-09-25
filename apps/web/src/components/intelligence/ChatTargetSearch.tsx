@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isChatTargetAgent } from "@/lib/chat-target-agents";
+import { displayNameForAgent } from "@/lib/focus-chrome";
 
 /**
  * Unified chat target selector: agents, human contacts, existing conversations,
@@ -195,7 +196,7 @@ export function ChatTargetSearch({
     if (chatTarget.kind === "conversation") {
       return currentConversation?.displayTitle ?? "Conversation";
     }
-    return currentAgent?.name ?? activeAgentId;
+    return displayNameForAgent(activeAgentId, currentAgent?.name);
   }, [chatTarget, currentConversation, currentAgent, activeAgentId]);
 
   const q = query.trim().toLowerCase();

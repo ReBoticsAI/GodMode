@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { AGENTS_PATH } from "@/lib/navigation";
 import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   approveAiMemory,
   createAiMemory,
@@ -115,7 +116,8 @@ function MemoryMetaBadges({ memory }: { memory: AiMemory }) {
 }
 
 export function MemoryTab() {
-  const { activeAgentId, setAgentsSection } = useIntelligence();
+  const { setAgentsSection } = useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const navigate = useNavigate();
   const [memories, setMemories] = useState<AiMemory[]>([]);
   const [newText, setNewText] = useState("");

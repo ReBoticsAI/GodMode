@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
 import {
   FIRST_LAND_GREETING,
+  interestModelGuide,
+  pathModelGuide,
+  SIGNUP_GUIDE_HARNESS_DELTA,
   TRIAL_DEFAULT_MODEL_ID,
   TRIAL_PASTE_KEY_PATH,
   TRIAL_PAY_GODMODE_PATH,
@@ -509,5 +512,58 @@ describe("trial-inference", () => {
       cloud.close();
       first.close();
     }
+  });
+});
+
+describe("interestModelGuide", () => {
+  it("expands Create past the examples and points at signup on the Graph", () => {
+    const guide = interestModelGuide("create");
+    expect(guide).toContain("examples, not the whole list");
+    expect(guide).toContain("pages, agents, structure");
+    expect(guide).toContain("3D Graph");
+    expect(guide).toContain("Do not mention a sidebar");
+    expect(guide).toContain("Do not start building");
+    expect(guide).toContain("GodMode Inference");
+    expect(guide).toContain("GodMode Cloud with Inference");
+    expect(interestModelGuide("nope")).toBeNull();
+  });
+
+  it("tells Earn to cover a local GodMode Seller account", () => {
+    const guide = interestModelGuide("earn");
+    expect(guide).toContain("GodMode Seller");
+    expect(guide).toContain("keeping this GodMode instance local");
+    expect(guide).toContain("marketplace");
+    expect(guide).toContain("commerce only");
+    expect(guide).toContain("Do not quote a Seller price");
+    expect(guide).toContain("https://godmode.software/downloads");
+    expect(guide).toContain("Windows, macOS, and Linux");
+    expect(interestModelGuide("create")).not.toContain("commerce only");
+  });
+
+  it("names the visitor operating system on the Earn download offer", () => {
+    const guide = interestModelGuide("earn", "windows");
+    expect(guide).toContain("The visitor is on Windows");
+    expect(guide).toContain("Windows desktop download");
+    expect(interestModelGuide("earn", "phone")).toContain("Windows, macOS, and Linux");
+    expect(interestModelGuide("create", "windows")).not.toContain(
+      "godmode.software/downloads"
+    );
+  });
+
+  it("keeps the same rules in the welcome harness", () => {
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("Never mention a sidebar");
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("not the whole list");
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("ask_guide_choice");
+  });
+
+  it("explains Cloud with Inference against a local install", () => {
+    const cloud = pathModelGuide("cloud_inference", "windows");
+    expect(cloud).toContain("not running GodMode on this computer");
+    expect(cloud).toContain("Local with Inference");
+    expect(cloud).toContain("godmode_inference");
+    const download = pathModelGuide("download", "macos");
+    expect(download).toContain("macOS");
+    expect(download).toContain("https://godmode.software/downloads");
+    expect(pathModelGuide("nope")).toBeNull();
   });
 });

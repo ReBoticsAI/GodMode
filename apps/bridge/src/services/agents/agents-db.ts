@@ -81,7 +81,7 @@ export function getAgent(db: AppDatabase, id: string): AiAgent | null {
  * differs from the user's Digital twin and the specialized subagents.
  */
 export const INTELLIGENCE_DESCRIPTION =
-  "Intelligence is GodMode's built-in AI — your guide to the platform itself. " +
+  "Intelligence is GodMode's built-in AI: your guide to the platform itself. " +
   "Ask it how GodMode works and have it help you build and wire things up: " +
   "new agents, pages, departments, automations and workflows. " +
   "It has a platform-wide view, so it's the best place to start when you're " +

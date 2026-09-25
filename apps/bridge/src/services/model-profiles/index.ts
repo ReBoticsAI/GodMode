@@ -28,6 +28,17 @@ export interface ModelHarnessProfile {
   deferredDiscoveryTools: string[];
   /** Appended after the base harness (simple-chat gate, etc.). */
   harnessDelta: string;
+  /**
+   * GLM / Z.AI thinking controls (OpenAI-compatible extras).
+   * Flash forces thinking enabled; prefer `low` for short orient turns and
+   * `max` for tool-heavy agent loops. Omit on hosts that do not accept these.
+   */
+  reasoningEffort?: "low" | "high" | "max";
+  /**
+   * When false, preserve prior `reasoning_content` across tool turns (better
+   * agent loops + cache hits on Z.AI). When true / omitted, clear thinking.
+   */
+  clearThinking?: boolean;
 }
 
 export type HarnessCatalogSource = "local" | "cursor" | "provider" | "remote";
@@ -1208,20 +1219,25 @@ export const ZAI_PAYG_PROFILE: ModelHarnessProfile = {
   id: "zai-payg",
   label: "Z.AI Platform (payg)",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  // Z.AI GLM-5.3 Flash recommended: temperature 1, top_p 0.95 (omit unused top_k).
+  sampling: { temperature: 1.0, topP: 0.95, topK: 0 },
   maxChatIterations: 14,
-  enableThinkingDefault: false,
+  // Flash forces thinking; low effort keeps orient / trial turns cheap.
+  enableThinkingDefault: true,
   stripThinkingFromHistory: true,
   requireJinja: false,
   deferredDiscoveryTools: [...ZAI_PAYG_TRANSPORT_DEFERRED],
+  reasoningEffort: "low",
+  clearThinking: true,
   harnessDelta: [
     '<model_profile id="zai-payg">',
     "You are running via Z.AI Platform payg (openai_compatible transport, metered BYOK).",
-    "This is not the Cursor SDK path, not GLM Coding Plan, and not Fireworks/Together GLM hosting.",
-    "Use native OpenAI-style function calling as exposed by the paas endpoint. Do not invent tool names.",
-    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Model family: GLM-5.3 Flash (glm-5.3-flash) on https://api.z.ai/api/paas/v4/ — not Coding Plan, not Cursor SDK, not Fireworks/Together GLM hosting.",
+    "Use native OpenAI-style function calling as exposed by the paas endpoint. Do not invent tool names. tool_choice is auto only.",
+    "Greetings: answer briefly with no tools.",
+    "Orientation, pricing, Vault, Graph, Inference, or BYOK: call open_guide_surface or focus_graph_node to show the UI. Never invent pack prices; open godmode_inference for live pricing.",
     "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
-    "GLM payg: lean tool surface; follow schemas closely.",
+    "Prefer short, purposeful turns. Follow tool schemas closely. Prefer live UI over fabricated numbers.",
     "</model_profile>",
   ].join("\n"),
 };
@@ -1430,12 +1446,15 @@ export const ZAI_CODING_PROFILE: ModelHarnessProfile = {
   id: "zai-coding",
   label: "Z.AI GLM Coding Plan",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  sampling: { temperature: 1.0, topP: 0.95, topK: 0 },
   maxChatIterations: 14,
-  enableThinkingDefault: false,
-  stripThinkingFromHistory: true,
+  enableThinkingDefault: true,
+  // Coding Plan preserves thinking by default; keep reasoning across tool turns.
+  stripThinkingFromHistory: false,
   requireJinja: false,
   deferredDiscoveryTools: [...ZAI_CODING_TRANSPORT_DEFERRED],
+  reasoningEffort: "max",
+  clearThinking: false,
   harnessDelta: [
     '<model_profile id="zai-coding">',
     "You are running via Z.AI GLM Coding Plan (openai_compatible transport, subscription quota).",

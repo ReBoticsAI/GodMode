@@ -9,9 +9,9 @@
  * the focus/reply pill + composer input even before measurement runs.
  */
 
-/** Top inset fallback: top-4 + ticker (h-8) + gap + notice (h-7) + slack. */
+/** Top inset fallback: top-4 + ticker (h-7) + gap + notice/observe (h-7) + slack. */
 export const GRAPH_TOP_CHROME_BAND =
-  "calc(1rem + 2rem + 0.375rem + 1.75rem + 0.5rem)";
+  "calc(1rem + 1.75rem + 0.375rem + 1.75rem + 0.5rem)";
 
 /**
  * Bottom inset fallback: footer pt-2 + focus/reply pill (h-7) + gap-2 +
@@ -25,6 +25,12 @@ export const GRAPH_PRIMARY_CHROME_Z = "z-[210]";
 
 /** Secondary surfaces (FloatingWindow, GraphPhoneSheet). Below primary chrome. */
 export const GRAPH_WINDOW_Z = "z-[110]";
+
+/** Intelligence chat: above Information so Vault/Info never buries the thread. */
+export const GRAPH_CHAT_WINDOW_Z = "z-[120]";
+
+/** Focused Information window sits between generic windows and chat. */
+export const GRAPH_INFO_FOCUS_Z = "z-[115]";
 
 export const GRAPH_WINDOW_BOUNDS_SELECTOR = "[data-graph-window-bounds]";
 export const GRAPH_TOP_CHROME_SELECTOR = "[data-graph-top-chrome]";

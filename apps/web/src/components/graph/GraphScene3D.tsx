@@ -21,6 +21,7 @@ import {
   hiddenDescendantIds,
   recollapsePlatformRayBeyond,
 } from "@/lib/graph-collapse";
+import { pathFromYou } from "@/lib/graph-path";
 import { buildGraphNodeColors, graphNodeColor } from "@/lib/graph-node-style";
 import { useTheme } from "next-themes";
 
@@ -136,6 +137,11 @@ export type GraphScene3DHandle = {
   focusNode: (nodeId: string) => void;
   /** Highlight a node and frame it (same as clicking the glyph). */
   selectNode: (nodeId: string) => void;
+  /**
+   * Zoom out on the path from You to this node and highlight that connection.
+   * The path is framed in the open area beside the chat window.
+   */
+  frameConnection: (nodeId: string) => void;
 };
 
 type Vec3 = { x: number; y: number; z: number };
@@ -145,7 +151,7 @@ function nodePosition(node: GraphProjectionNode): THREE.Vector3 {
   return new THREE.Vector3(p.x, p.y, p.z ?? 0);
 }
 
-function boundsForNodes(nodes: GraphProjectionNode[]): THREE.Box3 {
+function boundsForNodes(nodes: GraphProjectionNode[], slack = 0.85): THREE.Box3 {
   const box = new THREE.Box3();
   for (const n of nodes) {
     box.expandByPoint(nodePosition(n));
@@ -153,9 +159,36 @@ function boundsForNodes(nodes: GraphProjectionNode[]): THREE.Box3 {
   if (box.isEmpty()) {
     box.setFromCenterAndSize(DEFAULT_TARGET, new THREE.Vector3(2, 2, 2));
   } else {
-    box.expandByScalar(0.85);
+    box.expandByScalar(slack);
   }
   return box;
+}
+
+/** Push the framed path into the open side of the canvas, next to the chat. */
+function shiftBoxBesideChat(box: THREE.Box3): void {
+  if (typeof document === "undefined") return;
+  const canvas = document.querySelector("canvas");
+  const header = document.querySelector('header[data-window-id="chat"]');
+  const chat = header?.parentElement;
+  if (!canvas || !chat) return;
+  const view = canvas.getBoundingClientRect();
+  const panel = chat.getBoundingClientRect();
+  if (view.width < 80 || panel.width < 80) return;
+  const freeRight = Math.max(0, view.right - panel.right);
+  const freeLeft = Math.max(0, panel.left - view.left);
+  const freeWidth = Math.max(freeLeft, freeRight);
+  if (freeWidth < 80) return;
+  const freeCx =
+    freeRight >= freeLeft
+      ? panel.right + freeRight / 2
+      : view.left + freeLeft / 2;
+  const fraction = (freeCx - (view.left + view.width / 2)) / view.width;
+  const shift = Math.max(-0.35, Math.min(0.35, fraction));
+  if (Math.abs(shift) < 0.02) return;
+  const width = box.getSize(new THREE.Vector3()).x;
+  const extra = (Math.abs(shift) * width) / Math.max(0.08, 0.5 - Math.abs(shift));
+  if (shift > 0) box.min.x -= extra;
+  else box.max.x += extra;
 }
 
 /** Shared hit geometry for pointer events under Html glyphs. */
@@ -487,6 +520,7 @@ function EdgeLine({
 function SceneBody({
   projection,
   selectedId,
+  pathIds,
   collapsedIds,
   positionOverrides,
   cameraEnabled,
@@ -501,6 +535,7 @@ function SceneBody({
 }: {
   projection: GraphProjection;
   selectedId: string | null;
+  pathIds: Set<string> | null;
   collapsedIds: Set<string>;
   positionOverrides: Record<string, Vec3>;
   cameraEnabled: boolean;
@@ -621,30 +656,38 @@ function SceneBody({
     c.enabled = cameraEnabled;
   }, [cameraEnabled, controlsRef]);
 
+  const pathHighlight = pathIds != null && pathIds.size > 0;
+
   const dimEdges = useMemo(
     () =>
-      visibleEdges.filter(
-        (e) =>
-          !(
-            Boolean(selectedId) &&
-            (e.source === selectedId ||
-              e.target === selectedId ||
-              (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
-          )
-      ),
-    [visibleEdges, selectedId, adjacentIds]
-  );
-
-  const hiEdges = useMemo(
-    () =>
-      visibleEdges.filter(
-        (e) =>
+      visibleEdges.filter((e) => {
+        if (pathHighlight && pathIds) {
+          return !(pathIds.has(e.source) && pathIds.has(e.target));
+        }
+        return !(
           Boolean(selectedId) &&
           (e.source === selectedId ||
             e.target === selectedId ||
             (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
-      ),
-    [visibleEdges, selectedId, adjacentIds]
+        );
+      }),
+    [visibleEdges, selectedId, adjacentIds, pathHighlight, pathIds]
+  );
+
+  const hiEdges = useMemo(
+    () =>
+      visibleEdges.filter((e) => {
+        if (pathHighlight && pathIds) {
+          return pathIds.has(e.source) && pathIds.has(e.target);
+        }
+        return (
+          Boolean(selectedId) &&
+          (e.source === selectedId ||
+            e.target === selectedId ||
+            (adjacentIds.has(e.source) && adjacentIds.has(e.target)))
+        );
+      }),
+    [visibleEdges, selectedId, adjacentIds, pathHighlight, pathIds]
   );
 
   return (
@@ -695,8 +738,8 @@ function SceneBody({
               isLight,
             })
           }
-          selected={selectedId === n.id}
-          adjacent={adjacentIds.has(n.id)}
+          selected={pathIds?.has(n.id) || selectedId === n.id}
+          adjacent={!pathHighlight && adjacentIds.has(n.id)}
           collapsed={collapsedIds.has(n.id)}
           collapsible={collapsibleIds.has(n.id)}
           onSelect={onSelect}
@@ -729,6 +772,7 @@ export const GraphScene3D = forwardRef<
   const background =
     resolvedTheme === "light" ? SCENE_BG_LIGHT : SCENE_BG_DARK;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pathIds, setPathIds] = useState<Set<string> | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() =>
     defaultCollapsedSet()
   );
@@ -821,6 +865,7 @@ export const GraphScene3D = forwardRef<
     (nodeId: string) => {
       const node = projection.nodes.find((n) => n.id === nodeId);
       if (!node) return;
+      setPathIds(null);
       setSelectedId(nodeId);
       focusNode(nodeId);
       onSelectionChange?.(node);
@@ -828,14 +873,55 @@ export const GraphScene3D = forwardRef<
     [focusNode, onSelectionChange, projection.nodes]
   );
 
+  const frameConnection = useCallback(
+    (nodeId: string) => {
+      const c = controlsRef.current;
+      const node = projection.nodes.find((n) => n.id === nodeId);
+      if (!c || !node) return;
+      const ids = pathFromYou(projection.edges, nodeId).filter((id) =>
+        projection.nodes.some((n) => n.id === id)
+      );
+      const framed = (ids.length > 0 ? ids : [nodeId])
+        .map((id) => projection.nodes.find((n) => n.id === id))
+        .filter((n): n is GraphProjectionNode => Boolean(n))
+        .map((n) => {
+          const o = positionOverrides[n.id];
+          if (!o) return n;
+          return {
+            ...n,
+            position: { x: o.x, y: o.y, z: o.z },
+          };
+        });
+      setPathIds(new Set(framed.map((n) => n.id)));
+      setSelectedId(nodeId);
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of framed.map((n) => n.id)) next.delete(id);
+        return next;
+      });
+      const box = boundsForNodes(framed, 2.4);
+      shiftBoxBesideChat(box);
+      void c.fitToBox(box, true, {
+        cover: false,
+        paddingTop: 1.2,
+        paddingBottom: 1.2,
+        paddingLeft: 1.2,
+        paddingRight: 1.2,
+      });
+      onSelectionChange?.(node);
+    },
+    [onSelectionChange, positionOverrides, projection.edges, projection.nodes]
+  );
+
   useImperativeHandle(
     ref,
-    () => ({ fitAll, reset, focusNode, selectNode }),
-    [fitAll, reset, focusNode, selectNode]
+    () => ({ fitAll, reset, focusNode, selectNode, frameConnection }),
+    [fitAll, reset, focusNode, selectNode, frameConnection]
   );
 
   const onSelect = useCallback(
     (node: GraphProjectionNode) => {
+      setPathIds(null);
       setSelectedId(node.id);
       focusNode(node.id);
       onSelectionChange?.(node);
@@ -979,12 +1065,14 @@ export const GraphScene3D = forwardRef<
       className="h-full w-full"
       onPointerMissed={() => {
         setSelectedId(null);
+        setPathIds(null);
         invalidate();
       }}
     >
       <SceneBody
         projection={projection}
         selectedId={selectedId}
+        pathIds={pathIds}
         collapsedIds={collapsedIds}
         positionOverrides={positionOverrides}
         cameraEnabled={cameraEnabled}

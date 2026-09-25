@@ -9,6 +9,11 @@ import {
   type UserProfile,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
+import {
+  ACTIVE_AGENT_KEY,
+  LEGACY_ACTIVE_AGENT_KEY,
+  writeMigratedKey,
+} from "@/lib/storage-keys";
 import { CreateWorkspaceDialog } from "@/components/CreateWorkspaceDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -161,6 +166,7 @@ export function UserProfilePanel() {
     } catch {
       /* still clear local session below */
     }
+    writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, "intelligence");
     await refresh();
     window.location.assign("/");
   };

@@ -33,6 +33,8 @@ export function useGraphFocusChip(): FocusChip | null {
   const {
     informationPanelOpen,
     informationPanelMinimized,
+    panelOpen,
+    panelMinimized,
     activeLeftTab,
     chatInboxOpen,
     openChatWindows,
@@ -96,6 +98,22 @@ export function useGraphFocusChip(): FocusChip | null {
     return { ...focusChromeForInbox(), mode: "focused" };
   }
 
+  // IntelligencePanel registers as floating window id "chat".
+  if (activeWindowId === "chat" && panelOpen && !panelMinimized) {
+    const label =
+      agentNames[activeAgentId] || fallbackAgentLabel(activeAgentId);
+    return {
+      ...focusChromeForChatWindow({
+        id: "chat",
+        kind: "agent",
+        agentId: activeAgentId,
+        title: label,
+        minimized: false,
+      }),
+      mode: "replying",
+    };
+  }
+
   if (activeWindowId) {
     const activeChat = openChatWindows.find(
       (w) => w.id === activeWindowId && !w.minimized
@@ -111,6 +129,21 @@ export function useGraphFocusChip(): FocusChip | null {
   // 2) Fallbacks when registry has no active id yet.
   if (informationPanelOpen && !informationPanelMinimized) {
     return { ...infoChrome(), mode: "focused" };
+  }
+
+  if (panelOpen && !panelMinimized) {
+    const label =
+      agentNames[activeAgentId] || fallbackAgentLabel(activeAgentId);
+    return {
+      ...focusChromeForChatWindow({
+        id: "chat",
+        kind: "agent",
+        agentId: activeAgentId,
+        title: label,
+        minimized: false,
+      }),
+      mode: "replying",
+    };
   }
 
   const focusedWin = focusedChatWindowId

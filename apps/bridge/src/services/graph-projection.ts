@@ -935,9 +935,13 @@ function pushPlatformAgentToolSummaries(opts: {
  * entitlement / vault-connected booleans and a capped live chat neighborhood
  * (no message or memory bodies for anonymous; neighborhood only when tenantDb).
  */
+const ADMIN_ARCHITECTURE_NODE_ID = "hub:admin";
+
 export function buildArchitectureProjection(opts: {
   userId?: string;
   userLabel?: string;
+  /** When set with userId, non-admins do not see the Admin graph node. */
+  isAdmin?: boolean;
   tenantDb?: AppDatabase | null;
   cloudDb?: CoreDatabase;
   enrichLiveNeighborhood?: boolean;
@@ -1047,12 +1051,25 @@ export function buildArchitectureProjection(opts: {
     }
   }
 
-  const truncated = nodes.length >= MAX_NODES || edges.length >= MAX_EDGES;
+  // Signed-in non-admins should not see Admin on the architecture map.
+  let outNodes = nodes;
+  let outEdges = edges;
+  if (opts.userId && !opts.isAdmin) {
+    outNodes = nodes.filter((n) => n.id !== ADMIN_ARCHITECTURE_NODE_ID);
+    outEdges = edges.filter(
+      (e) =>
+        e.source !== ADMIN_ARCHITECTURE_NODE_ID &&
+        e.target !== ADMIN_ARCHITECTURE_NODE_ID
+    );
+  }
+
+  const truncated =
+    outNodes.length >= MAX_NODES || outEdges.length >= MAX_EDGES;
   return {
     focusType: "architecture",
     focusId: "godmode",
-    nodes,
-    edges,
+    nodes: outNodes,
+    edges: outEdges,
     truncated,
     catalogVersion: ARCHITECTURE_CATALOG_VERSION,
   };

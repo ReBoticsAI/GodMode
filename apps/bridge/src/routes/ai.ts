@@ -147,6 +147,8 @@ import {
   recordGodModeInferenceSpend,
 } from "../services/godmode-inference-grants.js";
 import {
+  interestModelGuide,
+  pathModelGuide,
   isSignupGuideModeEnabled,
   isSignupGuideTopic,
   SIGNUP_GUIDE_HARNESS_DELTA,
@@ -159,6 +161,7 @@ import {
   resolveProfileForAgent,
 } from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
+import { filterSchemasForSignupGuide } from "../services/guide-ui-tools.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
@@ -1617,6 +1620,9 @@ export function createAiRouter(
       autoAcceptTools = false,
       chatMode: rawChatMode,
       toolAutonomy: rawToolAutonomy,
+      interestId: rawInterestId,
+      pathId: rawPathId,
+      clientOs: rawClientOs,
     } = body as {
       chatId?: string;
       message: string;
@@ -1628,7 +1634,21 @@ export function createAiRouter(
       autoAcceptTools?: boolean;
       chatMode?: IntelligenceChatMode;
       toolAutonomy?: CodeAutonomyLevel;
+      interestId?: string;
+      pathId?: string;
+      clientOs?: string;
     };
+
+    const interestId =
+      typeof rawInterestId === "string" && interestModelGuide(rawInterestId)
+        ? rawInterestId
+        : undefined;
+    const pathId =
+      typeof rawPathId === "string" && pathModelGuide(rawPathId)
+        ? rawPathId
+        : undefined;
+    const clientOs =
+      typeof rawClientOs === "string" ? rawClientOs : undefined;
 
     const chatMode: IntelligenceChatMode =
       rawChatMode === "plan" || rawChatMode === "ask" ? rawChatMode : "agent";
@@ -1837,6 +1857,9 @@ export function createAiRouter(
         history,
         platformContext,
         message: message ?? "",
+        interestId,
+        pathId,
+        clientOs,
       },
     };
 
@@ -1865,6 +1888,9 @@ export function createAiRouter(
       history,
       platformContext,
       message,
+      interestId,
+      pathId,
+      clientOs,
     } = prepared;
 
     const workTenantId = work.tenantId;
@@ -1991,10 +2017,23 @@ export function createAiRouter(
       message?.trim() &&
       !isSignupGuideTopic(message)
     ) {
-      send("token", { text: SIGNUP_GUIDE_REFUSAL });
+      send("token", { content: SIGNUP_GUIDE_REFUSAL });
       send("done", { content: SIGNUP_GUIDE_REFUSAL });
       clearInterval(statusHeartbeat);
       markChatTurnIdle(workDb, activeChatId);
+      if (activeWorkCardId) {
+        try {
+          completeActiveWorkRunCard({
+            db: workDb,
+            cardId: activeWorkCardId,
+            tenantId: work.tenantId,
+            outcome: "aborted",
+            summary: "Welcome-guide topic gate: steered off-topic turn.",
+          });
+        } catch (completeErr) {
+          console.error("[active-work] complete run card failed", completeErr);
+        }
+      }
       return;
     }
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
@@ -2140,6 +2179,21 @@ export function createAiRouter(
       ? `${systemPrompt}\n\n${scratchpad}`
       : systemPrompt;
 
+    const paidInferenceGrant =
+      activeInferenceGrant?.kind === "pack" ||
+      activeInferenceGrant?.kind === "subscription";
+    const interestGuideText =
+      usingManagedSupply && !paidInferenceGrant
+        ? pathModelGuide(pathId ?? "", clientOs) ??
+          interestModelGuide(interestId ?? "", clientOs)
+        : null;
+    const guidedUserContent =
+      typeof userContent === "string" && interestGuideText
+        ? `${userContent}\n\n${interestGuideText}`
+        : Array.isArray(userContent) && interestGuideText
+          ? [{ type: "text" as const, text: interestGuideText }, ...userContent]
+          : userContent;
+
     const messages: ChatMessage[] = [
       { role: "system", content: systemPromptWithScratchpad },
       ...compactedHistory.map((h) => ({
@@ -2148,7 +2202,7 @@ export function createAiRouter(
         ...(h.tool_calls ? { tool_calls: h.tool_calls } : {}),
         ...(h.tool_call_id ? { tool_call_id: h.tool_call_id, name: h.name } : {}),
       })),
-      { role: "user", content: userContent },
+      { role: "user", content: guidedUserContent },
     ];
 
     const sampling = applyProfileSampling(
@@ -2298,18 +2352,31 @@ export function createAiRouter(
           pathname: platformContext?.pathname,
           mentionIds: platformContext?.mentionedSources?.map((s) => s.id) ?? [],
         };
-        const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, profileFilterOpts);
+        const profileSchemas = filterSchemasForProfile(
+          rawSchemas,
+          harnessProfile,
+          profileFilterOpts
+        );
+        // Trial welcome-guide: hard RBAC to orientation tools only.
+        const toolSchemas = signupGuideActive
+          ? filterSchemasForSignupGuide(profileSchemas)
+          : profileSchemas;
+        const refreshGuideSchemas = () => {
+          const next = filterSchemasForProfile(
+            getToolSchemasForLlm(engineDb, agent.id, chatMode),
+            harnessProfile,
+            profileFilterOpts
+          );
+          return signupGuideActive
+            ? filterSchemasForSignupGuide(next)
+            : next;
+        };
         const answer = await backend.run({
           agent,
           messages: agentMessages,
           chatMode,
           toolSchemas,
-          refreshToolSchemas: () =>
-            filterSchemasForProfile(
-              getToolSchemasForLlm(engineDb, agent.id, chatMode),
-              harnessProfile,
-              profileFilterOpts
-            ),
+          refreshToolSchemas: refreshGuideSchemas,
           toolMode:
             harnessProfile.toolMode === "grammar" ? "grammar" : "native",
           samplingOverlay: {
@@ -2317,6 +2384,20 @@ export function createAiRouter(
             topP: harnessProfile.sampling.topP,
             topK: harnessProfile.sampling.topK,
           },
+          providerExtras:
+            harnessProfile.reasoningEffort ||
+            harnessProfile.clearThinking != null ||
+            harnessProfile.enableThinkingDefault
+              ? {
+                  thinkingEnabled: harnessProfile.enableThinkingDefault,
+                  reasoningEffort: signupGuideActive
+                    ? "low"
+                    : harnessProfile.reasoningEffort,
+                  clearThinking: signupGuideActive
+                    ? true
+                    : harnessProfile.clearThinking,
+                }
+              : undefined,
           toolCtx: {
             get db() {
               return getTenantDb(workTenantId);

@@ -41,6 +41,11 @@ import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
+import {
+  ACTIVE_AGENT_KEY,
+  LEGACY_ACTIVE_AGENT_KEY,
+  writeMigratedKey,
+} from "@/lib/storage-keys";
 import { StorageTab } from "@/pages/Vault";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -328,6 +333,7 @@ function SessionCard() {
     } catch {
       /* still clear local session below */
     }
+    writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, "intelligence");
     await refresh();
     window.location.assign("/");
   };

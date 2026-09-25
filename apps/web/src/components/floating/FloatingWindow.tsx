@@ -31,12 +31,17 @@ import type { FloatingWindowRole } from "@/lib/floating-window-registry";
 import {
   anchorWindowAndMirror,
   registerFloatingWindow,
+  applyActiveFocusLayout,
+  floatingTitleWindowIdAt,
+  setTileSwapHighlight,
+  swapFocusWindowSlots,
   setActiveFloatingWindow,
 } from "@/lib/floating-window-registry";
 import { snapRectToGrid } from "@/lib/floating-window-grid";
 import {
   readFloatingWindowLayout,
   writeFloatingWindowLayout,
+  clearFloatingWindowLayout,
 } from "@/lib/floating-window-layout-store";
 
 export type FloatingWindowBounds = {
@@ -94,6 +99,13 @@ export type FloatingWindowProps = {
   windowId?: string;
   role?: FloatingWindowRole;
   pairGroup?: "focus-pair";
+  /**
+   * Skip saved layout and place from `placement`, then retile focus companions.
+   * Use for Graph Information windows so they never reopen on top of chat.
+   */
+  forceFocusTile?: boolean;
+  /** Called when the user activates this window (title click / drag start). */
+  onActivate?: () => void;
   onClose: () => void;
   headerActions?: ReactNode;
   children: ReactNode;
@@ -122,6 +134,8 @@ export function FloatingWindow({
   windowId,
   role = "generic",
   pairGroup,
+  forceFocusTile = false,
+  onActivate,
   onClose,
   headerActions,
   children,
@@ -185,8 +199,20 @@ export function FloatingWindow({
     const b = getFloatingWindowBounds();
     setBounds(b);
 
-    const saved = windowId ? readFloatingWindowLayout(windowId) : null;
-    if (saved) {
+    const saved =
+      !forceFocusTile && windowId ? readFloatingWindowLayout(windowId) : null;
+    const midX = b.x + b.width / 2;
+    // Legacy Information layouts lived on the left and buried chat. Ignore them.
+    const savedUsable =
+      saved &&
+      !(
+        role === "information" &&
+        saved.x + saved.width / 2 < midX
+      );
+    if (saved && !savedUsable && windowId) {
+      clearFloatingWindowLayout(windowId);
+    }
+    if (savedUsable && saved) {
       const w = Math.max(minWidth, Math.min(saved.width, b.width - 24));
       const h = Math.max(minHeight, Math.min(saved.height, b.height - 16));
       const pos = clampPos(saved.x, saved.y, w, h, b);
@@ -246,7 +272,16 @@ export function FloatingWindow({
     anchorY,
     windowId,
     pairGroup,
+    role,
+    forceFocusTile,
   ]);
+
+  useEffect(() => {
+    if (!open || maximized || isMobile) return;
+    if (role !== "information" && role !== "chat") return;
+    const id = requestAnimationFrame(() => applyActiveFocusLayout());
+    return () => cancelAnimationFrame(id);
+  }, [open, maximized, isMobile, role, windowId]);
 
   const currentWidth = maximized
     ? bounds.width
@@ -291,6 +326,12 @@ export function FloatingWindow({
       pairGroup,
       getLayout: () => layoutRef.current,
       applyLayout: (rect) => {
+        layoutRef.current = {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        };
         setX(rect.x);
         setY(rect.y);
         setWidth(rect.width);
@@ -326,7 +367,10 @@ export function FloatingWindow({
         return;
       }
 
-      if (windowId) setActiveFloatingWindow(windowId);
+      if (windowId) {
+        setActiveFloatingWindow(windowId);
+        onActivate?.();
+      }
 
       e.preventDefault();
       e.stopPropagation();
@@ -353,6 +397,11 @@ export function FloatingWindow({
         lastY = next.y;
         setX(next.x);
         setY(next.y);
+        if (windowId) {
+          setTileSwapHighlight(
+            floatingTitleWindowIdAt(ev.clientX, ev.clientY, windowId)
+          );
+        }
       };
       const onUp = (ev: PointerEvent) => {
         try {
@@ -364,6 +413,15 @@ export function FloatingWindow({
         window.removeEventListener("pointerup", onUp);
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        if (windowId) {
+          const swapTarget = floatingTitleWindowIdAt(
+            ev.clientX,
+            ev.clientY,
+            windowId
+          );
+          setTileSwapHighlight(null);
+          if (swapTarget && swapFocusWindowSlots(windowId, swapTarget)) return;
+        }
         const gridSnapped = snapRectToGrid(
           { x: lastX, y: lastY, width, height },
           activeBounds
@@ -412,6 +470,7 @@ export function FloatingWindow({
       height,
       anchorPickMode,
       windowId,
+      onActivate,
       persistLayout,
     ]
   );
@@ -682,9 +741,11 @@ export function FloatingWindow({
       />
 
       <header
+        data-floating-title
+        data-window-id={windowId}
         onPointerDown={isPhone || maximized ? undefined : handleDrag}
         className={cn(
-          "flex h-9 shrink-0 items-center gap-2 border-b px-2 select-none",
+          "flex h-9 shrink-0 items-center gap-2 border-b px-2 select-none data-[tile-swap-target=true]:ring-2 data-[tile-swap-target=true]:ring-ring",
           !isPhone && !maximized && "cursor-move"
         )}
         style={{

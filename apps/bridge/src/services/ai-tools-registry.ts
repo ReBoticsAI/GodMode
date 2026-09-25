@@ -47,6 +47,78 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     mode: "auto",
   },
   {
+    name: "open_guide_surface",
+    description:
+      "Open a GodMode UI surface for the user (Platform Vault Inference buy screen, Supported BYOK, Personal Vault, Bank, Wiki, or Intelligence chat). Use this to SHOW pricing and Vault instead of inventing numbers. Pass a surface id such as godmode_inference, supported_byok, platform_vault, personal_vault, bank, wiki, or intelligence_chat.",
+    mode: "auto",
+    category: "guide",
+    parameters: {
+      type: "object",
+      properties: {
+        surface: {
+          type: "string",
+          description:
+            "Destination id or alias: godmode_inference, supported_byok, platform_vault, personal_vault, bank, wiki, intelligence_chat.",
+        },
+      },
+      required: ["surface"],
+    },
+  },
+  {
+    name: "play_graph_tour",
+    description:
+      "Walk the connection from You to each area. Pass 4 to 6 stops. Each stop is a node alias (you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace) and one sentence in say. For 10 seconds the Graph zooms out beside the chat and highlights the path from You to that node, then moves to the next. For Earn, include marketplace and say they can keep the instance local with a GodMode Seller account. Use this instead of focus_graph_node when explaining an interest. Do not also write the tour in the message.",
+    mode: "auto",
+    category: "guide",
+    parameters: {
+      type: "object",
+      properties: {
+        stops: {
+          type: "array",
+          description: "Ordered tour stops. At least 2, at most 6.",
+          items: {
+            type: "object",
+            properties: {
+              node: { type: "string" },
+              say: { type: "string", description: "One sentence shown while this node is open." },
+            },
+            required: ["node", "say"],
+          },
+        },
+      },
+      required: ["stops"],
+    },
+  },
+  {
+    name: "ask_guide_choice",
+    description:
+      "Show the next-step buttons after a tour: download for this computer, GodMode Inference, GodMode Cloud, Cloud with Inference, and GodMode Seller. Call once after play_graph_tour. Do not write those options in the message.",
+    mode: "auto",
+    category: "guide",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "focus_graph_node",
+    description:
+      "Focus a node on the 3D Graph so the user can see You, Hub, Intelligence, Vaults, Bank, Wiki, Workspaces, or Marketplace. Pass a node id/alias such as you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace (or a hub:… id).",
+    mode: "auto",
+    category: "guide",
+    parameters: {
+      type: "object",
+      properties: {
+        node: {
+          type: "string",
+          description:
+            "Graph node alias or hub: id (you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace).",
+        },
+      },
+      required: ["node"],
+    },
+  },
+  {
     name: "use_skill",
     description:
       "Load the full step-by-step instructions for a named skill. Pass the skill id in `skillId` (e.g. 'plugin-authoring' for Bridge plugins, 'platform-workspace' for Tier 1 setup, 'shadcn-ui' before apps/web edits). Call this BEFORE starting a workflow the skill covers.",

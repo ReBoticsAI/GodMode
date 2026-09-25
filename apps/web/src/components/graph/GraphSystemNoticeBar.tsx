@@ -31,8 +31,10 @@ function formatNoticeTime(iso: string): string {
 
 export function GraphSystemNoticeBar({
   onOpenNotifications,
+  className,
 }: {
   onOpenNotifications?: () => void;
+  className?: string;
 }) {
   const { status: aiStatus } = useAiStatus();
   const { notificationsUnread } = useIntelligence();
@@ -124,7 +126,7 @@ export function GraphSystemNoticeBar({
   }, [customNotice, aiStatus, notificationsUnread, latestNotification]);
 
   return (
-    <div className="flex w-full max-w-2xl flex-col">
+    <div className={cn("flex w-full min-w-0 flex-col", className)}>
       <div
         role="status"
         aria-live="polite"
@@ -163,6 +165,21 @@ export function GraphSystemNoticeBar({
       >
         <div className="min-h-0 overflow-hidden">
           <div className="mt-1 flex flex-col gap-0.5 rounded-md border border-border/60 bg-background/90 p-1.5 shadow-sm backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 px-2 py-1">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                Recent
+              </span>
+              <button
+                type="button"
+                className="text-[11px] font-medium text-primary hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenNotifications?.();
+                }}
+              >
+                Show all
+              </button>
+            </div>
             {recentNotifications.length === 0 ? (
               <Empty className="border-0 p-2">
                 <EmptyHeader>
@@ -198,16 +215,6 @@ export function GraphSystemNoticeBar({
                 </button>
               ))
             )}
-            <button
-              type="button"
-              className="mt-0.5 px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenNotifications?.();
-              }}
-            >
-              Open notifications
-            </button>
           </div>
         </div>
       </div>

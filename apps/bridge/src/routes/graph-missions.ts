@@ -5,7 +5,6 @@ import {
   tenantDbMiddleware,
 } from "../services/auth/middleware.js";
 import { rateLimit } from "../services/auth/rate-limit.js";
-import { config } from "../config.js";
 import {
   completeGraphMission,
   getGraphMissionsStatus,
@@ -31,9 +30,7 @@ export function createGraphMissionsRouter(): Router {
   router.get("/", attachAuthContext, limiter, (req, res) => {
     const respond = () => {
       try {
-        const userId =
-          req.user?.id ??
-          (config.auth.allowAnonymous ? "system-local" : undefined);
+        const userId = req.user?.id;
         const displayName =
           req.user?.displayName?.trim() ||
           req.user?.email?.split("@")[0] ||

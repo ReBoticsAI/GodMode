@@ -1,5 +1,6 @@
 import { useState, useEffect, useId } from "react";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export type RareFindRarity =
   | "common"
@@ -122,8 +123,10 @@ function getRarityStyle(rarity: RareFindRarity) {
 
 export function GraphRareFindsTicker({
   onOpenLeaderboard,
+  className,
 }: {
   onOpenLeaderboard?: () => void;
+  className?: string;
 }) {
   const [items, setItems] = useState<RareFindItem[]>(INITIAL_RARE_FINDS);
   const [isPaused, setIsPaused] = useState(false);
@@ -169,7 +172,12 @@ export function GraphRareFindsTicker({
   const displayItems = [...items, ...items];
 
   return (
-    <div className="relative flex h-8 w-full items-center overflow-hidden rounded-md border border-border/60 bg-background/80 px-2 shadow-sm backdrop-blur-sm">
+    <div
+      className={cn(
+        "relative flex h-7 w-full items-center overflow-hidden rounded-md border border-border/60 bg-background/80 px-2 shadow-sm backdrop-blur-sm",
+        className
+      )}
+    >
       <style>{`
         @keyframes ticker_${animationName} {
           0% { transform: translate3d(0, 0, 0); }

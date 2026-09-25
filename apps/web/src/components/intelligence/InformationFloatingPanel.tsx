@@ -30,6 +30,11 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingWindow } from "@/components/floating/FloatingWindow";
+import { GRAPH_INFO_FOCUS_Z } from "@/lib/graph-chrome-layout";
+import {
+  FOCUS_WINDOW_PREFS_EVENT,
+  isFocusTilingEnabled,
+} from "@/lib/floating-window-focus-prefs";
 import { GraphPhoneSheet } from "@/components/graph/GraphPhoneSheet";
 import { useIsPhone } from "@/hooks/use-mobile";
 import { useIntelligence, type LeftRailTab } from "@/lib/intelligence-context";
@@ -37,6 +42,7 @@ import {
   agentIdFromFocusOwner,
   productivityScopeFromFocusOwner,
 } from "@/lib/graph-focus-owner";
+import { USER_KNOWLEDGE_AGENT_ID } from "@/lib/focus-chrome";
 import { useTenant } from "@/lib/tenant-context";
 import { useChatUnlock } from "@/lib/chat-unlock-context";
 import { useNavigate } from "react-router-dom";
@@ -71,7 +77,11 @@ import {
   GraphScoreboardSection,
 } from "@/components/graph/GraphMissionsPanel";
 import { graphNodeColor } from "@/lib/graph-node-style";
-import { floatingSurfaceForTab, resolveFloatingSurface } from "@/lib/graph-floating-surfaces";
+import {
+  floatingSurfaceForNodeId,
+  floatingSurfaceForTab,
+  resolveFloatingSurface,
+} from "@/lib/graph-floating-surfaces";
 
 const CodingWorkspacePage = lazy(
   () => import("@/pages/coding/CodingWorkspacePage")
@@ -130,6 +140,10 @@ export function InformationFloatingPanel() {
     setInformationPanelMinimized,
     informationNode,
     closeInformationPanel,
+    closeInformationCanvas,
+    focusInformationCanvas,
+    openCanvases,
+    focusedCanvasId,
     openPanel,
     activeLeftTab,
     setActiveLeftTab,
@@ -151,6 +165,15 @@ export function InformationFloatingPanel() {
     () => new Set()
   );
   const [canvasMode, setCanvasMode] = useState<CanvasMode>("overview");
+  const [focusTilingEnabled, setFocusTilingEnabled] = useState(() =>
+    isFocusTilingEnabled()
+  );
+
+  useEffect(() => {
+    const sync = () => setFocusTilingEnabled(isFocusTilingEnabled());
+    window.addEventListener(FOCUS_WINDOW_PREFS_EVENT, sync);
+    return () => window.removeEventListener(FOCUS_WINDOW_PREFS_EVENT, sync);
+  }, []);
 
   const [dmContacts, setDmContacts] = useState<DmContact[]>([]);
   useEffect(() => {
@@ -202,10 +225,10 @@ export function InformationFloatingPanel() {
     return { kind: "agent" as const, agentId: activeAgentId };
   }, [focusOwner, activeAgentId]);
 
-  const scopeAgentId = useMemo(() => {
+  const scopeAgentId = useMemo((): string | null => {
+    if (focusOwner.kind === "user") return null;
     const fromOwner = agentIdFromFocusOwner(focusOwner);
     if (fromOwner) return fromOwner;
-    if (focusOwner.kind === "user") return "digital-you";
     return activeAgentId;
   }, [focusOwner, activeAgentId]);
 
@@ -214,11 +237,12 @@ export function InformationFloatingPanel() {
       case "open_chat":
         if (node.kind === "chat" && node.refId) {
           setChatTarget({ kind: "agent", agentId: node.refId });
+          openPanel({ agentId: node.refId, tab: "chat" });
         } else if (node.kind === "agent" && node.refId) {
           setChatTarget({ kind: "agent", agentId: node.refId });
-        }
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
+          openPanel({ agentId: node.refId, tab: "chat" });
+        } else {
+          openPanel({ tab: "chat" });
         }
         return;
       case "open_panel": {
@@ -291,17 +315,6 @@ export function InformationFloatingPanel() {
         isLight,
       })
     : "#a78bfa";
-  const statusBits =
-    node?.status
-      ? Object.entries(node.status)
-          .filter(
-            ([k]) =>
-              !["attention", "attentionCount", "openMissions"].includes(k)
-          )
-          .map(([k, v]) =>
-            typeof v === "boolean" ? `${k}: ${v ? "yes" : "no"}` : `${k}: ${v}`
-          )
-      : [];
 
   const titlePrefix =
     canvasMode === "pipeline"
@@ -463,20 +476,49 @@ export function InformationFloatingPanel() {
     !informationPanelMinimized &&
     (activeLeftTab !== "info" || Boolean(node));
 
-  const panelBody =
-    activeLeftTab === "calendar" ? (
+  const renderPanelBody = (
+    tab: LeftRailTab,
+    subject: GraphProjectionNode | null
+  ): ReactNode => {
+    const activeLeftTab = tab;
+    const node = subject;
+    const accent = node
+      ? graphNodeColor(node.kind, node.id, null, node.objectType, node.label, {
+          isLight,
+        })
+      : "#a78bfa";
+    const statusBits = node?.status
+      ? Object.entries(node.status)
+          .filter(
+            ([k]) =>
+              !["attention", "attentionCount", "openMissions"].includes(k)
+          )
+          .map(([k, v]) =>
+            typeof v === "boolean" ? `${k}: ${v ? "yes" : "no"}` : `${k}: ${v}`
+          )
+      : [];
+    return activeLeftTab === "calendar" ? (
         <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
           <CalendarBoard scope={calendarScope} />
         </div>
       ) : activeLeftTab === "projects" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<EditorTabFallback label="Automations" />}>
-            <AutomationsPanel agentId={scopeAgentId} showTasks showEvents />
+            <AutomationsPanel
+              agentId={scopeAgentId ?? undefined}
+              userOwned={focusOwner.kind === "user"}
+              showTasks
+              showEvents
+            />
           </Suspense>
         </div>
       ) : activeLeftTab === "knowledge" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <KnowledgePanel />
+          <KnowledgePanel
+            agentId={
+              focusOwner.kind === "user" ? USER_KNOWLEDGE_AGENT_ID : undefined
+            }
+          />
         </div>
       ) : activeLeftTab === "bank" ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
@@ -847,7 +889,8 @@ export function InformationFloatingPanel() {
               {canvasMode === "automations" ? (
                 <Suspense fallback={<EditorTabFallback label="Automations" />}>
                   <AutomationsPanel
-                    agentId={scopeAgentId}
+                    agentId={scopeAgentId ?? undefined}
+                    userOwned={focusOwner.kind === "user"}
                     showTasks
                     showEvents
                   />
@@ -857,6 +900,9 @@ export function InformationFloatingPanel() {
           </Tabs>
         </div>
       ) : null;
+  };
+
+  const panelBody = renderPanelBody(activeLeftTab, informationNode);
 
   if (isPhone) {
     return (
@@ -873,26 +919,72 @@ export function InformationFloatingPanel() {
     );
   }
 
+  const infoWindows = openCanvases.filter(
+    (c) => c.kind === "information" && c.node
+  );
+  const windows =
+    infoWindows.length > 0
+      ? infoWindows
+      : informationPanelOpen && node
+        ? [
+            {
+              id: "information",
+              title: panelTitle,
+              kind: "information",
+              nodeId: node.id,
+              node,
+            },
+          ]
+        : [];
+
+  if (windows.length === 0) return null;
+
   return (
-    <FloatingWindow
-      open={
-        informationPanelOpen &&
-        (activeLeftTab !== "info" || Boolean(node))
-      }
-      minimized={informationPanelMinimized}
-      onMinimize={() => setInformationPanelMinimized(true)}
-      title={panelTitle}
-      icon={panelIcon}
-      accent={panelAccent}
-      windowId="information"
-      role="information"
-      pairGroup="focus-pair"
-      placement="left"
-      defaultWidth={composerWidth}
-      defaultHeight={panelHeight}
-      onClose={closeInformationPanel}
-    >
-      {panelBody}
-    </FloatingWindow>
+    <>
+      {windows.map((win) => {
+        const isFocused =
+          (focusedCanvasId ?? `information:${informationNode?.id}`) ===
+            win.id ||
+          informationNode?.id === win.nodeId;
+        return (
+          <FloatingWindow
+            key={win.id}
+            open={
+              informationPanelOpen &&
+              (activeLeftTab !== "info" || Boolean(win.node))
+            }
+            minimized={informationPanelMinimized}
+            onMinimize={() => setInformationPanelMinimized(true)}
+            title={
+              typeof win.title === "string"
+                ? win.title
+                : `Information · ${win.node?.label ?? "Node"}`
+            }
+            icon={panelIcon}
+            accent={panelAccent}
+            windowId={win.id}
+            role="information"
+            pairGroup="focus-pair"
+            placement="focus-right"
+            forceFocusTile={focusTilingEnabled}
+            zIndexClassName={isFocused ? GRAPH_INFO_FOCUS_Z : undefined}
+            defaultWidth={composerWidth}
+            defaultHeight={panelHeight}
+            onActivate={() => focusInformationCanvas(win.id)}
+            onClose={() => closeInformationCanvas(win.id)}
+          >
+            {renderPanelBody(
+              (win.node
+                ? (floatingSurfaceForNodeId(win.node.id)?.tab as
+                    | LeftRailTab
+                    | undefined)
+                : undefined) ??
+                (isFocused ? activeLeftTab : "info"),
+              win.node ?? (isFocused ? informationNode : null)
+            )}
+          </FloatingWindow>
+        );
+      })}
+    </>
   );
 }

@@ -22,6 +22,11 @@ import {
 import { FirstRunWizard, OnboardingWizardProvider, useOnboardingGate } from "@/components/FirstRunWizard";
 import { NoWorkspaceGate } from "@/components/NoWorkspaceGate";
 import { PreAuthChatCanvas } from "@/components/PreAuthChatCanvas";
+import {
+  ACTIVE_AGENT_KEY,
+  LEGACY_ACTIVE_AGENT_KEY,
+  writeMigratedKey,
+} from "@/lib/storage-keys";
 import { ChatUnlockProvider } from "@/lib/chat-unlock-context";
 import { ChatGraphCanvas } from "@/components/ChatGraphCanvas";
 import Bank from "./pages/Bank";
@@ -90,6 +95,7 @@ import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
+import { CloudGuideWindow } from "@/components/graph/CloudGuideWindow";
 import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
 import { GraphEscMenu } from "@/components/graph/GraphEscMenu";
 import { pageElementFor } from "@/lib/page-registry";
@@ -168,6 +174,14 @@ function FirstLandChatBootstrap() {
 
 const AI_SETTINGS_PATH = "/settings/ai";
 
+/** Public Graph opens Intelligence. Once per page load, before the chat provider reads storage. */
+let publicChatLandedOnIntelligence = false;
+function landPublicChatOnIntelligence() {
+  if (publicChatLandedOnIntelligence || typeof window === "undefined") return;
+  publicChatLandedOnIntelligence = true;
+  writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, "intelligence");
+}
+
 function AppShell() {
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
@@ -218,13 +232,12 @@ function AppShell() {
       ? webPluginRuntime.shellForSidebar(division.rightSidebar)
       : null;
 
-  // Graph is the primary surface on Home. Chrome index deep-links open
-  // floating windows over the Graph (Settings, Vaults, Wiki index, …).
+  // Graph is the primary surface on Home (no welcome overlay). Chrome index
+  // deep-links open floating windows over the Graph (Settings, Vaults, …).
   // Detail routes (e.g. /wiki/:slug) still paint in main.
   const onGraphHome = pathname === HOME_PATH || pathname === "/";
   const onFloatingIndex = isGraphFloatingIndexPath(pathname);
-  const showAppRoutes =
-    (panelOpen || !onGraphHome) && !onFloatingIndex;
+  const showAppRoutes = !onGraphHome && !onFloatingIndex;
 
   // Close the plugin drawer whenever the route changes.
   useEffect(() => {
@@ -262,6 +275,7 @@ function AppShell() {
         </main>
         <IntelligencePanel />
         <InformationFloatingPanel />
+        <CloudGuideWindow />
         <MinimizedWindowsDock />
         <AppFooter />
       </div>
@@ -545,6 +559,7 @@ function AuthGatedApp() {
         </>
       );
     }
+    landPublicChatOnIntelligence();
     return (
       <StructureProvider>
         <IntelligenceProvider>

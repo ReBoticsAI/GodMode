@@ -10,7 +10,6 @@ import {
   ensurePlatformBootstrap,
   listUserTenants,
   userHasTenantAccess,
-  SYSTEM_USER_ID,
 } from "../tenant-bootstrap.js";
 import { coreUserToAuth, sendForbidden, sendUnauthorized } from "../../types/express-auth.js";
 import { mfaEnabled } from "./mfa-and-tokens.js";
@@ -102,19 +101,8 @@ export function requireAuth(
     next();
     return;
   }
-  if (config.auth.allowAnonymous) {
-    req.user = {
-      id: SYSTEM_USER_ID,
-      email: "local@godmode.platform",
-      displayName: "Local User",
-      avatarUrl: null,
-      isAdmin: false,
-      emailVerified: true,
-      mfaEnabled: false,
-    };
-    next();
-    return;
-  }
+  // Public visitors arrive with their own session. Do not impersonate system-local,
+  // even when AUTH_ALLOW_ANONYMOUS is set for local tooling.
   sendUnauthorized(res);
 }
 
@@ -200,14 +188,10 @@ export function resolveTenant(
     typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
 
   const userId = req.user?.id;
-  const isAnonymousLocal = userId === SYSTEM_USER_ID;
 
   let tenantId = headerTenant ?? queryTenant;
 
-  if (isAnonymousLocal) {
-    tenantId = getOperatorTenantIdCached();
-    req.tenantRole = "viewer";
-  } else if (!userId) {
+  if (!userId) {
     sendUnauthorized(res);
     return;
   } else if (tenantId) {

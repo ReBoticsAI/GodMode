@@ -1139,6 +1139,12 @@ export interface AiChatRequest {
   chatMode?: "agent" | "plan" | "ask";
   /** Session tool autonomy: off | writes | full. */
   toolAutonomy?: "off" | "writes" | "full";
+  /** Welcome-guide interest id. Stored message stays `message`. */
+  interestId?: string;
+  /** Next-step button id. Stored message stays `message`. */
+  pathId?: string;
+  /** Desktop OS for the local download offer: windows, macos, or linux. */
+  clientOs?: string;
 }
 
 export interface AiStreamHandlers {
@@ -1234,12 +1240,26 @@ export function streamAiChat(
           message: String(parsed.message ?? "Working…"),
         });
         break;
-      case "token":
-        handlers.onToken?.(parsed.content as string);
+      case "token": {
+        const tokenText =
+          typeof parsed.content === "string"
+            ? parsed.content
+            : typeof parsed.text === "string"
+              ? parsed.text
+              : "";
+        if (tokenText) handlers.onToken?.(tokenText);
         break;
-      case "reasoning":
-        handlers.onReasoning?.(parsed.content as string);
+      }
+      case "reasoning": {
+        const reasoningText =
+          typeof parsed.content === "string"
+            ? parsed.content
+            : typeof parsed.text === "string"
+              ? parsed.text
+              : "";
+        if (reasoningText) handlers.onReasoning?.(reasoningText);
         break;
+      }
       case "tool_call":
         handlers.onToolCall?.(
           parsed.name as string,
@@ -3687,19 +3707,23 @@ export interface CatalogModel {
   model?: string;
   endpointId?: string;
   provider?: "openai" | "anthropic" | "openai_compatible";
+  transport?: string;
   multimodal?: boolean;
   active?: boolean;
+  managedGodModeInference?: boolean;
 }
 
 export const fetchModelCatalog = () =>
   api<{ models: CatalogModel[]; active: CatalogModel | null }>("/ai/model-catalog");
 
 export const selectIntelligenceModel = (body: {
+  id?: string;
   source: CatalogModelSource;
   path?: string;
   model?: string;
   provider?: "openai" | "anthropic" | "openai_compatible";
   endpointId?: string;
+  transport?: string;
   apiKeyRef?: string;
 }) =>
   actionDto<{ ok: true; active: CatalogModel }>(
@@ -3707,13 +3731,16 @@ export const selectIntelligenceModel = (body: {
     "select_model",
     {
       model_id:
-        body.source === "local"
+        body.id ??
+        (body.source === "local"
           ? `local:${body.path}`
           : body.source === "remote"
             ? `remote:${body.endpointId}`
             : body.source === "cursor"
               ? `cursor:${body.model}`
-              : `provider:${body.provider ?? "openai"}:${body.model}`,
+              : body.transport
+                ? `provider:openai_compatible:${body.transport}:${body.model}`
+                : `provider:${body.provider ?? "openai"}:${body.model}`),
     },
     "runtime",
     true
@@ -5084,6 +5111,8 @@ export interface AuthUser {
   isAdmin?: boolean;
   emailVerified?: boolean;
   mfaEnabled?: boolean;
+  /** True for a public-graph visitor before Local or Cloud signup. */
+  temporary?: boolean;
 }
 
 export interface TenantSummary {
@@ -5096,13 +5125,20 @@ export interface TenantSummary {
 
 export interface AuthSessionResponse {
   authenticated: boolean;
+  visitor?: boolean;
   user?: AuthUser;
   tenantId?: string;
   tenantRole?: string;
+  sessionToken?: string;
 }
 
 export function fetchAuthSession() {
-  return api<AuthSessionResponse>("/auth/session");
+  return api<AuthSessionResponse>("/auth/session").then((res) => {
+    if (allowSessionTokenFallback && res.sessionToken) {
+      writeSessionToken(res.sessionToken);
+    }
+    return res;
+  });
 }
 
 export interface AdminUserRow {
@@ -6030,9 +6066,16 @@ export function createAuthTenant(name: string, slug?: string) {
 }
 
 export function logoutAuth() {
-  return api<{ ok: boolean }>("/auth/logout", { method: "POST" }).finally(() => {
-    clearSessionToken();
+  return api<{ ok: boolean; sessionToken?: string }>("/auth/logout", {
+    method: "POST",
+  }).then((res) => {
     clearActiveTenant();
+    if (allowSessionTokenFallback && res.sessionToken) {
+      writeSessionToken(res.sessionToken);
+    } else {
+      clearSessionToken();
+    }
+    return res;
   });
 }
 
@@ -6837,8 +6880,15 @@ export function publishTrialGreeting(status: TrialInferenceStatus): void {
   if (status.ready) {
     window.dispatchEvent(new CustomEvent("godmode:model-selected"));
   }
-  const notice =
-    status.ready
+  const exhausted =
+    status.status === "expired" ||
+    status.status === "revoked" ||
+    /\b(used up|exhausted|spent out|no (active )?allowance|budget)\b/i.test(
+      status.detail ?? ""
+    );
+  const notice = exhausted
+    ? "GodMode Inference trial is used up. Buy more in Vault, or connect Supported BYOK / a local model."
+    : status.ready
       ? "GodMode Inference trial is ready. Keep chatting. When free runs out, pay through GodMode."
       : status.status === "unconfigured"
         ? "GodMode Inference is not configured on this Bridge yet. Chat will work after the platform OpenRouter key is set."

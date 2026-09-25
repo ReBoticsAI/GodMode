@@ -70,6 +70,7 @@ import {
   DASHSCOPE_API_KEY_SECRET_NAME,
   DASHSCOPE_CHAT_CATALOG,
 } from "./dashscope-platform.js";
+import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
 import {
   isGoogleAiAgentConfig,
   isGoogleAiPlatformReady,
@@ -217,6 +218,11 @@ export interface CatalogModel {
   active?: boolean;
   /** Resolved harness profile id (display / debug). */
   harnessProfileId?: string;
+  /**
+   * True when listed via Admin GodMode Inference supply (no personal Vault key).
+   * Footer groups these under "GodMode Inference".
+   */
+  managedGodModeInference?: boolean;
 }
 
 const OPENAI_CATALOG = [
@@ -426,6 +432,18 @@ function opencodeZenHarnessInput(model: string) {
   };
 }
 
+/** Install Cursor env key belongs to the operator machine, not a public visitor. */
+function callerIsTemporaryVisitor(
+  core: CoreDatabase | undefined,
+  userId: string | undefined
+): boolean {
+  if (!core || !userId || userId === "system-local") return false;
+  const row = core
+    .prepare("SELECT is_temporary FROM users WHERE id=?")
+    .get(userId) as { is_temporary?: number } | undefined;
+  return Number(row?.is_temporary) === 1;
+}
+
 export async function listModelCatalog(
   db: AppDatabase,
   llm: LlmManager,
@@ -434,6 +452,7 @@ export async function listModelCatalog(
 ): Promise<{ models: CatalogModel[]; active: CatalogModel | null }> {
   const agent = getAgent(db, "intelligence");
   const models: CatalogModel[] = [];
+  const ignoreInstallCursorEnv = callerIsTemporaryVisitor(core, userId);
 
   const local = llm.scanModels().filter((m) => !m.isMmproj && !isEmbeddingGguf(m.name));
   const localStatus = llm.getStatus();
@@ -452,7 +471,9 @@ export async function listModelCatalog(
     });
   }
 
-  if (isCursorSubscriptionReady(db, agent?.id ?? "intelligence")) {
+  if (isCursorSubscriptionReady(db, agent?.id ?? "intelligence", {
+    ignoreInstallEnv: ignoreInstallCursorEnv,
+  })) {
     try {
       const cursorModels = listCursorSubscriptionModelsForCatalog(
         db,
@@ -499,7 +520,9 @@ export async function listModelCatalog(
 
   if (
     agent?.backend === "cursor_cloud" &&
-    isCursorSubscriptionReady(db, agent?.id ?? "intelligence") &&
+    isCursorSubscriptionReady(db, agent?.id ?? "intelligence", {
+      ignoreInstallEnv: ignoreInstallCursorEnv,
+    }) &&
     !models.some((m) => m.source === "cursor" && m.active)
   ) {
     const model = String(agent.config?.model ?? "auto");
@@ -578,13 +601,21 @@ export async function listModelCatalog(
   const hasGroq = isGroqPlatformReady(db, catalogAgentId);
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
   const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
-  const hasDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
-  const hasDashScope = isDashScopePlatformReady(db, catalogAgentId);
+  const vaultDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
+  const supplyDeepSeek = Boolean(resolveGodModeInferenceSupplyKey("deepseek"));
+  const hasDeepSeek = vaultDeepSeek || supplyDeepSeek;
+  const vaultDashScope = isDashScopePlatformReady(db, catalogAgentId);
+  const supplyDashScope = Boolean(resolveGodModeInferenceSupplyKey("dashscope"));
+  const hasDashScope = vaultDashScope || supplyDashScope;
   const hasGoogleAi = isGoogleAiPlatformReady(db, catalogAgentId);
   const hasXai = isXaiPlatformReady(db, catalogAgentId);
-  const hasZai = isZaiPlatformReady(db, catalogAgentId);
+  const vaultZai = isZaiPlatformReady(db, catalogAgentId);
+  const supplyZai = Boolean(resolveGodModeInferenceSupplyKey("zai"));
+  const hasZai = vaultZai || supplyZai;
   const hasMinimax = isMinimaxPlatformReady(db, catalogAgentId);
-  const hasZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
+  const vaultZaiCoding = isZaiCodingPlatformReady(db, catalogAgentId);
+  const supplyZaiCoding = Boolean(resolveGodModeInferenceSupplyKey("zai_coding"));
+  const hasZaiCoding = vaultZaiCoding || supplyZaiCoding;
   const hasOpencodeGo = isOpencodeGoPlatformReady(db, catalogAgentId);
   const hasDigitalOceanInference = isDigitalOceanInferencePlatformReady(
     db,
@@ -709,6 +740,7 @@ export async function listModelCatalog(
   if (hasDeepSeek) {
     const agentIsDeepSeek =
       agent?.backend === "provider" && isDeepSeekAgentConfig(agent.config);
+    const managedSupply = !vaultDeepSeek && supplyDeepSeek;
     for (const m of DEEPSEEK_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(deepseekHarnessInput(m.id));
       models.push({
@@ -720,12 +752,14 @@ export async function listModelCatalog(
         transport: "deepseek",
         active: Boolean(agentIsDeepSeek && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
   if (hasDashScope) {
     const agentIsDashScope =
       agent?.backend === "provider" && isDashScopeAgentConfig(agent.config);
+    const managedSupply = !vaultDashScope && supplyDashScope;
     for (const m of DASHSCOPE_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(dashscopeHarnessInput(m.id));
       models.push({
@@ -737,6 +771,7 @@ export async function listModelCatalog(
         transport: "dashscope",
         active: Boolean(agentIsDashScope && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
@@ -777,6 +812,7 @@ export async function listModelCatalog(
   if (hasZai) {
     const agentIsZai =
       agent?.backend === "provider" && isZaiAgentConfig(agent.config);
+    const managedSupply = !vaultZai && supplyZai;
     for (const m of ZAI_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(zaiHarnessInput(m.id));
       models.push({
@@ -788,6 +824,7 @@ export async function listModelCatalog(
         transport: "zai",
         active: Boolean(agentIsZai && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
@@ -811,6 +848,7 @@ export async function listModelCatalog(
   if (hasZaiCoding) {
     const agentIsZai =
       agent?.backend === "provider" && isZaiCodingAgentConfig(agent.config);
+    const managedSupply = !vaultZaiCoding && supplyZaiCoding;
     for (const m of ZAI_CODING_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(zaiCodingHarnessInput(m.id));
       models.push({
@@ -822,6 +860,7 @@ export async function listModelCatalog(
         transport: "zai_coding",
         active: Boolean(agentIsZai && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }

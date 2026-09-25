@@ -22,6 +22,12 @@ import {
 } from "./exa-web.js";
 import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
 import {
+  resolveGraphTour,
+  resolveGuideChoice,
+  resolveGuideGraphNode,
+  resolveGuideSurface,
+} from "./guide-ui-tools.js";
+import {
   listSqliteUniverseTool,
   querySqliteUniverseTool,
 } from "./sqlite-universe-tools.js";
@@ -438,6 +444,79 @@ async function executeStaticKernelAlias(
     });
 
   switch (name) {
+    case "open_guide_surface": {
+      const surface = String(value(args, "surface") ?? "").trim();
+      if (!surface) {
+        return {
+          handled: true,
+          result: {
+            ok: false,
+            error: "surface is required (e.g. godmode_inference).",
+          },
+        };
+      }
+      const resolved = resolveGuideSurface(surface);
+      if (!resolved.ok) {
+        return { handled: true, result: resolved };
+      }
+      return {
+        handled: true,
+        result: {
+          ok: true,
+          message: resolved.message,
+          uiAction: resolved.uiAction,
+        },
+      };
+    }
+    case "ask_guide_choice": {
+      const resolved = resolveGuideChoice();
+      return {
+        handled: true,
+        result: {
+          ok: true,
+          message: resolved.message,
+          uiAction: resolved.uiAction,
+        },
+      };
+    }
+    case "play_graph_tour": {
+      const resolved = resolveGraphTour(args.stops);
+      if (!resolved.ok) {
+        return { handled: true, result: resolved };
+      }
+      return {
+        handled: true,
+        result: {
+          ok: true,
+          message: resolved.message,
+          uiAction: resolved.uiAction,
+        },
+      };
+    }
+    case "focus_graph_node": {
+      const node = String(value(args, "node") ?? "").trim();
+      if (!node) {
+        return {
+          handled: true,
+          result: {
+            ok: false,
+            error: "node is required (e.g. intelligence or hub:you).",
+          },
+        };
+      }
+      const resolved = resolveGuideGraphNode(node);
+      if (!resolved.ok) {
+        return { handled: true, result: resolved };
+      }
+      return {
+        handled: true,
+        result: {
+          ok: true,
+          message: resolved.message,
+          uiAction: resolved.uiAction,
+        },
+      };
+    }
     case "remember": {
       const data = {
         text: value(args, "text"),

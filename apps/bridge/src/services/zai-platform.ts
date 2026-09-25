@@ -25,6 +25,7 @@ export const ZAI_API_BASE_URL = "https://api.z.ai/api/paas/v4";
  * Custom slug remains on the Vault card.
  */
 export const ZAI_CHAT_CATALOG = [
+  { id: "glm-5.3-flash", label: "GLM-5.3 Flash" },
   { id: "glm-5.2", label: "GLM-5.2" },
   { id: "glm-5.1", label: "GLM-5.1" },
   { id: "glm-5", label: "GLM-5" },

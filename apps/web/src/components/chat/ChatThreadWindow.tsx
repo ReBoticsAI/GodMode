@@ -262,8 +262,13 @@ export function ChatThreadWindowsHost({
 
   if (isPhone) {
     const focused =
-      openChatWindows.find((w) => w.id === focusedChatWindowId && !w.minimized) ??
-      openChatWindows.find((w) => !w.minimized) ??
+      openChatWindows.find(
+        (w) =>
+          w.kind !== "agent" &&
+          w.id === focusedChatWindowId &&
+          !w.minimized
+      ) ??
+      openChatWindows.find((w) => w.kind !== "agent" && !w.minimized) ??
       null;
     if (!focused) return null;
     return (
@@ -279,7 +284,9 @@ export function ChatThreadWindowsHost({
 
   return (
     <>
-      {openChatWindows.map((win) => (
+      {openChatWindows
+        .filter((win) => win.kind !== "agent")
+        .map((win) => (
         <ChatThreadWindow
           key={win.id}
           win={win}
