@@ -217,7 +217,10 @@ export const config = {
     sessionSecret:
       process.env.AUTH_SESSION_SECRET ?? "dev-change-me-in-production",
     sessionTtlDays: Number(process.env.AUTH_SESSION_TTL_DAYS ?? 30),
-    /** When true, unauthenticated API requests use the system-local user (dev tooling only). */
+    /**
+     * Dev tooling flag. It does not impersonate the install user.
+     * A signed-out browser gets its own temporary account (see visitor-identity).
+     */
     allowAnonymous: process.env.AUTH_ALLOW_ANONYMOUS === "true",
     /** Open email/password signup (disabled on hub by default). */
     allowSignup:

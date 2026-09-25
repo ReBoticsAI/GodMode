@@ -17,13 +17,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   approveAiRule,
   createAiRule,
   deleteAiRule,
   fetchAiRules,
   importWorkspaceKnowledge,
+  isUnauthorizedError,
   rejectAiRule,
   updateAiRuleContent,
   updateAiRuleState,
@@ -104,7 +105,7 @@ const emptyRuleForm = (): RuleFormState => ({
 });
 
 export function RulesTab({ visible = true }: { visible?: boolean }) {
-  const { activeAgentId } = useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const [rules, setRules] = useState<AiRule[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<KnowledgeStatusFilter>("all");
@@ -119,6 +120,7 @@ export function RulesTab({ visible = true }: { visible?: boolean }) {
       .then((r) => setRules(r.rules))
       .catch((err) => {
         setRules([]);
+        if (isUnauthorizedError(err)) return;
         toast.error(
           err instanceof Error
             ? `Failed to load rules: ${err.message}`

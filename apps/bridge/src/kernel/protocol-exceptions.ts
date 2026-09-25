@@ -8,11 +8,140 @@ export interface ProtocolException {
 
 export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
   {
-    id: "health",
+    id: "chat-unlock-status",
     methods: ["GET"],
-    pathPattern: "/api/health",
-    rationale: "Unauthenticated process and deployment readiness.",
+    pathPattern: "/api/chat-unlock/status",
+    rationale:
+      "Public unlock catalog and entitlement flags; Stripe Checkout and tutorials use sibling authenticated routes.",
     authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-status",
+    methods: ["GET"],
+    pathPattern: "/api/trial-inference/status",
+    rationale:
+      "First-land trial inference probe with soft visitor cookie; no durable identity theater.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-ensure",
+    methods: ["POST"],
+    pathPattern: "/api/trial-inference/ensure",
+    rationale:
+      "Provision or attach GodMode trial OpenRouter path (#758); visitor soft-fail, auth vault attach when configured.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/checkout",
+    rationale:
+      "Authenticated Stripe Checkout for GodMode Inference packs/subscriptions; grant top-up is durable via webhook, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-list",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/admin/grants",
+    rationale:
+      "Platform-admin list of Inference grants (spent vs budget); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-patch",
+    methods: ["PATCH"],
+    pathPattern: "/api/godmode-inference/admin/grants/:",
+    rationale:
+      "Platform-admin patch of a grant budget / expire; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-revoke",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/admin/grants/:/revoke",
+    rationale:
+      "Platform-admin revoke of an Inference grant so Intelligence hard-stops; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-default-trial-budget",
+    methods: ["PUT"],
+    pathPattern: "/api/godmode-inference/admin/default-trial-budget",
+    rationale:
+      "Platform-admin default trial budget USD on GodModeInferenceConfig meta; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-config",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/config",
+    rationale:
+      "Public GodMode Inference pack/subscription catalog and supply-ready flag; no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-projection",
+    methods: ["GET"],
+    pathPattern: "/api/graph/projection",
+    rationale:
+      "Architecture catalog (public) and ObjectType neighborhood for The Graph; read-only, no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-admin-grant",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/admin/grant",
+    rationale:
+      "Platform admin or local allowAnonymous preview grant of UnlockEntitlement without tutorial or Stripe.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/checkout",
+    rationale:
+      "Stripe Checkout redirect for skip-tutorial unlock purchases (UnlockTransaction); durable grant is kernel UnlockEntitlement.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial-start",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/start",
+    rationale:
+      "Tutorial start for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial-step",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/step",
+    rationale:
+      "Tutorial step progress for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-tutorial-complete",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/complete",
+    rationale:
+      "Tutorial complete for free UnlockEntitlement grants.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-graph",
+    methods: ["GET", "PUT"],
+    pathPattern: "/api/chat-unlock/graph",
+    rationale:
+      "Chat graph document persistence for docked Intelligence threads after window unlock.",
+    authenticatedDomainMutations: "kernel-delegated",
+  },
+  {
+    id: "chat-unlock-graph-dock",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/graph/dock",
+    rationale:
+      "Dock Intelligence chat graph into a floating window after unlock.",
+    authenticatedDomainMutations: "kernel-delegated",
   },
   {
     id: "update-readiness",

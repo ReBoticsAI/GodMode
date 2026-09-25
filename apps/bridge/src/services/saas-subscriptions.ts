@@ -937,6 +937,9 @@ export function assertSaasUserMayAccess(user: CoreUser): {
     };
   }
 
+  // Public-graph visitors are not subscribers yet. Signup converts them in place.
+  if (user.is_temporary) return { ok: true };
+
   const core = getCloudDb();
   const rows = listSubscriptionsForUser(core, user.id);
   if (rows.some((row) => subscriptionGrantsAccess(row))) return { ok: true };

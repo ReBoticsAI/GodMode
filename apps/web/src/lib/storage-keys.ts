@@ -39,6 +39,11 @@ export const AGENTS_SECTION_KEY = "godmode.agentsSection";
 export const ACTIVE_AGENT_KEY = "godmode.activeAgentId";
 export const LEGACY_AGENTS_MODE_KEY = "godmode.agents.mode";
 
+/** Focus-pair floating window scale (1.0 = default). */
+export const FOCUS_WINDOW_SCALE_KEY = "godmode.focusWindowScale";
+/** When true, chat + Information use centered focus tiling; when false, cascade offset. */
+export const FOCUS_TILING_ENABLED_KEY = "godmode.focusTilingEnabled";
+
 export const LEGACY_COMPOSER_WIDTH_KEY = "moneyai.composerWidth";
 export const LEGACY_PANEL_HEIGHT_KEY = "moneyai.panelHeight";
 export const LEGACY_PANEL_X_KEY = "moneyai.panelX";

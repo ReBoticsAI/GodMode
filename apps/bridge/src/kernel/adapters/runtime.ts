@@ -27,6 +27,7 @@ import {
   listModelCatalog,
   selectIntelligenceModel,
 } from "../../services/model-catalog.js";
+import { ensureGodModeInferenceIntroGrant } from "../../services/trial-inference.js";
 import { runRemoteInference } from "../../services/inference-service.js";
 import type { LlmManager } from "../../services/llm-manager.js";
 import {
@@ -76,6 +77,7 @@ import {
   type PromptFlowConfig,
 } from "../../services/prompt-assembler.js";
 import { getAgent } from "../../services/agents/agents-db.js";
+import { ensureChatUniverseFile } from "../../services/sqlite-universe-registry.js";
 import {
   CURSOR_API_KEY_SECRET_ID,
   getCursorAuthStatus,
@@ -143,6 +145,16 @@ import {
   removeDeepSeekApiKey,
   upsertDeepSeekApiKey,
 } from "../../services/deepseek-platform.js";
+import {
+  getDashScopeAuthStatus,
+  isDashScopePlatformReady,
+  isDashScopeVaultSecretId,
+  isDashScopeVaultSecretName,
+  DASHSCOPE_API_KEY_SECRET_ID,
+  removeDashScopeApiKey,
+  upsertDashScopeApiKey,
+} from "../../services/dashscope-platform.js";
+import { resolveGodModeInferenceSupplyKey } from "../../services/godmode-inference-supply.js";
 import {
   getGoogleAiAuthStatus,
   isGoogleAiPlatformReady,
@@ -505,7 +517,7 @@ function chatRow(
 ): Record<string, unknown> | undefined {
   return db
     .prepare(
-      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
+      `SELECT id, title, user_id, agent_id, turn_state_json, created_at, updated_at
        FROM ai_chats
        WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     )
@@ -607,7 +619,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     const userId = requiredUser(ctx);
     const rows = db
       .prepare(
-      `SELECT id, title, user_id, turn_state_json, created_at, updated_at
+      `SELECT id, title, user_id, agent_id, turn_state_json, created_at, updated_at
        FROM ai_chats
        WHERE user_id IS NULL OR user_id = ?
        ORDER BY updated_at DESC`
@@ -619,6 +631,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
       records: result.rows.map((row) =>
         record(def, String(row.id), {
           title: row.title,
+          agent_id: row.agent_id ?? "intelligence",
           turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -632,6 +645,7 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
     return row
       ? record(def, id, {
           title: row.title,
+          agent_id: (row as { agent_id?: string }).agent_id ?? "intelligence",
           turn_state: parseJson(row.turn_state_json),
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -645,14 +659,31 @@ export const chatSessionRuntimeAdapter: RecordAdapter = {
         ? data.title.trim().slice(0, 120)
         : "New chat";
     db.prepare(
-      `INSERT INTO ai_chats (id, title, user_id, created_at, updated_at)
-       VALUES (?, ?, ?, datetime('now'), datetime('now'))`
-    ).run(id, title, requiredUser(ctx));
+      `INSERT INTO ai_chats (id, title, user_id, agent_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
+    ).run(
+      id,
+      title,
+      requiredUser(ctx),
+      typeof data.agent_id === "string" && data.agent_id.trim()
+        ? data.agent_id.trim()
+        : ctx.agentId ?? "intelligence"
+    );
     const row = db
-      .prepare(`SELECT created_at, updated_at FROM ai_chats WHERE id = ?`)
-      .get(id) as { created_at: string; updated_at: string };
+      .prepare(
+        `SELECT created_at, updated_at, agent_id FROM ai_chats WHERE id = ?`
+      )
+      .get(id) as { created_at: string; updated_at: string; agent_id: string | null };
+    const agentId = row.agent_id ?? "intelligence";
+    // SQLite-universe Phase 3: dual-write chat file + parent agent child link.
+    ensureChatUniverseFile({
+      chatId: id,
+      ownerAgentId: agentId,
+      label: title,
+    });
     return record(def, id, {
       title,
+      agent_id: agentId,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });
@@ -1220,6 +1251,8 @@ function isManagedPlatformSecret(secret: {
     isFireworksVaultSecretName(secret.name) ||
     isDeepSeekVaultSecretId(secret.id) ||
     isDeepSeekVaultSecretName(secret.name) ||
+    isDashScopeVaultSecretId(secret.id) ||
+    isDashScopeVaultSecretName(secret.name) ||
     isGoogleAiVaultSecretId(secret.id) ||
     isGoogleAiVaultSecretName(secret.name) ||
     isXaiVaultSecretId(secret.id) ||
@@ -1313,6 +1346,12 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isDeepSeekVaultSecretName(name)) {
       throw httpError(400, "DeepSeek API keys must use the DeepSeek credential flow");
+    }
+    if (isDashScopeVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "DashScope / Qwen API keys must use the DashScope credential flow"
+      );
     }
     if (isGoogleAiVaultSecretName(name)) {
       throw httpError(
@@ -1521,6 +1560,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
             kind: "api_key",
             provider: "deepseek",
             display_name: "DeepSeek",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === DASHSCOPE_API_KEY_SECRET_ID) {
+      const status = getDashScopeAuthStatus(db, scope);
+      return status.connected
+        ? record(def, DASHSCOPE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "dashscope",
+            display_name: "DashScope (Qwen)",
             status: "active",
             masked_token: status.masked ?? "****",
           })
@@ -1800,6 +1852,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "dashscope" ||
+      requiredText(data, "provider").toLowerCase() === "qwen"
+    ) {
+      upsertDashScopeApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getDashScopeAuthStatus(db, scope);
+      return record(def, DASHSCOPE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "dashscope",
+        display_name: "DashScope (Qwen)",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "google_ai" ||
       requiredText(data, "provider").toLowerCase() === "google-ai" ||
       requiredText(data, "provider").toLowerCase() === "gemini"
@@ -2049,6 +2116,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       removeDeepSeekApiKey(db, scope);
       return;
     }
+    if (id === DASHSCOPE_API_KEY_SECRET_ID) {
+      removeDashScopeApiKey(db, scope);
+      return;
+    }
     if (id === GOOGLE_AI_API_KEY_SECRET_ID) {
       removeGoogleAiApiKey(db, scope);
       return;
@@ -2190,11 +2261,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
-      // Custom Z.AI Coding Plan slug when Vault is connected.
+      // Custom Z.AI Coding Plan slug when Vault or Admin supply is ready.
       if (!selected) {
         const zaiCustom =
           /^provider:openai_compatible:zai_coding:(.+)$/.exec(modelId);
-        if (zaiCustom?.[1] && isZaiCodingPlatformReady(db)) {
+        if (
+          zaiCustom?.[1] &&
+          (isZaiCodingPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("zai_coding")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2309,11 +2384,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
-      // Custom DeepSeek slug when Vault is connected.
+      // Custom DeepSeek slug when Vault or Admin GodMode Inference supply is ready.
       if (!selected) {
         const deepseekCustom =
           /^provider:openai_compatible:deepseek:(.+)$/.exec(modelId);
-        if (deepseekCustom?.[1] && isDeepSeekPlatformReady(db)) {
+        if (
+          deepseekCustom?.[1] &&
+          (isDeepSeekPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("deepseek")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2321,6 +2400,25 @@ export const modelRuntimeAdapter: RecordAdapter = {
             model: deepseekCustom[1],
             provider: "openai_compatible",
             transport: "deepseek",
+          };
+        }
+      }
+      // Custom DashScope / Qwen slug when Vault or Admin supply is ready.
+      if (!selected) {
+        const dashscopeCustom =
+          /^provider:openai_compatible:dashscope:(.+)$/.exec(modelId);
+        if (
+          dashscopeCustom?.[1] &&
+          (isDashScopePlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("dashscope")))
+        ) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `Qwen · ${dashscopeCustom[1]}`,
+            model: dashscopeCustom[1],
+            provider: "openai_compatible",
+            transport: "dashscope",
           };
         }
       }
@@ -2353,10 +2451,14 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
-      // Custom Z.AI payg slug when Vault is connected.
+      // Custom Z.AI payg slug when Vault or Admin supply is ready.
       if (!selected) {
         const zaiCustom = /^provider:openai_compatible:zai:(.+)$/.exec(modelId);
-        if (zaiCustom?.[1] && isZaiPlatformReady(db)) {
+        if (
+          zaiCustom?.[1] &&
+          (isZaiPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("zai")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2449,6 +2551,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("together:") &&
           !custom[1].startsWith("fireworks:") &&
           !custom[1].startsWith("deepseek:") &&
+          !custom[1].startsWith("dashscope:") &&
           !custom[1].startsWith("google_ai:") &&
           !custom[1].startsWith("xai:") &&
           !custom[1].startsWith("zai:") &&
@@ -2483,12 +2586,26 @@ export const modelRuntimeAdapter: RecordAdapter = {
         (selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db)
           ? "openrouter"
           : undefined);
-      return selectIntelligenceModel(db, active.llm as LlmManager, {
+      const managedGodModeInference =
+        (transport === "deepseek" &&
+          !isDeepSeekPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("deepseek"))) ||
+        (transport === "dashscope" &&
+          !isDashScopePlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("dashscope"))) ||
+        (transport === "zai" &&
+          !isZaiPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("zai"))) ||
+        (transport === "zai_coding" &&
+          !isZaiCodingPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("zai_coding")));
+      const selectedResult = await selectIntelligenceModel(db, active.llm as LlmManager, {
         source: selected.source,
         path: selected.path,
         model: selected.model,
         provider: selected.provider,
         endpointId: selected.endpointId,
+        ...(managedGodModeInference ? { managedGodModeInference: true } : {}),
         ...(transport === "openrouter"
           ? { transport: "openrouter", apiKeyRef: OPENROUTER_API_KEY_SECRET_ID }
           : transport === "groq"
@@ -2499,6 +2616,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                 ? { transport: "fireworks", apiKeyRef: FIREWORKS_API_KEY_SECRET_ID }
                 : transport === "deepseek"
                   ? { transport: "deepseek", apiKeyRef: DEEPSEEK_API_KEY_SECRET_ID }
+                  : transport === "dashscope"
+                    ? {
+                        transport: "dashscope",
+                        apiKeyRef: DASHSCOPE_API_KEY_SECRET_ID,
+                      }
                   : transport === "google_ai"
                     ? { transport: "google_ai", apiKeyRef: GOOGLE_AI_API_KEY_SECRET_ID }
                     : transport === "xai"
@@ -2542,6 +2664,13 @@ export const modelRuntimeAdapter: RecordAdapter = {
                         }
                       : {}),
       });
+      if (managedGodModeInference && selected.model) {
+        ensureGodModeInferenceIntroGrant({
+          userId: requiredUser(ctx),
+          modelId: selected.model,
+        });
+      }
+      return selectedResult;
     },
     start(_db, _def, _id, _input, ctx) {
       requireSharedHostProcessMutate(ctx, "the host LLM process");
@@ -3308,7 +3437,7 @@ export const runtimeAdapterRegistrations = [
     adapterId: "chat_session_runtime",
     database: "tenant",
     operations: ["list", "get", "create", "delete"],
-    fields: ["id", "title", "turn_state", "created_at", "updated_at"],
+    fields: ["id", "title", "agent_id", "turn_state", "created_at", "updated_at"],
     // Chat turn streaming remains on the authorized SSE protocol endpoint and
     // is not declared as a Record action.
     actions: CHAT_SESSION_ACTIONS,

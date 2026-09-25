@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   deleteAiArtifact,
   fetchAiArtifacts,
@@ -45,8 +46,9 @@ function ArtifactMetaBadges({ artifact }: { artifact: AiArtifact }) {
 }
 
 export function ArtifactsTab() {
-  const { activeAgentId, openArtifactViewer, artifactViewer, discussArtifactInChat } =
+  const { openArtifactViewer, artifactViewer, discussArtifactInChat } =
     useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const [artifacts, setArtifacts] = useState<AiArtifact[]>([]);
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<string>("all");

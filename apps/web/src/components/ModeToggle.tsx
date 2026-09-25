@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 export function ModeToggle({
   className,
   size = "icon-sm",
+  variant = "ghost",
 }: {
   className?: string;
-  size?: "icon" | "icon-sm" | "icon-xs" | "icon-lg";
+  size?: "icon" | "icon-sm" | "icon-xs" | "icon-lg" | "sm";
+  variant?: "ghost" | "outline" | "secondary";
 }) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -27,7 +29,7 @@ export function ModeToggle({
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant={variant}
       size={size}
       className={className}
       aria-label={label}

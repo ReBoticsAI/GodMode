@@ -7,11 +7,13 @@ import { ArtifactsTab } from "@/pages/ai-settings/ArtifactsTab";
 import { ReflectionPanel } from "./ReflectionPanel";
 import { ToolsTab } from "@/pages/ai-settings/ToolsTab";
 import { useIntelligence, type KnowledgeSubTab } from "@/lib/intelligence-context";
+import { KnowledgeAgentScope } from "@/lib/knowledge-agent";
 
-export function KnowledgePanel() {
+export function KnowledgePanel({ agentId }: { agentId?: string }) {
   const { knowledgeSubTab, setKnowledgeSubTab } = useIntelligence();
 
   return (
+    <KnowledgeAgentScope agentId={agentId}>
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <Tabs
         value={knowledgeSubTab}
@@ -55,5 +57,6 @@ export function KnowledgePanel() {
         </div>
       </ScrollArea>
     </div>
+    </KnowledgeAgentScope>
   );
 }

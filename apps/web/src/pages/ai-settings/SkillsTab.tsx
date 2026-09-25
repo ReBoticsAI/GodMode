@@ -17,13 +17,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   approveAiSkill,
   createAiSkill,
   deleteAiSkill,
   fetchAiSkills,
   importWorkspaceKnowledge,
+  isUnauthorizedError,
   rejectAiSkill,
   updateAiSkillContent,
   updateAiSkillState,
@@ -95,7 +96,7 @@ const emptySkillForm = (): SkillFormState => ({
 });
 
 export function SkillsTab({ visible = true }: { visible?: boolean }) {
-  const { activeAgentId } = useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const [skills, setSkills] = useState<AiSkill[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<KnowledgeStatusFilter>("all");
@@ -110,6 +111,7 @@ export function SkillsTab({ visible = true }: { visible?: boolean }) {
       .then((r) => setSkills(r.skills))
       .catch((err) => {
         setSkills([]);
+        if (isUnauthorizedError(err)) return;
         toast.error(
           err instanceof Error
             ? `Failed to load skills: ${err.message}`

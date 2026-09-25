@@ -26,6 +26,7 @@ import {
   fetchOpenAiStatus,
   type OpenAiAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 const OPENAI_MODELS = [
   { id: "gpt-4o", label: "GPT-4o" },
@@ -112,6 +113,7 @@ export function OpenAiPlatformCard({
           Metered OpenAI API key (BYOK). Models run through GodMode&apos;s OpenAI harness with
           native tools. Billed to your OpenAI account, not a Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="openai" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

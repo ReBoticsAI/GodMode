@@ -23,7 +23,8 @@ export const DEEPSEEK_CHAT_CATALOG = [
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
 ] as const;
 
-export type DeepSeekAuthSource = "env" | "vault" | "none";
+/** Vault UI sources only. Platform admin supply is separate (Admin → GodMode Inference). */
+export type DeepSeekAuthSource = "vault" | "none";
 
 export interface DeepSeekAuthStatus {
   connected: boolean;
@@ -35,12 +36,14 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
+/**
+ * Personal Vault BYOK only. Admin / env GodMode Inference supply is resolved
+ * only via resolveGodModeInferenceSupplyForManagedChat.
+ */
 export function resolveDeepSeekApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const env = process.env.DEEPSEEK_API_KEY?.trim();
-  if (env) return env;
   return resolvePlatformVaultSecret(db, {
     baseId: DEEPSEEK_API_KEY_SECRET_ID,
     name: DEEPSEEK_API_KEY_SECRET_NAME,
@@ -72,14 +75,14 @@ export function removeDeepSeekApiKey(
   });
 }
 
+/**
+ * Personal / workspace BYOK status for Vault cards.
+ * Does not report Admin platform supply or process env (operator supply).
+ */
 export function getDeepSeekAuthStatus(
   db: AppDatabase,
   agentId?: string | null
 ): DeepSeekAuthStatus {
-  const env = process.env.DEEPSEEK_API_KEY?.trim();
-  if (env) {
-    return { connected: true, source: "env", masked: maskKey(env) };
-  }
   const value = getPlatformVaultSecretInScope(db, {
     baseId: DEEPSEEK_API_KEY_SECRET_ID,
     name: DEEPSEEK_API_KEY_SECRET_NAME,

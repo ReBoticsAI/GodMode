@@ -4,7 +4,8 @@ Design note for [#777](https://github.com/ReBoticsAI/GodMode/issues/777): the
 full shared-Cloud isolation stack beyond today's coding Layers 1–4.
 
 **Related:** [SECURITY.md](SECURITY.md) (coding posture), [multi-tenant-model.md](multi-tenant-model.md)
-(storage planes), [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) (Community child
+(storage planes), [SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md) (Graph map + shard
+files), [GRAPH_MISSIONS.md](GRAPH_MISSIONS.md), [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) (Community child
 process), [#172](https://github.com/ReBoticsAI/GodMode/issues/172) (job microVM
 slice), [#591](https://github.com/ReBoticsAI/GodMode/issues/591) (cgroups),
 [#736](https://github.com/ReBoticsAI/GodMode/issues/736) (queue workers /
@@ -26,6 +27,27 @@ dedicated-hardware isolation:
 Product default: **shared VPS fleet** with a **per-user runtime box** as the
 Cloud isolation unit. A whole dedicated VPS per customer is a later billing SKU
 (Phase 5), not the baseline Cloud claim.
+
+## The Graph is the map
+
+**The Graph** is the user-facing architecture of a GodMode instance: **You**,
+**Intelligence**, **Hub** (Bridge), Workspaces, Agents, Vaults, owner surfaces, and Chat.
+It is the control-surface metaphor for what exists and how windows open
+([SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md), [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md)).
+
+Isolation does **not** replace that map. It wraps and feeds it:
+
+| Layer | Role |
+|-------|------|
+| **Graph** | Topology users own and navigate (product architecture) |
+| **SQLite universe + Data Router** | Storage execution: which shard files open; digests to UI/agents |
+| **Per-user runtime box (#781)** | Hard compute boundary around that whole instance |
+| **Disposable job (#780)** | One throwaway burst inside the box |
+
+Build Graph WIP and isolation phases in parallel. Do not block The Graph on
+#781. Do not skip the Data Router because the map exists. Hub is the Bridge
+ops node on the map (on-disk path still `heart/` until a dual-read migration);
+SaaS `deploymentMode: hub` is a separate Cloud vocabulary.
 
 ## What this is not
 
@@ -88,9 +110,9 @@ Today’s one Bridge is the **strangle baseline**, not the forever Cloud home.
 | Piece | Role |
 |-------|------|
 | **GodMode Cloud** | Shared control plane: identity, billing, Marketplace, `Cloud.sqlite` / `Users.sqlite`, orchestrator that places user boxes and jobs |
-| **Per-user runtime box** | That customer’s GodMode instance home: workspaces, agents, plugins, ObjectType graph |
+| **Per-user runtime box** | That customer’s GodMode instance home: The Graph (You, Hub, Workspaces, agents), plugins |
 | **Disposable job** | Short-lived compute for toolful work; artifact handoff only |
-| **Data Router** | Storage execution under kernel policy |
+| **Data Router** | Storage execution under kernel policy (SQLite-universe shards + legacy planes) |
 
 ### Data path
 
@@ -210,3 +232,5 @@ Control Center. Do not ground-up rewrite the product to ship this ladder.
 - Cloud isolation epic parent: [#396](https://github.com/ReBoticsAI/GodMode/issues/396)
 - Plugin runtime: [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md), [#559](https://github.com/ReBoticsAI/GodMode/issues/559)
 - Storage planes: [multi-tenant-model.md](multi-tenant-model.md)
+- Graph map + shards: [SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md)
+- Graph missions: [GRAPH_MISSIONS.md](GRAPH_MISSIONS.md)

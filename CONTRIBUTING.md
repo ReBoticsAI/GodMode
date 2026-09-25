@@ -46,6 +46,8 @@ offsite object storage for backups.
 ## Pull requests
 
 - Keep changes focused; match existing code style.
+- Graph / Information floating chrome: follow
+  [docs/GRAPH_CHROME.md](docs/GRAPH_CHROME.md) (ownership, z-stack, tabs, Empty/Spinner).
 - Open pull requests against `main`. Docs-only clarifications (README, CONTRIBUTING, and similar markdown) are welcome without running the full kernel gate; still say in the PR that CI impact is none.
 - Run `npm run test:gate` before submitting kernel or route changes.
   `npm run audit:kernel:strict` and `npm run test:objecttypes` are available as

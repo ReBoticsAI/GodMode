@@ -294,10 +294,12 @@ export class PartsBuilder {
   }
 
   onToken(content: string): void {
+    if (typeof content !== "string" || !content) return;
     this.segRaw += content;
   }
 
   onReasoning(content: string): void {
+    if (typeof content !== "string" || !content) return;
     this.reasoningRaw += content;
     if (this.thinkingStartedAt == null) this.thinkingStartedAt = Date.now();
   }

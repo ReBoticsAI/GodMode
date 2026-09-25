@@ -11,11 +11,16 @@ import {
 } from "react";
 import {
   BotIcon,
+  BrainIcon,
   ChevronDownIcon,
   ClockIcon,
+  FileCodeIcon,
+  ImageIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
+  MinusIcon,
+  PanelLeftIcon,
   PlusIcon,
   Share2Icon,
   Trash2Icon,
@@ -23,29 +28,68 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { GRAPH_CHAT_WINDOW_Z } from "@/lib/graph-chrome-layout";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   clampComposerWidth,
   clampPanelHeight,
+  MIN_COMPOSER_WIDTH,
   useIntelligence,
   type PanelTab,
 } from "@/lib/intelligence-context";
+import {
+  INTELLIGENCE_GREETING_HELLO,
+  INTELLIGENCE_GREETING_QUESTION,
+  INTELLIGENCE_INTERESTS,
+  interestStartMessage,
+} from "@/lib/intelligence-interests";
+import { interestTour } from "@/lib/interest-tour";
+import { CLOUD_GUIDE_DONE_EVENT, playCloudGuide } from "@/lib/cloud-guide";
 import { AI_NAME } from "@/lib/navigation";
+import { detectDesktopOsFromNavigator } from "@/lib/desktop-os";
+import {
+  canonicalGuideChoice,
+  choiceOptionsForUserAgent,
+  GUIDE_CHOICE_EVENT,
+  type GuideChoiceCard,
+} from "@/lib/guide-next-choice";
+import {
+  displayNameForAgent,
+  fallbackAgentLabel,
+  isPersonaAgent,
+  sharesUserTooling,
+} from "@/lib/focus-chrome";
+import { ChatTurn } from "./ChatTurn";
 import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  focusWindowAnchors,
+  snapToFocusAnchor,
+} from "@/lib/floating-window-anchors";
+import { snapRectToGrid } from "@/lib/floating-window-grid";
+import {
+  anchorWindowAndMirror,
+  registerFloatingWindow,
+  applyActiveFocusLayout,
+  floatingTitleWindowIdAt,
+  setTileSwapHighlight,
+  swapFocusWindowSlots,
+  setActiveFloatingWindow,
+} from "@/lib/floating-window-registry";
 import { useAgentMentionSources } from "@/hooks/use-agent-mention-sources";
 import { useKanbanTodosForChat } from "@/hooks/use-kanban-todos-for-chat";
 import {
-  createAiMemory,
   deleteAiChat,
   fetchAiAgent,
   fetchAiChats,
@@ -59,16 +103,15 @@ import {
   truncateAiChat,
   deleteAiChatMessage,
   fetchAiArtifact,
-  fetchDmContacts,
   fetchDmMessages,
   fetchModelCatalog,
   getActiveTenantId,
   markDmConversationRead,
   sendDmMessage,
   refreshCursorSession,
+  selectIntelligenceModel,
   type AiChat,
   type CatalogModel,
-  type DmContact,
   type DmMessage,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
@@ -79,12 +122,21 @@ import { CalendarBoard } from "./calendar/CalendarBoard";
 import { AutomationsPanel } from "@/pages/Automations";
 import { KnowledgePanel } from "@/pages/intelligence-flow/KnowledgePanel";
 import { NotificationsList } from "@/components/NotificationsList";
-import { ConversationList } from "@/components/messages/ConversationList";
+import { ChatDirectorySidebar } from "./ChatDirectorySidebar";
 import { ChatTargetSearch } from "./ChatTargetSearch";
 import { ActiveWorkPanel } from "./projects/ActiveWorkPanel";
 import { Markdown } from "./Markdown";
 import { ArtifactViewerDialog, artifactViewerHref } from "./ArtifactViewerDialog";
-import { ChatTurn } from "./ChatTurn";
+import {
+  applyGuideUiAction,
+  cancelGraphTour,
+  playGraphTour,
+  GRAPH_TOUR_DONE_EVENT,
+  GRAPH_TOUR_LINE_EVENT,
+  GRAPH_TOUR_RESET_EVENT,
+  guideUiActionFromToolResult,
+} from "@/lib/guide-ui-action";
+import { DigitalYouIcon } from "./DigitalYouIcon";
 import {
   PartsBuilder,
   estimateTokens,
@@ -92,7 +144,8 @@ import {
   partsAnswerText,
   type MsgPart,
 } from "./chat-parts";
-import { IntelligenceComposer, type ComposerSubmit } from "./IntelligenceComposer";
+import { type ComposerSubmit } from "./IntelligenceComposer";
+import { syncMissionsAfterChat } from "@/components/graph/GraphMissionsPanel";
 
 interface UiMessage {
   id: string;
@@ -198,12 +251,105 @@ function clampPanelPos(
   };
 }
 
-export function IntelligencePanel() {
+const SOCIAL_WINDOW_TABS = ["chat", "support"] as const;
+const AGENT_WINDOW_TABS = [
+  "projects",
+  "calendar",
+  "knowledge",
+  "bank",
+  "vault",
+  "notifications",
+] as const;
+
+type SocialWindowTab = (typeof SOCIAL_WINDOW_TABS)[number];
+type AgentWindowTab = (typeof AGENT_WINDOW_TABS)[number];
+
+function isSocialWindowTab(tab: PanelTab): tab is SocialWindowTab {
+  return (SOCIAL_WINDOW_TABS as readonly string[]).includes(tab);
+}
+
+function isAgentWindowTab(tab: PanelTab): tab is AgentWindowTab {
+  return (AGENT_WINDOW_TABS as readonly string[]).includes(tab);
+}
+
+function ChatWindowTabs({
+  tab,
+  onTabChange,
+}: {
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
+}) {
+  const group = isAgentWindowTab(tab) ? "agent" : "social";
+  const [socialTab, setSocialTab] = useState<SocialWindowTab>("chat");
+  const [agentTab, setAgentTab] = useState<AgentWindowTab>("projects");
+
+  useEffect(() => {
+    if (isSocialWindowTab(tab)) setSocialTab(tab);
+    if (isAgentWindowTab(tab)) setAgentTab(tab);
+  }, [tab]);
+
+  const subtabClass = "min-w-max px-3 text-xs";
+
+  return (
+    <div className="flex min-w-0 shrink-0 flex-col gap-1 pt-1">
+      <Tabs
+        value={group}
+        onValueChange={(value) =>
+          onTabChange(value === "agent" ? agentTab : socialTab)
+        }
+        className="px-2"
+      >
+        <TabsList className="h-9 w-full">
+          <TabsTrigger value="social">Social</TabsTrigger>
+          <TabsTrigger value="agent">Agent</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => onTabChange(value as PanelTab)}
+        className="min-w-0"
+      >
+        <TabsList
+          variant="line"
+          className="h-auto w-full min-w-0 flex-nowrap justify-start overflow-x-auto px-1 pb-1.5"
+        >
+          {group === "social" ? (
+            <>
+              <TabsTrigger value="chat" className={subtabClass}>Chat</TabsTrigger>
+              <TabsTrigger value="support" className={subtabClass}>Support</TabsTrigger>
+            </>
+          ) : (
+            <>
+              <TabsTrigger value="projects" className={subtabClass}>Automations</TabsTrigger>
+              <TabsTrigger value="calendar" className={subtabClass}>Calendar</TabsTrigger>
+              <TabsTrigger value="knowledge" className={subtabClass}>Knowledge</TabsTrigger>
+              <TabsTrigger value="bank" className={subtabClass}>Bank</TabsTrigger>
+              <TabsTrigger value="vault" className={subtabClass}>Agent Vault</TabsTrigger>
+              <TabsTrigger value="notifications" className={subtabClass}>Notifications</TabsTrigger>
+            </>
+          )}
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}
+
+export function IntelligencePanel({
+  chromeLocks,
+}: {
+  chromeLocks?: {
+    lockClose?: boolean;
+    lockResize?: boolean;
+    lockCreate?: boolean;
+    onLockedClose?: () => void;
+    onLockedResize?: () => void;
+    onLockedCreate?: () => void;
+    onActiveChatId?: (id: string | null) => void;
+  };
+} = {}) {
   const {
     panelOpen,
     setPanelOpen,
-    seedText,
-    setSeedText,
     autoSendPrompt,
     setAutoSendPrompt,
     pendingChatId,
@@ -221,6 +367,8 @@ export function IntelligencePanel() {
     activeAgentId,
     panelMaximized,
     setPanelMaximized,
+    panelMinimized,
+    setPanelMinimized,
     chatTarget,
     setChatTarget,
     dmConversations,
@@ -232,19 +380,58 @@ export function IntelligencePanel() {
     clearNewChatRequest,
     toolAutonomy,
     chatMode,
-    openPanel,
+    setSeedText,
   } = useIntelligence();
-  const { user } = useTenant();
-  const { status } = useAiStatus();
+  const lockClose = chromeLocks?.lockClose ?? false;
+  const lockResize = chromeLocks?.lockResize ?? false;
+  const lockCreate = chromeLocks?.lockCreate ?? false;
+  const onLockedClose = chromeLocks?.onLockedClose;
+  const onLockedResize = chromeLocks?.onLockedResize;
+  const onLockedCreate = chromeLocks?.onLockedCreate;
+  const { user, authenticated } = useTenant();
+  const showChatDirectory = authenticated && user?.temporary !== true;
+  const { status } = useAiStatus({ enabled: panelOpen });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
+  const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
   const isMobile = useIsMobile();
+  const [isPhone, setIsPhone] = useState<boolean>(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(max-width: 639px)").matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setIsPhone(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  useEffect(() => {
+    const onGreeting = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ ready?: boolean }>).detail;
+      if (detail?.ready) {
+        window.dispatchEvent(new CustomEvent("godmode:model-selected"));
+      }
+    };
+    window.addEventListener("godmode:trial-greeting", onGreeting);
+    return () => window.removeEventListener("godmode:trial-greeting", onGreeting);
+  }, []);
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
-  const allowedTabs: PanelTab[] = isDmMode
-    ? ["chat", "dms", "channels"]
-    : ["chat", "notifications", "calendar", "projects", "knowledge", "bank", "vault", "support"];
+  const allowedTabs: PanelTab[] = [
+    "chat",
+    "support",
+    "notifications",
+    "calendar",
+    "projects",
+    "knowledge",
+    "bank",
+    "vault",
+  ];
   const effectiveTab: PanelTab = allowedTabs.includes(panelTab)
     ? panelTab
     : "chat";
+  const userTooling = sharesUserTooling(activeAgentId);
   useAgentMentionSources(
     activeAgentId,
     !isDmMode && panelOpen && effectiveTab === "chat"
@@ -269,23 +456,31 @@ export function IntelligencePanel() {
       : "Direct message";
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [tourLines, setTourLines] = useState<Array<{ label: string; say: string }>>([]);
+  const [holdTourReply, setHoldTourReply] = useState(false);
+  const [guideChoice, setGuideChoice] = useState<GuideChoiceCard | null>(null);
+  const tourReplyId = useMemo(() => {
+    if (tourLines.length === 0) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const row = messages[i];
+      if (row.role === "assistant") return row.id;
+    }
+    return null;
+  }, [messages, tourLines.length]);
   const [chats, setChats] = useState<AiChat[]>([]);
-  const [dmContacts, setDmContacts] = useState<DmContact[]>([]);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const kanbanTodoCards = useKanbanTodosForChat(
     activeAgentId,
     activeChatId,
     !isDmMode && effectiveTab === "chat"
   );
-  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // "Engine vs Work" UI state: whether the active agent is shared TO the user
   // (so chats save to THEIR workspace), the opt-in to contribute new memories
   // back to the agent owner, and whether this conversation is a shared session.
   const [agentShared, setAgentShared] = useState(false);
   const [agentName, setAgentName] = useState<string>(AI_NAME);
-  const [agentDescription, setAgentDescription] = useState<string | null>(null);
-  const [agentBackend, setAgentBackend] = useState<string | null>(null);
   const [contributeMemory, setContributeMemory] = useState(false);
   const [sharedSession, setSharedSession] = useState(false);
   const [sharingSession, setSharingSession] = useState(false);
@@ -329,20 +524,28 @@ export function IntelligencePanel() {
     return () => clearInterval(t);
   }, []);
 
-  // viewport changes.
+  // viewport changes. Latest tile rect lives on the ref so a resize
+  // does not pull a swapped chat window back to its mount position.
+  const chatLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   useEffect(() => {
     const recompute = () => {
       const nextBounds = getPanelBounds();
       setBounds(nextBounds);
-      const width = clampComposerWidth(composerWidth, nextBounds.width);
-      const height = clampPanelHeight(panelHeight, nextBounds.height);
+      const layout = chatLayoutRef.current;
+      const width = clampComposerWidth(
+        layout.width || composerWidth,
+        nextBounds.width
+      );
+      const height = clampPanelHeight(
+        layout.height || panelHeight,
+        nextBounds.height
+      );
       setComposerWidth(width);
       setPanelHeight(height);
-      const defaultX = nextBounds.x + 12;
-      const defaultY = nextBounds.y + nextBounds.height - height - 12;
+      const focus = focusWindowAnchors(nextBounds, width, height);
       const pos = clampPanelPos(
-        panelX ?? defaultX,
-        panelY ?? defaultY,
+        layout.width ? layout.x : (panelX ?? focus.left.x),
+        layout.height ? layout.y : (panelY ?? focus.left.y),
         width,
         height,
         nextBounds
@@ -364,19 +567,73 @@ export function IntelligencePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onReset = () => {
+      if (isMaximized) return;
+      const activeBounds = getPanelBounds();
+      setBounds(activeBounds);
+      const width = clampComposerWidth(composerWidth, activeBounds.width);
+      const height = clampPanelHeight(panelHeight, activeBounds.height);
+      setComposerWidth(width);
+      setPanelHeight(height);
+      const focus = focusWindowAnchors(activeBounds, width, height);
+      setPanelPos(focus.left.x, focus.left.y);
+      if (!panelOpen) setPanelOpen(true);
+    };
+    window.addEventListener("godmode:reset-window-anchors", onReset);
+    return () =>
+      window.removeEventListener("godmode:reset-window-anchors", onReset);
+  }, [
+    isMaximized,
+    composerWidth,
+    panelHeight,
+    panelOpen,
+    setComposerWidth,
+    setPanelHeight,
+    setPanelPos,
+    setPanelOpen,
+  ]);
+
+  const [anchorPickMode, setAnchorPickMode] = useState(false);
+  useEffect(() => {
+    const onPick = (ev: Event) => {
+      setAnchorPickMode(
+        Boolean((ev as CustomEvent<{ active?: boolean }>).detail?.active)
+      );
+    };
+    window.addEventListener("godmode:anchor-pick-mode", onPick);
+    return () => window.removeEventListener("godmode:anchor-pick-mode", onPick);
+  }, []);
+
   const handleDrag = (e: ReactPointerEvent<HTMLElement>) => {
     const target = e.target;
     if (target instanceof Element && target.closest("button,[role='button']")) {
       return;
     }
+
+    if (anchorPickMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      anchorWindowAndMirror("chat");
+      window.dispatchEvent(
+        new CustomEvent("godmode:anchor-pick-mode", {
+          detail: { active: false },
+        })
+      );
+      return;
+    }
+
+    setActiveFloatingWindow("chat");
     e.preventDefault();
     const activeBounds = getPanelBounds();
     setBounds(activeBounds);
     const startX = e.clientX;
     const startY = e.clientY;
-    const startPanelX = panelX ?? activeBounds.x + 12;
-    const startPanelY =
-      panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
+    const focus = focusWindowAnchors(activeBounds, composerWidth, panelHeight);
+    const startPanelX = panelX ?? focus.left.x;
+    const startPanelY = panelY ?? focus.left.y;
+    let lastX = startPanelX;
+    let lastY = startPanelY;
     const onMove = (ev: PointerEvent) => {
       const pos = clampPanelPos(
         startPanelX + ev.clientX - startX,
@@ -385,13 +642,40 @@ export function IntelligencePanel() {
         panelHeight,
         activeBounds
       );
+      lastX = pos.x;
+      lastY = pos.y;
       setPanelPos(pos.x, pos.y);
+      setTileSwapHighlight(floatingTitleWindowIdAt(ev.clientX, ev.clientY, "chat"));
     };
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      const swapTarget = floatingTitleWindowIdAt(ev.clientX, ev.clientY, "chat");
+      setTileSwapHighlight(null);
+      if (swapTarget && swapFocusWindowSlots("chat", swapTarget)) return;
+      const focusSnapped = snapToFocusAnchor(
+        lastX,
+        lastY,
+        composerWidth,
+        panelHeight,
+        activeBounds
+      );
+      if (focusSnapped) {
+        setPanelPos(focusSnapped.x, focusSnapped.y);
+      } else {
+        const gridSnapped = snapRectToGrid(
+          {
+            x: lastX,
+            y: lastY,
+            width: composerWidth,
+            height: panelHeight,
+          },
+          activeBounds
+        );
+        setPanelPos(gridSnapped.x, gridSnapped.y);
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -406,7 +690,9 @@ export function IntelligencePanel() {
     setBounds(activeBounds);
     const startX = e.clientX;
     const startWidth = composerWidth;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const onMove = (ev: PointerEvent) => {
       const available = activeBounds.x + activeBounds.width - currentX;
       setComposerWidth(
@@ -461,7 +747,9 @@ export function IntelligencePanel() {
     const startY = e.clientY;
     const startWidth = composerWidth;
     const startHeight = panelHeight;
-    const currentX = panelX ?? activeBounds.x + 12;
+    const currentX =
+      panelX ??
+      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
     const currentY =
       panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
     const onMove = (ev: PointerEvent) => {
@@ -500,22 +788,6 @@ export function IntelligencePanel() {
     refreshChats();
   }, [refreshChats]);
 
-  useEffect(() => {
-    if (!isDmMode) return;
-    fetchDmContacts()
-      .then((r) => setDmContacts(r.contacts))
-      .catch(() => undefined);
-  }, [isDmMode]);
-
-  const directConversations = dmConversations.filter(
-    (c) =>
-      c.kind === "direct" &&
-      !c.members.some((m) => m.memberKind === "agent")
-  );
-  const groupConversations = dmConversations.filter(
-    (c) => c.kind === "group" || c.members.length > 2
-  );
-
   // Resolve whether the active agent is shared TO this user. When owned,
   // engine === work, so the ownership UI stays hidden and behavior is unchanged.
   useEffect(() => {
@@ -523,26 +795,18 @@ export function IntelligencePanel() {
     if (!activeAgentId) {
       setAgentShared(false);
       setAgentName(AI_NAME);
-      setAgentDescription(null);
-      setAgentBackend(null);
       return;
     }
     fetchAiAgent(activeAgentId)
       .then((a) => {
         if (cancelled) return;
         setAgentShared(Boolean(a.shared));
-        setAgentName(
-          a.id === "intelligence" ? AI_NAME : a.name?.trim() || AI_NAME
-        );
-        setAgentDescription(a.description?.trim() || null);
-        setAgentBackend(a.backend ?? null);
+        setAgentName(displayNameForAgent(a.id, a.name));
       })
       .catch(() => {
         if (!cancelled) {
           setAgentShared(false);
-          setAgentName(AI_NAME);
-          setAgentDescription(null);
-          setAgentBackend(null);
+          setAgentName(fallbackAgentLabel(activeAgentId));
         }
       });
     return () => {
@@ -578,21 +842,13 @@ export function IntelligencePanel() {
     try {
       await startSharedChatSession(activeChatId, activeAgentId);
       setSharedSession(true);
-      toast.success("Conversation shared — collaborators can now join live.");
+      toast.success("Conversation shared. Collaborators can now join live.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to share conversation");
     } finally {
       setSharingSession(false);
     }
   }, [activeChatId, activeAgentId]);
-
-  // Seed text from any launcher into the composer.
-  useEffect(() => {
-    if (seedText) {
-      setInput(seedText);
-      setSeedText("");
-    }
-  }, [seedText, setSeedText]);
 
   const loadChat = useCallback(
     async (chatId: string) => {
@@ -726,7 +982,52 @@ export function IntelligencePanel() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  }, [messages, tourLines, holdTourReply, guideChoice]);
+
+  useEffect(() => {
+    const onLine = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ label?: string; say?: string }>).detail;
+      const say = detail?.say?.trim();
+      if (!say) return;
+      setHoldTourReply(true);
+      setTourLines((prev) => [
+        ...prev,
+        { label: detail.label?.trim() || "Graph", say },
+      ]);
+    };
+    const onReset = () => {
+      setTourLines([]);
+      setHoldTourReply(false);
+      setGuideChoice(null);
+    };
+    const onDone = () => {
+      setHoldTourReply(false);
+      setGuideChoice((current) => current ?? canonicalGuideChoice());
+    };
+    const onChoice = (ev: Event) => {
+      const detail = (ev as CustomEvent<GuideChoiceCard>).detail;
+      if (!detail?.options?.length) return;
+      setGuideChoice({
+        question: detail.question,
+        why: detail.why,
+        options: detail.options,
+      });
+    };
+    const onCloudDone = () => setHoldTourReply(false);
+    window.addEventListener(GRAPH_TOUR_LINE_EVENT, onLine);
+    window.addEventListener(GRAPH_TOUR_RESET_EVENT, onReset);
+    window.addEventListener(GRAPH_TOUR_DONE_EVENT, onDone);
+    window.addEventListener(CLOUD_GUIDE_DONE_EVENT, onCloudDone);
+    window.addEventListener(GUIDE_CHOICE_EVENT, onChoice);
+    return () => {
+      window.removeEventListener(GRAPH_TOUR_LINE_EVENT, onLine);
+      window.removeEventListener(GRAPH_TOUR_RESET_EVENT, onReset);
+      window.removeEventListener(GRAPH_TOUR_DONE_EVENT, onDone);
+      window.removeEventListener(CLOUD_GUIDE_DONE_EVENT, onCloudDone);
+      window.removeEventListener(GUIDE_CHOICE_EVENT, onChoice);
+      cancelGraphTour();
+    };
+  }, []);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -917,12 +1218,44 @@ export function IntelligencePanel() {
       await truncateAiChat(activeChatId, keepThrough.id).catch(() => undefined);
     }
     setMessages(messages.slice(0, priorUserIdx));
-    setInput(priorUser.text);
     void send({ text: priorUser.text, images: priorUser.images ?? [], mentionIds: [] });
   };
 
-  const send = async ({ text, images, mentionIds, dmAttachments }: ComposerSubmit) => {
+  const startInterestTour = (interestId: string) => {
     if (busy) return;
+    const text = interestStartMessage(interestId);
+    const stops = interestTour(interestId);
+    if (!text || !stops) return;
+    setErrorMsg(null);
+    setErrorCode(null);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", text },
+    ]);
+    playGraphTour(stops);
+  };
+
+  const startCloudGuide = (label: string) => {
+    if (busy) return;
+    setErrorMsg(null);
+    setErrorCode(null);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", text: label },
+    ]);
+    playCloudGuide();
+  };
+
+  const send = async ({
+    text,
+    images,
+    mentionIds,
+    dmAttachments,
+    interestId,
+    pathId,
+  }: ComposerSubmit) => {
+    if (busy) return;
+    cancelGraphTour();
     setErrorMsg(null);
     setErrorCode(null);
 
@@ -1053,6 +1386,12 @@ export function IntelligencePanel() {
         chatMode,
         toolAutonomy,
         autoAcceptTools: toolAutonomy === "full",
+        interestId,
+        pathId,
+        clientOs:
+          interestId || pathId
+            ? detectDesktopOsFromNavigator() ?? undefined
+            : undefined,
       },
       {
         onChatId: (chatId) => {
@@ -1103,6 +1442,10 @@ export function IntelligencePanel() {
               `\n\n[Open **${label}**](${artifactViewerHref(saved.id)})\n`
             );
           }
+          if (!isError) {
+            const uiAction = guideUiActionFromToolResult(result);
+            if (uiAction) applyGuideUiAction(uiAction);
+          }
           sync();
         },
         onTerminalOutput: ({ toolCallId, stream, text }) => {
@@ -1137,13 +1480,18 @@ export function IntelligencePanel() {
           busyRef.current = false;
           abortRef.current = null;
           refreshChats();
+          void syncMissionsAfterChat();
         },
-        onError: (error, code) => {
+        onError: (error, code, meta) => {
           const raw =
             String(error ?? "").trim() ||
             "Chat connection dropped. Try sending again.";
           const staleFromMsg = raw.includes("CURSOR_SESSION_STALE");
           const errorText = raw.replace(/^CURSOR_SESSION_STALE:\s*/i, "");
+          const convertLine = meta?.convertHint
+            ? `\n\n${meta.convertHint}`
+            : "";
+          const display = `⚠️ ${errorText}${convertLine}`;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -1151,9 +1499,9 @@ export function IntelligencePanel() {
                     ...m,
                     parts: [
                       ...builder.finalize(),
-                      { kind: "text", text: `⚠️ ${errorText}` },
+                      { kind: "text", text: display },
                     ],
-                    text: `⚠️ ${errorText}`,
+                    text: display,
                     streaming: false,
                     statusText: undefined,
                   }
@@ -1233,20 +1581,89 @@ export function IntelligencePanel() {
   };
 
   const running = status?.state === "running";
-  // Local llama.cpp "running" is only one way to have a model. Cursor / provider /
-  // remote selections are ready without a local process. Also trust the agent's
-  // configured backend so a stale catalog `active: null` does not flash
-  // "No model ready" after the user already picked Cursor Auto.
-  const nonLocalBackend =
-    agentBackend != null &&
-    agentBackend !== "local" &&
-    agentBackend !== "";
-  const hasUsableModel =
-    busy ||
-    nonLocalBackend ||
-    (activeModel != null && activeModel.source !== "local")
-      ? true
-      : running || status?.state === "starting";
+
+  const catalogBySource = useMemo(() => {
+    const groups: Record<CatalogModel["source"], CatalogModel[]> = {
+      local: [],
+      cursor: [],
+      provider: [],
+      remote: [],
+    };
+    for (const m of modelCatalog) {
+      if (m?.source && groups[m.source]) groups[m.source].push(m);
+    }
+    return groups;
+  }, [modelCatalog]);
+
+  const catalogGodModeInference = useMemo(
+    () =>
+      catalogBySource.provider.filter((m) => m.managedGodModeInference),
+    [catalogBySource.provider]
+  );
+  const catalogVaultProviders = useMemo(
+    () =>
+      catalogBySource.provider.filter((m) => !m.managedGodModeInference),
+    [catalogBySource.provider]
+  );
+
+  const signedOutModel =
+    catalogGodModeInference.find((m) => m.active) ??
+    catalogGodModeInference[0] ??
+    null;
+  const shownModel = authenticated ? activeModel : signedOutModel;
+
+  const modelLabel =
+    shownModel?.label ??
+    (!authenticated
+      ? "Select model"
+      : running
+        ? status?.modelName?.replace(/\.gguf$/i, "") ?? "Model"
+        : status?.state === "starting"
+          ? "Starting…"
+          : "Select model");
+
+  const modelDotClass =
+    shownModel?.source === "local"
+      ? running
+        ? "bg-emerald-500"
+        : status?.state === "starting"
+          ? "bg-amber-500"
+          : "bg-muted-foreground/60"
+      : shownModel
+        ? "bg-sky-500"
+        : "bg-muted-foreground/60";
+
+  const handleCatalogSelect = useCallback(
+    async (model: CatalogModel) => {
+      try {
+        const res = await selectIntelligenceModel({
+          id: model.id,
+          source: model.source,
+          path: model.path,
+          model: model.model,
+          provider: model.provider,
+          endpointId: model.endpointId,
+          transport: model.transport,
+        });
+        if (!res.active || typeof res.active.id !== "string") {
+          throw new Error("Model catalog returned no active model");
+        }
+        setActiveModel(res.active);
+        setModelCatalog((prev) =>
+          prev
+            .filter((m) => m && typeof m.id === "string")
+            .map((m) => ({ ...m, active: m.id === res.active.id }))
+        );
+        window.dispatchEvent(new Event("godmode:model-selected"));
+        toast.success(`Using ${res.active.label}`);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to switch model"
+        );
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!panelOpen || isDmMode) return;
@@ -1254,20 +1671,17 @@ export function IntelligencePanel() {
     const refreshModel = () => {
       fetchModelCatalog()
         .then((r) => {
-          if (!cancelled) setActiveModel(r.active);
+          if (cancelled) return;
+          setActiveModel(r.active);
+          setModelCatalog(
+            (r.models ?? []).filter((m) => m && typeof m.id === "string")
+          );
         })
         .catch(() => {
-          if (!cancelled) setActiveModel(null);
+          if (cancelled) return;
+          setActiveModel(null);
+          setModelCatalog([]);
         });
-      if (activeAgentId) {
-        fetchAiAgent(activeAgentId)
-          .then((a) => {
-            if (!cancelled) setAgentBackend(a.backend ?? null);
-          })
-          .catch(() => {
-            /* keep prior backend */
-          });
-      }
     };
     refreshModel();
     const onModelSelected = () => refreshModel();
@@ -1276,12 +1690,17 @@ export function IntelligencePanel() {
       cancelled = true;
       window.removeEventListener("godmode:model-selected", onModelSelected);
     };
-  }, [panelOpen, isDmMode, activeAgentId]);
+  }, [panelOpen, isDmMode]);
 
-  const currentWidth = clampComposerWidth(composerWidth, bounds.width);
+  const maxPairedWidth =
+    bounds.width < 1440
+      ? Math.max(MIN_COMPOSER_WIDTH, Math.floor((bounds.width - 120) / 2))
+      : bounds.width;
+  const currentWidth = clampComposerWidth(composerWidth, maxPairedWidth);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
-  const defaultX = bounds.x + 12;
-  const defaultY = bounds.y + bounds.height - currentHeight - 12;
+  const focus = focusWindowAnchors(bounds, currentWidth, currentHeight);
+  const defaultX = focus.left.x;
+  const defaultY = focus.left.y;
   const pos = clampPanelPos(
     panelX ?? defaultX,
     panelY ?? defaultY,
@@ -1290,40 +1709,93 @@ export function IntelligencePanel() {
     bounds
   );
 
+  chatLayoutRef.current = {
+    x: pos.x,
+    y: pos.y,
+    width: currentWidth,
+    height: currentHeight,
+  };
+
+  useEffect(() => {
+    if (!panelOpen || isMaximized || isMobile) return;
+    const unregister = registerFloatingWindow({
+      id: "chat",
+      role: "chat",
+      pairGroup: "focus-pair",
+      getLayout: () => chatLayoutRef.current,
+      applyLayout: (rect) => {
+        chatLayoutRef.current = {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        };
+        setPanelPos(rect.x, rect.y);
+        setComposerWidth(rect.width);
+        setPanelHeight(rect.height);
+      },
+    });
+    const id = requestAnimationFrame(() => applyActiveFocusLayout());
+    return () => {
+      cancelAnimationFrame(id);
+      unregister();
+    };
+  }, [
+    panelOpen,
+    isMaximized,
+    isMobile,
+    setPanelPos,
+    setComposerWidth,
+    setPanelHeight,
+  ]);
+
   if (!panelOpen) return null;
+
+  const panelAccent = isDmMode ? "#38bdf8" : "#a78bfa";
+  const panelShadow = isLight
+    ? `0 18px 40px -18px rgb(15 23 42 / 0.28), 0 0 0 1px ${panelAccent}40`
+    : `0 16px 48px -16px ${panelAccent}99`;
+  const panelBorder = isLight ? `${panelAccent}55` : `${panelAccent}88`;
+  const panelBorderMax = isLight ? `${panelAccent}40` : `${panelAccent}66`;
 
   return (
     <aside
       ref={asideRef}
+      aria-hidden={panelMinimized ? true : undefined}
       style={
-        isMobile
-          ? undefined
-          : isMaximized
-            ? {
-                left: bounds.x,
-                top: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-              }
-            : {
-                left: pos.x,
-                top: pos.y,
-                width: currentWidth,
-                height: currentHeight,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-              }
+        panelMinimized
+          ? { display: "none" }
+          : isPhone
+            ? undefined
+            : isMaximized
+              ? {
+                  left: bounds.x,
+                  top: bounds.y,
+                  width: bounds.width,
+                  height: bounds.height,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorderMax,
+                }
+              : {
+                  left: pos.x,
+                  top: pos.y,
+                  width: currentWidth,
+                  height: currentHeight,
+                  maxWidth: bounds.width,
+                  maxHeight: bounds.height,
+                  borderColor: panelBorder,
+                  boxShadow: panelShadow,
+                }
       }
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-popover",
-        isMobile
+        "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
+        isPhone
           ? "fixed inset-0 z-50"
-          : "absolute z-40 rounded-xl border shadow-2xl"
+          : `absolute ${GRAPH_CHAT_WINDOW_Z} rounded-xl border-2 shadow-2xl`
       )}
     >
-      {!isMobile && !isMaximized && (
+      {!isPhone && !isMaximized && !lockResize && (
         <>
           <div
             role="separator"
@@ -1360,17 +1832,31 @@ export function IntelligencePanel() {
         </>
       )}
 
+      <div
+        className="h-1 w-full shrink-0"
+        style={{ backgroundColor: panelAccent }}
+        aria-hidden
+      />
+
       <header
-        onPointerDown={isMobile || isMaximized ? undefined : handleDrag}
+        data-floating-title
+        data-window-id="chat"
+        onPointerDown={isPhone || isMaximized ? undefined : handleDrag}
         className={cn(
-          "flex h-9 shrink-0 items-center gap-2 border-b px-2",
-          !isMobile && !isMaximized && "cursor-move"
+          "flex h-9 shrink-0 items-center gap-2 border-b px-2 data-[tile-swap-target=true]:ring-2 data-[tile-swap-target=true]:ring-ring",
+          !isPhone && !isMaximized && "cursor-move"
         )}
+        style={{
+          borderColor: `${panelAccent}40`,
+          backgroundColor: `${panelAccent}14`,
+        }}
       >
         {isDmMode ? (
-          <MessageCircleIcon className="size-4 text-primary" />
+          <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
+        ) : isPersonaAgent(activeAgentId) ? (
+          <DigitalYouIcon className="size-4" />
         ) : (
-          <BotIcon className="size-4 text-foreground" />
+          <BotIcon className="size-4" style={{ color: panelAccent }} />
         )}
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -1457,20 +1943,54 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockCreate && "godmode-chrome-entice")}
             aria-label="New chat"
-            title="New chat"
-            onClick={newChat}
+            title={
+              lockCreate
+                ? "Unlock create chat (tutorial or pay to skip)"
+                : "New chat"
+            }
+            onClick={() => {
+              if (lockCreate) {
+                onLockedCreate?.();
+                return;
+              }
+              newChat();
+            }}
           >
             <PlusIcon />
           </Button>
-          {!isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Minimize"
+            title="Minimize"
+            onClick={() => setPanelMinimized(true)}
+          >
+            <MinusIcon />
+          </Button>
+          {!isPhone && (
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
+              className={cn(lockResize && "godmode-chrome-entice")}
               aria-label={isMaximized ? "Restore" : "Maximize"}
-              title={isMaximized ? "Restore" : "Maximize"}
-              onClick={() => setPanelMaximized(!isMaximized)}
+              title={
+                lockResize
+                  ? "Unlock window controls (tutorial or pay to skip)"
+                  : isMaximized
+                    ? "Restore"
+                    : "Maximize"
+              }
+              onClick={() => {
+                if (lockResize) {
+                  onLockedResize?.();
+                  return;
+                }
+                setPanelMaximized(!isMaximized);
+              }}
             >
               {isMaximized ? <Minimize2Icon /> : <Maximize2Icon />}
             </Button>
@@ -1479,44 +1999,83 @@ export function IntelligencePanel() {
             type="button"
             variant="ghost"
             size="icon-xs"
+            className={cn(lockClose && "godmode-chrome-entice")}
             aria-label="Close"
-            title="Close (Ctrl/Cmd+L)"
-            onClick={() => setPanelOpen(false)}
+            title={
+              lockClose
+                ? "Unlock close (tutorial or pay to skip)"
+                : "Close (Ctrl/Cmd+L)"
+            }
+            onClick={() => {
+              if (lockClose) {
+                onLockedClose?.();
+                return;
+              }
+              setPanelOpen(false);
+            }}
           >
             <XIcon />
           </Button>
         </div>
       </header>
 
-      <Tabs value={effectiveTab} onValueChange={(v) => setPanelTab(v as PanelTab)} className="shrink-0 px-2 pt-1">
-        <TabsList variant="line" className="h-8 w-full justify-start">
-          <TabsTrigger value="chat" className="text-xs">Chat</TabsTrigger>
-          {isDmMode ? (
-            <>
-              <TabsTrigger value="dms" className="text-xs">DMs</TabsTrigger>
-              <TabsTrigger value="channels" className="text-xs">Channels</TabsTrigger>
-            </>
-    ) : (
-      <>
-        <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
-        <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
-        {/* Internal id remains "projects" for stored panel tab preference. */}
-        <TabsTrigger value="projects" className="text-xs">Automations</TabsTrigger>
-        <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
-        <TabsTrigger value="bank" className="text-xs">Bank</TabsTrigger>
-        <TabsTrigger value="vault" className="text-xs">Agent Vault</TabsTrigger>
-        <TabsTrigger value="support" className="text-xs">Support</TabsTrigger>
-      </>
-    )}
-        </TabsList>
-      </Tabs>
+      <ChatWindowTabs tab={effectiveTab} onTabChange={setPanelTab} />
 
       <PanelErrorBoundary resetKey={effectiveTab}>
+        {effectiveTab === "chat" && (
+          <div className="relative flex min-h-0 flex-1 overflow-hidden">
+            {showChatDirectory && isPhone && directoryOpen ? (
+              <button
+                type="button"
+                className="absolute inset-0 z-10 bg-background/40"
+                aria-label="Hide conversations"
+                onClick={() => setDirectoryOpen(false)}
+              />
+            ) : null}
+            {showChatDirectory ? (
+              <ChatDirectorySidebar
+                agentId={activeAgentId}
+                agentName={agentName}
+                chatTarget={chatTarget}
+                conversations={dmConversations}
+                className={cn(
+                  isPhone && !directoryOpen && "hidden",
+                  isPhone &&
+                    directoryOpen &&
+                    "absolute inset-y-0 left-0 z-20 w-64 shadow-md"
+                )}
+                onSelectAgent={() => {
+                  setChatTarget({ kind: "agent", agentId: activeAgentId });
+                  setDirectoryOpen(false);
+                }}
+                onSelectConversation={(id) => {
+                  setChatTarget({ kind: "conversation", conversationId: id });
+                  setDirectoryOpen(false);
+                }}
+                onCreated={() => void refreshDmConversations()}
+              />
+            ) : null}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {showChatDirectory && isPhone ? (
+                <div className="flex shrink-0 items-center border-b px-2 py-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Show conversations"
+                    aria-expanded={directoryOpen}
+                    onClick={() => setDirectoryOpen((open) => !open)}
+                  >
+                    <PanelLeftIcon data-icon="inline-start" />
+                    Conversations
+                  </Button>
+                </div>
+              ) : null}
         {effectiveTab === "chat" && !isDmMode && agentShared && (
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <BotIcon className="size-3 text-amber-400" />
-              Shared agent — chats save to{" "}
+              Shared agent. Chats save to{" "}
               <span className="font-medium text-foreground">your project</span>
             </span>
             <label
@@ -1567,48 +2126,52 @@ export function IntelligencePanel() {
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
         >
-          {messages.length === 0 && (
+          {messages.length === 0 && !isDmMode && activeAgentId === "intelligence" && (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-8 text-center">
+              <BotIcon className="size-32 text-foreground/70" />
+              <div className="flex flex-col items-center gap-2 text-2xl text-foreground">
+                <p>{INTELLIGENCE_GREETING_HELLO}</p>
+                <p>{INTELLIGENCE_GREETING_QUESTION}</p>
+              </div>
+              <div className="grid w-full max-w-5xl grid-cols-4 gap-4">
+                {INTELLIGENCE_INTERESTS.map((item) => (
+                  <Button
+                    key={item.id}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="h-12 text-base"
+                    disabled={busy}
+                    onClick={() => startInterestTour(item.id)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {messages.length === 0 && (isDmMode || activeAgentId !== "intelligence") && (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
               {isDmMode ? (
-                <MessageCircleIcon className="size-8 text-primary/70" />
+                <BrainIcon className="size-8 text-foreground/70" />
+              ) : isPersonaAgent(activeAgentId) ? (
+                <DigitalYouIcon className="size-12" />
               ) : (
                 <BotIcon className="size-8 text-foreground/70" />
               )}
               <p className="text-sm font-medium text-foreground">
-                {isDmMode ? `Message ${dmTitle}` : `Ask ${agentName}`}
+                {isDmMode ? dmTitle : agentName}
               </p>
-              {!isDmMode && activeAgentId === "intelligence" ? (
-                <div className="max-w-[340px] space-y-3 text-left text-xs leading-relaxed">
-                  <p className="text-muted-foreground">
-                    {agentDescription ||
-                      "Intelligence is GodMode's built-in AI: your guide to the platform itself."}
-                  </p>
-                  <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
-                    <li>Explain how GodMode works and help you get oriented</li>
-                    <li>Create departments, pages, agents, wiki articles, and tasks</li>
-                    <li>Wire automations and configure your workspace from chat</li>
-                    <li>Hand off focused work to specialized subagents when you are ready</li>
-                  </ul>
-                </div>
-              ) : (
-                <p className="max-w-[320px] whitespace-pre-line text-xs leading-relaxed">
-                  {isDmMode
-                    ? "This conversation uses direct messages, including any agent members in the thread."
-                    : agentDescription ||
-                      `${agentName} is your AI agent. Start a conversation to put it to work.`}
-                </p>
-              )}
-              {!isDmMode && !hasUsableModel && (
-                <p className="mt-2 max-w-[260px] rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600">
-                  No model ready. Start a local model from the Agents page, or
-                  pick Cursor / a provider in the model menu below.
-                </p>
-              )}
             </div>
           )}
 
           {messages.map((m) => {
             const own = m.isOwn ?? m.role === "user";
+            const deferTourReply = !own && m.id === tourReplyId;
+            const visibleParts = deferTourReply
+              ? (m.parts ?? []).filter((part) => part.kind !== "text")
+              : (m.parts ?? []);
+            if (deferTourReply && visibleParts.length === 0) return null;
             if (own) {
               return (
                 <div key={m.id} className="group flex flex-col items-end gap-0.5">
@@ -1640,7 +2203,7 @@ export function IntelligencePanel() {
                         type="button"
                         className="text-[10px] text-muted-foreground hover:text-foreground"
                         onClick={() => {
-                          setInput(m.text);
+                          setSeedText(m.text);
                           void handleDeleteMessage(m.id);
                         }}
                       >
@@ -1660,31 +2223,43 @@ export function IntelligencePanel() {
                   </span>
                 )}
                 {(() => {
-                  const hasParts = !isDmMode && m.parts && m.parts.length > 0;
+                  const hasParts = !isDmMode && visibleParts && visibleParts.length > 0;
                   const showWorking =
                     m.streaming && !hasParts && !m.text;
                   if (showWorking) {
                     return (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="flex gap-0.5">
-                          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-                          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-                          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <span className="flex gap-0.5">
+                            <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
+                            <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
+                            <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
+                          </span>
+                          {m.statusText?.trim() || "Working…"}
                         </span>
-                        {m.statusText?.trim() || "Working…"}
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-[10px]"
+                          onClick={stop}
+                        >
+                          Stop
+                        </Button>
                       </div>
                     );
                   }
                   if (hasParts) {
                     return (
                       <ChatTurn
-                        parts={m.parts!}
+                        parts={visibleParts!}
                         kanbanTodoCards={kanbanTodoCards}
                         onApproveTool={handleApproveTool}
                         onDenyTool={handleDenyTool}
                       />
                     );
                   }
+                  if (deferTourReply) return null;
                   if (m.dmSenderKind === "agent" || !isDmMode) {
                     return <Markdown content={m.text} artifactLinks />;
                   }
@@ -1694,7 +2269,7 @@ export function IntelligencePanel() {
                     </div>
                   );
                 })()}
-                {!isDmMode && !m.streaming && (
+                {!isDmMode && !m.streaming && !deferTourReply && (
                   <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
@@ -1731,7 +2306,98 @@ export function IntelligencePanel() {
               </div>
             );
           })}
+          {tourLines.map((line, index) => (
+            <div
+              key={`${line.label}-${index}`}
+              className="flex max-w-[85%] flex-col gap-1 rounded-2xl rounded-bl-sm bg-muted/60 px-3 py-2 text-sm text-foreground"
+            >
+              <p className="font-medium">{line.label}</p>
+              <p>{line.say}</p>
+            </div>
+          ))}
+          {tourReplyId && !holdTourReply && (() => {
+            const reply = messages.find((row) => row.id === tourReplyId);
+            const text = reply
+              ? reply.parts?.length
+                ? partsAnswerText(reply.parts)
+                : reply.text.trim()
+              : "";
+            if (!reply || !text) return null;
+            return (
+              <div key={`${reply.id}-after-tour`} className="group flex max-w-[90%] flex-col gap-0.5">
+                <Markdown content={text} artifactLinks />
+                {!isDmMode && !reply.streaming && (
+                  <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={() => copyMessage(text)}
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={() => void handleRegenerate(reply.id)}
+                    >
+                      Regenerate
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={() => void handleDeleteMessage(reply.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {guideChoice && !holdTourReply && (
+            <div className="flex flex-col gap-3 py-2">
+              <p className="text-base font-medium text-foreground">
+                {guideChoice.question}
+              </p>
+              {guideChoice.why ? (
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  {guideChoice.why}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {choiceOptionsForUserAgent(
+                  guideChoice.options,
+                  typeof navigator === "undefined" ? "" : navigator.userAgent
+                ).map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setGuideChoice(null);
+                      if (option.id === "cloud") {
+                        startCloudGuide(option.label);
+                        return;
+                      }
+                      void send({
+                        text: option.label,
+                        images: [],
+                        mentionIds: [],
+                        pathId: option.id,
+                      });
+                    }}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+        )}
+            </div>
+          </div>
         )}
 
 {effectiveTab === "notifications" && (
@@ -1742,14 +2408,21 @@ export function IntelligencePanel() {
 
           {effectiveTab === "calendar" && (
             <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
-              <CalendarBoard scope={{ kind: "agent", agentId: activeAgentId }} />
+              <CalendarBoard
+                scope={
+                  userTooling
+                    ? { kind: "user" }
+                    : { kind: "agent", agentId: activeAgentId }
+                }
+              />
             </div>
           )}
 
         {effectiveTab === "projects" && (
           <div className="min-h-0 flex-1 overflow-hidden">
             <AutomationsPanel
-              agentId={activeAgentId}
+              agentId={userTooling ? undefined : activeAgentId}
+              userOwned={userTooling}
               showTasks
               showEvents
             />
@@ -1764,47 +2437,23 @@ export function IntelligencePanel() {
 
         {effectiveTab === "bank" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <Bank embedded agentId={activeAgentId} />
+            <Bank embedded agentId={userTooling ? null : activeAgentId} />
           </div>
         )}
 
         {effectiveTab === "vault" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <Vault mode="agent" agentId={activeAgentId} embedded />
+            {userTooling ? (
+              <Vault mode="user" embedded />
+            ) : (
+              <Vault mode="agent" agentId={activeAgentId} embedded />
+            )}
           </div>
         )}
 
         {effectiveTab === "support" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <Support />
-          </div>
-        )}
-
-        {effectiveTab === "dms" && (
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <ConversationList
-              conversations={directConversations}
-              contacts={dmContacts}
-              activeId={activeConversationId}
-              onSelect={(id) =>
-                setChatTarget({ kind: "conversation", conversationId: id })
-              }
-              onCreated={() => void refreshDmConversations()}
-            />
-          </div>
-        )}
-
-        {effectiveTab === "channels" && (
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <ConversationList
-              conversations={groupConversations}
-              contacts={dmContacts}
-              activeId={activeConversationId}
-              onSelect={(id) =>
-                setChatTarget({ kind: "conversation", conversationId: id })
-              }
-              onCreated={() => void refreshDmConversations()}
-            />
           </div>
         )}
 
@@ -1839,56 +2488,157 @@ export function IntelligencePanel() {
             )}
           </div>
         )}
-
-        <div className="shrink-0 px-3 pb-2">
-          <IntelligenceComposer
-            variant="panel"
-            value={input}
-            onChange={setInput}
-            onSubmit={send}
-            busy={busy}
-            onStop={stop}
-            dmMode={isDmMode}
-            onNewChat={newChat}
-            onOpenRules={() => openPanel({ tab: "knowledge", knowledgeSubTab: "rules" })}
-            onMemoryAdd={async (text) => {
-              await createAiMemory({ text, agentId: activeAgentId, scope: "global" });
-              toast("Memory saved");
-            }}
-            placeholder={
-              isDmMode
-                ? `Message ${dmTitle}…  (Enter to send, Shift+Enter for newline)`
-                : `Ask ${agentName} anything…  (Enter to send, Shift+Enter for newline)`
-            }
-          />
-        </div>
       </PanelErrorBoundary>
 
-      <footer className="flex h-6 shrink-0 items-center justify-between border-t px-3 text-[10px] text-muted-foreground">
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-2 border-t px-2 text-[10px] text-muted-foreground">
         {isDmMode ? (
           <>
-            <span>{activeConversation?.kind === "group" ? "Group conversation" : "Direct message"}</span>
+            <span>
+              {activeConversation?.kind === "group"
+                ? "Group conversation"
+                : "Direct message"}
+            </span>
             {dmMemberSummary && (
               <span className="truncate pl-3">{dmMemberSummary}</span>
             )}
           </>
         ) : (
           <>
-            <span className="inline-flex items-center gap-1">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  running ? "bg-emerald-500" : "bg-muted-foreground/60"
-                )}
+            {authenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className="inline-flex max-w-[55%] items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Model"
+                  >
+                    <span
+                      className={cn("size-1.5 shrink-0 rounded-full", modelDotClass)}
+                    />
+                    <span className="truncate">{modelLabel}</span>
+                    <ChevronDownIcon className="size-3 shrink-0" />
+                  </button>
+                }
               />
-              Local
+              <DropdownMenuContent
+                align="start"
+                className="max-h-80 w-72 overflow-y-auto"
+              >
+                <DropdownMenuLabel>Local models</DropdownMenuLabel>
+                {catalogBySource.local.length === 0 && (
+                  <DropdownMenuItem disabled>
+                    No local GGUF models found
+                  </DropdownMenuItem>
+                )}
+                {catalogBySource.local.map((m) => (
+                  <DropdownMenuItem
+                    key={m.id}
+                    onClick={() => void handleCatalogSelect(m)}
+                  >
+                    <span className="truncate">{m.label}</span>
+                    {m.multimodal && (
+                      <ImageIcon className="ml-auto size-3 text-muted-foreground" />
+                    )}
+                    {m.active && (
+                      <span className="ml-1 text-xs text-emerald-500">●</span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                {authenticated && catalogBySource.cursor.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Cursor</DropdownMenuLabel>
+                    {catalogBySource.cursor.map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => void handleCatalogSelect(m)}
+                      >
+                        <FileCodeIcon className="size-3 shrink-0 text-sky-500" />
+                        <span className="truncate">{m.label}</span>
+                        {m.active && (
+                          <span className="ml-1 text-xs text-sky-500">●</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                {catalogGodModeInference.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>GodMode Inference</DropdownMenuLabel>
+                    {catalogGodModeInference.map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => void handleCatalogSelect(m)}
+                      >
+                        <span className="truncate">{m.label}</span>
+                        {m.active && (
+                          <span className="ml-1 text-xs text-sky-500">●</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                {authenticated && catalogVaultProviders.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>
+                      Cloud API (Platform Vault keys)
+                    </DropdownMenuLabel>
+                    {catalogVaultProviders.map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => void handleCatalogSelect(m)}
+                      >
+                        <span className="truncate">{m.label}</span>
+                        {m.active && (
+                          <span className="ml-1 text-xs text-sky-500">●</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                {catalogBySource.remote.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Shared with me</DropdownMenuLabel>
+                    {catalogBySource.remote.map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => void handleCatalogSelect(m)}
+                      >
+                        <span className="truncate">{m.label}</span>
+                        {m.active && (
+                          <span className="ml-1 text-xs text-sky-500">●</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled className="text-[11px]">
+                  Add cloud keys in Platform Vault · manage in Builder
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            ) : (
+              <span
+                className="inline-flex max-w-[55%] items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title="Model"
+              >
+                <span
+                  className={cn("size-1.5 shrink-0 rounded-full", modelDotClass)}
+                />
+                <span className="truncate">{modelLabel}</span>
+              </span>
+            )}
+            <span className="inline-flex shrink-0 items-center gap-1.5">
               {status?.tokensPerSecond != null && running && (
-                <span className="ml-1 tabular-nums">
+                <span className="tabular-nums">
                   {status.tokensPerSecond.toFixed(1)} t/s
                 </span>
               )}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
               <span className="relative size-3">
                 <svg viewBox="0 0 36 36" className="size-3 -rotate-90">
                   <circle

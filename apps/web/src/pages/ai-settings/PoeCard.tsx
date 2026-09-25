@@ -26,6 +26,7 @@ import {
   fetchPoeStatus,
   type PoeAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Poe catalog snapshot (2026-08-03).
@@ -127,6 +128,7 @@ export function PoeCard({
           through OpenAI-compatible transport with a Poe harness. Per-tenant keys
           only. Points deduct from the key owner&apos;s Poe account.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="poe" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

@@ -52,6 +52,15 @@ export interface AgentRunRequest {
   toolMode?: "native" | "grammar" | "none";
   /** Optional sampling overlay from harness profile (temp / top_p / top_k). */
   samplingOverlay?: { temperature: number; topP: number; topK: number };
+  /**
+   * OpenAI-compatible extras for hosts like Z.AI GLM Flash
+   * (`thinking`, `reasoning_effort`).
+   */
+  providerExtras?: {
+    reasoningEffort?: "low" | "high" | "max";
+    clearThinking?: boolean;
+    thinkingEnabled?: boolean;
+  };
   chatMode?: import("../chat-mode.js").IntelligenceChatMode;
   onTerminalOutput?: (
     toolCallId: string,

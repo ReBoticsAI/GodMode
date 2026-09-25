@@ -87,7 +87,9 @@ docker-compose.override.yml
 .screenshots/
 *.sse
 artifacts/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 **/from_sc.txt
 **/to_sc.txt
 

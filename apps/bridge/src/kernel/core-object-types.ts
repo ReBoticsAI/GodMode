@@ -37,6 +37,7 @@ import {
 import { platformActionAdapters } from "./adapters/platform-actions.js";
 import { identityAdminAdapters } from "./adapters/identity-admin.js";
 import { platformConfigAdapters } from "./adapters/platform-config.js";
+import { chatUnlockAdapters } from "./adapters/chat-unlock.js";
 import { AUTOMATION_SPECS } from "./domains/automation.js";
 import { COLLABORATION_SPECS } from "./domains/collaboration.js";
 import { CONNECTIVITY_SUPPORT_SPECS } from "./domains/connectivity-support.js";
@@ -110,7 +111,11 @@ export const CORE_OBJECT_TYPE_NAMES = [
   "TenantMembership",
   "TenantProvisioningRun",
   "PlatformBillingConfig",
+  "GodModeInferenceConfig",
   "TenantOnboardingConfig",
+  "Unlockable",
+  "UnlockEntitlement",
+  "UnlockTransaction",
   "ShareGrant",
   "MarketplaceListing",
   "MarketplaceEntitlement",
@@ -196,6 +201,7 @@ const SERVICE_ADAPTERS = new Map(
     ...platformConfigAdapters,
     ...platformActionAdapters,
     ...runtimeAdapters,
+    ...chatUnlockAdapters,
   ].map((adapter) => [adapter.id, adapter])
 );
 

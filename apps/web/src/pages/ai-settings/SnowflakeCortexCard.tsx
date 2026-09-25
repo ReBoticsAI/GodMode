@@ -26,6 +26,7 @@ import {
   fetchSnowflakeCortexStatus,
   type SnowflakeCortexAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Snowflake Cortex chat catalog snapshot (2026-08-04).
@@ -140,6 +141,7 @@ export function SnowflakeCortexCard({
           OpenAI-compatible API. Per-tenant credentials only. Browser OAuth is not
           required for this path.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="snowflake" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

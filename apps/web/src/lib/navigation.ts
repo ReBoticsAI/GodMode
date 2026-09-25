@@ -69,9 +69,27 @@ export const STRUCTURE_SETTINGS_PATH = "/settings/structure";
 export const SETTINGS_PATH = "/settings/platform";
 /** Platform Vault (GodMode Cloud seats, Inference Connect, account secrets). */
 export const PLATFORM_VAULT_PATH = "/settings/vault";
+/** Graph architecture node for Platform Vault (account Connect secrets). */
+export const PLATFORM_VAULT_NODE_ID = "hub:vault-platform";
 /** @deprecated Prefer PLATFORM_VAULT_PATH; same route (/settings/vault). */
 export const USER_VAULT_PATH = PLATFORM_VAULT_PATH;
 export const ADMIN_PATH = "/settings/admin";
+/** Graph architecture node for Admin (You child). */
+export const ADMIN_NODE_ID = "hub:admin";
+/** Graph architecture node for Hub Wiki (shared knowledge base). */
+export const WIKI_NODE_ID = "hub:wiki";
+/** Graph architecture node for Personal / User Vault (You child). */
+export const PERSONAL_VAULT_NODE_ID = "hub:vault-you";
+export const SETTINGS_NODE_ID = "hub:settings";
+export const AGENTS_NODE_ID = "hub:agents";
+export const USERS_NODE_ID = "hub:users";
+export const SHARED_NODE_ID = "hub:shared";
+export const MARKETPLACE_NODE_ID = "hub:marketplace";
+export const STRUCTURE_NODE_ID = "hub:structure-you";
+export const CODING_NODE_ID = "hub:coding";
+export const RELEASES_NODE_ID = "hub:releases";
+export const SUPPORT_NODE_ID = "hub:support";
+export const TASKS_NODE_ID = "hub:tasks-you";
 export const USERS_PATH = "/settings/users";
 /** The contacts relationship graph (you ↔ everyone you collaborate with). */
 export const CONTACTS_PATH = "/contacts";
@@ -113,6 +131,8 @@ export const PLATFORM_VAULT_SECTIONS = [
 export type PlatformVaultSection = (typeof PLATFORM_VAULT_SECTIONS)[number];
 
 export const VAULT_INFERENCE_SUBTABS = [
+  "godmode",
+  "supported",
   "subscriptions",
   "api-keys",
   "search",
@@ -162,19 +182,17 @@ export function normalizeVaultInferenceSub(
 ): VaultInferenceSub {
   // Legacy top-level Search tab.
   if (tabRaw === "search") return "search";
-  if (
-    raw === "api-keys" ||
-    raw === "subscriptions" ||
-    raw === "search"
-  ) {
-    return raw;
+  // Preferred BYOK renamed to Supported.
+  if (raw === "optimized") return "supported";
+  if ((VAULT_INFERENCE_SUBTABS as readonly string[]).includes(raw ?? "")) {
+    return raw as VaultInferenceSub;
   }
-  return "subscriptions";
+  return "godmode";
 }
 
 /** Deep link into Platform Vault. */
 export function platformVaultHref(
-  target: VaultInferenceSub | PlatformVaultSection | "inference" = "subscriptions"
+  target: VaultInferenceSub | PlatformVaultSection | "inference" = "godmode"
 ): string {
   if (target === "cloud") {
     return `${PLATFORM_VAULT_PATH}?vault=cloud`;
@@ -183,7 +201,7 @@ export function platformVaultHref(
     return `${PLATFORM_VAULT_PATH}?vault=secrets`;
   }
   if (target === "inference") {
-    return `${PLATFORM_VAULT_PATH}?vault=inference&sub=subscriptions`;
+    return `${PLATFORM_VAULT_PATH}?vault=inference&sub=godmode`;
   }
   return `${PLATFORM_VAULT_PATH}?vault=inference&sub=${target}`;
 }

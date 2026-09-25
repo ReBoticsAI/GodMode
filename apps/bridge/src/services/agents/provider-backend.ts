@@ -6,6 +6,12 @@ import { budgetToolResult, TOOL_OUTPUT_MAX_CHARS } from "../ai-agent.js";
 import { PROVIDER_AGENT_ITERATIONS } from "../agent-loop.js";
 import { resolveSecretRefForAgent, withSecretValue } from "./agents-db.js";
 import { resolveAgentCredential } from "./agent-accounts.js";
+import {
+  isGodModeInferenceSupplySecretId,
+} from "../godmode-inference-supply.js";
+import {
+  resolveGodModeInferenceSupplyForManagedChat,
+} from "../godmode-inference-grants.js";
 import type { AppDatabase } from "../../db.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
 import type { AgentProviderConfig } from "./types.js";
@@ -56,7 +62,9 @@ async function openAiCompletion(
   body: Record<string, unknown>
 ): Promise<{ content: string; toolCalls: AgentMessage["tool_calls"] }> {
   const trimmed = baseUrl.replace(/\/$/, "");
-  const url = /\/v1$/i.test(trimmed)
+  // Bases that already end in /v1 or /v4 (Z.AI, DashScope-style) take
+  // /chat/completions. Bare hosts get /v1/chat/completions.
+  const url = /\/v\d+$/i.test(trimmed)
     ? `${trimmed}/chat/completions`
     : `${trimmed}/v1/chat/completions`;
   const res = await fetch(url, {
@@ -222,8 +230,21 @@ export class ProviderBackend implements AgentBackend {
         provider,
         secretId: keyRef ?? undefined,
       }) ??
-      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null);
-    if (!resolvedKey) throw new Error("API key not found for provider agent");
+      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null) ??
+      (keyRef && isGodModeInferenceSupplySecretId(keyRef)
+        ? resolveGodModeInferenceSupplyForManagedChat(keyRef, {
+            agentId: req.agent.id,
+            userId: req.toolCtx.userId ?? null,
+          })
+        : null);
+    if (!resolvedKey) {
+      if (keyRef && isGodModeInferenceSupplySecretId(keyRef)) {
+        throw new Error(
+          "GodMode Inference allowance exhausted or unavailable. Buy more GodMode Inference or connect a supported key in Vault."
+        );
+      }
+      throw new Error("API key not found for provider agent");
+    }
 
     return withSecretValue(resolvedKey, async (apiKey) => {
       const model =
@@ -269,6 +290,10 @@ export class ProviderBackend implements AgentBackend {
           content = out.content;
           toolCalls = out.toolCalls;
         } else {
+          const overlay = req.samplingOverlay;
+          const temperature =
+            overlay?.temperature ?? req.agent.sampling.temperature;
+          const topP = overlay?.topP ?? req.agent.sampling.topP;
           const body: Record<string, unknown> = {
             messages: messages.map((m) => ({
               role: m.role,
@@ -276,10 +301,26 @@ export class ProviderBackend implements AgentBackend {
               ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
               ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
             })),
-            temperature: req.agent.sampling.temperature,
+            temperature,
             max_tokens:
               req.agent.sampling.maxTokens > 0 ? req.agent.sampling.maxTokens : undefined,
           };
+          // Z.AI / OpenAI-compatible: send top_p when the harness sets it.
+          // Skip top_k (not in Z.AI chat completions contract).
+          if (typeof topP === "number" && topP > 0 && topP < 1) {
+            body.top_p = topP;
+          }
+          const extras = req.providerExtras;
+          if (extras?.thinkingEnabled || extras?.reasoningEffort) {
+            const clearThinking = extras.clearThinking !== false;
+            body.thinking = {
+              type: "enabled",
+              clear_thinking: clearThinking,
+            };
+            if (extras.reasoningEffort) {
+              body.reasoning_effort = extras.reasoningEffort;
+            }
+          }
           if (
             !isLast &&
             req.agent.thinking.nativeTools &&

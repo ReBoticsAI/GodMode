@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   approveReflectionProposal,
   fetchAgentReflection,
@@ -19,7 +19,7 @@ import {
 } from "@/api";
 
 export function ReflectionPanel() {
-  const { activeAgentId } = useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const [config, setConfig] = useState<AgentReflectionConfig | null>(null);
   const [proposals, setProposals] = useState<ReflectionProposal[]>([]);
   const [running, setRunning] = useState(false);

@@ -211,6 +211,33 @@ export function completeActiveWorkRunCard(args: {
       (args.outcome === "aborted"
         ? "Chat turn stopped before completion."
         : "Chat turn failed.");
+    // Leave Active Work so failed/aborted host runs do not stick in the panel.
+    args.db
+      .prepare(
+        `UPDATE ai_project_cards
+         SET column_id = 'done', status = 'cancelled', updated_at = datetime('now')
+         WHERE id = ?`
+      )
+      .run(args.cardId);
+    const openSubs = args.db
+      .prepare(
+        `SELECT id, column_id, status FROM ai_project_cards WHERE parent_card_id = ?`
+      )
+      .all(args.cardId) as Array<{
+      id: string;
+      column_id: string;
+      status: string | null;
+    }>;
+    for (const sub of openSubs) {
+      if (isTerminalSubtask(sub.column_id, sub.status)) continue;
+      args.db
+        .prepare(
+          `UPDATE ai_project_cards
+           SET column_id = 'done', status = 'cancelled', updated_at = datetime('now')
+           WHERE id = ?`
+        )
+        .run(sub.id);
+    }
     args.db
       .prepare(
         `INSERT INTO ai_card_comments (id, card_id, author, body, kind)

@@ -194,7 +194,7 @@ export function AgentSearch() {
               left: rect.left,
               width: 256,
             }}
-            className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
             {responsible?.agent && responsible.agent.id !== activeAgentId && (
               <button

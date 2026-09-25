@@ -28,6 +28,17 @@ export interface ModelHarnessProfile {
   deferredDiscoveryTools: string[];
   /** Appended after the base harness (simple-chat gate, etc.). */
   harnessDelta: string;
+  /**
+   * GLM / Z.AI thinking controls (OpenAI-compatible extras).
+   * Flash forces thinking enabled; prefer `low` for short orient turns and
+   * `max` for tool-heavy agent loops. Omit on hosts that do not accept these.
+   */
+  reasoningEffort?: "low" | "high" | "max";
+  /**
+   * When false, preserve prior `reasoning_content` across tool turns (better
+   * agent loops + cache hits on Z.AI). When true / omitted, clear thinking.
+   */
+  clearThinking?: boolean;
 }
 
 export type HarnessCatalogSource = "local" | "cursor" | "provider" | "remote";
@@ -1016,6 +1027,43 @@ export function resolveDeepSeekHarnessProfile(
   return DEEPSEEK_GENERIC_PROFILE;
 }
 
+/** DashScope / Qwen optimized supply (BYOK via OpenAI-compatible tools). */
+const DASHSCOPE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const DASHSCOPE_QWEN_PROFILE: ModelHarnessProfile = {
+  id: "dashscope-qwen",
+  label: "Qwen (DashScope)",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...DASHSCOPE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="dashscope-qwen">',
+    "You are running via Alibaba DashScope / Qwen (openai_compatible transport, metered BYOK).",
+    "This is not the Cursor SDK path, not Fireworks/Together/OpenRouter Qwen hosting.",
+    "Use native OpenAI-style function calling as exposed by the DashScope compatible-mode endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
+    "Qwen via DashScope: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveDashScopeHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return DASHSCOPE_QWEN_PROFILE;
+}
+
 /** Shared Google AI Studio transport middleware (BYOK via OpenAI-compatible tools). */
 const GOOGLE_AI_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1171,20 +1219,25 @@ export const ZAI_PAYG_PROFILE: ModelHarnessProfile = {
   id: "zai-payg",
   label: "Z.AI Platform (payg)",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  // Z.AI GLM-5.3 Flash recommended: temperature 1, top_p 0.95 (omit unused top_k).
+  sampling: { temperature: 1.0, topP: 0.95, topK: 0 },
   maxChatIterations: 14,
-  enableThinkingDefault: false,
+  // Flash forces thinking; low effort keeps orient / trial turns cheap.
+  enableThinkingDefault: true,
   stripThinkingFromHistory: true,
   requireJinja: false,
   deferredDiscoveryTools: [...ZAI_PAYG_TRANSPORT_DEFERRED],
+  reasoningEffort: "low",
+  clearThinking: true,
   harnessDelta: [
     '<model_profile id="zai-payg">',
     "You are running via Z.AI Platform payg (openai_compatible transport, metered BYOK).",
-    "This is not the Cursor SDK path, not GLM Coding Plan, and not Fireworks/Together GLM hosting.",
-    "Use native OpenAI-style function calling as exposed by the paas endpoint. Do not invent tool names.",
-    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Model family: GLM-5.3 Flash (glm-5.3-flash) on https://api.z.ai/api/paas/v4/ — not Coding Plan, not Cursor SDK, not Fireworks/Together GLM hosting.",
+    "Use native OpenAI-style function calling as exposed by the paas endpoint. Do not invent tool names. tool_choice is auto only.",
+    "Greetings: answer briefly with no tools.",
+    "Orientation, pricing, Vault, Graph, Inference, or BYOK: call open_guide_surface or focus_graph_node to show the UI. Never invent pack prices; open godmode_inference for live pricing.",
     "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory — or @-mentions Agents.",
-    "GLM payg: lean tool surface; follow schemas closely.",
+    "Prefer short, purposeful turns. Follow tool schemas closely. Prefer live UI over fabricated numbers.",
     "</model_profile>",
   ].join("\n"),
 };
@@ -1393,12 +1446,15 @@ export const ZAI_CODING_PROFILE: ModelHarnessProfile = {
   id: "zai-coding",
   label: "Z.AI GLM Coding Plan",
   toolMode: "native",
-  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  sampling: { temperature: 1.0, topP: 0.95, topK: 0 },
   maxChatIterations: 14,
-  enableThinkingDefault: false,
-  stripThinkingFromHistory: true,
+  enableThinkingDefault: true,
+  // Coding Plan preserves thinking by default; keep reasoning across tool turns.
+  stripThinkingFromHistory: false,
   requireJinja: false,
   deferredDiscoveryTools: [...ZAI_CODING_TRANSPORT_DEFERRED],
+  reasoningEffort: "max",
+  clearThinking: false,
   harnessDelta: [
     '<model_profile id="zai-coding">',
     "You are running via Z.AI GLM Coding Plan (openai_compatible transport, subscription quota).",
@@ -1640,6 +1696,7 @@ const REGISTRY: ModelHarnessProfile[] = [
   DEEPSEEK_FLASH_PROFILE,
   DEEPSEEK_PRO_PROFILE,
   DEEPSEEK_GENERIC_PROFILE,
+  DASHSCOPE_QWEN_PROFILE,
   GOOGLE_AI_FLASH_PROFILE,
   GOOGLE_AI_PRO_PROFILE,
   GOOGLE_AI_GENERIC_PROFILE,
@@ -1688,6 +1745,12 @@ function isDeepSeekTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "deepseek") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
   return base.includes("api.deepseek.com");
+}
+
+function isDashScopeTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "dashscope") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("dashscope") && base.includes("aliyuncs.com");
 }
 
 function isGoogleAiTransport(input: ResolveProfileInput): boolean {
@@ -1839,6 +1902,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isDeepSeekTransport(input)) {
       return resolveDeepSeekHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isDashScopeTransport(input)) {
+      return resolveDashScopeHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isGoogleAiTransport(input)) {
       return resolveGoogleAiHarnessProfile(input.model);
     }
@@ -1927,6 +1993,13 @@ export function resolveProfileForAgent(
         (baseUrl ?? "").toLowerCase().includes("api.deepseek.com")
       ) {
         transport = "deepseek";
+      } else if (
+        cfg.dashscope === true ||
+        cfg.qwen === true ||
+        ((baseUrl ?? "").toLowerCase().includes("dashscope") &&
+          (baseUrl ?? "").toLowerCase().includes("aliyuncs.com"))
+      ) {
+        transport = "dashscope";
       } else if (
         cfg.googleAi === true ||
         (baseUrl ?? "").toLowerCase().includes("generativelanguage.googleapis.com")

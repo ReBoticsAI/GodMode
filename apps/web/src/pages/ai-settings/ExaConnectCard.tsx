@@ -18,6 +18,7 @@ import {
   fetchAiSecrets,
   type AiSecret,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /** Fixed Vault secret name read by bridge Exa web_search / fetch_url. */
 export const EXA_API_KEY_SECRET_NAME = "exa_api_key";
@@ -111,6 +112,7 @@ export function ExaConnectCard({
           egress goes through Exa instead of the shared host IP. Self-host may fall back to
           DuckDuckGo when no key is set.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="exa" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
