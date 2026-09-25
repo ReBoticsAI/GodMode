@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { useIntelligence } from "@/lib/intelligence-context";
+import { useKnowledgeAgentId } from "@/lib/knowledge-agent";
 import {
   approveAiSkill,
   createAiSkill,
@@ -96,7 +96,7 @@ const emptySkillForm = (): SkillFormState => ({
 });
 
 export function SkillsTab({ visible = true }: { visible?: boolean }) {
-  const { activeAgentId } = useIntelligence();
+  const activeAgentId = useKnowledgeAgentId();
   const [skills, setSkills] = useState<AiSkill[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<KnowledgeStatusFilter>("all");

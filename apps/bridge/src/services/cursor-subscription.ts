@@ -68,10 +68,13 @@ export function apiKeyFingerprint(apiKey: string): string {
 
 export function resolveCursorApiKey(
   db: AppDatabase,
-  agentId?: string | null
+  agentId?: string | null,
+  opts?: { ignoreInstallEnv?: boolean }
 ): string | null {
-  const env = process.env.CURSOR_API_KEY?.trim();
-  if (env) return env;
+  if (!opts?.ignoreInstallEnv) {
+    const env = process.env.CURSOR_API_KEY?.trim();
+    if (env) return env;
+  }
   return resolvePlatformVaultSecret(db, {
     baseId: CURSOR_API_KEY_SECRET_ID,
     name: CURSOR_API_KEY_SECRET_NAME,
@@ -161,9 +164,10 @@ export function getCursorAuthStatus(
 /** True when Intelligence can run without a local llama-server. */
 export function isCursorSubscriptionReady(
   db: AppDatabase,
-  agentId?: string | null
+  agentId?: string | null,
+  opts?: { ignoreInstallEnv?: boolean }
 ): boolean {
-  return resolveCursorApiKey(db, agentId) != null;
+  return resolveCursorApiKey(db, agentId, opts) != null;
 }
 
 function readWarmCliProbe(now = Date.now()): CursorCliProbeResult | null {

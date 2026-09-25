@@ -27,6 +27,7 @@ import {
   listModelCatalog,
   selectIntelligenceModel,
 } from "../../services/model-catalog.js";
+import { ensureGodModeInferenceIntroGrant } from "../../services/trial-inference.js";
 import { runRemoteInference } from "../../services/inference-service.js";
 import type { LlmManager } from "../../services/llm-manager.js";
 import {
@@ -153,6 +154,7 @@ import {
   removeDashScopeApiKey,
   upsertDashScopeApiKey,
 } from "../../services/dashscope-platform.js";
+import { resolveGodModeInferenceSupplyKey } from "../../services/godmode-inference-supply.js";
 import {
   getGoogleAiAuthStatus,
   isGoogleAiPlatformReady,
@@ -2259,11 +2261,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
         requiredUser(ctx)
       );
       let selected = catalog.models.find((model) => model.id === modelId);
-      // Custom Z.AI Coding Plan slug when Vault is connected.
+      // Custom Z.AI Coding Plan slug when Vault or Admin supply is ready.
       if (!selected) {
         const zaiCustom =
           /^provider:openai_compatible:zai_coding:(.+)$/.exec(modelId);
-        if (zaiCustom?.[1] && isZaiCodingPlatformReady(db)) {
+        if (
+          zaiCustom?.[1] &&
+          (isZaiCodingPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("zai_coding")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2378,11 +2384,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
-      // Custom DeepSeek slug when Vault is connected.
+      // Custom DeepSeek slug when Vault or Admin GodMode Inference supply is ready.
       if (!selected) {
         const deepseekCustom =
           /^provider:openai_compatible:deepseek:(.+)$/.exec(modelId);
-        if (deepseekCustom?.[1] && isDeepSeekPlatformReady(db)) {
+        if (
+          deepseekCustom?.[1] &&
+          (isDeepSeekPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("deepseek")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2393,11 +2403,15 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
-      // Custom DashScope / Qwen slug when Vault is connected.
+      // Custom DashScope / Qwen slug when Vault or Admin supply is ready.
       if (!selected) {
         const dashscopeCustom =
           /^provider:openai_compatible:dashscope:(.+)$/.exec(modelId);
-        if (dashscopeCustom?.[1] && isDashScopePlatformReady(db)) {
+        if (
+          dashscopeCustom?.[1] &&
+          (isDashScopePlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("dashscope")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2437,10 +2451,14 @@ export const modelRuntimeAdapter: RecordAdapter = {
           };
         }
       }
-      // Custom Z.AI payg slug when Vault is connected.
+      // Custom Z.AI payg slug when Vault or Admin supply is ready.
       if (!selected) {
         const zaiCustom = /^provider:openai_compatible:zai:(.+)$/.exec(modelId);
-        if (zaiCustom?.[1] && isZaiPlatformReady(db)) {
+        if (
+          zaiCustom?.[1] &&
+          (isZaiPlatformReady(db) ||
+            Boolean(resolveGodModeInferenceSupplyKey("zai")))
+        ) {
           selected = {
             id: modelId,
             source: "provider",
@@ -2568,12 +2586,26 @@ export const modelRuntimeAdapter: RecordAdapter = {
         (selected.provider === "openai_compatible" && isOpenRouterPlatformReady(db)
           ? "openrouter"
           : undefined);
-      return selectIntelligenceModel(db, active.llm as LlmManager, {
+      const managedGodModeInference =
+        (transport === "deepseek" &&
+          !isDeepSeekPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("deepseek"))) ||
+        (transport === "dashscope" &&
+          !isDashScopePlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("dashscope"))) ||
+        (transport === "zai" &&
+          !isZaiPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("zai"))) ||
+        (transport === "zai_coding" &&
+          !isZaiCodingPlatformReady(db) &&
+          Boolean(resolveGodModeInferenceSupplyKey("zai_coding")));
+      const selectedResult = await selectIntelligenceModel(db, active.llm as LlmManager, {
         source: selected.source,
         path: selected.path,
         model: selected.model,
         provider: selected.provider,
         endpointId: selected.endpointId,
+        ...(managedGodModeInference ? { managedGodModeInference: true } : {}),
         ...(transport === "openrouter"
           ? { transport: "openrouter", apiKeyRef: OPENROUTER_API_KEY_SECRET_ID }
           : transport === "groq"
@@ -2632,6 +2664,13 @@ export const modelRuntimeAdapter: RecordAdapter = {
                         }
                       : {}),
       });
+      if (managedGodModeInference && selected.model) {
+        ensureGodModeInferenceIntroGrant({
+          userId: requiredUser(ctx),
+          modelId: selected.model,
+        });
+      }
+      return selectedResult;
     },
     start(_db, _def, _id, _input, ctx) {
       requireSharedHostProcessMutate(ctx, "the host LLM process");

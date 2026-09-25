@@ -272,7 +272,7 @@ export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget 
   if (resolveGodModeInferenceSupplyKey("zai")) {
     return {
       provider: "zai",
-      modelId: "glm-5.2",
+      modelId: "glm-5.3-flash",
       transport: "zai",
       baseUrl: "https://api.z.ai/api/paas/v4",
       apiKeyRef: ZAI_SECRET_ID,

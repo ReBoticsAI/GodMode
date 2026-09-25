@@ -99,19 +99,17 @@ import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AnchorIcon,
-  BellIcon,
-  BookOpenIcon,
-  CalendarIcon,
+  Columns2Icon,
+  ExpandIcon,
   Grid3x3Icon,
   LayoutTemplateIcon,
-  LifeBuoyIcon,
   Maximize2Icon,
-  MessageSquare,
-  MessageSquareOff,
   RotateCcwIcon,
   SaveIcon,
+  ShrinkIcon,
   TrophyIcon,
-  WorkflowIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from "lucide-react";
 import type { GraphScene3DHandle } from "@/components/graph/GraphScene3D";
 import { GraphEtherComposer } from "@/components/graph/GraphEtherComposer";
@@ -130,11 +128,29 @@ import {
   type SmartSuggestItem,
 } from "@/components/graph/GraphSmartSuggest";
 import { GraphSystemNoticeBar } from "@/components/graph/GraphSystemNoticeBar";
+import { GraphObservationBar } from "@/components/graph/GraphObservationBar";
 import { GraphTopTenBoardDialog } from "@/components/graph/GraphTopTenBoardDialog";
 import { ChatInboxWindow } from "@/components/chat/ChatInboxWindow";
 import { ChatThreadWindowsHost } from "@/components/chat/ChatThreadWindow";
-import { unreadCountsByKind } from "@/lib/chat-windows";
-import { Badge } from "@/components/ui/badge";
+import {
+  FOCUS_WINDOW_PREFS_EVENT,
+  FOCUS_WINDOW_SCALE_MAX,
+  FOCUS_WINDOW_SCALE_MIN,
+  FOCUS_WINDOW_SCALE_STEP,
+  bumpFocusWindowScale,
+  getFocusWindowScale,
+  isFocusTilingEnabled,
+  setFocusTilingEnabled,
+} from "@/lib/floating-window-focus-prefs";
+import {
+  applyActiveFocusLayout,
+  applyMaximizedFocusLayout,
+  FOCUS_LAYOUT_MAXIMIZED_EVENT,
+  isFocusLayoutMaximized,
+  resetFocusSlotOrder,
+  scaleFocusPairWindows,
+  toggleFocusLayoutMaximized,
+} from "@/lib/floating-window-registry";
 
 const GRAPH_ACTION_MODES = [
   { id: "create", label: "Create" },
@@ -152,12 +168,14 @@ function GraphToolIconButton({
   onClick,
   disabled,
   pressed,
+  tooltipSide = "left",
   children,
 }: {
   label: string;
   onClick?: () => void;
   disabled?: boolean;
   pressed?: boolean;
+  tooltipSide?: "left" | "right";
   children: ReactNode;
 }) {
   return (
@@ -178,43 +196,7 @@ function GraphToolIconButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent side="left">{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function GraphLeftTabIconButton({
-  label,
-  onClick,
-  disabled,
-  pressed,
-  children,
-}: {
-  label: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  pressed?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            size="icon-sm"
-            variant={pressed ? "secondary" : "outline"}
-            aria-label={label}
-            aria-pressed={pressed}
-            disabled={disabled}
-            onClick={onClick}
-            className="bg-background/80 shadow-sm backdrop-blur-sm"
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
+      <TooltipContent side={tooltipSide}>{label}</TooltipContent>
     </Tooltip>
   );
 }
@@ -251,6 +233,8 @@ export function ChatGraphCanvas({
     closeInformationPanel,
     openLeftRailTab,
     openPanel,
+    panelOpen,
+    panelMinimized,
     setAgentsSection,
     informationNode,
     focusOwner,
@@ -261,15 +245,12 @@ export function ChatGraphCanvas({
     startNewChat,
     setChatMode,
     chatInboxOpen,
-    setChatInboxOpen,
-    dmConversations,
-    dmUnreadCount,
     activeAgentId,
-    openOrFocusChatWindow,
-    closeAllChatWindows,
     openChatWindows,
+    seedText,
+    setSeedText,
   } = useIntelligence();
-  const { authenticated } = useTenant();
+  const { authenticated, user } = useTenant();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
@@ -279,19 +260,32 @@ export function ChatGraphCanvas({
   const [totalPoints, setTotalPoints] = useState<number | null>(null);
   const [anchorGridOpen, setAnchorGridOpen] = useState(false);
   const [anchorPickMode, setAnchorPickMode] = useState(false);
+  const [focusWindowScale, setFocusWindowScaleState] = useState(() =>
+    getFocusWindowScale()
+  );
+  const [focusTilingEnabled, setFocusTilingEnabledState] = useState(() =>
+    isFocusTilingEnabled()
+  );
+  const [focusLayoutMaximized, setFocusLayoutMaximizedState] = useState(() =>
+    isFocusLayoutMaximized()
+  );
   const [graphFilter, setGraphFilter] = useState("");
   const [topTenOpen, setTopTenOpen] = useState(false);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
+
+  // Non-autoSend panel prompts and Edit-message land in the Graph ether composer.
+  useEffect(() => {
+    if (!seedText) return;
+    setGraphFilter(seedText);
+    setSeedText("");
+    queueMicrotask(() => composerInputRef.current?.focus());
+  }, [seedText, setSeedText]);
   const [glOk] = useState(() => webglAvailable());
   const sceneRef = useRef<GraphScene3DHandle | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   const graphRootRef = useRef<HTMLDivElement | null>(null);
   const topChromeRef = useRef<HTMLDivElement | null>(null);
   const footerChromeRef = useRef<HTMLDivElement | null>(null);
-  const bottomChromeRef = useRef<HTMLDivElement | null>(null);
-  const [bottomChromeWidth, setBottomChromeWidth] = useState<number | null>(
-    null
-  );
   const [suggestIndex, setSuggestIndex] = useState(0);
   const [sendRequestId, setSendRequestId] = useState(0);
 
@@ -604,6 +598,41 @@ export function ChatGraphCanvas({
       window.removeEventListener("godmode:open-platform-vault", onOpen);
   }, [openPlatformVault, searchParams]);
 
+  useEffect(() => {
+    const onFocus = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ nodeId?: string; tour?: boolean }>).detail;
+      const nodeId = detail?.nodeId;
+      if (!nodeId || typeof nodeId !== "string") return;
+      const node = projection?.nodes.find((n) => n.id === nodeId);
+      if (!node) {
+        toast.message(`Graph node not found: ${nodeId}`);
+        return;
+      }
+      if (detail.tour) {
+        closeInformationPanel();
+        sceneRef.current?.frameConnection(node.id);
+        return;
+      }
+      sceneRef.current?.selectNode(node.id);
+      openInformationPanel(node);
+    };
+    window.addEventListener("godmode:focus-graph-node", onFocus);
+    return () =>
+      window.removeEventListener("godmode:focus-graph-node", onFocus);
+  }, [closeInformationPanel, openInformationPanel, projection?.nodes]);
+
+  useEffect(() => {
+    const onChat = () => {
+      // Open Intelligence chat chrome only. Do not steal the Information panel
+      // away from Platform Vault / buy screen after open_guide_surface.
+      setChatTarget({ kind: "agent", agentId: "intelligence" });
+      openPanel({ agentId: "intelligence", tab: "chat" });
+    };
+    window.addEventListener("godmode:open-intelligence-chat", onChat);
+    return () =>
+      window.removeEventListener("godmode:open-intelligence-chat", onChat);
+  }, [openPanel, setChatTarget]);
+
   // If Platform Vault opened before projection landed, select the node once it exists.
   useEffect(() => {
     if (activeLeftTab !== "platform-vault") return;
@@ -617,6 +646,16 @@ export function ChatGraphCanvas({
       if (!authenticated) {
         toast.message("Sign in to open Admin");
         navigate("/?auth=1");
+        return;
+      }
+      if (!user?.isAdmin) {
+        toast.message("Platform administrator access required.");
+        if (typeof window !== "undefined") {
+          const path = window.location.pathname;
+          if (path === ADMIN_PATH || path.startsWith(`${ADMIN_PATH}?`)) {
+            navigate(HOME_PATH, { replace: true });
+          }
+        }
         return;
       }
       const tab = opts?.tab;
@@ -658,6 +697,7 @@ export function ChatGraphCanvas({
       openLeftRailTab,
       projection?.nodes,
       setSearchParams,
+      user?.isAdmin,
     ]
   );
 
@@ -1593,75 +1633,84 @@ export function ChatGraphCanvas({
   useEffect(() => {
     const onShowChat = () => {
       setEtherChatOpen(true);
-      setChatInboxOpen(true);
-      openOrFocusChatWindow({
-        kind: "agent",
-        agentId: activeAgentId,
-        title:
-          activeAgentId === "intelligence"
-            ? "Intelligence"
-            : activeAgentId.charAt(0).toUpperCase() + activeAgentId.slice(1),
-      });
+      openPanel({ tab: "chat" });
     };
     window.addEventListener("godmode:show-chat", onShowChat);
     return () => window.removeEventListener("godmode:show-chat", onShowChat);
-  }, [activeAgentId, openOrFocusChatWindow, setChatInboxOpen]);
+  }, [openPanel]);
 
-  const ensureDefaultAgentWindow = useCallback(() => {
-    openOrFocusChatWindow({
-      kind: "agent",
-      agentId: activeAgentId,
-      title:
-        activeAgentId === "intelligence"
-          ? "Intelligence"
-          : activeAgentId.charAt(0).toUpperCase() + activeAgentId.slice(1),
-    });
-  }, [activeAgentId, openOrFocusChatWindow]);
+  const ensureIntelligenceChat = useCallback(() => {
+    openPanel({ agentId: activeAgentId, tab: "chat" });
+  }, [activeAgentId, openPanel]);
 
   const chatSurfaceOpen =
-    chatInboxOpen || openChatWindows.some((w) => !w.minimized);
+    (panelOpen && !panelMinimized) ||
+    chatInboxOpen ||
+    openChatWindows.some((w) => !w.minimized);
 
-  const toggleEtherChat = useCallback(() => {
-    if (chatSurfaceOpen || etherChatOpen) {
-      setEtherChatOpen(false);
-      setChatInboxOpen(false);
-      closeAllChatWindows();
-      return;
-    }
-    setEtherChatOpen(true);
-    setChatInboxOpen(true);
-    ensureDefaultAgentWindow();
-  }, [
-    chatSurfaceOpen,
-    closeAllChatWindows,
-    ensureDefaultAgentWindow,
-    etherChatOpen,
-    setChatInboxOpen,
-  ]);
-
-  // Desktop default: open Intelligence as a floating window (no ether tray).
+  // Desktop default: open IntelligencePanel as the agent chat window.
   const bootstrappedChat = useRef(false);
   useEffect(() => {
     if (bootstrappedChat.current || !etherChatOpen) return;
     bootstrappedChat.current = true;
-    ensureDefaultAgentWindow();
-  }, [etherChatOpen, ensureDefaultAgentWindow]);
-
-  const inboxUnread = useMemo(
-    () => unreadCountsByKind(dmConversations),
-    [dmConversations]
-  );
-  const showChatBadge = Math.max(dmUnreadCount, inboxUnread.total);
+    ensureIntelligenceChat();
+  }, [etherChatOpen, ensureIntelligenceChat]);
 
   const resetWindowAnchors = useCallback(() => {
+    resetFocusSlotOrder();
     if (informationNode) openInformationPanel(informationNode);
     requestAnimationFrame(() => {
       window.dispatchEvent(new CustomEvent("godmode:reset-window-anchors"));
+      requestAnimationFrame(() => applyActiveFocusLayout());
     });
   }, [
     informationNode,
     openInformationPanel,
   ]);
+
+  useEffect(() => {
+    const sync = () => {
+      setFocusWindowScaleState(getFocusWindowScale());
+      setFocusTilingEnabledState(isFocusTilingEnabled());
+    };
+    const syncMax = () => setFocusLayoutMaximizedState(isFocusLayoutMaximized());
+    window.addEventListener(FOCUS_WINDOW_PREFS_EVENT, sync);
+    window.addEventListener(FOCUS_LAYOUT_MAXIMIZED_EVENT, syncMax);
+    return () => {
+      window.removeEventListener(FOCUS_WINDOW_PREFS_EVENT, sync);
+      window.removeEventListener(FOCUS_LAYOUT_MAXIMIZED_EVENT, syncMax);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!focusLayoutMaximized) return;
+    const refit = () => applyMaximizedFocusLayout();
+    window.addEventListener("resize", refit);
+    window.addEventListener(GRAPH_CHROME_BANDS_EVENT, refit);
+    return () => {
+      window.removeEventListener("resize", refit);
+      window.removeEventListener(GRAPH_CHROME_BANDS_EVENT, refit);
+    };
+  }, [focusLayoutMaximized]);
+
+  const bumpWindowScale = useCallback((delta: number) => {
+    const old = getFocusWindowScale();
+    const next = bumpFocusWindowScale(delta);
+    if (next === old) return;
+    scaleFocusPairWindows(next / old);
+    applyActiveFocusLayout();
+  }, []);
+
+  const toggleFocusTiling = useCallback(() => {
+    const next = !isFocusTilingEnabled();
+    if (!next && isFocusLayoutMaximized()) toggleFocusLayoutMaximized();
+    setFocusTilingEnabled(next);
+    applyActiveFocusLayout();
+  }, []);
+
+  const toggleFocusMaximize = useCallback(() => {
+    setFocusLayoutMaximizedState(toggleFocusLayoutMaximized());
+  }, []);
 
   const beginAnchorPick = useCallback(() => {
     if (anchorPickMode) {
@@ -1705,7 +1754,19 @@ export function ChatGraphCanvas({
         setChatTarget({ kind: "agent", agentId: "intelligence" });
       }
       openInformationPanel(node);
-      if (
+      if (node.openImmediate && node.cta?.type === "open_chat") {
+        const agentId =
+          (node.kind === "agent" || node.kind === "chat") && node.refId
+            ? node.refId
+            : node.id === "hub:intelligence"
+              ? "intelligence"
+              : undefined;
+        openPanel(
+          agentId
+            ? { agentId, tab: "chat" }
+            : { tab: "chat" }
+        );
+      } else if (
         node.openImmediate &&
         node.cta?.type === "open_panel" &&
         floatingSurfaceForTab(node.cta.tab)
@@ -1716,7 +1777,7 @@ export function ChatGraphCanvas({
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
-    [openInformationPanel, openLeftRailTab, setChatTarget]
+    [openInformationPanel, openLeftRailTab, openPanel, setChatTarget]
   );
 
   const onNodeActivate = useCallback(
@@ -1732,7 +1793,19 @@ export function ChatGraphCanvas({
         setChatTarget({ kind: "agent", agentId: "intelligence" });
       }
       openInformationPanel(node);
-      if (
+      if (node.openImmediate && node.cta?.type === "open_chat") {
+        const agentId =
+          (node.kind === "agent" || node.kind === "chat") && node.refId
+            ? node.refId
+            : node.id === "hub:intelligence"
+              ? "intelligence"
+              : undefined;
+        openPanel(
+          agentId
+            ? { agentId, tab: "chat" }
+            : { tab: "chat" }
+        );
+      } else if (
         node.openImmediate &&
         node.cta?.type === "open_panel" &&
         floatingSurfaceForTab(node.cta.tab)
@@ -1743,7 +1816,7 @@ export function ChatGraphCanvas({
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
-    [openInformationPanel, openLeftRailTab, setChatTarget]
+    [openInformationPanel, openLeftRailTab, openPanel, setChatTarget]
   );
 
   // Live graphFilter ranks smart-suggest only. Camera zoom/focus runs on
@@ -1793,21 +1866,8 @@ export function ChatGraphCanvas({
 
   const composerPlaceholder =
     chatSurfaceOpen || etherChatOpen
-      ? "Send follow-up"
+      ? "Send reply"
       : "Ask Intelligence, search the Graph, or type an action…";
-
-  useEffect(() => {
-    const el = bottomChromeRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => {
-      const w = Math.round(el.getBoundingClientRect().width);
-      if (w > 0) setBottomChromeWidth(w);
-    };
-    apply();
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   // Live playfield bands: windows/sheets end above the focus pill + composer.
   useLayoutEffect(() => {
@@ -1993,152 +2053,75 @@ export function ChatGraphCanvas({
       ) : null}
       <WindowAnchorGridOverlay open={anchorGridOpen} anchorPickMode={anchorPickMode} />
 
-      {/* Trophy (left) + light/dark (right): mirrored outer chrome */}
-      <div
-        className={cn(
-          "pointer-events-auto fixed top-4 left-4",
-          GRAPH_PRIMARY_CHROME_Z
-        )}
-      >
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                className="bg-background/80 shadow-sm backdrop-blur-sm"
-                aria-label="Top 10 Board"
-                onClick={() => setTopTenOpen(true)}
-              />
-            }
-          >
-            <TrophyIcon className="text-amber-500" />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Top 10 Board</TooltipContent>
-        </Tooltip>
-      </div>
-      <div
-        className={cn(
-          "pointer-events-auto fixed top-4 right-4",
-          GRAPH_PRIMARY_CHROME_Z
-        )}
-      >
-        <ModeToggle
-          size="icon-sm"
-          variant="outline"
-          className="bg-background/80 shadow-sm backdrop-blur-sm"
-        />
-      </div>
-
-      {/* Centered top stack: ticker + system notice (full ticker width) */}
+      {/* Top chrome: trophy | ticker | theme, then notice | observation */}
       <div
         ref={topChromeRef}
         data-graph-top-chrome
         className={cn(
-          "pointer-events-none fixed inset-x-0 top-4 flex justify-center px-14",
+          "pointer-events-none fixed inset-x-0 top-4 px-4",
           GRAPH_PRIMARY_CHROME_Z
         )}
       >
-        <div
-          ref={bottomChromeRef}
-          className="pointer-events-auto relative flex w-full max-w-2xl flex-col items-center gap-1.5"
-        >
+        <div className="pointer-events-auto flex w-full flex-col gap-1.5">
           {topNotice ? (
             <div className="w-full break-words rounded-md border border-border/60 bg-background/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
               {topNotice}
             </div>
           ) : null}
 
-          <GraphRareFindsTicker
-            onOpenLeaderboard={() => setTopTenOpen(true)}
-          />
+          <div className="flex w-full items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="shrink-0 bg-background/80 shadow-sm backdrop-blur-sm"
+                    aria-label="Top 10 Board"
+                    onClick={() => setTopTenOpen(true)}
+                  />
+                }
+              >
+                <TrophyIcon className="text-amber-500" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Top 10 Board</TooltipContent>
+            </Tooltip>
 
-          <GraphSystemNoticeBar
-            onOpenNotifications={() => handleLeftTabClick("notifications")}
-          />
+            <GraphRareFindsTicker
+              className="min-w-0 flex-1"
+              onOpenLeaderboard={() => setTopTenOpen(true)}
+            />
+
+            <ModeToggle
+              size="icon-sm"
+              variant="outline"
+              className="shrink-0 bg-background/80 shadow-sm backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="flex w-full items-start justify-center gap-2">
+            <GraphSystemNoticeBar
+              className="min-w-0 w-1/2 max-w-3xl"
+              onOpenNotifications={() => handleLeftTabClick("notifications")}
+            />
+            <GraphObservationBar className="min-w-0 w-1/2 max-w-3xl" />
+          </div>
         </div>
       </div>
 
-      {/* Left-edge old chat window tabs: vertical icon stack mirroring right rail */}
       <div
         id="graph-left-tabs-rail"
         role="toolbar"
-        aria-label="Workspace tools"
+        aria-label="Canvas"
         className={cn(
           "pointer-events-auto fixed top-1/2 left-3 flex -translate-y-1/2 flex-col gap-1.5",
           GRAPH_PRIMARY_CHROME_Z
         )}
       >
-        <GraphLeftTabIconButton
-          label="Notifications"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "notifications"
-          }
-          onClick={() => handleLeftTabClick("notifications")}
-        >
-          <BellIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Calendar"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "calendar"
-          }
-          onClick={() => handleLeftTabClick("calendar")}
-        >
-          <CalendarIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Automations"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "projects"
-          }
-          onClick={() => handleLeftTabClick("projects")}
-        >
-          <WorkflowIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Knowledge"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "knowledge"
-          }
-          onClick={() => handleLeftTabClick("knowledge")}
-        >
-          <BookOpenIcon />
-        </GraphLeftTabIconButton>
-        <GraphLeftTabIconButton
-          label="Support"
-          pressed={
-            informationPanelOpen &&
-            !informationPanelMinimized &&
-            activeLeftTab === "support"
-          }
-          onClick={() => handleLeftTabClick("support")}
-        >
-          <LifeBuoyIcon />
-        </GraphLeftTabIconButton>
-      </div>
-
-      {/* Right-edge graph tools: always visible vertical icon stack */}
-      <div
-        id="graph-tools-rail"
-        role="toolbar"
-        aria-label="Graph tools"
-        className={cn(
-          "pointer-events-auto fixed top-1/2 right-3 flex -translate-y-1/2 flex-col gap-1.5",
-          GRAPH_PRIMARY_CHROME_Z
-        )}
-      >
         <GraphToolIconButton
           label="Reset view"
+          tooltipSide="right"
           onClick={() => sceneRef.current?.reset()}
           disabled={!glOk}
         >
@@ -2146,6 +2129,7 @@ export function ChatGraphCanvas({
         </GraphToolIconButton>
         <GraphToolIconButton
           label="Fit all"
+          tooltipSide="right"
           onClick={() => sceneRef.current?.fitAll()}
           disabled={!glOk}
         >
@@ -2153,11 +2137,23 @@ export function ChatGraphCanvas({
         </GraphToolIconButton>
         <GraphToolIconButton
           label="Toggle grid"
+          tooltipSide="right"
           pressed={anchorGridOpen}
           onClick={() => setAnchorGridOpen((v) => !v)}
         >
           <Grid3x3Icon />
         </GraphToolIconButton>
+      </div>
+
+      <div
+        id="graph-tools-rail"
+        role="toolbar"
+        aria-label="Windows"
+        className={cn(
+          "pointer-events-auto fixed top-1/2 right-3 flex -translate-y-1/2 flex-col gap-1.5",
+          GRAPH_PRIMARY_CHROME_Z
+        )}
+      >
         <GraphToolIconButton
           label="Anchor windows"
           pressed={anchorPickMode}
@@ -2165,6 +2161,36 @@ export function ChatGraphCanvas({
         >
           <AnchorIcon />
         </GraphToolIconButton>
+        <GraphToolIconButton
+          label="Smaller windows"
+          disabled={focusWindowScale <= FOCUS_WINDOW_SCALE_MIN + 1e-9}
+          onClick={() => bumpWindowScale(-FOCUS_WINDOW_SCALE_STEP)}
+        >
+          <ZoomOutIcon />
+        </GraphToolIconButton>
+        <GraphToolIconButton
+          label="Larger windows"
+          disabled={focusWindowScale >= FOCUS_WINDOW_SCALE_MAX - 1e-9}
+          onClick={() => bumpWindowScale(FOCUS_WINDOW_SCALE_STEP)}
+        >
+          <ZoomInIcon />
+        </GraphToolIconButton>
+        <GraphToolIconButton
+          label={focusTilingEnabled ? "Tile windows on" : "Cascade windows"}
+          pressed={focusTilingEnabled}
+          onClick={toggleFocusTiling}
+        >
+          <Columns2Icon />
+        </GraphToolIconButton>
+        {focusTilingEnabled ? (
+          <GraphToolIconButton
+            label={focusLayoutMaximized ? "Restore windows" : "Maximize windows"}
+            pressed={focusLayoutMaximized}
+            onClick={toggleFocusMaximize}
+          >
+            {focusLayoutMaximized ? <ShrinkIcon /> : <ExpandIcon />}
+          </GraphToolIconButton>
+        ) : null}
         <GraphToolIconButton
           label="Reset windows"
           onClick={resetWindowAnchors}
@@ -2178,23 +2204,16 @@ export function ChatGraphCanvas({
         ) : null}
       </div>
 
-      {/* Footer: composer + chat toggle locked to the page (primary chrome). */}
+      {/* Footer: ether composer locked to the page (primary chrome). */}
       <div
         ref={footerChromeRef}
         data-graph-footer-chrome
         className={cn(
-          "pointer-events-none fixed inset-x-0 bottom-0 flex items-end justify-center gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2",
+          "pointer-events-none fixed inset-x-0 bottom-0 flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2",
           GRAPH_PRIMARY_CHROME_Z
         )}
       >
-        <div
-          className="pointer-events-auto flex w-full max-w-[calc(100%-3.5rem)] flex-col gap-2"
-          style={{
-            maxWidth: bottomChromeWidth
-              ? `min(${bottomChromeWidth + 48}px, calc(100% - 3.5rem))`
-              : "min(100% - 3.5rem, 48rem)",
-          }}
-        >
+        <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2">
           <GraphSmartSuggest
             open={graphFilter.trim().length >= 1}
             items={smartSuggestions}
@@ -2211,8 +2230,14 @@ export function ChatGraphCanvas({
             onSuggestArrow={onSuggestArrow}
             onAskForce={() => {
               setEtherChatOpen(true);
-              ensureDefaultAgentWindow();
-              setSendRequestId((n) => n + 1);
+              const text = graphFilter.trim();
+              openPanel({
+                agentId: activeAgentId,
+                tab: "chat",
+                prompt: text || undefined,
+                autoSend: Boolean(text),
+              });
+              if (text) setGraphFilter("");
             }}
             sendRequestId={sendRequestId}
             onComposerEscape={onComposerEscape}
@@ -2231,48 +2256,6 @@ export function ChatGraphCanvas({
               ) : null
             }
           />
-        </div>
-
-        {/*
-          Align with the h-12 composer input (not chips above it).
-          (48px input − 28px icon-sm) / 2 = 10px lift from the shared bottom edge.
-        */}
-        <div className="pointer-events-auto flex shrink-0 items-end pb-2.5">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant={
-                    chatSurfaceOpen || etherChatOpen ? "secondary" : "outline"
-                  }
-                  className="relative bg-background/80 shadow-sm backdrop-blur-sm"
-                  aria-pressed={chatSurfaceOpen || etherChatOpen}
-                  aria-label={
-                    chatSurfaceOpen || etherChatOpen
-                      ? "Hide chat"
-                      : "Show chat"
-                  }
-                  onClick={toggleEtherChat}
-                />
-              }
-            >
-              {chatSurfaceOpen || etherChatOpen ? (
-                <MessageSquareOff />
-              ) : (
-                <MessageSquare />
-              )}
-              {showChatBadge > 0 ? (
-                <Badge className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px]">
-                  {showChatBadge > 99 ? "99+" : showChatBadge}
-                </Badge>
-              ) : null}
-            </TooltipTrigger>
-            <TooltipContent>
-              {chatSurfaceOpen || etherChatOpen ? "Hide chat" : "Show chat"}
-            </TooltipContent>
-          </Tooltip>
         </div>
       </div>
 

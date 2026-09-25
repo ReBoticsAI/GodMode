@@ -33,6 +33,7 @@ import {
   focusOwnerFromGraphNode,
   type FocusOwner,
 } from "./graph-focus-owner";
+import { floatingSurfaceForNodeId } from "./graph-floating-surfaces";
 import {
   ACTIVE_AGENT_KEY,
   AGENTS_SECTION_KEY,
@@ -144,7 +145,13 @@ interface IntelligenceContextValue {
    */
   focusOwner: FocusOwner;
   openInformationPanel: (node: GraphProjectionNode) => void;
+  /** Open one Information window and close the other Information windows. */
+  replaceInformationPanel: (node: GraphProjectionNode) => void;
   closeInformationPanel: () => void;
+  /** Focus an already-open Information canvas without closing others. */
+  focusInformationCanvas: (canvasId: string) => void;
+  /** Close one Information canvas by id (keeps siblings open). */
+  closeInformationCanvas: (canvasId: string) => void;
   openLeftRailTab: (tab: LeftRailTab) => void;
   /** Open Canvas pages (Information and future kinds) for Chat "Select a page". */
   openCanvases: Array<{
@@ -152,6 +159,7 @@ interface IntelligenceContextValue {
     title: string;
     kind: string;
     nodeId?: string;
+    node?: GraphProjectionNode;
   }>;
   focusedCanvasId: string | null;
   setFocusedCanvasId: (id: string | null) => void;
@@ -348,17 +356,23 @@ export const DEFAULT_PANEL_HEIGHT = 480;
 function readStoredPanelTab(): PanelTab {
   if (typeof window === "undefined") return "chat";
   const v = readMigratedKey(PANEL_TAB_KEY, LEGACY_PANEL_TAB_KEY);
-  if (v === "builder" || v === "workflow" || v === "agents") return "chat";
+  if (
+    v === "builder" ||
+    v === "workflow" ||
+    v === "agents" ||
+    v === "channels" ||
+    v === "contacts" ||
+    v === "dms"
+  ) {
+    return "chat";
+  }
   return v === "notifications" ||
     v === "calendar" ||
     v === "projects" ||
     v === "knowledge" ||
     v === "bank" ||
     v === "vault" ||
-    v === "support" ||
-    v === "contacts" ||
-    v === "dms" ||
-    v === "channels"
+    v === "support"
     ? v
     : "chat";
 }
@@ -821,10 +835,17 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setActiveAgentIdState("intelligence");
     }
     const legacyTab = readMigratedKey(PANEL_TAB_KEY, LEGACY_PANEL_TAB_KEY);
-    if (legacyTab === "workflow") {
-      setAgentsSectionState("workflows");
+    if (
+      legacyTab === "workflow" ||
+      legacyTab === "channels" ||
+      legacyTab === "contacts" ||
+      legacyTab === "dms"
+    ) {
+      if (legacyTab === "workflow") {
+        setAgentsSectionState("workflows");
+        writeMigratedKey(AGENTS_SECTION_KEY, LEGACY_AGENTS_SECTION_KEY, "workflows");
+      }
       writeMigratedKey(PANEL_TAB_KEY, LEGACY_PANEL_TAB_KEY, "chat");
-      writeMigratedKey(AGENTS_SECTION_KEY, LEGACY_AGENTS_SECTION_KEY, "workflows");
     }
   }, []);
 
@@ -875,7 +896,13 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const [informationNode, setInformationNode] =
     useState<GraphProjectionNode | null>(null);
   const [openCanvases, setOpenCanvases] = useState<
-    Array<{ id: string; title: string; kind: string; nodeId?: string }>
+    Array<{
+      id: string;
+      title: string;
+      kind: string;
+      nodeId?: string;
+      node?: GraphProjectionNode;
+    }>
   >([]);
   const [focusedCanvasId, setFocusedCanvasId] = useState<string | null>(null);
 
@@ -890,7 +917,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveAgentId(focusOwner.agentId);
   }, [focusOwner, activeAgentId, setActiveAgentId]);
 
-  const openInformationPanel = useCallback((node: GraphProjectionNode) => {
+  const presentInformationPanel = useCallback((node: GraphProjectionNode, replace = false) => {
     if (isPhoneViewport()) {
       setOpenChatWindows([]);
       setDraftByWindowId({});
@@ -900,24 +927,80 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveLeftTab("info");
     setInformationPanelOpen(true);
     setInformationPanelMinimized(false);
-    queueMicrotask(() => setActiveFloatingWindow("information"));
     const canvasId = `information:${node.id}`;
+    queueMicrotask(() => setActiveFloatingWindow(canvasId));
+    const canvas = {
+      id: canvasId,
+      title: `Information · ${node.label}`,
+      kind: "information" as const,
+      nodeId: node.id,
+      node,
+    };
     setOpenCanvases((prev) => {
-      if (prev.some((c) => c.id === canvasId)) return prev;
-      return [
-        ...prev,
-        {
-          id: canvasId,
-          title: `Information · ${node.label}`,
-          kind: "information",
-          nodeId: node.id,
-        },
-      ];
+      if (replace) {
+        return [...prev.filter((c) => c.kind !== "information"), canvas];
+      }
+      const existing = prev.find((c) => c.id === canvasId);
+      if (existing) {
+        return prev.map((c) => (c.id === canvasId ? { ...c, ...canvas } : c));
+      }
+      return [...prev, canvas];
     });
     setFocusedCanvasId(canvasId);
   }, []);
 
+  const openInformationPanel = useCallback(
+    (node: GraphProjectionNode) => presentInformationPanel(node, false),
+    [presentInformationPanel]
+  );
+  const replaceInformationPanel = useCallback(
+    (node: GraphProjectionNode) => presentInformationPanel(node, true),
+    [presentInformationPanel]
+  );
+
+  const focusInformationCanvas = useCallback((canvasId: string) => {
+    setOpenCanvases((prev) => {
+      const hit = prev.find((c) => c.id === canvasId);
+      if (hit?.node) {
+        setInformationNode(hit.node);
+        const surface = floatingSurfaceForNodeId(hit.node.id);
+        setActiveLeftTab(
+          surface ? (surface.tab as LeftRailTab) : "info"
+        );
+      }
+      return prev;
+    });
+    setFocusedCanvasId(canvasId);
+    setInformationPanelOpen(true);
+    setInformationPanelMinimized(false);
+    queueMicrotask(() => setActiveFloatingWindow(canvasId));
+  }, []);
+
+  const closeInformationCanvas = useCallback((canvasId: string) => {
+    setOpenCanvases((prev) => {
+      const next = prev.filter((c) => c.id !== canvasId);
+      const closingFocused = focusedCanvasId === canvasId;
+      if (closingFocused) {
+        const fallback = next.filter((c) => c.kind === "information").at(-1);
+        if (fallback?.node) {
+          setInformationNode(fallback.node);
+          setFocusedCanvasId(fallback.id);
+          queueMicrotask(() => setActiveFloatingWindow(fallback.id));
+        } else {
+          setInformationPanelOpen(false);
+          setInformationPanelMinimized(false);
+          setFocusedCanvasId(null);
+        }
+      }
+      return next;
+    });
+  }, [focusedCanvasId]);
+
   const closeInformationPanel = useCallback(() => {
+    if (focusedCanvasId) {
+      closeInformationCanvas(focusedCanvasId);
+      return;
+    }
     setInformationPanelOpen(false);
     setInformationPanelMinimized(false);
     setOpenCanvases((prev) => {
@@ -928,15 +1011,14 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setFocusedCanvasId((id) =>
       id?.startsWith("information:") ? null : id
     );
-  }, [informationNode?.id]);
+  }, [closeInformationCanvas, focusedCanvasId, informationNode?.id]);
 
   const openLeftRailTab = useCallback((tab: LeftRailTab) => {
     if (tab === "dms" || tab === "channels" || tab === "contacts") {
-      setChatInboxOpen(true);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("godmode:show-chat"));
-      }
-      queueMicrotask(() => setActiveFloatingWindow("chat-inbox"));
+      setPanelTab("chat");
+      setPanelOpen(true);
+      setPanelMinimized(false);
+      queueMicrotask(() => setActiveFloatingWindow("chat"));
       return;
     }
     if (isPhoneViewport()) {
@@ -947,8 +1029,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveLeftTab(tab);
     setInformationPanelOpen(true);
     setInformationPanelMinimized(false);
-    queueMicrotask(() => setActiveFloatingWindow("information"));
-  }, []);
+    queueMicrotask(() =>
+      setActiveFloatingWindow(focusedCanvasId ?? "information")
+    );
+  }, [focusedCanvasId]);
 
   const openPanel = useCallback(
     (opts?: {
@@ -963,29 +1047,11 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       artifactId?: string;
       artifactName?: string;
     }) => {
-      const openConversationWindow = (conversationId: string, title?: string) => {
-        const conv = dmConversations.find((c) => c.id === conversationId);
-        const kind = conv?.kind === "group" ? "channel" : "dm";
-        openOrFocusChatWindow({
-          kind,
-          conversationId,
-          title: title ?? conv?.title ?? "Conversation",
-        });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
-        }
-      };
-
       if (opts?.conversationId) {
         setChatTarget({ kind: "conversation", conversationId: opts.conversationId });
-        openConversationWindow(opts.conversationId);
       } else if (opts?.agentId) {
         setChatTarget({ kind: "agent", agentId: opts.agentId });
-        openOrFocusChatWindow({
-          kind: "agent",
-          agentId: opts.agentId,
-          title: opts.agentId === "intelligence" ? "Intelligence" : opts.agentId,
-        });
+        // Agent chat uses IntelligencePanel. The page composer sends the turn.
       } else if (opts?.contactUserId) {
         void createDmConversation({
           kind: "direct",
@@ -996,38 +1062,26 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
               kind: "conversation",
               conversationId: r.conversation.id,
             });
-            openOrFocusChatWindow({
-              kind: "dm",
-              conversationId: r.conversation.id,
-              title: r.conversation.title || "Direct message",
-            });
             void refreshDmConversations();
           })
           .catch(() => undefined);
       }
 
-      if (
+      const requestedTab =
         opts?.tab === "dms" ||
         opts?.tab === "channels" ||
         opts?.tab === "contacts"
-      ) {
-        setChatInboxOpen(true);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
-        }
-        return;
-      }
+          ? "chat"
+          : opts?.tab;
 
       setPanelOpen(true);
       setPanelMinimized(false);
-      if (opts?.tab) {
-        setPanelTab(opts.tab);
-        if (opts.tab !== "chat") {
-          setActiveLeftTab(opts.tab as LeftRailTab);
+      if (requestedTab) {
+        setPanelTab(requestedTab);
+        if (requestedTab !== "chat") {
+          setActiveLeftTab(requestedTab as LeftRailTab);
           setInformationPanelOpen(true);
           setInformationPanelMinimized(false);
-        } else if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("godmode:show-chat"));
         }
       }
       if (opts?.knowledgeSubTab) setKnowledgeSubTab(opts.knowledgeSubTab);
@@ -1049,8 +1103,6 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setChatTarget,
       refreshDmConversations,
       setKnowledgeSubTab,
-      openOrFocusChatWindow,
-      dmConversations,
     ]
   );
 
@@ -1293,7 +1345,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       chatInboxMinimized,
       setChatInboxMinimized,
       openInformationPanel,
+      replaceInformationPanel,
       closeInformationPanel,
+      focusInformationCanvas,
+      closeInformationCanvas,
       openLeftRailTab,
       openCanvases,
       focusedCanvasId,
@@ -1370,7 +1425,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       informationPanelMinimized,
       activeLeftTab,
       openInformationPanel,
+      replaceInformationPanel,
       closeInformationPanel,
+      focusInformationCanvas,
+      closeInformationCanvas,
       openLeftRailTab,
       openChatWindows,
       focusedChatWindowId,

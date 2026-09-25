@@ -11,7 +11,7 @@ import {
   isOpenRouterPlatformReady,
   upsertOpenRouterApiKey,
 } from "./openrouter-platform.js";
-import { getPlatformVaultSecretInScope } from "./agents/agents-db.js";
+import { getPlatformVaultSecretInScope, getAgent } from "./agents/agents-db.js";
 import { markLlmReady } from "./onboarding.js";
 import { selectIntelligenceModel } from "./model-catalog.js";
 import type { LlmManager } from "./llm-manager.js";
@@ -20,7 +20,11 @@ import {
   pickGodModeInferenceSupplyTarget,
   resolveGodModeInferenceSupplyKey,
 } from "./godmode-inference-supply.js";
-import { defaultTrialBudgetUsd } from "./godmode-inference-grants.js";
+import {
+  defaultTrialBudgetUsd,
+  findActiveGodModeInferenceGrant,
+  isGrantSpendable,
+} from "./godmode-inference-grants.js";
 import { config } from "../config.js";
 
 /**
@@ -82,12 +86,125 @@ export const DEFAULT_TRIAL_AFFILIATE_SIGNUP_URL =
  */
 export const SIGNUP_GUIDE_HARNESS_DELTA = [
   "<model_profile id=\"godmode-signup-guide\">",
-  "You are the GodMode welcome guide. Your only job is to help a new visitor understand the Graph and use GodMode Inference (managed chat on DeepSeek, Z.AI, and Qwen under GodMode accounts) or connect their own supported keys.",
-  "Stay on: what GodMode is, Graph nodes (You, Hub, Intelligence, Workspaces, Vaults), auth/signup, GodMode Inference packs and subscriptions, Local models, Supported BYOK (DeepSeek / Z.AI / Qwen).",
-  "If the user asks for unrelated coding, homework, general knowledge, or long free-form chat, briefly refuse and steer them to buy more GodMode Inference or connect a supported key in Vault.",
-  "Do not invent vendor partnerships. Prefer short turns. End useful answers with a clear GodMode Inference or Supported BYOK nudge.",
+  "You are the GodMode welcome guide. This chat explains GodMode and helps a visitor choose how to move forward. It is not a build session.",
+  "The control surface is the 3D Graph. Never mention a sidebar.",
+  "A visitor may start from Create, Earn, Organize, Automate, Explore, Battle, Social, or Learn.",
+  "Create means making things in GodMode. Content, plugins, and workflows are examples, not the whole list. Also talk about pages, agents, structure, knowledge, memories, skills, rules, artifacts, tools, automations, schedules, and other Graph nodes.",
+  "Earn means selling what they make. If they want to earn while keeping this GodMode instance local, offer the desktop download for their operating system from https://godmode.software/downloads (Windows, macOS, or Linux), then a GodMode Seller account. That account is commerce only. It is not a full GodMode Cloud workspace, and their work stays on this machine. Put the Seller point on a marketplace tour stop. Do not quote a Seller price. Do not invent a direct file URL. Organize means managing it. Automate means automating it.",
+  "Explore, Battle, Social, and Learn are the open universe: maneuvering a structure in space, encountering a hostile, encountering a friendly, and gaining knowledge by connecting to others. Explain that direction. Do not invent a live battle screen.",
+  "You may suggest what could be built later. Do not start building it, and do not offer to create departments, pages, plugins, or workflows in this chat. The Inference allowance will run out before a build finishes.",
+  "When you explain an interest, call play_graph_tour once with 4 to 6 stops. Each stop is a node (you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace) and one sentence in say. For 10 seconds the Graph zooms out beside the chat and highlights the connection from You to that node. Then it moves to the next stop. Do not say you opened or zoomed into a page. Do not call focus_graph_node for this tour. Do not write the tour sentences in your message.",
+  "After the tour, call ask_guide_choice once. That shows buttons for the desktop download, GodMode Inference, GodMode Cloud, Cloud with Inference, and GodMode Seller. Do not write that choice as a sentence.",
+  "Stay on: what GodMode is, the 3D Graph (You, Hub, Intelligence, Workspaces, Vaults), auth/signup, GodMode Inference, GodMode Cloud, Local models, Supported BYOK (DeepSeek / Z.AI / Qwen).",
+  "When the user asks about pricing, buying Inference, Vault, BYOK, or where something lives: call open_guide_surface or focus_graph_node to SHOW the UI. Do not invent pack prices; open godmode_inference so they see live pricing.",
+  "Guide tools available this turn: open_guide_surface (godmode_inference, supported_byok, platform_vault, personal_vault, bank, wiki, intelligence_chat), focus_graph_node (you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace), play_graph_tour, and ask_guide_choice.",
+  "If the user asks for unrelated coding, homework, general knowledge, or long free-form chat, briefly refuse and steer them to sign up for GodMode Inference or GodMode Cloud with Inference.",
+  "Do not invent vendor partnerships. Prefer short turns.",
   "</model_profile>",
 ].join("\n");
+
+const INTELLIGENCE_INTEREST_GUIDES: Record<string, string> = {
+  create:
+    "Create means making things in GodMode. Content, plugins, and workflows are examples, not the whole list. Also cover pages, agents, structure, knowledge, memories, skills, rules, artifacts, tools, automations, schedules, hooks, and other nodes on the 3D Graph.",
+  earn: "Earn means selling what they make, including listings others can buy. Do not limit this to workflows. If they want to earn while keeping this GodMode instance local, they add a GodMode Seller account. That account is commerce only: it lets them sell on the Community marketplace. It is not a full GodMode Cloud workspace, and their files stay on this machine. Do not quote a Seller price.",
+  organize:
+    "Organize means managing what they make: structure, pages, agents, knowledge, and the rest of the Graph. Do not limit this to workflows.",
+  automate:
+    "Automate means automating what they make: workflows, schedules, hooks, and agents that keep the work moving. Do not limit this to one workflow.",
+  explore:
+    "Explore means maneuvering your structure in space, in the open multiplayer universe.",
+  battle:
+    "Battle means encountering a hostile in space. Explain that direction. Do not invent a live battle screen.",
+  social:
+    "Social means encountering a friendly in space. Explain that direction.",
+  learn:
+    "Learn means gaining access to new knowledge by connecting to others in space.",
+};
+
+export const LOCAL_DOWNLOADS_URL = "https://godmode.software/downloads";
+
+export type GuideDesktopOs = "windows" | "macos" | "linux";
+
+const GUIDE_OS_LABEL: Record<GuideDesktopOs, string> = {
+  windows: "Windows",
+  macos: "macOS",
+  linux: "Linux",
+};
+
+/** Accept a client OS hint. Unknown values stay unset so the model does not invent one. */
+export function normalizeGuideDesktopOs(
+  raw: string | null | undefined
+): GuideDesktopOs | null {
+  const value = (raw ?? "").trim().toLowerCase();
+  if (value === "windows" || value === "win" || value === "win32") return "windows";
+  if (value === "macos" || value === "mac" || value === "darwin") return "macos";
+  if (value === "linux") return "linux";
+  return null;
+}
+
+/** Offer the desktop build for staying local instead of GodMode Cloud. */
+export function localDownloadOffer(os: GuideDesktopOs | null): string {
+  if (!os) {
+    return `If they want to stay local instead of GodMode Cloud, offer the desktop download for their operating system from ${LOCAL_DOWNLOADS_URL}. That page has Windows, macOS, and Linux. Do not invent a direct file URL.`;
+  }
+  const label = GUIDE_OS_LABEL[os];
+  return `If they want to stay local instead of GodMode Cloud, offer the ${label} desktop download. The visitor is on ${label}. Send them to ${LOCAL_DOWNLOADS_URL} and name the ${label} build. Do not invent a direct file URL.`;
+}
+
+/**
+ * Model-only brief for a starting interest. The stored user message stays the label.
+ * Appended on welcome-guide turns so the reply is not a closed reading of one example.
+ */
+export function interestModelGuide(
+  id: string,
+  clientOs?: string | null
+): string | null {
+  const body = INTELLIGENCE_INTEREST_GUIDES[id];
+  if (!body) return null;
+  const os = normalizeGuideDesktopOs(clientOs);
+  return [
+    "Welcome-guide turn. The visitor chose this interest. Answer it. Do not treat the examples as the whole product.",
+    body,
+    "The map is the 3D Graph. Do not mention a sidebar.",
+    "Explain how GodMode can do this by calling play_graph_tour once. Use 4 to 6 stops on you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, or marketplace. Each say is one sentence for that node. The Graph zooms out beside the chat and highlights the path from You to that node for 10 seconds, then moves on. Do not write those sentences yourself. Do not call focus_graph_node for the tour.",
+    "Suggesting what could be built later is fine. Do not start building it in this chat. This allowance will run out before a build finishes.",
+    "After the tour tool returns, call ask_guide_choice once. The buttons are the desktop download, GodMode Inference, GodMode Cloud, GodMode Cloud with Inference, and GodMode Seller. Do not write that choice as a sentence.",
+    ...(id === "earn"
+      ? [
+          "For Earn, one of those stops must be marketplace. In that stop's say, explain the local path: keep this GodMode instance local and add a GodMode Seller account to sell. Seller is commerce only, not a full GodMode Cloud workspace. Do not quote a price.",
+          localDownloadOffer(os),
+        ]
+      : []),
+  ].join("\n");
+}
+
+/**
+ * Model-only brief after a next-step button. The stored user message stays the label.
+ */
+export function pathModelGuide(
+  id: string,
+  clientOs?: string | null
+): string | null {
+  const os = normalizeGuideDesktopOs(clientOs);
+  const osLabel = os ? GUIDE_OS_LABEL[os] : "their operating system";
+  const bodies: Record<string, string> = {
+    download: `They chose the desktop download so they can stay local instead of GodMode Cloud. Explain that GodMode for ${osLabel} runs on their computer and their files stay there. They do not need a Cloud workspace for that. If they also want managed models, they add GodMode Inference on top of that local install. That is Local with Inference. Send them to ${LOCAL_DOWNLOADS_URL} and name the ${osLabel} build. Do not invent a direct file URL or a price.`,
+    inference:
+      "They chose GodMode Inference only. Explain that Inference is the model supply, packs or a subscription, not a hosted workspace. It works on a local install or on GodMode Cloud. Local with Inference means the app stays on their computer. Cloud with Inference means the workspace is hosted and the models come from GodMode. Call open_guide_surface with godmode_inference so they see live prices. Do not invent prices.",
+    cloud:
+      "They chose GodMode Cloud. Explain that Cloud is the hosted workspace: they use GodMode from any device without running it on this computer. They can bring their own model keys. If they want GodMode to supply the models too, that is Cloud with Inference, a different choice. Do not invent prices.",
+    cloud_inference:
+      "They chose GodMode Cloud with Inference. Explain why both pieces are there: Cloud hosts the workspace so they are not running GodMode on this computer, and Inference supplies the models so agents can run without their own keys. Contrast Local with Inference: the app stays on their machine and Inference is only the model supply. Call open_guide_surface with godmode_inference so they see live prices. Do not invent prices.",
+    seller: `They chose a GodMode Seller account. Explain that Seller is the commerce seat for selling on the Community marketplace from a local install. It is not a full GodMode Cloud workspace, and their files stay on this machine. If they do not have the app yet, they still download GodMode for ${osLabel} from ${LOCAL_DOWNLOADS_URL}. Do not quote a price.`,
+  };
+  const body = bodies[id];
+  if (!body) return null;
+  return [
+    "Welcome-guide follow-up. The visitor picked this next step. Explain that choice. Do not start a build.",
+    body,
+    "The map is the 3D Graph. Do not mention a sidebar.",
+  ].join("\n");
+}
 
 /** Topics allowed in signup-guide mode (substring match, case-insensitive). */
 const SIGNUP_GUIDE_ALLOW_TERMS = [
@@ -112,6 +229,9 @@ const SIGNUP_GUIDE_ALLOW_TERMS = [
   "trial",
   "plan",
   "pricing",
+  "price",
+  "cost",
+  "buy",
   "token",
   "model",
   "deepseek",
@@ -615,6 +735,42 @@ function upsertGrant(
   );
 }
 
+/**
+ * Ensure a spendable GodMode Inference intro grant when the user picks an
+ * Admin supply model from the catalog (no personal Vault key).
+ */
+export function ensureGodModeInferenceIntroGrant(opts: {
+  userId?: string | null;
+  visitorKey?: string | null;
+  modelId: string;
+  db?: CoreDatabase;
+}): void {
+  const db = opts.db ?? getCloudDb();
+  const existing = findActiveGodModeInferenceGrant({
+    userId: opts.userId,
+    visitorKey: opts.visitorKey,
+    db,
+  });
+  if (isGrantSpendable(existing)) return;
+  const cfg = trialInferenceConfig();
+  const subject = subjectKeyFor({
+    userId: opts.userId,
+    visitorKey: opts.visitorKey,
+  });
+  const expiresAt = new Date(
+    Date.now() + cfg.ttlDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+  upsertGrant(db, {
+    subjectKey: subject,
+    userId: opts.userId,
+    visitorKey: opts.visitorKey,
+    mechanism: "godmodeInferenceSupply",
+    modelId: opts.modelId,
+    expiresAt,
+    providerKeyHash: `godmode-inference-supply:intro`,
+  });
+}
+
 async function mintOpenRouterKeyViaMgmtApi(opts: {
   name: string;
   limitUsd: number;
@@ -875,6 +1031,47 @@ export async function ensureTrialInference(
     }
 
     try {
+      // Supply grant exists but agent still on Cursor (soft-fail attach / prior default).
+      // Re-apply Admin GodMode Inference so intros use platform keys.
+      if (
+        existing.mechanism === "godmodeInferenceSupply" &&
+        isGodModeInferenceSupplyReady() &&
+        opts.llm
+      ) {
+        const agent = getAgent(opts.tenantDb, "intelligence");
+        if (agent?.backend === "cursor_cloud") {
+          const applied = await applyGodModeInferenceSupplyToWorkspace({
+            tenantDb: opts.tenantDb,
+            llm: opts.llm,
+          });
+          if (applied) {
+            upsertGrant(db, {
+              subjectKey: subject,
+              userId: opts.userId,
+              visitorKey: opts.visitorKey,
+              mechanism: "godmodeInferenceSupply",
+              modelId: applied.modelId,
+              expiresAt,
+              providerKeyHash: hashTrialSecret(
+                `godmode-inference-supply:${applied.provider}`
+              ),
+            });
+            return baseStatus(
+              {
+                ready: true,
+                mechanism: "godmodeInferenceSupply",
+                modelId: applied.modelId,
+                status: "active",
+                expiresAt,
+                detail:
+                  "Attached Admin GodMode Inference supply for Intelligence intros (no personal Vault key required). Keep chatting; when ready, add your own BYOK in Platform Vault.",
+              },
+              identity
+            );
+          }
+        }
+      }
+
       const attach = await ensureWorkspaceHasTrialKey({
         tenantDb: opts.tenantDb,
         mechanism: existing.mechanism,

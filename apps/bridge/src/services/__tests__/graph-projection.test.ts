@@ -84,6 +84,31 @@ describe("graph-projection", () => {
     expect(proj.nodes.some((n) => n.kind === "tool")).toBe(true);
   });
 
+  it("hides Admin node for signed-in non-admin users", () => {
+    const proj = buildArchitectureProjection({
+      userId: "u-normal",
+      userLabel: "Normal",
+      isAdmin: false,
+    });
+    expect(proj.nodes.some((n) => n.id === "hub:admin")).toBe(false);
+    expect(
+      proj.edges.some(
+        (e) =>
+          e.source === "hub:admin" ||
+          e.target === "hub:admin"
+      )
+    ).toBe(false);
+  });
+
+  it("keeps Admin node for platform admins", () => {
+    const proj = buildArchitectureProjection({
+      userId: "u-admin",
+      userLabel: "Admin",
+      isAdmin: true,
+    });
+    expect(proj.nodes.some((n) => n.id === "hub:admin")).toBe(true);
+  });
+
   it("builds public architecture spine without tenant DB", () => {
     const proj = buildArchitectureProjection({});
     expect(proj.focusType).toBe("architecture");

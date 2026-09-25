@@ -65,3 +65,12 @@ export function writeFloatingWindowLayout(
   };
   writeStorageKey(LAYOUTS_KEY, JSON.stringify(all));
 }
+
+/** Drop a saved layout so the next open uses placement defaults / retile. */
+export function clearFloatingWindowLayout(windowId: string): void {
+  if (!windowId) return;
+  const all = readAll();
+  if (!(windowId in all)) return;
+  delete all[windowId];
+  writeStorageKey(LAYOUTS_KEY, JSON.stringify(all));
+}

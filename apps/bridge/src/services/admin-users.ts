@@ -73,7 +73,9 @@ export function listAdminUsers(core: CoreDatabase): AdminUserDto[] {
        ORDER BY is_admin DESC, created_at`
     )
     .all(SYSTEM_USER_ID) as CoreUser[];
-  return rows.map((u) => rowToAdminUser(core, u));
+  return rows
+    .filter((u) => !u.is_temporary)
+    .map((u) => rowToAdminUser(core, u));
 }
 
 export function getAdminUser(core: CoreDatabase, userId: string): AdminUserDto | null {

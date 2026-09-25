@@ -64,6 +64,11 @@ export interface CoreUser {
   deletion_status: string | null;
   /** ISO timestamp when email was verified; null = unverified. */
   email_verified_at: string | null;
+  /**
+   * 1 while this row is a public-graph visitor. Signup clears it in place.
+   * 0 for permanent accounts, including the install `system-local` user.
+   */
+  is_temporary: number;
   created_at: string;
   updated_at: string;
 }
@@ -782,7 +787,17 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_graph_leaderboard_v1",
     up: ensureGraphLeaderboardTables,
   },
+  {
+    version: 29,
+    name: "core_visitor_users_v1",
+    up: ensureVisitorUserColumn,
+  },
 ];
+
+/** Public-graph visitors: a real user row that signup converts in place. */
+function ensureVisitorUserColumn(db: CoreDatabase): void {
+  addCol(db, "users", "is_temporary", "INTEGER NOT NULL DEFAULT 0");
+}
 
 /** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
 function ensureAiQueueIndexSchema(db: CoreDatabase): void {

@@ -29,9 +29,7 @@ export function createChatUnlockRouter(): Router {
   });
 
   router.get("/status", attachAuthContext, (req, res) => {
-    const userId =
-      req.user?.id ??
-      (config.auth.allowAnonymous ? "system-local" : undefined);
+    const userId = req.user?.id;
     res.json({
       ...getChatUnlockStatus(userId),
       stripeConfigured: unlockStripeConfigured(),

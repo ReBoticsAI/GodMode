@@ -8,12 +8,11 @@ import {
 } from "react";
 import {
   ArrowUpIcon,
-  ChevronDownIcon,
   MicIcon,
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
-import { streamAiChat, readStoredTrialGreeting, sendDmMessage } from "@/api";
+import { sendDmMessage } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,11 +28,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import {
-  useIntelligence,
-  type IntelligenceChatMode,
-} from "@/lib/intelligence-context";
-import type { ChatEtherLine } from "@/lib/chat-windows";
+import { useIntelligence } from "@/lib/intelligence-context";
 import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { cn } from "@/lib/utils";
 
@@ -57,20 +52,9 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-const MODE_LABEL: Record<IntelligenceChatMode, string> = {
-  agent: "Agent",
-  plan: "Plan",
-  ask: "Ask",
-};
-
-function agentWindowTitle(agentId: string): string {
-  if (agentId === "intelligence") return "Intelligence";
-  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
-}
-
 /**
  * Cursor-style pill message box anchored bottom-center on the Graph.
- * Agent / DM / Channel replies go to focused FloatingWindows (not an ether tray).
+ * Agent and conversation replies open IntelligencePanel. The page composer follows chatTarget.
  */
 export function GraphEtherComposer({
   className,
@@ -106,84 +90,23 @@ export function GraphEtherComposer({
 }) {
   const {
     activeAgentId,
-    chatMode,
     setChatMode,
-    setPanelOpen,
+    openPanel,
     chatTarget,
     focusedChatWindowId,
     openChatWindows,
-    openOrFocusChatWindow,
-    updateChatWindowEtherLines,
     clearComposerDraft,
   } = useIntelligence();
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
-  const abortRef = useRef<(() => void) | null>(null);
-  const chatIdRef = useRef<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const greetingSeeded = useRef(false);
   const workStartedAt = useRef<number | null>(null);
   const [workedLabel, setWorkedLabel] = useState<string | null>(null);
 
   const focusedWindow = openChatWindows.find((w) => w.id === focusedChatWindowId);
 
-  const ensureAgentWindow = useCallback(
-    (agentId: string, etherLines?: ChatEtherLine[]) => {
-      return openOrFocusChatWindow({
-        kind: "agent",
-        agentId,
-        title: agentWindowTitle(agentId),
-        agentChatId: chatIdRef.current,
-        etherLines,
-      });
-    },
-    [openOrFocusChatWindow]
-  );
-
-  useEffect(() => {
-    if (greetingSeeded.current) return;
-    const seedGreeting = (greeting: string) => {
-      if (greetingSeeded.current || !greeting.trim()) return;
-      greetingSeeded.current = true;
-      const line: ChatEtherLine = {
-        id: "trial-greeting",
-        role: "assistant",
-        text: greeting.trim(),
-        at: Date.now(),
-      };
-      const agentId =
-        chatTarget.kind === "agent" ? chatTarget.agentId : activeAgentId;
-      const existing = openChatWindows.find(
-        (w) => w.kind === "agent" && w.agentId === agentId
-      );
-      if (existing) {
-        if ((existing.etherLines ?? []).some((l) => l.id === "trial-greeting")) {
-          return;
-        }
-        updateChatWindowEtherLines(existing.id, (prev) => [line, ...prev]);
-        return;
-      }
-      ensureAgentWindow(agentId, [line]);
-    };
-    const stored = readStoredTrialGreeting();
-    if (stored?.greeting) seedGreeting(stored.greeting);
-    const onGreeting = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ greeting?: string }>).detail;
-      if (detail?.greeting) seedGreeting(detail.greeting);
-    };
-    window.addEventListener("godmode:trial-greeting", onGreeting);
-    return () => window.removeEventListener("godmode:trial-greeting", onGreeting);
-  }, [
-    activeAgentId,
-    chatTarget,
-    ensureAgentWindow,
-    openChatWindows,
-    updateChatWindowEtherLines,
-  ]);
-
   useEffect(() => {
     return () => {
-      abortRef.current?.();
       recognitionRef.current?.stop();
     };
   }, []);
@@ -216,13 +139,11 @@ export function GraphEtherComposer({
     onValueChange("");
     clearComposerDraft(focusedChatWindowId);
 
-    if (
-      focusedWindow &&
-      (focusedWindow.kind === "dm" || focusedWindow.kind === "channel") &&
-      focusedWindow.conversationId
-    ) {
+    if (chatTarget.kind === "conversation") {
+      const conversationId = chatTarget.conversationId;
       setBusy(true);
-      void sendDmMessage(focusedWindow.conversationId, { bodyText: text })
+      openPanel({ tab: "chat" });
+      void sendDmMessage(conversationId, { bodyText: text })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : "Failed to send";
           setWorkedLabel(msg);
@@ -239,114 +160,22 @@ export function GraphEtherComposer({
           ? chatTarget.agentId
           : activeAgentId;
 
-    const intoWindow =
-      focusedWindow?.kind === "agent"
-        ? focusedWindow.id
-        : ensureAgentWindow(agentId);
-
-    const windowAfterOpen = openChatWindows.find((w) => w.id === intoWindow);
-    const historySource =
-      (focusedWindow?.kind === "agent"
-        ? focusedWindow.etherLines
-        : windowAfterOpen?.etherLines) ?? [];
-
-    const history = historySource
-      .filter((l) => l.role === "user" || l.role === "assistant")
-      .filter((l) => l.text.trim().length > 0)
-      .map((l) => ({ role: l.role, content: l.text }));
-
-    const userId = `u-${Date.now()}`;
-    const assistantId = `a-${Date.now()}`;
-
-    const pushTurn = (prev: ChatEtherLine[]) => [
-      ...prev,
-      { id: userId, role: "user" as const, text, at: Date.now() },
-      {
-        id: assistantId,
-        role: "assistant" as const,
-        text: "",
-        at: Date.now(),
-        streaming: true,
-      },
-    ];
-
-    updateChatWindowEtherLines(intoWindow, pushTurn);
-    setBusy(true);
-
-    abortRef.current?.();
-    abortRef.current = streamAiChat(
-      {
-        chatId:
-          (focusedWindow?.kind === "agent"
-            ? focusedWindow.agentChatId
-            : chatIdRef.current) ?? undefined,
-        message: text,
-        history,
-        agentId,
-      },
-      {
-        onChatId: (id) => {
-          chatIdRef.current = id;
-        },
-        onToken: (chunk) => {
-          updateChatWindowEtherLines(intoWindow, (prev) =>
-            prev.map((l) =>
-              l.id === assistantId ? { ...l, text: l.text + chunk } : l
-            )
-          );
-        },
-        onDone: (data) => {
-          updateChatWindowEtherLines(intoWindow, (prev) =>
-            prev.map((l) =>
-              l.id === assistantId
-                ? {
-                    ...l,
-                    text: l.text || data.answer || data.content || "",
-                    streaming: false,
-                  }
-                : l
-            )
-          );
-          setBusy(false);
-          abortRef.current = null;
-        },
-        onError: (err) => {
-          const raw = (err || "").trim();
-          const lower = raw.toLowerCase();
-          const errText =
-            lower.includes("authentication required") ||
-            lower.includes("unauthorized") ||
-            lower.includes("401")
-              ? "Sign in to chat with GodMode Inference. Open Auth (?auth=1) or use the account menu, then send again."
-              : raw || "Something went wrong";
-          updateChatWindowEtherLines(intoWindow, (prev) =>
-            prev.map((l) =>
-              l.id === assistantId
-                ? {
-                    ...l,
-                    role: "system" as const,
-                    text: errText,
-                    streaming: false,
-                  }
-                : l
-            )
-          );
-          setBusy(false);
-          abortRef.current = null;
-        },
-      }
-    );
+    // Agent replies stream in IntelligencePanel; Graph ether is the composer.
+    openPanel({
+      agentId,
+      tab: "chat",
+      prompt: text,
+      autoSend: true,
+    });
   }, [
     activeAgentId,
     busy,
     chatTarget,
     clearComposerDraft,
-    ensureAgentWindow,
     focusedChatWindowId,
     focusedWindow,
     onValueChange,
-    openChatWindows,
-    updateChatWindowEtherLines,
+    openPanel,
     value,
   ]);
 
@@ -396,7 +225,6 @@ export function GraphEtherComposer({
 
   const hasText = value.trim().length > 0;
   const speechAvailable = typeof window !== "undefined" && !!getSpeechRecognition();
-  const autoLabel = chatMode === "agent" ? "Auto" : MODE_LABEL[chatMode];
   const focusChip = useGraphFocusChip();
   const FocusIcon = focusChip?.Icon;
 
@@ -476,7 +304,9 @@ export function GraphEtherComposer({
                   <SparklesIcon />
                   Ask Intelligence
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setPanelOpen(true)}>
+                <DropdownMenuItem
+                  onClick={() => openPanel({ tab: "chat" })}
+                >
                   Open Intelligence panel
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -493,6 +323,7 @@ export function GraphEtherComposer({
 
           <InputGroupInput
             ref={inputRef}
+            data-graph-ether-composer=""
             className="bg-transparent text-sm text-foreground/90 placeholder:text-muted-foreground/70"
             placeholder={placeholder}
             value={value}
@@ -529,42 +360,6 @@ export function GraphEtherComposer({
           />
 
           <InputGroupAddon align="inline-end" className="gap-1 pr-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-0.5 rounded-full px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    title="Intelligence mode"
-                    aria-label="Intelligence mode"
-                  />
-                }
-              >
-                {autoLabel}
-                <ChevronDownIcon className="size-3.5 opacity-70" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel>Mode</DropdownMenuLabel>
-                {(
-                  [
-                    ["agent", "Auto (Agent)"],
-                    ["plan", "Plan"],
-                    ["ask", "Ask"],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <DropdownMenuItem
-                    key={mode}
-                    onClick={() => setChatMode(mode)}
-                  >
-                    {label}
-                    {chatMode === mode ? (
-                      <span className="ml-auto text-xs text-primary">●</span>
-                    ) : null}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {hasText ? (
               <Button
                 type="button"

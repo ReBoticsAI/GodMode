@@ -9,6 +9,8 @@ export interface AuthenticatedUser {
   isAdmin: boolean;
   emailVerified: boolean;
   mfaEnabled: boolean;
+  /** True for a public-graph visitor that signup can convert in place. */
+  temporary?: boolean;
 }
 
 declare global {
@@ -48,5 +50,6 @@ export function coreUserToAuth(
     isAdmin: Boolean(row.is_admin),
     emailVerified: Boolean(row.email_verified_at),
     mfaEnabled: Boolean(extras?.mfaEnabled),
+    temporary: Boolean(row.is_temporary),
   };
 }

@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { LeftRailTab } from "@/lib/intelligence-context";
 import type { OpenChatWindow } from "@/lib/chat-windows";
+import { isUserAgentId } from "@/lib/structure-agents";
 
 export type FocusChrome = {
   label: string;
@@ -150,6 +151,29 @@ export function fallbackAgentLabel(agentId: string): string {
     .filter(Boolean)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
+}
+
+/** Digital You and per-user persona agents. */
+export function isPersonaAgent(agentId: string | null | undefined): boolean {
+  return agentId === "digital-you" || (agentId != null && isUserAgentId(agentId));
+}
+
+/** Knowledge for You lives on Digital You. There is no separate user knowledge table. */
+export const USER_KNOWLEDGE_AGENT_ID = "digital-you";
+
+/** Digital You and per-user personas open You's calendar, tasks, bank, and vault. */
+export function sharesUserTooling(agentId: string | null | undefined): boolean {
+  return isPersonaAgent(agentId);
+}
+
+export function displayNameForAgent(
+  agentId: string,
+  name?: string | null
+): string {
+  if (agentId === "intelligence") return "Intelligence";
+  const trimmed = name?.trim();
+  if (trimmed && trimmed !== agentId) return trimmed;
+  return fallbackAgentLabel(agentId);
 }
 
 export function focusChromeForChatWindow(win: OpenChatWindow): FocusChrome {

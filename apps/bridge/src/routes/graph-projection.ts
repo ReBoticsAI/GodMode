@@ -34,6 +34,7 @@ export function createGraphProjectionRouter(): Router {
                 req.user.email?.split("@")[0] ||
                 "You"
               : undefined,
+            isAdmin: req.user?.isAdmin,
             tenantDb: req.tenantDb ?? null,
             enrichLiveNeighborhood: Boolean(req.user && req.tenantDb),
           });

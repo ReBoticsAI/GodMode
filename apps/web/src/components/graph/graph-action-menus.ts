@@ -233,7 +233,7 @@ export const GRAPH_ACTION_CREATE_ITEMS = [
     description: "Add a person or relationship to your social graph.",
     icon: "UserPlus",
     group: "Social",
-    cta: { type: "open_panel", tab: "contacts" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "dm",
@@ -241,7 +241,7 @@ export const GRAPH_ACTION_CREATE_ITEMS = [
     description: "Start a DM with a user or agent.",
     icon: "Mail",
     group: "Social",
-    cta: { type: "open_panel", tab: "dms" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "channel",
@@ -250,7 +250,7 @@ export const GRAPH_ACTION_CREATE_ITEMS = [
     icon: "Hash",
     group: "Social",
     needsDashboard: true,
-    cta: { type: "open_panel", tab: "channels" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "support-ticket",
@@ -662,7 +662,7 @@ export const GRAPH_ACTION_EDIT_ITEMS = [
     description: "Edit relationship graph edges and contact details.",
     icon: "Users",
     group: "Social",
-    cta: { type: "open_panel", tab: "contacts" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "channel",
@@ -671,7 +671,7 @@ export const GRAPH_ACTION_EDIT_ITEMS = [
     icon: "Hash",
     group: "Social",
     needsDashboard: true,
-    cta: { type: "open_panel", tab: "channels" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "support-ticket",
@@ -826,9 +826,9 @@ export const GRAPH_ACTION_CONNECT_ITEMS = [
   { id: "structure-link", label: "Structure link", description: "Connect Structure nodes in the anatomy tree.", icon: "FolderTree", group: "Graph", cta: { type: "navigate", path: "/structure" } },
   { id: "agent-assignment", label: "Agent assignment", description: "Assign an agent under a workspace or parent.", icon: "Bot", group: "Graph", cta: { type: "navigate", path: "/agents" } },
   { id: "agent-handoff", label: "Agent handoff", description: "Wire handoff edges between agents.", icon: "ArrowRightLeft", group: "Graph", needsDashboard: true, cta: { type: "navigate", path: "/agents" } },
-  { id: "contact", label: "Contact", description: "Connect a person in the social graph.", icon: "UserPlus", group: "People", cta: { type: "open_panel", tab: "contacts" } },
-  { id: "direct-message", label: "Direct message", description: "Open or start a DM thread.", icon: "Mail", group: "People", cta: { type: "open_panel", tab: "dms" } },
-  { id: "channel", label: "Channel", description: "Join or create a channel.", icon: "Hash", group: "People", needsDashboard: true, cta: { type: "open_panel", tab: "channels" } },
+  { id: "contact", label: "Contact", description: "Connect a person in the social graph.", icon: "UserPlus", group: "People", cta: { type: "open_panel", tab: "chat" } },
+  { id: "direct-message", label: "Direct message", description: "Open or start a DM thread.", icon: "Mail", group: "People", cta: { type: "open_panel", tab: "chat" } },
+  { id: "channel", label: "Channel", description: "Join or create a channel.", icon: "Hash", group: "People", needsDashboard: true, cta: { type: "open_panel", tab: "chat" } },
   { id: "peer-invite", label: "Peer invite", description: "Invite a federated peer via Shared.", icon: "Share2", group: "People", cta: { type: "navigate", path: "/settings/shared" } },
   { id: "integration", label: "Integration", description: "Personal Vault integrations hub.", icon: "Plug", group: "Integrations", cta: { type: "navigate", path: "/vault?tab=integrations" } },
   { id: "connector", label: "Connector", description: "Hardware-bound or store connectors.", icon: "Cable", group: "Integrations", needsDashboard: true, cta: { type: "navigate", path: "/marketplace" } },
