@@ -83,7 +83,7 @@ Route: `GET /api/graph/projection?focusType=architecture`.
 
 ## First-land Intelligence + GodMode Inference
 
-**Product decision:** Primary path is **GodMode Inference**: managed chat on DeepSeek, Z.AI (GLM), and Qwen under operator accounts (Admin → GodMode Inference). Free welcome allowance, then $1 packs and subscription ladder. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
+**Product decision:** Primary path is **GodMode Inference**: managed chat on DeepSeek, Z.AI (GLM), and Qwen under operator accounts (Admin → GodMode Inference). Free welcome allowance, then prepaid packs ($5 / $10 / $25 / $50 / $100). Cloud with Inference seats include monthly or yearly credit. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
 
 Admin supply keys are isolated: Intelligence agent + active grant only. They never resolve for other agents and never appear as user Vault connections.
 
@@ -97,17 +97,17 @@ Background ensure flow:
 4. Supported BYOK: Vault → Inference → Supported. Advanced BYOK: other provider cards under Advanced tabs.
 5. Buy more: Vault → Inference → GodMode Inference (`/platform-vault?vault=inference&sub=godmode`).
 
-**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a pack or subscribe (`payGodModePath`).
+**Primary CTAs:** Continue on GodMode Inference. When the free allowance runs out, buy a prepaid pack (`payGodModePath`) or subscribe to Cloud with Inference.
 
 **Convert paths (deployment-aware):**
 
-- **GodMode Cloud (SaaS):** keep a Cloud seat, then buy GodMode Inference (or Supported BYOK). Exhausted chat and welcome CTAs say so; optional Account / seat link.
+- **GodMode Cloud (SaaS):** keep a Cloud seat (BYOK) or Cloud with Inference (included credit), then top up with packs if needed. Exhausted chat and welcome CTAs say so; optional Account / seat link.
 - **GodMode Local / hub:** buy GodMode Inference for this install, or connect Supported BYOK / a local model.
 
 **Secondary CTAs:** Connect Supported BYOK or use Local models.
 
-**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget, mechanism, masked minted key metadata), sets default trial / mint budget (also used as OpenRouter Management mint `limit`), and can revoke a grant so Intelligence hard-stops. For Management API mints, revoke also deletes the provider key and clears Vault when possible. Platform supply keys stay on the same tab.
+**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget, mechanism, masked minted key metadata), sets default trial / mint budget (also used as OpenRouter Management mint `limit`), can create complimentary Inference credit for a user id, and can revoke a grant so Intelligence hard-stops. Admin → Users can also grant complimentary Inference credit. For Management API mints, revoke also deletes the provider key and clears Vault when possible. Platform supply keys stay on the same tab.
 
-Ops: configure Admin → GodMode Inference keys and default trial / mint budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Inference price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_*`. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1`); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
+Ops: configure Admin → GodMode Inference keys and default trial / mint budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Pack price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_PACK_5` … `_100`. Cloud with Inference: `STRIPE_SAAS_PRICE_MONTHLY_INFERENCE` / `_PLUS` / `_PRO` and yearly counterparts. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1` for packs; SaaS plan id for bundles); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
 
 See [MARKETPLACE.md](./MARKETPLACE.md#godmode-inference-supply-vision) for longer-term supply vision.

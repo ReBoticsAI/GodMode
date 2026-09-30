@@ -13,6 +13,7 @@ import {
   findSubscriptionByCustomerId,
   findSubscriptionBySessionId,
   findSubscriptionByUserId,
+  includedInferenceBudgetUsdForPlan,
   isSellerPlanId,
   linkSubscriptionToUser,
   markSubscriptionPastDueByCustomer,
@@ -21,6 +22,7 @@ import {
 } from "./saas-subscriptions.js";
 import { completeUnlockCheckoutSession } from "./chat-unlock.js";
 import { tryApplyGodModeInferenceStripeEvent } from "./godmode-inference-billing.js";
+import { topUpGodModeInferenceGrantOnce } from "./godmode-inference-grants.js";
 
 export type SaasPlanPublic = {
   id: string;
@@ -28,6 +30,7 @@ export type SaasPlanPublic = {
   label: string;
   amountLabel: string;
   interval: "month" | "year" | "one_time";
+  includedInferenceBudgetUsd?: number;
 };
 
 function stripeForm(params: Record<string, string>): URLSearchParams {
@@ -45,7 +48,29 @@ export function listSaasPlans(): SaasPlanPublic[] {
     label: p.label,
     amountLabel: p.amountLabel,
     interval: p.interval,
+    includedInferenceBudgetUsd: p.includedInferenceBudgetUsd,
   }));
+}
+
+/** Grant included Inference credit for a Cloud with Inference seat (idempotent). */
+export function applyIncludedInferenceCredit(opts: {
+  userId: string;
+  planId: string | null | undefined;
+  idempotencyKey: string;
+  stripeSubscriptionId?: string | null;
+}): boolean {
+  const budget = includedInferenceBudgetUsdForPlan(opts.planId);
+  if (!(budget > 0)) return false;
+  const key = opts.idempotencyKey.trim();
+  if (!key) return false;
+  const grant = topUpGodModeInferenceGrantOnce({
+    userId: opts.userId,
+    kind: "subscription",
+    budgetUsd: budget,
+    idempotencyKey: key,
+    stripeSubscriptionId: opts.stripeSubscriptionId,
+  });
+  return grant != null;
 }
 
 export function resolveSaasPlan(planIdOrPriceId?: string): SaasPlanPublic | undefined {
@@ -120,9 +145,19 @@ export async function createSaasCheckoutSession(opts: {
     "subscription_data[metadata][godmode_plan]": plan.id,
     customer_email: email,
   };
+  const included = plan.includedInferenceBudgetUsd ?? 0;
+  if (included > 0) {
+    params["metadata[godmode_inference_included]"] = "1";
+    params["metadata[godmode_inference_budget_usd]"] = String(included);
+    params["subscription_data[metadata][godmode_inference_included]"] = "1";
+    params["subscription_data[metadata][godmode_inference_budget_usd]"] =
+      String(included);
+  }
   if (config.saas.checkoutMode !== "subscription") {
     delete params["subscription_data[metadata][godmode_saas]"];
     delete params["subscription_data[metadata][godmode_plan]"];
+    delete params["subscription_data[metadata][godmode_inference_included]"];
+    delete params["subscription_data[metadata][godmode_inference_budget_usd]"];
   }
 
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -370,11 +405,63 @@ export function handleSaasStripeWebhook(
       email,
       stripeCustomerId: customer,
     });
+
+    // Existing account rebuying / upgrading: credit included Inference immediately.
+    if (email && includedInferenceBudgetUsdForPlan(metadata.godmode_plan) > 0) {
+      const existingUser = getCloudDb()
+        .prepare(`SELECT id FROM users WHERE lower(email)=lower(?) LIMIT 1`)
+        .get(email) as { id: string } | undefined;
+      if (existingUser?.id) {
+        applyIncludedInferenceCredit({
+          userId: existingUser.id,
+          planId: metadata.godmode_plan,
+          idempotencyKey: sessionId,
+          stripeSubscriptionId: subscription,
+        });
+      }
+    }
+
     return { ok: true, entitlement };
   }
 
   // GodMode Inference subscription renewals (metadata on subscription / invoice).
   if (tryApplyGodModeInferenceStripeEvent(type, obj)) {
+    return { ok: true };
+  }
+
+  // Cloud with Inference renewals: top up included credit when the seat is linked.
+  if (type === "invoice.paid") {
+    const customer =
+      typeof obj.customer === "string"
+        ? obj.customer
+        : obj.customer && typeof obj.customer === "object" &&
+            typeof (obj.customer as { id?: string }).id === "string"
+          ? (obj.customer as { id: string }).id
+          : null;
+    const subscriptionId =
+      typeof obj.subscription === "string"
+        ? obj.subscription
+        : obj.subscription && typeof obj.subscription === "object" &&
+            typeof (obj.subscription as { id?: string }).id === "string"
+          ? (obj.subscription as { id: string }).id
+          : null;
+    const invoiceId = typeof obj.id === "string" ? obj.id : "";
+    const subDetails = obj.subscription_details as
+      | { metadata?: { godmode_plan?: string; godmode_saas?: string } }
+      | undefined;
+    let planId = subDetails?.metadata?.godmode_plan ?? null;
+    if (customer) {
+      const sub = findSubscriptionByCustomerId(getCloudDb(), customer);
+      if (!planId) planId = sub?.plan_id ?? null;
+      if (sub?.user_id && includedInferenceBudgetUsdForPlan(planId) > 0 && invoiceId) {
+        applyIncludedInferenceCredit({
+          userId: sub.user_id,
+          planId,
+          idempotencyKey: invoiceId,
+          stripeSubscriptionId: subscriptionId ?? sub.stripe_subscription_id,
+        });
+      }
+    }
     return { ok: true };
   }
 

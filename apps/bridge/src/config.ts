@@ -106,12 +106,32 @@ export const config = {
       const yearly = (process.env.STRIPE_SAAS_PRICE_YEARLY ?? "").trim();
       const seller = (process.env.STRIPE_SAAS_PRICE_SELLER_MONTHLY ?? "").trim();
       const legacy = (process.env.STRIPE_SAAS_PRICE_ID ?? "").trim();
+      const monthlyInference = (
+        process.env.STRIPE_SAAS_PRICE_MONTHLY_INFERENCE ?? ""
+      ).trim();
+      const monthlyInferencePlus = (
+        process.env.STRIPE_SAAS_PRICE_MONTHLY_INFERENCE_PLUS ?? ""
+      ).trim();
+      const monthlyInferencePro = (
+        process.env.STRIPE_SAAS_PRICE_MONTHLY_INFERENCE_PRO ?? ""
+      ).trim();
+      const yearlyInference = (
+        process.env.STRIPE_SAAS_PRICE_YEARLY_INFERENCE ?? ""
+      ).trim();
+      const yearlyInferencePlus = (
+        process.env.STRIPE_SAAS_PRICE_YEARLY_INFERENCE_PLUS ?? ""
+      ).trim();
+      const yearlyInferencePro = (
+        process.env.STRIPE_SAAS_PRICE_YEARLY_INFERENCE_PRO ?? ""
+      ).trim();
       const plans: Array<{
-        id: "monthly" | "yearly" | "seller" | "default";
+        id: string;
         priceId: string;
         label: string;
         amountLabel: string;
         interval: "month" | "year" | "one_time";
+        /** Retail Inference credit included each billing period (Cloud with Inference). */
+        includedInferenceBudgetUsd?: number;
       }> = [];
       if (monthly) {
         plans.push({
@@ -129,6 +149,66 @@ export const config = {
           label: "Yearly",
           amountLabel: "$74.99/year",
           interval: "year",
+        });
+      }
+      if (monthlyInference) {
+        plans.push({
+          id: "monthly_inference",
+          priceId: monthlyInference,
+          label: "Cloud with Inference",
+          amountLabel: "$12.99/month",
+          interval: "month",
+          includedInferenceBudgetUsd: 5,
+        });
+      }
+      if (monthlyInferencePlus) {
+        plans.push({
+          id: "monthly_inference_plus",
+          priceId: monthlyInferencePlus,
+          label: "Cloud with Inference Plus",
+          amountLabel: "$17.99/month",
+          interval: "month",
+          includedInferenceBudgetUsd: 10,
+        });
+      }
+      if (monthlyInferencePro) {
+        plans.push({
+          id: "monthly_inference_pro",
+          priceId: monthlyInferencePro,
+          label: "Cloud with Inference Pro",
+          amountLabel: "$29.99/month",
+          interval: "month",
+          includedInferenceBudgetUsd: 25,
+        });
+      }
+      if (yearlyInference) {
+        plans.push({
+          id: "yearly_inference",
+          priceId: yearlyInference,
+          label: "Cloud with Inference (yearly)",
+          amountLabel: "$129/year",
+          interval: "year",
+          includedInferenceBudgetUsd: 60,
+        });
+      }
+      if (yearlyInferencePlus) {
+        plans.push({
+          id: "yearly_inference_plus",
+          priceId: yearlyInferencePlus,
+          label: "Cloud with Inference Plus (yearly)",
+          amountLabel: "$179/year",
+          interval: "year",
+          includedInferenceBudgetUsd: 120,
+        });
+      }
+      if (yearlyInferencePro) {
+        plans.push({
+          id: "yearly_inference_pro",
+          priceId: yearlyInferencePro,
+          label: "Cloud with Inference Pro (yearly)",
+          amountLabel: "$349/year",
+          interval: "year",
+          includedInferenceBudgetUsd: 300,
         });
       }
       if (seller) {
@@ -156,7 +236,9 @@ export const config = {
       process.env.STRIPE_SAAS_CHECKOUT_MODE ??
       ((process.env.STRIPE_SAAS_PRICE_MONTHLY ||
         process.env.STRIPE_SAAS_PRICE_YEARLY ||
-        process.env.STRIPE_SAAS_PRICE_SELLER_MONTHLY)
+        process.env.STRIPE_SAAS_PRICE_SELLER_MONTHLY ||
+        process.env.STRIPE_SAAS_PRICE_MONTHLY_INFERENCE ||
+        process.env.STRIPE_SAAS_PRICE_YEARLY_INFERENCE)
         ? "subscription"
         : "payment")
     ).toLowerCase() === "subscription"

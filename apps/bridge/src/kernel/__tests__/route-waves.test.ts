@@ -92,6 +92,7 @@ describe("legacy route wave", () => {
       "federation.ts:post:/invites/:token/accept",
       "federation.ts:post:/sc/:verb",
       "godmode-inference.ts:patch:/admin/grants/:id",
+      "godmode-inference.ts:post:/admin/grants",
       "godmode-inference.ts:post:/admin/grants/:id/revoke",
       "godmode-inference.ts:post:/checkout",
       "godmode-inference.ts:post:/checkout/complete",

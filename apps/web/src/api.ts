@@ -6546,6 +6546,7 @@ export function fetchSaasPaywall() {
       label: string;
       amountLabel: string;
       interval: "month" | "year" | "one_time";
+      includedInferenceBudgetUsd?: number;
     }>;
   }>("/saas/paywall");
 }
@@ -7406,7 +7407,7 @@ export function completeGodModeInferenceCheckout(sessionId: string) {
 }
 
 export function createGodModeInferenceCheckout(
-  planId = "pack",
+  planId = "pack_10",
   urls?: { successUrl?: string; cancelUrl?: string }
 ) {
   return api<{ url: string; sessionId: string; planId: string }>(
@@ -7464,6 +7465,19 @@ export function fetchAdminGodModeInferenceGrants(opts?: {
     grants: AdminGodModeInferenceGrant[];
     defaultTrialBudgetUsd: number;
   }>(`/godmode-inference/admin/grants${suffix}`);
+}
+
+export function createAdminGodModeInferenceGrant(input: {
+  userId: string;
+  budgetUsd: number;
+}) {
+  return api<{ grant: AdminGodModeInferenceGrant }>(
+    "/godmode-inference/admin/grants",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
 }
 
 export function revokeAdminGodModeInferenceGrant(id: string) {

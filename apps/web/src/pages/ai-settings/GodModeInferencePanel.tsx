@@ -99,20 +99,23 @@ export function GodModeInferencePanel() {
           <div className="flex flex-col gap-2">
             <p className="text-xs font-medium">Buy more</p>
             <div className="flex flex-wrap gap-2">
-              {(status?.plans ?? [{ id: "pack", label: "$1 pack", amountLabel: "$1" }]).map(
-                (plan) => (
+              {(
+                status?.plans ?? [
+                  { id: "pack_10", label: "$10 pack", amountLabel: "$10", priceId: "", interval: "one_time", budgetUsd: 10 },
+                ]
+              ).map((plan) => (
                   <Button
                     key={plan.id}
                     type="button"
                     size="sm"
-                    variant={plan.id === "pack" ? "default" : "outline"}
+                    variant={plan.id === "pack_10" ? "default" : "outline"}
                     disabled={Boolean(busy) || !status?.paymentsConfigured}
                     onClick={() => void checkout(plan.id)}
                   >
                     {busy === plan.id
                       ? "Opening…"
-                      : plan.id === "pack"
-                        ? "Buy $1 pack"
+                      : plan.amountLabel
+                        ? `Buy ${plan.amountLabel}`
                         : plan.label}
                   </Button>
                 )

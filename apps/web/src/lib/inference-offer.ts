@@ -3,10 +3,17 @@ import {
   GRAPH_TOUR_DWELL_MS,
   GRAPH_TOUR_LINE_EVENT,
 } from "@/lib/guide-ui-action";
-import { CLOUD_MONTHLY_PRICE, CLOUD_YEARLY_PRICE } from "@/lib/cloud-guide";
+import {
+  CLOUD_INFERENCE_PLUS_PRICE,
+  CLOUD_INFERENCE_PRO_PRICE,
+  CLOUD_INFERENCE_STARTER_PRICE,
+  CLOUD_MONTHLY_PRICE,
+  CLOUD_YEARLY_PRICE,
+} from "@/lib/cloud-guide";
 
-/** Published GodMode Inference pack. Subscriptions stay in Vault when Stripe lists them. */
-export const INFERENCE_PACK_PRICE = "$1";
+/** Default highlighted prepaid pack. Ladder is $5 / $10 / $25 / $50 / $100. */
+export const INFERENCE_PACK_PRICE = "$10";
+export const INFERENCE_PACK_PRICES = ["$5", "$10", "$25", "$50", "$100"] as const;
 
 export const INFERENCE_OFFER_OPEN_EVENT = "godmode:inference-offer-open";
 export const INFERENCE_OFFER_SECTION_EVENT = "godmode:inference-offer-section";
@@ -29,7 +36,7 @@ export const INFERENCE_OFFER_STOPS: InferenceOfferStop[] = [
   {
     id: "pack",
     title: "Inference pack",
-    say: `The published pack is ${INFERENCE_PACK_PRICE}. It tops up the managed balance. The model is GLM 5.3 Flash.`,
+    say: `Prepaid packs are ${INFERENCE_PACK_PRICES.join(", ")}. Each pack tops up the managed balance at face value. The model is GLM 5.3 Flash.`,
   },
   {
     id: "here",
@@ -42,12 +49,12 @@ export const CLOUD_INFERENCE_OFFER_STOPS: InferenceOfferStop[] = [
   {
     id: "workspace",
     title: "Hosted workspace",
-    say: `GodMode Cloud hosts the workspace. Cloud Monthly is ${CLOUD_MONTHLY_PRICE}. Cloud Yearly is ${CLOUD_YEARLY_PRICE}. You are not running GodMode on this computer.`,
+    say: `GodMode Cloud hosts the workspace. Cloud Monthly (BYOK) is ${CLOUD_MONTHLY_PRICE}. Cloud Yearly is ${CLOUD_YEARLY_PRICE}. You are not running GodMode on this computer.`,
   },
   {
     id: "models",
     title: "Models included",
-    say: `Cloud with Inference adds GodMode Inference so the models come from GodMode. The published Inference pack is ${INFERENCE_PACK_PRICE}. The model is GLM 5.3 Flash. You do not bring your own key on this path.`,
+    say: `Cloud with Inference bundles the seat and included Inference credit. Starter is ${CLOUD_INFERENCE_STARTER_PRICE}/mo with $5 credit, Plus ${CLOUD_INFERENCE_PLUS_PRICE}/mo with $10, Pro ${CLOUD_INFERENCE_PRO_PRICE}/mo with $25. The model is GLM 5.3 Flash. You do not bring your own key on this path.`,
   },
   {
     id: "here",

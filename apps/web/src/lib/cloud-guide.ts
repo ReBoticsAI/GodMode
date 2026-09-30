@@ -8,6 +8,12 @@ import { CLOUD_APP_SIGNUP } from "@/pages/marketing/cloudAppUrl";
 /** Published Cloud prices from the marketing pricing page. */
 export const CLOUD_MONTHLY_PRICE = "$9.99";
 export const CLOUD_YEARLY_PRICE = "$74.99";
+export const CLOUD_INFERENCE_STARTER_PRICE = "$12.99";
+export const CLOUD_INFERENCE_PLUS_PRICE = "$17.99";
+export const CLOUD_INFERENCE_PRO_PRICE = "$29.99";
+export const CLOUD_INFERENCE_STARTER_YEARLY = "$129";
+export const CLOUD_INFERENCE_PLUS_YEARLY = "$179";
+export const CLOUD_INFERENCE_PRO_YEARLY = "$349";
 export const CLOUD_SIGNUP_URL = CLOUD_APP_SIGNUP;
 
 export const CLOUD_GUIDE_OPEN_EVENT = "godmode:cloud-guide-open";
