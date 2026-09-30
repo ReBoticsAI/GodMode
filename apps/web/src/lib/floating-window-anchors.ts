@@ -71,6 +71,19 @@ export function focusWindowAnchors(
   };
 }
 
+/**
+ * Center a solo floating window in the playfield (chat alone, no companions).
+ */
+export function soloWindowAnchor(
+  bounds: AnchorBounds,
+  width: number,
+  height: number
+): { x: number; y: number } {
+  const x = bounds.x + Math.max(FOCUS_EDGE_INSET_PX, (bounds.width - width) / 2);
+  const y = bounds.y + Math.max(FOCUS_EDGE_INSET_PX, (bounds.height - height) / 2);
+  return clampPos(x, y, width, height, bounds);
+}
+
 /** Nearest focus anchor within snap threshold, or null. */
 export function snapToFocusAnchor(
   x: number,
@@ -216,13 +229,34 @@ export function layoutCenteredFocusCluster(
   focusX?: number
 ): { chat: FocusTileRect; companions: FocusTileRect[]; focusX: number } {
   const midX = focusAxisX(bounds, focusX);
-  const maxLeft =
-    midX - FOCUS_CENTER_GAP_PX / 2 - bounds.x - FOCUS_EDGE_INSET_PX;
-  const chatW = Math.max(160, Math.min(seedWidth, maxLeft));
   const chatH = Math.max(
     160,
     Math.min(seedHeight, bounds.height - FOCUS_EDGE_INSET_PX * 2)
   );
+  const n = Math.max(0, Math.min(5, Math.floor(companionCount)));
+
+  // Solo chat: center in the playfield instead of parking left of the focus gap.
+  if (n === 0) {
+    const chatW = Math.max(
+      160,
+      Math.min(seedWidth, bounds.width - FOCUS_EDGE_INSET_PX * 2)
+    );
+    const chatPos = soloWindowAnchor(bounds, chatW, chatH);
+    return {
+      chat: {
+        x: chatPos.x,
+        y: chatPos.y,
+        width: Math.round(chatW),
+        height: Math.round(chatH),
+      },
+      companions: [],
+      focusX: midX,
+    };
+  }
+
+  const maxLeft =
+    midX - FOCUS_CENTER_GAP_PX / 2 - bounds.x - FOCUS_EDGE_INSET_PX;
+  const chatW = Math.max(160, Math.min(seedWidth, maxLeft));
   const chatY =
     bounds.y + Math.max(FOCUS_EDGE_INSET_PX, (bounds.height - chatH) / 2);
   const chatX = midX - FOCUS_CENTER_GAP_PX / 2 - chatW;
@@ -237,7 +271,7 @@ export function layoutCenteredFocusCluster(
     bounds,
     chatW,
     chatH,
-    companionCount,
+    n,
     "right",
     midX
   );

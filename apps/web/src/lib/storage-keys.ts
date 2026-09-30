@@ -34,6 +34,8 @@ export const COMPOSER_WIDTH_KEY = "godmode.composerWidth";
 export const PANEL_HEIGHT_KEY = "godmode.panelHeight";
 export const PANEL_X_KEY = "godmode.panelX";
 export const PANEL_Y_KEY = "godmode.panelY";
+/** Bump with Social default geometry so stale tiny layouts are dropped once. */
+export const PANEL_LAYOUT_GEN_KEY = "godmode.panelLayoutGen";
 export const PANEL_TAB_KEY = "godmode.panelTab";
 export const AGENTS_SECTION_KEY = "godmode.agentsSection";
 export const ACTIVE_AGENT_KEY = "godmode.activeAgentId";

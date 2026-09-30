@@ -80,6 +80,7 @@ import { useAiStatus } from "@/hooks/use-ai-status";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   focusWindowAnchors,
+  soloWindowAnchor,
   snapToFocusAnchor,
 } from "@/lib/floating-window-anchors";
 import { snapRectToGrid } from "@/lib/floating-window-grid";
@@ -457,6 +458,7 @@ export function IntelligencePanel({
     setPanelMaximized,
     panelMinimized,
     setPanelMinimized,
+    informationPanelOpen,
     chatTarget,
     setChatTarget,
     dmConversations,
@@ -609,6 +611,16 @@ export function IntelligencePanel({
   // viewport changes. Latest tile rect lives on the ref so a resize
   // does not pull a swapped chat window back to its mount position.
   const chatLayoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const defaultChatAnchor = (
+    nextBounds: PanelBounds,
+    width: number,
+    height: number,
+    paired: boolean
+  ) =>
+    paired
+      ? focusWindowAnchors(nextBounds, width, height).left
+      : soloWindowAnchor(nextBounds, width, height);
+
   useEffect(() => {
     const recompute = () => {
       const nextBounds = getPanelBounds();
@@ -624,10 +636,15 @@ export function IntelligencePanel({
       );
       setComposerWidth(width);
       setPanelHeight(height);
-      const focus = focusWindowAnchors(nextBounds, width, height);
+      const fallback = defaultChatAnchor(
+        nextBounds,
+        width,
+        height,
+        informationPanelOpen
+      );
       const pos = clampPanelPos(
-        layout.width ? layout.x : (panelX ?? focus.left.x),
-        layout.height ? layout.y : (panelY ?? focus.left.y),
+        layout.width ? layout.x : (panelX ?? fallback.x),
+        layout.height ? layout.y : (panelY ?? fallback.y),
         width,
         height,
         nextBounds
@@ -658,8 +675,13 @@ export function IntelligencePanel({
       const height = clampPanelHeight(panelHeight, activeBounds.height);
       setComposerWidth(width);
       setPanelHeight(height);
-      const focus = focusWindowAnchors(activeBounds, width, height);
-      setPanelPos(focus.left.x, focus.left.y);
+      const anchor = defaultChatAnchor(
+        activeBounds,
+        width,
+        height,
+        informationPanelOpen
+      );
+      setPanelPos(anchor.x, anchor.y);
       if (!panelOpen) setPanelOpen(true);
     };
     window.addEventListener("godmode:reset-window-anchors", onReset);
@@ -670,6 +692,7 @@ export function IntelligencePanel({
     composerWidth,
     panelHeight,
     panelOpen,
+    informationPanelOpen,
     setComposerWidth,
     setPanelHeight,
     setPanelPos,
@@ -711,9 +734,14 @@ export function IntelligencePanel({
     setBounds(activeBounds);
     const startX = e.clientX;
     const startY = e.clientY;
-    const focus = focusWindowAnchors(activeBounds, composerWidth, panelHeight);
-    const startPanelX = panelX ?? focus.left.x;
-    const startPanelY = panelY ?? focus.left.y;
+    const fallback = defaultChatAnchor(
+      activeBounds,
+      composerWidth,
+      panelHeight,
+      informationPanelOpen
+    );
+    const startPanelX = panelX ?? fallback.x;
+    const startPanelY = panelY ?? fallback.y;
     let lastX = startPanelX;
     let lastY = startPanelY;
     const onMove = (ev: PointerEvent) => {
@@ -774,7 +802,12 @@ export function IntelligencePanel({
     const startWidth = composerWidth;
     const currentX =
       panelX ??
-      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
+      defaultChatAnchor(
+        activeBounds,
+        composerWidth,
+        panelHeight,
+        informationPanelOpen
+      ).x;
     const onMove = (ev: PointerEvent) => {
       const available = activeBounds.x + activeBounds.width - currentX;
       setComposerWidth(
@@ -831,7 +864,12 @@ export function IntelligencePanel({
     const startHeight = panelHeight;
     const currentX =
       panelX ??
-      focusWindowAnchors(activeBounds, composerWidth, panelHeight).left.x;
+      defaultChatAnchor(
+        activeBounds,
+        composerWidth,
+        panelHeight,
+        informationPanelOpen
+      ).x;
     const currentY =
       panelY ?? activeBounds.y + activeBounds.height - panelHeight - 12;
     const onMove = (ev: PointerEvent) => {
@@ -1794,9 +1832,14 @@ export function IntelligencePanel({
       : bounds.width;
   const currentWidth = clampComposerWidth(composerWidth, maxPairedWidth);
   const currentHeight = clampPanelHeight(panelHeight, bounds.height);
-  const focus = focusWindowAnchors(bounds, currentWidth, currentHeight);
-  const defaultX = focus.left.x;
-  const defaultY = focus.left.y;
+  const fallback = defaultChatAnchor(
+    bounds,
+    currentWidth,
+    currentHeight,
+    informationPanelOpen
+  );
+  const defaultX = fallback.x;
+  const defaultY = fallback.y;
   const pos = clampPanelPos(
     panelX ?? defaultX,
     panelY ?? defaultY,
