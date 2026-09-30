@@ -93,18 +93,19 @@ Do not treat one as a dead path of the other; both stay until a later fold.
 
 | | Desktop (≥640px) | Phone (&lt;640px) |
 |--|------------------|-----------------|
-| Land | Graph + multi [`FloatingWindow`](../apps/web/src/components/floating/FloatingWindow.tsx) | Graph overview (`lowPower` OK) + **one** primary surface |
-| Primary surface | FloatingWindow (`z-[110]`, focused chat may `z-[120]`) | shadcn Sheet via [`GraphPhoneSheet`](../apps/web/src/components/graph/GraphPhoneSheet.tsx) in the playfield (`z-[110]`, no blur overlay) |
-| Composer | [`GraphEtherComposer`](../apps/web/src/components/graph/GraphEtherComposer.tsx) fixed footer (`z-[210]`) | Same fixed footer band; Sheet ends above the reply pill / composer |
-| Focus | Multiple floats OK; windows stay under primary chrome | Opening Information / left-rail / chat closes sibling Graph floats (`isPhoneViewport`); no sheet backdrop blur |
+| Land | Graph + multi [`FloatingWindow`](../apps/web/src/components/floating/FloatingWindow.tsx); Social auto-opens | Graph overview (`lowPower` OK for R3F); **Social still auto-opens** in the playfield |
+| Primary surface | FloatingWindow (`z-[110]`, focused chat may `z-[120]`) | Playfield fullscreen only: [`GraphPhoneSheet`](../apps/web/src/components/graph/GraphPhoneSheet.tsx) or Social/floaters using the same top/composer band insets (`z-[110]`/`z-[120]`). **Open or closed** (no resize, maximize, or minimize) |
+| Composer | [`GraphEtherComposer`](../apps/web/src/components/graph/GraphEtherComposer.tsx) fixed footer (`z-[210]`) | Same fixed footer band; Sheet / Social ends above the reply pill / composer |
+| Focus | Multiple floats OK; windows stay under primary chrome | One primary surface: opening Social closes Information (and vice versa); no sheet backdrop blur |
 | Breakpoint | Tablets 640–1023 keep multi-window float | [`PHONE_BREAKPOINT`](../apps/web/src/hooks/use-mobile.ts) / `useIsPhone()` |
 
 ### Smoke (phone viewport)
 
-1. DevTools width ~390px (or real device). Signed-in session preferred for deep links.
-2. Open Calendar (left rail or Intelligence → Calendar) → Sheet; composer still usable.
-3. Open Chat → single chat Sheet; Information closes.
-4. Open Automations left rail → list Sheet; no stuck full-bleed overlay burying the composer.
+1. DevTools width ~390px (or real device). Guest or new-user land preferred.
+2. Social is visible in the playfield on land (under ticker/notice, above composer); side rails stay usable.
+3. Open Calendar (left rail or Intelligence → Calendar) → Sheet; Social closes; composer still usable.
+4. Close Social → Graph only; reopen via Ask / chat chrome.
+5. No resize or maximize controls on phone windows.
 
 PWA installability (manifest, service worker, Add to Home Screen) stays on [#75](https://github.com/ReBoticsAI/GodMode/issues/75) / [#419](https://github.com/ReBoticsAI/GodMode/issues/419) / [#387](https://github.com/ReBoticsAI/GodMode/issues/387). This issue owns the viewport shell contract only.
 

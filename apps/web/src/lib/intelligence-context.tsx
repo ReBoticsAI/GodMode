@@ -987,6 +987,8 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setOpenChatWindows([]);
       setDraftByWindowId({});
       setFocusedChatWindowId(null);
+      setPanelOpen(false);
+      setPanelMinimized(false);
     }
     setInformationNode(node);
     setActiveLeftTab("info");
@@ -1090,6 +1092,8 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setOpenChatWindows([]);
       setDraftByWindowId({});
       setFocusedChatWindowId(null);
+      setPanelOpen(false);
+      setPanelMinimized(false);
     }
     setActiveLeftTab(tab);
     setInformationPanelOpen(true);
@@ -1139,8 +1143,28 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
           ? "chat"
           : opts?.tab;
 
-      setPanelOpen(true);
-      setPanelMinimized(false);
+      const phone = isPhoneViewport();
+      const openAsInformation =
+        Boolean(requestedTab && requestedTab !== "chat") ||
+        Boolean(opts?.artifactId);
+
+      if (phone) {
+        setOpenChatWindows([]);
+        setDraftByWindowId({});
+        setFocusedChatWindowId(null);
+        if (openAsInformation) {
+          setPanelOpen(false);
+          setPanelMinimized(false);
+        } else {
+          setInformationPanelOpen(false);
+          setInformationPanelMinimized(false);
+          setPanelOpen(true);
+          setPanelMinimized(false);
+        }
+      } else {
+        setPanelOpen(true);
+        setPanelMinimized(false);
+      }
       if (requestedTab) {
         setPanelTab(requestedTab);
         if (requestedTab !== "chat") {
@@ -1154,6 +1178,11 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         setKnowledgeSubTab("artifacts");
         setPanelTab("knowledge");
         setArtifactViewer({ id: opts.artifactId, name: opts.artifactName });
+        if (phone) {
+          setPanelOpen(false);
+          setInformationPanelOpen(true);
+          setInformationPanelMinimized(false);
+        }
       }
       if (typeof opts?.maximized === "boolean") {
         setPanelMaximized(opts.maximized);
