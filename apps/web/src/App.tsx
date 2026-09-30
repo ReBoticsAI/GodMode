@@ -460,7 +460,7 @@ function AuthGatedApp() {
   const { checking, needsWizard, wizardEpoch, onFinished, onOpenVault, control } = useOnboardingGate();
   const [pluginsReady, setPluginsReady] = useState(false);
   const [pluginsEpoch, setPluginsEpoch] = useState(0);
-  const [saas, setSaas] = useState(false);
+  const [saas, setSaas] = useState<boolean | null>(null);
   const [forceAuth, setForceAuth] = useState(false);
   const { pathname, search } = useLocation();
   const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
@@ -493,34 +493,41 @@ function AuthGatedApp() {
       .catch(() => setSaas(false));
   }, []);
 
+  // Soft visitor sessions stay on the public Graph lander. Real SaaS accounts
+  // must verify email (or finish MFA) before product APIs will answer.
+  const isProductSession = Boolean(
+    authenticated && user && user.temporary !== true
+  );
+
   // Plan: require verified email before full product use on SaaS only.
   // Platform admins skip email verification (bootstrap before Resend); MFA still required.
+  // Wait for /health so we do not flash the product shell while saas is still unknown.
   const needsEmailVerify =
-    saas &&
-    authenticated &&
+    saas === true &&
+    isProductSession &&
     user?.emailVerified === false &&
     user?.isAdmin !== true;
   const needsMfaSetup =
-    saas &&
-    authenticated &&
+    saas === true &&
+    isProductSession &&
     !needsEmailVerify &&
     Boolean(user?.isAdmin) &&
     user?.mfaEnabled === false;
   const needsAuthInterstitial = needsEmailVerify || needsMfaSetup;
   const needsWorkspace =
-    authenticated && !needsAuthInterstitial && tenants.length === 0;
+    isProductSession && !needsAuthInterstitial && tenants.length === 0;
 
   useEffect(() => {
-    if (!authenticated || needsAuthInterstitial || needsWorkspace) {
+    if (!isProductSession || needsAuthInterstitial || needsWorkspace) {
       setPluginsReady(true);
       return;
     }
     setPluginsReady(false);
     void loadWebPlugins().finally(() => setPluginsReady(true));
-  }, [authenticated, needsAuthInterstitial, needsWorkspace]);
+  }, [isProductSession, needsAuthInterstitial, needsWorkspace]);
 
   useEffect(() => {
-    if (!authenticated || needsAuthInterstitial || needsWorkspace) return;
+    if (!isProductSession || needsAuthInterstitial || needsWorkspace) return;
     const onPluginsChanged = () => setPluginsEpoch((n) => n + 1);
     const onVisible = () => {
       if (document.visibilityState === "visible") void loadWebPlugins();
@@ -531,7 +538,7 @@ function AuthGatedApp() {
       window.removeEventListener("godmode:plugins-changed", onPluginsChanged);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [authenticated, needsAuthInterstitial, needsWorkspace]);
+  }, [isProductSession, needsAuthInterstitial, needsWorkspace]);
 
   useEffect(() => {
     const onOpenAuth = () => setForceAuth(true);
@@ -543,7 +550,7 @@ function AuthGatedApp() {
   const forceAuthFromUrl = new URLSearchParams(search).get("auth") === "1";
   const showAuthGate = forceAuth || forceAuthFromUrl;
 
-  if (loading) {
+  if (loading || (authenticated && saas === null)) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Loading workspace…
@@ -551,8 +558,8 @@ function AuthGatedApp() {
     );
   }
 
-  // Pre-auth (Local + Cloud): The Graph is the main site; AuthGate only when ?auth=1.
-  if (!authenticated) {
+  // Pre-auth + soft visitor sessions: The Graph is the main site; AuthGate only when ?auth=1.
+  if (!isProductSession) {
     if (showAuthGate) {
       return (
         <>

@@ -412,11 +412,13 @@ app.get("/api/health", (_req, res) => {
 app.use("/api", attachAuthContext, (req, res, next) => {
   // Platform admins skip email verification (MFA remains required). Lets
   // operators bootstrap SaaS before transactional mail (Resend) is configured.
+  // Soft visitor sessions stay on the public lander; they are not product accounts.
   if (
     !config.isSaas ||
     !req.user ||
     req.user.emailVerified ||
-    req.user.isAdmin
+    req.user.isAdmin ||
+    req.user.temporary
   ) {
     next();
     return;
