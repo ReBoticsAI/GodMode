@@ -4,7 +4,7 @@
  * Cloud with Inference tiers. Prints env lines for deploy.
  *
  * Usage:
- *   STRIPE_SECRET_KEY=sk_live_... node scripts/provision-stripe-inference-prices.mjs
+ *   STRIPE_SECRET_KEY=sk_live_... node deploy/scripts/provision-stripe-inference-prices.mjs
  *
  * Idempotent: reuses existing Prices that match nickname + unit_amount + recurring.
  */
