@@ -116,56 +116,128 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/admin/grant",
     rationale:
-      "Platform admin or local allowAnonymous preview grant of UnlockEntitlement without tutorial or Stripe.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Platform admin or local allowAnonymous preview grant of UnlockEntitlement without tutorial or Stripe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-checkout",
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/checkout",
     rationale:
-      "Stripe Checkout redirect for skip-tutorial unlock purchases (UnlockTransaction); durable grant is kernel UnlockEntitlement.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Stripe Checkout redirect for skip-tutorial unlock purchases. Durable grant is side-effect of webhook; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-tutorial-start",
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/tutorial/start",
     rationale:
-      "Tutorial start for free UnlockEntitlement grants.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Tutorial start for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-tutorial-step",
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/tutorial/step",
     rationale:
-      "Tutorial step progress for free UnlockEntitlement grants.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Tutorial step progress for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-tutorial-complete",
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/tutorial/complete",
     rationale:
-      "Tutorial complete for free UnlockEntitlement grants.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Tutorial complete for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-graph",
     methods: ["GET", "PUT"],
     pathPattern: "/api/chat-unlock/graph",
     rationale:
-      "Chat graph document persistence for docked Intelligence threads after window unlock.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Chat graph document persistence for docked Intelligence threads after window unlock. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "chat-unlock-graph-dock",
     methods: ["POST"],
     pathPattern: "/api/chat-unlock/graph/dock",
     rationale:
-      "Dock Intelligence chat graph into a floating window after unlock.",
-    authenticatedDomainMutations: "kernel-delegated",
+      "Dock Intelligence chat graph into a floating window after unlock. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-missions-sync",
+    methods: ["POST"],
+    pathPattern: "/api/graph-missions/sync",
+    rationale:
+      "Sync Graph mission checklist from catalog; platform meta side effect, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-missions-complete",
+    methods: ["POST"],
+    pathPattern: "/api/graph-missions/:/complete",
+    rationale:
+      "Mark a Graph mission complete for the signed-in user. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-open",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/open",
+    rationale:
+      "Open or attach a SQLite universe plane for Graph isolation pilots. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-chat",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/chat",
+    rationale:
+      "Pilot dual-write chat shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-agent",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/agent",
+    rationale:
+      "Pilot dual-write agent shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-vaults",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/vaults",
+    rationale:
+      "Pilot dual-write vault shells into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-surface",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/surface",
+    rationale:
+      "Pilot dual-write surface shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-tools-list",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/tools/list",
+    rationale:
+      "List SQLite universe pilot tools for Graph isolation dogfood. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-tools-query",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/tools/query",
+    rationale:
+      "Query SQLite universe pilot tools for Graph isolation dogfood. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
   },
   {
     id: "update-readiness",
