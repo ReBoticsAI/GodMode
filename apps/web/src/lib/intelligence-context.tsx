@@ -358,7 +358,7 @@ export const DEFAULT_PANEL_HEIGHT = 640;
  * Bump when default Social geometry changes. Clears stored size/position once
  * so large screens are not stuck on the legacy 560×480 focus-left layout.
  */
-export const PANEL_LAYOUT_GEN = 2;
+export const PANEL_LAYOUT_GEN = 3;
 
 /** ~42% of viewport width, floored at DEFAULT and capped at MAX. */
 export function defaultComposerWidthForViewport(
