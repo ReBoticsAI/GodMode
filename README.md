@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml/badge.svg)](https://github.com/ReBoticsAI/GodMode/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/tag/ReBoticsAI/GodMode?label=release)](https://github.com/ReBoticsAI/GodMode/releases/tag/v0.9.1)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
+[![License: Open Source](https://img.shields.io/badge/Open%20Source-GodMode%20License%201.0-blue.svg)](https://github.com/ReBoticsAI/GodMode/blob/main/LICENSE)
 
 **GodMode** is where you Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern yourself, your people and your agents.
 
 Think of GodMode as the feeling of inhabiting a digital body. The software is the body. Structure is the anatomy: departments are regions, divisions group work inside a region and pages are the surfaces you use. The model is the brain. Digital You is your twin inside GodMode, your digital persona; It learns your voice and conventions. It guides you when you are here and stands in when you are not. Intelligence is the nervous system, the platform agent you talk to in order to grow GodMode and its anatomy. Specialized agents are the muscles: they own a job, attach to a region and execute.
 
-Open source (Apache 2.0). Local-first by design: self-host on your own machine or use Cloud for convenience.
+Open source (GodMode License 1.0). Local-first by design: self-host on your own machine or use Cloud for convenience.
 
 ![GodMode home hub](docs/assets/readme/hero-home.png)
 
@@ -287,7 +287,7 @@ Full documentation index: **[docs/README.md](docs/README.md)**
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[GodMode License 1.0](LICENSE) (open source). You may fork, self-host a Private Hub for Your own use, and build on Core. You may not offer a competing hosted GodMode Cloud (public or invite-only paid hosting for third parties), and you must keep Platform Commerce Features (Official Marketplace access and Cloud commerce handoff) available to end users.
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 # Contributing to GodMode
 
-Thank you for contributing. GodMode core is released under the [Apache License 2.0](LICENSE).
+Thank you for contributing. GodMode core is released under the [GodMode License 1.0](LICENSE).
 
 ## Getting started
 
