@@ -9,8 +9,9 @@
  * Idempotent: reuses existing Prices that match nickname + unit_amount + recurring.
  */
 const secret = (process.env.STRIPE_SECRET_KEY ?? "").trim();
-if (!secret.startsWith("sk_")) {
-  console.error("Set STRIPE_SECRET_KEY to a Stripe secret key.");
+// sk_* standard secret, or rk_* restricted key with Products write.
+if (!secret.startsWith("sk_") && !secret.startsWith("rk_")) {
+  console.error("Set STRIPE_SECRET_KEY to a Stripe secret or restricted key.");
   process.exit(1);
 }
 
@@ -53,33 +54,44 @@ async function findOrCreateProduct(name) {
 }
 
 async function findOrCreatePrice(opts) {
-  const listed = await stripeGet(
-    `prices?product=${encodeURIComponent(opts.productId)}&limit=100&active=true`
-  );
-  const hit = (listed.data ?? []).find((p) => {
-    if (p.unit_amount !== opts.unitAmount) return false;
-    if (p.currency !== "usd") return false;
-    if (opts.nickname && p.nickname !== opts.nickname) return false;
-    if (!opts.recurring) return p.type === "one_time";
-    return (
-      p.recurring?.interval === opts.recurring.interval &&
-      (opts.recurring.interval_count ?? 1) === (p.recurring?.interval_count ?? 1)
-    );
-  });
-  if (hit) return hit;
-  const params = {
-    product: opts.productId,
-    currency: "usd",
-    unit_amount: opts.unitAmount,
-    nickname: opts.nickname,
-  };
-  if (opts.recurring) {
-    params["recurring[interval]"] = opts.recurring.interval;
-    if (opts.recurring.interval_count && opts.recurring.interval_count > 1) {
-      params["recurring[interval_count]"] = opts.recurring.interval_count;
+  // Restricted keys with Products Write can POST prices but may lack plan_read
+  // (GET /prices). Prefer create; fall back to list+match when readable.
+  try {
+    const params = {
+      product: opts.productId,
+      currency: "usd",
+      unit_amount: opts.unitAmount,
+      nickname: opts.nickname,
+    };
+    if (opts.recurring) {
+      params["recurring[interval]"] = opts.recurring.interval;
+      if (opts.recurring.interval_count && opts.recurring.interval_count > 1) {
+        params["recurring[interval_count]"] = opts.recurring.interval_count;
+      }
     }
+    return await stripe("prices", params);
+  } catch (createErr) {
+    let listed;
+    try {
+      listed = await stripeGet(
+        `prices?product=${encodeURIComponent(opts.productId)}&limit=100&active=true`
+      );
+    } catch {
+      throw createErr;
+    }
+    const hit = (listed.data ?? []).find((p) => {
+      if (p.unit_amount !== opts.unitAmount) return false;
+      if (p.currency !== "usd") return false;
+      if (opts.nickname && p.nickname !== opts.nickname) return false;
+      if (!opts.recurring) return p.type === "one_time";
+      return (
+        p.recurring?.interval === opts.recurring.interval &&
+        (opts.recurring.interval_count ?? 1) === (p.recurring?.interval_count ?? 1)
+      );
+    });
+    if (hit) return hit;
+    throw createErr;
   }
-  return stripe("prices", params);
 }
 
 const packs = [

@@ -1,0 +1,85 @@
+# Upsert live Inference / Cloud-with-Inference Stripe Price IDs into Hostinger
+# .env.production and recreate the godmode service (image pin unchanged).
+#
+# gh workflow run upsert-stripe-inference-env.yml -f confirm=upsert
+name: Upsert Stripe Inference env
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type upsert to run'
+        required: true
+        type: string
+
+concurrency:
+  group: godmode-saas-production
+  cancel-in-progress: false
+
+jobs:
+  upsert:
+    if: ${{ inputs.confirm == 'upsert' }}
+    environment: production
+    runs-on: [self-hosted, linux, godmode-saas]
+    permissions:
+      contents: read
+    steps:
+      - name: Upsert Price IDs and recreate Bridge
+        run: |
+          set -euo pipefail
+          ENV_FILE="/opt/godmode/deploy/.env.production"
+          if [[ ! -f "$ENV_FILE" ]]; then
+            echo "::error::$ENV_FILE missing"
+            exit 1
+          fi
+
+          # Live ReBotics catalog (created 2026-09-30 via provision script).
+          LINES=(
+            "STRIPE_GODMODE_INFERENCE_PRICE_PACK_5=price_1ULUDPAGfMlghZhOjfeI9ucU"
+            "STRIPE_GODMODE_INFERENCE_PRICE_PACK_10=price_1ULUDPAGfMlghZhOUXAEHRDd"
+            "STRIPE_GODMODE_INFERENCE_PRICE_PACK_25=price_1ULUDPAGfMlghZhONZMyLCtb"
+            "STRIPE_GODMODE_INFERENCE_PRICE_PACK_50=price_1ULUDPAGfMlghZhOt0pOWRse"
+            "STRIPE_GODMODE_INFERENCE_PRICE_PACK_100=price_1ULUDPAGfMlghZhO8DZBEomn"
+            "STRIPE_SAAS_PRICE_MONTHLY_INFERENCE=price_1ULUDQAGfMlghZhOP8HHueaO"
+            "STRIPE_SAAS_PRICE_MONTHLY_INFERENCE_PLUS=price_1ULUDQAGfMlghZhO72oOaayb"
+            "STRIPE_SAAS_PRICE_MONTHLY_INFERENCE_PRO=price_1ULUDQAGfMlghZhO115VsTW8"
+            "STRIPE_SAAS_PRICE_YEARLY_INFERENCE=price_1ULUDRAGfMlghZhO3norRIBW"
+            "STRIPE_SAAS_PRICE_YEARLY_INFERENCE_PLUS=price_1ULUDRAGfMlghZhO8uEHLt77"
+            "STRIPE_SAAS_PRICE_YEARLY_INFERENCE_PRO=price_1ULUDRAGfMlghZhOJbHZ6W2w"
+          )
+
+          for line in "${LINES[@]}"; do
+            key="${line%%=*}"
+            if grep -qE "^${key}=" "$ENV_FILE"; then
+              sed -i "s|^${key}=.*|${line}|" "$ENV_FILE"
+            else
+              printf '\n%s\n' "$line" >> "$ENV_FILE"
+            fi
+            echo "upserted ${key}"
+          done
+
+          cd /opt/godmode/deploy
+          COMPOSE_FILES=(-f docker-compose.prod.yml)
+          if [[ -f docker-compose.override.yml ]]; then
+            COMPOSE_FILES+=(-f docker-compose.override.yml)
+          fi
+          docker compose --env-file .env.production "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps godmode
+
+          for i in $(seq 1 60); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/health || true)
+            echo "health ${i}/60: HTTP ${code}"
+            if [[ "$code" == "200" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$code" != "200" ]]; then
+            echo "::error::health check failed"
+            exit 1
+          fi
+
+          {
+            echo "## Upserted Inference Price IDs"
+            echo ""
+            echo "Bridge recreated; /api/health OK."
+          } >> "$GITHUB_STEP_SUMMARY"
