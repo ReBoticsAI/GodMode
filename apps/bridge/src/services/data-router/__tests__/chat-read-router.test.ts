@@ -43,6 +43,7 @@ describe("Data Router chat reads (#778)", () => {
     db.exec(`
       CREATE TABLE ai_chats (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, user_id TEXT,
+        agent_id TEXT,
         turn_state_json TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       );
