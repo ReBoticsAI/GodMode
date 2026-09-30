@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-30
+
+First major stable cut of GodMode: sellable Inference on Cloud, Graph as the
+primary control surface, and the open-source personal OS core under GodMode
+License 1.0.
+
+### Added
+
+- **GodMode Inference commerce** - Stripe packs ($5 / $10 / $25 / $50 / $100)
+  and Cloud with Inference Starter / Plus / Pro (monthly and yearly); prepaid
+  USD grants; Z.AI platform supply metering; Admin complimentary grants and
+  spend controls; live Cloud Price IDs and Hostinger env upsert
+- **Graph control surface** - Graph-first land with Workspaces and Agents map,
+  welcome guide, focus chrome, floating Social / Information windows, phone
+  Sheet shell, and signed-in chat directory
+- **Data Router chat reads (#778)** - in-process router for ChatSession and
+  ChatMessage reads toward Graph / isolation ladder work
+- **GodMode License 1.0** - Cloud and Marketplace protections in the OSS core
+  license
+
+### Fixed
+
+- **Social window layout** - viewport-scaled size, pin left of the tour
+  playfield, clear of the left Graph canvas rail
+- **Cloud email gate** - unverified sessions no longer land an empty Graph
+- **Graph chrome / playfield** - window bands, focus owner, surface openers,
+  editor perf, and mobile shell hardening
+
+### Changed
+
+- **Isolation roadmap** - Graph-first state docs; Heart → Hub product naming;
+  OSS core stays free of private plugin domain residue
+
 ## [0.10.0] - 2026-09-04
 
 Minor stable cut of `main` since 0.9.1: Cursor parity for Intelligence,
