@@ -31,7 +31,7 @@ export async function startInferenceCheckout(planId: string): Promise<void> {
 
 export async function startCloudSeatCheckout(
   email: string,
-  planId: "monthly" | "yearly"
+  planId: string
 ): Promise<void> {
   const urls = inferenceCheckoutReturnUrls(window.location.origin, "cloud");
   const session = await startSaasCheckout({

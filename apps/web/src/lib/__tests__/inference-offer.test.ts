@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CLOUD_MONTHLY_PRICE, CLOUD_YEARLY_PRICE } from "../cloud-guide";
+import {
+  CLOUD_INFERENCE_STARTER_PRICE,
+  CLOUD_MONTHLY_PRICE,
+  CLOUD_YEARLY_PRICE,
+} from "../cloud-guide";
 import { canBillEmail, inferenceCheckoutReturnUrls } from "../inference-checkout";
 import {
   CLOUD_INFERENCE_OFFER_STOPS,
@@ -26,7 +30,7 @@ describe("inference offer", () => {
     expect(inference).toContain("GLM 5.3 Flash");
     expect(cloud).toContain(CLOUD_MONTHLY_PRICE);
     expect(cloud).toContain(CLOUD_YEARLY_PRICE);
-    expect(cloud).toContain(INFERENCE_PACK_PRICE);
+    expect(cloud).toContain(CLOUD_INFERENCE_STARTER_PRICE);
     expect(`${inference} ${cloud}`).toContain("Stripe Checkout");
     expect(`${inference} ${cloud}`).not.toMatch(/https?:\/\//);
     expect(`${inference} ${cloud}`).not.toContain("\u2014");

@@ -48,8 +48,8 @@ export type GodModeInferenceGrantRow = {
 
 const INTELLIGENCE_AGENT_ID = "intelligence";
 
-/** Default USD added by a $1 pack (override with GODMODE_INFERENCE_PACK_BUDGET_USD). */
-export const DEFAULT_PACK_BUDGET_USD = 1;
+/** Default USD added when pack budget metadata is missing (legacy $1 → $5 floor). */
+export const DEFAULT_PACK_BUDGET_USD = 5;
 
 /** Heuristic USD per managed turn when providers do not return cost. */
 export const DEFAULT_TURN_COST_USD = 0.002;
@@ -406,6 +406,54 @@ export function topUpGodModeInferenceGrant(opts: {
     .prepare(`SELECT * FROM trial_inference_grants WHERE id=?`)
     .get(id) as Record<string, unknown>;
   return mapRow(row);
+}
+
+const CREDIT_APPLIED_META_PREFIX = "godmode_inference.credit_applied.";
+
+/**
+ * Top up once per Stripe event / checkout session id (signup + webhook safe).
+ * Returns null when this idempotency key was already applied.
+ */
+export function topUpGodModeInferenceGrantOnce(opts: {
+  userId: string;
+  kind: "pack" | "subscription";
+  budgetUsd: number;
+  idempotencyKey: string;
+  stripeSubscriptionId?: string | null;
+  db?: CoreDatabase;
+}): GodModeInferenceGrantRow | null {
+  const key = opts.idempotencyKey.trim();
+  if (!key) {
+    return topUpGodModeInferenceGrant({
+      userId: opts.userId,
+      kind: opts.kind,
+      budgetUsd: opts.budgetUsd,
+      stripeSubscriptionId: opts.stripeSubscriptionId,
+      db: opts.db,
+    });
+  }
+  const db = opts.db ?? getCloudDb();
+  ensureSchema(db);
+  const metaKey = `${CREDIT_APPLIED_META_PREFIX}${key}`;
+  try {
+    if (getPlatformMeta(db, metaKey)) return null;
+  } catch {
+    /* Cloud DB optional in some tests */
+  }
+  const grant = topUpGodModeInferenceGrant({
+    userId: opts.userId,
+    kind: opts.kind,
+    budgetUsd: opts.budgetUsd,
+    stripeSessionId: key,
+    stripeSubscriptionId: opts.stripeSubscriptionId,
+    db,
+  });
+  try {
+    setPlatformMeta(db, metaKey, opts.userId);
+  } catch {
+    /* ignore */
+  }
+  return grant;
 }
 
 export function listGodModeInferenceGrantStats(db: CoreDatabase = getCloudDb()): {

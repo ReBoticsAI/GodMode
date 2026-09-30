@@ -6,6 +6,7 @@ import {
   updateGodModeInferenceConfig,
   fetchAdminGodModeInferenceHealth,
   fetchAdminGodModeInferenceGrants,
+  createAdminGodModeInferenceGrant,
   revokeAdminGodModeInferenceGrant,
   setAdminDefaultTrialBudget,
   type GodModeInferenceConfig,
@@ -157,6 +158,8 @@ export function AdminGodModeInferencePanel() {
   } | null>(null);
   const [grants, setGrants] = useState<AdminGodModeInferenceGrant[]>([]);
   const [defaultBudgetDraft, setDefaultBudgetDraft] = useState("0.10");
+  const [complimentaryUserId, setComplimentaryUserId] = useState("");
+  const [complimentaryBudget, setComplimentaryBudget] = useState("5");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deepseekKey, setDeepseekKey] = useState("");
@@ -246,6 +249,30 @@ export function AdminGodModeInferencePanel() {
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Revoke failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const grantComplimentary = async () => {
+    const userId = complimentaryUserId.trim();
+    const budgetUsd = Number(complimentaryBudget);
+    if (!userId) {
+      toast.error("Enter a user id");
+      return;
+    }
+    if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) {
+      toast.error("Enter a positive USD budget");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createAdminGodModeInferenceGrant({ userId, budgetUsd });
+      toast.success(`Granted $${budgetUsd.toFixed(2)} Inference credit`);
+      setComplimentaryUserId("");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Grant failed");
     } finally {
       setBusy(false);
     }
@@ -356,6 +383,44 @@ export function AdminGodModeInferencePanel() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Complimentary Inference credit</CardTitle>
+          <CardDescription>
+            Add prepaid retail credit for a user without Stripe. Default $5.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end gap-3">
+          <div className="flex min-w-[16rem] flex-col gap-2">
+            <Label htmlFor="admin-inference-user">User id</Label>
+            <Input
+              id="admin-inference-user"
+              value={complimentaryUserId}
+              onChange={(e) => setComplimentaryUserId(e.target.value)}
+              placeholder="uuid"
+            />
+          </div>
+          <div className="flex min-w-[8rem] flex-col gap-2">
+            <Label htmlFor="admin-inference-budget">Budget (USD)</Label>
+            <Input
+              id="admin-inference-budget"
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={complimentaryBudget}
+              onChange={(e) => setComplimentaryBudget(e.target.value)}
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => void grantComplimentary()}
+          >
+            {busy ? <Spinner className="size-4" /> : "Grant credit"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

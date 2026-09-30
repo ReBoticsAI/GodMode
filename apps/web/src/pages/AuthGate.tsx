@@ -99,6 +99,7 @@ export default function AuthGate() {
       label: string;
       amountLabel: string;
       interval: "month" | "year" | "one_time";
+      includedInferenceBudgetUsd?: number;
     }>
   >([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
@@ -510,13 +511,21 @@ export default function AuthGate() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         {plan.id === "seller"
                           ? "Marketplace Sell seat only. Commerce access without a full Cloud workspace. Billed monthly via Stripe."
-                          : plan.interval === "year"
-                            ? "Billed yearly via Stripe. Lower total than twelve monthly payments (about 4.5 months of savings)."
-                            : plan.interval === "month"
-                              ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
-                              : checkoutMode === "subscription"
-                                ? "Subscription billed via Stripe Checkout."
-                                : "One-time payment via Stripe Checkout."}
+                          : plan.id.includes("inference")
+                            ? plan.includedInferenceBudgetUsd
+                              ? `Cloud seat plus $${plan.includedInferenceBudgetUsd} Inference credit each billing period. Models from GodMode.`
+                              : "Cloud seat with included GodMode Inference credit. Models from GodMode."
+                            : plan.id === "monthly" || plan.id === "yearly"
+                              ? plan.interval === "year"
+                                ? "Cloud only (bring your own keys). Billed yearly via Stripe."
+                                : "Cloud only (bring your own keys). Billed monthly via Stripe. Cancel anytime in Stripe later."
+                              : plan.interval === "year"
+                                ? "Billed yearly via Stripe. Lower total than twelve monthly payments (about 4.5 months of savings)."
+                                : plan.interval === "month"
+                                  ? "Billed monthly via Stripe. Cancel anytime in Stripe later."
+                                  : checkoutMode === "subscription"
+                                    ? "Subscription billed via Stripe Checkout."
+                                    : "One-time payment via Stripe Checkout."}
                       </p>
                     </button>
                   );

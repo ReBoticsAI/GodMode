@@ -72,6 +72,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-admin-grants-create",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/admin/grants",
+    rationale:
+      "Platform-admin complimentary Inference credit grant (no Stripe); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "godmode-inference-admin-grants-patch",
     methods: ["PATCH"],
     pathPattern: "/api/godmode-inference/admin/grants/:",

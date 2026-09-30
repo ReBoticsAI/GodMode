@@ -1,6 +1,7 @@
 /**
- * GodMode Inference commerce: $1 packs + subscription ladder.
+ * GodMode Inference commerce: prepaid packs ($5–$100).
  * Separate from SaaS Cloud seats. Tops up trial_inference_grants budgets.
+ * Cloud with Inference bundles live on SaaS plans (included credit on seat renew).
  */
 
 import { config } from "../config.js";
@@ -21,14 +22,7 @@ import {
   markInferenceCloudCheckoutPaid,
 } from "./godmode-inference-cloud-checkout.js";
 
-export type GodModeInferencePlanInterval =
-  | "day"
-  | "week"
-  | "month"
-  | "quarter"
-  | "semiannual"
-  | "year"
-  | "one_time";
+export type GodModeInferencePlanInterval = "one_time";
 
 export type GodModeInferencePlanPublic = {
   id: string;
@@ -51,98 +45,78 @@ function stripeForm(params: Record<string, string>): URLSearchParams {
   return body;
 }
 
-/** $1 pack always offered when Stripe is configured (price id optional; price_data fallback). */
+const PACK_DEFS: Array<{
+  id: string;
+  env: string;
+  label: string;
+  amountLabel: string;
+  budgetUsd: number;
+  unitAmountCents: number;
+}> = [
+  {
+    id: "pack_5",
+    env: "STRIPE_GODMODE_INFERENCE_PRICE_PACK_5",
+    label: "$5 GodMode Inference pack",
+    amountLabel: "$5",
+    budgetUsd: 5,
+    unitAmountCents: 500,
+  },
+  {
+    id: "pack_10",
+    env: "STRIPE_GODMODE_INFERENCE_PRICE_PACK_10",
+    label: "$10 GodMode Inference pack",
+    amountLabel: "$10",
+    budgetUsd: 10,
+    unitAmountCents: 1000,
+  },
+  {
+    id: "pack_25",
+    env: "STRIPE_GODMODE_INFERENCE_PRICE_PACK_25",
+    label: "$25 GodMode Inference pack",
+    amountLabel: "$25",
+    budgetUsd: 25,
+    unitAmountCents: 2500,
+  },
+  {
+    id: "pack_50",
+    env: "STRIPE_GODMODE_INFERENCE_PRICE_PACK_50",
+    label: "$50 GodMode Inference pack",
+    amountLabel: "$50",
+    budgetUsd: 50,
+    unitAmountCents: 5000,
+  },
+  {
+    id: "pack_100",
+    env: "STRIPE_GODMODE_INFERENCE_PRICE_PACK_100",
+    label: "$100 GodMode Inference pack",
+    amountLabel: "$100",
+    budgetUsd: 100,
+    unitAmountCents: 10000,
+  },
+];
+
+export function isGodModeInferencePackPlanId(planId: string | null | undefined): boolean {
+  const id = (planId ?? "").trim();
+  if (!id) return false;
+  if (id === "pack") return true;
+  return PACK_DEFS.some((p) => p.id === id);
+}
+
+/** Prepaid packs always offered when Stripe (or Cloud delegate) is available. */
 export function listGodModeInferencePlans(): GodModeInferencePlanPublic[] {
   const plans: GodModeInferencePlanPublic[] = [];
-  const packPrice = readEnv("STRIPE_GODMODE_INFERENCE_PRICE_PACK");
-  plans.push({
-    id: "pack",
-    priceId: packPrice || "price_data:pack",
-    label: "$1 GodMode Inference pack",
-    amountLabel: "$1",
-    interval: "one_time",
-    budgetUsd: packBudgetUsd(),
-  });
-
-  const defs: Array<{
-    id: string;
-    env: string;
-    label: string;
-    amountLabel: string;
-    interval: GodModeInferencePlanInterval;
-    budgetEnv: string;
-    defaultBudget: number;
-  }> = [
-    {
-      id: "daily",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_DAILY",
-      label: "Daily",
-      amountLabel: "Daily",
-      interval: "day",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_DAILY_USD",
-      defaultBudget: 1,
-    },
-    {
-      id: "weekly",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_WEEKLY",
-      label: "Weekly",
-      amountLabel: "Weekly",
-      interval: "week",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_WEEKLY_USD",
-      defaultBudget: 5,
-    },
-    {
-      id: "monthly",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_MONTHLY",
-      label: "Monthly",
-      amountLabel: "Monthly",
-      interval: "month",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_MONTHLY_USD",
-      defaultBudget: 15,
-    },
-    {
-      id: "quarterly",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_QUARTERLY",
-      label: "Quarterly",
-      amountLabel: "Quarterly",
-      interval: "quarter",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_QUARTERLY_USD",
-      defaultBudget: 40,
-    },
-    {
-      id: "semiannual",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_SEMIANNUAL",
-      label: "Semi-annual",
-      amountLabel: "Semi-annual",
-      interval: "semiannual",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_SEMIANNUAL_USD",
-      defaultBudget: 70,
-    },
-    {
-      id: "yearly",
-      env: "STRIPE_GODMODE_INFERENCE_PRICE_YEARLY",
-      label: "Yearly",
-      amountLabel: "Yearly",
-      interval: "year",
-      budgetEnv: "GODMODE_INFERENCE_BUDGET_YEARLY_USD",
-      defaultBudget: 120,
-    },
-  ];
-
-  for (const d of defs) {
-    const priceId = readEnv(d.env);
-    if (!priceId) continue;
-    const budgetRaw = Number(readEnv(d.budgetEnv));
+  const legacyPack = readEnv("STRIPE_GODMODE_INFERENCE_PRICE_PACK");
+  for (const d of PACK_DEFS) {
+    let priceId = readEnv(d.env);
+    // Legacy single pack env maps to $5 when the $5-specific env is unset.
+    if (!priceId && d.id === "pack_5" && legacyPack) priceId = legacyPack;
     plans.push({
       id: d.id,
-      priceId,
+      priceId: priceId || `price_data:${d.id}`,
       label: d.label,
       amountLabel: d.amountLabel,
-      interval: d.interval,
-      budgetUsd:
-        Number.isFinite(budgetRaw) && budgetRaw > 0
-          ? budgetRaw
-          : d.defaultBudget,
+      interval: "one_time",
+      budgetUsd: d.budgetUsd,
     });
   }
   return plans;
@@ -214,6 +188,11 @@ export function getGodModeInferenceUserStatus(
   };
 }
 
+function resolvePackDef(planId: string) {
+  const id = planId.trim() === "pack" ? "pack_5" : planId.trim();
+  return PACK_DEFS.find((p) => p.id === id) ?? null;
+}
+
 export async function createGodModeInferenceCheckoutSession(opts: {
   userId?: string;
   email?: string;
@@ -227,22 +206,23 @@ export async function createGodModeInferenceCheckoutSession(opts: {
   if (!secret) {
     throw Object.assign(new Error("Stripe is not configured"), { status: 503 });
   }
+  const requested = opts.planId.trim() === "pack" ? "pack_5" : opts.planId.trim();
   const plans = listGodModeInferencePlans();
-  const plan = plans.find((p) => p.id === opts.planId);
+  const plan = plans.find((p) => p.id === requested);
   if (!plan) {
     throw Object.assign(new Error("Unknown GodMode Inference plan"), {
       status: 400,
     });
   }
+  const packDef = resolvePackDef(plan.id);
   const email = (opts.email ?? "").trim().toLowerCase();
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.startsWith("visitor+");
   if (!opts.cloudClaim && !emailOk) {
     throw Object.assign(new Error("Valid email is required"), { status: 400 });
   }
 
-  const mode = plan.interval === "one_time" ? "payment" : "subscription";
   const params: Record<string, string> = {
-    mode,
+    mode: "payment",
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
     "metadata[godmode_inference]": "1",
@@ -257,27 +237,14 @@ export async function createGodModeInferenceCheckoutSession(opts: {
   }
 
   if (plan.priceId.startsWith("price_data:") || !plan.priceId.startsWith("price_")) {
-    // $1 pack without a pre-created Stripe Price: use price_data.
+    const cents = packDef?.unitAmountCents ?? Math.round(plan.budgetUsd * 100);
     params["line_items[0][price_data][currency]"] = "usd";
-    params["line_items[0][price_data][unit_amount]"] = "100";
-    params["line_items[0][price_data][product_data][name]"] =
-      "GodMode Inference pack";
+    params["line_items[0][price_data][unit_amount]"] = String(cents);
+    params["line_items[0][price_data][product_data][name]"] = plan.label;
     params["line_items[0][quantity]"] = "1";
   } else {
     params["line_items[0][price]"] = plan.priceId;
     params["line_items[0][quantity]"] = "1";
-  }
-
-  if (mode === "subscription") {
-    params["subscription_data[metadata][godmode_inference]"] = "1";
-    params["subscription_data[metadata][godmode_inference_plan]"] = plan.id;
-    params["subscription_data[metadata][godmode_inference_budget_usd]"] =
-      String(plan.budgetUsd);
-    if (opts.cloudClaim) {
-      params["subscription_data[metadata][godmode_inference_cloud]"] = "1";
-    } else if (opts.userId) {
-      params["subscription_data[metadata][godmode_inference_user]"] = opts.userId;
-    }
   }
 
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -312,9 +279,9 @@ export async function createGodModeInferenceCheckoutSession(opts: {
 function applyCheckoutGrant(meta: Record<string, string>, sessionId: string, subscriptionId?: string | null) {
   const userId = meta.godmode_inference_user?.trim();
   if (!userId) return false;
-  const planId = meta.godmode_inference_plan?.trim() || "pack";
+  const planId = meta.godmode_inference_plan?.trim() || "pack_5";
   const budget = Number(meta.godmode_inference_budget_usd) || packBudgetUsd();
-  const kind = planId === "pack" ? "pack" : "subscription";
+  const kind = isGodModeInferencePackPlanId(planId) ? "pack" : "subscription";
   topUpGodModeInferenceGrant({
     userId,
     kind,

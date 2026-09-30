@@ -7,6 +7,7 @@ import {
   getGodModeInferenceUserStatus,
   handleGodModeInferenceStripeWebhook,
   getAdminGodModeInferenceHealth,
+  isGodModeInferencePackPlanId,
 } from "../services/godmode-inference-billing.js";
 import {
   defaultTrialBudgetUsd,
@@ -48,7 +49,7 @@ export function createGodModeInferenceRouter(): Router {
       const user = req.user!;
       const email = (user.email ?? "").trim().toLowerCase();
       const planId =
-        typeof req.body?.planId === "string" ? req.body.planId.trim() : "pack";
+        typeof req.body?.planId === "string" ? req.body.planId.trim() : "pack_10";
       const webBase = config.web.publicUrl.replace(/\/$/, "");
       const successUrl =
         typeof req.body?.successUrl === "string" && req.body.successUrl.trim()
@@ -104,7 +105,7 @@ export function createGodModeInferenceRouter(): Router {
       const claimed = await claimDelegatedInferenceCheckout(sessionId);
       const grant = topUpGodModeInferenceGrant({
         userId: req.user!.id,
-        kind: claimed.planId === "pack" ? "pack" : "subscription",
+        kind: isGodModeInferencePackPlanId(claimed.planId) ? "pack" : "subscription",
         budgetUsd: claimed.budgetUsd,
         stripeSessionId: sessionId,
       });
@@ -131,7 +132,7 @@ export function createGodModeInferenceRouter(): Router {
     }
     try {
       const planId =
-        typeof req.body?.planId === "string" ? req.body.planId.trim() : "pack";
+        typeof req.body?.planId === "string" ? req.body.planId.trim() : "pack_10";
       const successUrl = assertInferenceCloudReturnUrl(req.body?.successUrl, "success");
       const cancelUrl = assertInferenceCloudReturnUrl(req.body?.cancelUrl, "cancel");
       const email = typeof req.body?.email === "string" ? req.body.email : undefined;
@@ -204,6 +205,40 @@ export function createGodModeInferenceRouter(): Router {
       }),
       defaultTrialBudgetUsd: defaultTrialBudgetUsd(),
     });
+  });
+
+  /** Create complimentary Inference credit for a user (no Stripe). */
+  router.post("/admin/grants", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    try {
+      const userId = String(req.body?.userId ?? req.body?.user_id ?? "").trim();
+      if (!userId) {
+        res.status(400).json({ error: "userId required" });
+        return;
+      }
+      const budgetRaw = Number(req.body?.budgetUsd ?? req.body?.budget_usd ?? 5);
+      if (!Number.isFinite(budgetRaw) || budgetRaw <= 0) {
+        res.status(400).json({ error: "budgetUsd must be a positive number" });
+        return;
+      }
+      const grant = topUpGodModeInferenceGrant({
+        userId,
+        kind: "pack",
+        budgetUsd: budgetRaw,
+      });
+      res.status(201).json({ grant: toAdminGodModeInferenceGrant(grant) });
+    } catch (err) {
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: number }).status) || 500
+          : 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : "Grant failed",
+      });
+    }
   });
 
   router.patch("/admin/grants/:id", requireAuth, (req, res) => {

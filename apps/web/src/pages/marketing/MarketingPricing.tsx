@@ -18,9 +18,19 @@ import {
   marketingPageDescriptionClass,
 } from "./MarketingLayout";
 import { CLOUD_APP_HOME } from "./cloudAppUrl";
-import { CLOUD_MONTHLY_PRICE, CLOUD_YEARLY_PRICE } from "@/lib/cloud-guide";
+import {
+  CLOUD_INFERENCE_PLUS_PRICE,
+  CLOUD_INFERENCE_PLUS_YEARLY,
+  CLOUD_INFERENCE_PRO_PRICE,
+  CLOUD_INFERENCE_PRO_YEARLY,
+  CLOUD_INFERENCE_STARTER_PRICE,
+  CLOUD_INFERENCE_STARTER_YEARLY,
+  CLOUD_MONTHLY_PRICE,
+  CLOUD_YEARLY_PRICE,
+} from "@/lib/cloud-guide";
 import {
   INFERENCE_PACK_PRICE,
+  INFERENCE_PACK_PRICES,
   playInferenceOffer,
 } from "@/lib/inference-offer";
 
@@ -81,9 +91,10 @@ export default function MarketingPricing() {
             </CardDescription>
           </CardHeader>
           <CardContent className={pricingContentClass}>
-            <p className="text-3xl font-bold">{INFERENCE_PACK_PRICE}</p>
+            <p className="text-3xl font-bold">From {INFERENCE_PACK_PRICE}</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
-              Published pack. Tops up the managed balance. The model is GLM 5.3 Flash.
+              Prepaid packs: {INFERENCE_PACK_PRICES.join(", ")}. Tops up the managed
+              balance at face value. The model is GLM 5.3 Flash.
             </p>
           </CardContent>
           <CardFooter className={pricingFooterClass}>
@@ -117,12 +128,12 @@ export default function MarketingPricing() {
           <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>Cloud Monthly</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
-              We host GodMode for you. Choose a plan, pay with Stripe, then create your
-              account and verify email.
+              We host GodMode for you. Bring your own model keys. Choose a plan, pay with
+              Stripe, then create your account and verify email.
             </CardDescription>
           </CardHeader>
           <CardContent className={pricingContentClass}>
-            <p className="text-3xl font-bold">$9.99</p>
+            <p className="text-3xl font-bold">{CLOUD_MONTHLY_PRICE}</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Per month. Cancel anytime from the billing portal.
             </p>
@@ -140,7 +151,7 @@ export default function MarketingPricing() {
             </CardDescription>
           </CardHeader>
           <CardContent className={pricingContentClass}>
-            <p className="text-3xl font-bold">$74.99</p>
+            <p className="text-3xl font-bold">{CLOUD_YEARLY_PRICE}</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
               Lower yearly total than twelve monthly payments (about 4.5 months of savings).
             </p>
@@ -154,15 +165,18 @@ export default function MarketingPricing() {
           <CardHeader className={pricingHeaderClass}>
             <CardTitle className={marketingCardTitleClass}>Cloud with Inference</CardTitle>
             <CardDescription className={marketingCardDescriptionClass}>
-              GodMode hosts the workspace and supplies the models. You are not running
-              either on this computer, and you do not bring your own key.
+              GodMode hosts the workspace and supplies the models. One Subscribe includes
+              Cloud and monthly Inference credit. You do not bring your own key.
             </CardDescription>
           </CardHeader>
           <CardContent className={pricingContentClass}>
-            <p className="text-3xl font-bold">{CLOUD_MONTHLY_PRICE}</p>
+            <p className="text-3xl font-bold">From {CLOUD_INFERENCE_STARTER_PRICE}</p>
             <p className="mt-1 text-base leading-relaxed text-muted-foreground">
-              Cloud Monthly, or {CLOUD_YEARLY_PRICE} yearly, plus the {INFERENCE_PACK_PRICE}{" "}
-              Inference pack. GLM 5.3 Flash.
+              Starter {CLOUD_INFERENCE_STARTER_PRICE}/mo ($5 credit), Plus{" "}
+              {CLOUD_INFERENCE_PLUS_PRICE}/mo ($10), Pro {CLOUD_INFERENCE_PRO_PRICE}/mo ($25).
+              Yearly {CLOUD_INFERENCE_STARTER_YEARLY} / {CLOUD_INFERENCE_PLUS_YEARLY} /{" "}
+              {CLOUD_INFERENCE_PRO_YEARLY}. Save vs buying Cloud and packs separately. GLM
+              5.3 Flash.
             </p>
           </CardContent>
           <CardFooter className={pricingFooterClass}>

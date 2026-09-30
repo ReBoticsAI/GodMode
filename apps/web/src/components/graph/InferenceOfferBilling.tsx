@@ -28,12 +28,50 @@ import {
 import type { InferenceOfferKind } from "@/lib/inference-offer";
 import { useTenant } from "@/lib/tenant-context";
 
-type CloudPlan = { id: "monthly" | "yearly"; label: string; amountLabel: string };
+type CloudPlan = {
+  id: string;
+  label: string;
+  amountLabel: string;
+  includedInferenceBudgetUsd?: number;
+};
 
-const FALLBACK_CLOUD_PLANS: CloudPlan[] = [
+const FALLBACK_BYOK_PLANS: CloudPlan[] = [
   { id: "monthly", label: "Cloud Monthly", amountLabel: `${CLOUD_MONTHLY_PRICE}/month` },
   { id: "yearly", label: "Cloud Yearly", amountLabel: `${CLOUD_YEARLY_PRICE}/year` },
 ];
+
+const FALLBACK_BUNDLE_PLANS: CloudPlan[] = [
+  {
+    id: "monthly_inference",
+    label: "Cloud with Inference",
+    amountLabel: "$12.99/month",
+    includedInferenceBudgetUsd: 5,
+  },
+  {
+    id: "monthly_inference_plus",
+    label: "Cloud with Inference Plus",
+    amountLabel: "$17.99/month",
+    includedInferenceBudgetUsd: 10,
+  },
+  {
+    id: "monthly_inference_pro",
+    label: "Cloud with Inference Pro",
+    amountLabel: "$29.99/month",
+    includedInferenceBudgetUsd: 25,
+  },
+];
+
+const FALLBACK_PACKS: GodModeInferencePlan[] = [
+  { id: "pack_5", label: "$5 pack", amountLabel: "$5", priceId: "", interval: "one_time", budgetUsd: 5 },
+  { id: "pack_10", label: "$10 pack", amountLabel: "$10", priceId: "", interval: "one_time", budgetUsd: 10 },
+  { id: "pack_25", label: "$25 pack", amountLabel: "$25", priceId: "", interval: "one_time", budgetUsd: 25 },
+  { id: "pack_50", label: "$50 pack", amountLabel: "$50", priceId: "", interval: "one_time", budgetUsd: 50 },
+  { id: "pack_100", label: "$100 pack", amountLabel: "$100", priceId: "", interval: "one_time", budgetUsd: 100 },
+];
+
+function isInferenceBundlePlanId(id: string): boolean {
+  return id.includes("inference") && id !== "seller";
+}
 
 export function InferenceOfferBilling({
   kind,
@@ -47,7 +85,8 @@ export function InferenceOfferBilling({
   const [status, setStatus] = useState<GodModeInferenceUserStatus | null>(null);
   const [plans, setPlans] = useState<GodModeInferencePlan[]>([]);
   const [paymentsConfigured, setPaymentsConfigured] = useState<boolean | null>(null);
-  const [cloudPlans, setCloudPlans] = useState<CloudPlan[]>(FALLBACK_CLOUD_PLANS);
+  const [bundlePlans, setBundlePlans] = useState<CloudPlan[]>(FALLBACK_BUNDLE_PLANS);
+  const [byokPlans, setByokPlans] = useState<CloudPlan[]>(FALLBACK_BYOK_PLANS);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
@@ -80,17 +119,20 @@ export function InferenceOfferBilling({
       void fetchSaasPaywall()
         .then((paywall) => {
           if (cancelled) return;
-          const next: CloudPlan[] = [];
+          const bundles: CloudPlan[] = [];
+          const byok: CloudPlan[] = [];
           for (const plan of paywall.plans) {
-            if (plan.id === "monthly" || plan.id === "yearly") {
-              next.push({
-                id: plan.id,
-                label: plan.label,
-                amountLabel: plan.amountLabel,
-              });
-            }
+            const row: CloudPlan = {
+              id: plan.id,
+              label: plan.label,
+              amountLabel: plan.amountLabel,
+              includedInferenceBudgetUsd: plan.includedInferenceBudgetUsd,
+            };
+            if (isInferenceBundlePlanId(plan.id)) bundles.push(row);
+            else if (plan.id === "monthly" || plan.id === "yearly") byok.push(row);
           }
-          if (next.length) setCloudPlans(next);
+          if (bundles.length) setBundlePlans(bundles);
+          if (byok.length) setByokPlans(byok);
         })
         .catch(() => undefined);
     }
@@ -122,7 +164,7 @@ export function InferenceOfferBilling({
     }
   };
 
-  const buyCloud = async (planId: "monthly" | "yearly") => {
+  const buyCloudPlan = async (planId: string) => {
     if (!canBillEmail(email, false)) {
       toast.error("Enter the email for the Cloud account");
       return;
@@ -136,10 +178,7 @@ export function InferenceOfferBilling({
     }
   };
 
-  const inferencePlans =
-    plans.length > 0
-      ? plans
-      : [{ id: "pack", label: "$1 GodMode Inference pack", amountLabel: "$1", priceId: "", interval: "one_time", budgetUsd: 1 }];
+  const inferencePlans = plans.length > 0 ? plans : FALLBACK_PACKS;
 
   return (
     <Card>
@@ -157,7 +196,7 @@ export function InferenceOfferBilling({
           {grant ? (
             <span className="text-xs text-muted-foreground">
               {grant.kind} · {grant.promptCount} turns · ${grant.spentUsd.toFixed(3)} spent
-              {grant.budgetUsd != null ? ` · $${grant.budgetUsd.toFixed(2)} pack` : ""}
+              {grant.budgetUsd != null ? ` · $${grant.budgetUsd.toFixed(2)} credit` : ""}
             </span>
           ) : null}
         </div>
@@ -175,14 +214,36 @@ export function InferenceOfferBilling({
                 onChange={(ev) => setEmail(ev.target.value)}
               />
             </Field>
+            <p className="text-xs font-medium">Cloud with Inference (seat + credit)</p>
             <div className="flex flex-wrap gap-2">
-              {cloudPlans.map((plan) => (
+              {bundlePlans.map((plan) => (
                 <Button
                   key={plan.id}
                   type="button"
+                  variant={plan.id === "monthly_inference" ? "default" : "outline"}
+                  disabled={Boolean(busy)}
+                  onClick={() => void buyCloudPlan(plan.id)}
+                >
+                  {busy === plan.id
+                    ? "Opening Stripe…"
+                    : `${plan.label} ${plan.amountLabel}${
+                        plan.includedInferenceBudgetUsd
+                          ? ` · $${plan.includedInferenceBudgetUsd} credit`
+                          : ""
+                      }`}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs font-medium text-muted-foreground">Cloud only (BYOK)</p>
+            <div className="flex flex-wrap gap-2">
+              {byokPlans.map((plan) => (
+                <Button
+                  key={plan.id}
+                  type="button"
+                  size="sm"
                   variant="outline"
                   disabled={Boolean(busy)}
-                  onClick={() => void buyCloud(plan.id)}
+                  onClick={() => void buyCloudPlan(plan.id)}
                 >
                   {busy === plan.id ? "Opening Stripe…" : `${plan.label} ${plan.amountLabel}`}
                 </Button>
@@ -192,14 +253,16 @@ export function InferenceOfferBilling({
         ) : null}
 
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium">GodMode Inference</p>
+          <p className="text-xs font-medium">
+            {kind === "cloud_inference" ? "Top up Inference packs" : "GodMode Inference packs"}
+          </p>
           <div className="flex flex-wrap gap-2">
             {inferencePlans.map((plan) => (
               <Button
                 key={plan.id}
                 type="button"
                 size="sm"
-                variant={plan.id === "pack" ? "default" : "outline"}
+                variant={plan.id === "pack_10" ? "default" : "outline"}
                 disabled={Boolean(busy) || paymentsConfigured === false}
                 onClick={() => void buyInference(plan.id)}
               >

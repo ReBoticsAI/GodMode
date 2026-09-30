@@ -8,6 +8,7 @@ import {
 } from "./marketplace-commerce.js";
 import { githubProjectsStatus } from "./github-integration.js";
 import { getUserDb } from "../user-registry.js";
+import { topUpGodModeInferenceGrantOnce } from "./godmode-inference-grants.js";
 
 /** Admin-granted Cloud access without Stripe. Distinct from platform admin (`is_admin`). */
 export const COMPLIMENTARY_PLAN_ID = "complimentary";
@@ -19,8 +20,55 @@ const WORKSPACE_PLAN_IDS = new Set([
   "monthly",
   "yearly",
   "default",
+  "monthly_inference",
+  "monthly_inference_plus",
+  "monthly_inference_pro",
+  "yearly_inference",
+  "yearly_inference_plus",
+  "yearly_inference_pro",
   COMPLIMENTARY_PLAN_ID,
 ]);
+
+/** Cloud with Inference plan ids (seat + included retail credit). */
+export const INFERENCE_BUNDLE_PLAN_IDS = new Set([
+  "monthly_inference",
+  "monthly_inference_plus",
+  "monthly_inference_pro",
+  "yearly_inference",
+  "yearly_inference_plus",
+  "yearly_inference_pro",
+]);
+
+export function isInferenceBundlePlanId(planId: string | null | undefined): boolean {
+  return INFERENCE_BUNDLE_PLAN_IDS.has((planId ?? "").trim());
+}
+
+/** Included GodMode Inference retail credit for a SaaS plan, or 0. */
+export function includedInferenceBudgetUsdForPlan(
+  planId: string | null | undefined
+): number {
+  const key = (planId ?? "").trim();
+  if (!key) return 0;
+  const configured = config.saas.plans.find((p) => p.id === key || p.priceId === key);
+  const fromConfig = configured?.includedInferenceBudgetUsd;
+  if (typeof fromConfig === "number" && fromConfig > 0) return fromConfig;
+  switch (key) {
+    case "monthly_inference":
+      return 5;
+    case "monthly_inference_plus":
+      return 10;
+    case "monthly_inference_pro":
+      return 25;
+    case "yearly_inference":
+      return 60;
+    case "yearly_inference_plus":
+      return 120;
+    case "yearly_inference_pro":
+      return 300;
+    default:
+      return 0;
+  }
+}
 
 export function isSellerPlanId(planId: string | null | undefined): boolean {
   return (planId ?? "").trim() === SELLER_PLAN_ID;
@@ -505,7 +553,21 @@ export function linkSubscriptionToUser(opts: {
        WHERE id=?`
     )
     .run(opts.userId, opts.email?.trim().toLowerCase() || null, row.id);
-  return findSubscriptionByUserId(core, opts.userId) ?? null;
+  const linked = findSubscriptionByUserId(core, opts.userId) ?? null;
+  if (
+    linked &&
+    opts.stripeSessionId &&
+    includedInferenceBudgetUsdForPlan(linked.plan_id) > 0
+  ) {
+    topUpGodModeInferenceGrantOnce({
+      userId: opts.userId,
+      kind: "subscription",
+      budgetUsd: includedInferenceBudgetUsdForPlan(linked.plan_id),
+      idempotencyKey: opts.stripeSessionId,
+      stripeSubscriptionId: linked.stripe_subscription_id,
+    });
+  }
+  return linked;
 }
 
 function subscriptionStatusGrantsCommerce(

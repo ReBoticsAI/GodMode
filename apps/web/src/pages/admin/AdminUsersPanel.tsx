@@ -3,6 +3,7 @@ import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import {
   createAdminTenantForUser,
   createAdminUser,
+  createAdminGodModeInferenceGrant,
   deleteAdminTenant,
   deleteAdminUser,
   fetchUsers,
@@ -292,6 +293,8 @@ function UserDialog({
   const [provisionDefaultTenant, setProvisionDefaultTenant] = useState(true);
   const [saving, setSaving] = useState(false);
   const [complimentaryBusy, setComplimentaryBusy] = useState(false);
+  const [inferenceBudget, setInferenceBudget] = useState("5");
+  const [inferenceBusy, setInferenceBusy] = useState(false);
 
   useEffect(() => {
     if (!mode) return;
@@ -396,6 +399,24 @@ function UserDialog({
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
       setComplimentaryBusy(false);
+    }
+  };
+
+  const grantInferenceCredit = async () => {
+    if (!user) return;
+    const budgetUsd = Number(inferenceBudget);
+    if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) {
+      toast.error("Enter a positive Inference budget");
+      return;
+    }
+    setInferenceBusy(true);
+    try {
+      await createAdminGodModeInferenceGrant({ userId: user.id, budgetUsd });
+      toast.success(`Granted $${budgetUsd.toFixed(2)} complimentary Inference credit`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Inference grant failed");
+    } finally {
+      setInferenceBusy(false);
     }
   };
 
@@ -531,6 +552,37 @@ function UserDialog({
                   ) : (
                     "Grant Seller complimentary"
                   )}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {user ? (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <p className="text-sm font-medium">Complimentary Inference</p>
+              <p className="text-sm text-muted-foreground">
+                Add prepaid retail credit without Stripe. Default $5.
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="flex min-w-[6rem] flex-col gap-1">
+                  <Label htmlFor="admin-user-inference-budget">Budget (USD)</Label>
+                  <Input
+                    id="admin-user-inference-budget"
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    value={inferenceBudget}
+                    onChange={(e) => setInferenceBudget(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={inferenceBusy}
+                  onClick={() => void grantInferenceCredit()}
+                >
+                  {inferenceBusy ? <Spinner className="size-3.5" /> : "Grant Inference credit"}
                 </Button>
               </div>
             </div>
