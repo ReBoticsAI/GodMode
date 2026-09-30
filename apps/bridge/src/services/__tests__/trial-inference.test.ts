@@ -40,7 +40,7 @@ function memoryCloud(): CoreDatabase {
     );
   `);
   db.prepare(
-    `INSERT INTO users (id, email, display_name) VALUES ('u1', 'a@b.c', 'Alex Dane')`
+    `INSERT INTO users (id, email, display_name) VALUES ('u1', 'a@b.c', 'Alex')`
   ).run();
   ensureTrialInferenceTables(db);
   return db as unknown as CoreDatabase;
@@ -89,7 +89,7 @@ describe("trial-inference", () => {
 
   it("personalizes greeting with GodMode display name and email", () => {
     const g = buildFirstLandGreeting({
-      displayName: "Alex Dane",
+      displayName: "Alex",
       email: "a@b.c",
     });
     expect(g.startsWith("Hey Alex.")).toBe(true);

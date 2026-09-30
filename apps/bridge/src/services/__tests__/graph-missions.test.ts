@@ -51,7 +51,7 @@ describe("graph-missions", () => {
     const first = completeGraphMission({
       missionId: "hub.check",
       userId: "user-1",
-      displayName: "Dane",
+      displayName: "Alex",
       cloudDb: cloud,
       instanceId: "test",
     });
@@ -61,7 +61,7 @@ describe("graph-missions", () => {
     const second = completeGraphMission({
       missionId: "hub.check",
       userId: "user-1",
-      displayName: "Dane",
+      displayName: "Alex",
       cloudDb: cloud,
       instanceId: "test",
     });
@@ -70,7 +70,7 @@ describe("graph-missions", () => {
     expect(second.totalPoints).toBe(first.totalPoints);
 
     const board = listGraphLeaderboard({ cloudDb: cloud, limit: 10 });
-    expect(board[0]?.displayName).toBe("Dane");
+    expect(board[0]?.displayName).toBe("Alex");
     expect(board[0]?.totalPoints).toBe(first.pointsAwarded);
     expect(board[0]?.missionsCompleted).toBe(1);
 
@@ -79,7 +79,7 @@ describe("graph-missions", () => {
       limit: 10,
       timeframe: "day",
     });
-    expect(dayBoard[0]?.displayName).toBe("Dane");
+    expect(dayBoard[0]?.displayName).toBe("Alex");
     expect(dayBoard[0]?.totalPoints).toBe(first.pointsAwarded);
 
     const allBoard = listGraphLeaderboard({
@@ -87,7 +87,7 @@ describe("graph-missions", () => {
       limit: 10,
       timeframe: "all",
     });
-    expect(allBoard[0]?.displayName).toBe("Dane");
+    expect(allBoard[0]?.displayName).toBe("Alex");
 
     const status = getGraphMissionsStatus({ userId: "user-1" });
     expect(status.attentionByNode["hub:heart"]).toBeUndefined();
