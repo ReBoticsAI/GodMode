@@ -3,6 +3,7 @@ import { insetBoundsInsideRails } from "@/lib/floating-window-bounds";
 import {
   CASCADE_OFFSET_PX,
   FOCUS_CENTER_GAP_PX,
+  FOCUS_EDGE_INSET_PX,
   focusWindowAnchors,
   layoutCascadeStack,
   layoutCenteredFocusCluster,
@@ -13,7 +14,7 @@ import {
 const bounds = { x: 0, y: 0, width: 1200, height: 700 };
 
 describe("layoutCenteredFocusCluster", () => {
-  it("centers chat alone when there are no companions", () => {
+  it("pins solo chat to the far left so tours keep the right side clear", () => {
     const seedW = 720;
     const seedH = 640;
     const { chat, companions, focusX } = layoutCenteredFocusCluster(
@@ -26,7 +27,7 @@ describe("layoutCenteredFocusCluster", () => {
     expect(focusX).toBe(600);
     expect(chat.width).toBe(seedW);
     expect(chat.height).toBe(seedH);
-    expect(chat.x).toBe(Math.round((bounds.width - seedW) / 2));
+    expect(chat.x).toBe(FOCUS_EDGE_INSET_PX);
     expect(chat.y).toBeGreaterThan(bounds.y);
     expect(chat.y + chat.height).toBeLessThan(bounds.y + bounds.height);
   });

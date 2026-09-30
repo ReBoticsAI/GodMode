@@ -72,14 +72,15 @@ export function focusWindowAnchors(
 }
 
 /**
- * Center a solo floating window in the playfield (chat alone, no companions).
+ * Pin a solo floating window to the far-left of the playfield so Graph tours
+ * and highlights stay visible on the right.
  */
 export function soloWindowAnchor(
   bounds: AnchorBounds,
   width: number,
   height: number
 ): { x: number; y: number } {
-  const x = bounds.x + Math.max(FOCUS_EDGE_INSET_PX, (bounds.width - width) / 2);
+  const x = bounds.x + FOCUS_EDGE_INSET_PX;
   const y = bounds.y + Math.max(FOCUS_EDGE_INSET_PX, (bounds.height - height) / 2);
   return clampPos(x, y, width, height, bounds);
 }
@@ -235,7 +236,7 @@ export function layoutCenteredFocusCluster(
   );
   const n = Math.max(0, Math.min(5, Math.floor(companionCount)));
 
-  // Solo chat: center in the playfield instead of parking left of the focus gap.
+  // Solo chat: pin left so Graph tours stay visible on the right.
   if (n === 0) {
     const chatW = Math.max(
       160,
