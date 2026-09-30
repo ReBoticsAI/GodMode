@@ -298,6 +298,7 @@ export function ChatGraphCanvas({
       navigator.hardwareConcurrency > 0 &&
       navigator.hardwareConcurrency <= 12);
   // Ether log is a large DOM tree; keep it closed on low-power / mid PCs until asked.
+  // Social (IntelligencePanel) still auto-opens on phone: lowPower must not gate that.
   const [etherChatOpen, setEtherChatOpen] = useState(() => !lowPower);
   const focusId =
     focusChatId ??
@@ -1663,13 +1664,14 @@ export function ChatGraphCanvas({
     chatInboxOpen ||
     openChatWindows.some((w) => !w.minimized);
 
-  // Desktop default: open IntelligencePanel as the agent chat window.
+  // Land with Social open (desktop float or phone playfield sheet).
+  // Do not gate on etherChatOpen / lowPower: phones would never bootstrap chat.
   const bootstrappedChat = useRef(false);
   useEffect(() => {
-    if (bootstrappedChat.current || !etherChatOpen) return;
+    if (bootstrappedChat.current) return;
     bootstrappedChat.current = true;
     ensureIntelligenceChat();
-  }, [etherChatOpen, ensureIntelligenceChat]);
+  }, [ensureIntelligenceChat]);
 
   const resetWindowAnchors = useCallback(() => {
     resetFocusSlotOrder();

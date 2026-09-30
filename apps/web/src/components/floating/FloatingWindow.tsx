@@ -762,7 +762,7 @@ export function FloatingWindow({
             {headerActions}
           </div>
         ) : null}
-        {onMinimize ? (
+        {onMinimize && !isPhone ? (
           <Button
             type="button"
             size="icon-sm"

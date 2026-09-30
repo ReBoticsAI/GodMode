@@ -78,7 +78,7 @@ import {
 } from "@/lib/focus-chrome";
 import { ChatTurn } from "./ChatTurn";
 import { useAiStatus } from "@/hooks/use-ai-status";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsPhone } from "@/hooks/use-mobile";
 import {
   focusWindowAnchors,
   soloWindowAnchor,
@@ -465,17 +465,7 @@ export function IntelligencePanel({
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
   const isMobile = useIsMobile();
-  const [isPhone, setIsPhone] = useState<boolean>(() =>
-    typeof window === "undefined"
-      ? false
-      : window.matchMedia("(max-width: 639px)").matches
-  );
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 639px)");
-    const onChange = () => setIsPhone(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  const isPhone = useIsPhone();
   useEffect(() => {
     const onGreeting = (ev: Event) => {
       const detail = (ev as CustomEvent<{ ready?: boolean }>).detail;
@@ -1870,6 +1860,8 @@ export function IntelligencePanel({
   ]);
 
   if (!panelOpen) return null;
+  // Phone: open (playfield fullscreen) or closed only. Minimized is treated as closed.
+  if (isPhone && panelMinimized) return null;
 
   const panelAccent = isDmMode ? "#38bdf8" : "#a78bfa";
   const panelShadow = isLight
@@ -1881,37 +1873,41 @@ export function IntelligencePanel({
   return (
     <aside
       ref={asideRef}
-      aria-hidden={panelMinimized ? true : undefined}
       style={
-        panelMinimized
-          ? { display: "none" }
-          : isPhone
-            ? undefined
-            : isMaximized
-              ? {
-                  left: bounds.x,
-                  top: bounds.y,
-                  width: bounds.width,
-                  height: bounds.height,
-                  maxWidth: bounds.width,
-                  maxHeight: bounds.height,
-                  borderColor: panelBorderMax,
-                }
-              : {
-                  left: pos.x,
-                  top: pos.y,
-                  width: currentWidth,
-                  height: currentHeight,
-                  maxWidth: bounds.width,
-                  maxHeight: bounds.height,
-                  borderColor: panelBorder,
-                  boxShadow: panelShadow,
-                }
+        isPhone
+          ? {
+              top: "var(--graph-top-chrome-band, 5.625rem)",
+              bottom: "var(--graph-composer-band, 7.25rem)",
+              borderColor: panelBorderMax,
+            }
+          : isMaximized
+            ? {
+                left: bounds.x,
+                top: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+                maxWidth: bounds.width,
+                maxHeight: bounds.height,
+                borderColor: panelBorderMax,
+              }
+            : {
+                left: pos.x,
+                top: pos.y,
+                width: currentWidth,
+                height: currentHeight,
+                maxWidth: bounds.width,
+                maxHeight: bounds.height,
+                borderColor: panelBorder,
+                boxShadow: panelShadow,
+              }
       }
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
         isPhone
-          ? "fixed inset-0 z-50"
+          ? cn(
+              "fixed inset-x-0 rounded-t-xl border-t",
+              GRAPH_CHAT_WINDOW_Z
+            )
           : `absolute ${GRAPH_CHAT_WINDOW_Z} rounded-xl border-2 shadow-2xl`
       )}
     >
@@ -1996,16 +1992,18 @@ export function IntelligencePanel({
           >
             <PlusIcon />
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Minimize"
-            title="Minimize"
-            onClick={() => setPanelMinimized(true)}
-          >
-            <MinusIcon />
-          </Button>
+          {!isPhone && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Minimize"
+              title="Minimize"
+              onClick={() => setPanelMinimized(true)}
+            >
+              <MinusIcon />
+            </Button>
+          )}
           {!isPhone && (
             <Button
               type="button"
