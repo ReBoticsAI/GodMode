@@ -247,8 +247,8 @@ function focusSeedSize(entries: FloatingWindowRegistration[]): {
     }
   }
   return {
-    width: best?.width ?? Math.round(560 * scale),
-    height: best?.height ?? Math.round(480 * scale),
+    width: best?.width ?? Math.round(720 * scale),
+    height: best?.height ?? Math.round(640 * scale),
   };
 }
 

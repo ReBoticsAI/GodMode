@@ -50,6 +50,7 @@ import {
   LEGACY_PANEL_X_KEY,
   LEGACY_PANEL_Y_KEY,
   PANEL_HEIGHT_KEY,
+  PANEL_LAYOUT_GEN_KEY,
   PANEL_TAB_KEY,
   PANEL_X_KEY,
   PANEL_Y_KEY,
@@ -348,10 +349,62 @@ const IntelligenceCtx = createContext<IntelligenceContextValue | null>(null);
 
 /** Shared sizing constants for the floating AI modal. */
 export const MIN_COMPOSER_WIDTH = 320;
-export const MAX_COMPOSER_WIDTH = 900;
-export const DEFAULT_COMPOSER_WIDTH = 560;
+export const MAX_COMPOSER_WIDTH = 1100;
+export const DEFAULT_COMPOSER_WIDTH = 720;
 export const MIN_PANEL_HEIGHT = 240;
-export const DEFAULT_PANEL_HEIGHT = 480;
+export const DEFAULT_PANEL_HEIGHT = 640;
+
+/**
+ * Bump when default Social geometry changes. Clears stored size/position once
+ * so large screens are not stuck on the legacy 560×480 focus-left layout.
+ */
+export const PANEL_LAYOUT_GEN = 2;
+
+/** ~42% of viewport width, floored at DEFAULT and capped at MAX. */
+export function defaultComposerWidthForViewport(
+  viewportWidth =
+    typeof window !== "undefined" ? window.innerWidth : 1280
+): number {
+  return clampComposerWidth(
+    Math.round(
+      Math.min(
+        MAX_COMPOSER_WIDTH,
+        Math.max(DEFAULT_COMPOSER_WIDTH, viewportWidth * 0.42)
+      )
+    )
+  );
+}
+
+/** ~72% of usable height (viewport minus chrome), floored at DEFAULT. */
+export function defaultPanelHeightForViewport(
+  viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight : 900
+): number {
+  const usable = Math.max(MIN_PANEL_HEIGHT, viewportHeight - 96);
+  return clampPanelHeight(
+    Math.round(Math.min(usable, Math.max(DEFAULT_PANEL_HEIGHT, usable * 0.72))),
+    usable
+  );
+}
+
+/** Drop stale Social geometry when layout generation advances. */
+function migratePanelLayoutGen(): void {
+  if (typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(PANEL_LAYOUT_GEN_KEY);
+  const current = Number.parseInt(raw ?? "0", 10);
+  if (Number.isFinite(current) && current >= PANEL_LAYOUT_GEN) return;
+  const keys: Array<[string, string]> = [
+    [COMPOSER_WIDTH_KEY, LEGACY_COMPOSER_WIDTH_KEY],
+    [PANEL_HEIGHT_KEY, LEGACY_PANEL_HEIGHT_KEY],
+    [PANEL_X_KEY, LEGACY_PANEL_X_KEY],
+    [PANEL_Y_KEY, LEGACY_PANEL_Y_KEY],
+  ];
+  for (const [next, legacy] of keys) {
+    window.localStorage.removeItem(next);
+    window.localStorage.removeItem(legacy);
+  }
+  window.localStorage.setItem(PANEL_LAYOUT_GEN_KEY, String(PANEL_LAYOUT_GEN));
+}
 
 function readStoredPanelTab(): PanelTab {
   if (typeof window === "undefined") return "chat";
@@ -481,22 +534,34 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const [seedText, setSeedText] = useState("");
   const [autoSendPrompt, setAutoSendPrompt] = useState<string | null>(null);
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
-  const [composerWidth, setComposerWidthState] = useState(() =>
-    clampComposerWidth(
-      readStoredNumber(COMPOSER_WIDTH_KEY, LEGACY_COMPOSER_WIDTH_KEY, DEFAULT_COMPOSER_WIDTH)
-    )
-  );
-  const [panelHeight, setPanelHeightState] = useState(() =>
-    clampPanelHeight(
-      readStoredNumber(PANEL_HEIGHT_KEY, LEGACY_PANEL_HEIGHT_KEY, DEFAULT_PANEL_HEIGHT)
-    )
-  );
-  const [panelX, setPanelXState] = useState<number | null>(() =>
-    readStoredNumberOrNull(PANEL_X_KEY, LEGACY_PANEL_X_KEY)
-  );
-  const [panelY, setPanelYState] = useState<number | null>(() =>
-    readStoredNumberOrNull(PANEL_Y_KEY, LEGACY_PANEL_Y_KEY)
-  );
+  const [composerWidth, setComposerWidthState] = useState(() => {
+    migratePanelLayoutGen();
+    return clampComposerWidth(
+      readStoredNumber(
+        COMPOSER_WIDTH_KEY,
+        LEGACY_COMPOSER_WIDTH_KEY,
+        defaultComposerWidthForViewport()
+      )
+    );
+  });
+  const [panelHeight, setPanelHeightState] = useState(() => {
+    migratePanelLayoutGen();
+    return clampPanelHeight(
+      readStoredNumber(
+        PANEL_HEIGHT_KEY,
+        LEGACY_PANEL_HEIGHT_KEY,
+        defaultPanelHeightForViewport()
+      )
+    );
+  });
+  const [panelX, setPanelXState] = useState<number | null>(() => {
+    migratePanelLayoutGen();
+    return readStoredNumberOrNull(PANEL_X_KEY, LEGACY_PANEL_X_KEY);
+  });
+  const [panelY, setPanelYState] = useState<number | null>(() => {
+    migratePanelLayoutGen();
+    return readStoredNumberOrNull(PANEL_Y_KEY, LEGACY_PANEL_Y_KEY);
+  });
   const [panelTab, setPanelTabState] = useState<PanelTab>(readStoredPanelTab);
   const [agentsSection, setAgentsSectionState] = useState<AgentsSection>(
     readStoredAgentsSection

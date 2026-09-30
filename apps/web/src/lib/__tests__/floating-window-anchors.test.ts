@@ -13,6 +13,24 @@ import {
 const bounds = { x: 0, y: 0, width: 1200, height: 700 };
 
 describe("layoutCenteredFocusCluster", () => {
+  it("centers chat alone when there are no companions", () => {
+    const seedW = 720;
+    const seedH = 640;
+    const { chat, companions, focusX } = layoutCenteredFocusCluster(
+      bounds,
+      seedW,
+      seedH,
+      0
+    );
+    expect(companions).toEqual([]);
+    expect(focusX).toBe(600);
+    expect(chat.width).toBe(seedW);
+    expect(chat.height).toBe(seedH);
+    expect(chat.x).toBe(Math.round((bounds.width - seedW) / 2));
+    expect(chat.y).toBeGreaterThan(bounds.y);
+    expect(chat.y + chat.height).toBeLessThan(bounds.y + bounds.height);
+  });
+
   it("centers chat + one companion around the playfield midX", () => {
     const seedW = 400;
     const seedH = 480;
