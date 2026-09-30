@@ -96,6 +96,7 @@ import ContactsFlow from "./pages/ContactsFlow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
 import { CloudGuideWindow } from "@/components/graph/CloudGuideWindow";
+import { InferenceOfferWindow } from "@/components/graph/InferenceOfferWindow";
 import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
 import { GraphEscMenu } from "@/components/graph/GraphEscMenu";
 import { pageElementFor } from "@/lib/page-registry";
@@ -276,6 +277,7 @@ function AppShell() {
         <IntelligencePanel />
         <InformationFloatingPanel />
         <CloudGuideWindow />
+        <InferenceOfferWindow />
         <MinimizedWindowsDock />
         <AppFooter />
       </div>

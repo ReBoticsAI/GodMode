@@ -54,9 +54,114 @@ export const DEFAULT_PACK_BUDGET_USD = 1;
 /** Heuristic USD per managed turn when providers do not return cost. */
 export const DEFAULT_TURN_COST_USD = 0.002;
 
+/**
+ * GodMode Inference retail (2× Z.AI GLM-5.3 Flash list).
+ * Override with GODMODE_INFERENCE_RETAIL_*_PER_M_USD.
+ */
+export const DEFAULT_RETAIL_INPUT_PER_M_USD = 0.3;
+export const DEFAULT_RETAIL_CACHED_PER_M_USD = 0.06;
+export const DEFAULT_RETAIL_OUTPUT_PER_M_USD = 1;
+
+export type GodModeInferenceUsage = {
+  promptTokens: number;
+  cachedTokens?: number;
+  completionTokens?: number;
+  reasoningTokens?: number;
+};
+
 function readEnv(name: string): string | undefined {
   const v = process.env[name]?.trim();
   return v || undefined;
+}
+
+function retailRatePerM(envName: string, fallback: number): number {
+  const raw = Number(readEnv(envName));
+  return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+}
+
+export function godModeInferenceRetailRates(): {
+  inputPerM: number;
+  cachedPerM: number;
+  outputPerM: number;
+} {
+  return {
+    inputPerM: retailRatePerM(
+      "GODMODE_INFERENCE_RETAIL_INPUT_PER_M_USD",
+      DEFAULT_RETAIL_INPUT_PER_M_USD
+    ),
+    cachedPerM: retailRatePerM(
+      "GODMODE_INFERENCE_RETAIL_CACHED_PER_M_USD",
+      DEFAULT_RETAIL_CACHED_PER_M_USD
+    ),
+    outputPerM: retailRatePerM(
+      "GODMODE_INFERENCE_RETAIL_OUTPUT_PER_M_USD",
+      DEFAULT_RETAIL_OUTPUT_PER_M_USD
+    ),
+  };
+}
+
+/** Retail USD for a turn. Prompt tokens include cached; cached is billed at the lower rate. */
+export function godModeInferenceRetailUsd(usage: GodModeInferenceUsage): number {
+  const rates = godModeInferenceRetailRates();
+  const prompt = Math.max(0, Number(usage.promptTokens) || 0);
+  const cached = Math.min(prompt, Math.max(0, Number(usage.cachedTokens) || 0));
+  const input = Math.max(0, prompt - cached);
+  const output =
+    Math.max(0, Number(usage.completionTokens) || 0) +
+    Math.max(0, Number(usage.reasoningTokens) || 0);
+  const usd =
+    (input * rates.inputPerM +
+      cached * rates.cachedPerM +
+      output * rates.outputPerM) /
+    1_000_000;
+  return Number.isFinite(usd) ? Math.max(0, usd) : 0;
+}
+
+/**
+ * Map OpenAI-compatible usage (incl. Z.AI details) into retail usage.
+ * Returns null when the payload has no usable token counts.
+ */
+export function parseGodModeInferenceUsage(
+  raw: unknown
+): GodModeInferenceUsage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const u = raw as Record<string, unknown>;
+  const prompt = Number(u.prompt_tokens ?? u.input_tokens ?? 0);
+  const completion = Number(u.completion_tokens ?? u.output_tokens ?? 0);
+  const details =
+    u.prompt_tokens_details && typeof u.prompt_tokens_details === "object"
+      ? (u.prompt_tokens_details as Record<string, unknown>)
+      : null;
+  const outDetails =
+    u.completion_tokens_details && typeof u.completion_tokens_details === "object"
+      ? (u.completion_tokens_details as Record<string, unknown>)
+      : null;
+  const cached = Number(
+    u.cached_tokens ?? details?.cached_tokens ?? details?.cached_tokens_total ?? 0
+  );
+  const reasoning = Number(
+    u.reasoning_tokens ?? outDetails?.reasoning_tokens ?? 0
+  );
+  if (
+    !Number.isFinite(prompt) &&
+    !Number.isFinite(completion) &&
+    !Number.isFinite(reasoning)
+  ) {
+    return null;
+  }
+  const promptTokens = Number.isFinite(prompt) ? Math.max(0, prompt) : 0;
+  const completionTokens = Number.isFinite(completion)
+    ? Math.max(0, completion)
+    : 0;
+  const reasoningTokens = Number.isFinite(reasoning) ? Math.max(0, reasoning) : 0;
+  const cachedTokens = Number.isFinite(cached) ? Math.max(0, cached) : 0;
+  if (promptTokens + completionTokens + reasoningTokens <= 0) return null;
+  return {
+    promptTokens,
+    cachedTokens,
+    completionTokens,
+    reasoningTokens,
+  };
 }
 
 export function packBudgetUsd(): number {

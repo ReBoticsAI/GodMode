@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { InferenceOfferWindow } from "@/components/graph/InferenceOfferWindow";
 import { MarketingLayout } from "./MarketingLayout";
 import MarketingHome from "./MarketingHome";
 import MarketingPricing from "./MarketingPricing";
@@ -34,6 +35,7 @@ export default function MarketingRoutes() {
           <Route path="contact" element={<MarketingContact />} />
         </Route>
       </Routes>
+      <InferenceOfferWindow />
       <Toaster richColors position="top-right" />
     </>
   );

@@ -12,9 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   fetchGodModeInferenceStatus,
-  createGodModeInferenceCheckout,
   type GodModeInferenceUserStatus,
 } from "@/api";
+import { startInferenceCheckout } from "@/lib/inference-checkout";
 
 /**
  * Managed GodMode Inference balance + $1 pack / subscription ladder.
@@ -41,12 +41,7 @@ export function GodModeInferencePanel() {
   const checkout = async (planId: string) => {
     setBusy(planId);
     try {
-      const session = await createGodModeInferenceCheckout(planId);
-      if (session.url) {
-        window.location.href = session.url;
-        return;
-      }
-      toast.error("Checkout did not return a URL");
+      await startInferenceCheckout(planId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Checkout failed");
     } finally {
@@ -67,10 +62,10 @@ export function GodModeInferencePanel() {
       <div>
         <h2 className="text-sm font-medium">GodMode Inference</h2>
         <p className="text-sm text-muted-foreground">
-          Managed Intelligence chat on DeepSeek, Z.AI, and Qwen under GodMode
-          accounts. Buy a $1 pack or subscribe through the same GodMode Cloud
-          Stripe billing used for seats. Not a vendor partnership claim. For your
-          own keys, use Supported BYOK. Local models stay available.
+          Managed Intelligence chat on GLM 5.3 Flash under GodMode accounts.
+          Buy a $1 pack or subscribe through the same Stripe billing used for
+          Cloud seats. For your own keys, use Supported BYOK. Local models stay
+          available.
         </p>
       </div>
 

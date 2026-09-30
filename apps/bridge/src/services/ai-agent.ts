@@ -19,9 +19,17 @@ import {
 export const DEFAULT_MAX_ITERATIONS = 32;
 export const TOOL_OUTPUT_MAX_CHARS = 7000;
 
+export type AgentContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface AgentMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Multimodal blocks forwarded to hosts that accept them (Z.AI Flash). */
+  parts?: AgentContentPart[];
+  /** Prior-turn thinking echoed when the host preserves reasoning. */
+  reasoning_content?: string;
   tool_calls?: Array<{
     id: string;
     type: "function";

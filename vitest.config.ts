@@ -137,6 +137,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/trial-inference.test.ts",
       "apps/bridge/src/services/__tests__/guide-ui-tools.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-isolation.test.ts",
+      "apps/bridge/src/services/__tests__/godmode-inference-retail.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-grants-admin.test.ts",
       "apps/bridge/src/services/__tests__/openrouter-platform.test.ts",
       "apps/bridge/src/services/__tests__/graph-projection.test.ts",

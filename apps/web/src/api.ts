@@ -7370,6 +7370,7 @@ export type GodModeInferencePlan = {
 export type GodModeInferenceUserStatus = {
   supplyReady: boolean;
   paymentsConfigured: boolean;
+  canCheckout?: boolean;
   plans: GodModeInferencePlan[];
   grant: {
     kind: string;
@@ -7385,10 +7386,39 @@ export function fetchGodModeInferenceStatus() {
   return api<GodModeInferenceUserStatus>("/godmode-inference/status");
 }
 
-export function createGodModeInferenceCheckout(planId = "pack") {
+export type GodModeInferenceBillingConfig = {
+  supplyReady: boolean;
+  paymentsConfigured: boolean;
+  publishableKey: string | null;
+  plans: GodModeInferencePlan[];
+  payPath: string;
+};
+
+export function fetchGodModeInferenceBilling() {
+  return api<GodModeInferenceBillingConfig>("/godmode-inference/config");
+}
+
+export function completeGodModeInferenceCheckout(sessionId: string) {
+  return api<{ ok: true; remainingUsd: number | null }>(
+    "/godmode-inference/checkout/complete",
+    { method: "POST", body: JSON.stringify({ sessionId }) }
+  );
+}
+
+export function createGodModeInferenceCheckout(
+  planId = "pack",
+  urls?: { successUrl?: string; cancelUrl?: string }
+) {
   return api<{ url: string; sessionId: string; planId: string }>(
     "/godmode-inference/checkout",
-    { method: "POST", body: JSON.stringify({ planId }) }
+    {
+      method: "POST",
+      body: JSON.stringify({
+        planId,
+        successUrl: urls?.successUrl,
+        cancelUrl: urls?.cancelUrl,
+      }),
+    }
   );
 }
 

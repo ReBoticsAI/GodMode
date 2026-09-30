@@ -36,6 +36,7 @@ import {
 import { ModeToggle } from "@/components/ModeToggle";
 import { WindowAnchorGridOverlay } from "@/components/floating/WindowAnchorGridOverlay";
 import { CreateWorkspaceDialog } from "@/components/CreateWorkspaceDialog";
+import { InferenceComposerChip } from "@/components/graph/InferenceComposerChip";
 import {
   labelForConnectKind,
   type GraphConnectKind,
@@ -2243,17 +2244,20 @@ export function ChatGraphCanvas({
             onComposerEscape={onComposerEscape}
             inputRef={composerInputRef}
             statusChips={
-              totalPoints != null ? (
-                <button
-                  type="button"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border/50 bg-card/80 px-2.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label={`${totalPoints} points. Open Top 10 Board`}
-                  onClick={() => setTopTenOpen(true)}
-                >
-                  <TrophyIcon className="size-3.5" />
-                  <span>{totalPoints} pts</span>
-                </button>
-              ) : null
+              <>
+                <InferenceComposerChip />
+                {totalPoints != null ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border/50 bg-card/80 px-2.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label={`${totalPoints} points. Open Top 10 Board`}
+                    onClick={() => setTopTenOpen(true)}
+                  >
+                    <TrophyIcon className="size-3.5" />
+                    <span>{totalPoints} pts</span>
+                  </button>
+                ) : null}
+              </>
             }
           />
         </div>

@@ -40,6 +40,30 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-checkout-complete",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/checkout/complete",
+    rationale:
+      "Local applies a paid Cloud Stripe session onto this machine's Inference balance. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-cloud-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/cloud-checkout",
+    rationale:
+      "Unauthenticated Stripe Checkout on GodMode Cloud for Local Inference buyers, same commerce host as Marketplace and Seller. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-cloud-checkout-claim",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/cloud-checkout/claim",
+    rationale:
+      "Local claims a paid Cloud Inference Checkout once. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "godmode-inference-admin-grants-list",
     methods: ["GET"],
     pathPattern: "/api/godmode-inference/admin/grants",

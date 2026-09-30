@@ -56,6 +56,11 @@ import {
 } from "@/lib/intelligence-interests";
 import { interestTour } from "@/lib/interest-tour";
 import { CLOUD_GUIDE_DONE_EVENT, playCloudGuide } from "@/lib/cloud-guide";
+import {
+  INFERENCE_OFFER_DONE_EVENT,
+  playInferenceOffer,
+  type InferenceOfferKind,
+} from "@/lib/inference-offer";
 import { AI_NAME } from "@/lib/navigation";
 import { detectDesktopOsFromNavigator } from "@/lib/desktop-os";
 import {
@@ -123,7 +128,8 @@ import { AutomationsPanel } from "@/pages/Automations";
 import { KnowledgePanel } from "@/pages/intelligence-flow/KnowledgePanel";
 import { NotificationsList } from "@/components/NotificationsList";
 import { ChatDirectorySidebar } from "./ChatDirectorySidebar";
-import { ChatTargetSearch } from "./ChatTargetSearch";
+import { GuideChoiceChart } from "./GuideChoiceChart";
+import { AgentSearch } from "./AgentSearch";
 import { ActiveWorkPanel } from "./projects/ActiveWorkPanel";
 import { Markdown } from "./Markdown";
 import { ArtifactViewerDialog, artifactViewerHref } from "./ArtifactViewerDialog";
@@ -251,7 +257,6 @@ function clampPanelPos(
   };
 }
 
-const SOCIAL_WINDOW_TABS = ["chat", "support"] as const;
 const AGENT_WINDOW_TABS = [
   "projects",
   "calendar",
@@ -259,17 +264,91 @@ const AGENT_WINDOW_TABS = [
   "bank",
   "vault",
   "notifications",
+  "support",
 ] as const;
 
-type SocialWindowTab = (typeof SOCIAL_WINDOW_TABS)[number];
 type AgentWindowTab = (typeof AGENT_WINDOW_TABS)[number];
-
-function isSocialWindowTab(tab: PanelTab): tab is SocialWindowTab {
-  return (SOCIAL_WINDOW_TABS as readonly string[]).includes(tab);
-}
 
 function isAgentWindowTab(tab: PanelTab): tab is AgentWindowTab {
   return (AGENT_WINDOW_TABS as readonly string[]).includes(tab);
+}
+
+function ChatHistoryMenu({
+  chats,
+  conversations,
+  onOpenChat,
+  onDeleteChat,
+  onOpenConversation,
+}: {
+  chats: AiChat[];
+  conversations: Array<{
+    id: string;
+    displayTitle: string;
+    unreadCount: number;
+  }>;
+  onOpenChat: (id: string) => void;
+  onDeleteChat: (id: string) => void;
+  onOpenConversation: (id: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Chat history"
+          >
+            <ClockIcon className="size-3" />
+            History
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-72">
+        <DropdownMenuLabel>Agent chats</DropdownMenuLabel>
+        {chats.length === 0 && (
+          <DropdownMenuItem disabled>No saved chats</DropdownMenuItem>
+        )}
+        {chats.map((c) => (
+          <DropdownMenuItem
+            key={c.id}
+            onClick={() => onOpenChat(c.id)}
+            className="group/chat"
+          >
+            <span className="truncate">{c.title}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteChat(c.id);
+              }}
+              className="ml-auto opacity-0 transition-opacity group-hover/chat:opacity-100"
+            >
+              <Trash2Icon className="size-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
+          </DropdownMenuItem>
+        ))}
+        {conversations.length > 0 && (
+          <>
+            <DropdownMenuLabel>Conversations</DropdownMenuLabel>
+            {conversations.map((c) => (
+              <DropdownMenuItem
+                key={c.id}
+                onClick={() => onOpenConversation(c.id)}
+              >
+                <span className="truncate">{c.displayTitle}</span>
+                {c.unreadCount > 0 ? (
+                  <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                    {c.unreadCount}
+                  </span>
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function ChatWindowTabs({
@@ -279,57 +358,66 @@ function ChatWindowTabs({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
 }) {
-  const group = isAgentWindowTab(tab) ? "agent" : "social";
-  const [socialTab, setSocialTab] = useState<SocialWindowTab>("chat");
+  const group = isAgentWindowTab(tab) ? "intelligence" : "chat";
   const [agentTab, setAgentTab] = useState<AgentWindowTab>("projects");
 
   useEffect(() => {
-    if (isSocialWindowTab(tab)) setSocialTab(tab);
     if (isAgentWindowTab(tab)) setAgentTab(tab);
   }, [tab]);
 
   const subtabClass = "min-w-max px-3 text-xs";
+  const topTabClass =
+    "inline-flex h-[calc(100%-1px)] min-w-0 flex-1 items-center justify-center rounded-md px-2 py-0.5 text-sm font-medium";
 
   return (
     <div className="flex min-w-0 shrink-0 flex-col gap-1 pt-1">
-      <Tabs
-        value={group}
-        onValueChange={(value) =>
-          onTabChange(value === "agent" ? agentTab : socialTab)
-        }
-        className="px-2"
-      >
-        <TabsList className="h-9 w-full">
-          <TabsTrigger value="social">Social</TabsTrigger>
-          <TabsTrigger value="agent">Agent</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <Tabs
-        value={tab}
-        onValueChange={(value) => onTabChange(value as PanelTab)}
-        className="min-w-0"
-      >
-        <TabsList
-          variant="line"
-          className="h-auto w-full min-w-0 flex-nowrap justify-start overflow-x-auto px-1 pb-1.5"
+      <div className="px-2">
+        <div
+          role="tablist"
+          aria-label="Social"
+          className="flex h-9 w-full items-center rounded-lg bg-muted p-[3px]"
         >
-          {group === "social" ? (
-            <>
-              <TabsTrigger value="chat" className={subtabClass}>Chat</TabsTrigger>
-              <TabsTrigger value="support" className={subtabClass}>Support</TabsTrigger>
-            </>
-          ) : (
-            <>
-              <TabsTrigger value="projects" className={subtabClass}>Automations</TabsTrigger>
-              <TabsTrigger value="calendar" className={subtabClass}>Calendar</TabsTrigger>
-              <TabsTrigger value="knowledge" className={subtabClass}>Knowledge</TabsTrigger>
-              <TabsTrigger value="bank" className={subtabClass}>Bank</TabsTrigger>
-              <TabsTrigger value="vault" className={subtabClass}>Agent Vault</TabsTrigger>
-              <TabsTrigger value="notifications" className={subtabClass}>Notifications</TabsTrigger>
-            </>
-          )}
-        </TabsList>
-      </Tabs>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={group === "chat"}
+            className={cn(
+              topTabClass,
+              group === "chat"
+                ? "bg-background text-foreground shadow-sm dark:bg-input/30 dark:text-foreground"
+                : "text-foreground/60 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+            )}
+            onClick={() => onTabChange("chat")}
+          >
+            Chat
+          </button>
+          <AgentSearch
+            appearance="tab"
+            active={group === "intelligence"}
+            onActivate={() => onTabChange(agentTab)}
+          />
+        </div>
+      </div>
+      {group === "intelligence" && (
+        <Tabs
+          value={tab}
+          onValueChange={(value) => onTabChange(value as PanelTab)}
+          className="min-w-0"
+        >
+          <TabsList
+            variant="line"
+            className="h-auto w-full min-w-0 flex-nowrap justify-start overflow-x-auto px-1 pb-1.5"
+          >
+            <TabsTrigger value="projects" className={subtabClass}>Automations</TabsTrigger>
+            <TabsTrigger value="calendar" className={subtabClass}>Calendar</TabsTrigger>
+            <TabsTrigger value="knowledge" className={subtabClass}>Knowledge</TabsTrigger>
+            <TabsTrigger value="bank" className={subtabClass}>Bank</TabsTrigger>
+            <TabsTrigger value="vault" className={subtabClass}>Agent Vault</TabsTrigger>
+            <TabsTrigger value="notifications" className={subtabClass}>Notifications</TabsTrigger>
+            <TabsTrigger value="support" className={subtabClass}>Support</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
     </div>
   );
 }
@@ -448,12 +536,6 @@ export function IntelligencePanel({
       .filter(Boolean)
       .join(", ") ?? "";
   const dmTitle = activeConversation?.displayTitle ?? "Conversation";
-  const dmSubtitle =
-    activeConversation?.kind === "group"
-      ? dmMemberSummary
-        ? `Group - ${dmMemberSummary}`
-        : "Group conversation"
-      : "Direct message";
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [tourLines, setTourLines] = useState<Array<{ label: string; say: string }>>([]);
@@ -1014,16 +1096,19 @@ export function IntelligencePanel({
       });
     };
     const onCloudDone = () => setHoldTourReply(false);
+    const onOfferDone = () => setHoldTourReply(false);
     window.addEventListener(GRAPH_TOUR_LINE_EVENT, onLine);
     window.addEventListener(GRAPH_TOUR_RESET_EVENT, onReset);
     window.addEventListener(GRAPH_TOUR_DONE_EVENT, onDone);
     window.addEventListener(CLOUD_GUIDE_DONE_EVENT, onCloudDone);
+    window.addEventListener(INFERENCE_OFFER_DONE_EVENT, onOfferDone);
     window.addEventListener(GUIDE_CHOICE_EVENT, onChoice);
     return () => {
       window.removeEventListener(GRAPH_TOUR_LINE_EVENT, onLine);
       window.removeEventListener(GRAPH_TOUR_RESET_EVENT, onReset);
       window.removeEventListener(GRAPH_TOUR_DONE_EVENT, onDone);
       window.removeEventListener(CLOUD_GUIDE_DONE_EVENT, onCloudDone);
+      window.removeEventListener(INFERENCE_OFFER_DONE_EVENT, onOfferDone);
       window.removeEventListener(GUIDE_CHOICE_EVENT, onChoice);
       cancelGraphTour();
     };
@@ -1244,6 +1329,17 @@ export function IntelligencePanel({
       { id: `u-${Date.now()}`, role: "user", text: label },
     ]);
     playCloudGuide();
+  };
+
+  const startInferenceOffer = (label: string, kind: InferenceOfferKind) => {
+    if (busy) return;
+    setErrorMsg(null);
+    setErrorCode(null);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", text: label },
+    ]);
+    playInferenceOffer(kind);
   };
 
   const send = async ({
@@ -1851,92 +1947,8 @@ export function IntelligencePanel({
           backgroundColor: `${panelAccent}14`,
         }}
       >
-        {isDmMode ? (
-          <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
-        ) : isPersonaAgent(activeAgentId) ? (
-          <DigitalYouIcon className="size-4" />
-        ) : (
-          <BotIcon className="size-4" style={{ color: panelAccent }} />
-        )}
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <ChatTargetSearch titleMode />
-            {isDmMode && (
-              <span className="shrink-0 rounded bg-primary/10 px-1 text-[9px] font-medium uppercase tracking-wide text-primary">
-                {activeConversation?.kind === "group" ? "Group" : "DM"}
-              </span>
-            )}
-          </div>
-          {isDmMode && (
-            <p className="truncate text-[10px] leading-none text-muted-foreground">
-              {dmSubtitle}
-            </p>
-          )}
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Chat history"
-              >
-                <ClockIcon className="size-3.5" />
-                History
-                <ChevronDownIcon className="size-3" />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="start" className="w-72">
-            <DropdownMenuLabel>Agent chats</DropdownMenuLabel>
-            {chats.length === 0 && (
-              <DropdownMenuItem disabled>No saved chats</DropdownMenuItem>
-            )}
-            {chats.map((c) => (
-              <DropdownMenuItem
-                key={c.id}
-                onClick={() => {
-                  setChatTarget({ kind: "agent", agentId: activeAgentId });
-                  void loadChat(c.id);
-                }}
-                className="group/chat"
-              >
-                <span className="truncate">{c.title}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleDeleteChat(c.id);
-                  }}
-                  className="ml-auto opacity-0 transition-opacity group-hover/chat:opacity-100"
-                >
-                  <Trash2Icon className="size-3.5 text-muted-foreground hover:text-destructive" />
-                </button>
-              </DropdownMenuItem>
-            ))}
-            {dmConversations.length > 0 && (
-              <>
-                <DropdownMenuLabel>Conversations</DropdownMenuLabel>
-                {dmConversations.map((c) => (
-                  <DropdownMenuItem
-                    key={c.id}
-                    onClick={() =>
-                      setChatTarget({ kind: "conversation", conversationId: c.id })
-                    }
-                  >
-                    <span className="truncate">{c.displayTitle}</span>
-                    {c.unreadCount > 0 ? (
-                      <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
-                        {c.unreadCount}
-                      </span>
-                    ) : null}
-                  </DropdownMenuItem>
-                ))}
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
+        <span className="min-w-0 truncate text-sm font-medium">Social</span>
 
         <div className="ml-auto flex items-center gap-0.5">
           <Button
@@ -2355,44 +2367,32 @@ export function IntelligencePanel({
             );
           })()}
           {guideChoice && !holdTourReply && (
-            <div className="flex flex-col gap-3 py-2">
-              <p className="text-base font-medium text-foreground">
-                {guideChoice.question}
-              </p>
-              {guideChoice.why ? (
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  {guideChoice.why}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                {choiceOptionsForUserAgent(
-                  guideChoice.options,
-                  typeof navigator === "undefined" ? "" : navigator.userAgent
-                ).map((option) => (
-                  <Button
-                    key={option.id}
-                    type="button"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => {
-                      setGuideChoice(null);
-                      if (option.id === "cloud") {
-                        startCloudGuide(option.label);
-                        return;
-                      }
-                      void send({
-                        text: option.label,
-                        images: [],
-                        mentionIds: [],
-                        pathId: option.id,
-                      });
-                    }}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
+            <GuideChoiceChart
+              question={guideChoice.question}
+              why={guideChoice.why}
+              disabled={busy}
+              options={choiceOptionsForUserAgent(
+                guideChoice.options,
+                typeof navigator === "undefined" ? "" : navigator.userAgent
+              )}
+              onChoose={(option) => {
+                setGuideChoice(null);
+                if (option.id === "cloud") {
+                  startCloudGuide(option.label);
+                  return;
+                }
+                if (option.id === "inference" || option.id === "cloud_inference") {
+                  startInferenceOffer(option.label, option.id);
+                  return;
+                }
+                void send({
+                  text: option.label,
+                  images: [],
+                  mentionIds: [],
+                  pathId: option.id,
+                });
+              }}
+            />
           )}
         </div>
         )}
@@ -2499,8 +2499,22 @@ export function IntelligencePanel({
                 : "Direct message"}
             </span>
             {dmMemberSummary && (
-              <span className="truncate pl-3">{dmMemberSummary}</span>
+              <span className="min-w-0 truncate pl-3">{dmMemberSummary}</span>
             )}
+            <span className="ml-auto inline-flex shrink-0 items-center">
+              <ChatHistoryMenu
+                chats={chats}
+                conversations={dmConversations}
+                onOpenChat={(id) => {
+                  setChatTarget({ kind: "agent", agentId: activeAgentId });
+                  void loadChat(id);
+                }}
+                onDeleteChat={(id) => void handleDeleteChat(id)}
+                onOpenConversation={(id) =>
+                  setChatTarget({ kind: "conversation", conversationId: id })
+                }
+              />
+            </span>
           </>
         ) : (
           <>
@@ -2639,6 +2653,18 @@ export function IntelligencePanel({
                   {status.tokensPerSecond.toFixed(1)} t/s
                 </span>
               )}
+              <ChatHistoryMenu
+                chats={chats}
+                conversations={dmConversations}
+                onOpenChat={(id) => {
+                  setChatTarget({ kind: "agent", agentId: activeAgentId });
+                  void loadChat(id);
+                }}
+                onDeleteChat={(id) => void handleDeleteChat(id)}
+                onOpenConversation={(id) =>
+                  setChatTarget({ kind: "conversation", conversationId: id })
+                }
+              />
               <span className="relative size-3">
                 <svg viewBox="0 0 36 36" className="size-3 -rotate-90">
                   <circle

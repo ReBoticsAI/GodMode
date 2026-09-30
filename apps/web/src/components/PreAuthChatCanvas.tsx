@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
 import { CloudGuideWindow } from "@/components/graph/CloudGuideWindow";
+import { InferenceOfferWindow } from "@/components/graph/InferenceOfferWindow";
 import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
 import { ChatGraphCanvas } from "@/components/ChatGraphCanvas";
@@ -37,6 +38,7 @@ export function PreAuthChatCanvas() {
       <IntelligencePanel />
       <InformationFloatingPanel />
       <CloudGuideWindow />
+      <InferenceOfferWindow />
       <MinimizedWindowsDock />
       <GraphEscMenu />
       <Toaster richColors position="top-right" />

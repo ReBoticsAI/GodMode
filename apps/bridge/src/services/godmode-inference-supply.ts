@@ -257,18 +257,10 @@ export type GodModeInferenceApplyTarget = {
 };
 
 /**
- * Prefer DeepSeek → Z.AI payg → Z.AI Coding → DashScope for signup-guide.
+ * GodMode Inference is Z.AI GLM-5.3 Flash. DeepSeek, Coding Plan, and DashScope
+ * stay available as BYOK fallbacks when the Z.AI payg key is absent.
  */
 export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget | null {
-  if (resolveGodModeInferenceSupplyKey("deepseek")) {
-    return {
-      provider: "deepseek",
-      modelId: "deepseek-v4-flash",
-      transport: "deepseek",
-      baseUrl: "https://api.deepseek.com/v1",
-      apiKeyRef: DEEPSEEK_SECRET_ID,
-    };
-  }
   if (resolveGodModeInferenceSupplyKey("zai")) {
     return {
       provider: "zai",
@@ -276,6 +268,15 @@ export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget 
       transport: "zai",
       baseUrl: "https://api.z.ai/api/paas/v4",
       apiKeyRef: ZAI_SECRET_ID,
+    };
+  }
+  if (resolveGodModeInferenceSupplyKey("deepseek")) {
+    return {
+      provider: "deepseek",
+      modelId: "deepseek-v4-flash",
+      transport: "deepseek",
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKeyRef: DEEPSEEK_SECRET_ID,
     };
   }
   if (resolveGodModeInferenceSupplyKey("zai_coding")) {

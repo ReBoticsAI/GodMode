@@ -1222,13 +1222,14 @@ export const ZAI_PAYG_PROFILE: ModelHarnessProfile = {
   // Z.AI GLM-5.3 Flash recommended: temperature 1, top_p 0.95 (omit unused top_k).
   sampling: { temperature: 1.0, topP: 0.95, topK: 0 },
   maxChatIterations: 14,
-  // Flash forces thinking; low effort keeps orient / trial turns cheap.
+  // Flash forces thinking. Agent turns use max effort and preserved thinking.
+  // Signup turns override to low effort and clear_thinking in the chat route.
   enableThinkingDefault: true,
   stripThinkingFromHistory: true,
   requireJinja: false,
   deferredDiscoveryTools: [...ZAI_PAYG_TRANSPORT_DEFERRED],
-  reasoningEffort: "low",
-  clearThinking: true,
+  reasoningEffort: "max",
+  clearThinking: false,
   harnessDelta: [
     '<model_profile id="zai-payg">',
     "You are running via Z.AI Platform payg (openai_compatible transport, metered BYOK).",

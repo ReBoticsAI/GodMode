@@ -15,6 +15,11 @@ import {
 } from "./godmode-inference-grants.js";
 import { isGodModeInferenceSupplyReady } from "./godmode-inference-supply.js";
 import { verifyStripeWebhookSignature } from "./saas-entitlements.js";
+import {
+  inferenceCheckoutDelegatesToCloud,
+  recordInferenceCloudCheckout,
+  markInferenceCloudCheckoutPaid,
+} from "./godmode-inference-cloud-checkout.js";
 
 export type GodModeInferencePlanInterval =
   | "day"
@@ -153,15 +158,26 @@ export function getGodModeInferencePublicConfig(): {
   const billing = getPublicBillingConfig();
   return {
     supplyReady: isGodModeInferenceSupplyReady(),
-    paymentsConfigured: Boolean(resolveStripeSecretKey()),
+    paymentsConfigured:
+      Boolean(resolveStripeSecretKey()) || inferenceCheckoutDelegatesToCloud(),
     publishableKey: billing.publishableKey,
     plans: listGodModeInferencePlans(),
     payPath: "/platform-vault?vault=inference&sub=godmode",
   };
 }
 
-export function getGodModeInferenceUserStatus(userId: string): {
+function accountCanCheckout(email: string, temporary: boolean): boolean {
+  const value = email.trim().toLowerCase();
+  if (temporary || value.startsWith("visitor+")) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+export function getGodModeInferenceUserStatus(
+  userId: string,
+  account?: { email?: string | null; temporary?: boolean }
+): {
   supplyReady: boolean;
+  canCheckout: boolean;
   grant: {
     kind: string;
     status: string;
@@ -177,6 +193,9 @@ export function getGodModeInferenceUserStatus(userId: string): {
   const remaining = grant ? remainingBudgetUsd(grant) : null;
   return {
     supplyReady: isGodModeInferenceSupplyReady(),
+    canCheckout:
+      inferenceCheckoutDelegatesToCloud() ||
+      accountCanCheckout(account?.email ?? "", Boolean(account?.temporary)),
     grant: grant
       ? {
           kind: grant.kind,
@@ -190,16 +209,19 @@ export function getGodModeInferenceUserStatus(userId: string): {
         }
       : null,
     plans: listGodModeInferencePlans(),
-    paymentsConfigured: Boolean(resolveStripeSecretKey()),
+    paymentsConfigured:
+      Boolean(resolveStripeSecretKey()) || inferenceCheckoutDelegatesToCloud(),
   };
 }
 
 export async function createGodModeInferenceCheckoutSession(opts: {
-  userId: string;
-  email: string;
+  userId?: string;
+  email?: string;
   planId: string;
   successUrl: string;
   cancelUrl: string;
+  /** Local buyer. Cloud creates the Stripe session and the grant is claimed back on Local. */
+  cloudClaim?: boolean;
 }): Promise<{ url: string; sessionId: string; planId: string }> {
   const secret = resolveStripeSecretKey();
   if (!secret) {
@@ -212,8 +234,9 @@ export async function createGodModeInferenceCheckoutSession(opts: {
       status: 400,
     });
   }
-  const email = opts.email.trim().toLowerCase();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  const email = (opts.email ?? "").trim().toLowerCase();
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.startsWith("visitor+");
+  if (!opts.cloudClaim && !emailOk) {
     throw Object.assign(new Error("Valid email is required"), { status: 400 });
   }
 
@@ -222,12 +245,16 @@ export async function createGodModeInferenceCheckoutSession(opts: {
     mode,
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
-    customer_email: email,
     "metadata[godmode_inference]": "1",
     "metadata[godmode_inference_plan]": plan.id,
-    "metadata[godmode_inference_user]": opts.userId,
     "metadata[godmode_inference_budget_usd]": String(plan.budgetUsd),
   };
+  if (emailOk) params.customer_email = email;
+  if (opts.cloudClaim) {
+    params["metadata[godmode_inference_cloud]"] = "1";
+  } else if (opts.userId) {
+    params["metadata[godmode_inference_user]"] = opts.userId;
+  }
 
   if (plan.priceId.startsWith("price_data:") || !plan.priceId.startsWith("price_")) {
     // $1 pack without a pre-created Stripe Price: use price_data.
@@ -244,9 +271,13 @@ export async function createGodModeInferenceCheckoutSession(opts: {
   if (mode === "subscription") {
     params["subscription_data[metadata][godmode_inference]"] = "1";
     params["subscription_data[metadata][godmode_inference_plan]"] = plan.id;
-    params["subscription_data[metadata][godmode_inference_user]"] = opts.userId;
     params["subscription_data[metadata][godmode_inference_budget_usd]"] =
       String(plan.budgetUsd);
+    if (opts.cloudClaim) {
+      params["subscription_data[metadata][godmode_inference_cloud]"] = "1";
+    } else if (opts.userId) {
+      params["subscription_data[metadata][godmode_inference_user]"] = opts.userId;
+    }
   }
 
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -267,6 +298,13 @@ export async function createGodModeInferenceCheckoutSession(opts: {
       new Error(body.error?.message || "Stripe Checkout failed"),
       { status: 502 }
     );
+  }
+  if (opts.cloudClaim) {
+    recordInferenceCloudCheckout({
+      sessionId: body.id,
+      planId: plan.id,
+      budgetUsd: plan.budgetUsd,
+    });
   }
   return { url: body.url, sessionId: body.id, planId: plan.id };
 }
@@ -298,6 +336,9 @@ export function tryApplyGodModeInferenceStripeEvent(
   if (type === "checkout.session.completed") {
     const meta = (obj.metadata ?? {}) as Record<string, string>;
     if (meta.godmode_inference !== "1") return false;
+    if (meta.godmode_inference_cloud === "1") {
+      return markInferenceCloudCheckoutPaid(String(obj.id ?? ""));
+    }
     return applyCheckoutGrant(
       meta,
       String(obj.id ?? ""),

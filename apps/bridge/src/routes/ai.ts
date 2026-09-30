@@ -59,6 +59,7 @@ import {
   runAgentChat,
   resolveToolConfirmation,
   waitForToolConfirmation,
+  type AgentContentPart,
   type AgentMessage,
 } from "../services/ai-agent.js";
 import {
@@ -143,8 +144,11 @@ import {
 } from "../services/godmode-inference-supply.js";
 import {
   findActiveGodModeInferenceGrant,
+  godModeInferenceRetailUsd,
   isGrantSpendable,
+  parseGodModeInferenceUsage,
   recordGodModeInferenceSpend,
+  turnCostUsd,
 } from "../services/godmode-inference-grants.js";
 import {
   interestModelGuide,
@@ -2294,6 +2298,15 @@ export function createAiRouter(
         else parts.push({ kind: "todos", items });
         return;
       }
+      if (id) {
+        for (let i = parts.length - 1; i >= 0; i--) {
+          if (parts[i].kind === "tool" && parts[i].id === id) {
+            parts[i].name = name;
+            parts[i].args = args;
+            return;
+          }
+        }
+      }
       parts.push({
         kind: "tool",
         id: id ?? `t-${parts.length}`,
@@ -2323,17 +2336,40 @@ export function createAiRouter(
             : "Starting model…",
       });
       const baseUrl = llm.getServerBaseUrl();
-      const agentMessages: AgentMessage[] = messages.map((m) => ({
-        role: m.role as AgentMessage["role"],
-        content:
-          typeof m.content === "string"
-            ? m.content
-            : m.content
-                .map((p) => (typeof p === "string" ? p : p.text ?? ""))
-                .join("\n"),
-        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
-      }));
+      const agentMessages: AgentMessage[] = messages.map((m) => {
+        const toolFields = {
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
+        };
+        if (typeof m.content === "string") {
+          return {
+            role: m.role as AgentMessage["role"],
+            content: m.content,
+            ...toolFields,
+          };
+        }
+        const parts: AgentContentPart[] = [];
+        for (const part of m.content) {
+          if (part.type === "image_url" && part.image_url?.url) {
+            parts.push({
+              type: "image_url",
+              image_url: { url: part.image_url.url },
+            });
+          } else if (part.text) {
+            parts.push({ type: "text", text: part.text });
+          }
+        }
+        const text = parts
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
+        return {
+          role: m.role as AgentMessage["role"],
+          content: text,
+          ...(parts.some((part) => part.type === "image_url") ? { parts } : {}),
+          ...toolFields,
+        };
+      });
 
       if (agent.thinking.nativeTools || agent.backend !== "local") {
         let streamed = "";
@@ -2528,6 +2564,18 @@ export function createAiRouter(
           },
         });
         fullContent = answer || streamed;
+        // Metered debit from provider usage before any char-based estimate.
+        // Missing / zero retail falls back so managed turns are never free.
+        if (usingManagedSupply && activeInferenceGrant) {
+          const parsedUsage = parseGodModeInferenceUsage(usage);
+          const retailUsd = parsedUsage
+            ? godModeInferenceRetailUsd(parsedUsage)
+            : 0;
+          recordGodModeInferenceSpend({
+            grantId: activeInferenceGrant.id,
+            usd: retailUsd > 0 ? retailUsd : turnCostUsd(),
+          });
+        }
         // Estimate token usage for backends that don't report it, so the
         // context meter works for native-tools / provider / cursor agents.
         if (!usage.total_tokens) {
@@ -2542,9 +2590,6 @@ export function createAiRouter(
             completion_tokens: ct,
             total_tokens: pt + ct,
           };
-        }
-        if (usingManagedSupply && activeInferenceGrant) {
-          recordGodModeInferenceSpend({ grantId: activeInferenceGrant.id });
         }
       } else {
         const upstream = await fetch(`${baseUrl}/v1/chat/completions`, {
