@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { GRAPH_CHAT_WINDOW_Z } from "@/lib/graph-chrome-layout";
+import { getMaximizedFocusBounds } from "@/lib/floating-window-bounds";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   clampComposerWidth,
@@ -216,31 +217,11 @@ class PanelErrorBoundary extends Component<
 }
 
 /**
- * The floating modal is constrained to the visible `<main>` rectangle. Because
- * it is rendered inside the center content column, these bounds are already
- * between the left sidebar, any right sidebar, the header, and the footer.
+ * Social / chat uses the same rail-aware playfield as other Graph floaters so
+ * it never covers the left tabs rail or right tools rail.
  */
 function getPanelBounds(): PanelBounds {
-  const main = document.querySelector("main");
-  const parent = main?.parentElement;
-  if (main && parent) {
-    const m = main.getBoundingClientRect();
-    const p = parent.getBoundingClientRect();
-    if (m.width > 0 && m.height > 0) {
-      return {
-        x: Math.round(m.left - p.left),
-        y: Math.round(m.top - p.top),
-        width: Math.round(m.width),
-        height: Math.round(m.height),
-      };
-    }
-  }
-  return {
-    x: 0,
-    y: 36,
-    width: window.innerWidth,
-    height: Math.max(240, window.innerHeight - 72),
-  };
+  return getMaximizedFocusBounds();
 }
 
 function clampPanelPos(
