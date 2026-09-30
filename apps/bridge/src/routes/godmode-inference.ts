@@ -218,7 +218,7 @@ export function createGodModeInferenceRouter(): Router {
         return;
       }
       const updated = patchGodModeInferenceGrantBudget(
-        req.params.id,
+        String(req.params.id ?? ""),
         Number(budgetRaw)
       );
       if (!updated) {
@@ -242,7 +242,9 @@ export function createGodModeInferenceRouter(): Router {
       res.status(403).json({ error: "Admin only" });
       return;
     }
-    const updated = await revokeAdminGodModeInferenceGrant(req.params.id);
+    const updated = await revokeAdminGodModeInferenceGrant(
+      String(req.params.id ?? "")
+    );
     if (!updated) {
       res.status(404).json({ error: "Grant not found" });
       return;
