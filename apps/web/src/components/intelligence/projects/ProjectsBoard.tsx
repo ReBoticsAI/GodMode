@@ -46,6 +46,7 @@ import {
   fetchUserProjects,
   fetchAiAgents,
   fetchGithubReposList,
+  isUnauthorizedError,
   moveProjectCard,
   moveUserProjectCard,
   createProjectCard,
@@ -2325,7 +2326,11 @@ export function ProjectsBoard({
         });
       })
       .catch((err) => {
-        toast.error(err instanceof Error ? err.message : "Failed to load tasks");
+        setColumns([]);
+        setCards([]);
+        if (!isUnauthorizedError(err)) {
+          toast.error(err instanceof Error ? err.message : "Failed to load tasks");
+        }
       });
   }, [scope, projectId]);
 

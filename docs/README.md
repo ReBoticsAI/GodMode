@@ -21,7 +21,9 @@ Documentation for installing, using, and extending GodMode.
 | [MARKETPLACE.md](MARKETPLACE.md) | Official/paid catalog, seller payouts, install UX |
 | [OFFICIAL_CONNECTORS.md](OFFICIAL_CONNECTORS.md) | Official connector quality bar (auth, webhooks, grants, teardown) |
 | [PLUGIN_ISOLATION.md](PLUGIN_ISOLATION.md) | Community plugin runtime sandbox design (grants vs child process) |
-| [DATA_ISOLATION.md](DATA_ISOLATION.md) | Shared-Cloud SQLite shards, Data Router, VM/container ladder (#777) |
+| [DATA_ISOLATION.md](DATA_ISOLATION.md) | Graph-first map + SQLite shards, Data Router, per-user box ladder (#777) |
+| [ROADMAP_GRAPH_ISOLATION.md](ROADMAP_GRAPH_ISOLATION.md) | Near-term working order: Graph WIP then #779→#781 (local) |
+| [STATE_GRAPH_ISOLATION.md](STATE_GRAPH_ISOLATION.md) | Truth snapshot: map ≠ storage ≠ compute (as of PR #788) |
 | [MARKETPLACE_TOS.md](MARKETPLACE_TOS.md) | Marketplace Terms (chargebacks, fees, digital goods) |
 | [SHARED_FEDERATION.md](SHARED_FEDERATION.md) | Cross-home sharing and Tailscale |
 | [CONFIGURATION.md](CONFIGURATION.md) | Bridge environment variables |
@@ -35,9 +37,11 @@ Documentation for installing, using, and extending GodMode.
 |-------|-------------|
 | [../DEPLOY.md](../DEPLOY.md) | Desktop download, Docker hub/client, and bare-metal deployment |
 | [architecture.md](architecture.md) | System design and data model |
+| [SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md) | Target: one SQLite file per actor/surface; Graph topology; WindowSpec; open-set API |
+| [GRAPH_MISSIONS.md](GRAPH_MISSIONS.md) | Graph attention missions, degree-weighted points, Cloud leaderboard |
 | [OBJECTTYPE_KERNEL.md](OBJECTTYPE_KERNEL.md) | Canonical durable ObjectType, Record, action, adapter, tenancy, recovery, and protocol-exception contract |
 | [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md) | Build and install plugins (contributors) |
-| [multi-tenant-model.md](multi-tenant-model.md) | Cloud + Users + User + Workspace data planes; SaaS job index and workspace DB open policy (contributors) |
+| [multi-tenant-model.md](multi-tenant-model.md) | Legacy Cloud + Users + User + Workspace planes until SQLite-universe migration (contributors) |
 
 ## Project
 

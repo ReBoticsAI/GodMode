@@ -9,8 +9,13 @@ export default function AgentsPage() {
         description="Organization chart, agent pipeline, knowledge, workflows, and activity."
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <AgentsWorkspace />
+        <AgentsContent />
       </div>
     </Page>
   );
+}
+
+/** Agents body for the full route or an embedded Graph floating window. */
+export function AgentsContent() {
+  return <AgentsWorkspace />;
 }

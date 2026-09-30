@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isChatTargetAgent } from "@/lib/chat-target-agents";
+import { displayNameForAgent } from "@/lib/focus-chrome";
 
 /**
  * Unified chat target selector: agents, human contacts, existing conversations,
@@ -41,9 +42,15 @@ import { isChatTargetAgent } from "@/lib/chat-target-agents";
  */
 export function ChatTargetSearch({
   titleMode = false,
+  openFloatingOnSelect = false,
 }: {
   /** Render the trigger as the prominent panel title (larger, no leading icon). */
   titleMode?: boolean;
+  /**
+   * When true (Graph floating chat title), also open/focus a chat window for
+   * the selected target so multi-window Graph stays in sync.
+   */
+  openFloatingOnSelect?: boolean;
 } = {}) {
   const {
     chatTarget,
@@ -51,6 +58,7 @@ export function ChatTargetSearch({
     activeAgentId,
     dmConversations,
     refreshDmConversations,
+    openOrFocusChatWindow,
     pathname,
   } = useIntelligence();
   const { departments } = useStructure();
@@ -188,7 +196,7 @@ export function ChatTargetSearch({
     if (chatTarget.kind === "conversation") {
       return currentConversation?.displayTitle ?? "Conversation";
     }
-    return currentAgent?.name ?? activeAgentId;
+    return displayNameForAgent(activeAgentId, currentAgent?.name);
   }, [chatTarget, currentConversation, currentAgent, activeAgentId]);
 
   const q = query.trim().toLowerCase();
@@ -227,10 +235,26 @@ export function ChatTargetSearch({
     );
   }, [dmConversations, q]);
 
+  const closePicker = () => {
+    // Defer close so the selecting click cannot fall through onto the
+    // floating window underneath and re-focus the previous chat target.
+    window.setTimeout(() => {
+      setOpen(false);
+      setQuery("");
+    }, 0);
+  };
+
   const selectAgent = (id: string) => {
     setChatTarget({ kind: "agent", agentId: id });
-    setOpen(false);
-    setQuery("");
+    if (openFloatingOnSelect) {
+      const agent = agents.find((a) => a.id === id);
+      openOrFocusChatWindow({
+        kind: "agent",
+        agentId: id,
+        title: agent?.name ?? "Agent",
+      });
+    }
+    closePicker();
   };
 
   const selectContact = async (contact: DmContact) => {
@@ -241,8 +265,18 @@ export function ChatTargetSearch({
       });
       setChatTarget({ kind: "conversation", conversationId: res.conversation.id });
       void refreshDmConversations();
-      setOpen(false);
-      setQuery("");
+      if (openFloatingOnSelect) {
+        openOrFocusChatWindow({
+          kind: "dm",
+          conversationId: res.conversation.id,
+          title:
+            res.conversation.title ||
+            contact.displayName ||
+            contact.email ||
+            "Direct message",
+        });
+      }
+      closePicker();
     } catch {
       /* ignore */
     }
@@ -250,8 +284,18 @@ export function ChatTargetSearch({
 
   const selectConversation = (id: string) => {
     setChatTarget({ kind: "conversation", conversationId: id });
-    setOpen(false);
-    setQuery("");
+    if (openFloatingOnSelect) {
+      const c = dmConversations.find((x) => x.id === id);
+      openOrFocusChatWindow({
+        kind: c?.kind === "group" ? "channel" : "dm",
+        conversationId: id,
+        title:
+          c?.displayTitle ||
+          c?.title ||
+          (c?.kind === "group" ? "Channel" : "Direct message"),
+      });
+    }
+    closePicker();
   };
 
   const resetGroupDraft = () => {
@@ -292,8 +336,18 @@ export function ChatTargetSearch({
         conversationId: res.conversation.id,
       });
       void refreshDmConversations();
+      if (openFloatingOnSelect) {
+        openOrFocusChatWindow({
+          kind: "channel",
+          conversationId: res.conversation.id,
+          title:
+            res.conversation.title ||
+            groupTitle.trim() ||
+            "Channel",
+        });
+      }
       setGroupOpen(false);
-      setOpen(false);
+      closePicker();
       resetGroupDraft();
     } catch (err) {
       toast.error(
@@ -347,13 +401,14 @@ export function ChatTargetSearch({
           <div
             ref={panelRef}
             onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
               top: rect.bottom + 4,
               left: rect.left,
               width: 288,
             }}
-            className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
             {responsible?.agent &&
               chatTarget.kind === "agent" &&

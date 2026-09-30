@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BotIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayNameForAgent } from "@/lib/focus-chrome";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useStructure } from "@/lib/structure-context";
 import { departmentFromPath, divisionFromPath } from "@/lib/navigation";
@@ -13,11 +14,21 @@ import {
 } from "@/api";
 
 /**
- * Header "Agent Search" combobox. Selecting an agent possesses it (sets the
- * global activeAgentId), which scopes the Tasks/Workflows tabs and syncs the
- * Builder tree. Active agents (running work) are pinned to the top.
+ * Agent picker. Selecting an agent possesses it (sets the global activeAgentId),
+ * which scopes Automations, Knowledge, and the rest of the Intelligence tabs.
+ * Active agents (running work) are pinned to the top.
  */
-export function AgentSearch() {
+export function AgentSearch({
+  appearance = "inline",
+  active = false,
+  onActivate,
+}: {
+  /** `tab` renders the trigger as a top-level window tab. */
+  appearance?: "inline" | "tab";
+  active?: boolean;
+  /** Called when the tab trigger is pressed, before the menu toggles. */
+  onActivate?: () => void;
+} = {}) {
   const { activeAgentId, setActiveAgentId, pathname } = useIntelligence();
   const { departments } = useStructure();
   const [agents, setAgents] = useState<AiAgent[]>([]);
@@ -160,27 +171,83 @@ export function AgentSearch() {
     setQuery("");
   };
 
-  const triggerName = current?.name ?? activeAgentId;
+  const triggerName = displayNameForAgent(activeAgentId, current?.name);
+
+  const toggleMenu = () => {
+    onActivate?.();
+    setOpen((o) => !o);
+  };
+
+  const nameAndChevron = (
+    <>
+      {appearance === "inline" && <BotIcon className="size-3.5 shrink-0" />}
+      <span
+        className={cn(
+          "truncate",
+          appearance === "inline" && "font-medium text-foreground"
+        )}
+      >
+        {triggerName}
+      </span>
+      {activeIds.has(activeAgentId) && (
+        <span className="relative flex size-1.5 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/70" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+        </span>
+      )}
+      <ChevronDownIcon className="size-3 shrink-0" />
+    </>
+  );
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        title="Possess agent"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex max-w-[160px] items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        <BotIcon className="size-3.5 shrink-0" />
-        <span className="truncate font-medium text-foreground">{triggerName}</span>
-        {activeIds.has(activeAgentId) && (
-          <span className="relative flex size-1.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/70" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-          </span>
-        )}
-        <ChevronDownIcon className="size-3 shrink-0" />
-      </button>
+      {appearance === "tab" ? (
+        <div
+          role="tab"
+          aria-selected={active}
+          tabIndex={0}
+          className={cn(
+            "flex h-[calc(100%-1px)] min-w-0 flex-1 cursor-pointer items-center justify-center rounded-md px-2 py-0.5 text-sm font-medium",
+            active
+              ? "bg-background text-foreground shadow-sm dark:bg-input/30 dark:text-foreground"
+              : "text-foreground/60 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+          )}
+          onClick={() => onActivate?.()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onActivate?.();
+            }
+          }}
+        >
+          <button
+            ref={triggerRef}
+            type="button"
+            title="Choose agent"
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu();
+            }}
+            className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-muted/60"
+          >
+            {nameAndChevron}
+          </button>
+        </div>
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          title="Choose agent"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={toggleMenu}
+          className="inline-flex max-w-[160px] min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {nameAndChevron}
+        </button>
+      )}
 
       {open &&
         rect &&
@@ -194,7 +261,7 @@ export function AgentSearch() {
               left: rect.left,
               width: 256,
             }}
-            className="z-[60] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
           >
             {responsible?.agent && responsible.agent.id !== activeAgentId && (
               <button

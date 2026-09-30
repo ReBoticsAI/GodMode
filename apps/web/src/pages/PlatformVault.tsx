@@ -20,8 +20,26 @@ import {
 } from "@/lib/navigation";
 import { InferenceTab } from "@/pages/Vault";
 import { AiSecretsCard } from "@/pages/ai-settings/AiSecretsCard";
+import { cn } from "@/lib/utils";
 
 export default function PlatformVault() {
+  return (
+    <Page>
+      <PageHeader
+        title="Platform Vault"
+        description="Your account Connect credentials: GodMode Cloud seats, LLM subscriptions, API keys, and Exa. Shared across your workspaces. Agents fall back here when they have no key of their own. Optional per-workspace overrides stay on that workspace."
+      />
+      <PlatformVaultContent />
+    </Page>
+  );
+}
+
+/** Platform Vault body for the full route or an embedded Graph floating window. */
+export function PlatformVaultContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const platformSection = normalizePlatformVaultSection(
     searchParams.get("vault")
@@ -59,52 +77,66 @@ export default function PlatformVault() {
   };
 
   return (
-    <Page>
-      <PageHeader
-        title="Platform Vault"
-        description="Your account Connect credentials: GodMode Cloud seats, LLM subscriptions, API keys, and Exa. Shared across your workspaces. Agents fall back here when they have no key of their own. Optional per-workspace overrides stay on that workspace."
-      />
-      <PlatformVaultPanel
-        section={platformSection}
-        inferenceSub={inferenceSub}
-        onSectionChange={onSectionChange}
-        onInferenceSubChange={onInferenceSubChange}
-      />
-    </Page>
+    <PlatformVaultPanel
+      embedded={embedded}
+      section={platformSection}
+      inferenceSub={inferenceSub}
+      onSectionChange={onSectionChange}
+      onInferenceSubChange={onInferenceSubChange}
+    />
   );
 }
 
 function PlatformVaultPanel({
+  embedded,
   section,
   inferenceSub,
   onSectionChange,
   onInferenceSubChange,
 }: {
+  embedded: boolean;
   section: PlatformVaultSection;
   inferenceSub: VaultInferenceSub;
   onSectionChange: (value: string) => void;
   onInferenceSubChange: (value: string) => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRoundIcon className="size-4" />
-          Platform Vault
-        </CardTitle>
-        <CardDescription>
-          Shared platform credentials for this workspace. Personal connects
-          (GitHub, wallets and accounts, marketplace) stay on{" "}
-          <Link
-            to={VAULT_PATH}
-            className="text-primary underline-offset-2 hover:underline"
-          >
-            Personal Vault
-          </Link>
-          .
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <Card className={cn(embedded && "border-0 shadow-none")}>
+      {!embedded ? (
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRoundIcon className="size-4" />
+            Platform Vault
+          </CardTitle>
+          <CardDescription>
+            Shared platform credentials for this workspace. Personal connects
+            (GitHub, wallets and accounts, marketplace) stay on{" "}
+            <Link
+              to={VAULT_PATH}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Personal Vault
+            </Link>
+            .
+          </CardDescription>
+        </CardHeader>
+      ) : null}
+      <CardContent
+        className={cn("flex flex-col gap-4", embedded && "px-0 pt-0")}
+      >
+        {embedded ? (
+          <p className="text-sm text-muted-foreground">
+            Cloud seats, Inference Connect, and account secrets. Personal
+            connects stay on{" "}
+            <Link
+              to={VAULT_PATH}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Personal Vault
+            </Link>
+            .
+          </p>
+        ) : null}
         <Tabs value={section} onValueChange={onSectionChange} className="w-full">
           <TabsList variant="line" className="w-full flex-wrap justify-start">
             <TabsTrigger value="cloud">GodMode Cloud</TabsTrigger>

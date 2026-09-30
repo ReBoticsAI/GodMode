@@ -26,6 +26,7 @@ import {
   fetchGroqStatus,
   type GroqAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Groq production chat catalog snapshot (2026-08-03).
@@ -128,6 +129,7 @@ export function GroqCard({
           Metered GroqCloud API key (BYOK). Models run through OpenAI-compatible transport with
           a family harness (Llama, GPT-OSS, Compound, or generic). Not a Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="groq" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

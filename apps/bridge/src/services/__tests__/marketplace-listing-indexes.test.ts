@@ -58,6 +58,11 @@ describe("marketplace listing indexes", () => {
         name TEXT NOT NULL,
         applied_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL
+      );
       CREATE TABLE marketplace_seller_accounts (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL UNIQUE,
@@ -116,6 +121,11 @@ describe("marketplace listing indexes", () => {
         version INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
         applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL
       );
       CREATE TABLE marketplace_listings (
         id TEXT PRIMARY KEY,

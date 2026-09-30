@@ -56,6 +56,7 @@ import { AdminMarketplaceSellersPanel } from "@/pages/admin/AdminMarketplaceSell
 import { AdminObservabilityPanel } from "@/pages/admin/AdminObservabilityPanel";
 import { MemoryEngineTab } from "@/pages/ai-settings/MemoryEngineTab";
 import { AdminAuthorityPanel } from "@/pages/admin/AdminAuthorityPanel";
+import { AdminGodModeInferencePanel } from "@/pages/admin/AdminGodModeInferencePanel";
 import { UpdatesCard } from "@/components/admin/UpdatesCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -63,18 +64,8 @@ import { Label } from "@/components/ui/label";
 
 export default function Admin() {
   const { user } = useTenant();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [isHub, setIsHub] = useState(false);
   const [isSaas, setIsSaas] = useState(false);
-  const tabParam = searchParams.get("tab");
-  const tab =
-    tabParam === "platform" || tabParam === "structure"
-      ? tabParam === "structure"
-        ? "template"
-        : isHub
-          ? "billing"
-          : "template"
-      : (tabParam ?? (isHub ? "billing" : "template"));
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -98,70 +89,121 @@ export default function Admin() {
         title="Admin"
         description={
           isSaas
-            ? "Billing, SaaS customers, authority, embeddings, observability, updates, workspace template, users, and support."
+            ? "GodMode Inference, billing, SaaS customers, authority, embeddings, observability, updates, workspace template, users, and support."
             : isHub
-              ? "Billing, authority, embeddings, observability, updates, workspace template, users, and support."
-              : "Authority, embeddings, observability, updates, workspace template, users, and support."
+              ? "GodMode Inference, billing, authority, embeddings, observability, updates, workspace template, users, and support."
+              : "GodMode Inference, authority, embeddings, observability, updates, workspace template, users, and support."
         }
       />
-
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}
-        className="w-full"
-      >
-        <TabsList variant="line" className="w-full flex-wrap justify-start">
-          {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
-          {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
-          <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
-          <TabsTrigger value="authority">Authority</TabsTrigger>
-          <TabsTrigger value="embeddings">Embeddings</TabsTrigger>
-          <TabsTrigger value="observability">Observability</TabsTrigger>
-          <TabsTrigger value="updates">Updates</TabsTrigger>
-          <TabsTrigger value="template">Workspace template</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="support">Support</TabsTrigger>
-        </TabsList>
-
-        {isHub ? (
-          <TabsContent value="billing" className="mt-4">
-            <AdminBillingTab />
-          </TabsContent>
-        ) : null}
-        {isSaas ? (
-          <TabsContent value="saas" className="mt-4">
-            <AdminSaasCustomersPanel />
-          </TabsContent>
-        ) : null}
-        <TabsContent value="marketplace" className="mt-4 flex flex-col gap-4">
-          <AdminMarketplaceReviewPanel />
-          <AdminMarketplaceSellersPanel />
-          <AdminMarketplaceFeesPanel />
-        </TabsContent>
-        <TabsContent value="authority" className="mt-4">
-          <AdminAuthorityPanel />
-        </TabsContent>
-        <TabsContent value="embeddings" className="mt-4">
-          <MemoryEngineTab allowControls hostWide={isHub || isSaas} />
-        </TabsContent>
-        <TabsContent value="observability" className="mt-4">
-          <AdminObservabilityPanel />
-        </TabsContent>
-        <TabsContent value="updates" className="mt-4">
-          <UpdatesCard />
-        </TabsContent>
-        <TabsContent value="template" className="mt-4">
-          <StructureAdminPanel />
-        </TabsContent>
-        <TabsContent value="users" className="mt-4">
-          <AdminUsersPanel isSaas={isSaas} />
-        </TabsContent>
-        <TabsContent value="support" className="mt-4 space-y-4">
-          <AdminSupportGroupCard />
-          <AdminSupportTab />
-        </TabsContent>
-      </Tabs>
+      <AdminContent />
     </Page>
+  );
+}
+
+/** Admin body for the full route or an embedded Graph floating window. */
+export function AdminContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
+  const { user } = useTenant();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isHub, setIsHub] = useState(false);
+  const [isSaas, setIsSaas] = useState(false);
+  const tabParam = searchParams.get("tab");
+  const tab =
+    tabParam === "platform" || tabParam === "structure"
+      ? tabParam === "structure"
+        ? "template"
+        : isHub
+          ? "billing"
+          : "template"
+      : (tabParam ?? (isHub ? "billing" : "inference"));
+
+  useEffect(() => {
+    void fetchBridgeHealth()
+      .then((h) => {
+        setIsHub(Boolean(h.hub));
+        setIsSaas(Boolean(h.saas));
+      })
+      .catch(() => {
+        setIsHub(false);
+        setIsSaas(false);
+      });
+  }, []);
+
+  if (!user?.isAdmin) {
+    if (embedded) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          Platform administrator access required.
+        </p>
+      );
+    }
+    return <Navigate to={USERS_PATH} replace />;
+  }
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}
+      className="w-full"
+    >
+      <TabsList variant="line" className="w-full flex-wrap justify-start">
+        <TabsTrigger value="inference">GodMode Inference</TabsTrigger>
+        {isHub ? <TabsTrigger value="billing">Billing</TabsTrigger> : null}
+        {isSaas ? <TabsTrigger value="saas">SaaS</TabsTrigger> : null}
+        <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+        <TabsTrigger value="authority">Authority</TabsTrigger>
+        <TabsTrigger value="embeddings">Embeddings</TabsTrigger>
+        <TabsTrigger value="observability">Observability</TabsTrigger>
+        <TabsTrigger value="updates">Updates</TabsTrigger>
+        <TabsTrigger value="template">Workspace template</TabsTrigger>
+        <TabsTrigger value="users">Users</TabsTrigger>
+        <TabsTrigger value="support">Support</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="inference" className="mt-4">
+        <AdminGodModeInferencePanel />
+      </TabsContent>
+      {isHub ? (
+        <TabsContent value="billing" className="mt-4">
+          <AdminBillingTab />
+        </TabsContent>
+      ) : null}
+      {isSaas ? (
+        <TabsContent value="saas" className="mt-4">
+          <AdminSaasCustomersPanel />
+        </TabsContent>
+      ) : null}
+      <TabsContent value="marketplace" className="mt-4 flex flex-col gap-4">
+        <AdminMarketplaceReviewPanel />
+        <AdminMarketplaceSellersPanel />
+        <AdminMarketplaceFeesPanel />
+      </TabsContent>
+      <TabsContent value="authority" className="mt-4">
+        <AdminAuthorityPanel />
+      </TabsContent>
+      <TabsContent value="embeddings" className="mt-4">
+        <MemoryEngineTab allowControls hostWide={isHub || isSaas} />
+      </TabsContent>
+      <TabsContent value="observability" className="mt-4">
+        <AdminObservabilityPanel />
+      </TabsContent>
+      <TabsContent value="updates" className="mt-4">
+        <UpdatesCard />
+      </TabsContent>
+      <TabsContent value="template" className="mt-4">
+        <StructureAdminPanel />
+      </TabsContent>
+      <TabsContent value="users" className="mt-4">
+        <AdminUsersPanel isSaas={isSaas} />
+      </TabsContent>
+      <TabsContent value="support" className="mt-4 space-y-4">
+        <AdminSupportGroupCard />
+        <AdminSupportTab />
+      </TabsContent>
+    </Tabs>
   );
 }
 

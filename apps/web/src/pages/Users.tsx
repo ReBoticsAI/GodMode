@@ -8,7 +8,12 @@ export default function Users() {
         title="Profile"
         description="Your profile, account security, and projects."
       />
-      <UserProfilePanel />
+      <UsersContent />
     </Page>
   );
+}
+
+/** Profile body for the full route or an embedded Graph floating window. */
+export function UsersContent() {
+  return <UserProfilePanel />;
 }

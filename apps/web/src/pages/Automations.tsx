@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { WorkflowFlow } from "@/components/intelligence/workflow/WorkflowFlow";
 import { ProjectsBoard } from "@/components/intelligence/projects/ProjectsBoard";
+import { TasksContent } from "@/pages/UserTasks";
 import { SchedulesTab } from "@/pages/ai-settings/SchedulesTab";
 import {
   approveHookRun,
@@ -41,6 +42,7 @@ import {
   fetchEvents,
   fetchHookRuns,
   fetchHooks,
+  isUnauthorizedError,
   rejectHookRun,
   updateHook,
   type AiWorkflow,
@@ -137,10 +139,13 @@ function emptyDraft(scheduleOnly: boolean, agentId?: string): DraftState {
 function HooksManager({
   scheduleOnly = false,
   agentId,
+  userOwned = false,
 }: {
   scheduleOnly?: boolean;
   /** When set, list/create hooks scoped to this agent only. */
   agentId?: string;
+  /** When set, list/create hooks owned by the signed-in user. */
+  userOwned?: boolean;
 }) {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [agentIds, setAgentIds] = useState<string[]>([]);
@@ -160,7 +165,10 @@ function HooksManager({
       setAgentIds(h.agentIds);
       setEventTypes(e.eventTypes);
     } catch (err) {
-      toast.error((err as Error).message);
+      setHooks([]);
+      setAgentIds([]);
+      setEventTypes([]);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -188,7 +196,7 @@ function HooksManager({
       const res = await fetchHookRuns(hook.id);
       setRuns(res.runs);
     } catch (err) {
-      toast.error((err as Error).message);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
     }
   }, []);
 
@@ -293,9 +301,11 @@ function HooksManager({
       : hooks;
     if (agentId) {
       list = list.filter((h) => h.owner_kind === "agent" && h.owner_id === agentId);
+    } else if (userOwned) {
+      list = list.filter((h) => h.owner_kind === "user");
     }
     return list;
-  }, [hooks, scheduleOnly, agentId]);
+  }, [hooks, scheduleOnly, agentId, userOwned]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -846,7 +856,9 @@ function EventsList({ agentId }: { agentId: string }) {
 export interface AutomationsPanelProps {
   /** When set, scopes hooks/schedules/events to this agent and enables cockpit mode. */
   agentId?: string;
-  /** Show the Kanban Tasks sub-tab (default tab when true). */
+  /** You's task boards and user-owned hooks. Ignored when agentId is set. */
+  userOwned?: boolean;
+  /** Show the Tasks sub-tab (default tab when true). User boards when agentId is omitted. */
   showTasks?: boolean;
   /** Show read-only Events sub-tab. */
   showEvents?: boolean;
@@ -856,9 +868,11 @@ export interface AutomationsPanelProps {
  * Embeddable Automations surface. Self-contained — manages its own sub-tab state.
  * Without props: global Workflows/Hooks/Schedules (Agents workspace).
  * With agentId + showTasks/showEvents: per-agent cockpit in the chat panel.
+ * With showTasks and no agentId: You's task boards, and hooks owned by the user.
  */
 export function AutomationsPanel({
   agentId,
+  userOwned = false,
   showTasks = false,
   showEvents = false,
 }: AutomationsPanelProps = {}) {
@@ -934,12 +948,16 @@ export function AutomationsPanel({
           ))}
         </TabsList>
 
-        {showTasks && agentId && (
+        {showTasks && (
           <TabsContent
             value="tasks"
             className="mt-2 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
           >
-            <ProjectsBoard scope={{ kind: "agent", agentId }} />
+            {agentId ? (
+              <ProjectsBoard scope={{ kind: "agent", agentId }} />
+            ) : (
+              <TasksContent embedded />
+            )}
           </TabsContent>
         )}
 
@@ -954,7 +972,7 @@ export function AutomationsPanel({
           value="hooks"
           className="mt-4 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
-          <HooksManager agentId={agentId} />
+          <HooksManager agentId={agentId} userOwned={userOwned && !agentId} />
         </TabsContent>
 
         <TabsContent
@@ -962,7 +980,7 @@ export function AutomationsPanel({
           className="mt-4 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
           <div className="flex flex-col gap-4">
-            <HooksManager scheduleOnly agentId={agentId} />
+            <HooksManager scheduleOnly agentId={agentId} userOwned={userOwned && !agentId} />
             {showLegacySchedulesCard && (
               <Card>
                 <CardHeader>

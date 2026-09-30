@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { OperationContext } from "../adapter-registry.js";
 import {
   configurePlatformConfigAdapterServices,
+  godModeInferenceConfigAdapter,
   platformBillingConfigAdapter,
   resetPlatformConfigAdapterServices,
   tenantOnboardingConfigAdapter,
@@ -88,6 +89,22 @@ describe("platform configuration ObjectType adapters", () => {
         };
       },
       testBillingConnection: async () => ({ ok: true }),
+      getGodModeInferenceSupply: () => ({
+        configured: false,
+        deepseek: { connected: false, source: "none" as const },
+        zai: { connected: false, source: "none" as const },
+        zaiCoding: { connected: false, source: "none" as const },
+        dashscope: { connected: false, source: "none" as const },
+      }),
+      setGodModeInferenceSupply: () => ({
+        configured: false,
+        deepseek: { connected: false, source: "none" as const },
+        zai: { connected: false, source: "none" as const },
+        zaiCoding: { connected: false, source: "none" as const },
+        dashscope: { connected: false, source: "none" as const },
+      }),
+      defaultTrialBudgetUsd: () => 0.1,
+      setDefaultTrialBudgetUsd: (usd: number) => usd,
     });
     const def = definition("PlatformBillingConfig", "platform_billing_config_service", [
       "id",
@@ -117,6 +134,79 @@ describe("platform configuration ObjectType adapters", () => {
         ctx
       )
     ).resolves.toEqual({ ok: true });
+    db.close();
+  });
+
+  it("configures GodMode Inference supply without projecting secrets", () => {
+    const db = new Database(":memory:");
+    let deepseek = "";
+    let trialBudget = 0.1;
+    configurePlatformConfigAdapterServices({
+      getBillingConfig: () => ({
+        configured: false,
+        publishableKey: null,
+        creditsPerUsd: 100,
+        hasSecretKey: false,
+      }),
+      setBillingConfig: (input) => ({
+        configured: false,
+        publishableKey: input.publishableKey ?? null,
+        creditsPerUsd: input.creditsPerUsd ?? 100,
+        hasSecretKey: false,
+      }),
+      testBillingConnection: async () => ({ ok: false }),
+      getGodModeInferenceSupply: () => ({
+        configured: Boolean(deepseek),
+        deepseek: deepseek
+          ? { connected: true, source: "platform" as const, masked: "sk-t…key" }
+          : { connected: false, source: "none" as const },
+        zai: { connected: false, source: "none" as const },
+        zaiCoding: { connected: false, source: "none" as const },
+        dashscope: { connected: false, source: "none" as const },
+      }),
+      setGodModeInferenceSupply(input) {
+        if (input.deepseekApiKey !== undefined) {
+          deepseek = input.deepseekApiKey.trim();
+        }
+        return {
+          configured: Boolean(deepseek),
+          deepseek: deepseek
+            ? {
+                connected: true,
+                source: "platform" as const,
+                masked: "sk-t…key",
+              }
+            : { connected: false, source: "none" as const },
+          zai: { connected: false, source: "none" as const },
+          zaiCoding: { connected: false, source: "none" as const },
+          dashscope: { connected: false, source: "none" as const },
+        };
+      },
+      defaultTrialBudgetUsd: () => trialBudget,
+      setDefaultTrialBudgetUsd: (usd: number) => {
+        trialBudget = usd;
+        return usd;
+      },
+    });
+    const def = definition(
+      "GodModeInferenceConfig",
+      "godmode_inference_config_service",
+      ["id", "configured", "deepseek", "zai", "zai_coding", "dashscope"]
+    );
+    const ctx = context(db, "operator", true);
+    const updated = godModeInferenceConfigAdapter.actions!.configure(
+      db,
+      def,
+      "godmode-inference",
+      { deepseek_api_key: "sk-test-deepseek" },
+      ctx
+    ) as { data: Record<string, unknown> };
+    expect(deepseek).toBe("sk-test-deepseek");
+    expect(updated.data.configured).toBe(true);
+    expect(updated.data).not.toHaveProperty("deepseek_api_key");
+    expect(
+      (updated.data.deepseek as { masked?: string }).masked
+    ).toBe("sk-t…key");
     db.close();
   });
 

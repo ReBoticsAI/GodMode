@@ -26,6 +26,7 @@ import {
   fetchZaiCodingStatus,
   type ZaiCodingAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Z.AI GLM Coding Plan catalog snapshot (2026-08-03).
@@ -125,8 +126,10 @@ export function ZaiCodingPlanCard({
         <CardDescription>
           Use your GLM Coding Plan (subscription quota), not metered general Z.AI
           payg. Routes through the coding-only OpenAI-compatible endpoint. Per-tenant
-          keys only.
+          keys only. For metered Z.AI Platform payg, use Inference → Preferred
+          BYOK (personal) or Admin → GodMode Inference (platform supply).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="zai-coding" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

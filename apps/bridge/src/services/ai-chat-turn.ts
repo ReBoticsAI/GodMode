@@ -32,6 +32,12 @@ export type AiChatTurnBody = {
   autoAcceptTools?: boolean;
   chatMode?: IntelligenceChatMode;
   toolAutonomy?: CodeAutonomyLevel;
+  /** Welcome-guide interest. Not stored on the user message. */
+  interestId?: string;
+  /** Next-step button id. Not stored on the user message. */
+  pathId?: string;
+  /** Desktop OS hint for the local download offer: windows, macos, or linux. */
+  clientOs?: string;
   /** Continue an interrupted turn without inserting another user ChatMessage. */
   resumeInterrupted?: boolean;
 };
@@ -78,6 +84,9 @@ export type PreparedAiChatTurn = {
   history: HistoryTurn[];
   platformContext?: PlatformContext;
   message: string;
+  interestId?: string;
+  pathId?: string;
+  clientOs?: string;
 };
 
 export type PrepareAiChatTurnResult =

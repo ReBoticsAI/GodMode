@@ -149,7 +149,11 @@ function TreeNode({
   );
 }
 
-export default function CodingWorkspacePage() {
+export default function CodingWorkspacePage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const [rootEntries, setRootEntries] = useState<CodingTreeEntry[]>([]);
   const [codingRoot, setCodingRoot] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -292,31 +296,31 @@ export default function CodingWorkspacePage() {
   };
 
   if (denied) {
+    const deniedBody = (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyTitle>Coding disabled</EmptyTitle>
+          <EmptyDescription>
+            This installation has SaaS code access turned off. File browse,
+            edit, and the Terminal command runner stay blocked until platform
+            policy allows them.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+    if (embedded) return deniedBody;
     return (
       <Page>
         <PageHeader title="Coding" description="Browse and edit the coding workspace." />
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyTitle>Coding disabled</EmptyTitle>
-            <EmptyDescription>
-              This installation has SaaS code access turned off. File browse,
-              edit, and the Terminal command runner stay blocked until platform
-              policy allows them.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        {deniedBody}
       </Page>
     );
   }
 
-  return (
-    <Page>
-      <PageHeader
-        title="Coding"
-        description="Browse files, inspect git, and run sandboxed shell commands in the active coding root."
-      />
-      <Tabs defaultValue="files" className="flex flex-col gap-4">
-        <TabsList variant="line" className="w-full justify-start">
+  const workspace = (
+    <>
+      <Tabs defaultValue="files" className="flex min-h-0 flex-1 flex-col gap-4">
+        <TabsList variant="line" className="w-full shrink-0 justify-start">
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="git" onClick={() => void refreshGit()}>
             Git
@@ -324,7 +328,7 @@ export default function CodingWorkspacePage() {
           <TabsTrigger value="terminal">Terminal</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="files" className="mt-0">
+        <TabsContent value="files" className="mt-0 min-h-0 flex-1">
           <div className="flex min-h-[28rem] flex-col gap-4 md:flex-row md:items-stretch">
             <aside className="flex w-full shrink-0 flex-col gap-2 rounded-xl border bg-card md:w-64">
               <div className="flex items-center gap-1 border-b p-2">
@@ -548,6 +552,24 @@ export default function CodingWorkspacePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {workspace}
+      </div>
+    );
+  }
+
+  return (
+    <Page>
+      <PageHeader
+        title="Coding"
+        description="Browse files, inspect git, and run sandboxed shell commands in the active coding root."
+      />
+      {workspace}
     </Page>
   );
 }

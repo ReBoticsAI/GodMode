@@ -346,6 +346,13 @@ assert.equal(
 assert.equal(resolveZaiPaygHarnessProfile("glm-5.2").id, "zai-payg");
 assert.notEqual(resolveZaiPaygHarnessProfile("glm-5.2").id, "zai-coding");
 assert.notEqual(resolveZaiPaygHarnessProfile("glm-5.2").id, "together-glm");
+{
+  const zai = resolveZaiPaygHarnessProfile("glm-5.3-flash");
+  assert.equal(zai.sampling.topP, 0.95);
+  assert.equal(zai.enableThinkingDefault, true);
+  assert.equal(zai.reasoningEffort, "max");
+  assert.equal(zai.clearThinking, false);
+}
 assert.equal(
   resolveHarnessProfile({
     source: "provider",
@@ -581,7 +588,7 @@ assert.equal(formatCursorModelLabel("x", "Nice Name"), "Nice Name");
 
 assert.equal(
   cursorCloudCacheFingerprint("auto", "abc", ""),
-  "auto||abc||agent||"
+  "auto||abc||agent|||"
 );
 assert.notEqual(
   cursorCloudCacheFingerprint("auto", "sys1"),

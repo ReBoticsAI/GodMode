@@ -8,10 +8,235 @@ export interface ProtocolException {
 
 export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
   {
-    id: "health",
+    id: "chat-unlock-status",
     methods: ["GET"],
-    pathPattern: "/api/health",
-    rationale: "Unauthenticated process and deployment readiness.",
+    pathPattern: "/api/chat-unlock/status",
+    rationale:
+      "Public unlock catalog and entitlement flags; Stripe Checkout and tutorials use sibling authenticated routes.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-status",
+    methods: ["GET"],
+    pathPattern: "/api/trial-inference/status",
+    rationale:
+      "First-land trial inference probe with soft visitor cookie; no durable identity theater.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "trial-inference-ensure",
+    methods: ["POST"],
+    pathPattern: "/api/trial-inference/ensure",
+    rationale:
+      "Provision or attach GodMode trial OpenRouter path (#758); visitor soft-fail, auth vault attach when configured.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/checkout",
+    rationale:
+      "Authenticated Stripe Checkout for GodMode Inference packs/subscriptions; grant top-up is durable via webhook, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-checkout-complete",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/checkout/complete",
+    rationale:
+      "Local applies a paid Cloud Stripe session onto this machine's Inference balance. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-cloud-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/cloud-checkout",
+    rationale:
+      "Unauthenticated Stripe Checkout on GodMode Cloud for Local Inference buyers, same commerce host as Marketplace and Seller. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-cloud-checkout-claim",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/cloud-checkout/claim",
+    rationale:
+      "Local claims a paid Cloud Inference Checkout once. Not Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-list",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/admin/grants",
+    rationale:
+      "Platform-admin list of Inference grants (spent vs budget); not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-patch",
+    methods: ["PATCH"],
+    pathPattern: "/api/godmode-inference/admin/grants/:",
+    rationale:
+      "Platform-admin patch of a grant budget / expire; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-grants-revoke",
+    methods: ["POST"],
+    pathPattern: "/api/godmode-inference/admin/grants/:/revoke",
+    rationale:
+      "Platform-admin revoke of an Inference grant so Intelligence hard-stops; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-admin-default-trial-budget",
+    methods: ["PUT"],
+    pathPattern: "/api/godmode-inference/admin/default-trial-budget",
+    rationale:
+      "Platform-admin default trial budget USD on GodModeInferenceConfig meta; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "godmode-inference-config",
+    methods: ["GET"],
+    pathPattern: "/api/godmode-inference/config",
+    rationale:
+      "Public GodMode Inference pack/subscription catalog and supply-ready flag; no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-projection",
+    methods: ["GET"],
+    pathPattern: "/api/graph/projection",
+    rationale:
+      "Architecture catalog (public) and ObjectType neighborhood for The Graph; read-only, no secrets.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-admin-grant",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/admin/grant",
+    rationale:
+      "Platform admin or local allowAnonymous preview grant of UnlockEntitlement without tutorial or Stripe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-checkout",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/checkout",
+    rationale:
+      "Stripe Checkout redirect for skip-tutorial unlock purchases. Durable grant is side-effect of webhook; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-tutorial-start",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/start",
+    rationale:
+      "Tutorial start for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-tutorial-step",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/step",
+    rationale:
+      "Tutorial step progress for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-tutorial-complete",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/tutorial/complete",
+    rationale:
+      "Tutorial complete for free UnlockEntitlement grants. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-graph",
+    methods: ["GET", "PUT"],
+    pathPattern: "/api/chat-unlock/graph",
+    rationale:
+      "Chat graph document persistence for docked Intelligence threads after window unlock. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "chat-unlock-graph-dock",
+    methods: ["POST"],
+    pathPattern: "/api/chat-unlock/graph/dock",
+    rationale:
+      "Dock Intelligence chat graph into a floating window after unlock. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-missions-sync",
+    methods: ["POST"],
+    pathPattern: "/api/graph-missions/sync",
+    rationale:
+      "Sync Graph mission checklist from catalog; platform meta side effect, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "graph-missions-complete",
+    methods: ["POST"],
+    pathPattern: "/api/graph-missions/:/complete",
+    rationale:
+      "Mark a Graph mission complete for the signed-in user. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-open",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/open",
+    rationale:
+      "Open or attach a SQLite universe plane for Graph isolation pilots. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-chat",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/chat",
+    rationale:
+      "Pilot dual-write chat shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-agent",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/agent",
+    rationale:
+      "Pilot dual-write agent shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-vaults",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/vaults",
+    rationale:
+      "Pilot dual-write vault shells into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-pilot-surface",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/pilot/surface",
+    rationale:
+      "Pilot dual-write surface shell into the SQLite universe. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-tools-list",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/tools/list",
+    rationale:
+      "List SQLite universe pilot tools for Graph isolation dogfood. Not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "sqlite-universe-tools-query",
+    methods: ["POST"],
+    pathPattern: "/api/sqlite-universe/tools/query",
+    rationale:
+      "Query SQLite universe pilot tools for Graph isolation dogfood. Not ObjectType Record CRUD.",
     authenticatedDomainMutations: "none",
   },
   {

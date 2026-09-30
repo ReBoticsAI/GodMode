@@ -26,6 +26,7 @@ import {
   fetchZaiStatus,
   type ZaiAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Z.AI payg chat catalog snapshot (2026-08-03).
@@ -127,6 +128,7 @@ export function ZaiPaygCard({
           (`/api/paas/v4`), not GLM Coding Plan. For subscription quota, use the
           Z.AI Coding Plan card under Subscriptions.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="zai-payg" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

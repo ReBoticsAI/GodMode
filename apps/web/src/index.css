@@ -177,3 +177,54 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+/* Bottom chat dock: stock / breaking-news style marquee */
+@keyframes godmode-ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.godmode-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: godmode-ticker-scroll linear infinite;
+  animation-duration: var(--godmode-ticker-duration, 40s);
+}
+
+.godmode-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* Locked chat chrome enticement (first-land unlock journey) */
+@keyframes godmode-chrome-entice {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+    transform: scale(1);
+  }
+  40% {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 35%, transparent);
+    transform: scale(1.08);
+  }
+  70% {
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 20%, transparent);
+    transform: scale(1.02);
+  }
+}
+
+.godmode-chrome-entice {
+  animation: godmode-chrome-entice 2.4s ease-in-out infinite;
+  border-radius: var(--radius-sm, 0.25rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .godmode-chrome-entice {
+    animation: none;
+    outline: 2px solid color-mix(in oklch, var(--primary) 50%, transparent);
+    outline-offset: 2px;
+  }
+}

@@ -26,6 +26,7 @@ import {
   fetchOpencodeGoStatus,
   type OpencodeGoAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * OpenCode Go catalog snapshot (2026-08-03).
@@ -127,6 +128,7 @@ export function OpencodeGoCard({
           transport with an OpenCode Go harness. Per-tenant keys only. Not OpenCode Zen
           (separate product surface).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="opencode-go" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

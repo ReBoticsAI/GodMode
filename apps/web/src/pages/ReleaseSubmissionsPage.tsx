@@ -60,7 +60,11 @@ function isContentsPermissionFailure(error: string | null | undefined): boolean 
   );
 }
 
-export default function ReleaseSubmissionsPage() {
+export default function ReleaseSubmissionsPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<ReleaseSubmission[]>([]);
   const [metrics, setMetrics] = useState<ReleaseSubmissionMetrics | null>(null);
   const [connectors, setConnectors] = useState<PublisherConnector[]>([]);
@@ -104,8 +108,9 @@ export default function ReleaseSubmissionsPage() {
     }
   };
 
-  return (
-    <Page>
+  const inner = (
+    <>
+      {!embedded ? (
       <PageHeader
         title="Release submissions"
         description="Ship-from-GodMode status for GitHub Releases. Connect GitHub in Vault, then use github_release_prepare / create (draft) / publish from Coding. Other stores and channels install as plugins."
@@ -129,7 +134,17 @@ export default function ReleaseSubmissionsPage() {
           </div>
         }
       />
-
+      ) : (
+        <div className="mb-2 flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" render={<Link to={`${VAULT_PATH}?tab=integrations`} />}>
+            Vault Connect
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
+            <RefreshCwIcon data-icon="inline-start" />
+            Reload
+          </Button>
+        </div>
+      )}
       {connectors.length > 0 ? (
         <Card size="sm" className="mb-4">
           <CardHeader>
@@ -296,8 +311,21 @@ export default function ReleaseSubmissionsPage() {
           </Table>
         </div>
       )}
-    </Page>
+    </>
   );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{inner}</div>;
+  }
+  return <Page>{inner}</Page>;
+}
+
+export function ReleasesContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
+  return <ReleaseSubmissionsPage embedded={embedded} />;
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

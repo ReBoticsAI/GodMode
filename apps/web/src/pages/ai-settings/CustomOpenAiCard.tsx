@@ -19,6 +19,7 @@ import {
   fetchCustomOpenAiStatus,
   type CustomOpenAiAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /** Connect any OpenAI-compatible endpoint (base URL + key) for Intelligence. */
 export function CustomOpenAiCard({
@@ -113,6 +114,7 @@ export function CustomOpenAiCard({
           Escape hatch for any OpenAI-compatible base URL + API key. Prefer named
           provider cards when available. Uses a generic custom-openai harness.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="custom-openai" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

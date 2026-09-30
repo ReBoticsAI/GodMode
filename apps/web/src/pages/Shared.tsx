@@ -32,6 +32,15 @@ import { Input } from "@/components/ui/input";
 type GrantRow = Record<string, unknown>;
 
 export default function SharedPage() {
+  return <SharedContent />;
+}
+
+/** Shared body for the full route or an embedded Graph floating window. */
+export function SharedContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useTenant();
   const [grants, setGrants] = useState<GrantRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,13 +195,15 @@ export default function SharedPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+    <div className={embedded ? "flex flex-col gap-6" : "mx-auto flex max-w-4xl flex-col gap-6 p-6"}>
+      {!embedded ? (
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Shared</h1>
         <p className="text-sm text-muted-foreground">
           Resources shared with you and resources you have shared with others.
         </p>
       </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

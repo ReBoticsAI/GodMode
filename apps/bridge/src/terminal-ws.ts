@@ -6,7 +6,6 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket, WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { authenticateWsClient } from "./ws-broker.js";
-import { getOperatorTenantIdCached } from "./services/auth/middleware.js";
 import {
   parseWsSessionFromUrl,
   parseWsTenantIdFromUrl,
@@ -34,19 +33,6 @@ export function attachTerminalWebSocket(wss: WebSocketServer): void {
       return;
     }
 
-    if (!config.auth.allowAnonymous && config.isProduction) {
-      const querySession = config.isProduction
-        ? undefined
-        : parseWsSessionFromUrl(req.url);
-      const hasCookie = Boolean(
-        req.headers.cookie?.includes("godmode_session=")
-      );
-      if (!querySession && !hasCookie && !req.headers.authorization) {
-        ws.close(4401, "Authentication required");
-        return;
-      }
-    }
-
     const tenantHeader =
       typeof req.headers["x-tenant-id"] === "string"
         ? req.headers["x-tenant-id"]
@@ -63,21 +49,13 @@ export function attachTerminalWebSocket(wss: WebSocketServer): void {
       querySession
     );
 
-    if (!meta.userId && !config.auth.allowAnonymous) {
+    if (!meta.userId) {
       ws.close(4401, "Authentication required");
       return;
     }
     if (!meta.tenantId) {
-      if (meta.userId) {
-        ws.close(4403, "Tenant required");
-        return;
-      }
-      if (config.auth.allowAnonymous) {
-        meta.tenantId = getOperatorTenantIdCached();
-      } else {
-        ws.close(4401, "Authentication required");
-        return;
-      }
+      ws.close(4403, "Tenant required");
+      return;
     }
 
     let attachedSessionId: string | null = null;

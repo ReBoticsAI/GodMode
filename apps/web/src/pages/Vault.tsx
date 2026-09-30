@@ -43,6 +43,10 @@ import { XaiConsoleCard } from "@/pages/ai-settings/XaiConsoleCard";
 import { ZaiPaygCard } from "@/pages/ai-settings/ZaiPaygCard";
 import { MinimaxPaygCard } from "@/pages/ai-settings/MinimaxPaygCard";
 import { CustomOpenAiCard } from "@/pages/ai-settings/CustomOpenAiCard";
+import { QwenDashScopeCard } from "@/pages/ai-settings/QwenDashScopeCard";
+import { OptimizedInferenceSection } from "@/pages/ai-settings/OptimizedInferenceSection";
+import { GodModeInferencePanel } from "@/pages/ai-settings/GodModeInferencePanel";
+import { InferenceConnectOverview } from "@/pages/ai-settings/provider-connect-methods";
 import { HoldingsConnectionsContent } from "@/pages/Holdings";
 import type { HoldingCategory } from "@/lib/api-holdings";
 import {
@@ -341,21 +345,32 @@ export function InferenceTab({
   return (
     <Tabs value={sub} onValueChange={onSubChange} className="w-full">
       <TabsList variant="line" className="w-full flex-wrap justify-start">
-        <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
-        <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+        <TabsTrigger value="godmode">GodMode Inference</TabsTrigger>
+        <TabsTrigger value="supported">Supported</TabsTrigger>
+        <TabsTrigger value="subscriptions">Advanced subscriptions</TabsTrigger>
+        <TabsTrigger value="api-keys">Advanced API keys</TabsTrigger>
         <TabsTrigger value="search">Search</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="godmode" className="mt-4 flex flex-col gap-6">
+        <GodModeInferencePanel />
+      </TabsContent>
+
+      <TabsContent value="supported" className="mt-4 flex flex-col gap-6">
+        <OptimizedInferenceSection vaultAgentId={null} />
+      </TabsContent>
 
       <TabsContent value="subscriptions" className="mt-4 flex flex-col gap-6">
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-sm font-medium">Subscriptions</h2>
+            <h2 className="text-sm font-medium">Advanced subscriptions</h2>
             <p className="text-sm text-muted-foreground">
-              Use your plan (billed by the provider). Cursor, Z.AI GLM Coding Plan,
-              OpenCode Go, DigitalOcean Inference, and Snowflake Cortex PAT are
-              available today. Stored in the Platform Vault.
+              Unsupported bring-your-own plans. GodMode supports DeepSeek, Z.AI,
+              and Qwen for managed Inference and Supported BYOK. Other
+              subscriptions remain available for power users.
             </p>
           </div>
+          <InferenceConnectOverview bucket="subscriptions" />
           <CursorSubscriptionCard vaultAgentId={null} />
           <ZaiCodingPlanCard vaultAgentId={null} />
           <OpencodeGoCard vaultAgentId={null} />
@@ -371,12 +386,14 @@ export function InferenceTab({
       <TabsContent value="api-keys" className="mt-4 flex flex-col gap-6">
         <section className="flex flex-col gap-3">
           <div>
-            <h2 className="text-sm font-medium">API keys</h2>
+            <h2 className="text-sm font-medium">Advanced API keys</h2>
             <p className="text-sm text-muted-foreground">
-              Metered BYOK. Each card stores a fixed credential and can apply a
-              provider-tuned harness in Intelligence.
+              Unsupported metered BYOK. DeepSeek, Z.AI payg, and Qwen are
+              featured under Supported. Primary chat uses GodMode Inference
+              (welcome allowance, then packs and subscriptions).
             </p>
           </div>
+          <InferenceConnectOverview bucket="api-keys" />
           <OpenAiPlatformCard vaultAgentId={null} />
           <AnthropicConsoleCard vaultAgentId={null} />
           <OpenRouterCard vaultAgentId={null} />
@@ -388,6 +405,7 @@ export function InferenceTab({
           <XaiConsoleCard vaultAgentId={null} />
           <ZaiPaygCard vaultAgentId={null} />
           <MinimaxPaygCard vaultAgentId={null} />
+          <QwenDashScopeCard vaultAgentId={null} />
           <CustomOpenAiCard vaultAgentId={null} />
         </section>
       </TabsContent>
@@ -401,6 +419,7 @@ export function InferenceTab({
               Stored in the Platform Vault.
             </p>
           </div>
+          <InferenceConnectOverview bucket="search" />
           <ExaConnectCard vaultAgentId={null} />
         </section>
       </TabsContent>

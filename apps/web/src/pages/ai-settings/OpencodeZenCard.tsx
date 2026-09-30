@@ -26,6 +26,7 @@ import {
   fetchOpencodeZenStatus,
   type OpencodeZenAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * OpenCode Zen catalog snapshot (2026-08-03).
@@ -128,6 +129,7 @@ export function OpencodeZenCard({
           chat/completions-compatible model ids. Per-tenant keys only. Not
           OpenCode Go (separate Subscriptions card).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="opencode-zen" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

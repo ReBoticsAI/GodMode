@@ -19,6 +19,7 @@ import {
   fetchStaffSupportTickets,
   fetchSupportGroup,
   fetchSupportTicket,
+  isUnauthorizedError,
   postSupportMessage,
   promoteSupportTicketToKanban,
   type SupportMessage,
@@ -27,6 +28,7 @@ import {
 } from "@/api";
 import { TASKS_PATH } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/lib/tenant-context";
 
 const STATUS_TONE: Record<SupportTicketStatus, string> = {
   open: "bg-blue-500/15 text-blue-400",
@@ -36,7 +38,21 @@ const STATUS_TONE: Record<SupportTicketStatus, string> = {
 };
 
 export default function Support() {
+  return (
+    <Page>
+      <SupportContent />
+    </Page>
+  );
+}
+
+/** Support body for the full route or an embedded Graph floating window. */
+export function SupportContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const navigate = useNavigate();
+  const { authenticated } = useTenant();
   const [searchParams, setSearchParams] = useSearchParams();
   const inboxParam = searchParams.get("inbox") === "staff" ? "staff" : "mine";
   const [inbox, setInbox] = useState<"mine" | "staff">(inboxParam);
@@ -67,11 +83,14 @@ export default function Support() {
           : await fetchMySupportTickets();
       setTickets(res.tickets);
     } catch (err) {
+      setTickets([]);
       if (inbox === "staff") {
         setIsStaff(false);
         setInbox("mine");
-        toast.error("Staff inbox requires Support group membership");
-      } else {
+        if (!isUnauthorizedError(err)) {
+          toast.error("Staff inbox requires Support group membership");
+        }
+      } else if (!isUnauthorizedError(err)) {
         toast.error((err as Error).message);
       }
     } finally {
@@ -91,7 +110,9 @@ export default function Support() {
         setActive(res.ticket);
         setMessages(res.messages);
       })
-      .catch((err) => toast.error((err as Error).message));
+      .catch((err) => {
+        if (!isUnauthorizedError(err)) toast.error((err as Error).message);
+      });
   }, [searchParams]);
 
   const openTicket = useCallback(async (t: SupportTicket) => {
@@ -101,7 +122,7 @@ export default function Support() {
       setMessages(res.messages);
       setActive(res.ticket);
     } catch (err) {
-      toast.error((err as Error).message);
+      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
     }
   }, []);
 
@@ -132,7 +153,8 @@ export default function Support() {
   }, [active, navigate]);
 
   return (
-    <Page>
+    <div className={embedded ? "flex flex-col gap-4" : undefined}>
+      {!embedded ? (
       <PageHeader
         title="Support"
         description="Hub issues go to administrators and the Support group; open-source bugs go to GitHub."
@@ -143,7 +165,14 @@ export default function Support() {
           />
         }
       />
-
+      ) : (
+        <div className="mb-2 flex justify-end">
+          <SupportRequestDialog
+            trigger={<Button size="sm">New request</Button>}
+            onCreated={load}
+          />
+        </div>
+      )}
       <Tabs
         value={inbox}
         onValueChange={(v) => {
@@ -168,12 +197,18 @@ export default function Support() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">
-                      {inbox === "staff" ? "No staff tickets" : "No requests yet"}
+                      {!authenticated
+                        ? "Sign in required"
+                        : inbox === "staff"
+                          ? "No staff tickets"
+                          : "No requests yet"}
                     </CardTitle>
                     <CardDescription>
-                      {inbox === "staff"
-                        ? "Hub and shared-resource tickets appear here for Support group members."
-                        : "Submit a request and it will show up here."}
+                      {!authenticated
+                        ? "Sign in to view and submit support requests."
+                        : inbox === "staff"
+                          ? "Hub and shared-resource tickets appear here for Support group members."
+                          : "Submit a request and it will show up here."}
                     </CardDescription>
                   </CardHeader>
                 </Card>
@@ -289,6 +324,6 @@ export default function Support() {
           </div>
         </TabsContent>
       </Tabs>
-    </Page>
+    </div>
   );
 }

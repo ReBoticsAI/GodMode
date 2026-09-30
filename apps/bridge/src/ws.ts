@@ -22,15 +22,6 @@ export function attachWebSocket(
   bus: EventEmitter
 ): (payload: object, tenantId?: string) => void {
   wss.on("connection", (ws, req) => {
-    if (!config.auth.allowAnonymous && config.isProduction) {
-      const querySession = config.isProduction ? undefined : parseWsSessionFromUrl(req.url);
-      const hasCookie = Boolean(req.headers.cookie?.includes("godmode_session="));
-      if (!querySession && !hasCookie && !req.headers.authorization) {
-        ws.close(4401, "Authentication required");
-        return;
-      }
-    }
-
     const tenantHeader =
       typeof req.headers["x-tenant-id"] === "string"
         ? req.headers["x-tenant-id"]
@@ -45,26 +36,16 @@ export function attachWebSocket(
       querySession
     );
 
-    if (!meta.userId && !config.auth.allowAnonymous) {
+    if (!meta.userId) {
       ws.close(4401, "Authentication required");
       return;
     }
 
     if (!meta.tenantId) {
-      if (meta.userId) {
-        ws.close(4403, "Tenant required");
-        return;
-      }
-      if (config.auth.allowAnonymous) {
-        meta.tenantId = getOperatorTenantIdCached();
-        meta.rooms.add(`tenant:${meta.tenantId}`);
-      } else {
-        ws.close(4401, "Authentication required");
-        return;
-      }
-    } else if (meta.userId) {
-      meta.rooms.add(`tenant:${meta.tenantId}`);
+      ws.close(4403, "Tenant required");
+      return;
     }
+    meta.rooms.add(`tenant:${meta.tenantId}`);
     clients.add(meta);
     getShareBroker().registerClient(meta);
     markUserOnline(meta.userId);

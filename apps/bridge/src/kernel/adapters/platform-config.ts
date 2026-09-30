@@ -11,6 +11,15 @@ import {
   type PlatformBillingConfig,
 } from "../../services/platform-billing.js";
 import {
+  getGodModeInferenceSupplyStatus,
+  setGodModeInferenceSupplyKeys,
+  type GodModeInferenceSupplyStatus,
+} from "../../services/godmode-inference-supply.js";
+import {
+  defaultTrialBudgetUsd,
+  setDefaultTrialBudgetUsd,
+} from "../../services/godmode-inference-grants.js";
+import {
   markLlmReady,
   markOnboardingComplete,
   resetOnboarding,
@@ -34,6 +43,15 @@ export interface PlatformConfigAdapterServices {
     creditsPerUsd?: number;
   }): PlatformBillingConfig;
   testBillingConnection(): Promise<{ ok: boolean; detail?: string }>;
+  getGodModeInferenceSupply(): GodModeInferenceSupplyStatus;
+  setGodModeInferenceSupply(input: {
+    deepseekApiKey?: string;
+    zaiApiKey?: string;
+    zaiCodingApiKey?: string;
+    dashscopeApiKey?: string;
+  }): GodModeInferenceSupplyStatus;
+  defaultTrialBudgetUsd(): number;
+  setDefaultTrialBudgetUsd(usd: number): number;
   getOnboardingStatus?(tenantDb: AppDatabase): {
     completed: boolean;
     llmReady: boolean;
@@ -46,6 +64,10 @@ const defaultServices: PlatformConfigAdapterServices = {
   getBillingConfig: getPlatformBillingConfig,
   setBillingConfig: setPlatformBillingKeys,
   testBillingConnection: testStripeConnection,
+  getGodModeInferenceSupply: getGodModeInferenceSupplyStatus,
+  setGodModeInferenceSupply: setGodModeInferenceSupplyKeys,
+  defaultTrialBudgetUsd,
+  setDefaultTrialBudgetUsd,
 };
 
 let services = defaultServices;
@@ -128,6 +150,76 @@ export const platformBillingConfigAdapter: RecordAdapter = {
     async test_connection(_core, _def, _id, _input, ctx) {
       requireAdmin(ctx);
       return services.testBillingConnection();
+    },
+  },
+};
+
+function inferenceProviderData(status: {
+  connected: boolean;
+  source: string;
+  masked?: string;
+}) {
+  return {
+    connected: status.connected,
+    source: status.source,
+    masked: status.masked ?? null,
+  };
+}
+
+function godModeInferenceRecord(def: ObjectTypeDef): RecordRow {
+  const status = services.getGodModeInferenceSupply();
+  return record(def, "godmode-inference", {
+    configured: status.configured,
+    deepseek: inferenceProviderData(status.deepseek),
+    zai: inferenceProviderData(status.zai),
+    zai_coding: inferenceProviderData(status.zaiCoding),
+    dashscope: inferenceProviderData(status.dashscope),
+    default_trial_budget_usd: services.defaultTrialBudgetUsd(),
+  });
+}
+
+export const godModeInferenceConfigAdapter: RecordAdapter = {
+  id: "godmode_inference_config_service",
+  list(_core, def, _query, ctx) {
+    requireAdmin(ctx);
+    return {
+      objectType: def.name,
+      records: [godModeInferenceRecord(def)],
+      total: 1,
+    };
+  },
+  get(_core, def, id, ctx) {
+    requireAdmin(ctx);
+    return id === "godmode-inference" ? godModeInferenceRecord(def) : null;
+  },
+  actions: {
+    configure(_core, def, _id, input, ctx) {
+      requireAdmin(ctx);
+      services.setGodModeInferenceSupply({
+        deepseekApiKey:
+          typeof input.deepseek_api_key === "string"
+            ? input.deepseek_api_key
+            : undefined,
+        zaiApiKey:
+          typeof input.zai_api_key === "string" ? input.zai_api_key : undefined,
+        zaiCodingApiKey:
+          typeof input.zai_coding_api_key === "string"
+            ? input.zai_coding_api_key
+            : undefined,
+        dashscopeApiKey:
+          typeof input.dashscope_api_key === "string"
+            ? input.dashscope_api_key
+            : undefined,
+      });
+      if (
+        input.default_trial_budget_usd != null &&
+        input.default_trial_budget_usd !== ""
+      ) {
+        services.setDefaultTrialBudgetUsd(
+          Number(input.default_trial_budget_usd)
+        );
+      }
+      return godModeInferenceRecord(def);
     },
   },
 };
@@ -241,6 +333,23 @@ export const PLATFORM_CONFIG_ACTIONS: Record<string, ActionDef[]> = {
       confirmation: { required: true },
     }),
   ],
+  GodModeInferenceConfig: [
+    action("configure", {
+      confirmation: { required: true },
+      sensitiveInputPaths: [
+        "deepseek_api_key",
+        "zai_api_key",
+        "zai_coding_api_key",
+        "dashscope_api_key",
+      ],
+      inputSchema: schema({
+        deepseek_api_key: { type: "string" },
+        zai_api_key: { type: "string" },
+        zai_coding_api_key: { type: "string" },
+        dashscope_api_key: { type: "string" },
+      }),
+    }),
+  ],
   TenantOnboardingConfig: [
     action("complete"),
     action("mark_llm_ready"),
@@ -250,5 +359,6 @@ export const PLATFORM_CONFIG_ACTIONS: Record<string, ActionDef[]> = {
 
 export const platformConfigAdapters = [
   platformBillingConfigAdapter,
+  godModeInferenceConfigAdapter,
   tenantOnboardingConfigAdapter,
 ] as const;

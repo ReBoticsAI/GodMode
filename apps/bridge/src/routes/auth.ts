@@ -9,8 +9,6 @@ import {
 } from "../core-db.js";
 import { coreUserToAuth } from "../types/express-auth.js";
 import {
-  clearLegacySessionCookie,
-  clearSessionCookie,
   createSession,
   deleteSession,
   issueSessionCookies,
@@ -27,8 +25,15 @@ import {
 } from "../services/auth/middleware.js";
 import {
   listUserTenants,
+  promoteFirstSignupAdmin,
   userHasTenantAccess,
 } from "../services/tenant-bootstrap.js";
+import {
+  convertTemporaryVisitor,
+  createTemporaryVisitor,
+  isTemporaryUser,
+  VisitorIdentityError,
+} from "../services/visitor-identity.js";
 import { createAdminTenantForUser, AdminUsersError } from "../services/admin-users.js";
 import { refreshUserAgentPrompt } from "../services/agents/user-agent.js";
 import { getUserOwnerTenantDb } from "../services/user-scope.js";
@@ -191,7 +196,7 @@ export function createAuthRouter(): Router {
     });
   });
 
-  router.post("/signup", authLimiter, async (req, res) => {
+  router.post("/signup", authLimiter, attachAuthContext, async (req, res) => {
     const { email, password, name, inviteCode, checkoutSessionId } = req.body ?? {};
     const code = typeof inviteCode === "string" ? inviteCode.trim() : "";
     const paidSessionId =
@@ -259,37 +264,62 @@ export function createAuthRouter(): Router {
     }
 
     try {
-      let provisionDefaultTenant = true;
-      if (config.isSaas && paidSessionId) {
-        const sub = findSubscriptionBySessionId(core, paidSessionId);
-        if (sub && isSellerPlanId(sub.plan_id) && !subscriptionGrantsAccess(sub)) {
-          provisionDefaultTenant = false;
-        }
-      }
-      const created = await executeCollectionAction(
-        core,
-        "User",
-        "signup",
-        {
+      const visitorRow = req.user
+        ? (core.prepare("SELECT * FROM users WHERE id=?").get(req.user.id) as
+            | CoreUser
+            | undefined)
+        : undefined;
+      let user: CoreUser;
+      if (visitorRow && isTemporaryUser(visitorRow)) {
+        user = convertTemporaryVisitor(core, visitorRow.id, {
           email: normalized,
           password,
-          display_name: displayName,
-          provision_default_tenant: provisionDefaultTenant,
-        },
-        createSystemOperationContext({
-          requestId: req.get("X-Request-Id") || undefined,
-        })
-      ) as { id: string };
-      if (config.isSaas && paidSessionId) {
-        const entitlement = consumeSaasEntitlement(core, paidSessionId, created.id);
-        linkSubscriptionToUser({
-          userId: created.id,
-          stripeSessionId: paidSessionId,
-          stripeCustomerId: entitlement.stripe_customer_id,
-          email: normalized,
+          displayName,
         });
+        promoteFirstSignupAdmin(core, user.id);
+        if (config.isSaas && paidSessionId) {
+          const entitlement = consumeSaasEntitlement(core, paidSessionId, user.id);
+          linkSubscriptionToUser({
+            userId: user.id,
+            stripeSessionId: paidSessionId,
+            stripeCustomerId: entitlement.stripe_customer_id,
+            email: normalized,
+          });
+        }
+        user = core.prepare("SELECT * FROM users WHERE id=?").get(user.id) as CoreUser;
+      } else {
+        let provisionDefaultTenant = true;
+        if (config.isSaas && paidSessionId) {
+          const sub = findSubscriptionBySessionId(core, paidSessionId);
+          if (sub && isSellerPlanId(sub.plan_id) && !subscriptionGrantsAccess(sub)) {
+            provisionDefaultTenant = false;
+          }
+        }
+        const created = await executeCollectionAction(
+          core,
+          "User",
+          "signup",
+          {
+            email: normalized,
+            password,
+            display_name: displayName,
+            provision_default_tenant: provisionDefaultTenant,
+          },
+          createSystemOperationContext({
+            requestId: req.get("X-Request-Id") || undefined,
+          })
+        ) as { id: string };
+        if (config.isSaas && paidSessionId) {
+          const entitlement = consumeSaasEntitlement(core, paidSessionId, created.id);
+          linkSubscriptionToUser({
+            userId: created.id,
+            stripeSessionId: paidSessionId,
+            stripeCustomerId: entitlement.stripe_customer_id,
+            email: normalized,
+          });
+        }
+        user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
       }
-      const user = core.prepare("SELECT * FROM users WHERE id=?").get(created.id) as CoreUser;
       let verificationEmailSent = Boolean(user.email_verified_at);
       // Seeded INITIAL_ADMINS may already be verified; otherwise send verify link.
       if (!user.email_verified_at) {
@@ -328,6 +358,10 @@ export function createAuthRouter(): Router {
         });
         return;
       }
+      if (err instanceof VisitorIdentityError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
       throw err;
     }
   });
@@ -336,11 +370,15 @@ export function createAuthRouter(): Router {
     const core = getCloudDb();
     const sessionId = req.sessionId ?? parseSessionCookie(req.headers.cookie);
     if (sessionId) deleteSession(core, sessionId);
-    res.setHeader("Set-Cookie", [
-      clearSessionCookie(secure),
-      clearLegacySessionCookie(secure),
-    ]);
-    res.json({ ok: true });
+    const visitor = createTemporaryVisitor(core);
+    res.setHeader(
+      "Set-Cookie",
+      issueSessionCookies(visitor.sessionId, config.auth.sessionTtlDays, secure)
+    );
+    res.json({
+      ok: true,
+      ...(config.isProduction ? {} : { sessionToken: visitor.sessionId }),
+    });
   });
 
   router.post("/change-password", attachAuthContext, requireAuth, async (req, res) => {
@@ -488,7 +526,7 @@ export function createAuthRouter(): Router {
         .prepare(
           `SELECT id, email, display_name, avatar_url, is_admin, created_at
            FROM users
-           WHERE id <> 'system-local'
+           WHERE id <> 'system-local' AND COALESCE(is_temporary, 0) = 0
            ORDER BY is_admin DESC, created_at`
         )
         .all() as Array<{
@@ -514,11 +552,38 @@ export function createAuthRouter(): Router {
   );
 
   router.get("/session", attachAuthContext, (req, res) => {
+    const core = getCloudDb();
+    if (!req.user) {
+      const visitor = createTemporaryVisitor(core);
+      res.setHeader(
+        "Set-Cookie",
+        issueSessionCookies(visitor.sessionId, config.auth.sessionTtlDays, secure)
+      );
+      req.user = coreUserToAuth(visitor.user, { mfaEnabled: false });
+      req.sessionId = visitor.sessionId;
+    }
+    const sessionUser = core
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(req.user.id) as CoreUser | undefined;
+    if (sessionUser && isTemporaryUser(sessionUser)) {
+      const tenants = listUserTenants(core, sessionUser.id);
+      const home = tenants.find((t) => !t.is_operator) ?? tenants[0];
+      res.json({
+        authenticated: false,
+        visitor: true,
+        user: coreUserToAuth(sessionUser, { mfaEnabled: false }),
+        tenantId: home?.id ?? null,
+        tenantRole: home?.role ?? null,
+        ...(config.isProduction || !req.sessionId
+          ? {}
+          : { sessionToken: req.sessionId }),
+      });
+      return;
+    }
     if (!req.user) {
       res.json({ authenticated: false });
       return;
     }
-    const core = getCloudDb();
     const tenants = listUserTenants(core, req.user.id);
     // Zero-workspace users are still authenticated. resolveTenant would 403
     // with "No workspace access" and make login look like a false Signed In.
@@ -795,7 +860,7 @@ export function createAuthRouter(): Router {
     res.status(404).json({ error: "Unknown provider" });
   });
 
-  router.get("/oauth/:provider/callback", authLimiter, async (req, res) => {
+  router.get("/oauth/:provider/callback", authLimiter, attachAuthContext, async (req, res) => {
     const provider = String(req.params.provider);
     const code = typeof req.query.code === "string" ? req.query.code : "";
     if (!code) {
@@ -819,6 +884,14 @@ export function createAuthRouter(): Router {
           .get(profile.email) as { id: string } | undefined;
         if (existing) {
           userId = existing.id;
+        } else if (req.user?.temporary && req.user.id !== "system-local") {
+          const converted = convertTemporaryVisitor(core, req.user.id, {
+            email: profile.email,
+            password: randomOauthPassword(),
+            displayName: profile.name,
+          });
+          promoteFirstSignupAdmin(core, converted.id);
+          userId = converted.id;
         } else {
           const created = await executeCollectionAction(
             core,

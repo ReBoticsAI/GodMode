@@ -8,13 +8,15 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import { FlowCanvas, FlowInspector, FlowWorkspace } from "@/components/flow";
-import { LayoutGridIcon, RotateCwIcon } from "lucide-react";
+import { LayoutGridIcon, RotateCwIcon, CopyIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { truncatePromptPreview } from "@/lib/prompt-preview";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useStructure } from "@/lib/structure-context";
 import { useTenant } from "@/lib/tenant-context";
@@ -90,6 +92,7 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
   const [mcpStatus, setMcpStatus] = useState<AiMcpStatus | null>(null);
   const [flowConfig, setFlowConfig] = useState<AiPromptFlowConfig | null>(null);
   const [assembled, setAssembled] = useState<AiAssembledPrompt | null>(null);
+  const [showFullFinalPrompt, setShowFullFinalPrompt] = useState(false);
   const [commandCount, setCommandCount] = useState(0);
   const [selectedModel, setSelectedModel] = useState("");
   const [promptDraft, setPromptDraft] = useState("");
@@ -110,6 +113,10 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
   const { activeAgentId: selectedAgentId, setActiveAgentId: setSelectedAgentId } =
     useIntelligence();
   const [agentRecord, setAgentRecord] = useState<AiAgent | null>(null);
+
+  useEffect(() => {
+    setShowFullFinalPrompt(false);
+  }, [selectedAgentId, assembled?.estimatedChars]);
 
   const rfRef = useRef<ReactFlowInstance | null>(null);
   const consumedNodeParamRef = useRef<string | null>(null);
@@ -686,6 +693,23 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
     ? "Compaction applied"
     : null;
 
+  const finalPromptFull = assembled?.systemPrompt || "";
+  const finalPromptPreview = useMemo(
+    () => truncatePromptPreview(finalPromptFull),
+    [finalPromptFull]
+  );
+  const finalPromptDisplay = showFullFinalPrompt
+    ? finalPromptFull
+    : finalPromptPreview.text;
+
+  const copyFullFinalPrompt = useCallback(() => {
+    if (!finalPromptFull) return;
+    void navigator.clipboard
+      .writeText(finalPromptFull)
+      .then(() => toast.success("Copied full prompt"))
+      .catch(() => toast.error("Copy failed"));
+  }, [finalPromptFull]);
+
   const inspector = !selectedData ? (
     <FlowInspector title="Inspector" subtitle="Status">
       <div className="flex flex-col gap-2">
@@ -939,8 +963,41 @@ export function AiBuilder({ embedded = false, agentsVersion = 0 }: AiBuilderProp
                     <Label className="text-[11px] text-muted-foreground">
                       Assembled system prompt ({assembled?.estimatedChars ?? 0} chars)
                     </Label>
-                    <pre className="max-h-[60vh] overflow-auto rounded-md border bg-black/30 p-2 font-mono text-[10px] whitespace-pre-wrap">
-                      {assembled?.systemPrompt || "(empty)"}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!finalPromptFull}
+                        onClick={copyFullFinalPrompt}
+                      >
+                        <CopyIcon data-icon="inline-start" />
+                        Copy full
+                      </Button>
+                      {finalPromptPreview.truncated ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowFullFinalPrompt((v) => !v)}
+                        >
+                          {showFullFinalPrompt ? "Show preview" : "Show full"}
+                        </Button>
+                      ) : null}
+                    </div>
+                    {finalPromptPreview.truncated && !showFullFinalPrompt ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        Showing first 2,000 and last 1,000 chars. Expand or copy
+                        for the full prompt.
+                      </p>
+                    ) : null}
+                    <pre
+                      className={cn(
+                        "overflow-auto rounded-md border bg-black/30 p-2 font-mono text-[10px] whitespace-pre-wrap",
+                        showFullFinalPrompt ? "max-h-[60vh]" : "max-h-48"
+                      )}
+                    >
+                      {finalPromptDisplay || "(empty)"}
                     </pre>
                   </div>
                 )}

@@ -55,6 +55,10 @@ export interface ComposerSubmit {
   images: string[];
   mentionIds: string[];
   dmAttachments?: DmAttachmentInput[];
+  /** Welcome-guide interest. The server adds the model brief. The thread stores `text`. */
+  interestId?: string;
+  pathId?: string;
+  clientOs?: string;
 }
 
 interface IntelligenceComposerProps {
@@ -533,11 +537,13 @@ export function IntelligenceComposer({
   const handleCatalogSelect = async (model: CatalogModel) => {
     try {
       const res = await selectIntelligenceModel({
+        id: model.id,
         source: model.source,
         path: model.path,
         model: model.model,
         provider: model.provider,
         endpointId: model.endpointId,
+        transport: model.transport,
       });
       if (!res.active || typeof res.active.id !== "string") {
         throw new Error("Model catalog returned no active model");

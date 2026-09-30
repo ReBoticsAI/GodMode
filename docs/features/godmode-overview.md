@@ -14,7 +14,7 @@ summary: "Create, Edit, Organize, Connect, Monitor, Execute, Validate and Govern
 
 Think of GodMode as the feeling of inhabiting a digital body. The software is the body. Structure is the anatomy: departments are regions, divisions group work inside a region and pages are the surfaces you use. The model is the brain. Digital You is your twin inside GodMode, your digital persona; It learns your voice and conventions. It guides you when you are here and stands in when you are not. Intelligence is the nervous system, the platform agent you talk to in order to grow GodMode and its anatomy. Specialized agents are the muscles: they own a job, attach to a region and execute.
 
-Open source (Apache 2.0). Local-first. Self-host or use Cloud for convenience. **Connect** via Marketplace packs, plugins, connectors and in-workspace coding. Share live resources with your team.
+Open source (GodMode License 1.0). Local-first. Self-host or use Cloud for convenience. **Connect** via Marketplace packs, plugins, connectors and in-workspace coding. Share live resources with your team.
 
 **Intelligence** is GodMode's built-in platform agent (the robot in the sidebar). It is not the platform name.
 

@@ -237,7 +237,7 @@ describe("completeActiveWorkRunCard", () => {
     expect(comments[0]!.body.toLowerCase()).toMatch(/finished|closed/);
   });
 
-  it("records an issue comment on abort without forcing Done", () => {
+  it("cancels host run on abort and records an issue comment", () => {
     const db = makeDb();
     db.prepare(
       `INSERT INTO ai_project_cards
@@ -256,8 +256,8 @@ describe("completeActiveWorkRunCard", () => {
     const parent = db
       .prepare(`SELECT column_id, status FROM ai_project_cards WHERE id = ?`)
       .get("run_chat2") as { column_id: string; status: string };
-    expect(parent.column_id).toBe("in_progress");
-    expect(parent.status).toBe("working");
+    expect(parent.column_id).toBe("done");
+    expect(parent.status).toBe("cancelled");
 
     const comments = db
       .prepare(`SELECT kind FROM ai_card_comments WHERE card_id = ?`)

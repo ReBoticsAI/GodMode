@@ -2,6 +2,16 @@
 
 export const PLUGIN_LISTING_KIND = "plugin";
 
+/**
+ * GodMode Inference supply vision (scaffold / docs only):
+ * Sellers with unused provider credits or local capacity list `kind: "inference"`
+ * (or later an Agent wrapper) on hub Marketplace Sell. GodMode routes trial and
+ * paid demand onto platform or seller supply. OpenRouter (mgmt/platform) or BYOK
+ * is the backend. Settlement, P2P routing, and Cloud sell are not implemented.
+ * Do not fake a working marketplace from this comment.
+ */
+export const GODMODE_INFERENCE_LISTING_KIND = "inference" as const;
+
 /** Clone kinds that execute in the buyer workspace without plugin CI. */
 export const EXECUTABLE_CLONE_KINDS = ["agent", "workflow", "skill"] as const;
 
@@ -136,7 +146,7 @@ export function isCatalogEligibleListing(opts: {
   deliveryMode?: string | null;
 }): boolean {
   const kind = opts.kind.trim();
-  if (kind === "inference") return false;
+  if (kind === GODMODE_INFERENCE_LISTING_KIND) return false;
   if (kind === PLUGIN_LISTING_KIND) return true;
   if (isClonePackKind(kind)) return true;
   return String(opts.deliveryMode ?? "").trim().toLowerCase() === "live";
@@ -213,7 +223,7 @@ export function resolveListingPublishState(opts: {
   error?: string;
 } {
   const kind = opts.kind.trim();
-  if (kind === "inference" && opts.isSaas) {
+  if (kind === GODMODE_INFERENCE_LISTING_KIND && opts.isSaas) {
     return {
       status: "draft",
       visibility: "private",

@@ -26,6 +26,7 @@ import {
   fetchTogetherStatus,
   type TogetherAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Together serverless chat catalog snapshot (2026-08-03).
@@ -132,6 +133,7 @@ export function TogetherCard({
           a family harness (Llama, GPT-OSS, DeepSeek, Qwen, Kimi, MiniMax, or generic). Not a
           Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="together" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

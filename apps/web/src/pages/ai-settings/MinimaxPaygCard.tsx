@@ -26,6 +26,7 @@ import {
   fetchMinimaxStatus,
   type MinimaxAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * MiniMax payg chat catalog snapshot (2026-08-03).
@@ -126,6 +127,7 @@ export function MinimaxPaygCard({
           with a MiniMax harness. Not Token Plan subscription keys (those belong
           under Subscriptions when shipped).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="minimax-payg" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

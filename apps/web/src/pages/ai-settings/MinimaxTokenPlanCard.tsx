@@ -26,6 +26,7 @@ import {
   fetchMinimaxTokenStatus,
   type MinimaxTokenAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * MiniMax Token Plan catalog snapshot (2026-08-03).
@@ -126,6 +127,7 @@ export function MinimaxTokenPlanCard({
           OpenAI-compatible transport with a Token Plan harness. Per-tenant keys
           only. Not MiniMax payg (separate API Keys card).
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="minimax-token" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

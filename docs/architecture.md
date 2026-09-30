@@ -26,7 +26,7 @@ flowchart LR
   Adapters[Service-backed adapters]
   Native[Native ObjectType storage]
   Services[Authoritative domain services]
-  Databases[(Cloud Users User and Workspace SQLite)]
+  Databases[(SQLite universe: actors vaults chats surfaces registry)]
   Consumers --> Auth --> Kernel
   Kernel --> Adapters --> Services --> Databases
   Kernel --> Native --> Databases
@@ -57,6 +57,10 @@ is documented there; the static write-tool inventory and P0 gate live in
 [AI_TOOL_KERNEL_PARITY.md](AI_TOOL_KERNEL_PARITY.md).
 
 ## Data storage
+
+**Target:** every durable actor and surface is its own SQLite file (You, Intelligence, Agents, chat threads, Vaults, Hub/Bridge, Structure / Knowledge / Automations / Calendar surfaces), plus a tiny `registry.sqlite`. See [SQLITE_UNIVERSE.md](./SQLITE_UNIVERSE.md).
+
+**Current (until migrated):** Cloud + Users + User + Workspace planes:
 
 ```mermaid
 flowchart LR

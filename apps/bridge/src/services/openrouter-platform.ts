@@ -19,6 +19,14 @@ export const OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1";
  */
 export const OPENROUTER_TOP10_CATALOG = [
   {
+    id: "openrouter/free",
+    label: "OpenRouter Free Models Router",
+  },
+  {
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    label: "Nemotron 3 Ultra (free)",
+  },
+  {
     id: "deepseek/deepseek-v4-flash-0731",
     label: "DeepSeek V4 Flash 0731",
   },
@@ -26,17 +34,9 @@ export const OPENROUTER_TOP10_CATALOG = [
   { id: "tencent/hy3", label: "Hy3" },
   { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro" },
   { id: "z-ai/glm-5.2", label: "GLM 5.2" },
-  {
-    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    label: "Nemotron 3 Ultra (free)",
-  },
   { id: "minimax/minimax-m3", label: "MiniMax M3" },
   { id: "stepfun/step-3.7-flash", label: "Step 3.7 Flash" },
   { id: "moonshotai/kimi-k3", label: "Kimi K3" },
-  {
-    id: "inclusionai/ling-3.0-flash:free",
-    label: "Ling-3.0-flash (free)",
-  },
 ] as const;
 
 export type OpenRouterAuthSource = "env" | "vault" | "none";
@@ -51,11 +51,18 @@ function maskKey(value: string): string {
   return value.length > 8 ? `${value.slice(0, 4)}…${value.slice(-4)}` : "****";
 }
 
+/**
+ * Resolve OpenRouter API key for chat completions.
+ * Order: OPENROUTER_API_KEY env, TRIAL_PLATFORM_API_KEY (GodMode Inference
+ * shared trial), then Platform Vault secret.
+ */
 export function resolveOpenRouterApiKey(
   db: AppDatabase,
   agentId?: string | null
 ): string | null {
-  const env = process.env.OPENROUTER_API_KEY?.trim();
+  const env =
+    process.env.OPENROUTER_API_KEY?.trim() ||
+    process.env.TRIAL_PLATFORM_API_KEY?.trim();
   if (env) return env;
   return resolvePlatformVaultSecret(db, {
     baseId: OPENROUTER_API_KEY_SECRET_ID,
@@ -92,7 +99,9 @@ export function getOpenRouterAuthStatus(
   db: AppDatabase,
   agentId?: string | null
 ): OpenRouterAuthStatus {
-  const env = process.env.OPENROUTER_API_KEY?.trim();
+  const env =
+    process.env.OPENROUTER_API_KEY?.trim() ||
+    process.env.TRIAL_PLATFORM_API_KEY?.trim();
   if (env) {
     return { connected: true, source: "env", masked: maskKey(env) };
   }

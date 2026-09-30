@@ -122,7 +122,11 @@ function isSyncInProgress(board: UserTaskBoard | null | undefined): boolean {
   return Date.now() - started < GITHUB_SYNC_LEASE_MS;
 }
 
-export default function UserTasksPage() {
+export default function UserTasksPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const { user } = useTenant();
   const userId = user?.id ?? "";
   const [boards, setBoards] = useState<UserTaskBoard[]>([]);
@@ -392,8 +396,9 @@ export default function UserTasksPage() {
     }
   };
 
-  return (
-    <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-3 overflow-hidden">
+  const body = (
+    <>
+      {!embedded ? (
       <PageHeader
         title="Tasks"
         description="Personal kanban boards: create as many as you need; optionally sync one with a GitHub Project."
@@ -407,7 +412,7 @@ export default function UserTasksPage() {
           ) : null
         }
       />
-
+      ) : null}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Select
           value={activeBoardId ?? undefined}
@@ -865,6 +870,27 @@ export default function UserTasksPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <Page className="flex h-[calc(100dvh-7rem)] max-w-none flex-col gap-3 overflow-hidden">
+      {body}
     </Page>
   );
+}
+
+export function TasksContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
+  return <UserTasksPage embedded={embedded} />;
 }

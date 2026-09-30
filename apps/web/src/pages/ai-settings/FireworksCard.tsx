@@ -26,6 +26,7 @@ import {
   fetchFireworksStatus,
   type FireworksAuthStatus,
 } from "@/api";
+import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
  * Fireworks serverless chat catalog snapshot (2026-08-03).
@@ -135,6 +136,7 @@ export function FireworksCard({
           transport with a family harness (DeepSeek, GPT-OSS, Kimi, GLM, MiniMax,
           Llama, Qwen, Gemma, Nemotron, or generic). Not a Cursor subscription.
         </CardDescription>
+        <ProviderConnectMethodBadges providerId="fireworks" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

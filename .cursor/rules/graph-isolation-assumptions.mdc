@@ -1,0 +1,28 @@
+---
+description: Graph vs SQLite universe vs isolation ladder — do not conflate map, storage, and compute
+alwaysApply: true
+---
+
+# Graph-first isolation (assumptions)
+
+GodMode’s 3D **Graph** is the control-surface **map** of an instance (You, Hub, Intelligence, Workspaces, Agents, Vaults, Chat). It is not proof that each node has its own SQLite SoR or a VM/container.
+
+## Layers
+
+1. **Graph** — UX topology (R3F; SVG glyphs in `Html` today). WIP: `wip/graph-workspaces-agents`, draft PR #788.
+2. **SQLite universe + Data Router** — storage execution. Legacy Cloud/Users/User/Workspace planes remain SoR. Universe dual-writes empty pilot shells. #778 digests chat **reads** only (`DATA_ROUTER_CHAT_READS`).
+3. **#780 job throwaway / #781 per-user box** — compute isolation. **Not implemented.** Shared Bridge today.
+
+## Naming
+
+- Product: **Hub** (not Heart). Path may still be `heart/` until dual-read migration.
+- Product: **You** on Graph; objectType/API **User**.
+- Do not rename Intelligence vs Agents casually; SaaS `deploymentMode: hub` is separate Cloud vocab.
+
+## Working order
+
+See [docs/STATE_GRAPH_ISOLATION.md](docs/STATE_GRAPH_ISOLATION.md) and [docs/ROADMAP_GRAPH_ISOLATION.md](docs/ROADMAP_GRAPH_ISOLATION.md).
+
+After Graph land + signed-in smoke → **#779** chat shard → (#591 parallel) → #780 → #781 → #782.
+
+Do not block Graph on #781. Do not skip Data Router / #779 because the Graph exists. Public OSS core stays free of private plugin domain residue.

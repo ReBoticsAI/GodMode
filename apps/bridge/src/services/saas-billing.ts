@@ -19,6 +19,8 @@ import {
   upsertSubscriptionFromCheckout,
   type SaasSubscription,
 } from "./saas-subscriptions.js";
+import { completeUnlockCheckoutSession } from "./chat-unlock.js";
+import { tryApplyGodModeInferenceStripeEvent } from "./godmode-inference-billing.js";
 
 export type SaasPlanPublic = {
   id: string;
@@ -322,8 +324,16 @@ export function handleSaasStripeWebhook(
     const metadata = (obj.metadata ?? {}) as {
       godmode_saas?: string;
       godmode_plan?: string;
+      godmode_inference?: string;
     };
-    if (metadata.godmode_saas !== "1") return { ok: true };
+    // GodMode Inference packs / subscriptions (not Cloud seats).
+    if (tryApplyGodModeInferenceStripeEvent(type, obj)) {
+      return { ok: true };
+    }
+    if (metadata.godmode_saas !== "1") {
+      completeUnlockCheckoutSession(obj);
+      return { ok: true };
+    }
 
     const customerDetails = obj.customer_details as
       | { email?: string | null }
@@ -361,6 +371,11 @@ export function handleSaasStripeWebhook(
       stripeCustomerId: customer,
     });
     return { ok: true, entitlement };
+  }
+
+  // GodMode Inference subscription renewals (metadata on subscription / invoice).
+  if (tryApplyGodModeInferenceStripeEvent(type, obj)) {
+    return { ok: true };
   }
 
   if (

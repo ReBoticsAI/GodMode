@@ -14,6 +14,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { readSellerLinkResumePath } from "@/lib/seller-link-resume";
+import {
+  ACTIVE_AGENT_KEY,
+  LEGACY_ACTIVE_AGENT_KEY,
+  writeMigratedKey,
+} from "@/lib/storage-keys";
 
 /**
  * Shown when the session is valid but the user has no workspace membership.
@@ -41,6 +46,7 @@ export function NoWorkspaceGate() {
     } catch {
       /* still clear local auth via refresh */
     }
+    writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, "intelligence");
     await refresh().catch(() => undefined);
     toast.message("Signed out");
   };

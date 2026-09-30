@@ -34,7 +34,6 @@ import {
   isLegacySettingsVaultDeepLink,
   normalizeSettingsTab,
   PLATFORM_VAULT_PATH,
-  platformVaultHref,
   USERS_PATH,
   type SettingsTab,
 } from "@/lib/navigation";
@@ -42,6 +41,11 @@ import { WorkspaceDataCard } from "@/components/settings/WorkspaceDataCard";
 import { OtpauthQr } from "@/components/auth/OtpauthQr";
 import { useOnboardingWizardControl } from "@/components/FirstRunWizard";
 import { toast } from "sonner";
+import {
+  ACTIVE_AGENT_KEY,
+  LEGACY_ACTIVE_AGENT_KEY,
+  writeMigratedKey,
+} from "@/lib/storage-keys";
 import { StorageTab } from "@/pages/Vault";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -119,17 +123,24 @@ function PlatformVaultLinkCard() {
           Platform Vault
         </CardTitle>
         <CardDescription>
-          GodMode Cloud, Inference keys, and platform secrets live on their own
-          page in the sidebar.
+          GodMode Cloud, Inference keys, and platform secrets open in a window
+          over the Graph (Platform Vault node under Hub).
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Link
-          to={platformVaultHref("inference")}
+        <button
+          type="button"
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent("godmode:open-platform-vault", {
+                detail: { vault: "inference", sub: "subscriptions" },
+              })
+            );
+          }}
         >
           Open Platform Vault
-        </Link>
+        </button>
       </CardContent>
     </Card>
   );
@@ -322,6 +333,7 @@ function SessionCard() {
     } catch {
       /* still clear local session below */
     }
+    writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, "intelligence");
     await refresh();
     window.location.assign("/");
   };
@@ -343,6 +355,23 @@ function SessionCard() {
 }
 
 export default function Settings() {
+  return (
+    <Page>
+      <PageHeader
+        title="Settings"
+        description="Account, appearance, storage, and session settings."
+      />
+      <SettingsContent />
+    </Page>
+  );
+}
+
+/** Settings body for the full route or an embedded Graph floating window. */
+export function SettingsContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const vaultSectionRaw = searchParams.get("vault");
@@ -384,39 +413,40 @@ export default function Settings() {
   }
 
   return (
-    <Page>
-      <PageHeader
-        title="Settings"
-        description="Account, appearance, storage, and session settings."
-      />
-      <Tabs
-        value={settingsTab}
-        onValueChange={onSettingsTabChange}
-        className="w-full"
+    <Tabs
+      value={settingsTab}
+      onValueChange={onSettingsTabChange}
+      className="w-full"
+    >
+      <TabsList
+        variant="line"
+        className={
+          embedded
+            ? "w-full flex-wrap justify-start"
+            : "w-full flex-wrap justify-start"
+        }
       >
-        <TabsList variant="line" className="w-full flex-wrap justify-start">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="storage">Storage</TabsTrigger>
-        </TabsList>
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="storage">Storage</TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="general" className="mt-4">
-          <div className="flex flex-col gap-4">
-            <AccountCard />
-            <PlatformVaultLinkCard />
-            <OnboardingCard />
-            <MfaCard />
-            <AppearanceCard />
-            <SessionCard />
-          </div>
-        </TabsContent>
+      <TabsContent value="general" className="mt-4">
+        <div className="flex flex-col gap-4">
+          <AccountCard />
+          <PlatformVaultLinkCard />
+          <OnboardingCard />
+          <MfaCard />
+          <AppearanceCard />
+          <SessionCard />
+        </div>
+      </TabsContent>
 
-        <TabsContent value="storage" className="mt-4">
-          <div className="flex flex-col gap-4">
-            <StorageTab />
-            <WorkspaceDataCard />
-          </div>
-        </TabsContent>
-      </Tabs>
-    </Page>
+      <TabsContent value="storage" className="mt-4">
+        <div className="flex flex-col gap-4">
+          <StorageTab />
+          <WorkspaceDataCard />
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 }

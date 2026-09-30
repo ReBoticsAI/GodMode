@@ -59,6 +59,7 @@ import {
   runAgentChat,
   resolveToolConfirmation,
   waitForToolConfirmation,
+  type AgentContentPart,
   type AgentMessage,
 } from "../services/ai-agent.js";
 import {
@@ -139,11 +140,32 @@ import {
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
 import {
+  isGodModeInferenceSupplySecretId,
+} from "../services/godmode-inference-supply.js";
+import {
+  findActiveGodModeInferenceGrant,
+  godModeInferenceRetailUsd,
+  isGrantSpendable,
+  parseGodModeInferenceUsage,
+  recordGodModeInferenceSpend,
+  turnCostUsd,
+} from "../services/godmode-inference-grants.js";
+import {
+  interestModelGuide,
+  pathModelGuide,
+  isSignupGuideModeEnabled,
+  isSignupGuideTopic,
+  SIGNUP_GUIDE_HARNESS_DELTA,
+  SIGNUP_GUIDE_REFUSAL,
+  TRIAL_PAY_GODMODE_PATH,
+} from "../services/trial-inference.js";
+import {
   applyProfileSampling,
   filterSchemasForProfile,
   resolveProfileForAgent,
 } from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
+import { filterSchemasForSignupGuide } from "../services/guide-ui-tools.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
@@ -1291,6 +1313,9 @@ export function createAiRouter(
         s.id !== "deepseek-api-key" &&
         !s.id.startsWith("deepseek-api-key__agent__") &&
         s.name !== "deepseek_api_key" &&
+        s.id !== "dashscope-api-key" &&
+        !s.id.startsWith("dashscope-api-key__agent__") &&
+        s.name !== "dashscope_api_key" &&
         s.id !== "google-ai-api-key" &&
         !s.id.startsWith("google-ai-api-key__agent__") &&
         s.name !== "google_ai_api_key" &&
@@ -1599,6 +1624,9 @@ export function createAiRouter(
       autoAcceptTools = false,
       chatMode: rawChatMode,
       toolAutonomy: rawToolAutonomy,
+      interestId: rawInterestId,
+      pathId: rawPathId,
+      clientOs: rawClientOs,
     } = body as {
       chatId?: string;
       message: string;
@@ -1610,7 +1638,21 @@ export function createAiRouter(
       autoAcceptTools?: boolean;
       chatMode?: IntelligenceChatMode;
       toolAutonomy?: CodeAutonomyLevel;
+      interestId?: string;
+      pathId?: string;
+      clientOs?: string;
     };
+
+    const interestId =
+      typeof rawInterestId === "string" && interestModelGuide(rawInterestId)
+        ? rawInterestId
+        : undefined;
+    const pathId =
+      typeof rawPathId === "string" && pathModelGuide(rawPathId)
+        ? rawPathId
+        : undefined;
+    const clientOs =
+      typeof rawClientOs === "string" ? rawClientOs : undefined;
 
     const chatMode: IntelligenceChatMode =
       rawChatMode === "plan" || rawChatMode === "ask" ? rawChatMode : "agent";
@@ -1716,6 +1758,7 @@ export function createAiRouter(
       userId: auth.user.id,
       isAdmin: auth.user.isAdmin,
       role: (auth.tenantRole as OperationContext["role"]) ?? "editor",
+      agentId: resolvedAgentId,
       source: "http",
       bus,
     };
@@ -1750,7 +1793,7 @@ export function createAiRouter(
           activeChatId = createRecord(
             workDb,
             "ChatSession",
-            { title },
+            { title, agent_id: resolvedAgentId },
             chatKernelContext
           ).id;
         }
@@ -1818,6 +1861,9 @@ export function createAiRouter(
         history,
         platformContext,
         message: message ?? "",
+        interestId,
+        pathId,
+        clientOs,
       },
     };
 
@@ -1846,6 +1892,9 @@ export function createAiRouter(
       history,
       platformContext,
       message,
+      interestId,
+      pathId,
+      clientOs,
     } = prepared;
 
     const workTenantId = work.tenantId;
@@ -1934,6 +1983,63 @@ export function createAiRouter(
       agent,
       llm.getStatus().modelPath
     );
+    const managedSupplyKeyRef =
+      typeof (agent.config as { apiKeyRef?: unknown } | undefined)?.apiKeyRef ===
+      "string"
+        ? String((agent.config as { apiKeyRef?: string }).apiKeyRef)
+        : "";
+    const usingManagedSupply =
+      agent.id === "intelligence" &&
+      managedSupplyKeyRef &&
+      isGodModeInferenceSupplySecretId(managedSupplyKeyRef);
+    const activeInferenceGrant = usingManagedSupply
+      ? findActiveGodModeInferenceGrant({ userId: auth.user.id })
+      : null;
+    if (usingManagedSupply && !isGrantSpendable(activeInferenceGrant)) {
+      send("error", {
+        error: config.isSaas
+          ? "GodMode Inference allowance exhausted. Keep a Cloud seat, buy Inference in Vault, or connect Supported BYOK."
+          : "GodMode Inference allowance exhausted. Buy Inference in Vault for this Local install, or connect Supported BYOK / a local model.",
+        payPath: TRIAL_PAY_GODMODE_PATH,
+        convertHint: config.isSaas
+          ? "On GodMode Cloud: seat plus Inference (or BYOK)."
+          : "On GodMode Local: Inference or BYOK / local models.",
+        cloudSeatPath: config.isSaas ? "/settings?tab=account" : "",
+        cloudSeatCtaLabel: config.isSaas ? "Cloud seat" : "",
+        deploymentSurface: config.isSaas ? "saas" : "local",
+      });
+      clearInterval(statusHeartbeat);
+      markChatTurnIdle(workDb, activeChatId);
+      return;
+    }
+    const signupGuideActive =
+      usingManagedSupply &&
+      isSignupGuideModeEnabled() &&
+      activeInferenceGrant?.kind === "trial";
+    if (
+      signupGuideActive &&
+      message?.trim() &&
+      !isSignupGuideTopic(message)
+    ) {
+      send("token", { content: SIGNUP_GUIDE_REFUSAL });
+      send("done", { content: SIGNUP_GUIDE_REFUSAL });
+      clearInterval(statusHeartbeat);
+      markChatTurnIdle(workDb, activeChatId);
+      if (activeWorkCardId) {
+        try {
+          completeActiveWorkRunCard({
+            db: workDb,
+            cardId: activeWorkCardId,
+            tenantId: work.tenantId,
+            outcome: "aborted",
+            summary: "Welcome-guide topic gate: steered off-topic turn.",
+          });
+        } catch (completeErr) {
+          console.error("[active-work] complete run card failed", completeErr);
+        }
+      }
+      return;
+    }
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
@@ -2052,7 +2158,9 @@ export function createAiRouter(
       wikiOverride: wikiOverride || undefined,
       capabilitiesOverride,
       chatMode,
-      harnessDelta: harnessProfile.harnessDelta,
+      harnessDelta: signupGuideActive
+        ? `${harnessProfile.harnessDelta}\n\n${SIGNUP_GUIDE_HARNESS_DELTA}`
+        : harnessProfile.harnessDelta,
     });
     const systemPrompt = `${assembled.systemPrompt}\n\n${formatActiveWorkHostContext(activeWorkCardId)}`;
 
@@ -2075,6 +2183,21 @@ export function createAiRouter(
       ? `${systemPrompt}\n\n${scratchpad}`
       : systemPrompt;
 
+    const paidInferenceGrant =
+      activeInferenceGrant?.kind === "pack" ||
+      activeInferenceGrant?.kind === "subscription";
+    const interestGuideText =
+      usingManagedSupply && !paidInferenceGrant
+        ? pathModelGuide(pathId ?? "", clientOs) ??
+          interestModelGuide(interestId ?? "", clientOs)
+        : null;
+    const guidedUserContent =
+      typeof userContent === "string" && interestGuideText
+        ? `${userContent}\n\n${interestGuideText}`
+        : Array.isArray(userContent) && interestGuideText
+          ? [{ type: "text" as const, text: interestGuideText }, ...userContent]
+          : userContent;
+
     const messages: ChatMessage[] = [
       { role: "system", content: systemPromptWithScratchpad },
       ...compactedHistory.map((h) => ({
@@ -2083,7 +2206,7 @@ export function createAiRouter(
         ...(h.tool_calls ? { tool_calls: h.tool_calls } : {}),
         ...(h.tool_call_id ? { tool_call_id: h.tool_call_id, name: h.name } : {}),
       })),
-      { role: "user", content: userContent },
+      { role: "user", content: guidedUserContent },
     ];
 
     const sampling = applyProfileSampling(
@@ -2175,6 +2298,15 @@ export function createAiRouter(
         else parts.push({ kind: "todos", items });
         return;
       }
+      if (id) {
+        for (let i = parts.length - 1; i >= 0; i--) {
+          if (parts[i].kind === "tool" && parts[i].id === id) {
+            parts[i].name = name;
+            parts[i].args = args;
+            return;
+          }
+        }
+      }
       parts.push({
         kind: "tool",
         id: id ?? `t-${parts.length}`,
@@ -2204,17 +2336,40 @@ export function createAiRouter(
             : "Starting model…",
       });
       const baseUrl = llm.getServerBaseUrl();
-      const agentMessages: AgentMessage[] = messages.map((m) => ({
-        role: m.role as AgentMessage["role"],
-        content:
-          typeof m.content === "string"
-            ? m.content
-            : m.content
-                .map((p) => (typeof p === "string" ? p : p.text ?? ""))
-                .join("\n"),
-        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
-      }));
+      const agentMessages: AgentMessage[] = messages.map((m) => {
+        const toolFields = {
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id, name: m.name } : {}),
+        };
+        if (typeof m.content === "string") {
+          return {
+            role: m.role as AgentMessage["role"],
+            content: m.content,
+            ...toolFields,
+          };
+        }
+        const parts: AgentContentPart[] = [];
+        for (const part of m.content) {
+          if (part.type === "image_url" && part.image_url?.url) {
+            parts.push({
+              type: "image_url",
+              image_url: { url: part.image_url.url },
+            });
+          } else if (part.text) {
+            parts.push({ type: "text", text: part.text });
+          }
+        }
+        const text = parts
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
+        return {
+          role: m.role as AgentMessage["role"],
+          content: text,
+          ...(parts.some((part) => part.type === "image_url") ? { parts } : {}),
+          ...toolFields,
+        };
+      });
 
       if (agent.thinking.nativeTools || agent.backend !== "local") {
         let streamed = "";
@@ -2233,18 +2388,31 @@ export function createAiRouter(
           pathname: platformContext?.pathname,
           mentionIds: platformContext?.mentionedSources?.map((s) => s.id) ?? [],
         };
-        const toolSchemas = filterSchemasForProfile(rawSchemas, harnessProfile, profileFilterOpts);
+        const profileSchemas = filterSchemasForProfile(
+          rawSchemas,
+          harnessProfile,
+          profileFilterOpts
+        );
+        // Trial welcome-guide: hard RBAC to orientation tools only.
+        const toolSchemas = signupGuideActive
+          ? filterSchemasForSignupGuide(profileSchemas)
+          : profileSchemas;
+        const refreshGuideSchemas = () => {
+          const next = filterSchemasForProfile(
+            getToolSchemasForLlm(engineDb, agent.id, chatMode),
+            harnessProfile,
+            profileFilterOpts
+          );
+          return signupGuideActive
+            ? filterSchemasForSignupGuide(next)
+            : next;
+        };
         const answer = await backend.run({
           agent,
           messages: agentMessages,
           chatMode,
           toolSchemas,
-          refreshToolSchemas: () =>
-            filterSchemasForProfile(
-              getToolSchemasForLlm(engineDb, agent.id, chatMode),
-              harnessProfile,
-              profileFilterOpts
-            ),
+          refreshToolSchemas: refreshGuideSchemas,
           toolMode:
             harnessProfile.toolMode === "grammar" ? "grammar" : "native",
           samplingOverlay: {
@@ -2252,6 +2420,20 @@ export function createAiRouter(
             topP: harnessProfile.sampling.topP,
             topK: harnessProfile.sampling.topK,
           },
+          providerExtras:
+            harnessProfile.reasoningEffort ||
+            harnessProfile.clearThinking != null ||
+            harnessProfile.enableThinkingDefault
+              ? {
+                  thinkingEnabled: harnessProfile.enableThinkingDefault,
+                  reasoningEffort: signupGuideActive
+                    ? "low"
+                    : harnessProfile.reasoningEffort,
+                  clearThinking: signupGuideActive
+                    ? true
+                    : harnessProfile.clearThinking,
+                }
+              : undefined,
           toolCtx: {
             get db() {
               return getTenantDb(workTenantId);
@@ -2382,6 +2564,18 @@ export function createAiRouter(
           },
         });
         fullContent = answer || streamed;
+        // Metered debit from provider usage before any char-based estimate.
+        // Missing / zero retail falls back so managed turns are never free.
+        if (usingManagedSupply && activeInferenceGrant) {
+          const parsedUsage = parseGodModeInferenceUsage(usage);
+          const retailUsd = parsedUsage
+            ? godModeInferenceRetailUsd(parsedUsage)
+            : 0;
+          recordGodModeInferenceSpend({
+            grantId: activeInferenceGrant.id,
+            usd: retailUsd > 0 ? retailUsd : turnCostUsd(),
+          });
+        }
         // Estimate token usage for backends that don't report it, so the
         // context meter works for native-tools / provider / cursor agents.
         if (!usage.total_tokens) {

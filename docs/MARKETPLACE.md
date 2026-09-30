@@ -155,7 +155,7 @@ Every Community sale is a listing (`seller_kind=user`). **Catalog PRs are the on
 2. **Plugins:** PR into GodMode-Marketplace `catalog/community/index.json` (`installType: "plugin"`, CI + `pluginRef`). Claim on Sell (GitHub Connect must match catalog author or `pluginRepo` owner). Paid checkout uses `listingId` and Stripe Connect (10% / 90%).
 3. **Clone packs** (skill, agent, page, workflow, bundle): same Community index with `installType: "clone"`, `bundlePath`, and a pinned GitHub repo (`pluginRepo` + `pluginRef`). Buyer installs a copy from that pin. Not a plugin runtime. Private work stays on Marketplace → Local, a private repo, or Live Share / Federation.
 4. **Live share:** catalog entry with `deliveryMode: live` (pinned `pluginRepo` / `pluginRef` / `bundlePath`). Seller **binds** a workspace resource whose export hash must match the pin. Buyers get a Shared grant on the seller host, not a copy. Drift or a catalog pin bump demotes the listing until re-bind. Free Shared sidebar grants stay outside Marketplace.
-5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace. Hub-only residual review path.
+5. **Inference:** metered access to a seller `inference_endpoints` row on **that Bridge**. Hidden and blocked on GodMode Cloud. Friend-to-friend free model share under AI settings is not Marketplace. Hub-only residual review path. See [GodMode Inference supply vision](#godmode-inference-supply-vision) for the planned sell-spare-capacity story (scaffold only today).
 6. Buyer: **Community** → catalog plugins and packs, plus live listings → free install, or paid Stripe checkout then install. Local Buy does not need a GodMode Cloud account. To recover on a new machine, open Marketplace → **Local** or **Installed**, paste the Stripe Checkout session id (`cs_…`) from your receipt, and choose **Recover and install**. On Cloud, paste the same session id under **Installed** to **Link purchase** to your signed-in account. Optional receipt email must match the checkout email when the grant recorded one.
 
 **Purchase recovery limits (#734):** each paid Checkout session can serve a limited number of successful Local delivery payloads (the original Stripe return counts as the first). By default one extra recover is allowed (`MARKETPLACE_CHECKOUT_RECLAIM_LIMIT=1`, so two deliveries total). Further recover attempts fail closed with “Reclaim limit reached…”. Contact `support@godmode.software` if you need another install. Linking a guest purchase to a Cloud account (`Link purchase`) does not consume a delivery claim; that path still allows only one Cloud buyer per session.
@@ -245,6 +245,30 @@ connect home), **Submit to Community catalog**, publish from owned Community cat
 
 Admin → Marketplace review queue is residual (hub inference). Freeze and verified-seller
 tools stay under Sellers. Catalog PR merge is the intake gate for plugin, clone, and live.
+
+## GodMode Inference supply vision
+
+**Status:** design + extension-point stub. Not a working P2P inference marketplace.
+
+**Fit**
+
+1. Demand: first-land trial and paid chat run as **GodMode Inference** (platform OpenRouter mgmt / shared keys today). When free runs out, pay through GodMode (billing path still placeholder; see [ONBOARDING.md](./ONBOARDING.md)).
+2. Supply: sellers with unused provider credits or local capacity publish Marketplace listing kind `inference` (constant `GODMODE_INFERENCE_LISTING_KIND`) against an `inference_endpoints` row on their Bridge, or later wrap capacity as an Agent listing.
+3. Routing / settlement: future. GodMode would route trial and paid demand onto platform or seller supply and settle later. OpenRouter (or other BYOK) remains the supply backend.
+
+**What exists today**
+
+- Listing kind `inference` + Sell publish UI on non-SaaS hosts
+- Graph architecture node `hub:marketplace-sell-inference` (docs CTA into Marketplace → Sell)
+- Hub residual review path for inference listings
+
+**Still future**
+
+- Pay-as-you-go GodMode Inference billing for demand
+- Cross-host / Cloud P2P routing of buyer traffic onto seller capacity
+- Settlement, metering UX, and “sell as Agent” productization
+
+Do not invent private plugin domain residue for this. Keep the extension in core Marketplace kinds.
 
 ## Local catalogs
 

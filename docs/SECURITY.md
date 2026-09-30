@@ -187,7 +187,7 @@ boundaries distinct:
 | **Plugin capability grants (#290 / #303)** | Network, tools, and records deny-by-default for Official/Community; `host.externalFetch` allowlist from catalog `networkHosts` + manifest `capabilities.network.hosts`; tools/records from catalog `toolNames`/`recordNames` + manifest `capabilities.tools`/`capabilities.records` (plus manifest `objectTypes` names); Local/operator unrestricted; revoke via last-tenant uninstall (and kill switches #96) | Blocking raw in-process `fetch`; true plugin process sandbox |
 | **Coding jail (#112 Layers 1–4)** | Per-tenant coding root + bubblewrap terminal/helpers on a **shared** Bridge host | Isolating *installed plugin* code (plugins load in the Bridge Node process today) |
 | **VM-grade coding jobs (#172)** | Disposable machines for untrusted build/coding jobs | Per-plugin runtime sandbox on the buyer hub |
-| **Data + compute isolation ladder (#777)** | SQLite shards, Data Router digests, GodMode Cloud + per-user runtime box + one disposable job throwaway on a shared VPS ([DATA_ISOLATION.md](DATA_ISOLATION.md)) | Dedicated whole-VPS as default Cloud; bank-grade claims; plugin child-process sandbox (#559) |
+| **Data + compute isolation ladder (#777)** | The Graph as instance map; SQLite shards, Data Router digests, GodMode Cloud + per-user runtime box + one disposable job throwaway on a shared VPS ([DATA_ISOLATION.md](DATA_ISOLATION.md), [SQLITE_UNIVERSE.md](SQLITE_UNIVERSE.md)) | Dedicated whole-VPS as default Cloud; bank-grade claims; plugin child-process sandbox (#559) |
 | **Kill switches (#96)** | Deploy/spend/send/agent emergency stops | Fine-grained plugin capability grants (use #290 / #303 + uninstall) |
 
 Extending CI smoke or Copilot review on intake is encouraged and still not

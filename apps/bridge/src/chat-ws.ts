@@ -12,15 +12,11 @@ import { WebSocket, type WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { getCloudDb } from "./core-db.js";
 import { authenticateWsClient } from "./ws-broker.js";
-import { getOperatorTenantIdCached } from "./services/auth/middleware.js";
 import {
   parseWsSessionFromUrl,
   parseWsTenantIdFromUrl,
 } from "./services/ws-auth.js";
-import {
-  listUserTenants,
-  SYSTEM_USER_ID,
-} from "./services/tenant-bootstrap.js";
+import { listUserTenants } from "./services/tenant-bootstrap.js";
 import type { MembershipRole } from "./core-db.js";
 import { resolveSession, parseSessionCookie } from "./services/auth/session-store.js";
 import { coreUserToAuth } from "./types/express-auth.js";
@@ -50,6 +46,9 @@ type ChatClientMsg = {
   autoAcceptTools?: boolean;
   chatMode?: AiChatTurnBody["chatMode"];
   toolAutonomy?: AiChatTurnBody["toolAutonomy"];
+  interestId?: string;
+  pathId?: string;
+  clientOs?: string;
 };
 
 function resolveChatAuth(
@@ -81,36 +80,25 @@ function resolveChatAuth(
     }
   }
 
-  if (!userId && config.auth.allowAnonymous) {
-    userId = SYSTEM_USER_ID;
-    isAdmin = false;
-  }
-
   if (!userId) {
     return { error: "Authentication required", code: 4401 };
   }
 
-  let tenantId = meta.tenantId;
   const tenants = listUserTenants(core, userId);
-  if (!tenantId) {
-    if (config.auth.allowAnonymous) {
-      tenantId = getOperatorTenantIdCached();
-    } else if (tenants[0]?.id) {
-      tenantId = tenants[0].id;
-    }
+  let tenantId = meta.tenantId;
+  if (tenantId && !tenants.some((t) => t.id === tenantId)) {
+    tenantId = undefined;
   }
-  if (!tenantId) {
+  if (!tenantId) tenantId = tenants[0]?.id;
+  const membership = tenants.find((t) => t.id === tenantId);
+  if (!tenantId || !membership) {
     return { error: "Tenant required", code: 4403 };
   }
-
-  const membership = tenants.find((t) => t.id === tenantId);
-  const tenantRole: MembershipRole =
-    membership?.role ?? (config.auth.allowAnonymous ? "owner" : "viewer");
 
   return {
     user: { id: userId, isAdmin },
     tenantId,
-    tenantRole,
+    tenantRole: membership.role,
     tenantDb: getTenantDb(tenantId),
   };
 }
@@ -123,19 +111,6 @@ const ROLE_RANK: Record<MembershipRole, number> = {
 
 export function attachChatWebSocket(wss: WebSocketServer): void {
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    if (!config.auth.allowAnonymous && config.isProduction) {
-      const querySession = config.isProduction
-        ? undefined
-        : parseWsSessionFromUrl(req.url);
-      const hasCookie = Boolean(
-        req.headers.cookie?.includes("godmode_session=")
-      );
-      if (!querySession && !hasCookie && !req.headers.authorization) {
-        ws.close(4401, "Authentication required");
-        return;
-      }
-    }
-
     const tenantHeader =
       typeof req.headers["x-tenant-id"] === "string"
         ? req.headers["x-tenant-id"]
@@ -152,21 +127,9 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
       querySession
     );
 
-    if (!meta.userId && !config.auth.allowAnonymous) {
+    if (!meta.userId) {
       ws.close(4401, "Authentication required");
       return;
-    }
-    if (!meta.tenantId) {
-      if (meta.userId) {
-        ws.close(4403, "Tenant required");
-        return;
-      }
-      if (config.auth.allowAnonymous) {
-        meta.tenantId = getOperatorTenantIdCached();
-      } else {
-        ws.close(4401, "Authentication required");
-        return;
-      }
     }
 
     const authResult = resolveChatAuth(req, meta);
@@ -297,6 +260,10 @@ export function attachChatWebSocket(wss: WebSocketServer): void {
           autoAcceptTools: msg.autoAcceptTools,
           chatMode: msg.chatMode,
           toolAutonomy: msg.toolAutonomy,
+          interestId:
+            typeof msg.interestId === "string" ? msg.interestId : undefined,
+          pathId: typeof msg.pathId === "string" ? msg.pathId : undefined,
+          clientOs: typeof msg.clientOs === "string" ? msg.clientOs : undefined,
         };
 
         const preparedResult = await handlers.prepare(turnAuth, body);

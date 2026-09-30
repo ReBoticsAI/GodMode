@@ -31,15 +31,20 @@ function stopPolling(): void {
 }
 
 /** Shared poller for `/api/ai/status`, mirroring use-session-status. */
-export function useAiStatus(): { status: AiStatus | null; refresh: () => void } {
+export function useAiStatus(opts?: {
+  /** When false, do not subscribe or poll (idle graph land). Default true. */
+  enabled?: boolean;
+}): { status: AiStatus | null; refresh: () => void } {
+  const enabled = opts?.enabled !== false;
   const [s, setS] = useState<AiStatus | null>(cached);
   useEffect(() => {
+    if (!enabled) return;
     listeners.add(setS);
     ensurePolling();
     return () => {
       listeners.delete(setS);
       stopPolling();
     };
-  }, []);
+  }, [enabled]);
   return { status: s, refresh: pull };
 }
