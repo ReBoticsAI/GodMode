@@ -257,6 +257,7 @@ export function ChatGraphCanvas({
   const isMobile = useIsMobile();
   const [projection, setProjection] = useState<GraphProjection | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [projectionError, setProjectionError] = useState<string | null>(null);
   const [layoutDoc, setLayoutDoc] = useState<ChatGraphDoc | null>(null);
   const [totalPoints, setTotalPoints] = useState<number | null>(null);
   const [anchorGridOpen, setAnchorGridOpen] = useState(false);
@@ -305,19 +306,32 @@ export function ChatGraphCanvas({
 
   const reload = useCallback(() => {
     void Promise.all([
-      fetchGraphProjection({ focusType: "architecture" }).catch(() => null),
+      fetchGraphProjection({ focusType: "architecture" }).then(
+        (proj) => ({ ok: true as const, proj }),
+        (err: unknown) => ({
+          ok: false as const,
+          message:
+            err instanceof Error ? err.message : "Could not load The Graph",
+        })
+      ),
       authenticated
         ? fetchChatGraph().catch(() => ({ nodes: [], edges: [] }) as ChatGraphDoc)
         : Promise.resolve({ nodes: [], edges: [] } as ChatGraphDoc),
       // Missions scoreboard is signed-in chrome; skip on guest / new-install land.
       authenticated ? fetchGraphMissions().catch(() => null) : Promise.resolve(null),
     ])
-      .then(([proj, doc, missions]) => {
+      .then(([projResult, doc, missions]) => {
         setLayoutDoc(doc);
-        if (proj && proj.nodes.length > 0) {
-          setProjection(proj);
+        if (projResult.ok) {
+          setProjectionError(null);
+          if (projResult.proj && projResult.proj.nodes.length > 0) {
+            setProjection(projResult.proj);
+          } else {
+            setProjection(null);
+          }
         } else {
           setProjection(null);
+          setProjectionError(projResult.message || "Could not load The Graph");
         }
         if (missions) setTotalPoints(missions.totalPoints);
         else if (!authenticated) setTotalPoints(null);
@@ -1989,7 +2003,7 @@ export function ChatGraphCanvas({
     void saveChatGraph(layoutDoc).catch(() => undefined);
   }, [authenticated, layoutDoc]);
 
-  const empty = loaded && (projection?.nodes.length ?? 0) === 0;
+  const empty = loaded && !projectionError && (projection?.nodes.length ?? 0) === 0;
   const emptyHint = useMemo(
     () =>
       "The Graph maps GodMode architecture. Click to select; double-click to open Information.",
@@ -2022,6 +2036,14 @@ export function ChatGraphCanvas({
           <p className="max-w-sm text-center text-sm text-muted-foreground">
             WebGL is required for The Graph. Enable hardware acceleration or try
             another browser.
+          </p>
+        </div>
+      ) : projectionError ? (
+        <div className="flex h-full items-center justify-center p-6">
+          <p className="max-w-sm text-center text-sm text-muted-foreground">
+            {/email verification/i.test(projectionError)
+              ? "Verify your email to load The Graph."
+              : projectionError}
           </p>
         </div>
       ) : projection ? (

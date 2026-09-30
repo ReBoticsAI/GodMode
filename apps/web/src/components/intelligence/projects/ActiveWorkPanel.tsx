@@ -403,7 +403,12 @@ export function ActiveWorkPanel({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load Active Work";
-      setLoadError(message || "Failed to load Active Work");
+      // SaaS email gate: AuthGate owns this; do not paint a product-panel error.
+      if (/email verification required/i.test(message)) {
+        setLoadError(null);
+      } else {
+        setLoadError(message || "Failed to load Active Work");
+      }
       // Keep prior tasks visible; do not clear to empty on transient failures.
     } finally {
       loadingRef.current = false;
