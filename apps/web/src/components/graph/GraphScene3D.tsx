@@ -17,9 +17,15 @@ import type {
 } from "@/api";
 import { GraphNodeGlyph } from "@/components/graph/GraphNodeGlyph";
 import {
+  applyAgentDifferenceExpansions,
+  cycleTieredBranch,
+  defaultBranchTiers,
   defaultCollapsedSet,
-  hiddenDescendantIds,
+  hiddenGraphNodeIds,
+  isTieredBranchRoot,
   recollapsePlatformRayBeyond,
+  type GraphExpansionTier,
+  type TieredBranchRoot,
 } from "@/lib/graph-collapse";
 import { pathFromYou } from "@/lib/graph-path";
 import { buildGraphNodeColors, graphNodeColor } from "@/lib/graph-node-style";
@@ -522,6 +528,7 @@ function SceneBody({
   selectedId,
   pathIds,
   collapsedIds,
+  branchTiers,
   positionOverrides,
   cameraEnabled,
   onSelect,
@@ -537,6 +544,7 @@ function SceneBody({
   selectedId: string | null;
   pathIds: Set<string> | null;
   collapsedIds: Set<string>;
+  branchTiers: Record<TieredBranchRoot, GraphExpansionTier>;
   positionOverrides: Record<string, Vec3>;
   cameraEnabled: boolean;
   onSelect: (node: GraphProjectionNode) => void;
@@ -573,8 +581,8 @@ function SceneBody({
   );
 
   const hidden = useMemo(
-    () => hiddenDescendantIds(projection.edges, collapsedIds),
-    [projection.edges, collapsedIds]
+    () => hiddenGraphNodeIds(projection.edges, collapsedIds, branchTiers),
+    [projection.edges, collapsedIds, branchTiers]
   );
 
   const visibleNodes = useMemo(
@@ -740,7 +748,11 @@ function SceneBody({
           }
           selected={pathIds?.has(n.id) || selectedId === n.id}
           adjacent={!pathHighlight && adjacentIds.has(n.id)}
-          collapsed={collapsedIds.has(n.id)}
+          collapsed={
+            collapsedIds.has(n.id) ||
+            (isTieredBranchRoot(n.id) &&
+              (branchTiers[n.id] ?? "simple") !== "full")
+          }
           collapsible={collapsibleIds.has(n.id)}
           onSelect={onSelect}
           onActivate={onActivate}
@@ -773,9 +785,17 @@ export const GraphScene3D = forwardRef<
     resolvedTheme === "light" ? SCENE_BG_LIGHT : SCENE_BG_DARK;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pathIds, setPathIds] = useState<Set<string> | null>(null);
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() =>
-    defaultCollapsedSet()
-  );
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
+    const collapsed = defaultCollapsedSet();
+    applyAgentDifferenceExpansions(projection.edges, collapsed, [
+      "hub:agent-research",
+      "hub:agent-ops",
+    ]);
+    return collapsed;
+  });
+  const [branchTiers, setBranchTiers] = useState<
+    Record<TieredBranchRoot, GraphExpansionTier>
+  >(() => defaultBranchTiers());
   const [positionOverrides, setPositionOverrides] = useState<
     Record<string, Vec3>
   >({});
@@ -785,11 +805,17 @@ export const GraphScene3D = forwardRef<
   selectedIdRef.current = selectedId;
   const collapsedRef = useRef(collapsedIds);
   collapsedRef.current = collapsedIds;
+  const branchTiersRef = useRef(branchTiers);
+  branchTiersRef.current = branchTiers;
 
   const fitAll = useCallback(() => {
     const c = controlsRef.current;
     if (!c) return;
-    const hidden = hiddenDescendantIds(projection.edges, collapsedRef.current);
+    const hidden = hiddenGraphNodeIds(
+      projection.edges,
+      collapsedRef.current,
+      branchTiersRef.current
+    );
     const nodes = projection.nodes
       .filter((n) => !hidden.has(n.id))
       .map((n) => {
@@ -819,8 +845,14 @@ export const GraphScene3D = forwardRef<
     if (!c) return;
     setPositionOverrides({});
     const collapsed = defaultCollapsedSet();
+    applyAgentDifferenceExpansions(projection.edges, collapsed, [
+      "hub:agent-research",
+      "hub:agent-ops",
+    ]);
+    const tiers = defaultBranchTiers();
     setCollapsedIds(collapsed);
-    const hidden = hiddenDescendantIds(projection.edges, collapsed);
+    setBranchTiers(tiers);
+    const hidden = hiddenGraphNodeIds(projection.edges, collapsed, tiers);
     const nodes = projection.nodes.filter((n) => !hidden.has(n.id));
     const box = boundsForNodes(nodes);
     void c.fitToBox(box, true, {
@@ -931,6 +963,14 @@ export const GraphScene3D = forwardRef<
   );
 
   const onToggleCollapse = useCallback((nodeId: string) => {
+    if (isTieredBranchRoot(nodeId)) {
+      const nextCollapsed = new Set(collapsedRef.current);
+      const nextTiers = { ...branchTiersRef.current };
+      cycleTieredBranch(nodeId, nextCollapsed, nextTiers);
+      setCollapsedIds(nextCollapsed);
+      setBranchTiers(nextTiers);
+      return;
+    }
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(nodeId)) {
@@ -966,16 +1006,28 @@ export const GraphScene3D = forwardRef<
       const action = (ev as CustomEvent<{ action?: string }>).detail?.action;
       if (action === "expand-all") {
         setCollapsedIds(new Set());
+        setBranchTiers({
+          "hub:you": "full",
+          "hub:heart": "full",
+          "hub:intelligence": "full",
+        });
         return;
       }
       if (action === "collapse-all") {
         const next = new Set<string>();
         for (const e of projection.edges) next.add(e.source);
         setCollapsedIds(next);
+        setBranchTiers(defaultBranchTiers());
         return;
       }
       if (action === "reset-default") {
-        setCollapsedIds(defaultCollapsedSet());
+        const collapsed = defaultCollapsedSet();
+        applyAgentDifferenceExpansions(projection.edges, collapsed, [
+          "hub:agent-research",
+          "hub:agent-ops",
+        ]);
+        setCollapsedIds(collapsed);
+        setBranchTiers(defaultBranchTiers());
       }
     };
     window.addEventListener(
@@ -996,11 +1048,12 @@ export const GraphScene3D = forwardRef<
       new CustomEvent("godmode:graph-collapse-changed", {
         detail: {
           collapsedIds: [...collapsedIds],
+          branchTiers: { ...branchTiers },
           collapsibleIds: [...collapsible],
         },
       })
     );
-  }, [collapsedIds, projection.edges]);
+  }, [collapsedIds, branchTiers, projection.edges]);
 
   const onNudge = useCallback((nodeId: string, delta: Vec3) => {
     setPositionOverrides((prev) => {
@@ -1074,6 +1127,7 @@ export const GraphScene3D = forwardRef<
         selectedId={selectedId}
         pathIds={pathIds}
         collapsedIds={collapsedIds}
+        branchTiers={branchTiers}
         positionOverrides={positionOverrides}
         cameraEnabled={cameraEnabled}
         onSelect={onSelect}
