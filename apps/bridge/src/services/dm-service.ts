@@ -18,6 +18,16 @@ import { getAgent } from "./agents/agents-db.js";
 import { createShareGrant } from "./share-service.js";
 import { isUserOnline } from "./presence.js";
 import { blobHref } from "./blob-store.js";
+import {
+  canSendPublicChat,
+  getPublicChannelById,
+  isChannelAgentId,
+  isCloudLobbySlug,
+  isPublicConversation,
+  listInstallPublicChannels,
+  slugFromChannelAgentId,
+  type PublicChannelRole,
+} from "./public-channels.js";
 
 export class DmError extends Error {
   constructor(
@@ -102,6 +112,10 @@ export interface DmConversationView {
   id: string;
   kind: DmConversationKind;
   title: string | null;
+  /** Public lobby slug when kind is public. */
+  slug?: string | null;
+  /** install = this Users hub; cloud = GodMode Cloud lobby (client tags). */
+  plane?: "install" | "cloud";
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -137,7 +151,8 @@ function agentSummary(
 
 function userSummary(
   _hubDb: CoreDatabase,
-  userId: string
+  userId: string,
+  opts?: { redactEmail?: boolean }
 ): DmUserSummary | null {
   const row = getCloudDb()
     .prepare(
@@ -154,7 +169,8 @@ function userSummary(
   if (!row) return null;
   return {
     id: row.id,
-    email: row.email,
+    // Public lobby is world-readable; never ship emails there.
+    email: opts?.redactEmail ? "" : row.email,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
     online: isUserOnline(row.id),
@@ -282,6 +298,162 @@ export function assertConversationMember(
   return role;
 }
 
+/** Read access: members, or anyone for public lobby channels. */
+export function assertConversationReadable(
+  db: CoreDatabase,
+  conversationId: string,
+  _userId: string
+): void {
+  if (isPublicConversation(db, conversationId)) return;
+  assertConversationMember(db, conversationId, _userId);
+}
+
+/** Effective public-channel role. No membership row ⇒ visitor. */
+export function getPublicChannelRole(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): PublicChannelRole {
+  if (!isPublicConversation(db, conversationId)) {
+    throw new DmError("Not a public channel", 400);
+  }
+  const role = getConversationMemberRole(db, conversationId, userId);
+  if (role === "admin") return "admin";
+  if (role === "moderator") return "moderator";
+  if (role === "member" || role === "owner") return "member";
+  if (role === "visitor") return "visitor";
+  return "visitor";
+}
+
+export function canModeratePublicMessages(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): boolean {
+  const role = getPublicChannelRole(db, conversationId, userId);
+  return role === "admin" || role === "moderator";
+}
+
+export function assertChannelModerator(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): void {
+  if (!canModeratePublicMessages(db, conversationId, userId)) {
+    throw new DmError("Channel moderator or admin required", 403);
+  }
+}
+
+export function assertChannelAdmin(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): void {
+  if (getPublicChannelRole(db, conversationId, userId) !== "admin") {
+    throw new DmError("Channel admin required", 403);
+  }
+}
+
+/** Channel-agent content writes require Admin on the bound public channel. */
+export function assertCanEditChannelAgentContent(
+  db: CoreDatabase,
+  userId: string,
+  agentId: string
+): void {
+  if (!isChannelAgentId(agentId)) return;
+  const slug = slugFromChannelAgentId(agentId);
+  if (!slug) throw new DmError("Invalid channel agent", 400);
+  const row = db
+    .prepare(
+      `SELECT id FROM dm_conversations WHERE kind = 'public' AND slug = ?`
+    )
+    .get(slug) as { id: string } | undefined;
+  if (!row) throw new DmError("Channel not found for agent", 404);
+  assertChannelAdmin(db, row.id, userId);
+}
+
+function ensureMemberRoleOnPublicSend(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): void {
+  const role = getConversationMemberRole(db, conversationId, userId);
+  if (role === "admin" || role === "moderator" || role === "member") return;
+  if (role === "visitor") {
+    db.prepare(
+      `UPDATE dm_conversation_members
+       SET role = 'member'
+       WHERE conversation_id = ? AND user_id = ? AND role = 'visitor'`
+    ).run(conversationId, userId);
+    return;
+  }
+  addMember(db, conversationId, userId, "member");
+}
+
+export function setPublicChannelMemberRole(
+  db: CoreDatabase,
+  opts: {
+    conversationId: string;
+    actorUserId: string;
+    targetUserId: string;
+    role: PublicChannelRole;
+  }
+): void {
+  assertChannelAdmin(db, opts.conversationId, opts.actorUserId);
+  if (opts.targetUserId === opts.actorUserId && opts.role !== "admin") {
+    throw new DmError("Cannot demote yourself from admin", 400);
+  }
+  const existing = getConversationMemberRole(
+    db,
+    opts.conversationId,
+    opts.targetUserId
+  );
+  if (!existing) {
+    addMember(db, opts.conversationId, opts.targetUserId, opts.role);
+    return;
+  }
+  db.prepare(
+    `UPDATE dm_conversation_members
+     SET role = ?
+     WHERE conversation_id = ? AND user_id = ? AND member_kind = 'user'`
+  ).run(opts.role, opts.conversationId, opts.targetUserId);
+}
+
+export function softDeleteMessage(
+  db: CoreDatabase,
+  opts: {
+    conversationId: string;
+    messageId: string;
+    actorUserId: string;
+  }
+): DmMessageView {
+  assertConversationReadable(db, opts.conversationId, opts.actorUserId);
+  const msg = db
+    .prepare(
+      `SELECT * FROM dm_messages WHERE id = ? AND conversation_id = ?`
+    )
+    .get(opts.messageId, opts.conversationId) as CoreDmMessage | undefined;
+  if (!msg) throw new DmError("Message not found", 404);
+  if (msg.deleted_at) return mapMessageView(db, msg);
+
+  const isOwn = msg.sender_user_id === opts.actorUserId;
+  const canMod =
+    isPublicConversation(db, opts.conversationId) &&
+    canModeratePublicMessages(db, opts.conversationId, opts.actorUserId);
+  if (!isOwn && !canMod) {
+    throw new DmError("Not allowed to delete this message", 403);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE dm_messages SET deleted_at = ?, body_text = '' WHERE id = ?`
+  ).run(now, opts.messageId);
+  const updated = db
+    .prepare(`SELECT * FROM dm_messages WHERE id = ?`)
+    .get(opts.messageId) as CoreDmMessage;
+  return mapMessageView(db, updated);
+}
+
 function findDirectConversation(
   db: CoreDatabase,
   userA: string,
@@ -304,11 +476,67 @@ function findDirectConversation(
   );
 }
 
+function findDirectUserAgentConversation(
+  db: CoreDatabase,
+  userId: string,
+  agentId: string
+): CoreDmConversation | null {
+  return (
+    (db
+      .prepare(
+        `SELECT c.*
+         FROM dm_conversations c
+         JOIN dm_conversation_members mu
+           ON mu.conversation_id = c.id
+          AND mu.user_id = ?
+          AND mu.member_kind = 'user'
+         JOIN dm_conversation_members ma
+           ON ma.conversation_id = c.id
+          AND ma.member_kind = 'agent'
+          AND ma.agent_id = ?
+         WHERE c.kind = 'direct'
+           AND (SELECT COUNT(*) FROM dm_conversation_members WHERE conversation_id = c.id) = 2
+         LIMIT 1`
+      )
+      .get(userId, agentId) as CoreDmConversation | undefined) ?? null
+  );
+}
+
+/** Open or create a 1:1 DM with a tenant agent (Intelligence, Digital You, …). */
+export function ensureAgentDirectConversation(
+  db: CoreDatabase,
+  opts: {
+    userId: string;
+    agentId: string;
+    agentTenantId: string;
+  }
+): DmConversationView {
+  const existing = findDirectUserAgentConversation(
+    db,
+    opts.userId,
+    opts.agentId
+  );
+  if (existing) return buildConversationView(db, existing, opts.userId);
+  return createConversation(db, {
+    creatorUserId: opts.userId,
+    kind: "direct",
+    memberUserIds: [],
+    memberAgents: [
+      { agentId: opts.agentId, agentTenantId: opts.agentTenantId },
+    ],
+  });
+}
+
 function conversationDisplayTitle(
   db: CoreDatabase,
   conv: CoreDmConversation,
   viewerId: string
 ): string {
+  if (conv.kind === "public") {
+    const slug = conv.slug?.trim();
+    if (slug) return `#${slug.replace(/^#/, "")}`;
+    return conv.title?.trim() || "#channel";
+  }
   if (conv.kind === "group" && conv.title?.trim()) return conv.title.trim();
   const memberRows = db
     .prepare(`SELECT * FROM dm_conversation_members WHERE conversation_id = ?`)
@@ -395,6 +623,7 @@ function buildConversationView(
   const viewerMember = memberRows.find(
     (m) => (m.member_kind ?? "user") === "user" && m.user_id === viewerId
   );
+  const publicFacing = conv.kind === "public";
   const members: DmConversationMemberView[] = memberRows
     .map((m) => {
       const kind = m.member_kind ?? "user";
@@ -411,7 +640,7 @@ function buildConversationView(
           agent: agentSummary(m.agent_tenant_id, m.agent_id),
         };
       }
-      const user = userSummary(db, m.user_id);
+      const user = userSummary(db, m.user_id, { redactEmail: publicFacing });
       if (!user) return null;
       return {
         memberKind: "user" as const,
@@ -431,6 +660,13 @@ function buildConversationView(
     id: conv.id,
     kind: conv.kind,
     title: conv.title,
+    slug: conv.slug ?? null,
+    plane:
+      conv.kind === "public"
+        ? isCloudLobbySlug(conv.slug)
+          ? "cloud"
+          : "install"
+        : undefined,
     createdByUserId: conv.created_by_user_id,
     createdAt: conv.created_at,
     updatedAt: conv.updated_at,
@@ -454,10 +690,16 @@ export function listConversationsForUser(
        FROM dm_conversations c
        JOIN dm_conversation_members m ON m.conversation_id = c.id
        WHERE m.user_id = ?
+         AND c.kind IN ('direct', 'group')
        ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC`
     )
     .all(userId) as CoreDmConversation[];
-  return rows.map((c) => buildConversationView(db, c, userId));
+  const privateViews = rows.map((c) => buildConversationView(db, c, userId));
+  const publicViews = listInstallPublicChannels(db).map((ch) => {
+    const conv = getPublicChannelById(db, ch.id)!;
+    return buildConversationView(db, conv, userId);
+  });
+  return [...publicViews, ...privateViews];
 }
 
 export function getConversationForUser(
@@ -465,7 +707,7 @@ export function getConversationForUser(
   conversationId: string,
   userId: string
 ): DmConversationView {
-  assertConversationMember(db, conversationId, userId);
+  assertConversationReadable(db, conversationId, userId);
   const conv = db
     .prepare(`SELECT * FROM dm_conversations WHERE id = ?`)
     .get(conversationId) as CoreDmConversation | undefined;
@@ -548,6 +790,9 @@ export function createConversation(
   );
   const totalParticipants = uniqueMembers.length + uniqueAgents.length;
 
+  if (opts.kind === "public") {
+    throw new DmError("Public channels are seeded by the platform");
+  }
   if (opts.kind === "direct") {
     if (totalParticipants !== 2) {
       throw new DmError("Direct conversations require exactly two participants");
@@ -557,6 +802,14 @@ export function createConversation(
         db,
         uniqueMembers[0]!,
         uniqueMembers[1]!
+      );
+      if (existing) return buildConversationView(db, existing, opts.creatorUserId);
+    }
+    if (uniqueAgents.length === 1 && uniqueMembers.length === 1) {
+      const existing = findDirectUserAgentConversation(
+        db,
+        uniqueMembers[0]!,
+        uniqueAgents[0]!.agentId
       );
       if (existing) return buildConversationView(db, existing, opts.creatorUserId);
     }
@@ -624,7 +877,7 @@ export function listMessages(
   userId: string,
   opts?: { before?: string; limit?: number }
 ): DmMessageView[] {
-  assertConversationMember(db, conversationId, userId);
+  assertConversationReadable(db, conversationId, userId);
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
   const rows = opts?.before
     ? (db
@@ -671,7 +924,10 @@ function mapMessageView(db: CoreDatabase, m: CoreDmMessage): DmMessageView {
     };
   }
 
-  const sender = userSummary(db, m.sender_user_id);
+  const publicFacing = isPublicConversation(db, m.conversation_id);
+  const sender = userSummary(db, m.sender_user_id, {
+    redactEmail: publicFacing,
+  });
   return {
     id: m.id,
     conversationId: m.conversation_id,
@@ -703,7 +959,21 @@ export function createMessage(
     attachments?: DmAttachmentInput[];
   }
 ): DmMessageView {
-  assertConversationMember(db, opts.conversationId, opts.senderUserId);
+  if (isPublicConversation(db, opts.conversationId)) {
+    if (!canSendPublicChat(opts.senderUserId)) {
+      throw new DmError(
+        "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.",
+        402
+      );
+    }
+    ensureMemberRoleOnPublicSend(
+      db,
+      opts.conversationId,
+      opts.senderUserId
+    );
+  } else {
+    assertConversationMember(db, opts.conversationId, opts.senderUserId);
+  }
   const text = (opts.bodyText ?? "").trim();
   const attachments = opts.attachments ?? [];
   if (!text && attachments.length === 0) {
@@ -869,7 +1139,9 @@ export function markConversationRead(
   userId: string,
   messageId?: string
 ): void {
-  assertConversationMember(db, conversationId, userId);
+  assertConversationReadable(db, conversationId, userId);
+  // Public readers without a membership row have nothing to update.
+  if (!isConversationMember(db, conversationId, userId)) return;
   const now = new Date().toISOString();
   if (messageId) {
     const exists = db

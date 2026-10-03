@@ -8252,8 +8252,10 @@ export interface DmConversationMember {
 
 export interface DmConversation {
   id: string;
-  kind: "direct" | "group";
+  kind: "direct" | "group" | "public";
   title: string | null;
+  slug?: string | null;
+  plane?: "install" | "cloud";
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -8262,6 +8264,43 @@ export interface DmConversation {
   unreadCount: number;
   members: DmConversationMember[];
   displayTitle: string;
+}
+
+export type PublicChannelRole =
+  | "admin"
+  | "moderator"
+  | "member"
+  | "visitor";
+
+export interface PublicChannelRow {
+  id: string;
+  slug: string;
+  title: string;
+  plane: "install" | "cloud";
+  kind: "public";
+  /** Bound channel agent id (`channel-{slug}`). */
+  agentId: string;
+  viewerRole?: PublicChannelRole;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  displayTitle: string;
+  unreadCount: number;
+}
+
+export interface PublicChatEntitlement {
+  ok: boolean;
+  reason: string;
+  cloudSeat: boolean;
+  seller: boolean;
+  paidInference: boolean;
+}
+
+export interface DmDirectoryResponse {
+  conversations: DmConversation[];
+  installChannels: PublicChannelRow[];
+  cloudChannels: PublicChannelRow[];
+  cloudLobbyOnline: boolean;
+  entitlement: PublicChatEntitlement;
 }
 
 export interface DmAttachment {
@@ -8323,6 +8362,34 @@ export function fetchDmConversations() {
   return api<{ conversations: DmConversation[] }>("/dm/conversations");
 }
 
+export function fetchDmDirectory() {
+  return api<DmDirectoryResponse>("/dm/directory");
+}
+
+export function fetchPublicChatEntitlement() {
+  return api<{ entitlement: PublicChatEntitlement }>("/dm/public-chat-entitlement");
+}
+
+export function ensureAgentDm(agentId: string) {
+  return api<{ conversation: DmConversation }>("/dm/agent-dm", {
+    method: "POST",
+    body: JSON.stringify({ agentId }),
+  });
+}
+
+export function fetchCloudLobbyMessages(
+  slug: string,
+  opts?: { before?: string; limit?: number }
+) {
+  const params = new URLSearchParams();
+  if (opts?.before) params.set("before", opts.before);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return api<{ messages: DmMessage[]; plane: string; slug: string }>(
+    `/dm/cloud-lobby/${encodeURIComponent(slug)}/messages${qs ? `?${qs}` : ""}`
+  );
+}
+
 export function fetchDmConversation(id: string) {
   return api<{ conversation: DmConversation }>(`/dm/conversations/${id}`);
 }
@@ -8338,6 +8405,10 @@ export function createDmConversation(body: {
     kind: body.kind,
     title: body.title,
     member_user_ids: body.memberUserIds,
+    member_agents: body.memberAgents?.map((a) => ({
+      agent_id: a.agentId,
+      agent_tenant_id: a.agentTenantId,
+    })),
   }).then((row) => ({ conversation: rowDto<DmConversation>(row) }));
 }
 

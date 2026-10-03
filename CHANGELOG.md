@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-03
+
+Patch cut for Cloud lobby channels, Social desktop defaults, and visitor Cloud
+guide / signup paths so public channels can go live on GodMode Cloud.
+
+### Added
+
+- **Cloud lobby + this-install public channels** - Discord-style Social
+  directory (`#general`, `#dev`, `#roadmap`, `#support`, `#thegame` on Cloud;
+  `#local` on each install), channel-agent Graph pins, read vs post gates
+  (Cloud / Seller / paid Inference), and local proxy to Cloud lobby when online
+- **Visitor Cloud guide CTAs** - Explore and Login / signup paths surface
+  Inference and plan checkout; phone uses same-tab signup; desktop keeps
+  windowed checkout where Stripe is configured
+- **Social content density** - per-window zoom controls on floating Social and
+  phone Sheets
+
+### Fixed
+
+- **Desktop Social default width** - half the playfield, cut off just before
+  You / Intelligence; layout generation heals phone-min widths stuck in
+  localStorage
+- **Phone Social geometry** - full-bleed playfield sizing no longer overwrites
+  desktop width prefs; focus-tile applyLayout does not persist solo size
+- **AuthGate signup deep links** - honor `signup=1` / plan / email query params
+  for Cloud checkout return paths
+
+### Changed
+
+- **Graph chrome docs** - Social directory, channel agents, and desktop vs
+  phone Social sizing rules in GRAPH_CHROME and dms-and-channels
+
 ## [1.0.0] - 2026-09-30
 
 First major stable cut of GodMode: sellable Inference on Cloud, Graph as the

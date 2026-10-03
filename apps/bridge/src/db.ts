@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "./config.js";
 import { seedIntelligenceAgent, removeDeprecatedBuiltinAgents, ensureAgentPrincipalDefaults, ensureIntelligenceDescription, ensureIntelligenceCodeAccess, ensureIntelligenceLocalBackendWhenExternalLlm, ensureAgentDescriptions, ensureAgentReflectionDefaults, ensureAgentAutoApproveDefaults, ensureSpecialistCodeAccess } from "./services/agents/agents-db.js";
+import { seedChannelAgents } from "./services/agents/channel-agents.js";
 import { configureDbPragmas, logDbConfig, runForeignKeyCheck } from "./services/db-config.js";
 import {
   addCol as addColumn,
@@ -1296,6 +1297,7 @@ function migrateUnifiedDataSchema(db: Database.Database): void {
 
   migrateRootAgentMoneyAiToIntelligence(db);
   seedIntelligenceAgent(db);
+  // Channel agents live only on the operator tenant (seeded from bootstrap).
   removeDeprecatedBuiltinAgents(db);
   ensureAgentPrincipalDefaults(db);
   ensureIntelligenceDescription(db);

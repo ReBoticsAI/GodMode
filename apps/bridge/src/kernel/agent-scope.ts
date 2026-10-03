@@ -3,6 +3,11 @@ import type { AppDatabase } from "../db.js";
 import { getCloudDb } from "../core-db.js";
 import type { ShareGrantRole } from "../core-db.js";
 import { getAgent } from "../services/agents/agents-db.js";
+import {
+  assertChannelAgentWriteAllowed,
+  channelAgentWriteForbiddenMessage,
+} from "../services/channel-agent-acl.js";
+import { DmError } from "../services/dm-service.js";
 import { resolveShareAccess } from "../services/share-service.js";
 import { KernelError } from "./record-api.js";
 
@@ -37,6 +42,18 @@ export function resolveKernelAgentScope(
   const tenantDb = (req.tenantDb ?? undefined) as AppDatabase | undefined;
   if (!tenantDb || !req.tenantId) {
     throw new KernelError(401, "Authenticated tenant required for agent scope");
+  }
+  if (minRole === "editor" || minRole === "owner") {
+    try {
+      assertChannelAgentWriteAllowed(req.user?.id, agentId);
+    } catch (err) {
+      const msg = channelAgentWriteForbiddenMessage(err);
+      if (msg) {
+        const status = err instanceof DmError ? err.status : 403;
+        throw new KernelError(status, msg);
+      }
+      throw err;
+    }
   }
   if (getAgent(tenantDb, agentId)) {
     return {

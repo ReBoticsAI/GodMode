@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ErrorInfo,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -13,6 +14,7 @@ import {
   BotIcon,
   BrainIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ClockIcon,
   FileCodeIcon,
   ImageIcon,
@@ -38,6 +40,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import { GRAPH_CHAT_WINDOW_Z } from "@/lib/graph-chrome-layout";
 import { getMaximizedFocusBounds } from "@/lib/floating-window-bounds";
@@ -50,13 +60,24 @@ import {
   type PanelTab,
 } from "@/lib/intelligence-context";
 import {
+  INTELLIGENCE_ENTRY_ACTIONS,
+  INTELLIGENCE_ENTRY_QUESTION,
+  INTELLIGENCE_EXPLORE_MESSAGE,
   INTELLIGENCE_GREETING_HELLO,
-  INTELLIGENCE_GREETING_QUESTION,
   INTELLIGENCE_INTERESTS,
+  INTELLIGENCE_TOUR_FOCUS_QUESTION,
+  INTELLIGENCE_TOUR_INTRO_MESSAGE,
+  INTELLIGENCE_VISITOR_SIGNUP_MESSAGE,
   interestStartMessage,
+  type IntelligenceEntryActionId,
 } from "@/lib/intelligence-interests";
 import { interestTour } from "@/lib/interest-tour";
-import { CLOUD_GUIDE_DONE_EVENT, playCloudGuide } from "@/lib/cloud-guide";
+import {
+  CLOUD_GUIDE_DONE_EVENT,
+  openCloudSignupFallback,
+  playCloudGuide,
+} from "@/lib/cloud-guide";
+import { isPhoneViewport } from "@/lib/graph-phone-shell";
 import {
   INFERENCE_OFFER_DONE_EVENT,
   playInferenceOffer,
@@ -111,6 +132,8 @@ import {
   deleteAiChatMessage,
   fetchAiArtifact,
   fetchDmMessages,
+  fetchDmDirectory,
+  fetchCloudLobbyMessages,
   fetchModelCatalog,
   getActiveTenantId,
   markDmConversationRead,
@@ -120,11 +143,19 @@ import {
   type AiChat,
   type CatalogModel,
   type DmMessage,
+  type PublicChannelRow,
+  type PublicChatEntitlement,
 } from "@/api";
 import { useTenant } from "@/lib/tenant-context";
+import { WindowDensityControls } from "@/components/floating/WindowDensityControls";
+import AuthGate from "@/pages/AuthGate";
 import Bank from "@/pages/Bank";
 import Vault from "@/pages/Vault";
 import Support from "@/pages/Support";
+import {
+  getWindowDensity,
+  WINDOW_DENSITY_EVENT,
+} from "@/lib/floating-window-density";
 import { CalendarBoard } from "./calendar/CalendarBoard";
 import { AutomationsPanel } from "@/pages/Automations";
 import { KnowledgePanel } from "@/pages/intelligence-flow/KnowledgePanel";
@@ -435,6 +466,7 @@ export function IntelligencePanel({
     panelTab,
     setPanelTab,
     activeAgentId,
+    setActiveAgentId,
     panelMaximized,
     setPanelMaximized,
     panelMinimized,
@@ -452,6 +484,8 @@ export function IntelligencePanel({
     toolAutonomy,
     chatMode,
     setSeedText,
+    phoneCanGoBack,
+    phoneGoBack,
   } = useIntelligence();
   const lockClose = chromeLocks?.lockClose ?? false;
   const lockResize = chromeLocks?.lockResize ?? false;
@@ -460,7 +494,15 @@ export function IntelligencePanel({
   const onLockedResize = chromeLocks?.onLockedResize;
   const onLockedCreate = chromeLocks?.onLockedCreate;
   const { user, authenticated } = useTenant();
-  const showChatDirectory = authenticated && user?.temporary !== true;
+  /** Discord directory for signed-in users and temporary visitors. */
+  const showChatDirectory = Boolean(user);
+  const [installChannels, setInstallChannels] = useState<PublicChannelRow[]>(
+    []
+  );
+  const [cloudChannels, setCloudChannels] = useState<PublicChannelRow[]>([]);
+  const [cloudLobbyOnline, setCloudLobbyOnline] = useState(true);
+  const [publicEntitlement, setPublicEntitlement] =
+    useState<PublicChatEntitlement | null>(null);
   const { status } = useAiStatus({ enabled: panelOpen });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
@@ -479,6 +521,35 @@ export function IntelligencePanel({
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
   const isDmMode = chatTarget.kind === "conversation";
+  const agentDmRows = useMemo(() => {
+    const rows: Array<{ agentId: string; label: string }> = [
+      { agentId: "intelligence", label: "Intelligence" },
+    ];
+    if (user?.id) {
+      rows.push({
+        agentId: `user-${user.id}`,
+        label: "Digital You",
+      });
+    }
+    return rows;
+  }, [user?.id]);
+  // Possess public channel agents when Chat is on that conversation.
+  useEffect(() => {
+    const channel = [...installChannels, ...cloudChannels].find(
+      (c) =>
+        chatTarget.kind === "conversation" &&
+        c.id === chatTarget.conversationId
+    );
+    if (!channel?.agentId) return;
+    if (activeAgentId === channel.agentId) return;
+    setActiveAgentId(channel.agentId, { retainChatTarget: true });
+  }, [
+    activeAgentId,
+    chatTarget,
+    cloudChannels,
+    installChannels,
+    setActiveAgentId,
+  ]);
   const allowedTabs: PanelTab[] = [
     "chat",
     "support",
@@ -499,6 +570,70 @@ export function IntelligencePanel({
   );
   const activeConversationId =
     chatTarget.kind === "conversation" ? chatTarget.conversationId : null;
+  const activePublicConversation =
+    isDmMode && activeConversationId
+      ? [...installChannels, ...cloudChannels].find(
+          (c) => c.id === activeConversationId
+        ) ??
+        (dmConversations.find(
+          (c) => c.id === activeConversationId && c.kind === "public"
+        )
+          ? (() => {
+              const slug =
+                dmConversations.find((c) => c.id === activeConversationId)
+                  ?.slug ?? "channel";
+              return {
+                id: activeConversationId,
+                slug,
+                title:
+                  dmConversations.find((c) => c.id === activeConversationId)
+                    ?.title ?? "#channel",
+                plane: "install" as const,
+                kind: "public" as const,
+                agentId: `channel-${slug}`,
+                lastMessageAt: null,
+                lastMessagePreview: null,
+                displayTitle:
+                  dmConversations.find((c) => c.id === activeConversationId)
+                    ?.displayTitle ?? "#channel",
+                unreadCount: 0,
+              } satisfies PublicChannelRow;
+            })()
+          : undefined)
+      : null;
+  const publicChatLocked =
+    Boolean(activePublicConversation) && publicEntitlement?.ok !== true;
+  const channelAgentWriteLocked = useMemo(() => {
+    if (!activeAgentId.startsWith("channel-")) return false;
+    const row = [...installChannels, ...cloudChannels].find(
+      (c) => c.agentId === activeAgentId
+    );
+    return row?.viewerRole !== "admin";
+  }, [activeAgentId, cloudChannels, installChannels]);
+
+  useEffect(() => {
+    if (!user || !panelOpen || effectiveTab !== "chat") return;
+    let cancelled = false;
+    void fetchDmDirectory()
+      .then((res) => {
+        if (cancelled) return;
+        setInstallChannels(res.installChannels);
+        setCloudChannels(res.cloudChannels);
+        setCloudLobbyOnline(res.cloudLobbyOnline);
+        setPublicEntitlement(res.entitlement);
+        void refreshDmConversations();
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setInstallChannels([]);
+        setCloudChannels([]);
+        setCloudLobbyOnline(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, panelOpen, effectiveTab, refreshDmConversations]);
+
   const activeConversation =
     activeConversationId
       ? dmConversations.find((c) => c.id === activeConversationId) ?? null
@@ -511,6 +646,26 @@ export function IntelligencePanel({
   const dmTitle = activeConversation?.displayTitle ?? "Conversation";
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [contentDensity, setContentDensity] = useState(() =>
+    getWindowDensity("chat")
+  );
+  useEffect(() => {
+    const onChange = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ windowId?: string; density?: number }>)
+        .detail;
+      if (detail?.windowId !== "chat") return;
+      if (typeof detail.density === "number") {
+        setContentDensity(detail.density);
+        return;
+      }
+      setContentDensity(getWindowDensity("chat"));
+    };
+    window.addEventListener(WINDOW_DENSITY_EVENT, onChange);
+    return () => window.removeEventListener(WINDOW_DENSITY_EVENT, onChange);
+  }, []);
+  const [emptyOnboardingStep, setEmptyOnboardingStep] = useState<
+    "entry" | "tour-focus" | "login"
+  >("entry");
   const [tourLines, setTourLines] = useState<Array<{ label: string; say: string }>>([]);
   const [holdTourReply, setHoldTourReply] = useState(false);
   const [guideChoice, setGuideChoice] = useState<GuideChoiceCard | null>(null);
@@ -596,6 +751,9 @@ export function IntelligencePanel({
     const recompute = () => {
       const nextBounds = getPanelBounds();
       setBounds(nextBounds);
+      // Phone uses full-bleed sheet styles; skip floating geometry so a narrow
+      // viewport cannot shrink persisted desktop Social size.
+      if (isPhoneViewport()) return;
       const layout = chatLayoutRef.current;
       const width = clampComposerWidth(
         layout.width || composerWidth,
@@ -1119,7 +1277,8 @@ export function IntelligencePanel({
       window.removeEventListener(CLOUD_GUIDE_DONE_EVENT, onCloudDone);
       window.removeEventListener(INFERENCE_OFFER_DONE_EVENT, onOfferDone);
       window.removeEventListener(GUIDE_CHOICE_EVENT, onChoice);
-      cancelGraphTour();
+      // Do not cancelGraphTour() here: on phone the tour dismisses Social so
+      // the Graph stays visible, which unmounts this panel mid-tour.
     };
   }, []);
 
@@ -1222,10 +1381,36 @@ export function IntelligencePanel({
     [dmToUi, refreshDmConversations]
   );
 
+  const loadCloudLobbyBySlug = useCallback(
+    async (slug: string) => {
+      try {
+        const res = await fetchCloudLobbyMessages(slug, { limit: 100 });
+        setMessages(res.messages.map(dmToUi));
+      } catch {
+        setErrorMsg("Failed to load Cloud lobby");
+        setErrorCode(null);
+      }
+    },
+    [dmToUi]
+  );
+
   useEffect(() => {
     if (!activeConversationId) return;
+    const cloudRow = cloudChannels.find((c) => c.id === activeConversationId);
+    const installRow = installChannels.find((c) => c.id === activeConversationId);
+    // Remote Cloud lobby rows are not in this install's Users hub.
+    if (cloudRow && !installRow && cloudRow.plane === "cloud") {
+      void loadCloudLobbyBySlug(cloudRow.slug);
+      return;
+    }
     void loadDmConversation(activeConversationId);
-  }, [activeConversationId, loadDmConversation]);
+  }, [
+    activeConversationId,
+    cloudChannels,
+    installChannels,
+    loadCloudLobbyBySlug,
+    loadDmConversation,
+  ]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -1260,6 +1445,7 @@ export function IntelligencePanel({
   useEffect(() => {
     if (chatTarget.kind === "agent") {
       setMessages([]);
+      setEmptyOnboardingStep("entry");
       setActiveChatId(null);
     }
   }, [chatTarget]);
@@ -1267,6 +1453,7 @@ export function IntelligencePanel({
   const newChat = () => {
     abortRef.current?.();
     setMessages([]);
+    setEmptyOnboardingStep("entry");
     if (isDmMode) {
       setChatTarget({ kind: "agent", agentId: activeAgentId });
     } else {
@@ -1329,6 +1516,45 @@ export function IntelligencePanel({
     playGraphTour(stops);
   };
 
+  const handleEntryAction = (actionId: IntelligenceEntryActionId) => {
+    if (busy) return;
+    if (actionId === "login") {
+      setEmptyOnboardingStep("login");
+      return;
+    }
+    if (actionId === "guided-tour") {
+      setEmptyOnboardingStep("tour-focus");
+      return;
+    }
+    setEmptyOnboardingStep("entry");
+    setErrorMsg(null);
+    setErrorCode(null);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `a-explore-${Date.now()}`,
+        role: "assistant",
+        text: INTELLIGENCE_EXPLORE_MESSAGE,
+      },
+    ]);
+    setGuideChoice(canonicalGuideChoice());
+  };
+
+  const handleVisitorSignup = () => {
+    setEmptyOnboardingStep("entry");
+    setErrorMsg(null);
+    setErrorCode(null);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `a-signup-${Date.now()}`,
+        role: "assistant",
+        text: INTELLIGENCE_VISITOR_SIGNUP_MESSAGE,
+      },
+    ]);
+    setGuideChoice(canonicalGuideChoice());
+  };
+
   const startCloudGuide = (label: string) => {
     if (busy) return;
     setErrorMsg(null);
@@ -1365,6 +1591,13 @@ export function IntelligencePanel({
     setErrorCode(null);
 
     if (isDmMode && activeConversationId) {
+      if (publicChatLocked) {
+        setErrorMsg(
+          publicEntitlement?.reason ??
+            "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack."
+        );
+        return;
+      }
       const userMsg: UiMessage = {
         id: `u-${Date.now()}`,
         role: "user",
@@ -1797,8 +2030,10 @@ export function IntelligencePanel({
     };
   }, [panelOpen, isDmMode]);
 
+  // Only half-width when Information is open beside Social. Solo Social keeps
+  // the hub-safe default; phone full-bleed ignores these floating sizes.
   const maxPairedWidth =
-    bounds.width < 1440
+    informationPanelOpen && bounds.width < 1440
       ? Math.max(MIN_COMPOSER_WIDTH, Math.floor((bounds.width - 120) / 2))
       : bounds.width;
   const currentWidth = clampComposerWidth(composerWidth, maxPairedWidth);
@@ -1841,8 +2076,9 @@ export function IntelligencePanel({
           height: rect.height,
         };
         setPanelPos(rect.x, rect.y);
-        setComposerWidth(rect.width);
-        setPanelHeight(rect.height);
+        // Focus-tile layouts are temporary; do not overwrite solo Social prefs.
+        setComposerWidth(rect.width, { persist: false });
+        setPanelHeight(rect.height, { persist: false });
       },
     });
     const id = requestAnimationFrame(() => applyActiveFocusLayout());
@@ -1967,6 +2203,18 @@ export function IntelligencePanel({
           backgroundColor: `${panelAccent}14`,
         }}
       >
+        {isPhone && phoneCanGoBack ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Back"
+            title="Back"
+            onClick={() => phoneGoBack()}
+          >
+            <ChevronLeftIcon />
+          </Button>
+        ) : null}
         <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />
         <span className="min-w-0 truncate text-sm font-medium">Social</span>
 
@@ -1992,6 +2240,7 @@ export function IntelligencePanel({
           >
             <PlusIcon />
           </Button>
+          <WindowDensityControls windowId="chat" size="icon-xs" />
           {!isPhone && (
             <Button
               type="button"
@@ -2053,6 +2302,15 @@ export function IntelligencePanel({
         </div>
       </header>
 
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        style={
+          {
+            zoom: contentDensity,
+            ["--gm-window-density"]: String(contentDensity),
+          } as CSSProperties
+        }
+      >
       <ChatWindowTabs tab={effectiveTab} onTabChange={setPanelTab} />
 
       <PanelErrorBoundary resetKey={effectiveTab}>
@@ -2070,20 +2328,37 @@ export function IntelligencePanel({
               <ChatDirectorySidebar
                 agentId={activeAgentId}
                 agentName={agentName}
+                agentRows={agentDmRows}
                 chatTarget={chatTarget}
-                conversations={dmConversations}
+                conversations={dmConversations.filter(
+                  (c) => c.kind === "direct" || c.kind === "group"
+                )}
+                installChannels={installChannels}
+                cloudChannels={cloudChannels}
+                cloudLobbyOnline={cloudLobbyOnline}
+                entitlement={publicEntitlement}
                 className={cn(
                   isPhone && !directoryOpen && "hidden",
                   isPhone &&
                     directoryOpen &&
                     "absolute inset-y-0 left-0 z-20 w-64 shadow-md"
                 )}
-                onSelectAgent={() => {
-                  setChatTarget({ kind: "agent", agentId: activeAgentId });
+                onSelectAgent={(id) => {
+                  setChatTarget({ kind: "agent", agentId: id });
+                  setActiveAgentId(id);
                   setDirectoryOpen(false);
                 }}
                 onSelectConversation={(id) => {
                   setChatTarget({ kind: "conversation", conversationId: id });
+                  setDirectoryOpen(false);
+                }}
+                onSelectCloudChannel={(slug) => {
+                  const cloudRow = cloudChannels.find((c) => c.slug === slug);
+                  if (!cloudRow) return;
+                  setChatTarget({
+                    kind: "conversation",
+                    conversationId: cloudRow.id,
+                  });
                   setDirectoryOpen(false);
                 }}
                 onCreated={() => void refreshDmConversations()}
@@ -2161,42 +2436,118 @@ export function IntelligencePanel({
           className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
         >
           {messages.length === 0 && !isDmMode && activeAgentId === "intelligence" && (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-8 text-center">
-              <BotIcon className="size-32 text-foreground/70" />
-              <div className="flex flex-col items-center gap-2 text-2xl text-foreground">
-                <p>{INTELLIGENCE_GREETING_HELLO}</p>
-                <p>{INTELLIGENCE_GREETING_QUESTION}</p>
-              </div>
-              <div className="grid w-full max-w-5xl grid-cols-4 gap-4">
-                {INTELLIGENCE_INTERESTS.map((item) => (
+            <Empty className="@container/intel-greeting h-full gap-5 border-0 px-4 @min-[32rem]/intel-greeting:gap-6">
+              {emptyOnboardingStep === "login" ? (
+                <EmptyContent className="max-w-md">
+                  <AuthGate embedded onVisitorSignup={handleVisitorSignup} />
                   <Button
-                    key={item.id}
                     type="button"
-                    variant="outline"
-                    size="lg"
-                    className="h-12 text-base"
-                    disabled={busy}
-                    onClick={() => startInterestTour(item.id)}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEmptyOnboardingStep("entry")}
                   >
-                    {item.label}
+                    Back
                   </Button>
-                ))}
-              </div>
-            </div>
+                </EmptyContent>
+              ) : emptyOnboardingStep === "tour-focus" ? (
+                <>
+                  <EmptyHeader className="max-w-xl gap-3">
+                    <EmptyMedia
+                      variant="icon"
+                      className="mb-1 size-[clamp(3.25rem,min(12cqi,24cqb),5.5rem)] rounded-xl [&_svg:not([class*='size-'])]:size-[55%]"
+                    >
+                      <BotIcon />
+                    </EmptyMedia>
+                    <EmptyDescription className="rounded-lg bg-muted/60 px-3 py-2.5 text-left text-[clamp(0.875rem,min(2.4cqi,3.2cqb),1rem)] text-foreground whitespace-pre-wrap">
+                      {INTELLIGENCE_TOUR_INTRO_MESSAGE}
+                    </EmptyDescription>
+                    <EmptyTitle className="text-[clamp(1.125rem,min(3.2cqi,4.5cqb),1.5rem)]">
+                      {INTELLIGENCE_TOUR_FOCUS_QUESTION}
+                    </EmptyTitle>
+                  </EmptyHeader>
+                  <EmptyContent className="max-w-lg gap-3">
+                    <div className="grid w-full grid-cols-2 gap-2 @min-[28rem]/intel-greeting:grid-cols-4">
+                      {INTELLIGENCE_INTERESTS.map((item) => (
+                        <Button
+                          key={item.id}
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          className="h-10 @min-[40rem]/intel-greeting:h-11"
+                          disabled={busy}
+                          onClick={() => startInterestTour(item.id)}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEmptyOnboardingStep("entry")}
+                    >
+                      Back
+                    </Button>
+                  </EmptyContent>
+                </>
+              ) : (
+                <>
+                  <EmptyHeader className="max-w-xl gap-3">
+                    <EmptyMedia
+                      variant="icon"
+                      className="mb-1 size-[clamp(3.5rem,min(14cqi,28cqb),6rem)] rounded-xl [&_svg:not([class*='size-'])]:size-[55%]"
+                    >
+                      <BotIcon />
+                    </EmptyMedia>
+                    <EmptyTitle className="text-[clamp(1.25rem,min(3.4cqi,4.8cqb),1.625rem)]">
+                      {INTELLIGENCE_GREETING_HELLO}
+                    </EmptyTitle>
+                    <EmptyDescription className="text-[clamp(1.05rem,min(3cqi,4.2cqb),1.35rem)] text-foreground">
+                      {INTELLIGENCE_ENTRY_QUESTION}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent className="max-w-2xl">
+                    <div className="flex w-full flex-col gap-2.5 @min-[28rem]/intel-greeting:flex-row @min-[28rem]/intel-greeting:gap-3">
+                      {INTELLIGENCE_ENTRY_ACTIONS.map((item) => (
+                        <Button
+                          key={item.id}
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          className="h-11 flex-1 @min-[40rem]/intel-greeting:h-12"
+                          disabled={busy}
+                          onClick={() => handleEntryAction(item.id)}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </EmptyContent>
+                </>
+              )}
+            </Empty>
           )}
           {messages.length === 0 && (isDmMode || activeAgentId !== "intelligence") && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              {isDmMode ? (
-                <BrainIcon className="size-8 text-foreground/70" />
-              ) : isPersonaAgent(activeAgentId) ? (
-                <DigitalYouIcon className="size-12" />
-              ) : (
-                <BotIcon className="size-8 text-foreground/70" />
-              )}
-              <p className="text-sm font-medium text-foreground">
-                {isDmMode ? dmTitle : agentName}
-              </p>
-            </div>
+            <Empty className="h-full border-0">
+              <EmptyHeader>
+                {isPersonaAgent(activeAgentId) && !isDmMode ? (
+                  <EmptyMedia>
+                    <DigitalYouIcon />
+                  </EmptyMedia>
+                ) : (
+                  <EmptyMedia variant="icon">
+                    {isDmMode ? <BrainIcon /> : <BotIcon />}
+                  </EmptyMedia>
+                )}
+                <EmptyTitle>{isDmMode ? dmTitle : agentName}</EmptyTitle>
+                <EmptyDescription>
+                  {isDmMode
+                    ? "Say hello to start this conversation."
+                    : "Send a message to get started."}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
 
           {messages.map((m) => {
@@ -2407,6 +2758,20 @@ export function IntelligencePanel({
                   startInferenceOffer(option.label, option.id);
                   return;
                 }
+                if (option.id === "seller") {
+                  setMessages((prev) => [
+                    ...prev,
+                    { id: `u-${Date.now()}`, role: "user", text: option.label },
+                  ]);
+                  // Local hubs have no Seller Stripe. Phone stays same-tab on public Cloud.
+                  // Desktop SaaS can use in-app AuthGate plan picker.
+                  if (isPhoneViewport()) {
+                    openCloudSignupFallback("seller");
+                  } else {
+                    window.location.assign("/?auth=1&signup=1&plan=seller");
+                  }
+                  return;
+                }
                 void send({
                   text: option.label,
                   images: [],
@@ -2423,13 +2788,27 @@ export function IntelligencePanel({
         )}
 
 {effectiveTab === "notifications" && (
-            <div className="min-h-0 flex-1 overflow-hidden px-3 py-2">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
               <NotificationsList compact />
             </div>
           )}
 
+          {channelAgentWriteLocked &&
+            (effectiveTab === "calendar" ||
+              effectiveTab === "projects" ||
+              effectiveTab === "knowledge" ||
+              effectiveTab === "bank" ||
+              effectiveTab === "vault") && (
+              <div className="shrink-0 border-b px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Looking only: channel Admins can edit this channel agent&apos;s
+                  surfaces.
+                </p>
+              </div>
+            )}
+
           {effectiveTab === "calendar" && (
-            <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
               <CalendarBoard
                 scope={
                   userTooling
@@ -2441,7 +2820,7 @@ export function IntelligencePanel({
           )}
 
         {effectiveTab === "projects" && (
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <AutomationsPanel
               agentId={userTooling ? undefined : activeAgentId}
               userOwned={userTooling}
@@ -2452,19 +2831,19 @@ export function IntelligencePanel({
         )}
 
         {effectiveTab === "knowledge" && (
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <KnowledgePanel />
           </div>
         )}
 
         {effectiveTab === "bank" && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
             <Bank embedded agentId={userTooling ? null : activeAgentId} />
           </div>
         )}
 
         {effectiveTab === "vault" && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
             {userTooling ? (
               <Vault mode="user" embedded />
             ) : (
@@ -2476,6 +2855,41 @@ export function IntelligencePanel({
         {effectiveTab === "support" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <Support />
+          </div>
+        )}
+
+        {effectiveTab === "chat" && publicChatLocked && (
+          <div className="flex flex-col gap-1 border-t border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <p>
+              {publicEntitlement?.reason ??
+                "Public channels are read-only until you unlock chat."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent("godmode:open-auth"))
+                }
+              >
+                Sign in / Sign up
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("godmode:open-platform-vault", {
+                      detail: { vault: "inference", sub: "godmode" },
+                    })
+                  )
+                }
+              >
+                Buy Inference
+              </Button>
+            </div>
           </div>
         )}
 
@@ -2516,9 +2930,11 @@ export function IntelligencePanel({
         {isDmMode ? (
           <>
             <span>
-              {activeConversation?.kind === "group"
-                ? "Group conversation"
-                : "Direct message"}
+              {activePublicConversation
+                ? `Public ${activePublicConversation.displayTitle}`
+                : activeConversation?.kind === "group"
+                  ? "Group conversation"
+                  : "Direct message"}
             </span>
             {dmMemberSummary && (
               <span className="min-w-0 truncate pl-3">{dmMemberSummary}</span>
@@ -2717,6 +3133,7 @@ export function IntelligencePanel({
           </>
         )}
       </footer>
+      </div>
 
       <ArtifactViewerDialog />
     </aside>

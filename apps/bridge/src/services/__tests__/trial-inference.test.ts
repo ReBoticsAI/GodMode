@@ -5,6 +5,7 @@ import {
   interestModelGuide,
   pathModelGuide,
   SIGNUP_GUIDE_HARNESS_DELTA,
+  signupGuideVisualChatDelta,
   TRIAL_DEFAULT_MODEL_ID,
   TRIAL_PASTE_KEY_PATH,
   TRIAL_PAY_GODMODE_PATH,
@@ -554,6 +555,11 @@ describe("interestModelGuide", () => {
     expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("Never mention a sidebar");
     expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("not the whole list");
     expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("ask_guide_choice");
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("Structure in Space");
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).toContain("Answer freely about GodMode");
+    expect(SIGNUP_GUIDE_HARNESS_DELTA).not.toContain("briefly refuse");
+    expect(signupGuideVisualChatDelta(true)).toContain('enabled="true"');
+    expect(signupGuideVisualChatDelta(false)).toContain("Do not call open_guide_surface");
   });
 
   it("explains Cloud with Inference against a local install", () => {

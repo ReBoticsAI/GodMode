@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BotIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GRAPH_MODAL_Z } from "@/lib/graph-chrome-layout";
 import { displayNameForAgent } from "@/lib/focus-chrome";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useStructure } from "@/lib/structure-context";
@@ -261,7 +262,7 @@ export function AgentSearch({
               left: rect.left,
               width: 256,
             }}
-            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className={`${GRAPH_MODAL_Z} overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl`}
           >
             {responsible?.agent && responsible.agent.id !== activeAgentId && (
               <button

@@ -17,6 +17,10 @@ import {
   type GraphFloatingSurface,
 } from "@/lib/graph-floating-surfaces";
 import { HOME_PATH } from "@/lib/navigation";
+import {
+  PHONE_OPEN_SURFACE_REQUEST_EVENT,
+  type PhoneOpenSurfaceRequestDetail,
+} from "@/lib/phone-surface-stack";
 
 export type OpenGraphSurfaceInput = {
   tab?: string;
@@ -141,6 +145,39 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
       window.addEventListener(surface.event, fn);
       handlers.push({ event: surface.event, fn });
     }
+
+    const onPhoneOpenRequest: EventListener = (ev) => {
+      const detail = (ev as CustomEvent<PhoneOpenSurfaceRequestDetail>).detail;
+      if (!detail?.tab) return;
+      if (detail.tab === "chat") {
+        window.dispatchEvent(
+          new CustomEvent("godmode:open-intelligence-chat", { detail: {} })
+        );
+        return;
+      }
+      if (detail.tab === "platform-vault" || detail.tab === "admin") {
+        window.dispatchEvent(
+          new CustomEvent(`godmode:open-${detail.tab}`, {
+            detail: {
+              vault: detail.vault ?? null,
+              sub: detail.sub ?? null,
+              tab: detail.tab,
+            },
+          })
+        );
+        return;
+      }
+      openGraphSurface({
+        tab: detail.tab,
+        requireAuth: true,
+      });
+    };
+    window.addEventListener(PHONE_OPEN_SURFACE_REQUEST_EVENT, onPhoneOpenRequest);
+    handlers.push({
+      event: PHONE_OPEN_SURFACE_REQUEST_EVENT,
+      fn: onPhoneOpenRequest,
+    });
+
     return () => {
       for (const h of handlers) {
         window.removeEventListener(h.event, h.fn);
@@ -150,6 +187,7 @@ export function useGraphFloatingOpeners(opts: OpenOpts) {
     authenticated,
     focusOwner,
     navigate,
+    openGraphSurface,
     openInformationPanel,
     openLeftRailTab,
     projectionNodes,

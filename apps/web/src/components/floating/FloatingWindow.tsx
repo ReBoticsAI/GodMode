@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -15,8 +16,13 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { WindowDensityControls } from "@/components/floating/WindowDensityControls";
 import { cn } from "@/lib/utils";
 import { useIsMobile, useIsPhone } from "@/hooks/use-mobile";
+import {
+  getWindowDensity,
+  WINDOW_DENSITY_EVENT,
+} from "@/lib/floating-window-density";
 import {
   focusWindowAnchors,
   snapToFocusAnchor,
@@ -145,6 +151,29 @@ export function FloatingWindow({
   const isPhone = useIsPhone();
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
+  const [contentDensity, setContentDensity] = useState(() =>
+    windowId ? getWindowDensity(windowId) : 1
+  );
+
+  useEffect(() => {
+    if (!windowId) {
+      setContentDensity(1);
+      return;
+    }
+    setContentDensity(getWindowDensity(windowId));
+    const onChange = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ windowId?: string; density?: number }>)
+        .detail;
+      if (detail?.windowId !== windowId) return;
+      if (typeof detail.density === "number") {
+        setContentDensity(detail.density);
+        return;
+      }
+      setContentDensity(getWindowDensity(windowId));
+    };
+    window.addEventListener(WINDOW_DENSITY_EVENT, onChange);
+    return () => window.removeEventListener(WINDOW_DENSITY_EVENT, onChange);
+  }, [windowId]);
   const asideRef = useRef<HTMLElement | null>(null);
   const [anchorPickMode, setAnchorPickMode] = useState(false);
 
@@ -762,6 +791,7 @@ export function FloatingWindow({
             {headerActions}
           </div>
         ) : null}
+        {windowId ? <WindowDensityControls windowId={windowId} /> : null}
         {onMinimize && !isPhone ? (
           <Button
             type="button"
@@ -801,7 +831,20 @@ export function FloatingWindow({
         </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+        style={
+          windowId
+            ? ({
+                // Scales body UI (text + layout) for this window only.
+                // Keep zoom on the scroll node so density does not break min-h-0
+                // and clip tall offer sheets without a scrollbar.
+                zoom: contentDensity,
+                ["--gm-window-density"]: String(contentDensity),
+              } as CSSProperties)
+            : undefined
+        }
+      >
         {children}
       </div>
     </aside>

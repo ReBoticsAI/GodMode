@@ -63,6 +63,7 @@ import {
   CLONE_PACK_KINDS,
   type PublishFamily,
 } from "@/lib/marketplace-format";
+import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -1467,6 +1468,10 @@ export default function MarketplacePage({
 
   const feePercent = (platformFeeBps / 100).toFixed(0);
 
+  const catalogGridClass = embedded
+    ? "grid grid-cols-1 gap-3 @min-[22rem]/mp:grid-cols-2 @min-[40rem]/mp:grid-cols-3"
+    : "grid gap-4 md:grid-cols-2 xl:grid-cols-3";
+
   const body = (
     <>
       {cryptoPrompt ? (
@@ -1492,14 +1497,14 @@ export default function MarketplacePage({
         </Card>
       ) : null}
 
-      <div className="mb-4 flex gap-2">
+      <div className={cn("mb-4 flex gap-2", embedded && "mb-3")}>
         <Input
           placeholder="Search listings and plugins…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="max-w-sm"
         />
-        <Button variant="outline" onClick={() => void reload()}>
+        <Button variant="outline" size={embedded ? "sm" : "default"} onClick={() => void reload()}>
           Refresh
         </Button>
       </div>
@@ -1513,7 +1518,7 @@ export default function MarketplacePage({
           <TabsTrigger value="seller">Sell</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="official" className="mt-4">
+        <TabsContent value="official" className={cn("mt-4", embedded && "mt-3")}>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading official catalog…</p>
           ) : officialFiltered.length === 0 ? (
@@ -1521,7 +1526,7 @@ export default function MarketplacePage({
               {officialCatalogEmptyMessage(saas === true)}
             </p>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className={catalogGridClass}>
               {officialFiltered.map((entry) => (
                 <EntryCard
                   key={`official-${entry.id}`}
@@ -1656,7 +1661,7 @@ export default function MarketplacePage({
           {localFiltered.length > 0 ? (
             <div className="space-y-2">
               <p className="text-sm font-medium">From local catalogs</p>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className={catalogGridClass}>
                 {localFiltered.map((entry) => (
                   <EntryCard
                     key={`local-${entry.id}-${entry.sourceCatalog}`}
@@ -1686,7 +1691,7 @@ export default function MarketplacePage({
           ) : communityCatalogFiltered.length > 0 ? (
             <div className="space-y-3">
               <h3 className="text-sm font-medium">Community catalog</h3>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className={catalogGridClass}>
                 {communityCatalogFiltered.map((entry) => (
                   <EntryCard
                     key={`community-cat-${entry.id}`}
@@ -1752,7 +1757,7 @@ export default function MarketplacePage({
               No community listings yet — publish from Sell.
             </p>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className={catalogGridClass}>
               {communityFiltered.map((listing) => (
                 <CommunityListingCard
                   key={listing.id}
@@ -2492,7 +2497,7 @@ export default function MarketplacePage({
     </>
   );
 
-  if (embedded) return body;
+  if (embedded) return <div className="@container/mp">{body}</div>;
 
   return (
     <Page>

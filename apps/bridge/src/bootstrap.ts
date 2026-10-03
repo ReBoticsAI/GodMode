@@ -37,6 +37,12 @@ import {
 import { createSharesRouter } from "./routes/shares.js";
 import { shareChatSession } from "./services/share-service.js";
 import { createDmRouter } from "./routes/dm.js";
+import { getHostUsersDb } from "./host-users-db.js";
+import { seedChannelAgents } from "./services/agents/channel-agents.js";
+import {
+  bindChannelAgentsToPublicConversations,
+  ensurePublicChannelMemberRoles,
+} from "./services/public-channels.js";
 import { createUserProductivityRouter } from "./routes/user-productivity.js";
 import { createConnectionsRouter } from "./routes/connections.js";
 import { legacyEndpointTelemetry } from "./services/legacy-endpoint-telemetry.js";
@@ -134,6 +140,17 @@ repairNonOperatorTenantStructure(coreDb);
 removeLegacyLifeDepartmentFromPersonalTenants(coreDb);
 const db: AppDatabase = getTenantDb(operatorTenantId);
 pinTenantDb(operatorTenantId);
+seedChannelAgents(db);
+try {
+  const hub = getHostUsersDb();
+  ensurePublicChannelMemberRoles(hub);
+  bindChannelAgentsToPublicConversations(hub);
+} catch (err) {
+  console.warn(
+    "[bootstrap] channel agent bind failed:",
+    err instanceof Error ? err.message : err
+  );
+}
 const tenantDatabases = (): Array<{ tenantId: string; db: AppDatabase }> =>
   listTenantDbAccessors(db);
 const kernelDatabases = (): Array<{ tenantId: string; db: AppDatabase }> => [

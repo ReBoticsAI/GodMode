@@ -21,6 +21,7 @@ import {
   syncGraphMissions,
   fetchChatUnlockStatus,
   fetchAiRules,
+  fetchDmDirectory,
   type ChatGraphDoc,
   type GraphProjection,
   type GraphProjectionNode,
@@ -118,10 +119,13 @@ import {
   GRAPH_COMPOSER_BAND,
   GRAPH_TOP_CHROME_BAND,
 } from "@/components/graph/GraphPhoneSheet";
+import { GraphTourCaption } from "@/components/graph/GraphTourCaption";
 import {
   GRAPH_CHROME_BANDS_EVENT,
   GRAPH_PRIMARY_CHROME_Z,
 } from "@/lib/graph-chrome-layout";
+import { isPhoneViewport } from "@/lib/graph-phone-shell";
+import { dismissPhoneSurface } from "@/lib/phone-surface-stack";
 import { GraphRareFindsTicker } from "@/components/graph/GraphRareFindsTicker";
 import {
   buildSmartSuggestions,
@@ -230,6 +234,7 @@ export function ChatGraphCanvas({
 } = {}) {
   const {
     setChatTarget,
+    setActiveAgentId,
     openInformationPanel,
     closeInformationPanel,
     openLeftRailTab,
@@ -251,6 +256,26 @@ export function ChatGraphCanvas({
     seedText,
     setSeedText,
   } = useIntelligence();
+
+  const openChannelAgentFromGraph = useCallback(
+    async (agentId: string) => {
+      setActiveAgentId(agentId, { retainChatTarget: true });
+      try {
+        const dir = await fetchDmDirectory();
+        const ch = [...dir.installChannels, ...dir.cloudChannels].find(
+          (c) => c.agentId === agentId
+        );
+        if (ch) {
+          openPanel({ conversationId: ch.id, tab: "chat" });
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      openPanel({ agentId, tab: "chat" });
+    },
+    [openPanel, setActiveAgentId]
+  );
   const { authenticated, user } = useTenant();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -625,7 +650,10 @@ export function ChatGraphCanvas({
         return;
       }
       if (detail.tour) {
-        closeInformationPanel();
+        // Phone: reveal Graph under the tour caption (Social stays on the stack).
+        // Desktop: only close Information; Social keeps narrating in-chat.
+        if (isPhoneViewport()) dismissPhoneSurface();
+        else closeInformationPanel();
         sceneRef.current?.frameConnection(node.id);
         return;
       }
@@ -1760,6 +1788,19 @@ export function ChatGraphCanvas({
 
   const onNodeSelect = useCallback(
     (node: GraphProjectionNode) => {
+      const channelAgentId =
+        node.refId?.startsWith("channel-")
+          ? node.refId
+          : node.id.startsWith("hub:channel-")
+            ? `channel-${node.id.slice("hub:channel-".length)}`
+            : null;
+      if (channelAgentId) {
+        openInformationPanel(node);
+        if (node.openImmediate && node.cta?.type === "open_chat") {
+          void openChannelAgentFromGraph(channelAgentId);
+        }
+        return;
+      }
       if (
         (node.kind === "chat" || node.kind === "agent") &&
         node.refId
@@ -1794,11 +1835,30 @@ export function ChatGraphCanvas({
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
-    [openInformationPanel, openLeftRailTab, openPanel, setChatTarget]
+    [
+      openChannelAgentFromGraph,
+      openInformationPanel,
+      openLeftRailTab,
+      openPanel,
+      setChatTarget,
+    ]
   );
 
   const onNodeActivate = useCallback(
     (node: GraphProjectionNode) => {
+      const channelAgentId =
+        node.refId?.startsWith("channel-")
+          ? node.refId
+          : node.id.startsWith("hub:channel-")
+            ? `channel-${node.id.slice("hub:channel-".length)}`
+            : null;
+      if (channelAgentId) {
+        openInformationPanel(node);
+        if (node.openImmediate && node.cta?.type === "open_chat") {
+          void openChannelAgentFromGraph(channelAgentId);
+        }
+        return;
+      }
       if (
         (node.kind === "chat" || node.kind === "agent") &&
         node.refId
@@ -1833,7 +1893,13 @@ export function ChatGraphCanvas({
         if (surface) openLeftRailTab(surface.tab as LeftRailTab);
       }
     },
-    [openInformationPanel, openLeftRailTab, openPanel, setChatTarget]
+    [
+      openChannelAgentFromGraph,
+      openInformationPanel,
+      openLeftRailTab,
+      openPanel,
+      setChatTarget,
+    ]
   );
 
   // Live graphFilter ranks smart-suggest only. Camera zoom/focus runs on
@@ -2286,6 +2352,8 @@ export function ChatGraphCanvas({
           />
         </div>
       </div>
+
+      <GraphTourCaption />
 
       <ChatInboxWindow
         composerText={graphFilter}

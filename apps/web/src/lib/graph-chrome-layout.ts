@@ -23,6 +23,13 @@ export const GRAPH_COMPOSER_BAND =
 /** Primary page chrome (footer composer, top ticker/notice, tool rails). */
 export const GRAPH_PRIMARY_CHROME_Z = "z-[210]";
 
+/**
+ * Modal / dialog / select / menu portals (shadcn Dialog, Sheet overlay, Select).
+ * Above FloatingWindow / chat floaters; below primary chrome so ticker/composer
+ * stay page-locked unless a surface intentionally overrides.
+ */
+export const GRAPH_MODAL_Z = "z-[200]";
+
 /** Secondary surfaces (FloatingWindow, GraphPhoneSheet). Below primary chrome. */
 export const GRAPH_WINDOW_Z = "z-[110]";
 

@@ -146,11 +146,18 @@ export function isAgentScopedLeftTab(tab: LeftRailTab): boolean {
 export function fallbackAgentLabel(agentId: string): string {
   if (agentId === "intelligence") return "Intelligence";
   if (agentId === "digital-you") return "Digital You";
+  if (agentId.startsWith("channel-")) {
+    return `#${agentId.slice("channel-".length)}`;
+  }
   return agentId
     .split(/[-_]/)
     .filter(Boolean)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
+}
+
+export function isChannelAgentId(agentId: string | null | undefined): boolean {
+  return Boolean(agentId?.startsWith("channel-"));
 }
 
 /** Digital You and per-user persona agents. */

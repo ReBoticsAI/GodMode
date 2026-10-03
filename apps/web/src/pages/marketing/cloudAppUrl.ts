@@ -4,5 +4,7 @@ export const CLOUD_APP_ORIGIN =
   "https://app.godmode.software";
 
 export const CLOUD_APP_HOME = `${CLOUD_APP_ORIGIN}/`;
-export const CLOUD_APP_LOGIN = `${CLOUD_APP_ORIGIN}/login`;
-export const CLOUD_APP_SIGNUP = `${CLOUD_APP_ORIGIN}/signup`;
+/** Opens AuthGate on the Graph (temporary visitors stay on the canvas). */
+export const CLOUD_APP_LOGIN = `${CLOUD_APP_ORIGIN}/?auth=1`;
+/** Opens AuthGate signup / plan picker (`auth=1` + `signup=1`). */
+export const CLOUD_APP_SIGNUP = `${CLOUD_APP_ORIGIN}/?auth=1&signup=1`;

@@ -3,6 +3,7 @@ import {
   GRAPH_TOUR_DWELL_MS,
   GRAPH_TOUR_LINE_EVENT,
 } from "@/lib/guide-ui-action";
+import { isPhoneViewport } from "@/lib/graph-phone-shell";
 import { CLOUD_APP_SIGNUP } from "@/pages/marketing/cloudAppUrl";
 
 /** Published Cloud prices from the marketing pricing page. */
@@ -15,6 +16,29 @@ export const CLOUD_INFERENCE_STARTER_YEARLY = "$129";
 export const CLOUD_INFERENCE_PLUS_YEARLY = "$179";
 export const CLOUD_INFERENCE_PRO_YEARLY = "$349";
 export const CLOUD_SIGNUP_URL = CLOUD_APP_SIGNUP;
+
+/** Build public Cloud signup URL with optional plan + email query. */
+export function cloudSignupUrl(planId?: string, email?: string): string {
+  const url = new URL(CLOUD_SIGNUP_URL);
+  if (planId?.trim()) url.searchParams.set("plan", planId.trim());
+  if (email?.trim()) url.searchParams.set("email", email.trim());
+  return url.toString();
+}
+
+/**
+ * Local hubs without SaaS Stripe fall back to the public Cloud app.
+ * Phone: same-tab navigation so checkout stays in the mobile browser.
+ * Desktop: new tab so the Graph session remains.
+ */
+export function openCloudSignupFallback(planId?: string, email?: string): void {
+  const href = cloudSignupUrl(planId, email);
+  if (typeof window === "undefined") return;
+  if (isPhoneViewport()) {
+    window.location.assign(href);
+    return;
+  }
+  window.open(href, "_blank", "noreferrer");
+}
 
 export const CLOUD_GUIDE_OPEN_EVENT = "godmode:cloud-guide-open";
 export const CLOUD_GUIDE_SECTION_EVENT = "godmode:cloud-guide-section";

@@ -57,6 +57,7 @@ import {
   readMigratedKey,
   readStorageKey,
   readTenantId,
+  readVisualChatEnabled,
   writeMigratedKey,
   writeStorageKey,
 } from "./storage-keys";
@@ -69,6 +70,17 @@ import {
 } from "./chat-windows";
 import { setActiveFloatingWindow } from "./floating-window-registry";
 import { isPhoneViewport } from "./graph-phone-shell";
+import {
+  dismissPhoneSurface,
+  getPhoneSurfaceCurrent,
+  isApplyingPhoneHistory,
+  phoneCanGoBack as phoneCanGoBackFn,
+  phoneGoBack as phoneGoBackFn,
+  pushPhoneSurface,
+  replacePhoneSurface,
+  setPhoneSurfaceRestoreHandler,
+  type PhoneSurfaceEntry,
+} from "./phone-surface-stack";
 
 export interface PageContextSnapshot {
   /** Stable key for the publishing page, e.g. "trading-plan". */
@@ -98,6 +110,8 @@ export interface PlatformContextPayload {
   pageLabel?: string;
   pageSnapshot?: unknown;
   mentionedSources?: Array<{ id: string; label: string; data: unknown }>;
+  /** When true, guide tools may open floating windows. */
+  visualChat?: boolean;
 }
 
 /** What the unified chat window is talking to. */
@@ -188,10 +202,10 @@ interface IntelligenceContextValue {
   setPendingChatId: (id: string | null) => void;
   /** Width (px) of the floating modal. */
   composerWidth: number;
-  setComposerWidth: (width: number) => void;
+  setComposerWidth: (width: number, opts?: { persist?: boolean }) => void;
   /** Height (px) of the floating modal. */
   panelHeight: number;
-  setPanelHeight: (height: number) => void;
+  setPanelHeight: (height: number, opts?: { persist?: boolean }) => void;
   /** Top-left position (px, relative to the content area) of the floating
    * modal. `null` means "not placed yet" → the panel picks a default. */
   panelX: number | null;
@@ -205,7 +219,11 @@ interface IntelligenceContextValue {
   setAgentsSection: (section: AgentsSection) => void;
   /** Subagent used for the next chat turn (defaults to intelligence). */
   activeAgentId: string;
-  setActiveAgentId: (id: string) => void;
+  /** Possess an agent for secondary tabs. By default also retargets Chat to that agent. */
+  setActiveAgentId: (
+    id: string,
+    opts?: { retainChatTarget?: boolean }
+  ) => void;
   /** Count of autonomous runs awaiting review (drives the Projects tab badge). */
   reviewUnread: number;
   bumpReviewUnread: () => void;
@@ -249,6 +267,9 @@ interface IntelligenceContextValue {
   /** Floating Intelligence window minimize state. */
   panelMinimized: boolean;
   setPanelMinimized: (minimized: boolean) => void;
+  /** Phone (&lt;640px): hardware/title Back for the single-window stack. */
+  phoneCanGoBack: boolean;
+  phoneGoBack: () => void;
   /** Floating Information window minimize state. */
   informationPanelMinimized: boolean;
   setInformationPanelMinimized: (minimized: boolean) => void;
@@ -350,29 +371,80 @@ const IntelligenceCtx = createContext<IntelligenceContextValue | null>(null);
 /** Shared sizing constants for the floating AI modal. */
 export const MIN_COMPOSER_WIDTH = 320;
 export const MAX_COMPOSER_WIDTH = 1100;
-export const DEFAULT_COMPOSER_WIDTH = 720;
+/** Usable Social floor (directory + thread). */
+export const DEFAULT_COMPOSER_WIDTH = 560;
+/** Desktop default aims for half the playfield. */
+export const DEFAULT_COMPOSER_WIDTH_FRAC = 0.5;
+/**
+ * Typical screen-X fraction of the You / Intelligence hub column after fit.
+ * Default Social stops just before this column.
+ */
+export const HUB_COLUMN_VIEWPORT_FRAC = 0.425;
+/** Gap between Social's right edge and the hub column. */
+export const HUB_COLUMN_GAP_PX = 56;
+/** Matches solo left inset used by floating Social on desktop. */
+export const SOCIAL_LEFT_INSET_PX = 48;
 export const MIN_PANEL_HEIGHT = 240;
 export const DEFAULT_PANEL_HEIGHT = 640;
 
 /**
  * Bump when default Social geometry changes. Clears stored size/position once
- * so large screens are not stuck on the legacy 560×480 focus-left layout.
+ * so large screens are not stuck on a tiny layout (e.g. phone session wrote
+ * ~390px width into godmode.composerWidth).
  */
-export const PANEL_LAYOUT_GEN = 4;
+export const PANEL_LAYOUT_GEN = 12;
 
-/** ~42% of viewport width, floored at DEFAULT and capped at MAX. */
+/**
+ * Desktop default Social width: half the viewport, cut off just before the
+ * You / Intelligence hub column. Phone Social is fullscreen in the playfield
+ * and ignores this geometry.
+ */
 export function defaultComposerWidthForViewport(
   viewportWidth =
     typeof window !== "undefined" ? window.innerWidth : 1280
 ): number {
+  const half =
+    viewportWidth * DEFAULT_COMPOSER_WIDTH_FRAC - SOCIAL_LEFT_INSET_PX;
+  const hubCutoff =
+    viewportWidth * HUB_COLUMN_VIEWPORT_FRAC -
+    SOCIAL_LEFT_INSET_PX -
+    HUB_COLUMN_GAP_PX;
   return clampComposerWidth(
     Math.round(
-      Math.min(
-        MAX_COMPOSER_WIDTH,
-        Math.max(DEFAULT_COMPOSER_WIDTH, viewportWidth * 0.42)
+      Math.max(
+        DEFAULT_COMPOSER_WIDTH,
+        Math.min(half, hubCutoff, MAX_COMPOSER_WIDTH)
       )
     )
   );
+}
+
+/**
+ * Desktop: reject phone-min / half-tile widths left in localStorage so Social
+ * reopens at the viewport default instead of a ~320px strip.
+ */
+export function resolveComposerWidthForViewport(
+  stored: number,
+  viewportWidth =
+    typeof window !== "undefined" ? window.innerWidth : 1280
+): number {
+  const fallback = defaultComposerWidthForViewport(viewportWidth);
+  if (viewportWidth < 640) {
+    return clampComposerWidth(
+      Number.isFinite(stored) ? stored : fallback,
+      viewportWidth
+    );
+  }
+  // Phone full-bleed and narrow focus tiles land in ~320–420; reject those
+  // and anything well below the hub-safe default.
+  if (
+    !Number.isFinite(stored) ||
+    stored <= 420 ||
+    stored < fallback * 0.55
+  ) {
+    return fallback;
+  }
+  return clampComposerWidth(stored);
 }
 
 /** ~72% of usable height (viewport minus chrome), floored at DEFAULT. */
@@ -530,19 +602,49 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   );
   const [mentionSources, setMentionSources] = useState<MentionSource[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [phoneCanGoBack, setPhoneCanGoBack] = useState(false);
+  const panelOpenRef = useRef(false);
+  panelOpenRef.current = panelOpen;
+  const informationPanelOpenRef = useRef(false);
+  const informationNodeRef = useRef<GraphProjectionNode | null>(null);
+  const activeLeftTabRef = useRef<LeftRailTab>("info");
+  const focusedCanvasIdRef = useRef<string | null>(null);
+  const panelTabRef = useRef<PanelTab>("chat");
+  const chatTargetRef = useRef<ChatTarget>({ kind: "agent", agentId: "intelligence" });
+  const openChatWindowsRef = useRef<OpenChatWindow[]>([]);
+  const restoringPhoneRef = useRef(false);
+  const openPanelRef = useRef<IntelligenceContextValue["openPanel"] | null>(
+    null
+  );
+  const navigatePhoneSurfaceRef = useRef<
+    ((next: PhoneSurfaceEntry) => void) | null
+  >(null);
   const [panelMaximized, setPanelMaximized] = useState(false);
   const [seedText, setSeedText] = useState("");
   const [autoSendPrompt, setAutoSendPrompt] = useState<string | null>(null);
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [composerWidth, setComposerWidthState] = useState(() => {
     migratePanelLayoutGen();
-    return clampComposerWidth(
-      readStoredNumber(
+    const fallback = defaultComposerWidthForViewport();
+    const stored = readStoredNumber(
+      COMPOSER_WIDTH_KEY,
+      LEGACY_COMPOSER_WIDTH_KEY,
+      fallback
+    );
+    const resolved = resolveComposerWidthForViewport(stored);
+    // Rewrite healed width so hard refresh does not keep a phone-min value.
+    if (
+      typeof window !== "undefined" &&
+      !isPhoneViewport() &&
+      resolved !== stored
+    ) {
+      writeMigratedKey(
         COMPOSER_WIDTH_KEY,
         LEGACY_COMPOSER_WIDTH_KEY,
-        defaultComposerWidthForViewport()
-      )
-    );
+        String(resolved)
+      );
+    }
+    return resolved;
   });
   const [panelHeight, setPanelHeightState] = useState(() => {
     migratePanelLayoutGen();
@@ -666,6 +768,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     () => new Set<(msg: DmMessage, conversationId: string) => void>()
   );
   const [openChatWindows, setOpenChatWindows] = useState<OpenChatWindow[]>([]);
+  openChatWindowsRef.current = openChatWindows;
   const [focusedChatWindowId, setFocusedChatWindowId] = useState<string | null>(
     null
   );
@@ -684,6 +787,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   draftByWindowIdRef.current = draftByWindowId;
 
   const setChatTarget = useCallback((target: ChatTarget) => {
+    chatTargetRef.current = target;
     setChatTargetState(target);
     if (target.kind === "agent") {
       setActiveAgentIdState(target.agentId);
@@ -733,37 +837,41 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const openOrFocusChatWindow = useCallback(
     (target: OpenChatWindowTarget, currentComposerText?: string) => {
-      if (isPhoneViewport()) {
-        setInformationPanelOpen(false);
-        setInformationPanelMinimized(false);
+      const phone = isPhoneViewport();
+      // Agent DMs on phone use Social (single window), not a second Sheet.
+      if (phone && target.kind === "agent") {
+        openPanelRef.current?.({
+          tab: "chat",
+          agentId: target.agentId,
+        });
+        return chatWindowIdForAgent(target.agentId, target.agentChatId);
       }
+
       const id =
         target.kind === "agent"
           ? chatWindowIdForAgent(target.agentId, target.agentChatId)
           : chatWindowIdForConversation(target.conversationId);
 
+      if (phone) {
+        const nextEntry: PhoneSurfaceEntry = {
+          kind: "chat-thread",
+          conversationId:
+            target.kind === "conversation" ? target.conversationId : undefined,
+          canvasId: id,
+          label: target.title,
+        };
+        navigatePhoneSurfaceRef.current?.(nextEntry);
+        setInformationPanelOpen(false);
+        setInformationPanelMinimized(false);
+        setPanelOpen(false);
+        setPanelMinimized(false);
+      } else {
+        // desktop: unchanged
+      }
+
       setOpenChatWindows((prev) => {
         const existing = prev.find((w) => w.id === id);
-        if (existing) {
-          return prev.map((w) =>
-            w.id === id
-              ? {
-                  ...w,
-                  minimized: false,
-                  title: target.kind === "agent" ? target.title ?? w.title : target.title,
-                  etherLines:
-                    target.kind === "agent" && target.etherLines
-                      ? target.etherLines
-                      : w.etherLines,
-                  agentChatId:
-                    target.kind === "agent"
-                      ? target.agentChatId ?? w.agentChatId
-                      : w.agentChatId,
-                }
-              : w
-          );
-        }
-        const next: OpenChatWindow =
+        const nextWin: OpenChatWindow =
           target.kind === "agent"
             ? {
                 id,
@@ -781,7 +889,39 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
                 conversationId: target.conversationId,
                 minimized: false,
               };
-        return [...prev, next];
+        if (phone) {
+          // One primary thread Sheet only.
+          return existing
+            ? [
+                {
+                  ...existing,
+                  ...nextWin,
+                  minimized: false,
+                },
+              ]
+            : [nextWin];
+        }
+        if (existing) {
+          return prev.map((w) =>
+            w.id === id
+              ? {
+                  ...w,
+                  minimized: false,
+                  title:
+                    target.kind === "agent" ? target.title ?? w.title : target.title,
+                  etherLines:
+                    target.kind === "agent" && target.etherLines
+                      ? target.etherLines
+                      : w.etherLines,
+                  agentChatId:
+                    target.kind === "agent"
+                      ? target.agentChatId ?? w.agentChatId
+                      : w.agentChatId,
+                }
+              : w
+          );
+        }
+        return [...prev, nextWin];
       });
 
       const restored = focusChatWindow(id, currentComposerText);
@@ -792,6 +932,11 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   );
 
   const closeChatWindow = useCallback((id: string) => {
+    if (isPhoneViewport()) {
+      if (restoringPhoneRef.current || isApplyingPhoneHistory()) return;
+      dismissPhoneSurface();
+      return;
+    }
     setOpenChatWindows((prev) => prev.filter((w) => w.id !== id));
     setDraftByWindowId((d) => {
       const next = { ...d };
@@ -868,20 +1013,30 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const setActiveAgentId = useCallback((id: string) => {
-    setActiveAgentIdState(id);
-    setChatTargetState({ kind: "agent", agentId: id });
-    if (typeof window !== "undefined") {
-      writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, id);
-    }
-  }, []);
+  const setActiveAgentId = useCallback(
+    (id: string, opts?: { retainChatTarget?: boolean }) => {
+      setActiveAgentIdState(id);
+      if (!opts?.retainChatTarget) {
+        setChatTargetState({ kind: "agent", agentId: id });
+      }
+      if (typeof window !== "undefined") {
+        writeMigratedKey(ACTIVE_AGENT_KEY, LEGACY_ACTIVE_AGENT_KEY, id);
+      }
+    },
+    []
+  );
 
   const setPanelTab = useCallback((tab: PanelTab) => {
+    panelTabRef.current = tab;
     setPanelTabState(tab);
     if (typeof window !== "undefined") {
       writeMigratedKey(PANEL_TAB_KEY, LEGACY_PANEL_TAB_KEY, tab);
     }
   }, []);
+
+  // Keep refs warm for phone stack capture (panelTab / chatTarget initial).
+  panelTabRef.current = panelTab;
+  chatTargetRef.current = chatTarget;
 
   const setAgentsSection = useCallback((section: AgentsSection) => {
     setAgentsSectionState(section);
@@ -917,38 +1072,57 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const setPanelPos = useCallback((x: number, y: number) => {
     setPanelXState(x);
     setPanelYState(y);
-    if (typeof window !== "undefined") {
+    // Phone Social is full-bleed; never persist that geometry for desktop.
+    if (typeof window !== "undefined" && !isPhoneViewport()) {
       writeMigratedKey(PANEL_X_KEY, LEGACY_PANEL_X_KEY, String(Math.round(x)));
       writeMigratedKey(PANEL_Y_KEY, LEGACY_PANEL_Y_KEY, String(Math.round(y)));
     }
   }, []);
 
-  const setComposerWidth = useCallback((width: number) => {
-    setComposerWidthState(width);
-    if (typeof window !== "undefined") {
-      writeMigratedKey(
-        COMPOSER_WIDTH_KEY,
-        LEGACY_COMPOSER_WIDTH_KEY,
-        String(Math.round(width))
-      );
-    }
-  }, []);
+  const setComposerWidth = useCallback(
+    (width: number, opts?: { persist?: boolean }) => {
+      setComposerWidthState(width);
+      const persist = opts?.persist !== false;
+      // Phone full-bleed and focus-tile applyLayout must not shrink desktop prefs.
+      if (
+        persist &&
+        typeof window !== "undefined" &&
+        !isPhoneViewport()
+      ) {
+        writeMigratedKey(
+          COMPOSER_WIDTH_KEY,
+          LEGACY_COMPOSER_WIDTH_KEY,
+          String(Math.round(width))
+        );
+      }
+    },
+    []
+  );
 
-  const setPanelHeight = useCallback((height: number) => {
-    setPanelHeightState(height);
-    if (typeof window !== "undefined") {
-      writeMigratedKey(
-        PANEL_HEIGHT_KEY,
-        LEGACY_PANEL_HEIGHT_KEY,
-        String(Math.round(height))
-      );
-    }
-  }, []);
+  const setPanelHeight = useCallback(
+    (height: number, opts?: { persist?: boolean }) => {
+      setPanelHeightState(height);
+      const persist = opts?.persist !== false;
+      if (
+        persist &&
+        typeof window !== "undefined" &&
+        !isPhoneViewport()
+      ) {
+        writeMigratedKey(
+          PANEL_HEIGHT_KEY,
+          LEGACY_PANEL_HEIGHT_KEY,
+          String(Math.round(height))
+        );
+      }
+    },
+    []
+  );
 
   const [panelMinimized, setPanelMinimized] = useState(false);
   const [informationPanelMinimized, setInformationPanelMinimized] =
     useState(false);
   const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>("info");
+  activeLeftTabRef.current = activeLeftTab;
 
   const togglePanel = useCallback(() => {
     setPanelOpen((o) => {
@@ -958,8 +1132,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [informationPanelOpen, setInformationPanelOpen] = useState(false);
+  informationPanelOpenRef.current = informationPanelOpen;
   const [informationNode, setInformationNode] =
     useState<GraphProjectionNode | null>(null);
+  informationNodeRef.current = informationNode;
   const [openCanvases, setOpenCanvases] = useState<
     Array<{
       id: string;
@@ -970,6 +1146,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     }>
   >([]);
   const [focusedCanvasId, setFocusedCanvasId] = useState<string | null>(null);
+  focusedCanvasIdRef.current = focusedCanvasId;
 
   const focusOwner = useMemo(
     () => focusOwnerFromGraphNode(informationNode),
@@ -982,8 +1159,189 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveAgentId(focusOwner.agentId);
   }, [focusOwner, activeAgentId, setActiveAgentId]);
 
+  const capturePhoneSurface = useCallback((): PhoneSurfaceEntry | null => {
+    if (!isPhoneViewport()) return null;
+    // Prefer the stack module: openSurface can call navigate twice in one tick
+    // before React refs (panelOpen / informationPanelOpen) update.
+    const tracked = getPhoneSurfaceCurrent();
+    if (tracked) return tracked;
+    if (informationPanelOpenRef.current) {
+      return {
+        kind: "information",
+        tab: activeLeftTabRef.current,
+        canvasId: focusedCanvasIdRef.current ?? undefined,
+        node: informationNodeRef.current,
+        label: informationNodeRef.current?.label ?? activeLeftTabRef.current,
+      };
+    }
+    const focusedId = focusedChatWindowIdRef.current;
+    const wins = openChatWindowsRef.current;
+    const focusedWin = focusedId
+      ? wins.find((w) => w.id === focusedId)
+      : undefined;
+    if (focusedWin && focusedWin.kind !== "agent") {
+      return {
+        kind: "chat-thread",
+        conversationId: focusedWin.conversationId,
+        canvasId: focusedWin.id,
+        label: focusedWin.title,
+      };
+    }
+    if (panelOpenRef.current) {
+      const target = chatTargetRef.current;
+      return {
+        kind: "social",
+        tab: panelTabRef.current,
+        agentId: target.kind === "agent" ? target.agentId : undefined,
+        conversationId:
+          target.kind === "conversation" ? target.conversationId : undefined,
+        label: "Social",
+      };
+    }
+    return null;
+  }, []);
+
+  const navigatePhoneSurface = useCallback(
+    (next: PhoneSurfaceEntry) => {
+      if (!isPhoneViewport()) return;
+      if (restoringPhoneRef.current || isApplyingPhoneHistory()) {
+        replacePhoneSurface(next);
+        return;
+      }
+      const from = capturePhoneSurface();
+      const same =
+        from &&
+        from.kind === next.kind &&
+        (from.canvasId ?? "") === (next.canvasId ?? "") &&
+        (from.tab ?? "") === (next.tab ?? "") &&
+        (from.conversationId ?? "") === (next.conversationId ?? "");
+      // One Information shell: tab/node changes replace, they do not stack.
+      const infoTabSwitch =
+        from?.kind === "information" && next.kind === "information";
+      if (same || !from || infoTabSwitch) {
+        replacePhoneSurface(next);
+        return;
+      }
+      pushPhoneSurface(next, from);
+    },
+    [capturePhoneSurface]
+  );
+  navigatePhoneSurfaceRef.current = navigatePhoneSurface;
+
+  const applyPhoneSurfaceRestore = useCallback(
+    (entry: PhoneSurfaceEntry | null) => {
+      restoringPhoneRef.current = true;
+      try {
+        if (!entry) {
+          setPanelOpen(false);
+          setPanelMinimized(false);
+          setInformationPanelOpen(false);
+          setInformationPanelMinimized(false);
+          setOpenChatWindows([]);
+          setDraftByWindowId({});
+          setFocusedChatWindowId(null);
+          return;
+        }
+        if (entry.kind === "social") {
+          setInformationPanelOpen(false);
+          setInformationPanelMinimized(false);
+          setOpenChatWindows([]);
+          setDraftByWindowId({});
+          setFocusedChatWindowId(null);
+          if (entry.conversationId) {
+            setChatTarget({
+              kind: "conversation",
+              conversationId: entry.conversationId,
+            });
+          } else if (entry.agentId) {
+            setChatTarget({ kind: "agent", agentId: entry.agentId });
+          } else {
+            setChatTarget({ kind: "agent", agentId: activeAgentId });
+          }
+          if (entry.tab === "chat" || !entry.tab) setPanelTab("chat");
+          else setPanelTab(entry.tab as PanelTab);
+          setPanelOpen(true);
+          setPanelMinimized(false);
+          queueMicrotask(() => setActiveFloatingWindow("chat"));
+          return;
+        }
+        if (entry.kind === "information") {
+          setPanelOpen(false);
+          setPanelMinimized(false);
+          setOpenChatWindows([]);
+          setDraftByWindowId({});
+          setFocusedChatWindowId(null);
+          if (entry.node) setInformationNode(entry.node);
+          if (entry.tab) setActiveLeftTab(entry.tab as LeftRailTab);
+          else setActiveLeftTab("info");
+          setInformationPanelOpen(true);
+          setInformationPanelMinimized(false);
+          if (entry.canvasId) setFocusedCanvasId(entry.canvasId);
+          queueMicrotask(() =>
+            setActiveFloatingWindow(entry.canvasId ?? "information")
+          );
+          return;
+        }
+        if (entry.kind === "chat-thread" && entry.conversationId) {
+          setPanelOpen(false);
+          setPanelMinimized(false);
+          setInformationPanelOpen(false);
+          setInformationPanelMinimized(false);
+          const id =
+            entry.canvasId ??
+            chatWindowIdForConversation(entry.conversationId);
+          setOpenChatWindows([
+            {
+              id,
+              kind: "dm",
+              title: entry.label ?? "Chat",
+              conversationId: entry.conversationId,
+              minimized: false,
+            },
+          ]);
+          setFocusedChatWindowId(id);
+          setChatTarget({
+            kind: "conversation",
+            conversationId: entry.conversationId,
+          });
+          queueMicrotask(() => setActiveFloatingWindow(id));
+        }
+      } finally {
+        // Sheet onOpenChange(false) runs after this tick when Information closes
+        // during a Social restore. Keep the guard until then.
+        queueMicrotask(() => {
+          restoringPhoneRef.current = false;
+        });
+      }
+    },
+    [activeAgentId, setChatTarget, setPanelTab]
+  );
+
+  useEffect(() => {
+    setPhoneSurfaceRestoreHandler(applyPhoneSurfaceRestore);
+    const onStack = () => setPhoneCanGoBack(phoneCanGoBackFn());
+    onStack();
+    window.addEventListener("godmode:phone-surface-stack", onStack);
+    return () => {
+      setPhoneSurfaceRestoreHandler(null);
+      window.removeEventListener("godmode:phone-surface-stack", onStack);
+    };
+  }, [applyPhoneSurfaceRestore]);
+
+  const phoneGoBack = useCallback(() => {
+    phoneGoBackFn();
+  }, []);
+
   const presentInformationPanel = useCallback((node: GraphProjectionNode, replace = false) => {
+    const canvasId = `information:${node.id}`;
     if (isPhoneViewport()) {
+      navigatePhoneSurface({
+        kind: "information",
+        tab: "info",
+        canvasId,
+        node,
+        label: node.label,
+      });
       setOpenChatWindows([]);
       setDraftByWindowId({});
       setFocusedChatWindowId(null);
@@ -994,7 +1352,6 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     setActiveLeftTab("info");
     setInformationPanelOpen(true);
     setInformationPanelMinimized(false);
-    const canvasId = `information:${node.id}`;
     queueMicrotask(() => setActiveFloatingWindow(canvasId));
     const canvas = {
       id: canvasId,
@@ -1014,7 +1371,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       return [...prev, canvas];
     });
     setFocusedCanvasId(canvasId);
-  }, []);
+  }, [navigatePhoneSurface]);
 
   const openInformationPanel = useCallback(
     (node: GraphProjectionNode) => presentInformationPanel(node, false),
@@ -1064,6 +1421,12 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   }, [focusedCanvasId]);
 
   const closeInformationPanel = useCallback(() => {
+    if (isPhoneViewport()) {
+      if (restoringPhoneRef.current || isApplyingPhoneHistory()) return;
+      // X dismisses to Graph but keeps the surface on the back stack.
+      dismissPhoneSurface();
+      return;
+    }
     if (focusedCanvasId) {
       closeInformationCanvas(focusedCanvasId);
       return;
@@ -1082,6 +1445,17 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const openLeftRailTab = useCallback((tab: LeftRailTab) => {
     if (tab === "dms" || tab === "channels" || tab === "contacts") {
+      if (isPhoneViewport()) {
+        navigatePhoneSurface({
+          kind: "social",
+          tab: "chat",
+          label: "Social",
+        });
+        setInformationPanelOpen(false);
+        setInformationPanelMinimized(false);
+        setOpenChatWindows([]);
+        setFocusedChatWindowId(null);
+      }
       setPanelTab("chat");
       setPanelOpen(true);
       setPanelMinimized(false);
@@ -1089,6 +1463,13 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (isPhoneViewport()) {
+      navigatePhoneSurface({
+        kind: "information",
+        tab,
+        canvasId: focusedCanvasId ?? "information",
+        node: informationNode,
+        label: tab,
+      });
       setOpenChatWindows([]);
       setDraftByWindowId({});
       setFocusedChatWindowId(null);
@@ -1101,7 +1482,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     queueMicrotask(() =>
       setActiveFloatingWindow(focusedCanvasId ?? "information")
     );
-  }, [focusedCanvasId]);
+  }, [focusedCanvasId, informationNode, navigatePhoneSurface]);
 
   const openPanel = useCallback(
     (opts?: {
@@ -1153,9 +1534,22 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         setDraftByWindowId({});
         setFocusedChatWindowId(null);
         if (openAsInformation) {
+          const tab = (requestedTab ?? "knowledge") as LeftRailTab;
+          navigatePhoneSurface({
+            kind: "information",
+            tab,
+            label: tab,
+          });
           setPanelOpen(false);
           setPanelMinimized(false);
         } else {
+          navigatePhoneSurface({
+            kind: "social",
+            tab: "chat",
+            agentId: opts?.agentId,
+            conversationId: opts?.conversationId,
+            label: "Social",
+          });
           setInformationPanelOpen(false);
           setInformationPanelMinimized(false);
           setPanelOpen(true);
@@ -1197,14 +1591,45 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setChatTarget,
       refreshDmConversations,
       setKnowledgeSubTab,
+      navigatePhoneSurface,
     ]
   );
+
+  openPanelRef.current = openPanel;
+
+  const setPanelOpenAware = useCallback((open: boolean) => {
+    if (!open && isPhoneViewport()) {
+      if (restoringPhoneRef.current || isApplyingPhoneHistory()) return;
+      dismissPhoneSurface();
+      return;
+    }
+    if (open && isPhoneViewport() && !restoringPhoneRef.current) {
+      navigatePhoneSurfaceRef.current?.({
+        kind: "social",
+        tab: panelTabRef.current || "chat",
+        label: "Social",
+      });
+    }
+    setPanelOpen(open);
+    if (open) setPanelMinimized(false);
+  }, []);
 
   const discussArtifactInChat = useCallback(
     (opts: { id: string; name: string; agentId?: string; prompt?: string }) => {
       const agentId = opts.agentId ?? activeAgentId;
       setChatTarget({ kind: "agent", agentId });
       setPanelTab("chat");
+      if (isPhoneViewport()) {
+        navigatePhoneSurface({
+          kind: "social",
+          tab: "chat",
+          agentId,
+          label: "Social",
+        });
+        setInformationPanelOpen(false);
+        setOpenChatWindows([]);
+        setFocusedChatWindowId(null);
+      }
       setPanelOpen(true);
       addArtifactMention({ id: opts.id, name: opts.name });
       setRequestNewChat(true);
@@ -1213,14 +1638,30 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
           `I have questions about the attached report "${opts.name}".`
       );
     },
-    [activeAgentId, setChatTarget, setPanelTab, addArtifactMention]
+    [
+      activeAgentId,
+      setChatTarget,
+      setPanelTab,
+      addArtifactMention,
+      navigatePhoneSurface,
+    ]
   );
 
   const startNewChat = useCallback(() => {
     setPanelTab("chat");
+    if (isPhoneViewport()) {
+      navigatePhoneSurface({
+        kind: "social",
+        tab: "chat",
+        label: "Social",
+      });
+      setInformationPanelOpen(false);
+      setOpenChatWindows([]);
+      setFocusedChatWindowId(null);
+    }
     setPanelOpen(true);
     setRequestNewChat(true);
-  }, [setPanelTab]);
+  }, [setPanelTab, navigatePhoneSurface]);
 
   useEffect(() => {
     if (!user) return;
@@ -1378,6 +1819,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         pageLabel,
         pageSnapshot: pageSnapshot?.data,
         mentionedSources: mentioned.length ? mentioned : undefined,
+        visualChat: readVisualChatEnabled(),
       };
     },
     [crumb, pathname, pageKind, pageLabel, pageSnapshot, mentionSources]
@@ -1409,8 +1851,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       buildPlatformContext,
       captureScreenshot,
       panelOpen,
-      setPanelOpen,
+      setPanelOpen: setPanelOpenAware,
       togglePanel,
+      phoneCanGoBack,
+      phoneGoBack,
       panelMaximized,
       setPanelMaximized,
       panelMinimized,
@@ -1508,7 +1952,10 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       buildPlatformContext,
       captureScreenshot,
       panelOpen,
+      setPanelOpenAware,
       togglePanel,
+      phoneCanGoBack,
+      phoneGoBack,
       panelMaximized,
       panelMinimized,
       openPanel,

@@ -1,13 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyGuideUiAction,
   guideUiActionFromToolResult,
   playGraphTour,
 } from "../guide-ui-action";
+import { PHONE_OPEN_SURFACE_REQUEST_EVENT } from "../phone-surface-stack";
+
+const toastMessage = vi.fn();
 
 vi.mock("sonner", () => ({
-  toast: { message: vi.fn() },
+  toast: { message: (...args: unknown[]) => toastMessage(...args) },
 }));
+
+vi.mock("../graph-phone-shell", () => ({
+  isPhoneViewport: vi.fn(() => false),
+}));
+
+import { isPhoneViewport } from "../graph-phone-shell";
+
+beforeEach(() => {
+  toastMessage.mockReset();
+  vi.mocked(isPhoneViewport).mockReturnValue(false);
+});
 
 describe("guideUiActionFromToolResult", () => {
   it("reads open_surface actions", () => {
@@ -112,6 +126,64 @@ describe("applyGuideUiAction", () => {
       "godmode:focus-graph-node",
       "godmode:open-intelligence-chat",
     ]);
+    vi.unstubAllGlobals();
+  });
+
+  it("skips opening floating windows when visual chat is off", () => {
+    const dispatchEvent = vi.fn();
+    const store: Record<string, string> = { "godmode.visualChat": "0" };
+    vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
+    });
+    applyGuideUiAction({
+      type: "open_surface",
+      tab: "platform-vault",
+      label: "Platform Vault",
+    });
+    applyGuideUiAction({ type: "focus_node", nodeId: "hub:intelligence" });
+    const names = dispatchEvent.mock.calls.map(
+      (c) => (c[0] as CustomEvent).type
+    );
+    expect(names).toEqual(["godmode:focus-graph-node"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("on phone defers open_surface to a tappable toast (no auto open)", () => {
+    vi.mocked(isPhoneViewport).mockReturnValue(true);
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    applyGuideUiAction({
+      type: "open_surface",
+      tab: "platform-vault",
+      vault: "inference",
+      label: "GodMode Inference",
+    });
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(toastMessage).toHaveBeenCalledWith(
+      "Open GodMode Inference?",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Open" }),
+      })
+    );
+    const action = toastMessage.mock.calls[0]?.[1] as {
+      action: { onClick: () => void };
+    };
+    action.action.onClick();
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+    const ev = dispatchEvent.mock.calls[0]?.[0] as CustomEvent;
+    expect(ev.type).toBe(PHONE_OPEN_SURFACE_REQUEST_EVENT);
+    expect(ev.detail).toMatchObject({
+      tab: "platform-vault",
+      vault: "inference",
+      label: "GodMode Inference",
+    });
     vi.unstubAllGlobals();
   });
 });

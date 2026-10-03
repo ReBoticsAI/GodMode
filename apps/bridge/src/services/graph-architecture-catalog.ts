@@ -15,13 +15,21 @@
  * chain). Admin, Settings, Agents, and Profile are under You. You
  * and Intelligence connect only through Hub (no direct spine edge). Research
  * and Ops sit on the platform plane under Intelligence visually, but each
- * links to Hub (not Intelligence) and owns Vault + surfaces. Other exemplar
- * agents (Builder, Coordinator) live under Workspaces and have no
- * Vault/surface catalog pairs yet. Canonical Wiki is Hub-shared knowledge
- * (`hub:wiki`), not a You Knowledge child.
+ * links to Hub (not Intelligence) and owns Vault + surfaces. Channel agents
+ * (`hub:channel-local`, Cloud lobby agents on SaaS) sit under Hub as public
+ * Social lobby pins. Other exemplar agents (Builder, Coordinator) live under
+ * Workspaces and have no Vault/surface catalog pairs yet. Canonical Wiki is
+ * Hub-shared knowledge (`hub:wiki`), not a You Knowledge child.
  */
 
-export const ARCHITECTURE_CATALOG_VERSION = 39;
+import { config } from "../config.js";
+import {
+  CLOUD_LOBBY_SLUGS,
+  channelAgentIdForSlug,
+  INSTALL_LOCAL_SLUG,
+} from "./public-channels.js";
+
+export const ARCHITECTURE_CATALOG_VERSION = 40;
 
 export type GraphCtaAction =
   | { type: "open_chat" }
@@ -1394,6 +1402,60 @@ function platformRaySurfaceEdges(): ArchitectureCatalogEdge[] {
  * child; Wiki is the shared Hub knowledge base; Admin is a You child (not Hub
  * infrastructure).
  */
+function channelAgentSlugsOnGraph(): string[] {
+  const slugs = [INSTALL_LOCAL_SLUG];
+  if (config.isSaas) {
+    for (const slug of CLOUD_LOBBY_SLUGS) {
+      if (!slugs.includes(slug)) slugs.push(slug);
+    }
+  }
+  return slugs;
+}
+
+function channelAgentCatalogNodes(hubPos: Vec3): ArchitectureCatalogNode[] {
+  const slugs = channelAgentSlugsOnGraph();
+  return slugs.map((slug, index) => {
+    const agentId = channelAgentIdForSlug(slug);
+    const angle = (index / Math.max(slugs.length, 1)) * Math.PI * 0.6 - 0.3;
+    const radius = 2.4 + index * 0.15;
+    const position = offset(
+      hubPos,
+      Math.cos(angle) * radius - 0.4,
+      -1.6 - index * 0.35,
+      Math.sin(angle) * radius + 0.6
+    );
+    return {
+      id: `hub:channel-${slug}`,
+      kind: "agent" as const,
+      label: `#${slug}`,
+      objectType: "Agent",
+      refId: agentId,
+      position,
+      description:
+        `${`#${slug}`} is a public Social channel agent under Hub. ` +
+        "Selecting it opens the lobby conversation and possesses this agent " +
+        "for Automations, Calendar, Knowledge, Bank, and Vault. Channel Admins " +
+        "edit those surfaces; everyone else can look.",
+      securityNote:
+        "Public lobby history is openly readable. Channel-agent content edits require channel Admin.",
+      connectionLabels: ["Hub", `${`#${slug}`} Vault`],
+      ctaLabel: `Open #${slug}`,
+      cta: { type: "open_chat" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    };
+  });
+}
+
+function channelAgentCatalogEdges(): ArchitectureCatalogEdge[] {
+  return channelAgentSlugsOnGraph().map((slug) => ({
+    id: `e:heart-channel-${slug}`,
+    source: "hub:heart",
+    target: `hub:channel-${slug}`,
+    kind: "runtime",
+  }));
+}
+
 export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
   // You surfaces grow upward; Vault uses vaultBehindOwner (default camera at +z).
   // Intelligence surfaces grow downward clear of the hub.
@@ -1476,6 +1538,14 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       openImmediate: true,
       windows: INFO_ONLY,
     },
+    ...channelAgentCatalogNodes(hubPos),
+    ...agentVaultNodes({
+      suffix: "channel-local",
+      ownerId: "hub:channel-local",
+      ownerLabel: "#local",
+      vaultLabel: "#local Vault",
+      position: vaultBehindOwner(offset(hubPos, -0.8, -1.6, 1.2)),
+    }),
     {
       id: "hub:heart",
       kind: "system",
@@ -1782,6 +1852,8 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
     // You and Intelligence meet only at Hub (Bridge). No direct You↔Intelligence edge.
     { id: "e:you-heart", source: "hub:you", target: "hub:heart", kind: "runtime" },
     { id: "e:intel-heart", source: "hub:intelligence", target: "hub:heart", kind: "runtime" },
+    ...channelAgentCatalogEdges(),
+    ...agentVaultEdges("channel-local", "hub:channel-local"),
 
     ...platformSpineAgentEdges(),
 

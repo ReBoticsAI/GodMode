@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { GRAPH_MODAL_Z } from "@/lib/graph-chrome-layout";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useStructure } from "@/lib/structure-context";
 import { departmentFromPath, divisionFromPath } from "@/lib/navigation";
@@ -408,7 +409,7 @@ export function ChatTargetSearch({
               left: rect.left,
               width: 288,
             }}
-            className="z-[200] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
+            className={`${GRAPH_MODAL_Z} overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl`}
           >
             {responsible?.agent &&
               chatTarget.kind === "agent" &&

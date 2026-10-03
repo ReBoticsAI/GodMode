@@ -12,7 +12,8 @@ import {
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
-import { sendDmMessage } from "@/api";
+import { fetchPublicChatEntitlement, sendDmMessage } from "@/api";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -93,6 +94,7 @@ export function GraphEtherComposer({
     setChatMode,
     openPanel,
     chatTarget,
+    dmConversations,
     focusedChatWindowId,
     openChatWindows,
     clearComposerDraft,
@@ -141,6 +143,26 @@ export function GraphEtherComposer({
 
     if (chatTarget.kind === "conversation") {
       const conversationId = chatTarget.conversationId;
+      const conv = dmConversations.find((c) => c.id === conversationId);
+      if (conv?.kind === "public") {
+        setBusy(true);
+        openPanel({ tab: "chat" });
+        void fetchPublicChatEntitlement()
+          .then((res) => {
+            if (!res.entitlement.ok) {
+              toast.message(res.entitlement.reason);
+              return;
+            }
+            return sendDmMessage(conversationId, { bodyText: text });
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : "Failed to send";
+            setWorkedLabel(msg);
+            window.setTimeout(() => setWorkedLabel(null), 4000);
+          })
+          .finally(() => setBusy(false));
+        return;
+      }
       setBusy(true);
       openPanel({ tab: "chat" });
       void sendDmMessage(conversationId, { bodyText: text })
@@ -172,6 +194,7 @@ export function GraphEtherComposer({
     busy,
     chatTarget,
     clearComposerDraft,
+    dmConversations,
     focusedChatWindowId,
     focusedWindow,
     onValueChange,
