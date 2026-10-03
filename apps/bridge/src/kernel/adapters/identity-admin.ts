@@ -28,6 +28,11 @@ import { hashPassword, verifyPassword } from "../../services/auth/password.js";
 import { refreshUserAgentPrompt } from "../../services/agents/user-agent.js";
 import { getUserOwnerTenantDb } from "../../services/user-scope.js";
 import {
+  PublicHandleError,
+  claimUserHandle,
+  releaseUserHandle,
+} from "../../services/public-handles.js";
+import {
   promoteFirstSignupAdmin,
   SYSTEM_USER_ID,
 } from "../../services/tenant-bootstrap.js";
@@ -289,13 +294,19 @@ function profileRecord(
 ): RecordRow | null {
   const user = core
     .prepare(
-      `SELECT id, email, display_name, avatar_url, created_at, updated_at
+      `SELECT id, email, display_name, username, avatar_url, created_at, updated_at
        FROM users WHERE id=? AND id<>?`
     )
     .get(userId, SYSTEM_USER_ID) as
     | Pick<
         CoreUser,
-        "id" | "email" | "display_name" | "avatar_url" | "created_at" | "updated_at"
+        | "id"
+        | "email"
+        | "display_name"
+        | "username"
+        | "avatar_url"
+        | "created_at"
+        | "updated_at"
       >
     | undefined;
   if (!user) return null;
@@ -306,6 +317,7 @@ function profileRecord(
     user_id: user.id,
     email: user.email,
     display_name: user.display_name,
+    username: user.username ?? null,
     avatar_url: user.avatar_url,
     created_at: profile?.created_at ?? user.created_at,
     updated_at: profile?.updated_at ?? user.updated_at,
@@ -337,6 +349,18 @@ function updateProfile(
           `UPDATE users SET display_name=?, updated_at=datetime('now') WHERE id=?`
         )
         .run(displayName, userId);
+    }
+    if (data.username !== undefined) {
+      try {
+        const raw = optionalText(data.username);
+        if (!raw) releaseUserHandle(userId, core);
+        else claimUserHandle(userId, raw, core);
+      } catch (err) {
+        if (err instanceof PublicHandleError) {
+          throw httpError(err.status, err.message);
+        }
+        throw err;
+      }
     }
     if (data.avatar_url !== undefined) {
       core
@@ -957,10 +981,9 @@ export const IDENTITY_ADMIN_ACTIONS: Record<string, ActionDef[]> = {
     action("update_profile", {
       inputSchema: schema(
         Object.fromEntries(
-          ["display_name", "avatar_url", ...PROFILE_COLUMNS].map((name) => [
-            name,
-            { type: ["string", "null"] },
-          ])
+          ["display_name", "username", "avatar_url", ...PROFILE_COLUMNS].map(
+            (name) => [name, { type: ["string", "null"] }]
+          )
         )
       ),
     }),

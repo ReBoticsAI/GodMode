@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { LogOutIcon } from "lucide-react";
 import {
   changePasswordAuth,
+  checkUsernameAvailable,
   fetchProfile,
   fetchTenantMembers,
   logoutAuth,
@@ -41,6 +42,7 @@ import { toast } from "sonner";
 
 type ProfileFormField =
   | "displayName"
+  | "username"
   | "headline"
   | "bio"
   | "phone"
@@ -66,6 +68,7 @@ type ProfileForm = Record<ProfileFormField, string>;
 
 const EMPTY_PROFILE_FORM: ProfileForm = {
   displayName: "",
+  username: "",
   headline: "",
   bio: "",
   phone: "",
@@ -91,6 +94,7 @@ const EMPTY_PROFILE_FORM: ProfileForm = {
 function profileToForm(profile: UserProfile): ProfileForm {
   return {
     displayName: profile.displayName ?? "",
+    username: profile.username ?? "",
     headline: profile.headline ?? "",
     bio: profile.bio ?? "",
     phone: profile.phone ?? "",
@@ -132,6 +136,7 @@ export function UserProfilePanel() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileForm, setProfileForm] = useState<ProfileForm>(EMPTY_PROFILE_FORM);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<string | null>(null);
 
   const isAdmin = Boolean(user?.isAdmin);
   const activeProject = tenants.find((t) => t.id === activeTenantId) ?? null;
@@ -157,6 +162,35 @@ export function UserProfilePanel() {
       });
   }, []);
 
+  useEffect(() => {
+    const raw = profileForm.username.trim().replace(/^@+/, "");
+    if (!raw) {
+      setUsernameStatus(null);
+      return;
+    }
+    if (raw.toLowerCase() === (profile?.username ?? "").toLowerCase()) {
+      setUsernameStatus("Current username");
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void checkUsernameAvailable(raw)
+        .then((r) => {
+          if (cancelled) return;
+          setUsernameStatus(
+            r.available ? `@${r.handle ?? raw} is available` : r.error || "Unavailable"
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setUsernameStatus(null);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [profileForm.username, profile?.username]);
+
   const setField = (field: ProfileFormField, value: string) =>
     setProfileForm((prev) => ({ ...prev, [field]: value }));
 
@@ -176,6 +210,7 @@ export function UserProfilePanel() {
     try {
       const r = await updateProfile({
         displayName: profileForm.displayName.trim(),
+        username: profileForm.username.trim().replace(/^@+/, "") || null,
         avatarUrl: profileForm.avatarUrl,
         headline: profileForm.headline,
         bio: profileForm.bio,
@@ -274,6 +309,11 @@ export function UserProfilePanel() {
                   <span className="text-lg font-medium">
                     {profileForm.displayName || "—"}
                   </span>
+                  {profileForm.username.trim() ? (
+                    <Badge variant="outline">
+                      @{profileForm.username.trim().replace(/^@+/, "")}
+                    </Badge>
+                  ) : null}
                   {isAdmin && <Badge variant="secondary">Platform admin</Badge>}
                 </div>
                 {profileForm.headline && (
@@ -306,10 +346,25 @@ export function UserProfilePanel() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="profile-username">GodMode username</Label>
+                  <Input
+                    id="profile-username"
+                    placeholder="qa_alpha"
+                    value={profileForm.username}
+                    onChange={(e) => setField("username", e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Public @handle across Cloud lobby and mentions
+                    {usernameStatus ? ` · ${usernameStatus}` : ""}.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="profile-headline">Headline</Label>
                   <Input
                     id="profile-headline"
-                    placeholder="Quant trader & systems builder"
+                    placeholder="Builder and operator"
                     value={profileForm.headline}
                     onChange={(e) => setField("headline", e.target.value)}
                   />

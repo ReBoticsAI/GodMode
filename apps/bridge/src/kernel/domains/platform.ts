@@ -254,10 +254,10 @@ export const PLATFORM_SPECS: BuiltinSpec[] = [
     table: "user_profiles",
     database: "cloud",
     scope: "user",
-    writable: ["display_name", "avatar_url", "headline", "bio", "pronouns", "location", "timezone", "phone", "company", "job_title", "website", "twitter", "github", "linkedin", "emoji", "birthday", "languages", "interests", "values", "goals", "personality_notes", "decision_style", "risk_tolerance"],
+    writable: ["display_name", "username", "avatar_url", "headline", "bio", "pronouns", "location", "timezone", "phone", "company", "job_title", "website", "twitter", "github", "linkedin", "emoji", "birthday", "languages", "interests", "values", "goals", "personality_notes", "decision_style", "risk_tolerance"],
     operations: ["list", "get", "update"],
     actions: IDENTITY_ADMIN_ACTIONS.UserProfile,
-    fields: ["id", "user_id", "email", "display_name", "avatar_url", "headline", "bio", "pronouns", "location", "timezone", "phone", "company", "job_title", "website", "twitter", "github", "linkedin", "emoji", "birthday", "languages", "interests", "values", "goals", "personality_notes", "decision_style", "risk_tolerance", "created_at", "updated_at"],
+    fields: ["id", "user_id", "email", "display_name", "username", "avatar_url", "headline", "bio", "pronouns", "location", "timezone", "phone", "company", "job_title", "website", "twitter", "github", "linkedin", "emoji", "birthday", "languages", "interests", "values", "goals", "personality_notes", "decision_style", "risk_tolerance", "created_at", "updated_at"],
   },
   {
     name: "UserCredential",

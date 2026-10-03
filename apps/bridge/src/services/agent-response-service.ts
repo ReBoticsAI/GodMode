@@ -16,6 +16,7 @@ import {
   listConversationMemberUserIds,
   type DmAgentMemberInput,
 } from "./dm-service.js";
+import { resolveMentionsInText } from "./public-handles.js";
 import { getShareBroker } from "../ws-broker.js";
 
 export interface AgentResponseDeps {
@@ -43,18 +44,23 @@ function agentAutoRespond(agent: { config: Record<string, unknown> }): boolean {
   return agent.config.autoRespondInGroups === true;
 }
 
-/** Find agent participants @mentioned in message text (by id or display name). */
+/** Find agent participants @mentioned in message text (by id, name, or @handle). */
 export function findMentionedAgents(
   text: string,
   agents: AgentTarget[]
 ): AgentTarget[] {
   const lower = text.toLowerCase();
   const mentioned = new Set<string>();
+  const handleMentions = resolveMentionsInText(text);
   for (const agent of agents) {
     const idPat = `@${agent.agentId.toLowerCase()}`;
     const nameCompact = `@${agent.name.toLowerCase().replace(/\s+/g, "")}`;
     const nameSpaced = `@${agent.name.toLowerCase()}`;
+    const byHandle = handleMentions.some(
+      (m) => m.subjectKind === "agent" && m.subjectId === agent.agentId
+    );
     if (
+      byHandle ||
       lower.includes(idPat) ||
       lower.includes(nameCompact) ||
       lower.includes(nameSpaced)
