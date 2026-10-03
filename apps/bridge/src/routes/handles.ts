@@ -5,12 +5,14 @@ import { Router } from "express";
 import {
   PublicHandleError,
   assertHandleAvailable,
-  claimUserHandle,
   resolveHandle,
   searchHandles,
 } from "../services/public-handles.js";
-import { requireAuth } from "../services/auth/middleware.js";
 
+/**
+ * Read-only handle APIs. Claiming goes through UserProfile.username
+ * (kernel Record update) so we do not add a legacy mutation route.
+ */
 export function createHandlesRouter(): Router {
   const router = Router();
 
@@ -44,25 +46,6 @@ export function createHandlesRouter(): Router {
     const limit =
       typeof req.query.limit === "string" ? Number(req.query.limit) : 20;
     res.json({ handles: searchHandles(q, Number.isFinite(limit) ? limit : 20) });
-  });
-
-  router.put("/me", requireAuth, (req, res) => {
-    const raw =
-      typeof req.body?.username === "string"
-        ? req.body.username
-        : typeof req.body?.handle === "string"
-          ? req.body.handle
-          : "";
-    try {
-      const handle = claimUserHandle(req.user!.id, raw);
-      res.json({ ok: true, username: handle });
-    } catch (err) {
-      if (err instanceof PublicHandleError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
   });
 
   router.get("/:handle", (req, res) => {
