@@ -22,14 +22,29 @@ cloudMem.exec(`
       ('member-1', 'member@example.com', 'Member', NULL, 0);
 `);
 
-vi.mock("../../core-db.js", () => ({
-  getCloudDb: () => cloudMem,
-  getOperatorTenantId: () => "tenant-op",
-}));
+vi.mock("../../core-db.js", async () => {
+  const actual = await vi.importActual<typeof import("../../core-db.js")>(
+    "../../core-db.js"
+  );
+  return {
+    ...actual,
+    getCloudDb: () => cloudMem,
+    getOperatorTenantId: () => "tenant-op",
+  };
+});
 
-vi.mock("../../config.js", () => ({
-  config: { isSaas: false },
-}));
+vi.mock("../../config.js", async () => {
+  const actual = await vi.importActual<typeof import("../../config.js")>(
+    "../../config.js"
+  );
+  return {
+    ...actual,
+    config: {
+      ...actual.config,
+      isSaas: false,
+    },
+  };
+});
 
 const {
   CLOUD_LOBBY_SLUGS,

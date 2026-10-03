@@ -9,7 +9,6 @@ import { config } from "./config.js";
 import type { CoreDatabase } from "./core-db.js";
 import { configureDbPragmas, logDbConfig } from "./services/db-config.js";
 import { tableExists } from "./services/db-migrations.js";
-import { ensurePublicChannelSchema } from "./services/public-channels.js";
 
 export type HostUsersDatabase = Database.Database;
 
@@ -215,8 +214,6 @@ export function migrateHostUsersDb(db: HostUsersDatabase): void {
   } catch {
     /* optional */
   }
-
-  ensurePublicChannelSchema(db);
 }
 
 function columnNames(db: Database.Database, table: string): string[] {

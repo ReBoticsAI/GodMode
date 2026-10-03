@@ -42,6 +42,7 @@ import { seedChannelAgents } from "./services/agents/channel-agents.js";
 import {
   bindChannelAgentsToPublicConversations,
   ensurePublicChannelMemberRoles,
+  ensurePublicChannelSchema,
 } from "./services/public-channels.js";
 import { createUserProductivityRouter } from "./routes/user-productivity.js";
 import { createConnectionsRouter } from "./routes/connections.js";
@@ -143,6 +144,7 @@ pinTenantDb(operatorTenantId);
 seedChannelAgents(db);
 try {
   const hub = getHostUsersDb();
+  ensurePublicChannelSchema(hub);
   ensurePublicChannelMemberRoles(hub);
   bindChannelAgentsToPublicConversations(hub);
 } catch (err) {
