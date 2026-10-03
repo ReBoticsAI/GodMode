@@ -23,15 +23,16 @@ const { HOLDINGS_KEY, ALLOWED_ORIGIN, mailCalls, mem } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../../core-db.js", async () => {
-  const actual = await vi.importActual<typeof import("../../../core-db.js")>(
-    "../../../core-db.js"
-  );
-  return {
-    ...actual,
-    getCloudDb: () => mem,
-  };
-});
+// Do not importActual core-db here: loading the real module during the mock
+// factory can bind saas-subscriptions to the unmocked getCloudDb (admins
+// still pass because is_admin short-circuits before the DB lookup).
+vi.mock("../../../core-db.js", () => ({
+  getCloudDb: () => mem,
+  initCoreDb: () => mem,
+  getOperatorTenantId: () => null,
+  getPlatformMeta: () => null,
+  setPlatformMeta: () => undefined,
+}));
 
 vi.mock("../../../config.js", () => ({
   config: {
@@ -40,6 +41,11 @@ vi.mock("../../../config.js", () => ({
     isClient: false,
     isProduction: false,
     dataDir: "/tmp/godmode-auth-test",
+    dbPath: "/tmp/godmode-auth-test/platform.db",
+    cloudDbPath: "/tmp/godmode-auth-test/Cloud.sqlite",
+    hostUsersDbPath: "/tmp/godmode-auth-test/Users.sqlite",
+    tenantsDir: "/tmp/godmode-auth-test/tenants",
+    usersDir: "/tmp/godmode-auth-test/users",
     auth: {
       sessionTtlDays: 7,
       allowSignup: false,
@@ -142,6 +148,7 @@ function seedSchema(): void {
       access_disabled INTEGER NOT NULL DEFAULT 0,
       last_seen_at TEXT,
       email_verified_at TEXT,
+      is_temporary INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

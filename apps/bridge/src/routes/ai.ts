@@ -4,6 +4,11 @@ import type { EventEmitter } from "node:events";
 import { config } from "../config.js";
 import { requireEditorForMutation, getReqTenantDb } from "../services/auth/middleware.js";
 import {
+  assertChannelAgentWriteAllowed,
+  channelAgentWriteForbiddenMessage,
+} from "../services/channel-agent-acl.js";
+import { DmError } from "../services/dm-service.js";
+import {
   assertSpendAllowed,
   isSpendAuthorityError,
 } from "../services/authority/spend-authority.js";
@@ -154,9 +159,8 @@ import {
   interestModelGuide,
   pathModelGuide,
   isSignupGuideModeEnabled,
-  isSignupGuideTopic,
   SIGNUP_GUIDE_HARNESS_DELTA,
-  SIGNUP_GUIDE_REFUSAL,
+  signupGuideVisualChatDelta,
   TRIAL_PAY_GODMODE_PATH,
 } from "../services/trial-inference.js";
 import {
@@ -502,6 +506,20 @@ export function createAiRouter(
     agentId: string,
     minRole: ShareGrantRole = "viewer"
   ): AppDatabase | null {
+    if (minRole === "editor" || minRole === "owner") {
+      try {
+        assertChannelAgentWriteAllowed(req.user?.id, agentId);
+      } catch (err) {
+        const msg = channelAgentWriteForbiddenMessage(err);
+        if (msg) {
+          res
+            .status(err instanceof DmError ? err.status : 403)
+            .json({ error: msg });
+          return null;
+        }
+        throw err;
+      }
+    }
     const scope = resolveAgentScope(req, agentId, minRole);
     if (!scope) {
       res.status(404).json({ error: "Agent not found" });
@@ -2016,30 +2034,6 @@ export function createAiRouter(
       usingManagedSupply &&
       isSignupGuideModeEnabled() &&
       activeInferenceGrant?.kind === "trial";
-    if (
-      signupGuideActive &&
-      message?.trim() &&
-      !isSignupGuideTopic(message)
-    ) {
-      send("token", { content: SIGNUP_GUIDE_REFUSAL });
-      send("done", { content: SIGNUP_GUIDE_REFUSAL });
-      clearInterval(statusHeartbeat);
-      markChatTurnIdle(workDb, activeChatId);
-      if (activeWorkCardId) {
-        try {
-          completeActiveWorkRunCard({
-            db: workDb,
-            cardId: activeWorkCardId,
-            tenantId: work.tenantId,
-            outcome: "aborted",
-            summary: "Welcome-guide topic gate: steered off-topic turn.",
-          });
-        } catch (completeErr) {
-          console.error("[active-work] complete run card failed", completeErr);
-        }
-      }
-      return;
-    }
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.
@@ -2159,7 +2153,11 @@ export function createAiRouter(
       capabilitiesOverride,
       chatMode,
       harnessDelta: signupGuideActive
-        ? `${harnessProfile.harnessDelta}\n\n${SIGNUP_GUIDE_HARNESS_DELTA}`
+        ? [
+            harnessProfile.harnessDelta,
+            SIGNUP_GUIDE_HARNESS_DELTA,
+            signupGuideVisualChatDelta(platformContext?.visualChat !== false),
+          ].join("\n\n")
         : harnessProfile.harnessDelta,
     });
     const systemPrompt = `${assembled.systemPrompt}\n\n${formatActiveWorkHostContext(activeWorkCardId)}`;

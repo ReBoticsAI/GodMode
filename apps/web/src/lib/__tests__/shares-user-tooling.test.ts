@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  fallbackAgentLabel,
+  isChannelAgentId,
   sharesUserTooling,
   USER_KNOWLEDGE_AGENT_ID,
 } from "@/lib/focus-chrome";
@@ -16,6 +18,14 @@ describe("sharesUserTooling", () => {
     expect(sharesUserTooling("research")).toBe(false);
     expect(sharesUserTooling("ops")).toBe(false);
     expect(sharesUserTooling("builder")).toBe(false);
+    expect(sharesUserTooling("channel-local")).toBe(false);
     expect(sharesUserTooling(null)).toBe(false);
+  });
+
+  it("labels channel agents as #slug", () => {
+    expect(isChannelAgentId("channel-local")).toBe(true);
+    expect(isChannelAgentId("intelligence")).toBe(false);
+    expect(fallbackAgentLabel("channel-local")).toBe("#local");
+    expect(fallbackAgentLabel("channel-general")).toBe("#general");
   });
 });

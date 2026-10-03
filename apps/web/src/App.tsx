@@ -3,6 +3,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import Home from "./pages/Home";
@@ -43,6 +44,12 @@ import RecordListPage from "./pages/records/RecordListPage";
 import RecordFormPage from "./pages/records/RecordFormPage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
@@ -463,6 +470,7 @@ function AuthGatedApp() {
   const [saas, setSaas] = useState<boolean | null>(null);
   const [forceAuth, setForceAuth] = useState(false);
   const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const isSellerLinkConnect = pathname.startsWith("/seller-link/connect");
   const isSellerLinkGithub = pathname.startsWith("/seller-link/github");
   const isSellerLinkStripe = pathname.startsWith("/seller-link/stripe");
@@ -546,9 +554,27 @@ function AuthGatedApp() {
     return () => window.removeEventListener("godmode:open-auth", onOpenAuth);
   }, []);
 
+  // Legacy /signup and /login paths → Graph AuthGate query (plan/email preserved).
+  useEffect(() => {
+    if (pathname !== "/signup" && pathname !== "/login") return;
+    const params = new URLSearchParams(search);
+    params.set("auth", "1");
+    if (pathname === "/signup") params.set("signup", "1");
+    navigate({ pathname: "/", search: `?${params.toString()}` }, { replace: true });
+  }, [pathname, search, navigate]);
+
   // User node navigates to /?auth=1; honor the query so AuthGate survives remount/HMR.
   const forceAuthFromUrl = new URLSearchParams(search).get("auth") === "1";
   const showAuthGate = forceAuth || forceAuthFromUrl;
+
+  const closeAuthOverlay = () => {
+    setForceAuth(false);
+    if (!forceAuthFromUrl) return;
+    const params = new URLSearchParams(search);
+    params.delete("auth");
+    const qs = params.toString();
+    navigate({ pathname, search: qs ? `?${qs}` : "" }, { replace: true });
+  };
 
   if (loading || (authenticated && saas === null)) {
     return (
@@ -558,21 +584,40 @@ function AuthGatedApp() {
     );
   }
 
-  // Pre-auth + soft visitor sessions: The Graph is the main site; AuthGate only when ?auth=1.
+  // Pre-auth + soft visitor sessions: Graph stays mounted; AuthGate opens in a Dialog.
   if (!isProductSession) {
-    if (showAuthGate) {
-      return (
-        <>
-          <AuthGate />
-          <Toaster richColors position="top-right" />
-        </>
-      );
-    }
     landPublicChatOnIntelligence();
+    const signupFromUrl =
+      new URLSearchParams(search).get("signup") === "1";
     return (
       <StructureProvider>
         <IntelligenceProvider>
           <PreAuthChatCanvas />
+          <Dialog
+            open={showAuthGate}
+            onOpenChange={(open) => {
+              if (open) {
+                setForceAuth(true);
+                return;
+              }
+              closeAuthOverlay();
+            }}
+          >
+            <DialogContent
+              className="max-h-[90vh] overflow-y-auto border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-md"
+              showCloseButton
+            >
+              <DialogTitle className="sr-only">
+                {signupFromUrl ? "Choose a plan" : "Sign in"}
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                {signupFromUrl
+                  ? "Pick a GodMode Cloud plan, pay, then create your account."
+                  : "Sign in or create a GodMode account without leaving the Graph."}
+              </DialogDescription>
+              <AuthGate embedded />
+            </DialogContent>
+          </Dialog>
         </IntelligenceProvider>
       </StructureProvider>
     );

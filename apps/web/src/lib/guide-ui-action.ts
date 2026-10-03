@@ -5,6 +5,12 @@
 
 import { toast } from "sonner";
 import { GUIDE_CHOICE_EVENT } from "@/lib/guide-next-choice";
+import { isPhoneViewport } from "@/lib/graph-phone-shell";
+import {
+  PHONE_OPEN_SURFACE_REQUEST_EVENT,
+  type PhoneOpenSurfaceRequestDetail,
+} from "@/lib/phone-surface-stack";
+import { readVisualChatEnabled } from "@/lib/storage-keys";
 
 export type GraphTourStop = {
   nodeId: string;
@@ -152,11 +158,36 @@ export function guideUiActionFromToolResult(
   return null;
 }
 
+/** Phone: toast a tappable Open affordance instead of auto-swapping surfaces. */
+export function promptPhoneOpenSurface(action: {
+  tab: string;
+  vault?: string;
+  sub?: string;
+  label?: string;
+}): void {
+  if (typeof window === "undefined") return;
+  const label = action.label?.trim() || action.tab;
+  const detail: PhoneOpenSurfaceRequestDetail = {
+    tab: action.tab,
+    vault: action.vault ?? null,
+    sub: action.sub ?? null,
+    label,
+  };
+  toast.message(`Open ${label}?`, {
+    action: {
+      label: "Open",
+      onClick: () => {
+        window.dispatchEvent(
+          new CustomEvent(PHONE_OPEN_SURFACE_REQUEST_EVENT, { detail })
+        );
+      },
+    },
+  });
+}
+
 /**
  * Dispatch Graph chrome events for a guide uiAction.
- * Chat / left-rail tabs without a floating surface fall through to open-tab.
- * After opening a surface, keep Intelligence chat visible so the reply is not
- * buried under Vault.
+ * On phone, open_surface becomes a tappable toast (no auto window swap).
  */
 export function applyGuideUiAction(action: GuideUiAction): void {
   if (typeof window === "undefined") return;
@@ -183,9 +214,26 @@ export function applyGuideUiAction(action: GuideUiAction): void {
   }
 
   if (action.tab === "chat") {
+    if (isPhoneViewport()) {
+      promptPhoneOpenSurface({ tab: "chat", label: action.label ?? "Chat" });
+      return;
+    }
     window.dispatchEvent(
       new CustomEvent("godmode:open-intelligence-chat", { detail: {} })
     );
+    return;
+  }
+
+  // Floating windows only when Visual chat is on (Settings → General).
+  if (!readVisualChatEnabled()) {
+    if (action.label) {
+      toast.message(`Visual chat is off. ${action.label} was not opened.`);
+    }
+    return;
+  }
+
+  if (isPhoneViewport()) {
+    promptPhoneOpenSurface(action);
     return;
   }
 
@@ -202,7 +250,7 @@ export function applyGuideUiAction(action: GuideUiAction): void {
   if (action.label) {
     toast.message(`Opened ${action.label}`);
   }
-  // Keep Intelligence chat readable after opening Vault (not the Messages inbox).
+  // Desktop: keep Intelligence chat readable after opening Vault.
   if (action.tab === "platform-vault" || action.tab === "personal-vault") {
     queueMicrotask(() => {
       window.dispatchEvent(

@@ -10,23 +10,46 @@ import {
   resolveTenant,
 } from "../services/auth/middleware.js";
 import {
-  addConversationMember,
-  assertConversationMember,
-  createConversation,
-  createMessage,
   DmError,
+  ensureAgentDirectConversation,
   getConversationForUser,
+  getPublicChannelRole,
+  isConversationMember,
   listConversationMemberUserIds,
   listConversationsForUser,
   listDmContacts,
   listMessages,
-  lookupUserByEmail,
-  markConversationRead,
-  removeConversationMember,
-  shareResourceToConversation,
+  setPublicChannelMemberRole,
+  softDeleteMessage,
   totalUnreadForUser,
   userCanAccessBlob,
 } from "../services/dm-service.js";
+import {
+  canSendPublicChat,
+  cloudLobbyIsLocal,
+  fetchRemoteCloudLobbyChannels,
+  fetchRemoteCloudLobbyMessages,
+  getPublicChatEntitlement,
+  isCloudLobbySlug,
+  isPublicConversation,
+  listCloudLobbyChannels,
+  listInstallPublicChannels,
+  seedPublicChannelCatalog,
+  type PublicChannelRole,
+  type PublicChannelView,
+} from "../services/public-channels.js";
+
+function withViewerRoles(
+  hub: ReturnType<typeof getHostUsersDb>,
+  userId: string,
+  channels: PublicChannelView[]
+): PublicChannelView[] {
+  return channels.map((c) => ({
+    ...c,
+    viewerRole: getPublicChannelRole(hub, c.id, userId),
+  }));
+}
+import type { CoreDmMessage } from "../core-db.js";
 import {
   blobHref,
   BlobStoreError,
@@ -71,7 +94,18 @@ export function authorizeTypingEvent(
   authenticatedUserId: string,
   body: unknown
 ): string[] {
-  assertConversationMember(hub, conversationId, authenticatedUserId);
+  // Public lobby: typing only for users who can actually post.
+  // Private DMs: real membership required (not "public-readable" alone).
+  if (isPublicConversation(hub, conversationId)) {
+    if (!canSendPublicChat(authenticatedUserId)) {
+      throw new DmError(
+        "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.",
+        403
+      );
+    }
+  } else if (!isConversationMember(hub, conversationId, authenticatedUserId)) {
+    throw new DmError("Not a member of this conversation", 403);
+  }
   const input =
     body && typeof body === "object"
       ? (body as Record<string, unknown>)
@@ -95,6 +129,71 @@ export interface DmRouterDeps {
 
 export function createDmRouter(deps: DmRouterDeps): Router {
   const router = Router();
+
+  /** Unauthenticated Cloud lobby catalog (Local installs proxy here). SaaS only. */
+  router.get("/public-lobby", (_req, res) => {
+    if (!cloudLobbyIsLocal()) {
+      res.json({ channels: [] });
+      return;
+    }
+    const hub = getHostUsersDb();
+    seedPublicChannelCatalog(hub);
+    const channels = listCloudLobbyChannels(hub);
+    res.json({ channels });
+  });
+
+  router.get("/public-lobby/:slug/messages", (req, res) => {
+    if (!cloudLobbyIsLocal()) {
+      res.status(404).json({ error: "Cloud lobby is not hosted on this install" });
+      return;
+    }
+    const hub = getHostUsersDb();
+    seedPublicChannelCatalog(hub);
+    const slug = paramId(req.params.slug).replace(/^#/, "");
+    if (!isCloudLobbySlug(slug)) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+    const channel = listCloudLobbyChannels(hub).find((c) => c.slug === slug);
+    if (!channel) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+    const before =
+      typeof req.query.before === "string" ? req.query.before : undefined;
+    const limitRaw =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
+    const rows = before
+      ? (hub
+          .prepare(
+            `SELECT m.* FROM dm_messages m
+             WHERE m.conversation_id = ?
+               AND m.created_at < (SELECT created_at FROM dm_messages WHERE id = ?)
+             ORDER BY m.created_at DESC
+             LIMIT ?`
+          )
+          .all(channel.id, before, limit) as CoreDmMessage[])
+      : (hub
+          .prepare(
+            `SELECT m.* FROM dm_messages m
+             WHERE m.conversation_id = ?
+             ORDER BY m.created_at DESC
+             LIMIT ?`
+          )
+          .all(channel.id, limit) as CoreDmMessage[]);
+    res.json({
+      messages: rows.reverse().map((m) => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderUserId: m.sender_user_id,
+        bodyText: m.deleted_at ? "" : m.body_text,
+        createdAt: m.created_at,
+        deletedAt: m.deleted_at,
+      })),
+    });
+  });
+
   router.use(attachAuthContext, requireAuth);
 
   router.get("/contacts", (req, res) => {
@@ -108,9 +207,114 @@ export function createDmRouter(deps: DmRouterDeps): Router {
     res.json({ unread: totalUnreadForUser(getHostUsersDb(), req.user!.id) });
   });
 
+  router.get("/public-chat-entitlement", (req, res) => {
+    res.json({ entitlement: getPublicChatEntitlement(req.user!.id) });
+  });
+
+  router.get("/directory", async (req, res) => {
+    const hub = getHostUsersDb();
+    const userId = req.user!.id;
+    const conversations = listConversationsForUser(hub, userId);
+    const installPublic = withViewerRoles(
+      hub,
+      userId,
+      listInstallPublicChannels(hub)
+    );
+    const cloudRaw = cloudLobbyIsLocal()
+      ? listCloudLobbyChannels(hub)
+      : await fetchRemoteCloudLobbyChannels();
+    const cloudPublic = cloudLobbyIsLocal()
+      ? withViewerRoles(hub, userId, cloudRaw)
+      : cloudRaw.map((c) => ({
+          ...c,
+          viewerRole: (c.viewerRole ?? "visitor") as PublicChannelRole,
+        }));
+    const entitlement = getPublicChatEntitlement(userId);
+    res.json({
+      conversations,
+      installChannels: installPublic,
+      cloudChannels: cloudPublic,
+      cloudLobbyOnline: cloudLobbyIsLocal() || cloudPublic.length > 0,
+      entitlement,
+    });
+  });
+
+  router.post("/agent-dm", resolveTenant, (req, res) => {
+    const agentId =
+      typeof req.body?.agentId === "string" ? req.body.agentId.trim() : "";
+    if (!agentId) {
+      res.status(400).json({ error: "agentId required" });
+      return;
+    }
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      res.status(403).json({ error: "Workspace required" });
+      return;
+    }
+    try {
+      const conversation = ensureAgentDirectConversation(getHostUsersDb(), {
+        userId: req.user!.id,
+        agentId,
+        agentTenantId: tenantId,
+      });
+      res.json({ conversation });
+    } catch (err) {
+      if (err instanceof DmError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
   router.get("/conversations", (req, res) => {
     const conversations = listConversationsForUser(getHostUsersDb(), req.user!.id);
     res.json({ conversations });
+  });
+
+  router.get("/cloud-lobby/:slug/messages", async (req, res) => {
+    const slug = paramId(req.params.slug).replace(/^#/, "");
+    const before =
+      typeof req.query.before === "string" ? req.query.before : undefined;
+    const limit =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    if (cloudLobbyIsLocal()) {
+      if (!isCloudLobbySlug(slug)) {
+        res.status(404).json({ error: "Channel not found" });
+        return;
+      }
+      const channel = listCloudLobbyChannels(getHostUsersDb()).find(
+        (c) => c.slug === slug
+      );
+      if (!channel) {
+        res.status(404).json({ error: "Channel not found" });
+        return;
+      }
+      try {
+        const messages = listMessages(
+          getHostUsersDb(),
+          channel.id,
+          req.user!.id,
+          {
+            before,
+            limit: Number.isFinite(limit) ? limit : undefined,
+          }
+        );
+        res.json({ messages, plane: "cloud", slug });
+      } catch (err) {
+        if (err instanceof DmError) {
+          res.status(err.status).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      return;
+    }
+    const messages = await fetchRemoteCloudLobbyMessages(slug, {
+      before,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json({ messages, plane: "cloud", slug });
   });
 
   router.get("/conversations/:id", (req, res) => {
@@ -141,6 +345,60 @@ export function createDmRouter(deps: DmRouterDeps): Router {
         limit: Number.isFinite(limit) ? limit : undefined,
       });
       res.json({ messages });
+    } catch (err) {
+      if (err instanceof DmError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  router.delete("/conversations/:id/messages/:messageId", (req, res) => {
+    try {
+      const message = softDeleteMessage(getHostUsersDb(), {
+        conversationId: paramId(req.params.id),
+        messageId: paramId(req.params.messageId),
+        actorUserId: req.user!.id,
+      });
+      res.json({ message });
+    } catch (err) {
+      if (err instanceof DmError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  router.patch("/conversations/:id/members/:userId/role", (req, res) => {
+    const roleRaw =
+      typeof req.body?.role === "string" ? req.body.role.trim() : "";
+    const allowed: PublicChannelRole[] = [
+      "admin",
+      "moderator",
+      "member",
+      "visitor",
+    ];
+    if (!allowed.includes(roleRaw as PublicChannelRole)) {
+      res.status(400).json({ error: "Invalid role" });
+      return;
+    }
+    try {
+      setPublicChannelMemberRole(getHostUsersDb(), {
+        conversationId: paramId(req.params.id),
+        actorUserId: req.user!.id,
+        targetUserId: paramId(req.params.userId),
+        role: roleRaw as PublicChannelRole,
+      });
+      res.json({
+        ok: true,
+        role: getPublicChannelRole(
+          getHostUsersDb(),
+          paramId(req.params.id),
+          paramId(req.params.userId)
+        ),
+      });
     } catch (err) {
       if (err instanceof DmError) {
         res.status(err.status).json({ error: err.message });

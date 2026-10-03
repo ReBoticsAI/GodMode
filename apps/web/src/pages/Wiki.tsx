@@ -179,7 +179,13 @@ export function WikiContent({
         ) : (
           <ul className="flex flex-col gap-3">
             {proposals.map((p) => (
-              <li key={p.id} className="rounded-lg border bg-card p-4 shadow-sm">
+              <li
+                key={p.id}
+                className={cn(
+                  "rounded-lg border bg-card shadow-sm",
+                  embedded ? "p-3" : "p-4"
+                )}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{p.action}</Badge>
                   {p.space && (
@@ -240,7 +246,10 @@ export function WikiContent({
               <button
                 type="button"
                 onClick={() => navigate(`${WIKI_PATH}/${p.slug}`)}
-                className="flex w-full flex-col gap-1 rounded-lg border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent/40"
+                className={cn(
+                  "flex w-full flex-col gap-1 rounded-lg border bg-card text-left shadow-sm transition-colors hover:bg-accent/40",
+                  embedded ? "p-3" : "p-4"
+                )}
               >
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{p.title}</span>
@@ -325,7 +334,7 @@ export function WikiContent({
 
   if (embedded) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="@container/wiki-embed flex flex-col gap-3">
         {listBody}
         {dialog}
       </div>

@@ -937,11 +937,45 @@ function pushPlatformAgentToolSummaries(opts: {
  */
 const ADMIN_ARCHITECTURE_NODE_ID = "hub:admin";
 
+/** Visitor Graph: You + Hub + Intelligence spine only (no Research/Ops/Builder agents). */
+const VISITOR_ARCHITECTURE_KEEP = new Set([
+  "hub:you",
+  "hub:heart",
+  "hub:intelligence",
+  "hub:channel-local",
+  "hub:vault-channel-local",
+  "hub:bank-channel-local",
+  "hub:workspace",
+  "hub:wiki",
+  "hub:marketplace",
+  "hub:support",
+  "hub:shared",
+  "hub:vault-platform",
+  "hub:vault-you",
+  "hub:vault-intelligence",
+  "hub:bank-you",
+  "hub:bank-intelligence",
+  "hub:calendar-you",
+  "hub:calendar-intelligence",
+  "hub:tasks-you",
+  "hub:tasks-intelligence",
+  "hub:settings-you",
+  "hub:profile-you",
+  "hub:structure-you",
+  "hub:structure-intelligence",
+  "hub:knowledge-you",
+  "hub:knowledge-intelligence",
+  "hub:automations-you",
+  "hub:automations-intelligence",
+]);
+
 export function buildArchitectureProjection(opts: {
   userId?: string;
   userLabel?: string;
   /** When set with userId, non-admins do not see the Admin graph node. */
   isAdmin?: boolean;
+  /** Temporary visitor: hide Research/Ops/Builder and other non-core agents. */
+  isTemporary?: boolean;
   tenantDb?: AppDatabase | null;
   cloudDb?: CoreDatabase;
   enrichLiveNeighborhood?: boolean;
@@ -1060,6 +1094,31 @@ export function buildArchitectureProjection(opts: {
       (e) =>
         e.source !== ADMIN_ARCHITECTURE_NODE_ID &&
         e.target !== ADMIN_ARCHITECTURE_NODE_ID
+    );
+  }
+
+  if (opts.isTemporary) {
+    outNodes = outNodes.filter((n) => {
+      if (VISITOR_ARCHITECTURE_KEEP.has(n.id)) return true;
+      // Live chat neighborhood under You / Intelligence only.
+      if (n.id.startsWith("chat:") || n.id.startsWith("agent:")) {
+        const parent =
+          typeof n.status?.parentHubId === "string"
+            ? n.status.parentHubId
+            : "";
+        return (
+          parent === "hub:you" ||
+          parent === "hub:intelligence" ||
+          n.id.includes("intelligence") ||
+          n.id.includes("digital-you") ||
+          n.id.includes(`user-${opts.userId}`)
+        );
+      }
+      return false;
+    });
+    const keepIds = new Set(outNodes.map((n) => n.id));
+    outEdges = outEdges.filter(
+      (e) => keepIds.has(e.source) && keepIds.has(e.target)
     );
   }
 

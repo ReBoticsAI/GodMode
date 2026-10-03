@@ -35,6 +35,7 @@ export function createGraphProjectionRouter(): Router {
                 "You"
               : undefined,
             isAdmin: req.user?.isAdmin,
+            isTemporary: Boolean(req.user?.temporary),
             tenantDb: req.tenantDb ?? null,
             enrichLiveNeighborhood: Boolean(req.user && req.tenantDb),
           });

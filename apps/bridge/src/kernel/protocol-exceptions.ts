@@ -1040,6 +1040,30 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "dm-agent-direct",
+    methods: ["POST"],
+    pathPattern: "/api/dm/agent-dm",
+    rationale:
+      "Ensure a 1:1 agent DM for Social directory open; relationship-scoped membership write, not DirectConversation Record CRUD shape.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "dm-soft-delete-message",
+    methods: ["DELETE"],
+    pathPattern: "/api/dm/conversations/:/messages/:",
+    rationale:
+      "Soft-delete a DM or public-channel message for the sender or moderator; not DirectMessage Record delete.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "dm-public-channel-member-role",
+    methods: ["PATCH"],
+    pathPattern: "/api/dm/conversations/:/members/:/role",
+    rationale:
+      "Public-channel ACL role change (admin/moderator/member/visitor); membership metadata, not DirectConversation Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "github-integration-callback",
     methods: ["GET"],
     pathPattern: "/api/integrations/github/callback",

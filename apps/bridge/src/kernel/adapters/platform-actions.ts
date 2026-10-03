@@ -448,11 +448,38 @@ export const directConversationAdapter: RecordAdapter = {
     const members = Array.isArray(data.member_user_ids)
       ? data.member_user_ids.filter((id): id is string => typeof id === "string")
       : [];
+    const memberAgents = Array.isArray(data.member_agents)
+      ? data.member_agents
+          .map((raw) => {
+            if (!raw || typeof raw !== "object") return null;
+            const row = raw as Record<string, unknown>;
+            const agentId =
+              typeof row.agentId === "string"
+                ? row.agentId
+                : typeof row.agent_id === "string"
+                  ? row.agent_id
+                  : "";
+            const agentTenantId =
+              typeof row.agentTenantId === "string"
+                ? row.agentTenantId
+                : typeof row.agent_tenant_id === "string"
+                  ? row.agent_tenant_id
+                  : typeof ctx.tenantId === "string"
+                    ? ctx.tenantId
+                    : "";
+            if (!agentId || !agentTenantId) return null;
+            return { agentId, agentTenantId };
+          })
+          .filter(
+            (a): a is { agentId: string; agentTenantId: string } => a != null
+          )
+      : [];
     const row = createConversation(hubDb(ctx), {
       creatorUserId: requireUser(ctx),
       kind: data.kind === "group" ? "group" : "direct",
       title: typeof data.title === "string" ? data.title : undefined,
       memberUserIds: members,
+      memberAgents,
     });
     return record(
       def,
@@ -2232,6 +2259,7 @@ export const PLATFORM_ACTION_METADATA: Record<string, ActionDef[]> = {
         kind: { enum: ["direct", "group"] },
         title: { type: "string" },
         member_user_ids: { type: "array", items: { type: "string" } },
+        member_agents: { type: "array" },
       }),
     }),
     action("mark_read", {

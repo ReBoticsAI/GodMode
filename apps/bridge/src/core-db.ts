@@ -1394,7 +1394,8 @@ function ensureDmMembersAgentFkFix(db: CoreDatabase): void {
       CREATE TABLE dm_conversation_members_new (
         conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
         user_id TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+        role TEXT NOT NULL DEFAULT 'member'
+          CHECK (role IN ('owner', 'admin', 'moderator', 'member', 'visitor')),
         joined_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_read_at TEXT,
         last_read_message_id TEXT,
@@ -1755,8 +1756,13 @@ export interface CoreSharedChatSession {
   created_at: string;
 }
 
-export type DmConversationKind = "direct" | "group";
-export type DmMemberRole = "owner" | "member";
+export type DmConversationKind = "direct" | "group" | "public";
+export type DmMemberRole =
+  | "owner"
+  | "admin"
+  | "moderator"
+  | "member"
+  | "visitor";
 export type DmMemberKind = "user" | "agent";
 export type DmSenderKind = "user" | "agent";
 export type DmAttachmentKind = "image" | "file" | "resource_ref";
@@ -1765,6 +1771,8 @@ export interface CoreDmConversation {
   id: string;
   kind: DmConversationKind;
   title: string | null;
+  /** Public lobby slug (general, dev, …). Null for DMs/groups. */
+  slug?: string | null;
   created_by_user_id: string;
   created_at: string;
   updated_at: string;

@@ -185,6 +185,8 @@ export function ChatThreadWindow({
     focusChatWindow,
     closeChatWindow,
     setChatWindowMinimized,
+    phoneCanGoBack,
+    phoneGoBack,
   } = useIntelligence();
   const focused = focusedChatWindowId === win.id;
 
@@ -222,6 +224,9 @@ export function ChatThreadWindow({
         }}
         title={title}
         icon={icon}
+        windowId={`chat-thread:${win.id}`}
+        showBack={phoneCanGoBack}
+        onBack={() => phoneGoBack()}
       >
         <ChatThreadBody win={win} focused={focused} activate={activate} />
       </GraphPhoneSheet>

@@ -1,10 +1,22 @@
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { ChevronLeftIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { WindowDensityControls } from "@/components/floating/WindowDensityControls";
+import {
+  getWindowDensity,
+  WINDOW_DENSITY_EVENT,
+} from "@/lib/floating-window-density";
 import { GRAPH_WINDOW_Z } from "@/lib/graph-chrome-layout";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +32,11 @@ type GraphPhoneSheetProps = {
   icon?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Density prefs key (defaults to information). */
+  windowId?: string;
+  /** Title-bar back (same as hardware Back / phoneGoBack). */
+  showBack?: boolean;
+  onBack?: () => void;
 };
 
 /**
@@ -34,7 +51,26 @@ export function GraphPhoneSheet({
   icon,
   children,
   className,
+  windowId = "information",
+  showBack = false,
+  onBack,
 }: GraphPhoneSheetProps) {
+  const [contentDensity, setContentDensity] = useState(() =>
+    getWindowDensity(windowId)
+  );
+
+  useEffect(() => {
+    setContentDensity(getWindowDensity(windowId));
+    const onDensity = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ windowId?: string; density?: number }>)
+        .detail;
+      if (detail?.windowId !== windowId) return;
+      if (typeof detail.density === "number") setContentDensity(detail.density);
+    };
+    window.addEventListener(WINDOW_DENSITY_EVENT, onDensity);
+    return () => window.removeEventListener(WINDOW_DENSITY_EVENT, onDensity);
+  }, [windowId]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
@@ -42,7 +78,7 @@ export function GraphPhoneSheet({
         showCloseButton
         showOverlay={false}
         className={cn(
-          "gap-0 p-0 shadow-xl",
+          "flex flex-col gap-0 overflow-hidden p-0 shadow-xl",
           GRAPH_WINDOW_Z,
           // Playfield: under top chrome, above composer / focus pill.
           "inset-x-0! top-[var(--graph-top-chrome-band,5.625rem)]! bottom-[var(--graph-composer-band,7.25rem)]! h-auto! max-h-none!",
@@ -50,13 +86,39 @@ export function GraphPhoneSheet({
           className
         )}
       >
-        <SheetHeader className="flex shrink-0 flex-row items-center gap-2 border-b px-3 py-2.5 pr-12 text-left">
+        <SheetHeader className="flex shrink-0 flex-row items-center gap-1.5 border-b px-2 py-2 pr-12 text-left">
+          {showBack && onBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Back"
+              title="Back"
+              onClick={onBack}
+            >
+              <ChevronLeftIcon />
+            </Button>
+          ) : null}
           {icon ? <span className="shrink-0">{icon}</span> : null}
-          <SheetTitle className="min-w-0 truncate text-sm font-medium">
+          <SheetTitle className="min-w-0 flex-1 truncate text-sm font-medium">
             {title}
           </SheetTitle>
+          <WindowDensityControls windowId={windowId} size="icon-xs" />
         </SheetHeader>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/*
+          Scroll and zoom on the same node. Zoom on an overflow-hidden parent
+          breaks the flex min-h-0 chain so content grows past the playfield and
+          gets clipped with no scrollbar (Cloud / Inference offer sheets).
+        */}
+        <div
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+          style={
+            {
+              zoom: contentDensity,
+              ["--gm-window-density"]: String(contentDensity),
+            } as CSSProperties
+          }
+        >
           {children}
         </div>
       </SheetContent>

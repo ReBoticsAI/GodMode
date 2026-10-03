@@ -53,8 +53,9 @@ export function migrateHostUsersDb(db: HostUsersDatabase): void {
 
     CREATE TABLE IF NOT EXISTS dm_conversations (
       id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('direct', 'group')),
+      kind TEXT NOT NULL CHECK (kind IN ('direct', 'group', 'public')),
       title TEXT,
+      slug TEXT,
       created_by_user_id TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -67,7 +68,8 @@ export function migrateHostUsersDb(db: HostUsersDatabase): void {
     CREATE TABLE IF NOT EXISTS dm_conversation_members (
       conversation_id TEXT NOT NULL REFERENCES dm_conversations(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+      role TEXT NOT NULL DEFAULT 'member'
+        CHECK (role IN ('owner', 'admin', 'moderator', 'member', 'visitor')),
       joined_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_read_at TEXT,
       last_read_message_id TEXT,

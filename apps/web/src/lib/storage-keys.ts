@@ -69,6 +69,24 @@ export const AUTO_ACCEPT_TOOLS_KEY = "godmode.autoAcceptTools";
 export const CHAT_MODE_KEY = "godmode.chatMode";
 export const TOOL_AUTONOMY_KEY = "godmode.toolAutonomy";
 
+/**
+ * When true, Intelligence may open floating windows (Vault, Wiki, …) while chatting.
+ * Default on so orientation chat can show the surfaces it names.
+ */
+export const VISUAL_CHAT_KEY = "godmode.visualChat";
+
+export function readVisualChatEnabled(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  const raw = localStorage.getItem(VISUAL_CHAT_KEY);
+  if (raw == null) return true;
+  return raw !== "0" && raw !== "false";
+}
+
+export function writeVisualChatEnabled(enabled: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(VISUAL_CHAT_KEY, enabled ? "1" : "0");
+}
+
 /** HttpOnly cookie fallback for dev / embedded browsers that drop Set-Cookie on fetch. */
 export const SESSION_TOKEN_KEY = "godmode_session_token";
 export const LEGACY_SESSION_TOKEN_KEY = "money_session_token";

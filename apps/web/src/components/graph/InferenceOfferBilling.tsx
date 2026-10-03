@@ -19,7 +19,11 @@ import {
   type GodModeInferencePlan,
   type GodModeInferenceUserStatus,
 } from "@/api";
-import { CLOUD_MONTHLY_PRICE, CLOUD_YEARLY_PRICE } from "@/lib/cloud-guide";
+import {
+  CLOUD_MONTHLY_PRICE,
+  CLOUD_YEARLY_PRICE,
+  openCloudSignupFallback,
+} from "@/lib/cloud-guide";
 import {
   canBillEmail,
   startCloudSeatCheckout,
@@ -173,7 +177,9 @@ export function InferenceOfferBilling({
     try {
       await startCloudSeatCheckout(email, planId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Checkout failed");
+      const msg = err instanceof Error ? err.message : "Checkout failed";
+      toast.message(`${msg}. Opening Cloud signup…`);
+      openCloudSignupFallback(planId, email);
       setBusy(null);
     }
   };

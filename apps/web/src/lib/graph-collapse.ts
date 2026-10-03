@@ -22,7 +22,7 @@ export const PLATFORM_SPINE_ID_SET = new Set<string>(PLATFORM_SPINE_IDS);
 
 /**
  * Full Hub → Workspaces → Personal → Structure → Pages path.
- * Used at standard/full tiers, not on simple land.
+ * Workspaces root is on simple land; this path opens at standard/full.
  */
 export const DEFAULT_HUB_TO_PAGE_PATH = [
   "hub:heart",
@@ -147,21 +147,21 @@ export const YOU_STANDARD_CHILD_IDS = [
   "hub:automations-you",
 ] as const;
 
-/** Hub simple: Support, Shared, Marketplace, Wiki, Platform Vault (+ agent spine). */
+/** Hub simple: Support, Shared, Marketplace, Workspaces, Wiki, Platform Vault (+ agent spine). */
 export const HUB_SIMPLE_CHILD_IDS = [
   "hub:support",
   "hub:shared",
   "hub:marketplace",
+  "hub:workspace",
   "hub:wiki",
   "hub:vault-platform",
   "hub:agent-research",
   "hub:agent-ops",
 ] as const;
 
-/** Hub standard adds Workspaces, Coding, Releases. */
+/** Hub standard adds Coding and Releases (Workspaces already on simple). */
 export const HUB_STANDARD_CHILD_IDS = [
   ...HUB_SIMPLE_CHILD_IDS,
-  "hub:workspace",
   "hub:coding",
   "hub:releases",
 ] as const;
@@ -263,7 +263,8 @@ export const SIMPLE_NESTED_HIDE_IDS = [
 /**
  * Default land (simple tier):
  * - You: Calendar (+ Tasks), Settings, Knowledge, Profile, Structure, Vault, Hub
- * - Hub: Support, Shared, Marketplace, Wiki, Platform Vault (side trees closed)
+ * - Hub: Support, Shared, Marketplace, Workspaces, Wiki, Platform Vault
+ *   (side trees / workspace children closed)
  * - Intelligence expanded to its simple surfaces; Research / Ops collapsed
  * - Deeper nests stay collapsed until standard/full
  */
@@ -283,7 +284,7 @@ export const DEFAULT_COLLAPSED_IDS = [
   ...ownerSurfaceRootIds("ops"),
   "hub:vault-research",
   "hub:vault-ops",
-  // Platform side trees + workspaces (Hub simple hides Workspaces via tier too)
+  // Platform side trees + Workspaces children (Workspaces root is visible on simple)
   ...PLATFORM_RAY_COLLAPSED_IDS,
   "hub:coding",
   "hub:releases",

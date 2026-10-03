@@ -72,14 +72,32 @@ function clearStoredCheckoutSession(): void {
   }
 }
 
-export default function AuthGate() {
+export default function AuthGate({
+  embedded = false,
+  onVisitorSignup,
+}: {
+  /** Compact card for Dialog / in-chat host (no full-page shell). */
+  embedded?: boolean;
+  /**
+   * Temporary Graph visitors on non-SaaS hubs: Sign up should open plan choice
+   * cards instead of local invite-code signup.
+   */
+  onVisitorSignup?: () => void;
+} = {}) {
   const { refresh, user } = useTenant();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(() =>
+    searchParams.get("signup") === "1" ? "signup" : "login"
+  );
   const [saasStep, setSaasStep] = useState<SaasSignupStep>("plan");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(
+    () => searchParams.get("email")?.trim() ?? ""
+  );
+  const [selectedPlanId, setSelectedPlanId] = useState(
+    () => searchParams.get("plan")?.trim() ?? ""
+  );
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -87,6 +105,8 @@ export default function AuthGate() {
   const [emailLocked, setEmailLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saas, setSaas] = useState(false);
+  /** False until bridge health resolves so temporary Sign up does not race saas=false. */
+  const [saasResolved, setSaasResolved] = useState(false);
   const [paywallReady, setPaywallReady] = useState(false);
   const [refundAck, setRefundAck] = useState(false);
   const [checkoutMode, setCheckoutMode] = useState<"payment" | "subscription">(
@@ -102,11 +122,21 @@ export default function AuthGate() {
       includedInferenceBudgetUsd?: number;
     }>
   >([]);
-  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [mfaToken, setMfaToken] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [oauth, setOauth] = useState({ google: false, github: false });
+
+  useEffect(() => {
+    if (searchParams.get("signup") === "1") {
+      setMode("signup");
+      setSaasStep("plan");
+    }
+    const planFromUrl = searchParams.get("plan")?.trim();
+    if (planFromUrl) setSelectedPlanId(planFromUrl);
+    const emailFromUrl = searchParams.get("email")?.trim();
+    if (emailFromUrl) setEmail(emailFromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     void fetchBridgeHealth()
@@ -122,15 +152,28 @@ export default function AuthGate() {
           setPaywallReady(p.paymentsConfigured && p.priceConfigured);
           setCheckoutMode(p.checkoutMode);
           setPlans(p.plans ?? []);
-          setSelectedPlanId((prev) => prev || p.plans?.[0]?.id || "");
+          const planFromUrl = searchParams.get("plan")?.trim() ?? "";
+          const urlPlan =
+            planFromUrl &&
+            (p.plans ?? []).some((plan) => plan.id === planFromUrl)
+              ? planFromUrl
+              : "";
+          setSelectedPlanId(
+            (prev) => urlPlan || prev || p.plans?.[0]?.id || ""
+          );
         });
       })
       .catch(() => {
-        /* health optional on first paint */
+        /* health optional on first paint; treat as non-SaaS */
+      })
+      .finally(() => {
+        setSaasResolved(true);
       });
     void fetchOauthProviders()
       .then(setOauth)
       .catch(() => setOauth({ google: false, github: false }));
+    // Intentionally once on mount; URL plan applied again when paywall loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -215,6 +258,10 @@ export default function AuthGate() {
 
   useEffect(() => {
     if (!user) return;
+    // Soft Graph visitors have a synthetic email and are not signed-in product
+    // users. Keep AuthGate on login/signup when they open /?auth=1 (e.g. gated
+    // Calendar / Vault). Real accounts still see verify-banner when unverified.
+    if (user.temporary === true) return;
     if (user.emailVerified === false && !user.isAdmin) {
       setMode("verify-banner");
       setEmail(user.email);
@@ -419,6 +466,16 @@ export default function AuthGate() {
   };
 
   const switchMode = (next: Mode) => {
+    if (
+      next === "signup" &&
+      saasResolved &&
+      !saas &&
+      user?.temporary === true &&
+      onVisitorSignup
+    ) {
+      onVisitorSignup();
+      return;
+    }
     setMode(next);
     if (next === "signup" && saas && !checkoutSessionId) {
       setSaasStep("plan");
@@ -428,13 +485,19 @@ export default function AuthGate() {
   };
 
   const showSaasPlan = saas && mode === "signup" && saasStep === "plan";
+  /** Signup deep-link: wait for /health before showing login or invite form. */
+  const awaitingSignupSurface =
+    mode === "signup" && !saasResolved;
   const showAccountForm =
-    mode === "forgot" ||
-    mode === "reset" ||
-    mode === "mfa" ||
-    mode === "verify-banner" ||
-    mode === "mfa-setup" ||
-    (!saas || mode === "login" || saasStep === "account");
+    !awaitingSignupSurface &&
+    (mode === "forgot" ||
+      mode === "reset" ||
+      mode === "mfa" ||
+      mode === "verify-banner" ||
+      mode === "mfa-setup" ||
+      mode === "login" ||
+      (mode === "signup" && saasResolved && !saas) ||
+      (mode === "signup" && saas && saasStep === "account"));
 
   const title =
     mode === "forgot"
@@ -449,15 +512,31 @@ export default function AuthGate() {
               ? "Enroll MFA"
               : mode === "login"
               ? "Sign in"
-              : showSaasPlan
+              : awaitingSignupSurface
                 ? "Choose a plan"
-                : "Create account";
+                : showSaasPlan
+                  ? "Choose a plan"
+                  : "Create account";
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground">
-      <Card className={`w-full ${showSaasPlan ? "max-w-md" : "max-w-sm"}`}>
+    <div
+      className={
+        embedded
+          ? "flex w-full justify-center text-foreground"
+          : "flex min-h-dvh items-center justify-center bg-background p-6 text-foreground"
+      }
+    >
+      <Card
+        className={
+          embedded
+            ? `w-full border-0 bg-transparent shadow-none ${showSaasPlan ? "max-w-md" : "max-w-sm"}`
+            : `w-full ${showSaasPlan ? "max-w-md" : "max-w-sm"}`
+        }
+      >
         <CardHeader className="text-center">
-          <div className="mb-1 text-3xl font-bold tracking-tight">{APP_NAME}</div>
+          {!embedded ? (
+            <div className="mb-1 text-3xl font-bold tracking-tight">{APP_NAME}</div>
+          ) : null}
           <CardTitle>{title}</CardTitle>
           <CardDescription>
             {mode === "forgot"
@@ -474,16 +553,23 @@ export default function AuthGate() {
                       ? saas
                         ? "Sign in to your GodMode cloud workspace."
                         : "Sign in to your local GodMode workspace."
-                      : showSaasPlan
-                        ? "Pick a plan to unlock signup. You create your account after payment."
-                        : saas
-                          ? selectedPlanId === "seller"
-                            ? "Payment confirmed. Create your Seller account to finish (commerce only; no Cloud workspace)."
-                            : "Payment confirmed. Create your account to open your workspace."
-                          : "Create your account. The first signup becomes platform admin."}
+                      : awaitingSignupSurface
+                        ? "Loading Cloud plans…"
+                        : showSaasPlan
+                          ? "Pick a plan to unlock signup. You create your account after payment."
+                          : saas
+                            ? selectedPlanId === "seller"
+                              ? "Payment confirmed. Create your Seller account to finish (commerce only; no Cloud workspace)."
+                              : "Payment confirmed. Create your account to open your workspace."
+                            : "Create your account. The first signup becomes platform admin."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {awaitingSignupSurface && (
+            <p className="text-center text-sm text-muted-foreground">
+              Loading plans…
+            </p>
+          )}
           {showSaasPlan && (
             <div className="flex flex-col gap-3">
               {(() => {
@@ -786,6 +872,11 @@ export default function AuthGate() {
                 type="button"
                 variant="link"
                 className="px-1"
+                disabled={
+                  mode === "login" &&
+                  Boolean(onVisitorSignup) &&
+                  !saasResolved
+                }
                 onClick={() => switchMode(mode === "login" ? "signup" : "login")}
               >
                 {mode === "login" ? "Sign up" : "Sign in"}

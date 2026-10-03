@@ -48,6 +48,24 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     try {
       const session = await fetchAuthSession();
       if (!session.authenticated || !session.user) {
+        // Temporary Graph visitors still have a user + cookie for DM/public chat.
+        if (session.visitor && session.user) {
+          setAuthenticated(false);
+          setUser({ ...session.user, temporary: true });
+          setTenants([]);
+          if (session.tenantId) {
+            setActiveTenantId(session.tenantId);
+            setActiveTenantIdState(session.tenantId);
+          } else {
+            setActiveTenantIdState(null);
+            clearActiveTenant();
+          }
+          return {
+            authenticated: false,
+            user: { ...session.user, temporary: true },
+            tenants: [],
+          };
+        }
         setAuthenticated(false);
         setUser(null);
         setTenants([]);

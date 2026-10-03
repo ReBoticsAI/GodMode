@@ -91,12 +91,21 @@ describe("specialized route authorization", () => {
   it("requires DM membership and authenticated sender identity", () => {
     const db = new Database(":memory:");
     db.exec(`
+      CREATE TABLE dm_conversations (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        title TEXT,
+        slug TEXT,
+        created_by_user_id TEXT NOT NULL DEFAULT 'system'
+      );
       CREATE TABLE dm_conversation_members (
         conversation_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         role TEXT NOT NULL,
         member_kind TEXT
       );
+      INSERT INTO dm_conversations (id, kind, title)
+      VALUES ('conversation-1', 'direct', 'DM');
       INSERT INTO dm_conversation_members
         (conversation_id, user_id, role, member_kind)
       VALUES

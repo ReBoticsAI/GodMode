@@ -155,6 +155,8 @@ export function InformationFloatingPanel() {
     refreshDmConversations,
     composerWidth,
     panelHeight,
+    phoneCanGoBack,
+    phoneGoBack,
   } = useIntelligence();
   const { authenticated } = useTenant();
   const { requestUnlock } = useChatUnlock();
@@ -498,11 +500,11 @@ export function InformationFloatingPanel() {
           )
       : [];
     return activeLeftTab === "calendar" ? (
-        <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
           <CalendarBoard scope={calendarScope} />
         </div>
       ) : activeLeftTab === "projects" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Suspense fallback={<EditorTabFallback label="Automations" />}>
             <AutomationsPanel
               agentId={scopeAgentId ?? undefined}
@@ -513,7 +515,7 @@ export function InformationFloatingPanel() {
           </Suspense>
         </div>
       ) : activeLeftTab === "knowledge" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <KnowledgePanel
             agentId={
               focusOwner.kind === "user" ? USER_KNOWLEDGE_AGENT_ID : undefined
@@ -521,11 +523,11 @@ export function InformationFloatingPanel() {
           />
         </div>
       ) : activeLeftTab === "bank" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <Bank embedded agentId={scopeAgentId} />
         </div>
       ) : activeLeftTab === "vault" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           {focusOwner.kind === "user" ? (
             <Vault mode="user" embedded />
           ) : (
@@ -533,43 +535,43 @@ export function InformationFloatingPanel() {
           )}
         </div>
       ) : activeLeftTab === "personal-vault" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <Vault mode="user" embedded />
         </div>
       ) : activeLeftTab === "platform-vault" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <PlatformVaultContent embedded />
         </div>
       ) : activeLeftTab === "admin" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <AdminContent embedded />
         </div>
       ) : activeLeftTab === "wiki" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-1.5">
           <WikiContent embedded />
         </div>
       ) : activeLeftTab === "support" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <SupportContent embedded />
         </div>
       ) : activeLeftTab === "settings" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <SettingsContent embedded />
         </div>
       ) : activeLeftTab === "shared" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <SharedContent embedded />
         </div>
       ) : activeLeftTab === "marketplace" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-1.5">
           <MarketplaceContent embedded />
         </div>
       ) : activeLeftTab === "structure" ? (
-        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-1">
           <StructureContent />
         </div>
       ) : activeLeftTab === "coding" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Suspense
             fallback={
               <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
@@ -582,31 +584,31 @@ export function InformationFloatingPanel() {
           </Suspense>
         </div>
       ) : activeLeftTab === "releases" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <ReleasesContent embedded />
         </div>
       ) : activeLeftTab === "agents" ? (
-        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-1">
           <AgentsContent />
         </div>
       ) : activeLeftTab === "users" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <UsersContent />
         </div>
       ) : activeLeftTab === "tasks" ? (
-        <div className="min-h-0 flex-1 overflow-hidden px-1 py-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-1">
           <TasksContent embedded />
         </div>
       ) : activeLeftTab === "notifications" ? (
-        <div className="min-h-0 flex-1 overflow-hidden px-3 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           <NotificationsList compact />
         </div>
       ) : activeLeftTab === "contacts" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <ContactsContent />
         </div>
       ) : activeLeftTab === "dms" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <ConversationList
             conversations={directConversations}
             contacts={dmContacts}
@@ -621,7 +623,7 @@ export function InformationFloatingPanel() {
           />
         </div>
       ) : activeLeftTab === "channels" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <ConversationList
             conversations={groupConversations}
             contacts={dmContacts}
@@ -636,7 +638,7 @@ export function InformationFloatingPanel() {
           />
         </div>
       ) : node ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Tabs
             value={canvasMode}
             onValueChange={(v) => setCanvasMode(v as CanvasMode)}
@@ -659,9 +661,9 @@ export function InformationFloatingPanel() {
 
             <TabsContent
               value="overview"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto p-4 data-[state=inactive]:hidden"
+              className="mt-0 min-h-0 flex-1 overflow-y-auto p-3 data-[state=inactive]:hidden"
             >
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge
                     variant="secondary"
@@ -913,6 +915,9 @@ export function InformationFloatingPanel() {
         }}
         title={panelTitle}
         icon={panelIcon}
+        windowId="information"
+        showBack={phoneCanGoBack}
+        onBack={() => phoneGoBack()}
       >
         {panelBody}
       </GraphPhoneSheet>

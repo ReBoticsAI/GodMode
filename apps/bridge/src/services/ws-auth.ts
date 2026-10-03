@@ -1,9 +1,11 @@
 import { getCloudDb, type MarketplaceListingKind } from "../core-db.js";
+import { getHostUsersDb } from "../host-users-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { getAgent } from "./agents/agents-db.js";
 import { resolveShareAccess } from "./share-service.js";
 import { userHasTenantAccess } from "./tenant-bootstrap.js";
 import { isConversationMember } from "./dm-service.js";
+import { isPublicConversation } from "./public-channels.js";
 
 export function parseWsTenantIdFromUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
@@ -60,7 +62,10 @@ export function canJoinResourceRoom(
 ): boolean {
   if (!userId) return false;
   if (kind === "conversation") {
-    return isConversationMember(getCloudDb(), resourceId, userId);
+    // DM / lobby tables live on the Users hub, not Cloud.sqlite.
+    const hub = getHostUsersDb();
+    if (isPublicConversation(hub, resourceId)) return true;
+    return isConversationMember(hub, resourceId, userId);
   }
   if (!tenantId) return false;
   if (kind === "agent") {

@@ -44,9 +44,12 @@ import { toast } from "sonner";
 import {
   ACTIVE_AGENT_KEY,
   LEGACY_ACTIVE_AGENT_KEY,
+  readVisualChatEnabled,
   writeMigratedKey,
+  writeVisualChatEnabled,
 } from "@/lib/storage-keys";
 import { StorageTab } from "@/pages/Vault";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const THEME_OPTIONS = [
@@ -58,9 +61,11 @@ const THEME_OPTIONS = [
 function AppearanceCard() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [visualChat, setVisualChat] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    setVisualChat(readVisualChatEnabled());
   }, []);
 
   const active = mounted ? theme ?? "system" : undefined;
@@ -74,19 +79,41 @@ function AppearanceCard() {
           system's light or dark preference.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        {THEME_OPTIONS.map(({ value, label, Icon }) => (
-          <Button
-            key={value}
-            type="button"
-            variant={active === value ? "default" : "outline"}
-            onClick={() => setTheme(value)}
-            className={cn("min-w-24 justify-start")}
-          >
-            <Icon data-icon="inline-start" />
-            {label}
-          </Button>
-        ))}
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-wrap gap-2">
+          {THEME_OPTIONS.map(({ value, label, Icon }) => (
+            <Button
+              key={value}
+              type="button"
+              variant={active === value ? "default" : "outline"}
+              onClick={() => setTheme(value)}
+              className={cn("min-w-24 justify-start")}
+            >
+              <Icon data-icon="inline-start" />
+              {label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-border px-3 py-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label htmlFor="visual-chat" className="text-sm font-medium">
+              Visual chat
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              When on, Intelligence can open Graph windows (Vault, Wiki, and
+              similar) while it talks about them. Turn off if that feels noisy.
+            </p>
+          </div>
+          <Switch
+            id="visual-chat"
+            checked={visualChat}
+            onCheckedChange={(checked) => {
+              const next = Boolean(checked);
+              setVisualChat(next);
+              writeVisualChatEnabled(next);
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
   );

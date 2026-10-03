@@ -305,9 +305,10 @@ describe("graph-collapse", () => {
     expect(hidden.has("hub:support")).toBe(false);
     expect(hidden.has("hub:shared")).toBe(false);
     expect(hidden.has("hub:marketplace")).toBe(false);
+    expect(hidden.has("hub:workspace")).toBe(false);
     expect(hidden.has("hub:wiki")).toBe(false);
     expect(hidden.has("hub:vault-platform")).toBe(false);
-    expect(hidden.has("hub:workspace")).toBe(true);
+    expect(hidden.has("hub:ws-personal")).toBe(true);
     expect(hidden.has("hub:coding")).toBe(true);
     expect(hidden.has("hub:releases")).toBe(true);
     expect(hidden.has("hub:support-tickets")).toBe(true);
@@ -394,7 +395,7 @@ describe("graph-collapse", () => {
   it("Shared / Marketplace chevrons do not hide further Hub fan hubs", () => {
     const collapsed = defaultCollapsedSet();
     const tiers = defaultBranchTiers();
-    // Promote Hub to standard so Workspaces exists in the visible fan.
+    // Hub already shows Workspaces on simple; standard opens Coding / Releases.
     cycleTieredBranch("hub:heart", collapsed, tiers);
 
     collapsed.delete("hub:shared");

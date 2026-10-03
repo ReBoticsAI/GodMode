@@ -109,6 +109,36 @@ describe("graph-projection", () => {
     expect(proj.nodes.some((n) => n.id === "hub:admin")).toBe(true);
   });
 
+  it("includes #local channel agent under Hub", () => {
+    const proj = buildArchitectureProjection({});
+    const channel = proj.nodes.find((n) => n.id === "hub:channel-local");
+    expect(channel).toBeTruthy();
+    expect(channel?.kind).toBe("agent");
+    expect(channel?.refId).toBe("channel-local");
+    expect(channel?.label).toBe("#local");
+    expect(proj.nodes.some((n) => n.id === "hub:vault-channel-local")).toBe(
+      true
+    );
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:heart" && e.target === "hub:channel-local"
+      )
+    ).toBe(true);
+  });
+
+  it("keeps #local channel agent on the visitor architecture map", () => {
+    const proj = buildArchitectureProjection({
+      userId: "visitor-1",
+      userLabel: "Visitor",
+      isTemporary: true,
+    });
+    expect(proj.nodes.some((n) => n.id === "hub:channel-local")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:vault-channel-local")).toBe(
+      true
+    );
+    expect(proj.nodes.some((n) => n.id === "hub:agent-research")).toBe(false);
+  });
+
   it("builds public architecture spine without tenant DB", () => {
     const proj = buildArchitectureProjection({});
     expect(proj.focusType).toBe("architecture");

@@ -32,6 +32,11 @@ export interface PlatformContext {
   pageLabel?: string;
   pageSnapshot?: unknown;
   mentionedSources?: Array<{ id: string; label: string; data: unknown }>;
+  /**
+   * When true (default), orientation tools may open floating windows.
+   * When false, describe surfaces in words and skip open_guide_surface.
+   */
+  visualChat?: boolean;
   /** Compact coding-root git status (server-enriched). */
   gitSnapshot?: GitWorkspaceSnapshot;
   /** Compact coding-root MCP config discovery (server-enriched; not executed). */
