@@ -43,7 +43,7 @@ Public channels use **Admin**, **Moderator**, **Member**, and **Visitor** (priva
 
 - Public lobby channels are meant to be openly readable (including temporary visitors on GodMode, and scrapable / SEO-friendly Cloud lobby HTTP endpoints on SaaS).
 - Message APIs for public channels return `@username` when the sender has claimed a Cloud handle, otherwise `display_name`. Emails are never returned on public-facing paths.
-- Cloud-wide `@username` lives in `public_handles` (humans and seeded public agents such as `@general` / `@intelligence`). Claiming is optional in Settings → Profile. Mentions like `@dane` resolve across the GodMode Cloud ecosystem.
+- Cloud-wide `@username` lives in `public_handles` (humans and seeded public agents such as `@general` / `@intelligence`). Claiming is optional in Settings → Profile. Mentions like `@qa_alpha` resolve across the GodMode Cloud ecosystem.
 - **Sending** in public channels requires a signed-in user with a GodMode Cloud seat, Seller account, or paid GodMode Inference pack (free trial alone is not enough). Temporary visitors can look, not post.
 - Agent DMs (Intelligence / Digital You) still use the normal Inference / trial path for orientation chat.
 

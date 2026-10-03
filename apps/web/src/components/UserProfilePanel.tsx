@@ -349,7 +349,7 @@ export function UserProfilePanel() {
                   <Label htmlFor="profile-username">GodMode username</Label>
                   <Input
                     id="profile-username"
-                    placeholder="dane"
+                    placeholder="qa_alpha"
                     value={profileForm.username}
                     onChange={(e) => setField("username", e.target.value)}
                     autoComplete="off"
