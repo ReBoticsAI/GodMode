@@ -856,7 +856,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
         const nextEntry: PhoneSurfaceEntry = {
           kind: "chat-thread",
           conversationId:
-            target.kind === "conversation" ? target.conversationId : undefined,
+            target.kind === "agent" ? undefined : target.conversationId,
           canvasId: id,
           label: target.title,
         };

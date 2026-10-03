@@ -85,7 +85,7 @@ export function slugFromChannelAgentId(
 
 /** Slugs that get a channel agent on this install. */
 export function channelAgentSlugsForInstall(): string[] {
-  const slugs = [INSTALL_LOCAL_SLUG];
+  const slugs: string[] = [INSTALL_LOCAL_SLUG];
   if (config.isSaas) {
     for (const slug of CLOUD_LOBBY_SLUGS) {
       if (!slugs.includes(slug)) slugs.push(slug);
