@@ -5,11 +5,20 @@
 
 import type { CoreDatabase } from "../core-db.js";
 import { getCloudDb } from "../core-db.js";
-import {
-  CLOUD_LOBBY_SLUGS,
-  INSTALL_LOCAL_SLUG,
-  channelAgentIdForSlug,
-} from "./public-channels.js";
+
+/** Keep in sync with public-channels lobby slugs (avoid import cycle / mock breakage). */
+const CLOUD_LOBBY_HANDLE_SLUGS = [
+  "general",
+  "dev",
+  "roadmap",
+  "support",
+  "thegame",
+] as const;
+const INSTALL_LOCAL_HANDLE = "local";
+
+function channelAgentIdForSlug(slug: string): string {
+  return `channel-${slug.trim()}`;
+}
 
 export type PublicHandleSubjectKind = "user" | "agent";
 
@@ -76,8 +85,8 @@ const RESERVED_USER_HANDLES = new Set([
 
 const AGENT_SEED_HANDLES = [
   "intelligence",
-  INSTALL_LOCAL_SLUG,
-  ...CLOUD_LOBBY_SLUGS,
+  INSTALL_LOCAL_HANDLE,
+  ...CLOUD_LOBBY_HANDLE_SLUGS,
 ] as const;
 
 export function normalizeHandle(raw: string): string {
@@ -280,7 +289,7 @@ export function ensurePublicAgentHandles(
      WHERE public_handles.subject_kind='agent'`
   );
   upsert.run("intelligence", "intelligence", operatorTenantId);
-  for (const slug of [INSTALL_LOCAL_SLUG, ...CLOUD_LOBBY_SLUGS]) {
+  for (const slug of [INSTALL_LOCAL_HANDLE, ...CLOUD_LOBBY_HANDLE_SLUGS]) {
     upsert.run(slug, channelAgentIdForSlug(slug), operatorTenantId);
   }
 }

@@ -60,6 +60,7 @@ function createCore(): Database.Database {
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL,
+      username TEXT,
       avatar_url TEXT,
       is_admin INTEGER NOT NULL DEFAULT 0,
       password_hash TEXT,
