@@ -5,6 +5,8 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   displayName: string;
+  /** Cloud-wide @username when claimed. */
+  username?: string | null;
   avatarUrl: string | null;
   isAdmin: boolean;
   emailVerified: boolean;
@@ -46,6 +48,7 @@ export function coreUserToAuth(
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    username: row.username ?? null,
     avatarUrl: row.avatar_url,
     isAdmin: Boolean(row.is_admin),
     emailVerified: Boolean(row.email_verified_at),

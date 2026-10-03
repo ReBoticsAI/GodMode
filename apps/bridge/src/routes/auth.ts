@@ -1041,6 +1041,7 @@ function mergeProfile(
   id: string;
   email: string;
   displayName: string;
+  username: string | null;
   avatarUrl: string | null;
   headline: string | null;
   bio: string | null;
@@ -1068,6 +1069,7 @@ function mergeProfile(
     id: user.id,
     email: user.email,
     displayName: user.display_name,
+    username: user.username ?? null,
     avatarUrl: user.avatar_url,
     headline: profile?.headline ?? null,
     bio: profile?.bio ?? null,

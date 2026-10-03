@@ -149,6 +149,7 @@ function seedSchema(): void {
       last_seen_at TEXT,
       email_verified_at TEXT,
       is_temporary INTEGER NOT NULL DEFAULT 0,
+      username TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

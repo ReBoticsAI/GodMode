@@ -28,6 +28,11 @@ import {
   slugFromChannelAgentId,
   type PublicChannelRole,
 } from "./public-channels.js";
+import {
+  getHandleForSubject,
+  resolveMentionsInText,
+} from "./public-handles.js";
+import { createNotification } from "./notification-service.js";
 
 export class DmError extends Error {
   constructor(
@@ -43,6 +48,8 @@ export interface DmUserSummary {
   id: string;
   email: string;
   displayName: string;
+  /** Cloud-wide @username when claimed. */
+  username: string | null;
   avatarUrl: string | null;
   online: boolean;
 }
@@ -79,7 +86,16 @@ export interface DmAgentSummary {
   tenantId: string;
   name: string;
   icon: string | null;
+  /** Cloud-wide @username when seeded/claimed. */
+  username: string | null;
 }
+
+export type DmMentionView = {
+  handle: string;
+  subjectKind: "user" | "agent";
+  subjectId: string;
+  agentTenantId?: string | null;
+};
 
 export interface DmMessageView {
   id: string;
@@ -94,6 +110,7 @@ export interface DmMessageView {
   editedAt: string | null;
   deletedAt: string | null;
   attachments: DmAttachmentView[];
+  mentions?: DmMentionView[];
 }
 
 export interface DmConversationMemberView {
@@ -143,6 +160,7 @@ function agentSummary(
       tenantId: agentTenantId,
       name: agent.name,
       icon: agent.icon,
+      username: getHandleForSubject("agent", agentId),
     };
   } catch {
     return null;
@@ -156,13 +174,14 @@ function userSummary(
 ): DmUserSummary | null {
   const row = getCloudDb()
     .prepare(
-      `SELECT id, email, display_name, avatar_url FROM users WHERE id = ?`
+      `SELECT id, email, display_name, username, avatar_url FROM users WHERE id = ?`
     )
     .get(userId) as
     | {
         id: string;
         email: string;
         display_name: string;
+        username: string | null;
         avatar_url: string | null;
       }
     | undefined;
@@ -172,6 +191,7 @@ function userSummary(
     // Public lobby is world-readable; never ship emails there.
     email: opts?.redactEmail ? "" : row.email,
     displayName: row.display_name,
+    username: row.username ?? null,
     avatarUrl: row.avatar_url,
     online: isUserOnline(row.id),
   };
@@ -184,7 +204,7 @@ export function lookupUserByEmail(
 ): DmUserSummary | null {
   const row = getCloudDb()
     .prepare(
-      `SELECT id, email, display_name, avatar_url
+      `SELECT id, email, display_name, username, avatar_url
        FROM users WHERE email = ? AND id <> 'system-local'`
     )
     .get(email.trim().toLowerCase()) as
@@ -192,6 +212,7 @@ export function lookupUserByEmail(
         id: string;
         email: string;
         display_name: string;
+        username: string | null;
         avatar_url: string | null;
       }
     | undefined;
@@ -200,6 +221,7 @@ export function lookupUserByEmail(
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    username: row.username ?? null,
     avatarUrl: row.avatar_url,
     online: isUserOnline(row.id),
   };
@@ -906,6 +928,15 @@ function mapMessageView(db: CoreDatabase, m: CoreDmMessage): DmMessageView {
   const attachments = db
     .prepare(`SELECT * FROM dm_message_attachments WHERE message_id = ?`)
     .all(m.id) as CoreDmMessageAttachment[];
+  const bodyText = m.deleted_at ? "" : m.body_text;
+  const mentions = bodyText
+    ? resolveMentionsInText(bodyText).map((x) => ({
+        handle: x.handle,
+        subjectKind: x.subjectKind,
+        subjectId: x.subjectId,
+        agentTenantId: x.agentTenantId ?? null,
+      }))
+    : [];
 
   if (senderKind === "agent" && m.sender_agent_id && m.sender_agent_tenant_id) {
     return {
@@ -916,11 +947,12 @@ function mapMessageView(db: CoreDatabase, m: CoreDmMessage): DmMessageView {
       sender: null,
       senderAgentId: m.sender_agent_id,
       senderAgent: agentSummary(m.sender_agent_tenant_id, m.sender_agent_id),
-      bodyText: m.deleted_at ? "" : m.body_text,
+      bodyText,
       createdAt: m.created_at,
       editedAt: m.edited_at,
       deletedAt: m.deleted_at,
       attachments: attachments.map(mapAttachment),
+      mentions,
     };
   }
 
@@ -937,17 +969,50 @@ function mapMessageView(db: CoreDatabase, m: CoreDmMessage): DmMessageView {
       id: m.sender_user_id,
       email: "",
       displayName: "Unknown",
+      username: null,
       avatarUrl: null,
       online: false,
     },
     senderAgentId: null,
     senderAgent: null,
-    bodyText: m.deleted_at ? "" : m.body_text,
+    bodyText,
     createdAt: m.created_at,
     editedAt: m.edited_at,
     deletedAt: m.deleted_at,
     attachments: attachments.map(mapAttachment),
+    mentions,
   };
+}
+
+function notifyMentionedUsers(opts: {
+  conversationId: string;
+  senderUserId: string;
+  bodyText: string;
+  messageId: string;
+}): void {
+  const mentions = resolveMentionsInText(opts.bodyText);
+  const sender = userSummary(getCloudDb(), opts.senderUserId);
+  const fromLabel = sender?.username
+    ? `@${sender.username}`
+    : sender?.displayName || "Someone";
+  for (const m of mentions) {
+    if (m.subjectKind !== "user") continue;
+    if (m.subjectId === opts.senderUserId) continue;
+    try {
+      createNotification({
+        recipientKind: "user",
+        recipientId: m.subjectId,
+        category: "mention",
+        title: `${fromLabel} mentioned you`,
+        body: opts.bodyText.slice(0, 200),
+        link: `/chat?conversation=${opts.conversationId}`,
+        resourceKind: "dm_message",
+        resourceId: opts.messageId,
+      });
+    } catch {
+      /* notifications optional on Local / missing hub */
+    }
+  }
 }
 
 export function createMessage(
@@ -1044,9 +1109,14 @@ export function createMessage(
   const msg = db
     .prepare(`SELECT * FROM dm_messages WHERE id = ?`)
     .get(id) as CoreDmMessage;
-  const attRows = db
-    .prepare(`SELECT * FROM dm_message_attachments WHERE message_id = ?`)
-    .all(id) as CoreDmMessageAttachment[];
+  if (text) {
+    notifyMentionedUsers({
+      conversationId: opts.conversationId,
+      senderUserId: opts.senderUserId,
+      bodyText: text,
+      messageId: id,
+    });
+  }
   return mapMessageView(db, msg);
 }
 

@@ -104,8 +104,12 @@ export function MessageBubble({
       {!isOwn ? (
         <span className="text-[10px] text-muted-foreground px-1">
           {message.senderKind === "agent"
-            ? message.senderAgent?.name ?? "Agent"
-            : message.sender?.displayName ?? "User"}
+            ? message.senderAgent?.username
+              ? `@${message.senderAgent.username}`
+              : message.senderAgent?.name ?? "Agent"
+            : message.sender?.username
+              ? `@${message.sender.username}`
+              : message.sender?.displayName ?? "User"}
         </span>
       ) : null}
       <div

@@ -6090,6 +6090,8 @@ export interface UserProfile {
   id: string;
   email: string;
   displayName: string;
+  /** Cloud-wide @username when claimed. */
+  username?: string | null;
   avatarUrl: string | null;
   headline: string | null;
   bio: string | null;
@@ -6120,10 +6122,25 @@ export function fetchProfile() {
   return api<{ profile: UserProfile }>("/auth/profile");
 }
 
+export function checkUsernameAvailable(handle: string) {
+  const q = new URLSearchParams({ handle });
+  return api<{ ok: boolean; available: boolean; handle?: string; error?: string }>(
+    `/handles/check?${q}`
+  );
+}
+
+export function searchPublicHandles(q: string, limit = 20) {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  return api<{
+    handles: Array<{ handle: string; kind: "user" | "agent"; subjectId: string }>;
+  }>(`/handles?${params}`);
+}
+
 export function updateProfile(patch: UserProfileUpdate) {
   return fetchProfile().then(({ profile: current }) =>
     updateDto<UserProfile>("UserProfile", current.id, {
       display_name: patch.displayName,
+      username: patch.username,
       avatar_url: patch.avatarUrl,
       headline: patch.headline,
       bio: patch.bio,
@@ -8223,6 +8240,7 @@ export interface DmUserSummary {
   id: string;
   email: string;
   displayName: string;
+  username: string | null;
   avatarUrl: string | null;
   online: boolean;
 }
@@ -8236,6 +8254,7 @@ export interface DmAgentSummary {
   tenantId: string;
   name: string;
   icon: string | null;
+  username: string | null;
 }
 
 export interface DmConversationMember {
@@ -8315,6 +8334,13 @@ export interface DmAttachment {
   size: number | null;
 }
 
+export interface DmMention {
+  handle: string;
+  subjectKind: "user" | "agent";
+  subjectId: string;
+  agentTenantId?: string | null;
+}
+
 export interface DmMessage {
   id: string;
   conversationId: string;
@@ -8328,6 +8354,7 @@ export interface DmMessage {
   editedAt: string | null;
   deletedAt: string | null;
   attachments: DmAttachment[];
+  mentions?: DmMention[];
 }
 
 export interface DmAttachmentInput {

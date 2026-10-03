@@ -145,6 +145,7 @@ export function ChatDirectorySidebar({
     return contacts.filter(
       (c) =>
         c.displayName.toLowerCase().includes(q) ||
+        (c.username?.toLowerCase().includes(q) ?? false) ||
         c.email.toLowerCase().includes(q)
     );
   }, [contacts, q]);
@@ -412,7 +413,11 @@ export function ChatDirectorySidebar({
                   filteredContacts.map((c) => (
                     <DirectoryRow
                       key={c.id}
-                      label={c.displayName || c.email}
+                      label={
+                        c.username
+                          ? `@${c.username}`
+                          : c.displayName || c.email
+                      }
                       icon={<UsersIcon data-icon="inline-start" />}
                       disabled={busy}
                       onClick={() => void startWithContact(c)}

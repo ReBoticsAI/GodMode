@@ -15,6 +15,7 @@ import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/a
 import { requireTrustedOrigin } from "./services/auth/rate-limit.js";
 import { structuredRequestLog } from "./services/request-log.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { createHandlesRouter } from "./routes/handles.js";
 import { createUpdateRouter } from "./routes/update.js";
 import { createMarketplaceRouter } from "./routes/marketplace.js";
 import { createMarketplaceCatalogRouter } from "./routes/marketplace-catalog.js";
@@ -44,6 +45,7 @@ import {
   ensurePublicChannelMemberRoles,
   ensurePublicChannelSchema,
 } from "./services/public-channels.js";
+import { ensurePublicAgentHandles } from "./services/public-handles.js";
 import { createUserProductivityRouter } from "./routes/user-productivity.js";
 import { createConnectionsRouter } from "./routes/connections.js";
 import { legacyEndpointTelemetry } from "./services/legacy-endpoint-telemetry.js";
@@ -150,6 +152,14 @@ try {
 } catch (err) {
   console.warn(
     "[bootstrap] channel agent bind failed:",
+    err instanceof Error ? err.message : err
+  );
+}
+try {
+  ensurePublicAgentHandles(operatorTenantId);
+} catch (err) {
+  console.warn(
+    "[bootstrap] public agent handles seed failed:",
     err instanceof Error ? err.message : err
   );
 }
@@ -488,6 +498,7 @@ app.use("/api", (req, res, next) => {
 });
 app.use("/api/update", createUpdateRouter(coreDb));
 app.use("/api/auth", createAuthRouter());
+app.use("/api/handles", createHandlesRouter());
 if (config.isSaas) {
   app.use("/api/saas", createSaasRouter());
 }

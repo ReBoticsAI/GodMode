@@ -69,6 +69,8 @@ export interface CoreUser {
    * 0 for permanent accounts, including the install `system-local` user.
    */
   is_temporary: number;
+  /** Cloud-wide @username (lowercase); null until claimed. */
+  username: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -792,11 +794,35 @@ export const CORE_MIGRATIONS: readonly Migration[] = [
     name: "core_visitor_users_v1",
     up: ensureVisitorUserColumn,
   },
+  {
+    version: 30,
+    name: "core_public_handles_v1",
+    up: ensurePublicHandlesMigration,
+  },
 ];
 
 /** Public-graph visitors: a real user row that signup converts in place. */
 function ensureVisitorUserColumn(db: CoreDatabase): void {
   addCol(db, "users", "is_temporary", "INTEGER NOT NULL DEFAULT 0");
+}
+
+/** Ecosystem @username registry + denormalized users.username. */
+function ensurePublicHandlesMigration(db: CoreDatabase): void {
+  addCol(db, "users", "username", "TEXT");
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_username_uidx
+      ON users(username) WHERE username IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS public_handles (
+      handle TEXT PRIMARY KEY,
+      subject_kind TEXT NOT NULL CHECK (subject_kind IN ('user', 'agent')),
+      subject_id TEXT NOT NULL,
+      agent_tenant_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS public_handles_subject_uidx
+      ON public_handles(subject_kind, subject_id);
+  `);
 }
 
 /** Cross-tenant AI queue discovery pointers (#737). Job payloads stay in workspace DBs. */
