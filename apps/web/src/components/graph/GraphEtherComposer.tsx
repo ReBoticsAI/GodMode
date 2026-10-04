@@ -338,9 +338,13 @@ export function GraphEtherComposer({
       <div className="flex shrink-0" data-graph-action-chrome="">
         <InputGroup
           className={cn(
-            "h-12 min-w-0 flex-1 rounded-full border-border/50 bg-card/85 shadow-sm backdrop-blur-md",
-            "dark:bg-card/90",
-            "has-[[data-slot=input-group-control]:focus-visible]:border-ring/60 has-[[data-slot=input-group-control]:focus-visible]:ring-2"
+            // Solid elevated surface. InputGroup's has-disabled:* greys the whole
+            // pill when the empty send button is disabled; override that.
+            "h-12 min-w-0 flex-1 rounded-full border-border bg-card shadow-md",
+            "dark:bg-card",
+            "has-disabled:opacity-100 has-disabled:bg-card",
+            "dark:has-disabled:bg-card",
+            "has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-2"
           )}
         >
           <InputGroupAddon align="inline-start" className="pl-1.5">
@@ -352,7 +356,7 @@ export function GraphEtherComposer({
                     size="icon-sm"
                     variant="ghost"
                     aria-label="Add context"
-                    className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="size-8 rounded-full text-foreground/80 hover:bg-muted hover:text-foreground"
                   />
                 }
               >
@@ -389,7 +393,7 @@ export function GraphEtherComposer({
           <InputGroupInput
             ref={inputRef}
             data-graph-ether-composer=""
-            className="bg-transparent text-sm text-foreground/90 placeholder:text-muted-foreground/70"
+            className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground"
             placeholder={placeholder}
             value={value}
             disabled={busy && !browseActive}
@@ -434,7 +438,7 @@ export function GraphEtherComposer({
                 browseActive ? "Select match or send" : "Send message"
               }
               onClick={handlePrimaryAction}
-              className="size-8 rounded-full"
+              className="size-8 rounded-full disabled:opacity-70"
             >
               <ArrowUpIcon />
             </Button>
