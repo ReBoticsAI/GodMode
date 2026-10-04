@@ -228,3 +228,45 @@
     outline-offset: 2px;
   }
 }
+
+/*
+ * Phone Graph sheets / floating windows: one scroll owner.
+ * Nested flex-1 + overflow-y-auto (and h-full + overflow-hidden + ScrollArea)
+ * under density zoom often clips with no scrollbar on mobile WebKit.
+ */
+[data-graph-phone-sheet-scroll] .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
+[data-phone-sole-scroll] .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
+[data-graph-phone-sheet-scroll] .min-h-0.flex-1.overflow-y-auto,
+[data-phone-sole-scroll] .min-h-0.flex-1.overflow-y-auto {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+[data-graph-phone-sheet-scroll] .h-full.min-h-0,
+[data-phone-sole-scroll] .h-full.min-h-0,
+[data-graph-phone-sheet-scroll] .flex.h-full.min-h-0,
+[data-phone-sole-scroll] .flex.h-full.min-h-0 {
+  height: auto;
+  max-height: none;
+}
+
+[data-graph-phone-sheet-scroll] [data-slot="scroll-area"],
+[data-phone-sole-scroll] [data-slot="scroll-area"] {
+  display: contents;
+}
+
+[data-graph-phone-sheet-scroll] [data-slot="scroll-area-viewport"],
+[data-phone-sole-scroll] [data-slot="scroll-area-viewport"] {
+  display: block;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+[data-graph-phone-sheet-scroll] [data-slot="scroll-area-scrollbar"],
+[data-phone-sole-scroll] [data-slot="scroll-area-scrollbar"] {
+  display: none;
+}

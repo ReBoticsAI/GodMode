@@ -16,7 +16,6 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   ImageIcon,
-  MicIcon,
   PlusIcon,
   BotIcon,
   FileCodeIcon,
@@ -144,24 +143,6 @@ function filterMentionSources(sources: MentionSource[], query: string): MentionS
   );
 }
 
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-};
-
-function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
-  const w = window as unknown as {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
 export function IntelligenceComposer({
   variant,
   value,
@@ -201,10 +182,8 @@ export function IntelligenceComposer({
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [typeahead, setTypeahead] = useState<TypeaheadState | null>(null);
   const [typeaheadIndex, setTypeaheadIndex] = useState(0);
-  const [listening, setListening] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const isPanel = variant === "panel";
@@ -509,29 +488,6 @@ export function IntelligenceComposer({
     setMentionIds((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     );
-  };
-
-  const toggleMic = () => {
-    const Recognition = getSpeechRecognition();
-    if (!Recognition) return;
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const rec = new Recognition();
-    rec.lang = "en-US";
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.onresult = (e) => {
-      const transcript = Array.from({ length: e.results.length })
-        .map((_, i) => e.results[i][0].transcript)
-        .join(" ");
-      onChange(value ? `${value} ${transcript}` : transcript);
-    };
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
   };
 
   const handleCatalogSelect = async (model: CatalogModel) => {
@@ -1059,19 +1015,6 @@ export function IntelligenceComposer({
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          {getSpeechRecognition() && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Voice input"
-              title="Voice input"
-              onClick={toggleMic}
-              className={cn(listening && "text-red-500")}
-            >
-              <MicIcon />
-            </Button>
-          )}
           {busy ? (
             <Button
               type="button"

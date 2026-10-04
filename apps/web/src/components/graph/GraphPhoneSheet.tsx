@@ -78,10 +78,13 @@ export function GraphPhoneSheet({
         showCloseButton
         showOverlay={false}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden p-0 shadow-xl",
+          "flex min-h-0 flex-col gap-0 overflow-hidden p-0 shadow-xl",
           GRAPH_WINDOW_Z,
           // Playfield: under top chrome, above composer / focus pill.
-          "inset-x-0! top-[var(--graph-top-chrome-band,5.625rem)]! bottom-[var(--graph-composer-band,7.25rem)]! h-auto! max-h-none!",
+          // Explicit height beats Sheet's default bottom h-auto so the body
+          // gets a real scroll budget on mobile WebKit.
+          "inset-x-0! top-[var(--graph-top-chrome-band,5.625rem)]! bottom-[var(--graph-composer-band,7.25rem)]!",
+          "h-[calc(100dvh-var(--graph-top-chrome-band,5.625rem)-var(--graph-composer-band,7.25rem))]! max-h-none!",
           "rounded-t-xl border-t",
           className
         )}
@@ -106,16 +109,18 @@ export function GraphPhoneSheet({
           <WindowDensityControls windowId={windowId} size="icon-xs" />
         </SheetHeader>
         {/*
-          Scroll and zoom on the same node. Zoom on an overflow-hidden parent
-          breaks the flex min-h-0 chain so content grows past the playfield and
-          gets clipped with no scrollbar (Cloud / Inference offer sheets).
+          Sole scroll owner on phone. Do not use flex-col here: nested children
+          with flex-1 + overflow-y-auto (plus density zoom) clip with no scroll.
+          Natural-height children scroll inside this node.
         */}
         <div
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+          data-graph-phone-sheet-scroll=""
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y"
           style={
             {
               zoom: contentDensity,
               ["--gm-window-density"]: String(contentDensity),
+              WebkitOverflowScrolling: "touch",
             } as CSSProperties
           }
         >
