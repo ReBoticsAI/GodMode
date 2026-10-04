@@ -49,11 +49,24 @@ export function cancelGraphTour(): void {
   window.dispatchEvent(new CustomEvent(GRAPH_TOUR_RESET_EVENT));
 }
 
+export type PlayGraphTourOptions = {
+  /**
+   * Soft framing: highlight the node without dismissing Social (phone) or
+   * opening Information. Used for Explore buy onboarding so chat cards stay up.
+   */
+  soft?: boolean;
+};
+
 /** Show one Graph stop, explain it, then move on. Each stop replaces the last page. */
-export function playGraphTour(stops: GraphTourStop[], dwellMs = GRAPH_TOUR_DWELL_MS): void {
+export function playGraphTour(
+  stops: GraphTourStop[],
+  dwellMs = GRAPH_TOUR_DWELL_MS,
+  opts?: PlayGraphTourOptions
+): void {
   cancelGraphTour();
   if (typeof window === "undefined" || stops.length === 0) return;
   const wait = Math.min(20_000, Math.max(1_000, dwellMs));
+  const soft = opts?.soft === true;
   let cancelled = false;
   const timers: number[] = [];
   cancelActiveTour = () => {
@@ -64,7 +77,9 @@ export function playGraphTour(stops: GraphTourStop[], dwellMs = GRAPH_TOUR_DWELL
     if (cancelled) return;
     window.dispatchEvent(
       new CustomEvent("godmode:focus-graph-node", {
-        detail: { nodeId: stop.nodeId, tour: true },
+        detail: soft
+          ? { nodeId: stop.nodeId, soft: true }
+          : { nodeId: stop.nodeId, tour: true },
       })
     );
     window.dispatchEvent(

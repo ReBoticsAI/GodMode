@@ -642,12 +642,20 @@ export function ChatGraphCanvas({
 
   useEffect(() => {
     const onFocus = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ nodeId?: string; tour?: boolean }>).detail;
+      const detail = (
+        ev as CustomEvent<{ nodeId?: string; tour?: boolean; soft?: boolean }>
+      ).detail;
       const nodeId = detail?.nodeId;
       if (!nodeId || typeof nodeId !== "string") return;
       const node = projection?.nodes.find((n) => n.id === nodeId);
       if (!node) {
         toast.message(`Graph node not found: ${nodeId}`);
+        return;
+      }
+      if (detail.soft) {
+        // Explore buy onboarding: frame the node without dismissing Social or
+        // opening Information so chat buy cards stay visible on phone.
+        sceneRef.current?.frameConnection(node.id);
         return;
       }
       if (detail.tour) {

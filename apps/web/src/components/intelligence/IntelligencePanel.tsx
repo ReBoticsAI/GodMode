@@ -60,18 +60,19 @@ import {
   type PanelTab,
 } from "@/lib/intelligence-context";
 import {
+  INTELLIGENCE_ALLOWANCE_OUT_MESSAGE,
   INTELLIGENCE_ENTRY_ACTIONS,
   INTELLIGENCE_ENTRY_QUESTION,
   INTELLIGENCE_EXPLORE_MESSAGE,
   INTELLIGENCE_GREETING_HELLO,
-  INTELLIGENCE_INTERESTS,
-  INTELLIGENCE_TOUR_FOCUS_QUESTION,
-  INTELLIGENCE_TOUR_INTRO_MESSAGE,
   INTELLIGENCE_VISITOR_SIGNUP_MESSAGE,
-  interestStartMessage,
   type IntelligenceEntryActionId,
 } from "@/lib/intelligence-interests";
-import { interestTour } from "@/lib/interest-tour";
+import {
+  isInferenceAllowanceExhaustedError,
+  playAllowanceOutTour,
+  playExploreBuyTour,
+} from "@/lib/explore-buy-tour";
 import {
   CLOUD_GUIDE_DONE_EVENT,
   openCloudSignupFallback,
@@ -171,7 +172,6 @@ import { ArtifactViewerDialog, artifactViewerHref } from "./ArtifactViewerDialog
 import {
   applyGuideUiAction,
   cancelGraphTour,
-  playGraphTour,
   GRAPH_TOUR_DONE_EVENT,
   GRAPH_TOUR_LINE_EVENT,
   GRAPH_TOUR_RESET_EVENT,
@@ -693,11 +693,12 @@ export function IntelligencePanel({
     return () => window.removeEventListener(WINDOW_DENSITY_EVENT, onChange);
   }, []);
   const [emptyOnboardingStep, setEmptyOnboardingStep] = useState<
-    "entry" | "tour-focus" | "login"
+    "entry" | "login"
   >("entry");
   const [tourLines, setTourLines] = useState<Array<{ label: string; say: string }>>([]);
   const [holdTourReply, setHoldTourReply] = useState(false);
   const [guideChoice, setGuideChoice] = useState<GuideChoiceCard | null>(null);
+  const allowanceOutNudgedRef = useRef(false);
   const tourReplyId = useMemo(() => {
     if (tourLines.length === 0) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1274,9 +1275,9 @@ export function IntelligencePanel({
       ]);
     };
     const onReset = () => {
+      // Tour chrome only. Keep guideChoice buy cards (send/newChat cancel tours).
       setTourLines([]);
       setHoldTourReply(false);
-      setGuideChoice(null);
     };
     const onDone = () => {
       setHoldTourReply(false);
@@ -1479,16 +1480,26 @@ export function IntelligencePanel({
 
   useEffect(() => {
     if (chatTarget.kind === "agent") {
+      cancelGraphTour();
       setMessages([]);
+      setTourLines([]);
+      setHoldTourReply(false);
+      setGuideChoice(null);
       setEmptyOnboardingStep("entry");
       setActiveChatId(null);
+      allowanceOutNudgedRef.current = false;
     }
   }, [chatTarget]);
 
   const newChat = () => {
     abortRef.current?.();
+    cancelGraphTour();
     setMessages([]);
+    setTourLines([]);
+    setHoldTourReply(false);
+    setGuideChoice(null);
     setEmptyOnboardingStep("entry");
+    allowanceOutNudgedRef.current = false;
     if (isDmMode) {
       setChatTarget({ kind: "agent", agentId: activeAgentId });
     } else {
@@ -1537,28 +1548,25 @@ export function IntelligencePanel({
     void send({ text: priorUser.text, images: priorUser.images ?? [], mentionIds: [] });
   };
 
-  const startInterestTour = (interestId: string) => {
-    if (busy) return;
-    const text = interestStartMessage(interestId);
-    const stops = interestTour(interestId);
-    if (!text || !stops) return;
-    setErrorMsg(null);
-    setErrorCode(null);
+  const nudgeAllowanceOut = useCallback(() => {
+    if (allowanceOutNudgedRef.current) return;
+    allowanceOutNudgedRef.current = true;
     setMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, role: "user", text },
+      {
+        id: `a-allowance-out-${Date.now()}`,
+        role: "assistant",
+        text: INTELLIGENCE_ALLOWANCE_OUT_MESSAGE,
+      },
     ]);
-    playGraphTour(stops);
-  };
+    setGuideChoice(canonicalGuideChoice());
+    playAllowanceOutTour();
+  }, []);
 
   const handleEntryAction = (actionId: IntelligenceEntryActionId) => {
     if (busy) return;
     if (actionId === "login") {
       setEmptyOnboardingStep("login");
-      return;
-    }
-    if (actionId === "guided-tour") {
-      setEmptyOnboardingStep("tour-focus");
       return;
     }
     setEmptyOnboardingStep("entry");
@@ -1573,6 +1581,7 @@ export function IntelligencePanel({
       },
     ]);
     setGuideChoice(canonicalGuideChoice());
+    playExploreBuyTour();
   };
 
   const handleVisitorSignup = () => {
@@ -1887,6 +1896,9 @@ export function IntelligencePanel({
               ? "CURSOR_SESSION_STALE"
               : code ?? null
           );
+          if (isInferenceAllowanceExhaustedError(errorText, code)) {
+            nudgeAllowanceOut();
+          }
           setBusy(false);
           busyRef.current = false;
           abortRef.current = null;
@@ -2515,48 +2527,6 @@ export function IntelligencePanel({
                     Back
                   </Button>
                 </EmptyContent>
-              ) : emptyOnboardingStep === "tour-focus" ? (
-                <>
-                  <EmptyHeader className="max-w-xl gap-3">
-                    <EmptyMedia
-                      variant="icon"
-                      className="mb-1 size-[clamp(3.25rem,min(12cqi,24cqb),5.5rem)] rounded-xl [&_svg:not([class*='size-'])]:size-[55%]"
-                    >
-                      <BotIcon />
-                    </EmptyMedia>
-                    <EmptyDescription className="rounded-lg bg-muted/60 px-3 py-2.5 text-left text-[clamp(0.875rem,min(2.4cqi,3.2cqb),1rem)] text-foreground whitespace-pre-wrap">
-                      {INTELLIGENCE_TOUR_INTRO_MESSAGE}
-                    </EmptyDescription>
-                    <EmptyTitle className="text-[clamp(1.125rem,min(3.2cqi,4.5cqb),1.5rem)]">
-                      {INTELLIGENCE_TOUR_FOCUS_QUESTION}
-                    </EmptyTitle>
-                  </EmptyHeader>
-                  <EmptyContent className="max-w-lg gap-3">
-                    <div className="grid w-full grid-cols-2 gap-2 @min-[28rem]/intel-greeting:grid-cols-4">
-                      {INTELLIGENCE_INTERESTS.map((item) => (
-                        <Button
-                          key={item.id}
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          className="h-10 @min-[40rem]/intel-greeting:h-11"
-                          disabled={busy}
-                          onClick={() => startInterestTour(item.id)}
-                        >
-                          {item.label}
-                        </Button>
-                      ))}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEmptyOnboardingStep("entry")}
-                    >
-                      Back
-                    </Button>
-                  </EmptyContent>
-                </>
               ) : (
                 <>
                   <EmptyHeader className="max-w-xl gap-3">
