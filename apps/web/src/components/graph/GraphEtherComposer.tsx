@@ -8,7 +8,6 @@ import {
 } from "react";
 import {
   ArrowUpIcon,
-  MicIcon,
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -33,26 +32,6 @@ import { isChannelAgentId } from "@/lib/focus-chrome";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { cn } from "@/lib/utils";
-
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((e: {
-    results: ArrayLike<{ 0: { transcript: string } }>;
-  }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
-  const w = window as unknown as {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
 
 /**
  * Cursor-style pill message box anchored bottom-center on the Graph.
@@ -105,18 +84,10 @@ export function GraphEtherComposer({
     refreshDmConversations,
   } = useIntelligence();
   const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const workStartedAt = useRef<number | null>(null);
   const [workedLabel, setWorkedLabel] = useState<string | null>(null);
 
   const focusedWindow = openChatWindows.find((w) => w.id === focusedChatWindowId);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
 
   useEffect(() => {
     if (busy) {
@@ -318,31 +289,7 @@ export function GraphEtherComposer({
     send();
   }, [onAskForce, send]);
 
-  const toggleMic = useCallback(() => {
-    const Recognition = getSpeechRecognition();
-    if (!Recognition) return;
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const rec = new Recognition();
-    rec.lang = "en-US";
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.onresult = (e) => {
-      const transcript = Array.from({ length: e.results.length })
-        .map((_, i) => e.results[i][0].transcript)
-        .join(" ");
-      onValueChange(value ? `${value} ${transcript}` : transcript);
-    };
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
-  }, [listening, onValueChange, value]);
-
   const hasText = value.trim().length > 0;
-  const speechAvailable = typeof window !== "undefined" && !!getSpeechRecognition();
   const focusChip = useGraphFocusChip();
   const FocusIcon = focusChip?.Icon;
 
@@ -478,48 +425,19 @@ export function GraphEtherComposer({
           />
 
           <InputGroupAddon align="inline-end" className="gap-1 pr-1.5">
-            {hasText ? (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="default"
-                disabled={busy}
-                aria-label={
-                  browseActive ? "Select match or send" : "Send message"
-                }
-                onClick={handlePrimaryAction}
-                className="size-8 rounded-full"
-              >
-                <ArrowUpIcon />
-              </Button>
-            ) : speechAvailable ? (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="secondary"
-                aria-label={listening ? "Stop voice input" : "Voice input"}
-                title="Voice input"
-                onClick={toggleMic}
-                className={cn(
-                  "size-8 rounded-full bg-foreground text-background hover:bg-foreground/90",
-                  listening && "ring-2 ring-destructive/60"
-                )}
-              >
-                <MicIcon />
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="default"
-                disabled={busy || !hasText}
-                aria-label="Send message"
-                onClick={handlePrimaryAction}
-                className="size-8 rounded-full"
-              >
-                <ArrowUpIcon />
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="default"
+              disabled={busy || !hasText}
+              aria-label={
+                browseActive ? "Select match or send" : "Send message"
+              }
+              onClick={handlePrimaryAction}
+              className="size-8 rounded-full"
+            >
+              <ArrowUpIcon />
+            </Button>
           </InputGroupAddon>
         </InputGroup>
       </div>

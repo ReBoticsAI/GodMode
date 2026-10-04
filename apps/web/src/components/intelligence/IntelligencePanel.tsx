@@ -2338,11 +2338,22 @@ export function IntelligencePanel({
       </header>
 
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        data-phone-sole-scroll={
+          isPhone && effectiveTab !== "chat" ? "" : undefined
+        }
+        className={cn(
+          "min-h-0 flex-1",
+          // Phone non-chat tabs: sheet owns scroll (zoom + overflow-hidden clips).
+          // Chat keeps a nested flex scrollport for the message list.
+          isPhone && effectiveTab !== "chat"
+            ? "overflow-y-auto overscroll-y-contain touch-pan-y"
+            : "flex flex-col overflow-hidden"
+        )}
         style={
           {
             zoom: contentDensity,
             ["--gm-window-density"]: String(contentDensity),
+            WebkitOverflowScrolling: "touch",
           } as CSSProperties
         }
       >

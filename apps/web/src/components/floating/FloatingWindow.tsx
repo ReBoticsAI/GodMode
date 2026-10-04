@@ -832,7 +832,14 @@ export function FloatingWindow({
       </header>
 
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+        data-floating-window-scroll=""
+        data-phone-sole-scroll={isPhone ? "" : undefined}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y",
+          // Phone: block flow so nested flex-1 + overflow-y-auto bodies do not
+          // steal the scrollport (same trap as GraphPhoneSheet).
+          isPhone ? "" : "flex flex-col"
+        )}
         style={
           windowId
             ? ({
@@ -841,8 +848,9 @@ export function FloatingWindow({
                 // and clip tall offer sheets without a scrollbar.
                 zoom: contentDensity,
                 ["--gm-window-density"]: String(contentDensity),
+                WebkitOverflowScrolling: "touch",
               } as CSSProperties)
-            : undefined
+            : ({ WebkitOverflowScrolling: "touch" } as CSSProperties)
         }
       >
         {children}
