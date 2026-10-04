@@ -8312,6 +8312,8 @@ export interface PublicChatEntitlement {
   cloudSeat: boolean;
   seller: boolean;
   paidInference: boolean;
+  /** Signed-in non-temporary users may post in this-install `#local`. */
+  installLocalOk?: boolean;
 }
 
 export interface DmDirectoryResponse {
@@ -8319,6 +8321,8 @@ export interface DmDirectoryResponse {
   installChannels: PublicChannelRow[];
   cloudChannels: PublicChannelRow[];
   cloudLobbyOnline: boolean;
+  /** True when this Bridge hosts Cloud lobby SoR (SaaS). Local proxies reads only. */
+  cloudLobbyHostedHere?: boolean;
   entitlement: PublicChatEntitlement;
 }
 

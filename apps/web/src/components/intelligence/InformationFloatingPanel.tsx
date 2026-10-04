@@ -452,7 +452,7 @@ export function InformationFloatingPanel() {
     panelAccent = "#38bdf8";
     panelIcon = <UsersIcon className="size-4" style={{ color: panelAccent }} />;
   } else if (activeLeftTab === "dms") {
-    panelTitle = "Direct Messages";
+    panelTitle = "People";
     panelAccent = "#38bdf8";
     panelIcon = (
       <MessageCircleIcon className="size-4" style={{ color: panelAccent }} />

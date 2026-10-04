@@ -5,7 +5,8 @@
 import type { AppDatabase } from "../../db.js";
 import {
   channelAgentIdForSlug,
-  channelAgentSlugsForInstall,
+  CLOUD_LOBBY_SLUGS,
+  INSTALL_LOCAL_SLUG,
 } from "../public-channels.js";
 import { createAgent, getAgent } from "./agents-db.js";
 
@@ -15,11 +16,16 @@ export {
   slugFromChannelAgentId,
 } from "../public-channels.js";
 
+/** Seed local + Cloud lobby channel agents so Agents DMs work on every install. */
+function channelAgentSlugsForSeed(): string[] {
+  return [INSTALL_LOCAL_SLUG, ...CLOUD_LOBBY_SLUGS];
+}
+
 export function seedChannelAgents(db: AppDatabase): void {
   // Intelligence is the clone base for tooling defaults.
   if (!getAgent(db, "intelligence")) return;
 
-  for (const slug of channelAgentSlugsForInstall()) {
+  for (const slug of channelAgentSlugsForSeed()) {
     const id = channelAgentIdForSlug(slug);
     if (getAgent(db, id)) continue;
     const title = `#${slug}`;

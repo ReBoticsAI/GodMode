@@ -3,7 +3,6 @@ import multer from "multer";
 import type { MarketplaceListingKind, ShareGrantRole } from "../core-db.js";
 import { getHostUsersDb } from "../host-users-db.js";
 import type { LlmManager } from "../services/llm-manager.js";
-import { scheduleAgentResponses } from "../services/agent-response-service.js";
 import {
   attachAuthContext,
   requireAuth,
@@ -25,7 +24,7 @@ import {
   userCanAccessBlob,
 } from "../services/dm-service.js";
 import {
-  canSendPublicChat,
+  canSendToPublicConversation,
   cloudLobbyIsLocal,
   fetchRemoteCloudLobbyChannels,
   fetchRemoteCloudLobbyMessages,
@@ -34,6 +33,7 @@ import {
   isPublicConversation,
   listCloudLobbyChannels,
   listInstallPublicChannels,
+  publicSendDeniedMessage,
   seedPublicChannelCatalog,
   type PublicChannelRole,
   type PublicChannelView,
@@ -49,7 +49,6 @@ function withViewerRoles(
     viewerRole: getPublicChannelRole(hub, c.id, userId),
   }));
 }
-import type { CoreDmMessage } from "../core-db.js";
 import {
   blobHref,
   BlobStoreError,
@@ -97,9 +96,11 @@ export function authorizeTypingEvent(
   // Public lobby: typing only for users who can actually post.
   // Private DMs: real membership required (not "public-readable" alone).
   if (isPublicConversation(hub, conversationId)) {
-    if (!canSendPublicChat(authenticatedUserId)) {
+    if (
+      !canSendToPublicConversation(hub, conversationId, authenticatedUserId)
+    ) {
       throw new DmError(
-        "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.",
+        publicSendDeniedMessage(hub, conversationId),
         403
       );
     }
@@ -164,34 +165,21 @@ export function createDmRouter(deps: DmRouterDeps): Router {
     const limitRaw =
       typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
-    const rows = before
-      ? (hub
-          .prepare(
-            `SELECT m.* FROM dm_messages m
-             WHERE m.conversation_id = ?
-               AND m.created_at < (SELECT created_at FROM dm_messages WHERE id = ?)
-             ORDER BY m.created_at DESC
-             LIMIT ?`
-          )
-          .all(channel.id, before, limit) as CoreDmMessage[])
-      : (hub
-          .prepare(
-            `SELECT m.* FROM dm_messages m
-             WHERE m.conversation_id = ?
-             ORDER BY m.created_at DESC
-             LIMIT ?`
-          )
-          .all(channel.id, limit) as CoreDmMessage[]);
-    res.json({
-      messages: rows.reverse().map((m) => ({
-        id: m.id,
-        conversationId: m.conversation_id,
-        senderUserId: m.sender_user_id,
-        bodyText: m.deleted_at ? "" : m.body_text,
-        createdAt: m.created_at,
-        deletedAt: m.deleted_at,
-      })),
-    });
+    // Same public message shape as authenticated reads (sender + attachments).
+    // Local installs proxy this unauthenticated catalog for Cloud lobby history.
+    try {
+      const messages = listMessages(hub, channel.id, "public-lobby-reader", {
+        before,
+        limit,
+      });
+      res.json({ messages });
+    } catch (err) {
+      if (err instanceof DmError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
   });
 
   router.use(attachAuthContext, requireAuth);
@@ -235,6 +223,8 @@ export function createDmRouter(deps: DmRouterDeps): Router {
       installChannels: installPublic,
       cloudChannels: cloudPublic,
       cloudLobbyOnline: cloudLobbyIsLocal() || cloudPublic.length > 0,
+      /** True when this Bridge hosts Cloud lobby SoR (SaaS). Local proxies reads only. */
+      cloudLobbyHostedHere: cloudLobbyIsLocal(),
       entitlement,
     });
   });
@@ -255,6 +245,8 @@ export function createDmRouter(deps: DmRouterDeps): Router {
       const conversation = ensureAgentDirectConversation(getHostUsersDb(), {
         userId: req.user!.id,
         agentId,
+        // Channel agents live on the operator tenant; ensureAgentDirectConversation
+        // remaps channel-* ids. Other agents use the active workspace.
         agentTenantId: tenantId,
       });
       res.json({ conversation });

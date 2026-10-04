@@ -3,23 +3,28 @@ slug: dms-and-channels
 title: "DMs and channels"
 section: "Platform and agents"
 location: "Social Chat → directory"
-summary: "Discord-style Chat: Cloud lobby, this-install lobby, channel agents, and DMs with people and agents."
+summary: "Discord-style Chat: Cloud lobby, this-install lobby, channel agents, People, and Agents."
 ---
 # DMs and channels
 
 ![dms-and-channels in GodMode](/features/dms-and-channels.png)
 
-Social Chat uses a Discord-style directory with three planes:
+Social Chat uses a Discord-style directory with these planes:
 
 1. **Cloud lobby** — Shared public channels on GodMode Cloud: `#general`, `#dev`, `#roadmap`, `#support`, `#thegame`. Local / Desktop / PWA clients read them when online (proxy to Cloud). On SaaS, this hub is the SoR.
 2. **This install** — A single per-machine public room: `#local`, seeded on this install’s Users hub.
-3. **Direct messages** — People, local agents (Intelligence, Digital You), private groups, and marketplace share-grant peers.
+3. **People** — Direct chats with people, private groups, and marketplace share-grant peers.
+4. **Agents** — Intelligence, Digital You, and each channel’s built-in agent (`#local`, `#general`, …) as a **1:1 DM**.
 
 ## Channel agents
 
-Each public channel slug maps 1:1 to a real agent id: `channel-{slug}` (for example `channel-local`, `channel-general`). Selecting that channel in Chat **possesses** that agent for the Social secondary tab (Automations, Calendar, Knowledge, Bank, Vault). Chat stays on the public conversation stream.
+Each public channel slug maps 1:1 to a real agent id: `channel-{slug}` (for example `channel-local`, `channel-general`).
 
-- Seeded on the operator tenant at bootstrap (`#local` everywhere; Cloud lobby agents also on SaaS).
+- **Cloud / This install channel row** — Opens the shared public thread (everyone in the lobby). Selecting it also **possesses** that channel agent for Social secondary tabs (Automations, Calendar, Knowledge, Bank, Vault).
+- **Agents → `#general` (or `#local`)** — Opens a private DM with that channel’s built-in agent (same destination as mentioning the agent).
+- **`@general` / `@local` in the public channel** — Keeps the message in the lobby and mirrors it into the 1:1 DM with that channel agent so the agent can answer or act about the channel.
+
+- Seeded on the operator tenant at bootstrap (local + Cloud lobby agent ids on every install; public Cloud lobby rooms only on SaaS).
 - Bound onto the public conversation as `member_kind='agent'`.
 - Channel agents use full agent tooling (not persona / Digital You tooling).
 
@@ -52,6 +57,6 @@ Public channels use **Admin**, **Moderator**, **Member**, and **Visitor** (priva
 - **This install** (`#local`, DMs, groups): host **Users** hub SQLite (`Users.sqlite` under the Bridge data dir). Tables: `dm_conversations`, `dm_messages`, `dm_conversation_members`, attachments/blobs as needed.
 - **Cloud lobby** (`#general`, …): same table shape on **GodMode Cloud’s** Users hub when `DEPLOYMENT_MODE=saas`. Local clients do not store Cloud lobby history as SoR; they fetch via `/api/dm/public-lobby` and `/api/dm/cloud-lobby/:slug/messages` when online.
 - Channel agents live in the operator tenant `ai_agents` table; tool execution remains on tenant stores until a later unification.
-- Agent DMs in the directory already present Intelligence / Digital You as DM rows.
+- Intelligence, Digital You, and channel agents (`#local`, `#general`, …) appear under **Agents**. Channel-agent rows open DMs, not the public lobby.
 
 See [[chat-panel]].

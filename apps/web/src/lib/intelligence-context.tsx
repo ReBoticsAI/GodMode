@@ -188,6 +188,8 @@ interface IntelligenceContextValue {
   onDmIncomingMessage: (
     cb: (msg: DmMessage, conversationId: string) => void
   ) => () => void;
+  /** Push a locally authored DM into listeners (live thread update without waiting on WS). */
+  emitDmIncomingMessage: (msg: DmMessage, conversationId: string) => void;
   /** Unread notification count for the current user (sidebar + tab badge). */
   notificationsUnread: number;
   refreshNotificationsUnread: () => Promise<void>;
@@ -1000,6 +1002,15 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
     (cb: (msg: DmMessage, conversationId: string) => void) => {
       dmMessageListeners.add(cb);
       return () => dmMessageListeners.delete(cb);
+    },
+    [dmMessageListeners]
+  );
+
+  const emitDmIncomingMessage = useCallback(
+    (msg: DmMessage, conversationId: string) => {
+      for (const cb of dmMessageListeners) {
+        cb(msg, conversationId);
+      }
     },
     [dmMessageListeners]
   );
@@ -1916,6 +1927,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       refreshDmConversations,
       dmUnreadCount,
       onDmIncomingMessage,
+      emitDmIncomingMessage,
       notificationsUnread,
       refreshNotificationsUnread,
       reviewUnread,
@@ -2010,6 +2022,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       refreshDmConversations,
       dmUnreadCount,
       onDmIncomingMessage,
+      emitDmIncomingMessage,
       notificationsUnread,
       refreshNotificationsUnread,
       reviewUnread,

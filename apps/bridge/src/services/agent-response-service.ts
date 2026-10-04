@@ -24,6 +24,20 @@ export interface AgentResponseDeps {
   bridgePort: number;
 }
 
+let agentResponseDeps: AgentResponseDeps | null = null;
+
+export function setAgentResponseDeps(deps: AgentResponseDeps): void {
+  agentResponseDeps = deps;
+}
+
+/** Fire-and-forget agent replies when LLM deps were registered at boot. */
+export function tryScheduleAgentResponses(
+  opts: Parameters<typeof scheduleAgentResponses>[1]
+): void {
+  if (!agentResponseDeps) return;
+  scheduleAgentResponses(agentResponseDeps, opts);
+}
+
 interface AgentTarget extends DmAgentMemberInput {
   name: string;
   autoRespondInGroups: boolean;

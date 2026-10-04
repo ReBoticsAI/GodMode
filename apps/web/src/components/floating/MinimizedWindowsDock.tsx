@@ -143,7 +143,7 @@ export function MinimizedWindowsDock() {
     infoTitle = "Contacts";
     infoAccent = "#38bdf8";
   } else if (activeLeftTab === "dms") {
-    infoTitle = "Direct Messages";
+    infoTitle = "People";
     infoAccent = "#38bdf8";
   } else if (activeLeftTab === "channels") {
     infoTitle = "Channels";

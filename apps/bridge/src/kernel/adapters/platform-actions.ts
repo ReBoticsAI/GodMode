@@ -19,13 +19,19 @@ import {
   createConversation,
   createMessage,
   getConversationForUser,
+  listConversationAgents,
+  listConversationMemberUserIds,
   listConversationsForUser,
   listMessages,
   markConversationRead,
   removeConversationMember,
+  routeChannelAgentMentionsToDm,
   shareResourceToConversation,
   userCanAccessBlob,
 } from "../../services/dm-service.js";
+import { tryScheduleAgentResponses } from "../../services/agent-response-service.js";
+import { getCloudDb, getOperatorTenantId } from "../../core-db.js";
+import { isPublicConversation } from "../../services/public-channels.js";
 import {
   BlobStoreError,
   getDmBlob,
@@ -569,12 +575,85 @@ export const directMessageAdapter: RecordAdapter = {
       : null;
   },
   create(_db, def, data, ctx) {
-    const row = createMessage(hubDb(ctx), {
-      conversationId: requiredText(data, "conversation_id"),
-      senderUserId: requireUser(ctx),
-      bodyText: typeof data.body_text === "string" ? data.body_text : undefined,
-      attachments: Array.isArray(data.attachments) ? (data.attachments as never) : undefined,
+    const core = hubDb(ctx);
+    const conversationId = requiredText(data, "conversation_id");
+    const senderUserId = requireUser(ctx);
+    const bodyText =
+      typeof data.body_text === "string" ? data.body_text : undefined;
+    const row = createMessage(core, {
+      conversationId,
+      senderUserId,
+      bodyText,
+      attachments: Array.isArray(data.attachments)
+        ? (data.attachments as never)
+        : undefined,
     });
+    const broker = getShareBroker();
+    const broadcast = (
+      convId: string,
+      message: unknown,
+      memberIds: string[]
+    ) => {
+      const payload = {
+        type: "dm_message",
+        data: { conversationId: convId, message },
+        timestamp: Date.now(),
+      };
+      broker.broadcastResource("conversation", convId, payload);
+      for (const userId of memberIds) {
+        broker.broadcastToRoom(`user:${userId}`, payload);
+      }
+    };
+    broadcast(
+      conversationId,
+      row,
+      listConversationMemberUserIds(core, conversationId)
+    );
+
+    const tenantId =
+      getOperatorTenantId(getCloudDb()) ??
+      (typeof ctx.tenantId === "string" ? ctx.tenantId : "");
+    const senderDisplayName = "Someone";
+
+    if (isPublicConversation(core, conversationId) && bodyText?.trim()) {
+      const routed = routeChannelAgentMentionsToDm(core, {
+        sourceConversationId: conversationId,
+        senderUserId,
+        bodyText,
+        agentTenantId: tenantId || requireTenant(ctx),
+      });
+      for (const r of routed) {
+        broadcast(
+          r.conversationId,
+          r.message,
+          listConversationMemberUserIds(core, r.conversationId)
+        );
+        if (tenantId) {
+          tryScheduleAgentResponses({
+            core,
+            conversationId: r.conversationId,
+            messageText: bodyText,
+            senderUserId,
+            senderDisplayName,
+            tenantId,
+          });
+        }
+      }
+    } else if (
+      listConversationAgents(core, conversationId).length > 0 &&
+      bodyText?.trim() &&
+      tenantId
+    ) {
+      tryScheduleAgentResponses({
+        core,
+        conversationId,
+        messageText: bodyText,
+        senderUserId,
+        senderDisplayName,
+        tenantId,
+      });
+    }
+
     return record(
       def,
       row as unknown as Record<string, unknown>,
