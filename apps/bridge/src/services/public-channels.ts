@@ -102,6 +102,11 @@ export type PublicChatEntitlement = {
   seller: boolean;
   /** Paid Inference pack/subscription (not free trial) */
   paidInference: boolean;
+  /**
+   * This-install `#local` allows any signed-in non-temporary account,
+   * even without a Cloud seat.
+   */
+  installLocalOk: boolean;
 };
 
 function titleForSlug(slug: string): string {
@@ -476,6 +481,18 @@ function hasCloudWorkspaceSeat(userId: string): boolean {
   }
 }
 
+function isNonTemporaryUser(userId: string): boolean {
+  try {
+    const row = getCloudDb()
+      .prepare(`SELECT is_temporary FROM users WHERE id = ?`)
+      .get(userId) as { is_temporary: number } | undefined;
+    if (!row) return false;
+    return Number(row.is_temporary) !== 1;
+  } catch {
+    return false;
+  }
+}
+
 /** Public lobby send: Cloud seat, Seller, or paid Inference (not free trial). */
 export function getPublicChatEntitlement(userId: string): PublicChatEntitlement {
   const cloudSeat = hasCloudWorkspaceSeat(userId);
@@ -487,11 +504,13 @@ export function getPublicChatEntitlement(userId: string): PublicChatEntitlement 
   }
   const paidInference = hasPaidInference(userId);
   const ok = cloudSeat || seller || paidInference;
+  const installLocalOk = isNonTemporaryUser(userId);
   return {
     ok,
     cloudSeat,
     seller,
     paidInference,
+    installLocalOk,
     reason: ok
       ? "ok"
       : "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.",
@@ -500,6 +519,35 @@ export function getPublicChatEntitlement(userId: string): PublicChatEntitlement 
 
 export function canSendPublicChat(userId: string): boolean {
   return getPublicChatEntitlement(userId).ok;
+}
+
+/**
+ * Install `#local` accepts any signed-in non-temporary user.
+ * Cloud lobby channels still require Cloud seat / Seller / paid Inference.
+ */
+export function canSendToPublicConversation(
+  db: CoreDatabase,
+  conversationId: string,
+  userId: string
+): boolean {
+  const ch = getPublicChannelById(db, conversationId);
+  if (!ch) return false;
+  const slug = (ch.slug ?? "").trim();
+  if (slug === INSTALL_LOCAL_SLUG) {
+    return isNonTemporaryUser(userId);
+  }
+  return canSendPublicChat(userId);
+}
+
+export function publicSendDeniedMessage(
+  db: CoreDatabase,
+  conversationId: string
+): string {
+  const ch = getPublicChannelById(db, conversationId);
+  if (ch?.slug === INSTALL_LOCAL_SLUG) {
+    return "Sign in with a full account to post in #local.";
+  }
+  return "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.";
 }
 
 /** On SaaS, this hub is the Cloud lobby SoR. */

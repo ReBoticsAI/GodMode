@@ -132,6 +132,7 @@ import {
   GraphSmartSuggest,
   type SmartSuggestItem,
 } from "@/components/graph/GraphSmartSuggest";
+import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { GraphSystemNoticeBar } from "@/components/graph/GraphSystemNoticeBar";
 import { GraphObservationBar } from "@/components/graph/GraphObservationBar";
 import { GraphTopTenBoardDialog } from "@/components/graph/GraphTopTenBoardDialog";
@@ -1947,10 +1948,13 @@ export function ChatGraphCanvas({
     composerInputRef.current?.blur();
   }, [graphFilter]);
 
+  const focusChip = useGraphFocusChip();
   const composerPlaceholder =
-    chatSurfaceOpen || etherChatOpen
-      ? "Send reply"
-      : "Ask Intelligence, search the Graph, or type an action…";
+    focusChip?.mode === "replying"
+      ? `Message ${focusChip.label}`
+      : chatSurfaceOpen || etherChatOpen
+        ? "Send reply"
+        : "Ask Intelligence, search the Graph, or type an action…";
 
   // Live playfield bands: windows/sheets end above the focus pill + composer.
   useLayoutEffect(() => {
@@ -2001,8 +2005,12 @@ export function ChatGraphCanvas({
         nodes: projection?.nodes ?? [],
         actionCatalog,
         limit: 12,
+        composeTarget:
+          focusChip?.mode === "replying"
+            ? { label: focusChip.label }
+            : null,
       }),
-    [graphFilter, projection?.nodes, actionCatalog]
+    [graphFilter, projection?.nodes, actionCatalog, focusChip]
   );
 
   useEffect(() => {

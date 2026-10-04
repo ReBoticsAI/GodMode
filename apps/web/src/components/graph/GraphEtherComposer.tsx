@@ -12,7 +12,7 @@ import {
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
-import { fetchPublicChatEntitlement, sendDmMessage } from "@/api";
+import { ensureAgentDm, fetchDmDirectory, sendDmMessage } from "@/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { isChannelAgentId } from "@/lib/focus-chrome";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { cn } from "@/lib/utils";
@@ -91,13 +92,17 @@ export function GraphEtherComposer({
 }) {
   const {
     activeAgentId,
+    setActiveAgentId,
     setChatMode,
     openPanel,
     chatTarget,
+    setChatTarget,
     dmConversations,
     focusedChatWindowId,
     openChatWindows,
     clearComposerDraft,
+    emitDmIncomingMessage,
+    refreshDmConversations,
   } = useIntelligence();
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -135,43 +140,100 @@ export function GraphEtherComposer({
     return undefined;
   }, [busy]);
 
+  const postToConversation = useCallback(
+    async (conversationId: string, text: string) => {
+      const dir = await fetchDmDirectory();
+      const cloud = dir.cloudChannels.find((c) => c.id === conversationId);
+      const install = dir.installChannels.find((c) => c.id === conversationId);
+      const privateConv = dmConversations.find((c) => c.id === conversationId);
+      const isPublicChannel = Boolean(cloud || install);
+
+      if (cloud && !dir.cloudLobbyHostedHere) {
+        toast.message(
+          "Cloud lobby posts from Local are not available yet. Use #local on this install, or open GodMode Cloud."
+        );
+        return false;
+      }
+
+      if (cloud || install) {
+        const allowed = cloud
+          ? dir.entitlement.ok
+          : dir.entitlement.installLocalOk !== false;
+        if (!allowed) {
+          toast.message(
+            cloud
+              ? dir.entitlement.reason
+              : "Sign in with a full account to post in #local."
+          );
+          return false;
+        }
+      } else if (!privateConv) {
+        toast.message("Conversation not found on this install.");
+        return false;
+      }
+
+      const res = await sendDmMessage(conversationId, { bodyText: text });
+      emitDmIncomingMessage(res.message, conversationId);
+      void refreshDmConversations();
+
+      // @general / @local in a public channel also opens that channel agent's DM.
+      if (isPublicChannel) {
+        const handles = [
+          ...text.matchAll(/@([a-z0-9_]{3,32})\b/gi),
+        ].map((m) => m[1]!.toLowerCase());
+        const channels = [...dir.installChannels, ...dir.cloudChannels];
+        for (const handle of handles) {
+          const ch = channels.find((c) => c.slug === handle);
+          if (!ch?.agentId || !isChannelAgentId(ch.agentId)) continue;
+          try {
+            const dm = await ensureAgentDm(ch.agentId);
+            setChatTarget({
+              kind: "conversation",
+              conversationId: dm.conversation.id,
+            });
+            setActiveAgentId(ch.agentId, { retainChatTarget: true });
+            void refreshDmConversations();
+            toast.message(`Opened DM with ${ch.displayTitle}`);
+          } catch {
+            /* mention still posted in-channel; DM open is best-effort */
+          }
+          break;
+        }
+      }
+      return true;
+    },
+    [
+      dmConversations,
+      emitDmIncomingMessage,
+      refreshDmConversations,
+      setActiveAgentId,
+      setChatTarget,
+    ]
+  );
+
   const send = useCallback(() => {
     const text = value.trim();
     if (!text || busy) return;
-    onValueChange("");
-    clearComposerDraft(focusedChatWindowId);
 
     if (chatTarget.kind === "conversation") {
       const conversationId = chatTarget.conversationId;
-      const conv = dmConversations.find((c) => c.id === conversationId);
-      if (conv?.kind === "public") {
-        setBusy(true);
-        openPanel({ tab: "chat" });
-        void fetchPublicChatEntitlement()
-          .then((res) => {
-            if (!res.entitlement.ok) {
-              toast.message(res.entitlement.reason);
-              return;
-            }
-            return sendDmMessage(conversationId, { bodyText: text });
-          })
-          .catch((err) => {
-            const msg = err instanceof Error ? err.message : "Failed to send";
-            setWorkedLabel(msg);
-            window.setTimeout(() => setWorkedLabel(null), 4000);
-          })
-          .finally(() => setBusy(false));
-        return;
-      }
       setBusy(true);
       openPanel({ tab: "chat" });
-      void sendDmMessage(conversationId, { bodyText: text })
-        .catch((err) => {
+      void (async () => {
+        try {
+          const ok = await postToConversation(conversationId, text);
+          if (!ok) return;
+          onValueChange("");
+          clearComposerDraft(focusedChatWindowId);
+        } catch (err) {
           const msg = err instanceof Error ? err.message : "Failed to send";
+          toast.error(msg);
           setWorkedLabel(msg);
           window.setTimeout(() => setWorkedLabel(null), 4000);
-        })
-        .finally(() => setBusy(false));
+        } finally {
+          setBusy(false);
+        }
+      })();
       return;
     }
 
@@ -181,6 +243,37 @@ export function GraphEtherComposer({
         : chatTarget.kind === "agent"
           ? chatTarget.agentId
           : activeAgentId;
+
+    // Channel agents are 1:1 DMs (same as Agents → #general / @general).
+    if (isChannelAgentId(agentId)) {
+      setBusy(true);
+      openPanel({ tab: "chat" });
+      void (async () => {
+        try {
+          const res = await ensureAgentDm(agentId);
+          setChatTarget({
+            kind: "conversation",
+            conversationId: res.conversation.id,
+          });
+          setActiveAgentId(agentId, { retainChatTarget: true });
+          const ok = await postToConversation(res.conversation.id, text);
+          if (!ok) return;
+          onValueChange("");
+          clearComposerDraft(focusedChatWindowId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to send";
+          toast.error(msg);
+          setWorkedLabel(msg);
+          window.setTimeout(() => setWorkedLabel(null), 4000);
+        } finally {
+          setBusy(false);
+        }
+      })();
+      return;
+    }
+
+    onValueChange("");
+    clearComposerDraft(focusedChatWindowId);
 
     // Agent replies stream in IntelligencePanel; Graph ether is the composer.
     openPanel({
@@ -194,11 +287,13 @@ export function GraphEtherComposer({
     busy,
     chatTarget,
     clearComposerDraft,
-    dmConversations,
     focusedChatWindowId,
     focusedWindow,
     onValueChange,
     openPanel,
+    postToConversation,
+    setActiveAgentId,
+    setChatTarget,
     value,
   ]);
 

@@ -120,7 +120,7 @@ export function focusChromeForLeftTab(
       return { label: "Contacts", accent: "#38bdf8", Icon: UsersIcon };
     case "dms":
       return {
-        label: "Direct Messages",
+        label: "People",
         accent: "#38bdf8",
         Icon: MessageCircleIcon,
       };

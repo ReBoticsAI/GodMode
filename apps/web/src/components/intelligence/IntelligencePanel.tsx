@@ -94,6 +94,7 @@ import {
 import {
   displayNameForAgent,
   fallbackAgentLabel,
+  isChannelAgentId,
   isPersonaAgent,
   sharesUserTooling,
 } from "@/lib/focus-chrome";
@@ -131,6 +132,7 @@ import {
   truncateAiChat,
   deleteAiChatMessage,
   fetchAiArtifact,
+  ensureAgentDm,
   fetchDmMessages,
   fetchDmDirectory,
   fetchCloudLobbyMessages,
@@ -531,14 +533,19 @@ export function IntelligencePanel({
         label: "Digital You",
       });
     }
+    const seen = new Set(rows.map((r) => r.agentId));
+    for (const c of [...installChannels, ...cloudChannels]) {
+      if (!c.agentId || seen.has(c.agentId)) continue;
+      seen.add(c.agentId);
+      rows.push({ agentId: c.agentId, label: `#${c.slug}` });
+    }
     return rows;
-  }, [user?.id]);
-  // Possess public channel agents when Chat is on that conversation.
+  }, [user?.id, installChannels, cloudChannels]);
+  // Possess public channel agents when Chat is on that public conversation.
   useEffect(() => {
+    if (chatTarget.kind !== "conversation") return;
     const channel = [...installChannels, ...cloudChannels].find(
-      (c) =>
-        chatTarget.kind === "conversation" &&
-        c.id === chatTarget.conversationId
+      (c) => c.id === chatTarget.conversationId
     );
     if (!channel?.agentId) return;
     if (activeAgentId === channel.agentId) return;
@@ -548,6 +555,24 @@ export function IntelligencePanel({
     chatTarget,
     cloudChannels,
     installChannels,
+    setActiveAgentId,
+  ]);
+
+  // When Chat is on a channel-agent DM, possess that agent for secondary tabs.
+  useEffect(() => {
+    if (chatTarget.kind !== "conversation") return;
+    const conv = dmConversations.find((c) => c.id === chatTarget.conversationId);
+    if (!conv || conv.kind === "public") return;
+    const agentMember = conv.members.find(
+      (m) => m.memberKind === "agent" && m.agentId && isChannelAgentId(m.agentId)
+    );
+    if (!agentMember?.agentId) return;
+    if (activeAgentId === agentMember.agentId) return;
+    setActiveAgentId(agentMember.agentId, { retainChatTarget: true });
+  }, [
+    activeAgentId,
+    chatTarget,
+    dmConversations,
     setActiveAgentId,
   ]);
   const allowedTabs: PanelTab[] = [
@@ -601,8 +626,12 @@ export function IntelligencePanel({
             })()
           : undefined)
       : null;
-  const publicChatLocked =
-    Boolean(activePublicConversation) && publicEntitlement?.ok !== true;
+  // Cloud lobby needs a seat/Seller/paid Inference. This-install `#local`
+  // unlocks for any signed-in non-temporary account (installLocalOk).
+  const publicChatLocked = Boolean(activePublicConversation) &&
+    (activePublicConversation?.plane === "cloud"
+      ? publicEntitlement?.ok !== true
+      : publicEntitlement?.installLocalOk !== true);
   const channelAgentWriteLocked = useMemo(() => {
     if (!activeAgentId.startsWith("channel-")) return false;
     const row = [...installChannels, ...cloudChannels].find(
@@ -1344,19 +1373,23 @@ export function IntelligencePanel({
 
   const dmToUi = useCallback(
     (m: DmMessage): UiMessage => {
-      const isOwn = m.senderKind === "user" && m.senderUserId === user?.id;
+      const senderKind = m.senderKind ?? (m.senderAgentId ? "agent" : "user");
+      const isOwn = senderKind === "user" && m.senderUserId === user?.id;
       const agentName = m.senderAgent?.name ?? "Agent";
-      const humanName = m.sender?.displayName ?? "User";
-      const imageHrefs = m.attachments
+      const humanName =
+        (m.sender?.username ? `@${m.sender.username}` : null) ||
+        m.sender?.displayName ||
+        "User";
+      const imageHrefs = (m.attachments ?? [])
         .filter((a) => a.kind === "image" && a.href)
         .map((a) => a.href!);
       return {
         id: m.id,
-        role: m.senderKind === "agent" ? "assistant" : isOwn ? "user" : "assistant",
-        text: m.bodyText,
+        role: senderKind === "agent" ? "assistant" : isOwn ? "user" : "assistant",
+        text: m.bodyText ?? "",
         images: imageHrefs.length ? imageHrefs : undefined,
-        dmSenderKind: m.senderKind,
-        dmSenderName: m.senderKind === "agent" ? agentName : humanName,
+        dmSenderKind: senderKind,
+        dmSenderName: senderKind === "agent" ? agentName : humanName,
         isOwn,
       };
     },
@@ -1368,6 +1401,8 @@ export function IntelligencePanel({
       try {
         const res = await fetchDmMessages(conversationId, { limit: 100 });
         setMessages(res.messages.map(dmToUi));
+        setErrorMsg(null);
+        setErrorCode(null);
         const last = res.messages[res.messages.length - 1];
         if (last) {
           await markDmConversationRead(conversationId, last.id);
@@ -2344,6 +2379,26 @@ export function IntelligencePanel({
                     "absolute inset-y-0 left-0 z-20 w-64 shadow-md"
                 )}
                 onSelectAgent={(id) => {
+                  if (isChannelAgentId(id)) {
+                    void ensureAgentDm(id)
+                      .then((res) => {
+                        setChatTarget({
+                          kind: "conversation",
+                          conversationId: res.conversation.id,
+                        });
+                        setActiveAgentId(id, { retainChatTarget: true });
+                        void refreshDmConversations();
+                        setDirectoryOpen(false);
+                      })
+                      .catch((err) => {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Could not open channel agent DM"
+                        );
+                      });
+                    return;
+                  }
                   setChatTarget({ kind: "agent", agentId: id });
                   setActiveAgentId(id);
                   setDirectoryOpen(false);

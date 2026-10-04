@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import {
   getCloudDb,
+  getOperatorTenantId,
   type CoreDatabase,
   type CoreDmConversation,
   type CoreDmMessage,
@@ -19,7 +20,8 @@ import { createShareGrant } from "./share-service.js";
 import { isUserOnline } from "./presence.js";
 import { blobHref } from "./blob-store.js";
 import {
-  canSendPublicChat,
+  canSendToPublicConversation,
+  publicSendDeniedMessage,
   getPublicChannelById,
   isChannelAgentId,
   isCloudLobbySlug,
@@ -533,6 +535,9 @@ export function ensureAgentDirectConversation(
     agentTenantId: string;
   }
 ): DmConversationView {
+  const agentTenantId = isChannelAgentId(opts.agentId)
+    ? getOperatorTenantId(getCloudDb()) ?? opts.agentTenantId
+    : opts.agentTenantId;
   const existing = findDirectUserAgentConversation(
     db,
     opts.userId,
@@ -544,9 +549,57 @@ export function ensureAgentDirectConversation(
     kind: "direct",
     memberUserIds: [],
     memberAgents: [
-      { agentId: opts.agentId, agentTenantId: opts.agentTenantId },
+      { agentId: opts.agentId, agentTenantId },
     ],
   });
+}
+
+/**
+ * When a human posts in a public channel and @mentions a channel agent
+ * (`@general`, `@local`, …), mirror the message into a 1:1 DM with that agent.
+ */
+export function routeChannelAgentMentionsToDm(
+  db: CoreDatabase,
+  opts: {
+    sourceConversationId: string;
+    senderUserId: string;
+    bodyText: string;
+    agentTenantId: string;
+  }
+): Array<{ agentId: string; conversationId: string; message: DmMessageView }> {
+  if (!isPublicConversation(db, opts.sourceConversationId)) return [];
+  const text = (opts.bodyText ?? "").trim();
+  if (!text) return [];
+  const mentions = resolveMentionsInText(text);
+  const routed: Array<{
+    agentId: string;
+    conversationId: string;
+    message: DmMessageView;
+  }> = [];
+  const seen = new Set<string>();
+  for (const m of mentions) {
+    if (m.subjectKind !== "agent") continue;
+    if (!isChannelAgentId(m.subjectId)) continue;
+    if (seen.has(m.subjectId)) continue;
+    seen.add(m.subjectId);
+    const dm = ensureAgentDirectConversation(db, {
+      userId: opts.senderUserId,
+      agentId: m.subjectId,
+      agentTenantId: opts.agentTenantId,
+    });
+    if (dm.id === opts.sourceConversationId) continue;
+    const message = createMessage(db, {
+      conversationId: dm.id,
+      senderUserId: opts.senderUserId,
+      bodyText: text,
+    });
+    routed.push({
+      agentId: m.subjectId,
+      conversationId: dm.id,
+      message,
+    });
+  }
+  return routed;
 }
 
 function conversationDisplayTitle(
@@ -1025,9 +1078,15 @@ export function createMessage(
   }
 ): DmMessageView {
   if (isPublicConversation(db, opts.conversationId)) {
-    if (!canSendPublicChat(opts.senderUserId)) {
+    if (
+      !canSendToPublicConversation(
+        db,
+        opts.conversationId,
+        opts.senderUserId
+      )
+    ) {
       throw new DmError(
-        "Public chat needs a GodMode Cloud seat, Seller account, or paid GodMode Inference pack.",
+        publicSendDeniedMessage(db, opts.conversationId),
         402
       );
     }

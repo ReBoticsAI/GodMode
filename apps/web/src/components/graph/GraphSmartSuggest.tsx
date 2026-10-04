@@ -53,6 +53,11 @@ export function buildSmartSuggestions(opts: {
     items: readonly GraphActionMenuItem[];
   }>;
   limit?: number;
+  /**
+   * When the ether composer is replying to a focused chat/channel,
+   * label the fallback send row for that target instead of Ask Intelligence.
+   */
+  composeTarget?: { label: string } | null;
 }): SmartSuggestItem[] {
   const q = opts.query.trim();
   if (q.length < 1) return [];
@@ -104,12 +109,25 @@ export function buildSmartSuggestions(opts: {
   scored.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
   const top = scored.slice(0, limit).map(({ score: _s, ...rest }) => rest);
 
-  top.push({
-    id: `ask:${q}`,
-    kind: "ask",
-    title: `Ask Intelligence: “${q}”`,
-    subtitle: "Send as a chat message",
-  });
+  const targetLabel = opts.composeTarget?.label?.trim();
+  if (targetLabel) {
+    const isChannel = targetLabel.startsWith("#");
+    top.push({
+      id: `ask:${q}`,
+      kind: "ask",
+      title: `Send to ${targetLabel}: “${q}”`,
+      subtitle: isChannel
+        ? "Post in this channel"
+        : "Send as a chat message",
+    });
+  } else {
+    top.push({
+      id: `ask:${q}`,
+      kind: "ask",
+      title: `Ask Intelligence: “${q}”`,
+      subtitle: "Send as a chat message",
+    });
+  }
 
   return top;
 }

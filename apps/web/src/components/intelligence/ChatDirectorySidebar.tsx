@@ -63,7 +63,7 @@ export function ChatDirectorySidebar({
 }: {
   agentId: string;
   agentName: string;
-  /** Local agents shown as DMs (Intelligence, Digital You, …). */
+  /** Local agents (Intelligence, Digital You, …). */
   agentRows: AgentDmRow[];
   chatTarget: ChatTarget;
   conversations: DmConversation[];
@@ -96,6 +96,8 @@ export function ChatDirectorySidebar({
     () =>
       conversations.filter((c) => {
         if (c.kind !== "direct") return false;
+        // Agent 1:1s (Intelligence, Digital You, channel agents) live under Agents.
+        if (c.members.some((m) => m.memberKind === "agent")) return false;
         if (!q) return true;
         return (c.displayTitle || c.title || "").toLowerCase().includes(q);
       }),
@@ -204,6 +206,23 @@ export function ChatDirectorySidebar({
       ? cloudChannels.find((c) => c.id === chatTarget.conversationId)?.slug
       : null;
 
+  const showPossessedAgent =
+    !filteredAgents.some((a) => a.agentId === agentId) &&
+    (!q || agentName.toLowerCase().includes(q));
+  const agentsEmpty = filteredAgents.length === 0 && !showPossessedAgent;
+
+  function isAgentRowSelected(rowAgentId: string): boolean {
+    if (chatTarget.kind === "agent" && chatTarget.agentId === rowAgentId) {
+      return true;
+    }
+    if (chatTarget.kind !== "conversation") return false;
+    const conv = conversations.find((c) => c.id === chatTarget.conversationId);
+    if (!conv || conv.kind === "public") return false;
+    return conv.members.some(
+      (m) => m.memberKind === "agent" && m.agentId === rowAgentId
+    );
+  }
+
   return (
     <aside
       aria-label="Conversations"
@@ -221,7 +240,7 @@ export function ChatDirectorySidebar({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search"
-            aria-label="Search channels, direct messages, and contacts"
+            aria-label="Search channels, people, and contacts"
           />
         </InputGroup>
         <Button
@@ -353,19 +372,7 @@ export function ChatDirectorySidebar({
 
           <Separator className="my-1" />
 
-          <DirectorySection title="Direct messages">
-            {filteredAgents.map((a) => (
-              <DirectoryRow
-                key={`agent-${a.agentId}`}
-                label={a.label}
-                icon={<BotIcon data-icon="inline-start" />}
-                selected={
-                  chatTarget.kind === "agent" &&
-                  chatTarget.agentId === a.agentId
-                }
-                onClick={() => onSelectAgent(a.agentId)}
-              />
-            ))}
+          <DirectorySection title="People" icon={<UsersIcon />}>
             {privateDirects.map((c) => (
               <DirectoryRow
                 key={c.id}
@@ -392,11 +399,9 @@ export function ChatDirectorySidebar({
                 onClick={() => onSelectConversation(c.id)}
               />
             ))}
-            {filteredAgents.length === 0 &&
-            privateDirects.length === 0 &&
-            privateGroups.length === 0 ? (
+            {privateDirects.length === 0 && privateGroups.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">
-                No direct messages
+                No people yet
               </p>
             ) : null}
           </DirectorySection>
@@ -428,22 +433,32 @@ export function ChatDirectorySidebar({
             </>
           ) : null}
 
-          {!filteredAgents.some((a) => a.agentId === agentId) &&
-          (!q || agentName.toLowerCase().includes(q)) ? (
-            <>
-              <Separator className="my-1" />
-              <DirectorySection title="Agents">
-                <DirectoryRow
-                  label={agentName}
-                  icon={<BotIcon data-icon="inline-start" />}
-                  selected={
-                    chatTarget.kind === "agent" && chatTarget.agentId === agentId
-                  }
-                  onClick={() => onSelectAgent(agentId)}
-                />
-              </DirectorySection>
-            </>
-          ) : null}
+          <Separator className="my-1" />
+
+          <DirectorySection title="Agents" icon={<BotIcon />}>
+            {filteredAgents.map((a) => (
+              <DirectoryRow
+                key={`agent-${a.agentId}`}
+                label={a.label}
+                icon={<BotIcon data-icon="inline-start" />}
+                selected={isAgentRowSelected(a.agentId)}
+                onClick={() => onSelectAgent(a.agentId)}
+              />
+            ))}
+            {showPossessedAgent ? (
+              <DirectoryRow
+                label={agentName}
+                icon={<BotIcon data-icon="inline-start" />}
+                selected={isAgentRowSelected(agentId)}
+                onClick={() => onSelectAgent(agentId)}
+              />
+            ) : null}
+            {agentsEmpty ? (
+              <p className="px-2 py-1 text-xs text-muted-foreground">
+                No agents
+              </p>
+            ) : null}
+          </DirectorySection>
         </div>
       </ScrollArea>
     </aside>

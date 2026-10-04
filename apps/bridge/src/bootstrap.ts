@@ -76,6 +76,7 @@ import { createAdminMarketplaceRouter, createAdminObservabilityRouter } from "./
 import { createAdminWorkspaceTemplateRouter } from "./routes/admin-workspace-template.js";
 import { createTenantDataRouter } from "./routes/tenant-data.js";
 import { setDispatcherDeps } from "./services/hook-dispatcher.js";
+import { setAgentResponseDeps } from "./services/agent-response-service.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { ensureLocalConnection } from "./services/bridge-connections.js";
 import type { AppDatabase } from "./db.js";
@@ -521,6 +522,7 @@ app.use("/api/trial-inference", createTrialInferenceRouter(llmManager));
 app.use("/api/godmode-inference", createGodModeInferenceRouter());
 app.use("/api/shares", createSharesRouter());
 app.use("/api/dm", createDmRouter({ llm: llmManager, bridgePort: config.port }));
+setAgentResponseDeps({ llm: llmManager, bridgePort: config.port });
 app.use("/api/notifications", createNotificationsRouter());
 app.use("/api/hooks", createHooksRouter());
 app.use("/api/events", createEventsRouter());
