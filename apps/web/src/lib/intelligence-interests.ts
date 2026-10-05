@@ -32,8 +32,8 @@ export const INTELLIGENCE_EXPLORE_MESSAGE =
   `${INTELLIGENCE_GRAPH_ORIENTATION}\n\n` +
   "I am Intelligence, GodMode's AI. You can talk to me and ask questions about anything here.\n\n" +
   "You are on a temporary visitor account. Feel free to explore GodMode. What you do will not be saved unless you sign up for a GodMode Cloud account or sign in to an existing one.\n\n" +
-  "Your Inference allowance is limited on this visit. Public chat channels are read-only until you sign in. When the allowance runs out, sign in or buy GodMode Cloud / Inference to keep chatting.\n\n" +
-  "Watch the Graph highlight Hub and Platform Vault. Below you can pick GodMode Cloud, Inference, Cloud with Inference, Seller, or download for this computer.";
+  "Your chat budget is limited on this trial. Public chat channels are read-only until you sign in. When the allowance runs out, sign in or buy Inference through GodMode to keep chatting.\n\n" +
+  "Below you can pick GodMode Cloud, Inference, Cloud with Inference, Seller, or download for this computer.";
 
 /**
  * Assistant reply when a temporary visitor picks Sign up from the Login step
@@ -47,7 +47,7 @@ export const INTELLIGENCE_VISITOR_SIGNUP_MESSAGE =
  * Guide choice cards are shown beside this message.
  */
 export const INTELLIGENCE_ALLOWANCE_OUT_MESSAGE =
-  "Your free GodMode Inference allowance is used up. Sign in for a full account, or pick GodMode Cloud, Inference, or Cloud with Inference below to keep chatting. Platform Vault on the Graph is where those Connect paths live.";
+  "Your free GodMode Inference allowance is used up. Sign in for a full account, or pick GodMode Cloud, Inference, or Cloud with Inference below to keep chatting.";
 
 /**
  * Interest labels kept for legacy interest-tour scripts and model briefs.

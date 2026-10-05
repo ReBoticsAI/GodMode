@@ -68,11 +68,7 @@ import {
   INTELLIGENCE_VISITOR_SIGNUP_MESSAGE,
   type IntelligenceEntryActionId,
 } from "@/lib/intelligence-interests";
-import {
-  isInferenceAllowanceExhaustedError,
-  playAllowanceOutTour,
-  playExploreBuyTour,
-} from "@/lib/explore-buy-tour";
+import { isInferenceAllowanceExhaustedError } from "@/lib/explore-buy-tour";
 import {
   CLOUD_GUIDE_DONE_EVENT,
   openCloudSignupFallback,
@@ -1560,7 +1556,6 @@ export function IntelligencePanel({
       },
     ]);
     setGuideChoice(canonicalGuideChoice());
-    playAllowanceOutTour();
   }, []);
 
   const handleEntryAction = (actionId: IntelligenceEntryActionId) => {
@@ -1581,7 +1576,6 @@ export function IntelligencePanel({
       },
     ]);
     setGuideChoice(canonicalGuideChoice());
-    playExploreBuyTour();
   };
 
   const handleVisitorSignup = () => {

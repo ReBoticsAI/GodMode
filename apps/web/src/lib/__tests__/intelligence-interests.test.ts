@@ -48,17 +48,16 @@ describe("intelligence interests", () => {
     expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("I am Intelligence");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("temporary visitor account");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("will not be saved");
-    expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("Inference allowance is limited");
+    expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("chat budget is limited");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("read-only");
-    expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("Platform Vault");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).toContain("Below you can pick GodMode Cloud");
+    expect(INTELLIGENCE_EXPLORE_MESSAGE).not.toContain("highlight");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).not.toContain("\u2014");
     expect(INTELLIGENCE_EXPLORE_MESSAGE).not.toContain(" -- ");
     expect(INTELLIGENCE_VISITOR_SIGNUP_MESSAGE).toContain("picking a path below");
     expect(INTELLIGENCE_VISITOR_SIGNUP_MESSAGE).toContain("GodMode Cloud");
     expect(INTELLIGENCE_VISITOR_SIGNUP_MESSAGE).not.toContain("\u2014");
     expect(INTELLIGENCE_ALLOWANCE_OUT_MESSAGE).toContain("allowance is used up");
-    expect(INTELLIGENCE_ALLOWANCE_OUT_MESSAGE).toContain("Platform Vault");
     expect(INTELLIGENCE_ALLOWANCE_OUT_MESSAGE).not.toContain("\u2014");
   });
 
