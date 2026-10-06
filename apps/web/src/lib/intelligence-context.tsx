@@ -790,7 +790,23 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
 
   const setChatTarget = useCallback((target: ChatTarget) => {
     chatTargetRef.current = target;
-    setChatTargetState(target);
+    setChatTargetState((prev) => {
+      if (
+        prev.kind === "agent" &&
+        target.kind === "agent" &&
+        prev.agentId === target.agentId
+      ) {
+        return prev;
+      }
+      if (
+        prev.kind === "conversation" &&
+        target.kind === "conversation" &&
+        prev.conversationId === target.conversationId
+      ) {
+        return prev;
+      }
+      return target;
+    });
     if (target.kind === "agent") {
       setActiveAgentIdState(target.agentId);
       if (typeof window !== "undefined") {

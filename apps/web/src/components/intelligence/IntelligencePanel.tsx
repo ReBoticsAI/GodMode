@@ -86,6 +86,7 @@ import {
   canonicalGuideChoice,
   choiceOptionsForUserAgent,
   GUIDE_CHOICE_EVENT,
+  isCanonicalGuideChoice,
   type GuideChoiceCard,
 } from "@/lib/guide-next-choice";
 import {
@@ -173,6 +174,7 @@ import {
   GRAPH_TOUR_RESET_EVENT,
   guideUiActionFromToolResult,
 } from "@/lib/guide-ui-action";
+import { chatScrollAction } from "@/lib/chat-scroll-policy";
 import { DigitalYouIcon } from "./DigitalYouIcon";
 import {
   PartsBuilder,
@@ -1255,9 +1257,59 @@ export function IntelligencePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChatId]);
 
+  const pinnedAssistantScrollIdRef = useRef<string | null>(null);
+  /** After a freeform send, ignore Explore buy-card reinjection from tours/tools. */
+  const blockCanonicalPlansRef = useRef(false);
+  const [scrollEpoch, setScrollEpoch] = useState(0);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, tourLines, holdTourReply, guideChoice]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const action = chatScrollAction({
+      conversationKind: activeConversation?.kind,
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        streaming: m.streaming,
+        text: m.text,
+        hasParts: Boolean(m.parts?.length),
+      })),
+    });
+    const apply = () => {
+      const port = scrollRef.current;
+      if (!port) return;
+      if (action.type === "bottom") {
+        pinnedAssistantScrollIdRef.current = null;
+        port.scrollTo({ top: port.scrollHeight });
+        return;
+      }
+      if (action.type === "message-start") {
+        // Pin once per assistant reply so streaming tokens do not fight the reader.
+        if (pinnedAssistantScrollIdRef.current === action.messageId) return;
+        const node = port.querySelector<HTMLElement>(
+          `[data-chat-msg="${CSS.escape(action.messageId)}"]`
+        );
+        if (!node) return;
+        pinnedAssistantScrollIdRef.current = action.messageId;
+        const top =
+          node.getBoundingClientRect().top -
+          port.getBoundingClientRect().top +
+          port.scrollTop;
+        port.scrollTo({ top: Math.max(0, top) });
+      }
+    };
+    // Tour restore / phone sheet layout can lag one frame behind React commit.
+    apply();
+    const id = window.requestAnimationFrame(apply);
+    return () => window.cancelAnimationFrame(id);
+  }, [
+    messages,
+    tourLines,
+    holdTourReply,
+    guideChoice,
+    activeConversation?.kind,
+    scrollEpoch,
+  ]);
 
   useEffect(() => {
     const onLine = (ev: Event) => {
@@ -1265,6 +1317,9 @@ export function IntelligencePanel({
       const say = detail?.say?.trim();
       if (!say) return;
       setHoldTourReply(true);
+      // Phone narration lives on GraphTourCaption while Social is dismissed.
+      // Do not also dump tour lines into the chat transcript.
+      if (isPhoneViewport()) return;
       setTourLines((prev) => [
         ...prev,
         { label: detail.label?.trim() || "Graph", say },
@@ -1276,12 +1331,20 @@ export function IntelligencePanel({
       setHoldTourReply(false);
     };
     const onDone = () => {
+      // Allow the scroll effect to re-pin to the live assistant reply after
+      // phone Social is restored from the Graph tour.
+      pinnedAssistantScrollIdRef.current = null;
       setHoldTourReply(false);
-      setGuideChoice((current) => current ?? canonicalGuideChoice());
+      setTourLines([]);
+      setScrollEpoch((n) => n + 1);
+      // Mid-chat Graph tours must not re-open Explore Plans under the reply.
     };
     const onChoice = (ev: Event) => {
       const detail = (ev as CustomEvent<GuideChoiceCard>).detail;
       if (!detail?.options?.length) return;
+      if (blockCanonicalPlansRef.current && isCanonicalGuideChoice(detail)) {
+        return;
+      }
       setGuideChoice({
         question: detail.question,
         why: detail.why,
@@ -1474,17 +1537,24 @@ export function IntelligencePanel({
     });
   }, [activeConversationId, onDmIncomingMessage, dmToUi, refreshDmConversations]);
 
+  const prevChatTargetRef = useRef(chatTarget);
   useEffect(() => {
-    if (chatTarget.kind === "agent") {
-      cancelGraphTour();
-      setMessages([]);
-      setTourLines([]);
-      setHoldTourReply(false);
-      setGuideChoice(null);
-      setEmptyOnboardingStep("entry");
-      setActiveChatId(null);
-      allowanceOutNudgedRef.current = false;
-    }
+    const prev = prevChatTargetRef.current;
+    prevChatTargetRef.current = chatTarget;
+    if (chatTarget.kind !== "agent") return;
+    // Re-targeting the same agent (tour done → reopen Social, openPanel) must
+    // keep the in-flight Explore / agent thread. Only wipe on a real switch.
+    const sameAgent =
+      prev.kind === "agent" && prev.agentId === chatTarget.agentId;
+    if (sameAgent) return;
+    cancelGraphTour();
+    setMessages([]);
+    setTourLines([]);
+    setHoldTourReply(false);
+    setGuideChoice(null);
+    setEmptyOnboardingStep("entry");
+    setActiveChatId(null);
+    allowanceOutNudgedRef.current = false;
   }, [chatTarget]);
 
   const newChat = () => {
@@ -1494,6 +1564,7 @@ export function IntelligencePanel({
     setTourLines([]);
     setHoldTourReply(false);
     setGuideChoice(null);
+    blockCanonicalPlansRef.current = false;
     setEmptyOnboardingStep("entry");
     allowanceOutNudgedRef.current = false;
     if (isDmMode) {
@@ -1625,6 +1696,10 @@ export function IntelligencePanel({
   }: ComposerSubmit) => {
     if (busy) return;
     cancelGraphTour();
+    // Typing a freeform question leaves Explore buy cards behind so the user
+    // bubble is not sandwiched between the intro and Plans.
+    setGuideChoice(null);
+    blockCanonicalPlansRef.current = true;
     setErrorMsg(null);
     setErrorCode(null);
 
@@ -2589,7 +2664,11 @@ export function IntelligencePanel({
             if (deferTourReply && visibleParts.length === 0) return null;
             if (own) {
               return (
-                <div key={m.id} className="group flex flex-col items-end gap-0.5">
+                <div
+                  key={m.id}
+                  data-chat-msg={m.id}
+                  className="group flex flex-col items-end gap-0.5"
+                >
                   <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-muted px-3 py-2 text-sm">
                     {m.images && m.images.length > 0 && (
                       <div className="mb-1.5 flex flex-wrap gap-1.5">
@@ -2630,7 +2709,11 @@ export function IntelligencePanel({
               );
             }
             return (
-              <div key={m.id} className="group flex flex-col max-w-[90%] gap-0.5">
+              <div
+                key={m.id}
+                data-chat-msg={m.id}
+                className="group flex max-w-[90%] flex-col gap-0.5"
+              >
                 {m.dmSenderName && (
                   <span className="mb-0.5 text-[10px] font-medium text-muted-foreground">
                     {m.dmSenderKind === "agent" ? "🤖 " : ""}
