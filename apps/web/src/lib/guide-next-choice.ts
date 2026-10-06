@@ -118,6 +118,14 @@ export function canonicalGuideChoice(): GuideChoiceCard {
   };
 }
 
+/** True when a guide_choice payload is the Explore / buy-path card set. */
+export function isCanonicalGuideChoice(card: GuideChoiceCard | null | undefined): boolean {
+  if (!card?.options?.length) return false;
+  if (card.question.trim() !== GUIDE_NEXT_QUESTION) return false;
+  const ids = new Set(card.options.map((option) => option.id));
+  return GUIDE_NEXT_OPTIONS.every((option) => ids.has(option.id));
+}
+
 export function downloadLabelForUserAgent(userAgent: string): string {
   const os = detectDesktopOs(userAgent);
   return os ? OS_DOWNLOAD_LABEL[os] : "Download for my computer";

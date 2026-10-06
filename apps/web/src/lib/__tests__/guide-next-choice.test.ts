@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   GUIDE_CHOICE_PROFILES,
   GUIDE_NEXT_OPTIONS,
+  canonicalGuideChoice,
   guideChoiceProfilesForOptions,
+  isCanonicalGuideChoice,
 } from "../guide-next-choice";
 
 describe("guide choice cards", () => {
@@ -30,5 +32,16 @@ describe("guide choice cards", () => {
       "Download for Windows",
       "GodMode Cloud",
     ]);
+  });
+
+  it("detects the canonical Explore buy-card set", () => {
+    expect(isCanonicalGuideChoice(canonicalGuideChoice())).toBe(true);
+    expect(
+      isCanonicalGuideChoice({
+        question: "Pick one",
+        why: "",
+        options: [{ id: "cloud", label: "GodMode Cloud" }],
+      })
+    ).toBe(false);
   });
 });

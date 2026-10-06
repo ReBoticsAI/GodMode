@@ -4,8 +4,11 @@ import {
   GRAPH_TOUR_LINE_EVENT,
   GRAPH_TOUR_RESET_EVENT,
 } from "@/lib/guide-ui-action";
-import { canonicalGuideChoice, GUIDE_CHOICE_EVENT } from "@/lib/guide-next-choice";
 import { isPhoneViewport } from "@/lib/graph-phone-shell";
+import {
+  getPhoneSurfaceCurrent,
+  phoneGoBack,
+} from "@/lib/phone-surface-stack";
 import { useIsPhone } from "@/hooks/use-mobile";
 import { GRAPH_WINDOW_Z } from "@/lib/graph-chrome-layout";
 import { cn } from "@/lib/utils";
@@ -35,16 +38,17 @@ export function GraphTourCaption() {
     const onDone = () => {
       setLine(null);
       if (!isPhoneViewport()) return;
-      // Return to Social with the usual post-tour choice cards.
-      window.dispatchEvent(
-        new CustomEvent("godmode:open-intelligence-chat", { detail: {} })
-      );
+      // Pop the Social surface pushed when the tour started. Do not re-open
+      // Explore Plans here; mid-chat tours return to the live thread as-is.
+      phoneGoBack();
       queueMicrotask(() => {
-        window.dispatchEvent(
-          new CustomEvent(GUIDE_CHOICE_EVENT, {
-            detail: canonicalGuideChoice(),
-          })
-        );
+        // If dismiss ran with an empty phone stack (viewport race), force Social
+        // back open without wiping the in-memory agent thread.
+        if (!getPhoneSurfaceCurrent()) {
+          window.dispatchEvent(
+            new CustomEvent("godmode:open-intelligence-chat", { detail: {} })
+          );
+        }
       });
     };
     window.addEventListener(GRAPH_TOUR_LINE_EVENT, onLine);

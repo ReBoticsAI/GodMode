@@ -125,7 +125,12 @@ import {
   GRAPH_PRIMARY_CHROME_Z,
 } from "@/lib/graph-chrome-layout";
 import { isPhoneViewport } from "@/lib/graph-phone-shell";
-import { dismissPhoneSurface } from "@/lib/phone-surface-stack";
+import {
+  dismissPhoneSurface,
+  getPhoneSurfaceCurrent,
+  PHONE_SOCIAL_CHAT_ENTRY,
+  replacePhoneSurface,
+} from "@/lib/phone-surface-stack";
 import { GraphRareFindsTicker } from "@/components/graph/GraphRareFindsTicker";
 import {
   buildSmartSuggestions,
@@ -661,8 +666,14 @@ export function ChatGraphCanvas({
       if (detail.tour) {
         // Phone: reveal Graph under the tour caption (Social stays on the stack).
         // Desktop: only close Information; Social keeps narrating in-chat.
-        if (isPhoneViewport()) dismissPhoneSurface();
-        else closeInformationPanel();
+        if (isPhoneViewport()) {
+          // Ensure there is a Social entry to restore after the tour even if the
+          // phone stack was never seeded (viewport race on first paint).
+          if (!getPhoneSurfaceCurrent()) {
+            replacePhoneSurface({ ...PHONE_SOCIAL_CHAT_ENTRY });
+          }
+          dismissPhoneSurface();
+        } else closeInformationPanel();
         sceneRef.current?.frameConnection(node.id);
         return;
       }
@@ -678,13 +689,14 @@ export function ChatGraphCanvas({
     const onChat = () => {
       // Open Intelligence chat chrome only. Do not steal the Information panel
       // away from Platform Vault / buy screen after open_guide_surface.
-      setChatTarget({ kind: "agent", agentId: "intelligence" });
+      // setChatTarget is stable for the same agentId, so reopening after a
+      // phone Graph tour keeps the existing Explore / agent thread.
       openPanel({ agentId: "intelligence", tab: "chat" });
     };
     window.addEventListener("godmode:open-intelligence-chat", onChat);
     return () =>
       window.removeEventListener("godmode:open-intelligence-chat", onChat);
-  }, [openPanel, setChatTarget]);
+  }, [openPanel]);
 
   // If Platform Vault opened before projection landed, select the node once it exists.
   useEffect(() => {
