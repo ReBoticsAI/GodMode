@@ -78,9 +78,17 @@
       "class": "infra_coding",
       "rationale": "Structured git push for coding ship; not Community catalog publish."
     },
+    "github_fork_repo": {
+      "class": "infra_coding",
+      "rationale": "Fork upstream Core for Support handoff / coding ship; GitHub App install path, not a domain ObjectType mutation."
+    },
     "github_pr_create": {
       "class": "infra_coding",
       "rationale": "GitHub PR for coding-stage review; Community catalog publish uses submit_community_catalog_submission / Sell UI."
+    },
+    "github_pr_merge": {
+      "class": "infra_coding",
+      "rationale": "Maintainer Core PR merge under hard matrix (CI, allowlist, scope); coding/ops infra on operator tenant only."
     },
     "github_release_create": {
       "class": "infra_coding",
@@ -121,6 +129,18 @@
     "reply_support_ticket": {
       "class": "kernel_generated",
       "rationale": "Cutover alias to SupportTicket.reply."
+    },
+    "report_admin_ops": {
+      "class": "protocol_exception",
+      "rationale": "Private Hub/Cloud ops notify + optional Kanban card; not public Core GitHub and not a single ObjectType Record write."
+    },
+    "report_platform_issue": {
+      "class": "protocol_exception",
+      "rationale": "GitHub App create/comment on public Core issues with screenshot embed and dedupe; Support intake protocol, not kernel Record CRUD."
+    },
+    "report_shared_resource_issue": {
+      "class": "protocol_exception",
+      "rationale": "Notify share-grant owner (and staff cc) about a shared resource failure; Support protocol, not ObjectType mutation."
     },
     "restart_llm": {
       "class": "infra_llm",

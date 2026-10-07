@@ -2,11 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { CreditCardIcon } from "lucide-react";
 import {
-  fetchAdminSupportTickets,
   fetchBridgeHealth,
-  fetchSupportTicket,
-  postSupportMessage,
-  updateAdminSupportTicket,
   fetchAdminBillingConfig,
   updateAdminBillingConfig,
   testAdminBillingConnection,
@@ -17,13 +13,9 @@ import {
   fetchAiAgents,
   type PlatformBillingConfig,
   type SupportGroupMember,
-  type SupportMessage,
-  type SupportTicket,
-  type SupportTicketStatus,
   type AdminUserRow,
   type AiAgent,
 } from "@/api";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -31,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { useTenant } from "@/lib/tenant-context";
 import { USERS_PATH } from "@/lib/navigation";
 import { Page, PageHeader } from "@/components/PageHeader";
@@ -343,20 +334,6 @@ function AdminBillingTab() {
   );
 }
 
-const SUPPORT_STATUSES: SupportTicketStatus[] = [
-  "open",
-  "in_progress",
-  "resolved",
-  "closed",
-];
-
-const SUPPORT_STATUS_TONE: Record<SupportTicketStatus, string> = {
-  open: "bg-blue-500/15 text-blue-400",
-  in_progress: "bg-amber-500/15 text-amber-400",
-  resolved: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-muted text-muted-foreground",
-};
-
 function AdminSupportGroupCard() {
   const { activeTenantId } = useTenant();
   const [members, setMembers] = useState<SupportGroupMember[]>([]);
@@ -531,213 +508,32 @@ function AdminSupportGroupCard() {
 }
 
 function AdminSupportTab() {
-  const [searchParams] = useSearchParams();
-  const [statusFilter, setStatusFilter] = useState<"all" | SupportTicketStatus>(
-    "all"
-  );
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [active, setActive] = useState<SupportTicket | null>(null);
-  const [messages, setMessages] = useState<SupportMessage[]>([]);
-  const [reply, setReply] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetchAdminSupportTickets(
-        statusFilter === "all" ? undefined : statusFilter
-      );
-      setTickets(res.tickets);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load tickets");
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const openTicket = useCallback(async (t: SupportTicket) => {
-    setActive(t);
-    try {
-      const res = await fetchSupportTicket(t.id);
-      setActive(res.ticket);
-      setMessages(res.messages);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load ticket");
-    }
-  }, []);
-
-  // Deep link from a notification: ?tab=support&ticket=<id>
-  useEffect(() => {
-    const ticketId = searchParams.get("ticket");
-    if (ticketId && tickets.length > 0 && active?.id !== ticketId) {
-      const t = tickets.find((x) => x.id === ticketId);
-      if (t) void openTicket(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, tickets]);
-
-  const changeStatus = useCallback(
-    async (status: SupportTicketStatus) => {
-      if (!active) return;
-      try {
-        const res = await updateAdminSupportTicket(active.id, { status });
-        setActive(res.ticket);
-        void load();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update");
-      }
-    },
-    [active, load]
-  );
-
-  const sendReply = useCallback(async () => {
-    if (!active || !reply.trim()) return;
-    try {
-      await postSupportMessage(active.id, reply.trim());
-      setReply("");
-      const res = await fetchSupportTicket(active.id);
-      setMessages(res.messages);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reply");
-    }
-  }, [active, reply]);
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Support tickets</CardTitle>
-        <CardDescription>Triage and respond to user requests.</CardDescription>
-        <CardAction>
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {SUPPORT_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardAction>
+        <CardTitle>Agent Support reports</CardTitle>
+        <CardDescription>
+          New reports use Intelligence with the Support skill (
+          report_platform_issue, report_admin_ops, report_shared_resource_issue).
+          Staff get in-app notifications; OSS bugs land on GitHub with dedupe.
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-          <div className="flex flex-col gap-1">
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : tickets.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No tickets.</p>
-            ) : (
-              tickets.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => void openTicket(t)}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors hover:bg-accent/50",
-                    active?.id === t.id ? "border-primary/40 bg-primary/5" : ""
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">{t.subject}</span>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "ml-auto text-[10px]",
-                        SUPPORT_STATUS_TONE[t.status]
-                      )}
-                    >
-                      {t.status}
-                    </Badge>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {t.category ? `${t.category} · ` : ""}
-                    {t.updated_at}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div>
-            {active ? (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium">{active.subject}</p>
-                  <Select
-                    value={active.status}
-                    onValueChange={(v) =>
-                      void changeStatus(v as SupportTicketStatus)
-                    }
-                  >
-                    <SelectTrigger className="ml-auto w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPORT_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={cn(
-                        "rounded-md border px-3 py-2 text-sm",
-                        m.author_kind === "admin"
-                          ? "border-violet-500/20 bg-violet-500/5"
-                          : "bg-muted/40"
-                      )}
-                    >
-                      <div className="mb-1 flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          {m.author_kind}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          {m.created_at}
-                        </span>
-                      </div>
-                      <p className="whitespace-pre-wrap">{m.body}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Textarea
-                    rows={3}
-                    value={reply}
-                    onChange={(e) => setReply(e.target.value)}
-                    placeholder="Reply as admin…"
-                  />
-                  <Button
-                    className="self-end"
-                    onClick={() => void sendReply()}
-                    disabled={!reply.trim()}
-                  >
-                    Send reply
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Select a ticket to view the conversation.
-              </p>
-            )}
-          </div>
-        </div>
+      <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+        <p>
+          Manage who receives ops alerts via the Support group card above. Open
+          Automations to review seeded hooks on support.platform_issue.reported,
+          ops.report.created, and support.resource_issue.reported.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="self-start"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("godmode:open-intelligence-chat"))
+          }
+        >
+          Open Intelligence chat
+        </Button>
       </CardContent>
     </Card>
   );

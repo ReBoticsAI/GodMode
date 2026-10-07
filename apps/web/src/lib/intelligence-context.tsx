@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router-dom";
-import { toPng } from "html-to-image";
 import { toast } from "sonner";
+import { capturePageScreenshot } from "@/lib/capture-page-screenshot";
 import {
   createDmConversation,
   fetchDmConversations,
@@ -199,6 +199,9 @@ interface IntelligenceContextValue {
   /** When set, Intelligence chat auto-sends this prompt on the next open. */
   autoSendPrompt: string | null;
   setAutoSendPrompt: (text: string | null) => void;
+  /** Images to attach on the next auto-send (e.g. bug pill screenshot). */
+  pendingComposerImages: string[];
+  setPendingComposerImages: (images: string[]) => void;
   /** When set, the panel should load this chat id. */
   pendingChatId: string | null;
   setPendingChatId: (id: string | null) => void;
@@ -624,6 +627,9 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   const [panelMaximized, setPanelMaximized] = useState(false);
   const [seedText, setSeedText] = useState("");
   const [autoSendPrompt, setAutoSendPrompt] = useState<string | null>(null);
+  const [pendingComposerImages, setPendingComposerImages] = useState<string[]>(
+    []
+  );
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [composerWidth, setComposerWidthState] = useState(() => {
     migratePanelLayoutGen();
@@ -1853,18 +1859,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
   );
 
   const captureScreenshot = useCallback(async (): Promise<string | null> => {
-    const target =
-      document.querySelector("main") ?? document.body;
-    if (!target) return null;
-    try {
-      return await toPng(target as HTMLElement, {
-        cacheBust: true,
-        pixelRatio: 1,
-        backgroundColor: "#0a0a0a",
-      });
-    } catch {
-      return null;
-    }
+    return capturePageScreenshot();
   }, []);
 
   const value = useMemo<IntelligenceContextValue>(
@@ -1922,6 +1917,8 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setSeedText,
       autoSendPrompt,
       setAutoSendPrompt,
+      pendingComposerImages,
+      setPendingComposerImages,
       pendingChatId,
       setPendingChatId,
       composerWidth,
@@ -2018,6 +2015,7 @@ export function IntelligenceProvider({ children }: { children: ReactNode }) {
       setFocusedCanvasId,
       seedText,
       autoSendPrompt,
+      pendingComposerImages,
       pendingChatId,
       composerWidth,
       setComposerWidth,

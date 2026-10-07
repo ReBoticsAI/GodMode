@@ -33,6 +33,8 @@ function repairPersonalTenantIfNeeded(db: AppDatabase): void {
     repairPersonalOsTenant(db);
     personalRepaired.add(db);
   } catch (err) {
+    // Mark attempted so a broken require/seed does not retry on every getTenantDb.
+    personalRepaired.add(db);
     console.warn(
       "[tenant] personal toolAllow repair failed:",
       err instanceof Error ? err.message : err

@@ -200,6 +200,40 @@ function shiftBoxBesideChat(box: THREE.Box3): void {
 /** Shared hit geometry for pointer events under Html glyphs. */
 const HIT_GEO = new THREE.SphereGeometry(0.42, 6, 6);
 
+/** Demand-framed Graph: paint + sync screenshot for Support / bug-pill. */
+function GraphScreenshotBridge() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const invalidateFrame = useThree((s) => s.invalidate);
+
+  useEffect(() => {
+    const onInvalidate = () => invalidateFrame();
+    const onScreenshot = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ resolve?: (url: string | null) => void }>
+      ).detail;
+      const resolve = detail?.resolve;
+      try {
+        // Render then read in the same turn so the buffer is still valid
+        // even if preserveDrawingBuffer were off.
+        gl.render(scene, camera);
+        resolve?.(gl.domElement.toDataURL("image/png"));
+      } catch {
+        resolve?.(null);
+      }
+    };
+    window.addEventListener("godmode:graph-invalidate", onInvalidate);
+    window.addEventListener("godmode:graph-screenshot", onScreenshot);
+    return () => {
+      window.removeEventListener("godmode:graph-invalidate", onInvalidate);
+      window.removeEventListener("godmode:graph-screenshot", onScreenshot);
+    };
+  }, [gl, scene, camera, invalidateFrame]);
+
+  return null;
+}
+
 function KeyboardTruck({
   controlsRef,
   enabled,
@@ -723,6 +757,7 @@ function SceneBody({
           three: CameraControlsImpl.ACTION.TOUCH_TRUCK,
         }}
       />
+      <GraphScreenshotBridge />
       <KeyboardTruck controlsRef={controlsRef} enabled={cameraEnabled} />
       <EdgeBatch edges={dimEdges} positions={positions} isLight={isLight} />
       {hiEdges.map((e) => (
@@ -1113,6 +1148,8 @@ export const GraphScene3D = forwardRef<
         alpha: false,
         stencil: false,
         depth: true,
+        // Needed so bug-pill / Support screenshots can read the WebGL buffer.
+        preserveDrawingBuffer: true,
       }}
       performance={{ min: 0.5 }}
       className="h-full w-full"

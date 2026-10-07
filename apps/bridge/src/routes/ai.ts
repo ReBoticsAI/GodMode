@@ -170,6 +170,11 @@ import {
 } from "../services/model-profiles/index.js";
 import { getToolSchemasForLlm } from "../services/ai-tools-registry.js";
 import { filterSchemasForSignupGuide } from "../services/guide-ui-tools.js";
+import {
+  filterSchemasOutsideSignupGuide,
+  resolveSupportIntakeGuide,
+  supportPathModelGuide,
+} from "../services/support-intake.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
@@ -1666,7 +1671,8 @@ export function createAiRouter(
         ? rawInterestId
         : undefined;
     const pathId =
-      typeof rawPathId === "string" && pathModelGuide(rawPathId)
+      typeof rawPathId === "string" &&
+      (pathModelGuide(rawPathId) || supportPathModelGuide(rawPathId))
         ? rawPathId
         : undefined;
     const clientOs =
@@ -2030,7 +2036,11 @@ export function createAiRouter(
       markChatTurnIdle(workDb, activeChatId);
       return;
     }
+    // Trial welcome-guide RBAC is only for managed Inference provider turns.
+    // Cursor / local / remote must keep the full agent tool surface even if a
+    // stale apiKeyRef was left on agent.config from a prior provider selection.
     const signupGuideActive =
+      agent.backend === "provider" &&
       usingManagedSupply &&
       isSignupGuideModeEnabled() &&
       activeInferenceGrant?.kind === "trial";
@@ -2189,11 +2199,18 @@ export function createAiRouter(
         ? pathModelGuide(pathId ?? "", clientOs) ??
           interestModelGuide(interestId ?? "", clientOs)
         : null;
+    const supportIntakeGuide = resolveSupportIntakeGuide({
+      pathId: pathId ?? null,
+      userMessage: typeof message === "string" ? message : null,
+    });
+    const guideInjectText = [interestGuideText, supportIntakeGuide]
+      .filter((s): s is string => Boolean(s && String(s).trim()))
+      .join("\n\n");
     const guidedUserContent =
-      typeof userContent === "string" && interestGuideText
-        ? `${userContent}\n\n${interestGuideText}`
-        : Array.isArray(userContent) && interestGuideText
-          ? [{ type: "text" as const, text: interestGuideText }, ...userContent]
+      typeof userContent === "string" && guideInjectText
+        ? `${userContent}\n\n${guideInjectText}`
+        : Array.isArray(userContent) && guideInjectText
+          ? [{ type: "text" as const, text: guideInjectText }, ...userContent]
           : userContent;
 
     const messages: ChatMessage[] = [
@@ -2392,9 +2409,11 @@ export function createAiRouter(
           profileFilterOpts
         );
         // Trial welcome-guide: hard RBAC to orientation tools only.
+        // Normal chat: drop signup-only ask_guide_choice so Support cannot
+        // mis-route into Explore/buy buttons.
         const toolSchemas = signupGuideActive
           ? filterSchemasForSignupGuide(profileSchemas)
-          : profileSchemas;
+          : filterSchemasOutsideSignupGuide(profileSchemas);
         const refreshGuideSchemas = () => {
           const next = filterSchemasForProfile(
             getToolSchemasForLlm(engineDb, agent.id, chatMode),
@@ -2403,7 +2422,7 @@ export function createAiRouter(
           );
           return signupGuideActive
             ? filterSchemasForSignupGuide(next)
-            : next;
+            : filterSchemasOutsideSignupGuide(next);
         };
         const answer = await backend.run({
           agent,
@@ -2456,6 +2475,7 @@ export function createAiRouter(
             isAdmin: Boolean(auth.user.isAdmin),
             tenantId: workTenantId,
             sessionAutonomy,
+            turnImages: images,
             abortSignal: abortController.signal,
             onTerminalOutput: (chunk) => {
               send("terminal_output", {

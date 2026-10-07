@@ -1,45 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
 import { Page, PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SupportRequestDialog } from "@/components/SupportRequestDialog";
-import { toast } from "sonner";
-import {
-  fetchMySupportTickets,
-  fetchStaffSupportTickets,
-  fetchSupportGroup,
-  fetchSupportTicket,
-  isUnauthorizedError,
-  postSupportMessage,
-  promoteSupportTicketToKanban,
-  type SupportMessage,
-  type SupportTicket,
-  type SupportTicketStatus,
-} from "@/api";
-import { TASKS_PATH } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
-import { useTenant } from "@/lib/tenant-context";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { LifeBuoyIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-const STATUS_TONE: Record<SupportTicketStatus, string> = {
-  open: "bg-blue-500/15 text-blue-400",
-  in_progress: "bg-amber-500/15 text-amber-400",
-  resolved: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-muted text-muted-foreground",
-};
-
+/**
+ * Support intake is Agent-first: Chat Intelligence with the Support skill.
+ * Legacy ticket inbox is retired; report_* tools + GitHub / Admin notify replace it.
+ */
 export default function Support() {
   return (
     <Page>
+      <PageHeader title="Support" description="Report problems through Intelligence." />
       <SupportContent />
     </Page>
   );
@@ -52,278 +31,32 @@ export function SupportContent({
   embedded?: boolean;
 }) {
   const navigate = useNavigate();
-  const { authenticated } = useTenant();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const inboxParam = searchParams.get("inbox") === "staff" ? "staff" : "mine";
-  const [inbox, setInbox] = useState<"mine" | "staff">(inboxParam);
-  const [isStaff, setIsStaff] = useState(false);
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [active, setActive] = useState<SupportTicket | null>(null);
-  const [messages, setMessages] = useState<SupportMessage[]>([]);
-  const [reply, setReply] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [promoting, setPromoting] = useState(false);
 
-  useEffect(() => {
-    void fetchSupportGroup()
-      .then((r) => setIsStaff(Boolean(r.isMember)))
-      .catch(() => setIsStaff(false));
-  }, []);
-
-  useEffect(() => {
-    setInbox(inboxParam);
-  }, [inboxParam]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res =
-        inbox === "staff"
-          ? await fetchStaffSupportTickets()
-          : await fetchMySupportTickets();
-      setTickets(res.tickets);
-    } catch (err) {
-      setTickets([]);
-      if (inbox === "staff") {
-        setIsStaff(false);
-        setInbox("mine");
-        if (!isUnauthorizedError(err)) {
-          toast.error("Staff inbox requires Support group membership");
-        }
-      } else if (!isUnauthorizedError(err)) {
-        toast.error((err as Error).message);
-      }
-    } finally {
-      setLoading(false);
+  const openChat = () => {
+    if (!embedded) {
+      navigate("/");
     }
-  }, [inbox]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const ticketId = searchParams.get("ticket");
-    if (!ticketId) return;
-    void fetchSupportTicket(ticketId)
-      .then((res) => {
-        setActive(res.ticket);
-        setMessages(res.messages);
-      })
-      .catch((err) => {
-        if (!isUnauthorizedError(err)) toast.error((err as Error).message);
-      });
-  }, [searchParams]);
-
-  const openTicket = useCallback(async (t: SupportTicket) => {
-    setActive(t);
-    try {
-      const res = await fetchSupportTicket(t.id);
-      setMessages(res.messages);
-      setActive(res.ticket);
-    } catch (err) {
-      if (!isUnauthorizedError(err)) toast.error((err as Error).message);
-    }
-  }, []);
-
-  const sendReply = useCallback(async () => {
-    if (!active || !reply.trim()) return;
-    try {
-      await postSupportMessage(active.id, reply.trim());
-      setReply("");
-      const res = await fetchSupportTicket(active.id);
-      setMessages(res.messages);
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  }, [active, reply]);
-
-  const promoteToKanban = useCallback(async () => {
-    if (!active) return;
-    setPromoting(true);
-    try {
-      const res = await promoteSupportTicketToKanban(active.id);
-      toast.success(`Follow-up card created: ${res.title}`);
-      navigate(TASKS_PATH);
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setPromoting(false);
-    }
-  }, [active, navigate]);
+    window.dispatchEvent(new CustomEvent("godmode:open-intelligence-chat"));
+  };
 
   return (
-    <div className={embedded ? "flex flex-col gap-4" : undefined}>
-      {!embedded ? (
-      <PageHeader
-        title="Support"
-        description="Hub issues go to administrators and the Support group; open-source bugs go to GitHub."
-        actions={
-          <SupportRequestDialog
-            trigger={<Button>New request</Button>}
-            onCreated={load}
-          />
-        }
-      />
-      ) : (
-        <div className="mb-2 flex justify-end">
-          <SupportRequestDialog
-            trigger={<Button size="sm">New request</Button>}
-            onCreated={load}
-          />
-        </div>
-      )}
-      <Tabs
-        value={inbox}
-        onValueChange={(v) => {
-          const next = v === "staff" ? "staff" : "mine";
-          setInbox(next);
-          setActive(null);
-          setMessages([]);
-          setSearchParams(next === "staff" ? { inbox: "staff" } : {}, { replace: true });
-        }}
-        className="mb-4"
-      >
-        <TabsList variant="line">
-          <TabsTrigger value="mine">My requests</TabsTrigger>
-          {isStaff ? <TabsTrigger value="staff">Staff inbox</TabsTrigger> : null}
-        </TabsList>
-        <TabsContent value={inbox} className="mt-4">
-          <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-            <div className="flex flex-col gap-2">
-              {loading ? (
-                <p className="text-sm text-muted-foreground">Loading…</p>
-              ) : tickets.length === 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      {!authenticated
-                        ? "Sign in required"
-                        : inbox === "staff"
-                          ? "No staff tickets"
-                          : "No requests yet"}
-                    </CardTitle>
-                    <CardDescription>
-                      {!authenticated
-                        ? "Sign in to view and submit support requests."
-                        : inbox === "staff"
-                          ? "Hub and shared-resource tickets appear here for Support group members."
-                          : "Submit a request and it will show up here."}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {tickets.map((t) => (
-                    <li key={t.id}>
-                      <button
-                        type="button"
-                        onClick={() => void openTicket(t)}
-                        className={cn(
-                          "flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors hover:bg-accent/50",
-                          active?.id === t.id ? "border-primary/40 bg-primary/5" : ""
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-medium">{t.subject}</span>
-                          <Badge
-                            variant="secondary"
-                            className={cn("ml-auto text-[10px]", STATUS_TONE[t.status])}
-                          >
-                            {t.status}
-                          </Badge>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">
-                          {t.updated_at}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div>
-              {active ? (
-                <Card className="flex h-full flex-col">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-base">{active.subject}</CardTitle>
-                      <Badge
-                        variant="secondary"
-                        className={cn("text-[10px]", STATUS_TONE[active.status])}
-                      >
-                        {active.status}
-                      </Badge>
-                    </div>
-                    {active.category && (
-                      <CardDescription>Category: {active.category}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="flex flex-1 flex-col gap-3">
-                    <div className="flex max-h-80 flex-col gap-2 overflow-y-auto rounded-md border p-3">
-                      {messages.map((m) => (
-                        <div key={m.id} className="text-sm">
-                          <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                            {m.author_kind} · {m.created_at}
-                          </div>
-                          <p className="whitespace-pre-wrap">{m.body}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <Textarea
-                      rows={3}
-                      value={reply}
-                      onChange={(e) => setReply(e.target.value)}
-                      placeholder="Write a reply…"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button onClick={() => void sendReply()} disabled={!reply.trim()}>
-                        Send reply
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={promoting}
-                        onClick={() => void promoteToKanban()}
-                      >
-                        Create follow-up task
-                      </Button>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        void (async () => {
-                          try {
-                            const res = await promoteSupportTicketToKanban(active.id);
-                            toast.success(`Kanban card created: ${res.title}`);
-                            window.location.assign(TASKS_PATH);
-                          } catch (err) {
-                            toast.error(
-                              err instanceof Error ? err.message : "Promote failed"
-                            );
-                          }
-                        })();
-                      }}
-                    >
-                      Promote to Kanban
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Select a ticket</CardTitle>
-                    <CardDescription>
-                      Choose a request on the left to view the thread.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+    <Empty className="min-h-[16rem] border-0 px-4 py-8">
+      <EmptyHeader className="max-w-lg">
+        <EmptyMedia variant="icon">
+          <LifeBuoyIcon />
+        </EmptyMedia>
+        <EmptyTitle>Report via Intelligence</EmptyTitle>
+        <EmptyDescription>
+          Agents use the Support skill to file OSS bugs on GitHub (with dedupe),
+          private Admin ops reports, or shared-resource owner notifications. Ask
+          Intelligence to report the problem; do not use the old ticket inbox.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button type="button" onClick={openChat}>
+          Open chat with Intelligence
+        </Button>
+      </EmptyContent>
+    </Empty>
   );
 }

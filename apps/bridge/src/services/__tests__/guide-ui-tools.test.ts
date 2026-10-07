@@ -6,7 +6,9 @@ import {
   resolveGuideChoice,
   resolveGuideGraphNode,
   resolveGuideSurface,
+  resolveUserChoice,
   SIGNUP_GUIDE_TOOL_ALLOW,
+  SUPPORT_JOB1_OPTIONS,
 } from "../guide-ui-tools.js";
 
 describe("guide-ui-tools", () => {
@@ -83,6 +85,7 @@ describe("guide-ui-tools", () => {
       { function: { name: "focus_graph_node" } },
       { function: { name: "play_graph_tour" } },
       { function: { name: "ask_guide_choice" } },
+      { function: { name: "ask_user_choice" } },
       { function: { name: "read_wiki_page" } },
       { function: { name: "run_terminal" } },
       { function: { name: "create_page" } },
@@ -91,5 +94,34 @@ describe("guide-ui-tools", () => {
     expect(filtered.map((s) => s.function.name).sort()).toEqual(
       [...SIGNUP_GUIDE_TOOL_ALLOW].sort()
     );
+    expect(filtered.map((s) => s.function.name)).not.toContain("ask_user_choice");
+  });
+
+  it("resolveUserChoice defaults to Support job 1 Log vs Handoff", () => {
+    const choice = resolveUserChoice({
+      question: "How should we handle this bug?",
+    });
+    expect(choice.ok).toBe(true);
+    if (!choice.ok || choice.uiAction.type !== "guide_choice") return;
+    expect(choice.uiAction.options.map((o) => o.id)).toEqual(
+      SUPPORT_JOB1_OPTIONS.map((o) => o.id)
+    );
+  });
+
+  it("resolveUserChoice accepts custom options and rejects empty question", () => {
+    expect(resolveUserChoice({ question: "  " }).ok).toBe(false);
+    const custom = resolveUserChoice({
+      question: "Continue?",
+      options: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+    });
+    expect(custom.ok).toBe(true);
+    if (!custom.ok || custom.uiAction.type !== "guide_choice") return;
+    expect(custom.uiAction.options).toEqual([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ]);
   });
 });

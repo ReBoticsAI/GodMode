@@ -6,6 +6,12 @@
  * focus events Graph CTAs already use.
  */
 
+import {
+  SUPPORT_JOB1_OPTIONS,
+  SUPPORT_JOB1_QUESTION,
+  SUPPORT_JOB1_WHY,
+} from "./support-intake.js";
+
 export type GraphTourStop = {
   nodeId: string;
   label: string;
@@ -287,6 +293,76 @@ export function resolveGuideChoice(): {
     },
     message:
       "Choice buttons are on screen. Do not repeat the options or write a signup paragraph.",
+  };
+}
+
+/** @deprecated Prefer SUPPORT_JOB1_* from support-intake. Kept for older prompts. */
+export const CONTRIBUTE_CORE_FIX_OPTIONS = [
+  {
+    id: "yes_offer_pr",
+    label: "Yes, offer a fix as a pull request",
+  },
+  { id: "no_thanks", label: "No thanks" },
+] as const;
+
+/** @deprecated Prefer SUPPORT_JOB1_QUESTION. */
+export const CONTRIBUTE_CORE_FIX_QUESTION = SUPPORT_JOB1_QUESTION;
+
+/** @deprecated Prefer SUPPORT_JOB1_WHY. */
+export const CONTRIBUTE_CORE_FIX_WHY = SUPPORT_JOB1_WHY;
+
+export {
+  SUPPORT_JOB1_OPTIONS,
+  SUPPORT_JOB1_QUESTION,
+  SUPPORT_JOB1_WHY,
+} from "./support-intake.js";
+
+/**
+ * Mid-chat choice buttons (guide_choice UI). Default is Support job 1:
+ * Log bug vs Hand off to coding subagent (before report_platform_issue).
+ * Pass explicit options for any other Yes/No / multi-option prompt.
+ */
+export function resolveUserChoice(opts: {
+  question: string;
+  why?: string;
+  options?: Array<{ id: string; label: string }>;
+}): {
+  ok: true;
+  uiAction: GuideUiAction;
+  message: string;
+} | {
+  ok: false;
+  error: string;
+} {
+  const question = String(opts.question ?? "").trim();
+  if (!question) {
+    return { ok: false, error: "question is required" };
+  }
+  const rawOptions = Array.isArray(opts.options) ? opts.options : [];
+  const options: Array<{ id: string; label: string }> = [];
+  for (const item of rawOptions) {
+    const id = String(item?.id ?? "").trim();
+    const label = String(item?.label ?? "").trim();
+    if (!id || !label) continue;
+    options.push({ id, label });
+  }
+  if (options.length === 0) {
+    options.push(...SUPPORT_JOB1_OPTIONS.map((o) => ({ ...o })));
+  }
+  if (options.length < 2) {
+    return { ok: false, error: "Provide at least two options with id and label" };
+  }
+  const why = String(opts.why ?? "").trim();
+  return {
+    ok: true,
+    uiAction: {
+      type: "guide_choice",
+      question,
+      why,
+      options,
+    },
+    message:
+      "Choice buttons are on screen. Wait for the user to pick one. Do not repeat the options as a paragraph.",
   };
 }
 

@@ -116,8 +116,13 @@ describe("Intelligence toolAllow registry sync (#442)", () => {
     expect(merged).toContain("git_clone");
     expect(merged).toContain("github_repo_create");
     expect(merged).toContain("github_pr_create");
+    expect(merged).toContain("github_fork_repo");
+    expect(merged).toContain("ask_user_choice");
     expect(merged).toContain("github_release_create");
     expect(merged).toContain("promote_support_to_card");
+    expect(merged).toContain("report_platform_issue");
+    expect(merged).toContain("report_admin_ops");
+    expect(merged).toContain("report_shared_resource_issue");
     expect(merged).toContain("git_push");
     expect(merged).toContain("remember");
   });

@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import { ChatAttachmentImage } from "@/components/intelligence/ChatAttachmentLightbox";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -151,7 +152,7 @@ import { WindowDensityControls } from "@/components/floating/WindowDensityContro
 import AuthGate from "@/pages/AuthGate";
 import Bank from "@/pages/Bank";
 import Vault from "@/pages/Vault";
-import Support from "@/pages/Support";
+import { SupportContent } from "@/pages/Support";
 import {
   getWindowDensity,
   WINDOW_DENSITY_EVENT,
@@ -453,6 +454,8 @@ export function IntelligencePanel({
     setPanelOpen,
     autoSendPrompt,
     setAutoSendPrompt,
+    pendingComposerImages,
+    setPendingComposerImages,
     pendingChatId,
     setPendingChatId,
     buildPlatformContext,
@@ -1995,8 +1998,10 @@ export function IntelligencePanel({
   useEffect(() => {
     if (!autoSendPrompt || !panelOpen || effectiveTab !== "chat" || busy) return;
     const text = autoSendPrompt;
+    const images = pendingComposerImages.slice();
     setAutoSendPrompt(null);
-    void send({ text, images: [], mentionIds: [] });
+    setPendingComposerImages([]);
+    void send({ text, images, mentionIds: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSendPrompt, panelOpen, panelTab, busy, setAutoSendPrompt]);
 
@@ -2582,7 +2587,10 @@ export function IntelligencePanel({
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
         >
-          {messages.length === 0 && !isDmMode && activeAgentId === "intelligence" && (
+          {messages.length === 0 &&
+            !isDmMode &&
+            activeAgentId === "intelligence" &&
+            (!authenticated || user?.temporary) && (
             <Empty className="@container/intel-greeting h-full gap-5 border-0 px-4 @min-[32rem]/intel-greeting:gap-6">
               {emptyOnboardingStep === "login" ? (
                 <EmptyContent className="max-w-md">
@@ -2633,6 +2641,23 @@ export function IntelligencePanel({
               )}
             </Empty>
           )}
+          {messages.length === 0 &&
+            !isDmMode &&
+            activeAgentId === "intelligence" &&
+            authenticated &&
+            !user?.temporary && (
+            <Empty className="h-full border-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <BotIcon />
+                </EmptyMedia>
+                <EmptyTitle>{agentName}</EmptyTitle>
+                <EmptyDescription>
+                  Send a message to get started.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
           {messages.length === 0 && (isDmMode || activeAgentId !== "intelligence") && (
             <Empty className="h-full border-0">
               <EmptyHeader>
@@ -2673,11 +2698,10 @@ export function IntelligencePanel({
                     {m.images && m.images.length > 0 && (
                       <div className="mb-1.5 flex flex-wrap gap-1.5">
                         {m.images.map((img, i) => (
-                          <img
+                          <ChatAttachmentImage
                             key={i}
                             src={img}
                             alt="attachment"
-                            className="size-16 rounded-md border border-border/60 object-cover"
                           />
                         ))}
                       </div>
@@ -2719,6 +2743,17 @@ export function IntelligencePanel({
                     {m.dmSenderKind === "agent" ? "🤖 " : ""}
                     {m.dmSenderName}
                   </span>
+                )}
+                {m.images && m.images.length > 0 && (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5">
+                    {m.images.map((img, i) => (
+                      <ChatAttachmentImage
+                        key={i}
+                        src={img}
+                        alt="attachment"
+                      />
+                    ))}
+                  </div>
                 )}
                 {(() => {
                   const hasParts = !isDmMode && visibleParts && visibleParts.length > 0;
@@ -2967,7 +3002,7 @@ export function IntelligencePanel({
 
         {effectiveTab === "support" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <Support />
+            <SupportContent embedded />
           </div>
         )}
 

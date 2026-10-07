@@ -13,6 +13,7 @@ const NEVER_AUTO_APPROVE = new Set([
   "git_push",
   "git_clone",
   "github_repo_create",
+  "github_fork_repo",
   "github_pr_create",
   "submit_community_catalog_submission",
   "marketplace_catalog_submit_submission",

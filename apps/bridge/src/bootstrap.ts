@@ -11,6 +11,9 @@ import { getTenantDb, pinTenantDb, closeAllTenantDbs, listTenantDbAccessors } fr
 import { closeAllPluginSqlite } from "./services/plugin-sqlite.js";
 import { closeAllUserDbs } from "./user-registry.js";
 import { ensurePlatformBootstrap, ensureInitialAdmins, repairNonOperatorTenantStructure, removeLegacyLifeDepartmentFromPersonalTenants } from "./services/tenant-bootstrap.js";
+import { ensureSupportReportHooks } from "./services/support-report-hooks-seed.js";
+import { ensureCoreMaintainerAgents } from "./services/core-maintainer-agents.js";
+import type { CoreDatabase } from "./core-db.js";
 import { tenantDbMiddleware, attachAuthContext, requireAuth } from "./services/auth/middleware.js";
 import { requireTrustedOrigin } from "./services/auth/rate-limit.js";
 import { structuredRequestLog } from "./services/request-log.js";
@@ -145,6 +148,26 @@ removeLegacyLifeDepartmentFromPersonalTenants(coreDb);
 const db: AppDatabase = getTenantDb(operatorTenantId);
 pinTenantDb(operatorTenantId);
 seedChannelAgents(db);
+try {
+  ensureSupportReportHooks(db as unknown as CoreDatabase, {
+    ownerKind: "agent",
+    ownerId: "intelligence",
+    ownerTenantId: operatorTenantId,
+  });
+} catch (err) {
+  console.warn(
+    "[bootstrap] support report hooks seed failed:",
+    err instanceof Error ? err.message : err
+  );
+}
+try {
+  ensureCoreMaintainerAgents(db, operatorTenantId);
+} catch (err) {
+  console.warn(
+    "[bootstrap] core maintainer agents seed failed:",
+    err instanceof Error ? err.message : err
+  );
+}
 try {
   const hub = getHostUsersDb();
   ensurePublicChannelSchema(hub);

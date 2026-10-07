@@ -72,7 +72,7 @@ export async function ensureGithubFork(
     throw new Error(
       forkRes.json.message ??
         existing.json.message ??
-        "Could not fork or access GodMode-Marketplace. Fork the repo on GitHub first."
+        `Could not fork or access ${upstreamOwner}/${upstreamRepo}. Connect GitHub and fork the repo first.`
     );
   }
   return {

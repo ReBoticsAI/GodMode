@@ -2109,6 +2109,7 @@ export function ChatGraphCanvas({
   return (
     <div
       ref={graphRootRef}
+      data-godmode-graph-root=""
       className="absolute inset-0 z-0 bg-background"
       style={
         {
