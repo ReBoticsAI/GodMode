@@ -24,10 +24,10 @@ describe("community Core fix PR wiring", () => {
   });
 
   it("formats cross-fork head like Marketplace catalog PRs", () => {
-    const forkOwner = "dane-contrib";
+    const forkOwner = "contrib-user";
     const branch = "fix/support-e2e";
     const head = `${forkOwner}:${branch}`;
-    expect(head).toBe("dane-contrib:fix/support-e2e");
+    expect(head).toBe("contrib-user:fix/support-e2e");
   });
 
   it("rejectPiiHints blocks emails and secrets for public PR bodies", () => {

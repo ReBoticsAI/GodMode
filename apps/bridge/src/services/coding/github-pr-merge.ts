@@ -17,8 +17,15 @@ export const CORE_PR_OK_TO_MERGE_LABEL = "maintainers:ok-to-merge";
 export const CORE_PR_MAX_FILES = 40;
 export const CORE_PR_MAX_CHANGED_LINES = 2000;
 
-const FORBIDDEN_PATH =
-  /(^|\/)(\.env|\.env\..*|credentials\.json|secrets?\/|id_rsa|\.pem$)|\bgodmode-plugin-(sierra|polymarket)\b|\/playbook-zones\/|from_sc|to_sc|\bpm_/i;
+/** Secrets + any private plugin path. Domain plugin ids are not named here (OSS). */
+const FORBIDDEN_PATH = new RegExp(
+  [
+    "(^|/)(\\.env|\\.env\\..*|credentials\\.json|secrets?/|id_rsa|\\.pem$)",
+    "|\\bgodmode-plugin-[\\w-]+\\b",
+    "|@godmode-plugin-[\\w-]+",
+  ].join(""),
+  "i"
+);
 
 export type PrMergeFile = {
   filename: string;
