@@ -1,0 +1,42 @@
+{
+  "template": "support-report",
+  "description": "Event hooks for Agent Support reports (platform GitHub, Admin ops, shared resource). Seeded as notify actions; override actionKind to run_workflow when ready.",
+  "hooks": [
+    {
+      "name": "support-platform-issue-notify",
+      "triggerKind": "event",
+      "eventType": "support.platform_issue.reported",
+      "actionKind": "notify",
+      "rateLimitPerHour": 20,
+      "actionConfig": {
+        "title": "Platform issue reported",
+        "body": "A GodMode Agent filed or updated a Core GitHub issue.",
+        "category": "support"
+      }
+    },
+    {
+      "name": "support-ops-report-notify",
+      "triggerKind": "event",
+      "eventType": "ops.report.created",
+      "actionKind": "notify",
+      "rateLimitPerHour": 20,
+      "actionConfig": {
+        "title": "Admin ops report",
+        "body": "A GodMode Agent filed a private Admin ops report.",
+        "category": "support"
+      }
+    },
+    {
+      "name": "support-resource-issue-notify",
+      "triggerKind": "event",
+      "eventType": "support.resource_issue.reported",
+      "actionKind": "notify",
+      "rateLimitPerHour": 20,
+      "actionConfig": {
+        "title": "Shared resource issue",
+        "body": "A GodMode Agent reported a shared-resource issue.",
+        "category": "support"
+      }
+    }
+  ]
+}

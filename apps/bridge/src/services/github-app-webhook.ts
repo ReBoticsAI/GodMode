@@ -1,11 +1,13 @@
 /**
- * GitHub App webhook receiver (Projects v2 item → Tasks board sync).
+ * GitHub App webhook receiver (Projects v2 item → Tasks board sync;
+ * Core issues / PRs → PlatformEvent for Agent Support hooks).
  */
 import type { Request, Response } from "express";
 import { getCloudDb, listAllTenantIds } from "../core-db.js";
 import { getTenantDb } from "../tenant-registry.js";
 import { verifyGithubWebhookSignature } from "../services/github-app.js";
 import { syncBoardWithGithub } from "../services/github-projects.js";
+import { emitEvent } from "./event-bus.js";
 
 type ProjectsV2ItemPayload = {
   action?: string;
@@ -14,6 +16,47 @@ type ProjectsV2ItemPayload = {
     project_node_id?: string;
   };
 };
+
+type IssuesPayload = {
+  action?: string;
+  issue?: {
+    number?: number;
+    html_url?: string;
+    title?: string;
+    state?: string;
+  };
+  pull_request?: {
+    number?: number;
+    html_url?: string;
+    title?: string;
+    state?: string;
+    draft?: boolean;
+    user?: { login?: string };
+  };
+  repository?: {
+    full_name?: string;
+  };
+};
+
+const PR_WAKE_ACTIONS = new Set([
+  "opened",
+  "reopened",
+  "synchronize",
+  "ready_for_review",
+  "edited",
+]);
+
+function operatorTenantId(): string | null {
+  return (
+    (
+      getCloudDb()
+        .prepare(
+          `SELECT id FROM tenants WHERE is_operator = 1 ORDER BY created_at ASC LIMIT 1`
+        )
+        .get() as { id: string } | undefined
+    )?.id ?? null
+  );
+}
 
 export async function githubAppWebhookHandler(
   req: Request,
@@ -36,11 +79,68 @@ export async function githubAppWebhookHandler(
     return;
   }
 
-  let payload: ProjectsV2ItemPayload = {};
+  let payload: ProjectsV2ItemPayload & IssuesPayload = {};
   try {
-    payload = JSON.parse(raw.toString("utf8")) as ProjectsV2ItemPayload;
+    payload = JSON.parse(raw.toString("utf8")) as ProjectsV2ItemPayload &
+      IssuesPayload;
   } catch {
     res.status(400).json({ error: "Invalid JSON" });
+    return;
+  }
+
+  if (event === "issues" || event === "issue_comment") {
+    const fullName = payload.repository?.full_name ?? "";
+    if (fullName === "ReBoticsAI/GodMode" && payload.issue?.number) {
+      const operatorTenant = operatorTenantId();
+      if (operatorTenant) {
+        emitEvent({
+          type: "support.platform_issue.reported",
+          actor: { kind: "system", id: "github-webhook" },
+          tenantId: operatorTenant,
+          payload: {
+            action: payload.action ?? event,
+            issueNumber: payload.issue.number,
+            htmlUrl: payload.issue.html_url ?? null,
+            subject: payload.issue.title ?? null,
+            source: "github_webhook",
+            event,
+          },
+        });
+      }
+    }
+    res.status(200).json({ ok: true, accepted: event });
+    return;
+  }
+
+  if (event === "pull_request") {
+    const fullName = payload.repository?.full_name ?? "";
+    const action = payload.action ?? "";
+    const pr = payload.pull_request;
+    if (
+      fullName === "ReBoticsAI/GodMode" &&
+      pr?.number &&
+      PR_WAKE_ACTIONS.has(action)
+    ) {
+      const operatorTenant = operatorTenantId();
+      if (operatorTenant) {
+        emitEvent({
+          type: "support.platform_pr.updated",
+          actor: { kind: "system", id: "github-webhook" },
+          tenantId: operatorTenant,
+          payload: {
+            action,
+            prNumber: pr.number,
+            htmlUrl: pr.html_url ?? null,
+            title: pr.title ?? null,
+            draft: Boolean(pr.draft),
+            authorLogin: pr.user?.login ?? null,
+            source: "github_webhook",
+            event,
+          },
+        });
+      }
+    }
+    res.status(200).json({ ok: true, accepted: event });
     return;
   }
 

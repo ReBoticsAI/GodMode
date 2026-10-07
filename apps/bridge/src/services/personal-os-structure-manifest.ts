@@ -70,6 +70,7 @@ export const PERSONAL_BOOTSTRAP_SKILL_IDS = [
   "plugin-authoring",
   "object-types",
   "shadcn-ui",
+  "support",
 ] as const;
 
 /**

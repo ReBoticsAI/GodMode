@@ -101,6 +101,41 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "ask_user_choice",
+    description:
+      "Show custom mid-chat choice buttons. For Support job 1 (Bug pill / OSS bug): call once AFTER a short gather and BEFORE report_platform_issue with Log bug for developers vs Hand off to a coding subagent (defaults when options omitted). Not for signup next-steps (never use ask_guide_choice here). Wait for their pick; do not repeat the options in prose.",
+    mode: "auto",
+    category: "guide",
+    parameters: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description:
+            "Short question shown above the buttons. Required.",
+        },
+        why: {
+          type: "string",
+          description: "Optional one-sentence context under the question.",
+        },
+        options: {
+          type: "array",
+          description:
+            "Optional buttons. Default is Log bug for developers / Hand off to a coding subagent. Each needs id and label.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+            },
+            required: ["id", "label"],
+          },
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
     name: "focus_graph_node",
     description:
       "Focus a node on the 3D Graph so the user can see You, Hub, Intelligence, Vaults, Bank, Wiki, Workspaces, or Marketplace. Pass a node id/alias such as you, hub, intelligence, platform_vault, personal_vault, bank, wiki, workspaces, marketplace (or a hub:… id).",
@@ -1364,9 +1399,30 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     },
   },
   {
+    name: "github_fork_repo",
+    description:
+      "Fork a public GitHub repo into the connected user's account via Vault GitHub Connect (same pattern as Community catalog). Default upstream is ReBoticsAI/GodMode. Returns cloneUrl for git_clone. Always requires confirmation. Does not open a PR.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        owner: {
+          type: "string",
+          description: "Upstream owner (default ReBoticsAI)",
+        },
+        repo: {
+          type: "string",
+          description: "Upstream repo name (default GodMode)",
+        },
+      },
+    },
+  },
+  {
     name: "github_pr_create",
     description:
-      "Open a GitHub pull request for the coding-root remote using Vault GitHub Connect. Always requires confirmation. Strip Cursor Co-authored-by / Made-with trailers from title and body. Prefer after git_push.",
+      "Open a GitHub pull request using Vault GitHub Connect. Always requires confirmation. Strip Cursor Co-authored-by / Made-with trailers from title and body. Prefer after git_push. For a fork contributing to upstream Core, set upstreamOwner=ReBoticsAI and upstreamRepo=GodMode (head becomes youruser:branch). Never merge.",
     mode: "confirm",
     category: "coding",
     write: true,
@@ -1381,15 +1437,55 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         },
         base: {
           type: "string",
-          description: "Base branch (default: main)",
+          description: "Base branch (default: main, or upstream default when targeting upstream)",
         },
         remote: {
           type: "string",
-          description: "Remote name used to resolve owner/repo (default origin)",
+          description: "Remote name used to resolve fork owner/repo (default origin)",
+        },
+        upstreamOwner: {
+          type: "string",
+          description:
+            "Optional upstream owner for cross-fork PRs (e.g. ReBoticsAI). When set with upstreamRepo, opens the PR on upstream with head=forkOwner:branch.",
+        },
+        upstreamRepo: {
+          type: "string",
+          description: "Optional upstream repo (e.g. GodMode).",
         },
         draft: { type: "boolean" },
       },
       required: ["title"],
+    },
+  },
+  {
+    name: "github_pr_merge",
+    description:
+      "Operator-tenant only. Merge a ReBoticsAI/GodMode PR into main after the hard-gate decision matrix passes (CI green, scope, author allowlist or maintainers:ok-to-merge, no drafts/secrets). Fail closed. Never force-merge. Prefer after watch_pr_checks.",
+    mode: "confirm",
+    category: "coding",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        pr: {
+          type: "string",
+          description: "PR number or URL (e.g. 461 or https://github.com/ReBoticsAI/GodMode/pull/461)",
+        },
+        owner: {
+          type: "string",
+          description: "Repo owner (default ReBoticsAI)",
+        },
+        repo: {
+          type: "string",
+          description: "Repo name (default GodMode)",
+        },
+        mergeMethod: {
+          type: "string",
+          enum: ["squash", "merge", "rebase"],
+          description: "GitHub merge method (default squash)",
+        },
+      },
+      required: ["pr"],
     },
   },
   {
@@ -1600,10 +1696,77 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       },
     },
   },
-  // --- Support ---
+  // --- Support (Agent report tools; prefer these over legacy tickets) ---
+  {
+    name: "report_platform_issue",
+    description:
+      "Report an OSS/product bug to ReBoticsAI/GodMode on GitHub via the platform App. Searches open issues and comments on a strong match instead of opening a duplicate. Optional images (screenshot data URLs) are uploaded and embedded in the issue. Never include secrets or PII. Prefer use_skill('support') first.",
+    mode: "confirm",
+    write: true,
+    category: "general",
+    parameters: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Issue title" },
+        body: { type: "string", description: "Evidence, repro, expected vs actual" },
+        forceNew: {
+          type: "boolean",
+          description: "Skip dedupe and always create a new issue",
+        },
+        images: {
+          type: "array",
+          description:
+            "Optional screenshot data URLs (data:image/png;base64,...) to embed on the GitHub issue. Prefer images from the user message / bug pill capture.",
+          items: { type: "string" },
+        },
+      },
+      required: ["subject", "body"],
+    },
+  },
+  {
+    name: "report_admin_ops",
+    description:
+      "File a private Hub/Cloud ops report to platform admins (billing, account, staging). Not public GitHub. Optionally creates an Admin Kanban follow-up card. Prefer use_skill('support').",
+    mode: "confirm",
+    write: true,
+    category: "general",
+    parameters: {
+      type: "object",
+      properties: {
+        subject: { type: "string" },
+        body: { type: "string" },
+        createCard: {
+          type: "boolean",
+          description: "Create a Kanban follow-up card for the current user (default true for admins)",
+        },
+      },
+      required: ["subject", "body"],
+    },
+  },
+  {
+    name: "report_shared_resource_issue",
+    description:
+      "Notify the owner of a shared resource (share grant) about a problem. Not a GodMode GitHub issue unless it is clearly a platform bug (use report_platform_issue). Prefer use_skill('support').",
+    mode: "confirm",
+    write: true,
+    category: "general",
+    parameters: {
+      type: "object",
+      properties: {
+        subject: { type: "string" },
+        body: { type: "string" },
+        sharedGrantId: {
+          type: "string",
+          description: "share_grants.id for the shared resource",
+        },
+      },
+      required: ["subject", "body", "sharedGrantId"],
+    },
+  },
   {
     name: supersededStaticName("create_support_ticket"),
-    description: "Submit a support ticket to platform admins.",
+    description:
+      "Legacy: submit an in-app support ticket. Prefer report_platform_issue, report_admin_ops, or report_shared_resource_issue.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1619,7 +1782,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: supersededStaticName("list_support_tickets"),
-    description: "List support tickets for the requester or all tickets (admin).",
+    description: "Legacy: list in-app support tickets. Prefer GitHub issues / notifications from report_* tools.",
     mode: "auto",
     parameters: {
       type: "object",
@@ -1631,7 +1794,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "reply_support_ticket",
-    description: "Add a message to a support ticket. Requires confirmation.",
+    description: "Legacy: add a message to an in-app support ticket.",
     mode: "confirm",
     write: true,
     parameters: {
@@ -1645,7 +1808,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "update_support_ticket",
-    description: "Update support ticket status (admin). Requires confirmation.",
+    description: "Legacy: update in-app support ticket status (admin).",
     mode: "confirm",
     write: true,
     parameters: {
@@ -2387,7 +2550,9 @@ export const CODING_TOOL_NAMES = new Set<string>([
   "git_push",
   "git_clone",
   "github_repo_create",
+  "github_fork_repo",
   "github_pr_create",
+  "github_pr_merge",
   "github_release_prepare",
   "github_release_create",
   "github_release_publish",
@@ -2429,7 +2594,9 @@ const CODING_WRITE_TOOLS = new Set([
   "git_push",
   "git_clone",
   "github_repo_create",
+  "github_fork_repo",
   "github_pr_create",
+  "github_pr_merge",
   "github_release_prepare",
   "github_release_create",
   "github_release_publish",

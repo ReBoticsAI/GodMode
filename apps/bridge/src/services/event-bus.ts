@@ -124,6 +124,10 @@ export function listKnownEventTypes(db?: CoreDatabase): string[] {
   for (const t of [
     "dm.message.created",
     "support.ticket.created",
+    "support.platform_issue.reported",
+    "support.platform_pr.updated",
+    "support.resource_issue.reported",
+    "ops.report.created",
     "share.created",
     "agent.run.completed",
     "schedule.tick",

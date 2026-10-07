@@ -8,12 +8,21 @@ import {
 } from "react";
 import {
   ArrowUpIcon,
+  BugIcon,
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
 import { ensureAgentDm, fetchDmDirectory, sendDmMessage } from "@/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,16 +31,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { Textarea } from "@/components/ui/textarea";
 import { isChannelAgentId } from "@/lib/focus-chrome";
 import { useIntelligence } from "@/lib/intelligence-context";
 import { useGraphFocusChip } from "@/lib/use-graph-focus-chip";
 import { cn } from "@/lib/utils";
+
+function buildBugReportPrompt(userNote: string): string {
+  return [
+    "I tapped the Bug pill and attached a screenshot of the current page.",
+    "",
+    "What looks wrong:",
+    userNote.trim(),
+    "",
+    "Use the Support skill (job 1):",
+    "1. Gather any missing expected vs actual / repro in 1–3 short turns (do not file yet).",
+    "2. ask_user_choice: Log bug for developers vs Hand off to a coding subagent for a fix PR (we will not merge).",
+    "3. On log-only: report_platform_issue with subject/body from my notes and the screenshot (pass images or rely on turn screenshots), return the issue URL, stop.",
+    "4. On handoff: report_platform_issue first, then delegate_to_subagent / fork+PR to upstream ReBoticsAI/GodMode linking the issue. Never merge. No secrets or personal emails.",
+    "Never call ask_guide_choice, open_guide_surface, or wiki tools for this bug.",
+  ].join("\n");
+}
 
 /**
  * Cursor-style pill message box anchored bottom-center on the Graph.
@@ -82,7 +109,14 @@ export function GraphEtherComposer({
     clearComposerDraft,
     emitDmIncomingMessage,
     refreshDmConversations,
+    captureScreenshot,
+    setPendingComposerImages,
   } = useIntelligence();
+  const [bugCapturing, setBugCapturing] = useState(false);
+  const [bugDialogOpen, setBugDialogOpen] = useState(false);
+  const [bugScreenshot, setBugScreenshot] = useState<string | null>(null);
+  const [bugNote, setBugNote] = useState("");
+  const bugNoteRef = useRef<HTMLTextAreaElement | null>(null);
   const [busy, setBusy] = useState(false);
   const workStartedAt = useRef<number | null>(null);
   const [workedLabel, setWorkedLabel] = useState<string | null>(null);
@@ -292,14 +326,133 @@ export function GraphEtherComposer({
   const hasText = value.trim().length > 0;
   const focusChip = useGraphFocusChip();
   const FocusIcon = focusChip?.Icon;
+  const leftChips = Boolean(statusChips || workedLabel || focusChip);
+
+  const handleBugReport = useCallback(async () => {
+    if (bugCapturing || bugDialogOpen) return;
+    setBugCapturing(true);
+    try {
+      const shot = await captureScreenshot();
+      if (!shot) {
+        toast.error("Could not capture screenshot");
+        return;
+      }
+      setBugScreenshot(shot);
+      setBugNote("");
+      setBugDialogOpen(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Screenshot failed");
+    } finally {
+      setBugCapturing(false);
+    }
+  }, [bugCapturing, bugDialogOpen, captureScreenshot]);
+
+  useEffect(() => {
+    if (!bugDialogOpen) return;
+    const id = window.setTimeout(() => bugNoteRef.current?.focus(), 50);
+    return () => window.clearTimeout(id);
+  }, [bugDialogOpen]);
+
+  const closeBugDialog = useCallback(() => {
+    setBugDialogOpen(false);
+    setBugScreenshot(null);
+    setBugNote("");
+  }, []);
+
+  const submitBugReport = useCallback(() => {
+    const note = bugNote.trim();
+    if (note.length < 8) {
+      toast.error("Describe what looks wrong (a short sentence is enough)");
+      bugNoteRef.current?.focus();
+      return;
+    }
+    if (!bugScreenshot) {
+      toast.error("Screenshot missing. Tap Bug again.");
+      closeBugDialog();
+      return;
+    }
+    setPendingComposerImages([bugScreenshot]);
+    openPanel({
+      tab: "chat",
+      agentId: "intelligence",
+      prompt: buildBugReportPrompt(note),
+      autoSend: true,
+    });
+    closeBugDialog();
+    toast.message("Filing bug report…");
+  }, [
+    bugNote,
+    bugScreenshot,
+    closeBugDialog,
+    openPanel,
+    setPendingComposerImages,
+  ]);
 
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
-      {(statusChips || workedLabel || focusChip) && (
-        <div
-          className="flex shrink-0 flex-wrap items-center gap-1.5"
-          data-graph-action-chrome=""
-        >
+      <Dialog
+        open={bugDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeBugDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Report a bug</DialogTitle>
+            <DialogDescription>
+              Screenshot captured. Describe what looks wrong so Intelligence can
+              file a clear GitHub issue.
+            </DialogDescription>
+          </DialogHeader>
+          {bugScreenshot ? (
+            <div className="overflow-hidden rounded-md border border-border">
+              <img
+                src={bugScreenshot}
+                alt="Bug screenshot preview"
+                className="max-h-40 w-full object-cover object-top"
+              />
+            </div>
+          ) : null}
+          <Field>
+            <FieldLabel htmlFor="bug-report-note">What looks wrong?</FieldLabel>
+            <Textarea
+              ref={bugNoteRef}
+              id="bug-report-note"
+              value={bugNote}
+              onChange={(e) => setBugNote(e.target.value)}
+              placeholder="Expected vs actual, and how to reproduce if you know."
+              rows={4}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submitBugReport();
+                }
+              }}
+            />
+            <FieldDescription>
+              Do not include secrets or personal emails. Ctrl/Cmd+Enter to submit.
+            </FieldDescription>
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeBugDialog}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={submitBugReport}
+              disabled={bugNote.trim().length < 8}
+            >
+              File report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div
+        className="flex shrink-0 items-center gap-1.5"
+        data-graph-action-chrome=""
+      >
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {focusChip && FocusIcon ? (
             <span
               className={cn(
@@ -332,8 +485,25 @@ export function GraphEtherComposer({
             </span>
           ) : null}
           {statusChips}
+          {!leftChips ? <span className="sr-only">Composer actions</span> : null}
         </div>
-      )}
+        <button
+          type="button"
+          className={cn(
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs shadow-sm backdrop-blur-sm transition-colors",
+            "border-border/50 bg-card/80 text-muted-foreground",
+            "hover:bg-muted hover:text-foreground",
+            "disabled:pointer-events-none disabled:opacity-50"
+          )}
+          aria-label="Report a bug with screenshot"
+          title="Report a bug (captures screenshot, then asks what looks wrong)"
+          disabled={bugCapturing || bugDialogOpen}
+          onClick={() => void handleBugReport()}
+        >
+          <BugIcon className="size-3.5 shrink-0" aria-hidden />
+          <span>{bugCapturing ? "Capturing…" : "Bug"}</span>
+        </button>
+      </div>
 
       <div className="flex shrink-0" data-graph-action-chrome="">
         <InputGroup

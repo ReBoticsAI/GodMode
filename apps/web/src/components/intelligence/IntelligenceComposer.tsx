@@ -22,6 +22,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ChatAttachmentImage } from "@/components/intelligence/ChatAttachmentLightbox";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -747,15 +748,18 @@ export function IntelligenceComposer({
       {images.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {images.map((img, i) => (
-            <div
-              key={i}
-              className="relative size-12 overflow-hidden rounded-md border border-border/60"
-            >
-              <img src={img} alt="attachment" className="size-full object-cover" />
+            <div key={i} className="relative size-12">
+              <ChatAttachmentImage
+                src={img}
+                alt="attachment"
+                className="size-12"
+                thumbClassName="size-full"
+              />
               <button
                 type="button"
                 onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                className="absolute right-0 top-0 rounded-bl bg-black/60 p-0.5 text-white"
+                className="absolute right-0 top-0 z-10 rounded-bl bg-black/60 p-0.5 text-white"
+                aria-label="Remove attachment"
               >
                 <XIcon className="size-3" />
               </button>

@@ -254,11 +254,11 @@ export const GRAPH_ACTION_CREATE_ITEMS = [
   },
   {
     id: "support-ticket",
-    label: "Support ticket",
-    description: "Open a platform or shared-resource support ticket.",
+    label: "Report via Support skill",
+    description: "Ask Intelligence to report a platform, ops, or shared-resource issue.",
     icon: "LifeBuoy",
     group: "Social",
-    cta: { type: "navigate", path: "/support" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "record",
@@ -675,11 +675,11 @@ export const GRAPH_ACTION_EDIT_ITEMS = [
   },
   {
     id: "support-ticket",
-    label: "Support ticket",
-    description: "Update status, reply, or promote to a task.",
+    label: "Report via Support skill",
+    description: "Ask Intelligence to file GitHub, Admin ops, or owner reports.",
     icon: "LifeBuoy",
     group: "Social",
-    cta: { type: "navigate", path: "/support" },
+    cta: { type: "open_panel", tab: "chat" },
   },
   {
     id: "share-grant",
@@ -883,7 +883,7 @@ export const GRAPH_ACTION_MONITOR_ITEMS = [
   { id: "calendar-activity", label: "Calendar activity", description: "Calendar feed and upcoming events.", icon: "CalendarDays", group: "Activity", cta: { type: "open_panel", tab: "calendar" } },
   { id: "automation-activity", label: "Automation activity", description: "Workflow / hook / schedule activity.", icon: "Workflow", group: "Activity", needsDashboard: true, cta: { type: "open_panel", tab: "projects" } },
   { id: "vault-activity", label: "Vault activity", description: "Recent vault connect and secret changes.", icon: "Vault", group: "Activity", needsDashboard: true, cta: { type: "open_panel", tab: "vault" } },
-  { id: "support", label: "Support", description: "Support ticket queue.", icon: "LifeBuoy", group: "Activity", cta: { type: "open_panel", tab: "support" } },
+  { id: "support", label: "Support", description: "Agent Support skill intake (chat).", icon: "LifeBuoy", group: "Activity", cta: { type: "open_panel", tab: "support" } },
   { id: "release-submissions", label: "Release submissions", description: "GitHub Releases draft/publish status.", icon: "Rocket", group: "Activity", cta: { type: "navigate", path: "/releases" } },
   { id: "training-jobs", label: "Training jobs", description: "Model training job monitor.", icon: "GraduationCap", group: "Jobs", needsDashboard: true, cta: { type: "none" } },
   { id: "sync-jobs", label: "Sync jobs", description: "Background sync job monitor.", icon: "RefreshCw", group: "Jobs", needsDashboard: true, cta: { type: "none" } },
@@ -1366,10 +1366,10 @@ export const GRAPH_ACTION_VALIDATE_ITEMS = [
   {
     id: "support-verify",
     label: "Support routing",
-    description: "Confirm ticket targets and GitHub App availability.",
+    description: "Confirm Agent Support skill and GitHub App availability.",
     icon: "LifeBuoy",
     group: "Surfaces",
-    cta: { type: "navigate", path: "/support" },
+    cta: { type: "open_panel", tab: "support" },
   },
 ] as const satisfies readonly GraphActionMenuItem[];
 
@@ -1412,7 +1412,7 @@ export const GRAPH_ACTION_GOVERN_ITEMS = [
   { id: "audit-logs", label: "Audit logs", description: "Authority and admin audit trail.", icon: "ScrollText", group: "Compliance", systemOnly: true, needsDashboard: true, cta: { type: "navigate", path: "/settings/admin" } },
   { id: "retention", label: "Retention", description: "Data retention policy.", icon: "Timer", group: "Compliance", systemOnly: true, needsDashboard: true, cta: { type: "none" } },
   { id: "observability", label: "Observability", description: "Admin observability logs.", icon: "Activity", group: "Compliance", systemOnly: true, cta: { type: "navigate", path: "/settings/admin" } },
-  { id: "support", label: "Support", description: "Support queue administration.", icon: "LifeBuoy", group: "Compliance", cta: { type: "navigate", path: "/support" } },
+  { id: "support", label: "Support", description: "Agent Support staff group and report hooks.", icon: "LifeBuoy", group: "Compliance", cta: { type: "navigate", path: "/settings/admin?tab=support" } },
   { id: "publish-rules", label: "Publish rules", description: "Marketplace publish rules.", icon: "BookCheck", group: "Marketplace", systemOnly: true, needsDashboard: true, cta: { type: "navigate", path: "/marketplace?tab=seller" } },
   { id: "seller-policies", label: "Seller policies", description: "Seller ToS and payout policy.", icon: "Store", group: "Marketplace", systemOnly: true, cta: { type: "navigate", path: "/marketplace?tab=seller" } },
   { id: "listing-policies", label: "Listing policies", description: "Listing moderation policy.", icon: "FileCheck", group: "Marketplace", systemOnly: true, needsDashboard: true, cta: { type: "navigate", path: "/marketplace" } },

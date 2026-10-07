@@ -482,6 +482,20 @@ export function previewGitToolDiff(
         ].join("\n"),
       };
     }
+    if (toolName === "github_pr_merge") {
+      const pr = String(args.pr ?? "").trim() || "(pr required)";
+      const owner = String(args.owner ?? "ReBoticsAI").trim() || "ReBoticsAI";
+      const repo = String(args.repo ?? "GodMode").trim() || "GodMode";
+      const method = String(args.mergeMethod ?? "squash").trim() || "squash";
+      return {
+        previewDiff: [
+          `Merge PR ${pr} on ${owner}/${repo}`,
+          `Method: ${method}`,
+          "Hard-gate matrix must pass (CI, scope, author/label)",
+          "Operator tenant only; never force-merge",
+        ].join("\n"),
+      };
+    }
     if (
       toolName === "github_release_create" ||
       toolName === "github_release_publish"

@@ -1266,10 +1266,40 @@ export interface SelectModelInput {
   managedGodModeInference?: boolean;
 }
 
+/** Clear provider / managed-Inference flags when leaving the provider backend. */
+const CLEAR_PROVIDER_CONFIG_FLAGS: Record<string, undefined> = {
+  provider: undefined,
+  apiKeyRef: undefined,
+  baseUrl: undefined,
+  transport: undefined,
+  openrouter: undefined,
+  groq: undefined,
+  together: undefined,
+  fireworks: undefined,
+  deepseek: undefined,
+  dashscope: undefined,
+  qwen: undefined,
+  googleAi: undefined,
+  google_ai: undefined,
+  xai: undefined,
+  zai: undefined,
+  minimax: undefined,
+  customOpenai: undefined,
+  zaiCoding: undefined,
+  opencodeGo: undefined,
+  digitaloceanInference: undefined,
+  snowflakeCortex: undefined,
+  minimaxToken: undefined,
+  kimiCode: undefined,
+  poe: undefined,
+  opencodeZen: undefined,
+};
+
 function applyProfileToAgentPatch(
   agent: NonNullable<ReturnType<typeof getAgent>>,
   profile: ModelHarnessProfile,
-  configExtra: Record<string, unknown>
+  configExtra: Record<string, unknown>,
+  opts?: { clearProviderConfig?: boolean }
 ) {
   return {
     thinking: {
@@ -1285,6 +1315,7 @@ function applyProfileToAgentPatch(
     },
     config: {
       ...agent.config,
+      ...(opts?.clearProviderConfig ? CLEAR_PROVIDER_CONFIG_FLAGS : {}),
       ...configExtra,
       harnessProfileId: profile.id,
       knowsUser: agent.config?.knowsUser !== false,
@@ -1305,7 +1336,7 @@ export async function selectIntelligenceModel(
     const path = input.path?.trim();
     if (!path) throw new Error("Local model path required");
     const profile = resolveHarnessProfile({ source: "local", path });
-    const patch = applyProfileToAgentPatch(agent, profile, {});
+    const patch = applyProfileToAgentPatch(agent, profile, {}, { clearProviderConfig: true });
     updateAgent(db, "intelligence", {
       backend: "local",
       modelPath: path,
@@ -1337,7 +1368,12 @@ export async function selectIntelligenceModel(
     }
     const model = input.model?.trim() || "auto";
     const profile = resolveHarnessProfile({ source: "cursor", model });
-    const patch = applyProfileToAgentPatch(agent, profile, { model });
+    const patch = applyProfileToAgentPatch(
+      agent,
+      profile,
+      { model },
+      { clearProviderConfig: true }
+    );
     updateAgent(db, "intelligence", {
       backend: "cursor_cloud",
       ...patch,

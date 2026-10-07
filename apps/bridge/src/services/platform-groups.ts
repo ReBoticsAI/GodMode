@@ -55,7 +55,7 @@ export function ensurePlatformGroups(db: CoreDatabase = getHostUsersDb()): void 
       uuidv4(),
       SUPPORT_GROUP_SLUG,
       "Support",
-      "Users and agents who can answer hub and shared-resource support tickets."
+      "Users and agents who receive Admin ops and shared-resource Support reports."
     );
   }
 }

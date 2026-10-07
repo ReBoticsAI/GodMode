@@ -22,10 +22,13 @@ import {
 } from "./exa-web.js";
 import { AI_TOOL_REGISTRY } from "./ai-tools-registry.js";
 import {
+  SUPPORT_JOB1_QUESTION,
+  SUPPORT_JOB1_WHY,
   resolveGraphTour,
   resolveGuideChoice,
   resolveGuideGraphNode,
   resolveGuideSurface,
+  resolveUserChoice,
 } from "./guide-ui-tools.js";
 import {
   listSqliteUniverseTool,
@@ -144,7 +147,29 @@ import {
   createGithubPullRequest,
   resolveGithubRemoteFromUrl,
 } from "./coding/github-pr.js";
+import {
+  fetchGithubPullFiles,
+  fetchGithubPullSnapshot,
+  mergeGithubPullRequest,
+} from "./coding/github-pr-api.js";
+import {
+  CORE_PR_MERGE_OWNER,
+  CORE_PR_MERGE_REPO,
+  evaluateCorePrMergeMatrix,
+  parseAuthorAllowlist,
+} from "./coding/github-pr-merge.js";
+import { ensureGithubFork } from "./coding/github-contents.js";
 import { createGithubRepository } from "./coding/github-repo-create.js";
+import {
+  CORE_GITHUB_OWNER,
+  CORE_GITHUB_REPO,
+} from "./github-app-issues.js";
+import {
+  createInstallationAccessToken,
+  githubAppConfigured,
+  resolvePlatformInstallationId,
+} from "./github-app.js";
+import { isOperatorTenantDb } from "./tenant-kind.js";
 import {
   createGithubRelease,
   formatGithubReleasePermissionError,
@@ -208,6 +233,17 @@ import {
   listAllTickets,
   listTicketsForRequester,
 } from "./support-service.js";
+import {
+  rejectPiiHints,
+  reportAdminOps,
+  reportPlatformIssue,
+  reportSharedResourceIssue,
+  SupportReportError,
+} from "./support-report.js";
+import {
+  AgentToolRateLimitError,
+  assertAgentToolRateLimit,
+} from "./agent-tool-rate-limit.js";
 import {
   createPage as createWikiPage,
   deletePage as deleteWikiPage,
@@ -288,6 +324,8 @@ export interface ToolExecContext {
   tenantId?: string;
   /** Session tool autonomy from composer (off | writes | full). */
   sessionAutonomy?: import("./agents/agents-db.js").CodeAutonomyLevel;
+  /** Images from the current user chat turn (data URLs). */
+  turnImages?: string[];
   /** Read-only coding explore sub-run (#450). Mutating coding tools are rejected. */
   codingExploreOnly?: boolean;
   /** Active tool call id for streaming terminal output. */
@@ -470,6 +508,41 @@ async function executeStaticKernelAlias(
     }
     case "ask_guide_choice": {
       const resolved = resolveGuideChoice();
+      return {
+        handled: true,
+        result: {
+          ok: true,
+          message: resolved.message,
+          uiAction: resolved.uiAction,
+        },
+      };
+    }
+    case "ask_user_choice": {
+      const question =
+        String(value(args, "question") ?? "").trim() ||
+        SUPPORT_JOB1_QUESTION;
+      const whyRaw = value(args, "why");
+      const why =
+        whyRaw != null && String(whyRaw).trim()
+          ? String(whyRaw).trim()
+          : SUPPORT_JOB1_WHY;
+      const rawOpts = args.options;
+      const options = Array.isArray(rawOpts)
+        ? rawOpts.map((item) => {
+            const row =
+              item && typeof item === "object"
+                ? (item as Record<string, unknown>)
+                : {};
+            return {
+              id: String(row.id ?? ""),
+              label: String(row.label ?? ""),
+            };
+          })
+        : undefined;
+      const resolved = resolveUserChoice({ question, why, options });
+      if (!resolved.ok) {
+        return { handled: true, result: resolved };
+      }
       return {
         handled: true,
         result: {
@@ -3131,6 +3204,71 @@ export async function executeTool(
       }
     }
 
+    case "github_fork_repo": {
+      if (!ctx.userId) throw new Error("Authenticated user required");
+      const ownerDb = getUserDb(ctx.userId);
+      let accessToken: string;
+      try {
+        accessToken = await resolveCodingGithubAccessToken(ownerDb);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        createNotification({
+          recipientKind: "user",
+          recipientId: ctx.userId,
+          recipientTenantId: ctx.tenantId ?? null,
+          category: "coding_git",
+          title: "GitHub Connect required to fork",
+          body: detail.slice(0, 200),
+          link: "/vault?tab=integrations",
+        });
+        throw new Error(detail);
+      }
+      const upstreamOwner =
+        String(args.owner ?? CORE_GITHUB_OWNER).trim() || CORE_GITHUB_OWNER;
+      const upstreamRepo =
+        String(args.repo ?? CORE_GITHUB_REPO).trim() || CORE_GITHUB_REPO;
+      assertAgentToolRateLimit({
+        agentId: ctx.activeAgentId ?? "intelligence",
+        toolName: "github_fork_repo",
+        max: 6,
+        windowMs: 60 * 60 * 1000,
+      });
+      try {
+        const fork = await ensureGithubFork(
+          accessToken,
+          upstreamOwner,
+          upstreamRepo
+        );
+        const cloneUrl = `https://github.com/${fork.owner}/${fork.repo}.git`;
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_fork_repo",
+          result: "ok",
+        });
+        return {
+          owner: fork.owner,
+          repo: fork.repo,
+          defaultBranch: fork.defaultBranch,
+          cloneUrl,
+          upstreamOwner,
+          upstreamRepo,
+          httpsCloneUrl: `https://github.com/${fork.owner}/${fork.repo}`,
+        };
+      } catch (err) {
+        if (err instanceof AgentToolRateLimitError) {
+          throw new Error(err.message);
+        }
+        const detail = err instanceof Error ? err.message : String(err);
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_fork_repo",
+          result: "error",
+          detail: detail.slice(0, 500),
+        });
+        throw new Error(detail);
+      }
+    }
+
     case "github_pr_create": {
       if (!ctx.userId) throw new Error("Authenticated user required");
       const ownerDb = getUserDb(ctx.userId);
@@ -3141,14 +3279,46 @@ export async function executeTool(
         remote: args.remote ? String(args.remote) : "origin",
       });
       const remote = resolveGithubRemoteFromUrl(remoteUrl);
-      const head = String(args.head ?? status.branch).trim() || status.branch;
+      const branchName =
+        String(args.head ?? status.branch).trim() || status.branch;
+      const upstreamOwner = String(args.upstreamOwner ?? "").trim();
+      const upstreamRepo = String(args.upstreamRepo ?? "")
+        .trim()
+        .replace(/\.git$/i, "");
+      const targetingUpstream = Boolean(upstreamOwner && upstreamRepo);
+      if (targetingUpstream) {
+        assertAgentToolRateLimit({
+          agentId: ctx.activeAgentId ?? "intelligence",
+          toolName: "github_pr_create_upstream",
+          max: 4,
+          windowMs: 60 * 60 * 1000,
+        });
+      }
+      const title = String(args.title ?? "");
+      const body =
+        args.body != null ? String(args.body) : undefined;
+      if (targetingUpstream) {
+        try {
+          rejectPiiHints(`${title}\n${body ?? ""}`);
+        } catch (err) {
+          if (err instanceof SupportReportError) {
+            throw new Error(err.message);
+          }
+          throw err;
+        }
+      }
+      const prOwner = targetingUpstream ? upstreamOwner : remote.owner;
+      const prRepo = targetingUpstream ? upstreamRepo : remote.repo;
+      const head = targetingUpstream
+        ? `${remote.owner}:${branchName}`
+        : branchName;
       try {
         const res = await createGithubPullRequest({
           accessToken,
-          owner: remote.owner,
-          repo: remote.repo,
-          title: String(args.title ?? ""),
-          body: args.body != null ? String(args.body) : undefined,
+          owner: prOwner,
+          repo: prRepo,
+          title,
+          body,
           head,
           base: args.base ? String(args.base) : "main",
           draft: args.draft === true,
@@ -3171,6 +3341,9 @@ export async function executeTool(
         });
         return res;
       } catch (err) {
+        if (err instanceof AgentToolRateLimitError) {
+          throw new Error(err.message);
+        }
         const detail = err instanceof Error ? err.message : String(err);
         createNotification({
           recipientKind: "user",
@@ -3182,6 +3355,193 @@ export async function executeTool(
           link: "/coding",
         });
         throw err;
+      }
+    }
+
+    case "github_pr_merge": {
+      if (!isOperatorTenantDb(ctx.db)) {
+        throw new Error(
+          "github_pr_merge is only available on the operator (maintainer) tenant"
+        );
+      }
+      const rawPr = String(
+        args.pr ?? args.pullRequest ?? args.number ?? ""
+      ).trim();
+      if (!rawPr) throw new Error("pr required (number or URL)");
+      const prMatch = rawPr.match(/\/pull\/(\d+)/i);
+      const prNumStr = prMatch?.[1] ?? rawPr.replace(/^#/, "");
+      if (!/^\d+$/.test(prNumStr)) {
+        throw new Error(`Could not parse PR number from: ${rawPr}`);
+      }
+      const pullNumber = Number(prNumStr);
+      const owner =
+        String(args.owner ?? CORE_PR_MERGE_OWNER).trim() || CORE_PR_MERGE_OWNER;
+      const repo =
+        String(args.repo ?? CORE_PR_MERGE_REPO)
+          .trim()
+          .replace(/\.git$/i, "") || CORE_PR_MERGE_REPO;
+      const mergeMethodRaw = String(args.mergeMethod ?? "squash").trim();
+      const mergeMethod =
+        mergeMethodRaw === "merge" || mergeMethodRaw === "rebase"
+          ? mergeMethodRaw
+          : "squash";
+
+      let accessToken: string | null = null;
+      let tokenSource: "app" | "connect" = "app";
+      if (githubAppConfigured()) {
+        const installationId = await resolvePlatformInstallationId();
+        if (installationId) {
+          const tok = await createInstallationAccessToken(installationId);
+          accessToken = tok.token;
+          tokenSource = "app";
+        }
+      }
+      if (!accessToken) {
+        if (!ctx.userId) {
+          throw new Error(
+            "GitHub App not configured and no user Connect token available for merge"
+          );
+        }
+        const ownerDb = getUserDb(ctx.userId);
+        accessToken = await resolveCodingGithubAccessToken(ownerDb);
+        tokenSource = "connect";
+      }
+
+      const snap = await fetchGithubPullSnapshot({
+        accessToken,
+        owner,
+        repo,
+        pullNumber,
+      });
+      const files = await fetchGithubPullFiles({
+        accessToken,
+        owner,
+        repo,
+        pullNumber,
+      });
+
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execFileAsync = promisify(execFile);
+      let checkRows: unknown[] = [];
+      try {
+        const { stdout } = await execFileAsync(
+          "gh",
+          [
+            "pr",
+            "checks",
+            String(pullNumber),
+            "--repo",
+            `${owner}/${repo}`,
+            "--json",
+            GH_PR_CHECKS_JSON_FIELDS_CSV,
+          ],
+          {
+            timeout: 60_000,
+            windowsHide: true,
+            maxBuffer: 2 * 1024 * 1024,
+          }
+        );
+        checkRows = JSON.parse(stdout) as unknown[];
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          merged: false,
+          reasons: [
+            `CI checks unavailable (fail closed): ${message.slice(0, 300)}`,
+          ],
+        };
+      }
+      const checkSummary = summarizePrChecks(
+        checkRows as Array<{
+          name?: string;
+          state?: string;
+          bucket?: string;
+          link?: string;
+        }>
+      );
+      const gate = evaluateCorePrMergeMatrix({
+        owner,
+        repo,
+        baseRef: snap.baseRef,
+        draft: snap.draft,
+        state: snap.state,
+        merged: snap.merged,
+        mergeable: snap.mergeable,
+        authorLogin: snap.authorLogin,
+        labels: snap.labels,
+        title: snap.title,
+        body: snap.body,
+        files,
+        checkSummary,
+        authorAllowlist: parseAuthorAllowlist(
+          process.env.GODMODE_PR_MERGE_AUTHOR_ALLOWLIST
+        ),
+      });
+      if (!gate.ok) {
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_pr_merge",
+          result: "error",
+          detail: gate.reasons.join("; ").slice(0, 500),
+        });
+        return {
+          ok: false,
+          merged: false,
+          pr: pullNumber,
+          htmlUrl: snap.htmlUrl,
+          reasons: gate.reasons,
+          checkSummary,
+        };
+      }
+
+      try {
+        const merged = await mergeGithubPullRequest({
+          accessToken,
+          owner,
+          repo,
+          pullNumber,
+          mergeMethod,
+          commitTitle: snap.title,
+        });
+        if (ctx.userId) {
+          createNotification({
+            recipientKind: "user",
+            recipientId: ctx.userId,
+            recipientTenantId: ctx.tenantId ?? null,
+            category: "coding_git",
+            title: `Merged PR #${pullNumber}`,
+            body: merged.message.slice(0, 200),
+            link: snap.htmlUrl || undefined,
+            resourceKind: "github_pr",
+            resourceId: String(pullNumber),
+          });
+        }
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_pr_merge",
+          result: "ok",
+          detail: `sha=${merged.sha} via=${tokenSource}`,
+        });
+        return {
+          ok: true,
+          merged: true,
+          pr: pullNumber,
+          sha: merged.sha,
+          htmlUrl: snap.htmlUrl,
+          tokenSource,
+          mergeMethod,
+        };
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        logToolAudit(ctx.db, {
+          ...auditCtx(ctx),
+          action: "github_pr_merge",
+          result: "error",
+          detail: detail.slice(0, 500),
+        });
+        throw new Error(detail);
       }
     }
 
@@ -3498,6 +3858,89 @@ export async function executeTool(
         link: args.link ? String(args.link) : null,
         category: args.category ? String(args.category) : "system",
       });
+    }
+
+    case "report_platform_issue": {
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const argImages = Array.isArray(args.images)
+        ? args.images.map((x) => String(x ?? "").trim()).filter(Boolean)
+        : [];
+      const images =
+        argImages.length > 0
+          ? argImages
+          : Array.isArray(ctx.turnImages)
+            ? ctx.turnImages
+            : [];
+      try {
+        return await reportPlatformIssue({
+          agentId,
+          subject: String(args.subject ?? ""),
+          body: String(args.body ?? ""),
+          forceNew: args.forceNew === true,
+          images,
+          tenantId: ctx.tenantId ?? null,
+          actorKind: ctx.userId ? "user" : "agent",
+          actorId: ctx.userId ?? agentId,
+        });
+      } catch (err) {
+        if (
+          err instanceof AgentToolRateLimitError ||
+          err instanceof SupportReportError
+        ) {
+          throw new Error(err.message);
+        }
+        throw err;
+      }
+    }
+
+    case "report_admin_ops": {
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      const createCard =
+        args.createCard === true ||
+        (args.createCard !== false && Boolean(ctx.userId && isPlatformAdmin(ctx.userId)));
+      try {
+        return reportAdminOps({
+          agentId,
+          subject: String(args.subject ?? ""),
+          body: String(args.body ?? ""),
+          tenantId: ctx.tenantId ?? null,
+          actorKind: ctx.userId ? "user" : "agent",
+          actorId: ctx.userId ?? agentId,
+          createCardForUserId: createCard && ctx.userId ? ctx.userId : null,
+          tenantDb: createCard && ctx.db ? ctx.db : null,
+        });
+      } catch (err) {
+        if (
+          err instanceof AgentToolRateLimitError ||
+          err instanceof SupportReportError
+        ) {
+          throw new Error(err.message);
+        }
+        throw err;
+      }
+    }
+
+    case "report_shared_resource_issue": {
+      const agentId = ctx.activeAgentId ?? "intelligence";
+      try {
+        return reportSharedResourceIssue({
+          agentId,
+          subject: String(args.subject ?? ""),
+          body: String(args.body ?? ""),
+          sharedGrantId: String(args.sharedGrantId ?? ""),
+          tenantId: ctx.tenantId ?? null,
+          actorKind: ctx.userId ? "user" : "agent",
+          actorId: ctx.userId ?? agentId,
+        });
+      } catch (err) {
+        if (
+          err instanceof AgentToolRateLimitError ||
+          err instanceof SupportReportError
+        ) {
+          throw new Error(err.message);
+        }
+        throw err;
+      }
     }
 
     case "create_support_ticket": {
