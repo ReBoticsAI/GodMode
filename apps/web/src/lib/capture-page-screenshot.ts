@@ -30,56 +30,84 @@ function snapshotGraphWebgl(): Promise<string | null> {
   });
 }
 
+type StyleSnapshot = { el: HTMLElement; cssText: string };
+
 /**
  * html-to-image often drops or misplaces `position: fixed` chrome when the
- * capture root is not the viewport. Pin those nodes to absolute coords in the
- * clone so ticker / composer / rails stay in the shot.
+ * capture root is not the viewport. Temporarily pin those nodes to absolute
+ * coords on the live tree (restored after capture).
  */
-function pinFixedChromeInClone(
-  liveRoot: HTMLElement,
-  clonedRoot: HTMLElement
-): void {
+function pinFixedChromeLive(liveRoot: HTMLElement): StyleSnapshot[] {
   const rootRect = liveRoot.getBoundingClientRect();
-  const liveFixed = Array.from(liveRoot.querySelectorAll<HTMLElement>("*")).filter(
-    (el) => {
-      const pos = window.getComputedStyle(el).position;
-      return pos === "fixed";
-    }
-  );
+  const liveFixed = Array.from(
+    liveRoot.querySelectorAll<HTMLElement>("*")
+  ).filter((el) => window.getComputedStyle(el).position === "fixed");
 
+  const snaps: StyleSnapshot[] = [];
   for (const live of liveFixed) {
-    const path: number[] = [];
-    let node: Element | null = live;
-    while (node && node !== liveRoot) {
-      const parent = node.parentElement;
-      if (!parent) break;
-      path.push(Array.from(parent.children).indexOf(node));
-      node = parent;
-    }
-    if (node !== liveRoot) continue;
-
-    let cloned: Element = clonedRoot;
-    for (let i = path.length - 1; i >= 0; i--) {
-      const next = cloned.children[path[i]!];
-      if (!next) {
-        cloned = clonedRoot;
-        break;
-      }
-      cloned = next;
-    }
-    if (!(cloned instanceof HTMLElement) || cloned === clonedRoot) continue;
-
+    snaps.push({ el: live, cssText: live.style.cssText });
     const rect = live.getBoundingClientRect();
-    cloned.style.position = "absolute";
-    cloned.style.top = `${rect.top - rootRect.top}px`;
-    cloned.style.left = `${rect.left - rootRect.left}px`;
-    cloned.style.width = `${rect.width}px`;
-    cloned.style.height = `${rect.height}px`;
-    cloned.style.right = "auto";
-    cloned.style.bottom = "auto";
-    cloned.style.margin = "0";
-    cloned.style.transform = "none";
-    cloned.style.zIndex = window.getComputedStyle(live).zIndex || "1";
+    live.style.position = "absolute";
+    live.style.top = `${rect.top - rootRect.top}px`;
+    live.style.left = `${rect.left - rootRect.left}px`;
+    live.style.width = `${rect.width}px`;
+    live.style.height = `${rect.height}px`;
+    live.style.right = "auto";
+    live.style.bottom = "auto";
+    live.style.margin = "0";
+    live.style.transform = "none";
+    live.style.zIndex = window.getComputedStyle(live).zIndex || "1";
+  }
+  return snaps;
+}
+
+type CanvasSwap = { canvas: HTMLCanvasElement; img: HTMLImageElement };
+
+/**
+ * Swap live canvases for static images so html-to-image captures WebGL pixels.
+ */
+function swapCanvasesForImages(
+  liveRoot: HTMLElement,
+  canvasSnaps: Array<string | null>
+): CanvasSwap[] {
+  const liveCanvases = Array.from(liveRoot.querySelectorAll("canvas"));
+  const rootRect = liveRoot.getBoundingClientRect();
+  const swaps: CanvasSwap[] = [];
+  liveCanvases.forEach((canvas, i) => {
+    const dataUrl = canvasSnaps[i];
+    if (!dataUrl || dataUrl === "data:," || isTinyDataUrl(dataUrl)) return;
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.alt = "Graph canvas";
+    img.className = canvas.className;
+    const style = canvas.getAttribute("style");
+    if (style) img.setAttribute("style", style);
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      img.style.position = "absolute";
+      img.style.left = `${rect.left - rootRect.left}px`;
+      img.style.top = `${rect.top - rootRect.top}px`;
+      img.style.width = `${rect.width}px`;
+      img.style.height = `${rect.height}px`;
+    }
+    img.style.display = "block";
+    img.style.objectFit = "cover";
+    img.style.pointerEvents = "none";
+    canvas.replaceWith(img);
+    swaps.push({ canvas, img });
+  });
+  return swaps;
+}
+
+function restoreCanvasSwaps(swaps: CanvasSwap[]): void {
+  for (const { canvas, img } of swaps) {
+    img.replaceWith(canvas);
+  }
+}
+
+function restoreStyleSnaps(snaps: StyleSnapshot[]): void {
+  for (const { el, cssText } of snaps) {
+    el.style.cssText = cssText;
   }
 }
 
@@ -89,7 +117,7 @@ function pinFixedChromeInClone(
  *
  * The Graph WebGL canvas lives outside `<main>`; capturing `main` alone yields
  * a black/empty shot on Graph view. WebGL is snapshotted via a sync render,
- * then swapped into the DOM clone.
+ * then swapped into the live DOM for html-to-image (no unsupported onclone).
  */
 export async function capturePageScreenshot(): Promise<string | null> {
   const target =
@@ -121,6 +149,8 @@ export async function capturePageScreenshot(): Promise<string | null> {
     }
   });
 
+  const styleSnaps = pinFixedChromeLive(target);
+  const canvasSwaps = swapCanvasesForImages(target, canvasSnaps);
   try {
     const png = await toPng(target, {
       cacheBust: true,
@@ -132,40 +162,13 @@ export async function capturePageScreenshot(): Promise<string | null> {
         if (node.getAttribute("data-sonner-toaster") != null) return false;
         return true;
       },
-      onclone: (_doc, cloned) => {
-        pinFixedChromeInClone(target, cloned);
-
-        const clonedCanvases = Array.from(cloned.querySelectorAll("canvas"));
-        clonedCanvases.forEach((canvas, i) => {
-          const dataUrl = canvasSnaps[i];
-          if (!dataUrl || dataUrl === "data:," || isTinyDataUrl(dataUrl)) {
-            return;
-          }
-          const img = cloned.ownerDocument.createElement("img");
-          img.src = dataUrl;
-          img.alt = "Graph canvas";
-          img.className = canvas.className;
-          const style = canvas.getAttribute("style");
-          if (style) img.setAttribute("style", style);
-          const rect = liveCanvases[i]?.getBoundingClientRect();
-          const rootRect = target.getBoundingClientRect();
-          if (rect && rect.width > 0 && rect.height > 0) {
-            img.style.position = "absolute";
-            img.style.left = `${rect.left - rootRect.left}px`;
-            img.style.top = `${rect.top - rootRect.top}px`;
-            img.style.width = `${rect.width}px`;
-            img.style.height = `${rect.height}px`;
-          }
-          img.style.display = "block";
-          img.style.objectFit = "cover";
-          img.style.pointerEvents = "none";
-          canvas.replaceWith(img);
-        });
-      },
     });
     if (png && !isTinyDataUrl(png)) return png;
   } catch {
     /* fall through to graph-only */
+  } finally {
+    restoreCanvasSwaps(canvasSwaps);
+    restoreStyleSnaps(styleSnaps);
   }
 
   if (graphShot && !isTinyDataUrl(graphShot)) return graphShot;

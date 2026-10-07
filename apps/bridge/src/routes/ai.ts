@@ -2200,7 +2200,7 @@ export function createAiRouter(
           interestModelGuide(interestId ?? "", clientOs)
         : null;
     const supportIntakeGuide = resolveSupportIntakeGuide({
-      pathId: typeof rawPathId === "string" ? rawPathId : pathId,
+      pathId: pathId ?? null,
       userMessage: typeof message === "string" ? message : null,
     });
     const guideInjectText = [interestGuideText, supportIntakeGuide]

@@ -3262,8 +3262,7 @@ export async function executeTool(
         logToolAudit(ctx.db, {
           ...auditCtx(ctx),
           action: "github_fork_repo",
-          result: "error",
-          detail: detail.slice(0, 500),
+          result: `error:${detail.slice(0, 500)}`,
         });
         throw new Error(detail);
       }
@@ -3483,8 +3482,7 @@ export async function executeTool(
         logToolAudit(ctx.db, {
           ...auditCtx(ctx),
           action: "github_pr_merge",
-          result: "error",
-          detail: gate.reasons.join("; ").slice(0, 500),
+          result: `error:${gate.reasons.join("; ").slice(0, 500)}`,
         });
         return {
           ok: false,
@@ -3521,8 +3519,7 @@ export async function executeTool(
         logToolAudit(ctx.db, {
           ...auditCtx(ctx),
           action: "github_pr_merge",
-          result: "ok",
-          detail: `sha=${merged.sha} via=${tokenSource}`,
+          result: `ok:sha=${merged.sha} via=${tokenSource}`,
         });
         return {
           ok: true,
@@ -3538,8 +3535,7 @@ export async function executeTool(
         logToolAudit(ctx.db, {
           ...auditCtx(ctx),
           action: "github_pr_merge",
-          result: "error",
-          detail: detail.slice(0, 500),
+          result: `error:${detail.slice(0, 500)}`,
         });
         throw new Error(detail);
       }
