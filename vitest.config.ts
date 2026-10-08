@@ -142,6 +142,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/chat-unlock.test.ts",
       "apps/bridge/src/services/__tests__/trial-inference.test.ts",
       "apps/bridge/src/services/__tests__/guide-ui-tools.test.ts",
+      "apps/bridge/src/services/__tests__/hook-run-agent-ready.test.ts",
       "apps/bridge/src/services/__tests__/github-upstream-pr.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-isolation.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-retail.test.ts",

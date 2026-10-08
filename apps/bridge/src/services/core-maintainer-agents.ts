@@ -2,11 +2,22 @@
  * Seed operator-tenant Core Issues + Core PRs maintainer Agents and wake hooks.
  */
 import { v4 as uuidv4 } from "uuid";
+import { config } from "../config.js";
 import type { CoreDatabase } from "../core-db.js";
 import type { AppDatabase } from "../db.js";
-import { createAgent, getAgent } from "./agents/agents-db.js";
+import {
+  createAgent,
+  getAgent,
+  updateAgent,
+} from "./agents/agents-db.js";
+import type { AgentBackendKind } from "./agents/types.js";
 import { updateAiSkillState } from "./ai-skills.js";
 import { ensureHooksWorkspaceSchema } from "./hooks-workspace-migrate.js";
+
+/** Cloud Admin: Cursor subscription. Local operator: inherit Intelligence (usually local). */
+function maintainerBackend(): AgentBackendKind | undefined {
+  return config.isSaas ? "cursor_cloud" : undefined;
+}
 
 export const CORE_ISSUES_AGENT_ID = "core-issues";
 export const CORE_PRS_AGENT_ID = "core-prs";
@@ -21,7 +32,9 @@ function ensureMaintainerAgent(
   }
 ): void {
   if (!getAgent(db, "intelligence")) return;
-  if (!getAgent(db, opts.id)) {
+  const backend = maintainerBackend();
+  const existing = getAgent(db, opts.id);
+  if (!existing) {
     createAgent(db, {
       id: opts.id,
       name: opts.name,
@@ -29,6 +42,7 @@ function ensureMaintainerAgent(
       icon: "shield",
       team: "maintainer",
       parentId: "intelligence",
+      ...(backend ? { backend } : {}),
       config: {
         knowsUser: false,
         codeAccess: true,
@@ -36,6 +50,9 @@ function ensureMaintainerAgent(
       },
       autoApprove: ["*"],
     });
+  } else if (backend && existing.backend === "local") {
+    // Prior seeds inherited local; Cloud has no chat GGUF so promote to Cursor.
+    updateAgent(db, opts.id, { backend });
   }
   try {
     updateAiSkillState(db, opts.id, opts.skillId, true);

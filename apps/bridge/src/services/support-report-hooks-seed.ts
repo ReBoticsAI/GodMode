@@ -34,7 +34,7 @@ const SEEDED: Array<{
     name: "support-platform-pr-notify",
     eventType: "support.platform_pr.updated",
     title: "Core pull request updated",
-    body: "A ReBoticsAI/GodMode pull request was opened or updated. Core PRs Agent will review when wired.",
+    body: "A ReBoticsAI/GodMode pull request was opened or updated. Core PRs Agent wakes on support.platform_pr.updated.",
   },
 ];
 
