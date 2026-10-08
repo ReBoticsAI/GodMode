@@ -173,6 +173,7 @@ import { filterSchemasForSignupGuide } from "../services/guide-ui-tools.js";
 import {
   filterSchemasOutsideSignupGuide,
   resolveSupportIntakeGuide,
+  shouldBypassSignupGuideForSupport,
   supportPathModelGuide,
 } from "../services/support-intake.js";
 import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-tools.js";
@@ -2039,11 +2040,21 @@ export function createAiRouter(
     // Trial welcome-guide RBAC is only for managed Inference provider turns.
     // Cursor / local / remote must keep the full agent tool surface even if a
     // stale apiKeyRef was left on agent.config from a prior provider selection.
+    // Support Bug pill / Log-Handoff must keep filing tools on trial credit
+    // (Cloud dogfood: trial RBAC stripped report_platform_issue → ask_guide_choice).
+    const supportBypassSignupGuide = shouldBypassSignupGuideForSupport({
+      pathId: pathId ?? null,
+      userMessage: typeof message === "string" ? message : null,
+      historyTexts: history.map((h) =>
+        typeof h.content === "string" ? h.content : null
+      ),
+    });
     const signupGuideActive =
       agent.backend === "provider" &&
       usingManagedSupply &&
       isSignupGuideModeEnabled() &&
-      activeInferenceGrant?.kind === "trial";
+      activeInferenceGrant?.kind === "trial" &&
+      !supportBypassSignupGuide;
     // Semantic (RAG) memory READS come from the engine DB (the agent owner's
     // accumulated knowledge powers the engine). Falls back to recency inside the
     // helper when the embedder is down, so chat never blocks on embeddings.

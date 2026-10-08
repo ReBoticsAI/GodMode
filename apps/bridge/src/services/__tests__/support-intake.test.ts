@@ -4,6 +4,7 @@ import {
   filterSchemasOutsideSignupGuide,
   isSupportBugIntakeMessage,
   resolveSupportIntakeGuide,
+  shouldBypassSignupGuideForSupport,
   supportPathModelGuide,
 } from "../support-intake.js";
 import { resolveUserChoice } from "../guide-ui-tools.js";
@@ -43,14 +44,38 @@ describe("support-intake", () => {
   it("guides Log and Handoff path ids toward report_platform_issue", () => {
     const log = supportPathModelGuide("log_bug");
     expect(log).toContain("report_platform_issue");
-    expect(log).not.toContain("ask_guide_choice");
+    expect(log).toMatch(/Do not call ask_guide_choice/);
     const handoff = supportPathModelGuide("handoff_coding");
     expect(handoff).toContain("report_platform_issue");
+    expect(handoff).toMatch(/Do not call ask_guide_choice/);
     expect(resolveSupportIntakeGuide({ pathId: "log_bug" })).toBe(log);
     expect(
       resolveSupportIntakeGuide({
         userMessage: "Use the Support skill (job 1): gather then choose",
       })
     ).toContain("report_platform_issue");
+  });
+
+  it("bypasses trial signup-guide RBAC for Bug pill and follow-ups", () => {
+    expect(
+      shouldBypassSignupGuideForSupport({
+        userMessage:
+          "I tapped the Bug pill and attached a screenshot of the current page.",
+      })
+    ).toBe(true);
+    expect(
+      shouldBypassSignupGuideForSupport({ pathId: "log_bug", userMessage: "Log" })
+    ).toBe(true);
+    expect(
+      shouldBypassSignupGuideForSupport({
+        userMessage: "Log",
+        historyTexts: [
+          "I tapped the Bug pill and attached a screenshot of the current page.",
+        ],
+      })
+    ).toBe(true);
+    expect(
+      shouldBypassSignupGuideForSupport({ userMessage: "hello", historyTexts: [] })
+    ).toBe(false);
   });
 });

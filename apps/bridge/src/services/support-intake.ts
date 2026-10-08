@@ -106,3 +106,28 @@ export function resolveSupportIntakeGuide(opts: {
   }
   return null;
 }
+
+/**
+ * Trial welcome-guide RBAC must not strip Support filing tools.
+ * Bug pill / Log-Handoff path turns, and follow-ups in the same chat after a
+ * Bug pill message, need ask_user_choice + report_platform_issue.
+ */
+export function shouldBypassSignupGuideForSupport(opts: {
+  pathId?: string | null;
+  userMessage?: string | null;
+  /** Prior chat turns (user content) in this conversation. */
+  historyTexts?: Array<string | null | undefined>;
+}): boolean {
+  if (
+    resolveSupportIntakeGuide({
+      pathId: opts.pathId,
+      userMessage: opts.userMessage,
+    })
+  ) {
+    return true;
+  }
+  for (const text of opts.historyTexts ?? []) {
+    if (isSupportBugIntakeMessage(text)) return true;
+  }
+  return false;
+}
