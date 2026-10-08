@@ -10,6 +10,8 @@ import type { LlmManager } from "./llm-manager.js";
 import type { AiQueueWorker } from "./ai-queue-worker.js";
 import { createNotification } from "./notification-service.js";
 import { getTenantDb } from "../tenant-registry.js";
+import { getAgent } from "./agents/agents-db.js";
+import { agentCanRunWithoutLocalLlm } from "./agents/cursor-cloud-backend.js";
 import { runSubagent } from "./agents/runner.js";
 import { runBoundedSubagentDelegation } from "./agents/subagent-bounds.js";
 import {
@@ -203,6 +205,17 @@ async function runActionNotify(
   return { status: "success", detail: `Notified ${hook.owner_kind} ${hook.owner_id}` };
 }
 
+/** True when run_agent may start: local LLM up, or Cursor/provider/cli/acp ready. */
+export function isRunAgentLlmReady(
+  localLlmReady: boolean,
+  backend: string,
+  db: import("../db.js").AppDatabase,
+  agentId: string
+): boolean {
+  if (localLlmReady) return true;
+  return agentCanRunWithoutLocalLlm(backend, db, agentId);
+}
+
 async function runActionRunAgent(
   hook: CoreHook,
   cfg: Record<string, unknown>,
@@ -217,14 +230,26 @@ async function runActionRunAgent(
   if (!agentTenantId) {
     return { status: "error", detail: "run_agent: cannot resolve agent tenant" };
   }
-  if (!deps.llm || !deps.llm.isReady()) {
+  if (!deps.llm) {
     return {
       status: "error",
-      detail: "run_agent: local LLM not ready; run skipped",
+      detail: "run_agent: LLM manager unavailable; run skipped",
+    };
+  }
+  const db = getTenantDb(agentTenantId);
+  const agent = getAgent(db, agentId);
+  if (!agent) {
+    return { status: "error", detail: `run_agent: agent ${agentId} not found` };
+  }
+  // Cloud Admin: Core Issues / Core PRs wake on cursor_cloud (or provider)
+  // without a local chat GGUF. Local-backend agents still need llm.isReady().
+  if (!isRunAgentLlmReady(deps.llm.isReady(), agent.backend, db, agentId)) {
+    return {
+      status: "error",
+      detail: "run_agent: no runnable LLM backend; run skipped",
     };
   }
   const prompt = fillTemplate(promptTpl || "Hook triggered.", payload);
-  const db = getTenantDb(agentTenantId);
   const bounded = await runBoundedSubagentDelegation({
     agentId,
     run: () =>

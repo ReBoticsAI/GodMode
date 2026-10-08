@@ -31,8 +31,8 @@ Private paths stay separate:
 
 On the operator tenant, bootstrap seeds:
 
-- **Core Issues** Agent (`support-triage`) woken by `support.platform_issue.reported` (App webhooks for Core `issues` / `issue_comment`, plus Agent-filed reports).
-- **Core PRs** Agent (`support-pr-review`) woken by `support.platform_pr.updated` (`pull_request` webhooks for opened/synchronize/reopened/ready_for_review/edited).
+- **Core Issues** Agent (`support-triage`) woken by `support.platform_issue.reported` (App webhooks for Core `issues` / `issue_comment`, plus Agent-filed reports). On Cloud Admin the agent uses Cursor (`cursor_cloud`); wake does not require a local chat GGUF.
+- **Core PRs** Agent (`support-pr-review`) woken by `support.platform_pr.updated` (`pull_request` webhooks for opened/synchronize/reopened/ready_for_review/edited). Same Cursor-on-Cloud Admin path.
 
 Notify hooks also fire for staff. Core PRs may call `github_pr_merge` only on the operator tenant. The tool fail-closes unless every hard gate passes (CI green via `watch_pr_checks`, base `main`, not draft, mergeable, diff scope/size, author allowlist or `maintainers:ok-to-merge`, clean title/body). Set `GODMODE_PR_MERGE_AUTHOR_ALLOWLIST` (comma-separated GitHub logins) on the maintainer host.
 
