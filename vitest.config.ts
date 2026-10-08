@@ -82,6 +82,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/agent-tool-rate-limit.test.ts",
       "apps/bridge/src/services/__tests__/github-app-issues-dedupe.test.ts",
       "apps/bridge/src/services/__tests__/support-screenshot-markdown.test.ts",
+      "apps/bridge/src/services/__tests__/support-intake.test.ts",
       "apps/bridge/src/services/__tests__/support-report-hooks-seed.test.ts",
       "apps/bridge/src/services/__tests__/coding-hooks.test.ts",
       "apps/bridge/src/services/__tests__/explore-coding.test.ts",
