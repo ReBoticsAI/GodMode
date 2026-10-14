@@ -1896,6 +1896,16 @@ export function IntelligencePanel({
               `\n\n[Open **${label}**](${artifactViewerHref(saved.id)})\n`
             );
           }
+          if (
+            !isError &&
+            name === "browser_session_create" &&
+            result &&
+            typeof result === "object" &&
+            "openBrowserStage" in result &&
+            (result as { openBrowserStage?: boolean }).openBrowserStage
+          ) {
+            window.dispatchEvent(new CustomEvent("godmode:open-browser"));
+          }
           if (!isError) {
             const uiAction = guideUiActionFromToolResult(result);
             if (uiAction) applyGuideUiAction(uiAction);

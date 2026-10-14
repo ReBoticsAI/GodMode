@@ -1221,6 +1221,78 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "ai-browser-session-create",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions",
+    rationale:
+      "Browser stage session create (#850); Local Playwright Chromium lifecycle, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-navigate",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/navigate",
+    rationale:
+      "Browser stage navigate (#851); session protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-click",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/click",
+    rationale:
+      "Browser stage click (#851); session protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-type",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/type",
+    rationale:
+      "Browser stage type/fill (#851); session protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-select",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/select",
+    rationale:
+      "Browser stage select (#851); session protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-screenshot",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/screenshot",
+    rationale:
+      "Browser stage screenshot (#851); session observe protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-snapshot",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/snapshot",
+    rationale:
+      "Browser stage a11y/DOM snapshot (#851); session observe protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-mode",
+    methods: ["POST"],
+    pathPattern: "/api/ai/browser/sessions/:/mode",
+    rationale:
+      "Browser stage pause/take-over/resume (#852); session control protocol, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
+    id: "ai-browser-session-close",
+    methods: ["DELETE"],
+    pathPattern: "/api/ai/browser/sessions/:",
+    rationale:
+      "Browser stage session close (#850); Chromium lifecycle, not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "ai-cursor-sdk-session-refresh",
     methods: ["POST"],
     pathPattern: "/api/ai/cursor/refresh",

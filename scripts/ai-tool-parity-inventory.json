@@ -10,6 +10,30 @@
       "class": "infra_coding",
       "rationale": "In-process plugin esbuild; authoring infra, not a kernel Record action."
     },
+    "browser_click": {
+      "class": "protocol_exception",
+      "rationale": "Browser stage click on Local Playwright session; session protocol, not an ObjectType mutation."
+    },
+    "browser_navigate": {
+      "class": "protocol_exception",
+      "rationale": "Browser stage navigate on Local Playwright session; session protocol, not an ObjectType mutation."
+    },
+    "browser_select": {
+      "class": "protocol_exception",
+      "rationale": "Browser stage select on Local Playwright session; session protocol, not an ObjectType mutation."
+    },
+    "browser_session_close": {
+      "class": "protocol_exception",
+      "rationale": "Close Browser stage Chromium session; session lifecycle protocol."
+    },
+    "browser_session_create": {
+      "class": "protocol_exception",
+      "rationale": "Start Browser stage Chromium session (Local; Cloud gated); session lifecycle protocol."
+    },
+    "browser_type": {
+      "class": "protocol_exception",
+      "rationale": "Browser stage type/fill on Local Playwright session; session protocol, not an ObjectType mutation."
+    },
     "coding_workspace_clear": {
       "class": "infra_coding",
       "rationale": "Coding workspace retarget clear; Layer 2 infra."

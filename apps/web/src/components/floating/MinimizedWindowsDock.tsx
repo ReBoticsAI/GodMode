@@ -121,6 +121,9 @@ export function MinimizedWindowsDock() {
   } else if (activeLeftTab === "coding") {
     infoTitle = "Coding";
     infoAccent = "#38bdf8";
+  } else if (activeLeftTab === "browser") {
+    infoTitle = "Browser";
+    infoAccent = "#22d3ee";
   } else if (activeLeftTab === "releases") {
     infoTitle = "Releases";
     infoAccent = "#f472b6";

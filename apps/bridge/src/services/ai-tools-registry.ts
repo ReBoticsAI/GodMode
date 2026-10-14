@@ -12,6 +12,7 @@ import {
 } from "../kernel/auto-tools.js";
 import { pageKindJsonSchema } from "../kernel/kind-registry.js";
 import { getBridgeMcpToolDefsForAgent } from "./coding/mcp-host.js";
+import { browserStageAllowed } from "./browser/browser-access.js";
 
 /** JSON-schema for structure node `kind` — live Kind registry (plugins extend). */
 function kindSchema(): Record<string, unknown> {
@@ -196,6 +197,183 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
         maxChars: { type: "number", description: "Max characters of text (default 6000)" },
       },
       required: ["url"],
+    },
+  },
+  // --- Browser stage (Local desktop Playwright; gated on Cloud) ---
+  {
+    name: "browser_session_create",
+    description:
+      "Start a supervised Chromium browser session for interactive web work (forms, surveys). Opens the Browser stage so the human can watch or take over. Local desktop only; fail-closed on GodMode Cloud until disposable browser jobs exist. Prefer official APIs when available.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "Optional initial https URL to open",
+        },
+        allowHosts: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional hostname allowlist (e.g. example.com). Empty means any host.",
+        },
+        maxSteps: {
+          type: "number",
+          description: "Max agent actions in this session (default 80)",
+        },
+      },
+    },
+  },
+  {
+    name: "browser_session_list",
+    description: "List open Browser stage sessions for this agent/tenant.",
+    mode: "auto",
+    category: "browser",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "browser_session_close",
+    description: "Close a Browser stage session and its Chromium process.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "browser_navigate",
+    description: "Navigate the Browser session to an http(s) URL.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        url: { type: "string" },
+      },
+      required: ["sessionId", "url"],
+    },
+  },
+  {
+    name: "browser_click",
+    description: "Click a CSS selector in the Browser session.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        selector: { type: "string" },
+      },
+      required: ["sessionId", "selector"],
+    },
+  },
+  {
+    name: "browser_type",
+    description: "Type into a CSS selector in the Browser session.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        selector: { type: "string" },
+        text: { type: "string" },
+        clear: {
+          type: "boolean",
+          description: "If true, replace field contents (fill)",
+        },
+        pressEnter: { type: "boolean" },
+      },
+      required: ["sessionId", "selector", "text"],
+    },
+  },
+  {
+    name: "browser_select",
+    description: "Select an option in a <select> by CSS selector.",
+    mode: "confirm",
+    category: "browser",
+    write: true,
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        selector: { type: "string" },
+        value: { type: "string" },
+      },
+      required: ["sessionId", "selector", "value"],
+    },
+  },
+  {
+    name: "browser_screenshot",
+    description: "Capture a JPEG screenshot of the current Browser session page.",
+    mode: "auto",
+    category: "browser",
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "browser_snapshot",
+    description:
+      "Return an accessibility / DOM snapshot of the current page for choosing selectors.",
+    mode: "auto",
+    category: "browser",
+    parameters: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "browser_session_pause",
+    description: "Pause agent actions on a Browser session (human can watch).",
+    mode: "auto",
+    category: "browser",
+    parameters: {
+      type: "object",
+      properties: { sessionId: { type: "string" } },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "browser_session_takeover",
+    description:
+      "Hand the Browser session to the human (take-over). Agent actions blocked until resume.",
+    mode: "auto",
+    category: "browser",
+    parameters: {
+      type: "object",
+      properties: { sessionId: { type: "string" } },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "browser_session_resume",
+    description: "Return a paused or human take-over Browser session to agent mode.",
+    mode: "auto",
+    category: "browser",
+    parameters: {
+      type: "object",
+      properties: { sessionId: { type: "string" } },
+      required: ["sessionId"],
     },
   },
   {
@@ -2619,6 +2797,26 @@ export function isCodingTool(name: string): boolean {
   return CODING_TOOL_NAMES.has(name);
 }
 
+/** Browser stage tools (Local Playwright; Cloud gated via browserStageAllowed). */
+export const BROWSER_TOOL_NAMES = new Set<string>([
+  "browser_session_create",
+  "browser_session_list",
+  "browser_session_close",
+  "browser_navigate",
+  "browser_click",
+  "browser_type",
+  "browser_select",
+  "browser_screenshot",
+  "browser_snapshot",
+  "browser_session_pause",
+  "browser_session_takeover",
+  "browser_session_resume",
+]);
+
+export function isBrowserTool(name: string): boolean {
+  return BROWSER_TOOL_NAMES.has(name);
+}
+
 // Domain-specific tools are registered by optional plugins at runtime with
 // departments: ["trading"] and arrive via departmentToolNames("trading").
 const TASK_TOOLS = new Set<string>([
@@ -2804,6 +3002,7 @@ export function isToolVisibleForAgent(
   if (allowed && !allowed.has(toolName)) return false;
   const agent = getAgent(db, agentId);
   if (CODING_TOOL_NAMES.has(toolName) && !agentCodeAccess(agent)) return false;
+  if (BROWSER_TOOL_NAMES.has(toolName) && !browserStageAllowed()) return false;
   return true;
 }
 
@@ -2811,9 +3010,11 @@ function visibleTools(db?: AppDatabase, agentId?: string): AiToolDef[] {
   const allowed = allowedToolNames(db, agentId);
   const agent = db && agentId ? getAgent(db, agentId) : null;
   const codeAccess = agentCodeAccess(agent);
+  const browserOk = browserStageAllowed();
   return allRegisteredTools().filter((t) => {
     if (allowed && !allowed.has(t.name)) return false;
     if (CODING_TOOL_NAMES.has(t.name) && !codeAccess) return false;
+    if (BROWSER_TOOL_NAMES.has(t.name) && !browserOk) return false;
     return true;
   });
 }

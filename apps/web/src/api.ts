@@ -3795,6 +3795,51 @@ export const fetchCodingTree = (path = ".", agentId?: string) =>
     `/ai/coding/tree${codingQs(agentId, { path })}`
   );
 
+/* ----------------------------- Browser stage ----------------------------- */
+
+export type BrowserSession = {
+  id: string;
+  agentId: string;
+  tenantId: string;
+  url: string;
+  title: string;
+  mode: "agent" | "paused" | "human";
+  stepCount: number;
+  maxSteps: number;
+  allowHosts: string[];
+  createdAt: string;
+  updatedAt: string;
+  profileDir: string;
+};
+
+export const fetchBrowserStatus = () =>
+  api<{ allowed: boolean; message: string | null }>("/ai/browser/status");
+
+export const fetchBrowserSessions = (agentId?: string) =>
+  api<{ sessions: BrowserSession[] }>(
+    `/ai/browser/sessions${codingQs(agentId)}`
+  );
+
+export const fetchBrowserFrame = (sessionId: string) =>
+  api<{
+    frame: { mimeType: string; dataBase64: string; url: string };
+  }>(`/ai/browser/sessions/${encodeURIComponent(sessionId)}/frame`);
+
+export const browserSessionSetMode = (
+  sessionId: string,
+  mode: "agent" | "paused" | "human"
+) =>
+  api<{ session: BrowserSession }>(
+    `/ai/browser/sessions/${encodeURIComponent(sessionId)}/mode`,
+    { method: "POST", body: JSON.stringify({ mode }) }
+  );
+
+export const browserSessionClose = (sessionId: string) =>
+  api<{ ok: boolean }>(
+    `/ai/browser/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" }
+  );
+
 export type CodingGitStatus = {
   branch: string;
   dirtyCount: number;

@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CodeIcon,
+  GlobeIcon,
   HashIcon,
   InfoIcon,
   KeyRoundIcon,
@@ -85,6 +86,9 @@ import {
 
 const CodingWorkspacePage = lazy(
   () => import("@/pages/coding/CodingWorkspacePage")
+);
+const BrowserStagePage = lazy(
+  () => import("@/pages/browser/BrowserStagePage")
 );
 
 const AiBuilder = lazy(() =>
@@ -421,6 +425,12 @@ export function InformationFloatingPanel() {
     panelIcon = (
       <CodeIcon className="size-4" style={{ color: panelAccent }} />
     );
+  } else if (activeLeftTab === "browser") {
+    panelTitle = "Browser";
+    panelAccent = "#22d3ee";
+    panelIcon = (
+      <GlobeIcon className="size-4" style={{ color: panelAccent }} />
+    );
   } else if (activeLeftTab === "releases") {
     panelTitle = "Releases";
     panelAccent = "#f472b6";
@@ -581,6 +591,19 @@ export function InformationFloatingPanel() {
             }
           >
             <CodingWorkspacePage embedded />
+          </Suspense>
+        </div>
+      ) : activeLeftTab === "browser" ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <Suspense
+            fallback={
+              <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                <Spinner />
+                <span>Loading browser…</span>
+              </div>
+            }
+          >
+            <BrowserStagePage embedded />
           </Suspense>
         </div>
       ) : activeLeftTab === "releases" ? (
