@@ -4,6 +4,7 @@ import {
   BotIcon,
   CalendarIcon,
   CodeIcon,
+  GlobeIcon,
   HashIcon,
   InboxIcon,
   InfoIcon,
@@ -106,6 +107,8 @@ export function focusChromeForLeftTab(
       return { label: "Structure", accent: "#60a5fa", Icon: LayersIcon };
     case "coding":
       return { label: "Coding", accent: "#38bdf8", Icon: CodeIcon };
+    case "browser":
+      return { label: "Browser", accent: "#22d3ee", Icon: GlobeIcon };
     case "releases":
       return { label: "Releases", accent: "#f472b6", Icon: RocketIcon };
     case "agents":

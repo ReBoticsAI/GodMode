@@ -269,6 +269,20 @@ import {
 } from "./hook-service.js";
 import { refreshScheduler } from "./scheduler.js";
 import { emitEvent, listEventsForOwner } from "./event-bus.js";
+import {
+  BrowserSessionError,
+  browserClick,
+  browserNavigate,
+  browserScreenshot,
+  browserSelect,
+  browserSnapshot,
+  browserType,
+  closeBrowserSession,
+  createBrowserSession,
+  listBrowserSessions,
+  setBrowserSessionMode,
+} from "./browser/browser-session.js";
+import { browserStageAllowed, browserStageDeniedMessage } from "./browser/browser-access.js";
 import { createFinancialServices } from "../routes/financial.js";
 import {
   listAvailablePlugins,
@@ -1791,6 +1805,152 @@ export async function executeTool(
       } finally {
         clearTimeout(timer);
       }
+    }
+    case "browser_session_create": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      const tenantId = resolveToolWorkspaceId(ctx);
+      if (!tenantId) throw new Error("tenant required for browser session");
+      const allowHosts = Array.isArray(args.allowHosts)
+        ? args.allowHosts.map((h) => String(h))
+        : undefined;
+      const session = await createBrowserSession({
+        agentId: ctx.activeAgentId ?? "intelligence",
+        tenantId,
+        url: args.url ? String(args.url) : undefined,
+        allowHosts,
+        maxSteps: args.maxSteps != null ? Number(args.maxSteps) : undefined,
+      });
+      try {
+        emitEvent({
+          type: "browser.session.created",
+          actor: { kind: "agent", id: ctx.activeAgentId ?? "intelligence" },
+          tenantId,
+          payload: { sessionId: session.id, url: session.url },
+        });
+      } catch {
+        /* event bus optional for tools */
+      }
+      return {
+        ok: true,
+        session,
+        openBrowserStage: true,
+        hint: "Open the Browser stage window to watch or take over this session.",
+      };
+    }
+    case "browser_session_list": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      const tenantId = resolveToolWorkspaceId(ctx) ?? undefined;
+      return {
+        sessions: listBrowserSessions({
+          tenantId,
+          agentId: ctx.activeAgentId ?? undefined,
+        }),
+      };
+    }
+    case "browser_session_close": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      const sessionId = String(args.sessionId ?? "").trim();
+      if (!sessionId) throw new Error("sessionId required");
+      await closeBrowserSession(sessionId);
+      return { ok: true, sessionId };
+    }
+    case "browser_navigate": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        const session = await browserNavigate(
+          String(args.sessionId ?? ""),
+          String(args.url ?? "")
+        );
+        return { ok: true, session };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_click": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        const session = await browserClick(
+          String(args.sessionId ?? ""),
+          String(args.selector ?? "")
+        );
+        return { ok: true, session };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_type": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        const session = await browserType(
+          String(args.sessionId ?? ""),
+          String(args.selector ?? ""),
+          String(args.text ?? ""),
+          {
+            clear: Boolean(args.clear),
+            pressEnter: Boolean(args.pressEnter),
+          }
+        );
+        return { ok: true, session };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_select": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        const session = await browserSelect(
+          String(args.sessionId ?? ""),
+          String(args.selector ?? ""),
+          String(args.value ?? "")
+        );
+        return { ok: true, session };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_screenshot": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        const screenshot = await browserScreenshot(String(args.sessionId ?? ""));
+        return { ok: true, screenshot };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_snapshot": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      try {
+        return { ok: true, ...(await browserSnapshot(String(args.sessionId ?? ""))) };
+      } catch (err) {
+        if (err instanceof BrowserSessionError) throw new Error(err.message);
+        throw err;
+      }
+    }
+    case "browser_session_pause": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      return {
+        ok: true,
+        session: setBrowserSessionMode(String(args.sessionId ?? ""), "paused"),
+      };
+    }
+    case "browser_session_takeover": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      return {
+        ok: true,
+        session: setBrowserSessionMode(String(args.sessionId ?? ""), "human"),
+      };
+    }
+    case "browser_session_resume": {
+      if (!browserStageAllowed()) throw new Error(browserStageDeniedMessage());
+      return {
+        ok: true,
+        session: setBrowserSessionMode(String(args.sessionId ?? ""), "agent"),
+      };
     }
     case "save_artifact": {
       const name = String(args.name ?? "").trim();

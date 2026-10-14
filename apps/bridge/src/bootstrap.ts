@@ -596,10 +596,16 @@ const terminalWss = new WebSocketServer({ noServer: true });
 attachTerminalWebSocket(terminalWss);
 const chatWss = new WebSocketServer({ noServer: true });
 attachChatWebSocket(chatWss);
+const browserWss = new WebSocketServer({ noServer: true });
+const { attachBrowserWebSocket } = await import(
+  "./services/browser/browser-ws.js"
+);
+attachBrowserWebSocket(browserWss);
 attachWsUpgradeRouter(server, [
   { path: "/ws", wss },
   { path: "/ws/terminal", wss: terminalWss },
   { path: "/ws/chat", wss: chatWss },
+  { path: "/ws/browser", wss: browserWss },
 ]);
 
 await pluginRuntime.emitHook("server:beforeListen", {

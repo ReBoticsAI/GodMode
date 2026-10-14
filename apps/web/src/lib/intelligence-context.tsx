@@ -327,6 +327,7 @@ export type LeftRailTab =
   | "marketplace"
   | "structure"
   | "coding"
+  | "browser"
   | "releases"
   | "agents"
   | "users";
@@ -350,6 +351,7 @@ export type PanelTab =
   | "marketplace"
   | "structure"
   | "coding"
+  | "browser"
   | "releases"
   | "agents"
   | "users"

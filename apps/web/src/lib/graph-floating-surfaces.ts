@@ -10,6 +10,7 @@ import {
   AGENTS_PATH,
   BANK_PATH,
   CALENDAR_PATH,
+  BROWSER_PATH,
   CODING_PATH,
   CONTACTS_PATH,
   MARKETPLACE_PATH,
@@ -105,6 +106,13 @@ export const GRAPH_FLOATING_SURFACES: readonly GraphFloatingSurface[] = [
     event: "godmode:open-coding",
     path: CODING_PATH,
     authLabel: "Coding",
+  },
+  {
+    tab: "browser",
+    nodeId: "hub:browser",
+    event: "godmode:open-browser",
+    path: BROWSER_PATH,
+    authLabel: "Browser",
   },
   {
     tab: "releases",

@@ -97,6 +97,7 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/sandboxed-process.test.ts",
       "apps/bridge/src/services/__tests__/tenant-worktree.test.ts",
       "apps/bridge/src/services/__tests__/coding-ui-access.test.ts",
+      "apps/bridge/src/services/__tests__/browser-stage.test.ts",
       "apps/bridge/src/services/__tests__/coding-quota.test.ts",
       "apps/bridge/src/services/__tests__/spend-authority.test.ts",
       "apps/bridge/src/services/__tests__/deploy-authority.test.ts",

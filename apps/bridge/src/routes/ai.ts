@@ -180,6 +180,7 @@ import { globFiles, listDir, resolveCodingRoot } from "../services/coding/fs-too
 import { codingUiAllowed } from "../services/coding/coding-ui-access.js";
 import { enrichPlatformContextWithGit } from "../services/coding/git-workspace.js";
 import { createCodingWorkspaceRouter } from "./coding-workspace.js";
+import { createBrowserStageRouter } from "./browser-stage.js";
 import {
   collectCursorMcpDiscovery,
   enrichPlatformContextWithMcp,
@@ -467,6 +468,7 @@ export function createAiRouter(
   };
   router.use(requireEditorForMutation);
   router.use("/coding", createCodingWorkspaceRouter(tdb));
+  router.use("/browser", createBrowserStageRouter());
   const { training, scheduler, bridgePort, queue, embeddings, reflection, memoryMaintenance, bus } =
     deps;
   const datasetBuilderFor = (req: Request) => new AiDatasetBuilder(tdb(req));
