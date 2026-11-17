@@ -37,6 +37,7 @@ const NODE_LABELS: Record<string, string> = {
   "hub:admin": "Admin",
   "hub:wiki": "Wiki",
   "hub:coding": "Coding",
+  "hub:browser": "Browser",
   "hub:releases": "Releases",
   "hub:settings": "Settings",
   "hub:agents": "Agents",

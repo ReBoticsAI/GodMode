@@ -150,6 +150,7 @@ describe("graph-projection", () => {
     expect(proj.nodes.some((n) => n.id === "hub:admin")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:wiki")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:coding")).toBe(true);
+    expect(proj.nodes.some((n) => n.id === "hub:browser")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:releases")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:settings")).toBe(true);
     expect(proj.nodes.some((n) => n.id === "hub:agents")).toBe(true);
@@ -166,6 +167,11 @@ describe("graph-projection", () => {
     expect(
       proj.edges.some(
         (e) => e.source === "hub:heart" && e.target === "hub:wiki"
+      )
+    ).toBe(true);
+    expect(
+      proj.edges.some(
+        (e) => e.source === "hub:heart" && e.target === "hub:browser"
       )
     ).toBe(true);
     expect(

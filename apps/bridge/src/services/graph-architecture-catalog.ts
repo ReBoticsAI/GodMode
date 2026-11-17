@@ -1480,6 +1480,7 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
   // Distinct from Shared (≈0.286) and Support (0.9): below Hub on -y.
   const wikiPos = offset(hubPos, 2.0, -1.5, 1.8);
   const codingPos = offset(hubPos, 2.8, -2.25, -0.6);
+  const browserPos = offset(hubPos, 3.4, -1.4, 0.9);
   const releasesPos = offset(hubPos, 1.5, 2.4, -1.0);
   const adminPos = offset(youPos, 1.4, -1.3, 0.5);
   const settingsPos = offset(youPos, -1.6, -1.1, 0.7);
@@ -1763,6 +1764,23 @@ export function listArchitectureCatalogNodes(): ArchitectureCatalogNode[] {
       windows: INFO_ONLY,
     },
     {
+      id: "hub:browser",
+      kind: "page",
+      label: "Browser",
+      objectType: "BrowserStage",
+      refId: "browser",
+      position: browserPos,
+      description:
+        "Agent browser stage under Hub: watch, pause, and take over supervised Chromium sessions. Opens in a floating window over the Graph.",
+      securityNote:
+        "Local Playwright profiles live under the Bridge data dir. Cloud SaaS stays gated until disposable browser jobs.",
+      connectionLabels: ["Hub"],
+      ctaLabel: "Open Browser",
+      cta: { type: "open_panel", tab: "browser" },
+      openImmediate: true,
+      windows: INFO_ONLY,
+    },
+    {
       id: "hub:releases",
       kind: "page",
       label: "Releases",
@@ -1886,8 +1904,8 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
 
     // Platform fan from Hub: each hub is an independent Hub child.
     // Expand Hub once for the whole fan; Support / Shared / Marketplace
-    // chevrons open side trees only. Platform Vault, Wiki, Coding, and
-    // Releases are Hub children. Admin is a You child (operator control),
+    // chevrons open side trees only. Platform Vault, Wiki, Coding, Browser,
+    // and Releases are Hub children. Admin is a You child (operator control),
     // not part of this fan.
     { id: "e:heart-support", source: "hub:heart", target: "hub:support", kind: "platform" },
     { id: "e:heart-shared", source: "hub:heart", target: "hub:shared", kind: "platform" },
@@ -1913,6 +1931,12 @@ export function listArchitectureCatalogEdges(): ArchitectureCatalogEdge[] {
       id: "e:heart-coding",
       source: "hub:heart",
       target: "hub:coding",
+      kind: "platform",
+    },
+    {
+      id: "e:heart-browser",
+      source: "hub:heart",
+      target: "hub:browser",
       kind: "platform",
     },
     {

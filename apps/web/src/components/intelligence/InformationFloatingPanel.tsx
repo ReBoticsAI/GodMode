@@ -950,6 +950,8 @@ export function InformationFloatingPanel() {
   const infoWindows = openCanvases.filter(
     (c) => c.kind === "information" && c.node
   );
+  // Chrome tabs (Browser, Coding, …) can open via openLeftRailTab without a
+  // Graph node yet. Keep a synthetic window so the stage still mounts.
   const windows =
     infoWindows.length > 0
       ? infoWindows
@@ -958,12 +960,22 @@ export function InformationFloatingPanel() {
             {
               id: "information",
               title: panelTitle,
-              kind: "information",
+              kind: "information" as const,
               nodeId: node.id,
               node,
             },
           ]
-        : [];
+        : informationPanelOpen && activeLeftTab !== "info"
+          ? [
+              {
+                id: "information",
+                title: panelTitle,
+                kind: "information" as const,
+                nodeId: `tab:${activeLeftTab}`,
+                node: null as unknown as GraphProjectionNode,
+              },
+            ]
+          : [];
 
   if (windows.length === 0) return null;
 
@@ -995,19 +1007,25 @@ export function InformationFloatingPanel() {
             pairGroup="focus-pair"
             placement="focus-right"
             forceFocusTile={focusTilingEnabled}
-            zIndexClassName={isFocused ? GRAPH_INFO_FOCUS_Z : undefined}
+            zIndexClassName={
+              isFocused || String(win.nodeId).startsWith("tab:")
+                ? GRAPH_INFO_FOCUS_Z
+                : undefined
+            }
             defaultWidth={composerWidth}
             defaultHeight={panelHeight}
             onActivate={() => focusInformationCanvas(win.id)}
             onClose={() => closeInformationCanvas(win.id)}
           >
             {renderPanelBody(
-              (win.node
-                ? (floatingSurfaceForNodeId(win.node.id)?.tab as
-                    | LeftRailTab
-                    | undefined)
-                : undefined) ??
-                (isFocused ? activeLeftTab : "info"),
+              String(win.nodeId).startsWith("tab:")
+                ? activeLeftTab
+                : (win.node
+                    ? (floatingSurfaceForNodeId(win.node.id)?.tab as
+                        | LeftRailTab
+                        | undefined)
+                    : undefined) ??
+                  (isFocused ? activeLeftTab : "info"),
               win.node ?? (isFocused ? informationNode : null)
             )}
           </FloatingWindow>
