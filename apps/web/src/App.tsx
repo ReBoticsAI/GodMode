@@ -4,7 +4,6 @@ import {
   Routes,
   useLocation,
   useNavigate,
-  useSearchParams,
 } from "react-router-dom";
 import Home from "./pages/Home";
 import AgentsPage from "./pages/Agents";
@@ -22,14 +21,13 @@ import {
 } from "./pages/marketing/marketingBase";
 import { FirstRunWizard, OnboardingWizardProvider, useOnboardingGate } from "@/components/FirstRunWizard";
 import { NoWorkspaceGate } from "@/components/NoWorkspaceGate";
-import { PreAuthChatCanvas } from "@/components/PreAuthChatCanvas";
 import {
   ACTIVE_AGENT_KEY,
   LEGACY_ACTIVE_AGENT_KEY,
   writeMigratedKey,
 } from "@/lib/storage-keys";
 import { ChatUnlockProvider } from "@/lib/chat-unlock-context";
-import { ChatGraphCanvas } from "@/components/ChatGraphCanvas";
+import { ChatAppShell } from "@/components/chat-shell/ChatAppShell";
 import Bank from "./pages/Bank";
 import DepartmentOverview from "./pages/DepartmentOverview";
 import UserCalendarPage from "./pages/UserCalendar";
@@ -102,19 +100,12 @@ import SellerLinkStripePage, {
 } from "./pages/SellerLinkStripe";
 import StructureEditor from "./pages/StructureEditor";
 import ContactsFlow from "./pages/ContactsFlow";
-import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
-import { InformationFloatingPanel } from "@/components/intelligence/InformationFloatingPanel";
-import { CloudGuideWindow } from "@/components/graph/CloudGuideWindow";
-import { InferenceOfferWindow } from "@/components/graph/InferenceOfferWindow";
-import { MinimizedWindowsDock } from "@/components/floating/MinimizedWindowsDock";
-import { GraphEscMenu } from "@/components/graph/GraphEscMenu";
 import { pageElementFor } from "@/lib/page-registry";
 import { loadWebPlugins } from "@/plugins/loader";
 import { webPluginRuntime } from "@/plugins/runtime";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useMemo, useState, useRef, createElement, type ComponentType } from "react";
 import { autoChatAgentIdForPagePath } from "@/lib/structure-agents";
-import { floatingSurfaceForPath, isGraphFloatingIndexPath } from "@/lib/graph-floating-surfaces";
 import { toast } from "sonner";
 import { connectWebSocket, fetchBridgeHealth, ensureTrialInference } from "@/api";
 import { useChatUnlock } from "@/lib/chat-unlock-context";
@@ -194,7 +185,6 @@ function landPublicChatOnIntelligence() {
 
 function AppShell() {
   const { pathname } = useLocation();
-  const [searchParams] = useSearchParams();
   const { departments, nodes, loading } = useStructure();
   const { openPanel, panelOpen } = useIntelligence();
   const isMobile = useIsMobile();
@@ -209,22 +199,6 @@ function AppShell() {
     if (!autoChatAgentId) return;
     openPanel({ agentId: autoChatAgentId });
   }, [autoChatAgentId, pathname, openPanel]);
-
-  // Deep-link chrome index routes → Graph home + floating window.
-  useEffect(() => {
-    const surface = floatingSurfaceForPath(pathname);
-    if (!surface) return;
-    const detail: Record<string, string | null> = {};
-    if (surface.tab === "platform-vault") {
-      detail.vault = searchParams.get("vault");
-      detail.sub = searchParams.get("sub");
-    } else if (surface.tab === "admin" || surface.tab === "settings") {
-      detail.tab = searchParams.get("tab");
-    }
-    window.dispatchEvent(
-      new CustomEvent(surface.event, { detail })
-    );
-  }, [pathname, searchParams]);
 
   const [rightOpen, setRightOpen] = useState(false);
 
@@ -242,12 +216,8 @@ function AppShell() {
       ? webPluginRuntime.shellForSidebar(division.rightSidebar)
       : null;
 
-  // Graph is the primary surface on Home (no welcome overlay). Chrome index
-  // deep-links open floating windows over the Graph (Settings, Vaults, …).
-  // Detail routes (e.g. /wiki/:slug) still paint in main.
-  const onGraphHome = pathname === HOME_PATH || pathname === "/";
-  const onFloatingIndex = isGraphFloatingIndexPath(pathname);
-  const showAppRoutes = !onGraphHome && !onFloatingIndex;
+  // Chat-first home: ChatAppShell. Deep routes paint in main (no Graph).
+  const onChatHome = pathname === HOME_PATH || pathname === "/";
 
   // Close the plugin drawer whenever the route changes.
   useEffect(() => {
@@ -267,31 +237,30 @@ function AppShell() {
         className="relative flex min-w-0 flex-1 flex-col"
         data-godmode-capture-root=""
       >
-        <ChatGraphCanvas />
-        <AppHeader
-          onOpenRightPanel={
-            hasRightPanel ? () => setRightOpen(true) : undefined
-          }
-          rightPanelKind={hasRightPanel ? division?.rightSidebar ?? undefined : undefined}
-        />
-        <main
-          className={
-            showAppRoutes
-              ? panelOpen
-                ? "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background/90"
-                : "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background"
-              : "pointer-events-none invisible relative z-10 min-h-0 flex-1 overflow-hidden"
-          }
-          aria-hidden={!showAppRoutes}
-        >
-          <AppRoutes departments={departments} loading={loading} />
-        </main>
-        <IntelligencePanel />
-        <InformationFloatingPanel />
-        <CloudGuideWindow />
-        <InferenceOfferWindow />
-        <MinimizedWindowsDock />
-        <AppFooter />
+        {onChatHome ? (
+          <ChatAppShell />
+        ) : (
+          <>
+            <AppHeader
+              onOpenRightPanel={
+                hasRightPanel ? () => setRightOpen(true) : undefined
+              }
+              rightPanelKind={
+                hasRightPanel ? division?.rightSidebar ?? undefined : undefined
+              }
+            />
+            <main
+              className={
+                panelOpen
+                  ? "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background/90"
+                  : "relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background"
+              }
+            >
+              <AppRoutes departments={departments} loading={loading} />
+            </main>
+            <AppFooter />
+          </>
+        )}
       </div>
 
       {/* Right panel: static rail on desktop, drawer in compact mode */}
@@ -317,7 +286,6 @@ function AppShell() {
 
       <FirstLandChatBootstrap />
       <AiNotifications />
-      <GraphEscMenu />
       <Toaster richColors position="top-right" />
     </div>
   );
@@ -590,7 +558,7 @@ function AuthGatedApp() {
     );
   }
 
-  // Pre-auth + soft visitor sessions: Graph stays mounted; AuthGate opens in a Dialog.
+  // Pre-auth + soft visitor sessions: chat-first shell; AuthGate opens in a Dialog.
   if (!isProductSession) {
     landPublicChatOnIntelligence();
     const signupFromUrl =
@@ -598,7 +566,7 @@ function AuthGatedApp() {
     return (
       <StructureProvider>
         <IntelligenceProvider>
-          <PreAuthChatCanvas />
+          <ChatAppShell />
           <Dialog
             open={showAuthGate}
             onOpenChange={(open) => {
@@ -619,7 +587,7 @@ function AuthGatedApp() {
               <DialogDescription className="sr-only">
                 {signupFromUrl
                   ? "Pick a GodMode Cloud plan, pay, then create your account."
-                  : "Sign in or create a GodMode account without leaving the Graph."}
+                  : "Sign in or create a GodMode account without leaving chat."}
               </DialogDescription>
               <AuthGate embedded />
             </DialogContent>

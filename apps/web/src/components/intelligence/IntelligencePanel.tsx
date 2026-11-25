@@ -438,6 +438,7 @@ function ChatWindowTabs({
 
 export function IntelligencePanel({
   chromeLocks,
+  layout = "floating",
 }: {
   chromeLocks?: {
     lockClose?: boolean;
@@ -448,7 +449,10 @@ export function IntelligencePanel({
     onLockedCreate?: () => void;
     onActiveChatId?: (id: string | null) => void;
   };
+  /** `shell` = chat-first AppShell (fill parent, no floating chrome). */
+  layout?: "floating" | "shell";
 } = {}) {
+  const isShell = layout === "shell";
   const {
     panelOpen,
     setPanelOpen,
@@ -506,7 +510,7 @@ export function IntelligencePanel({
   const [cloudLobbyOnline, setCloudLobbyOnline] = useState(true);
   const [publicEntitlement, setPublicEntitlement] =
     useState<PublicChatEntitlement | null>(null);
-  const { status } = useAiStatus({ enabled: panelOpen });
+  const { status } = useAiStatus({ enabled: panelOpen || isShell });
   const [activeModel, setActiveModel] = useState<CatalogModel | null>(null);
   const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
   const isMobile = useIsMobile();
@@ -2114,17 +2118,28 @@ export function IntelligencePanel({
           endpointId: model.endpointId,
           transport: model.transport,
         });
-        if (!res.active || typeof res.active.id !== "string") {
-          throw new Error("Model catalog returned no active model");
+        // select_model is queued as a durable operation; the action can resolve
+        // before the new active model is reflected in the catalog. Poll briefly.
+        let active =
+          res.active && typeof res.active.id === "string" ? res.active : null;
+        for (let attempt = 0; !active && attempt < 20; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const catalog = await fetchModelCatalog();
+          if (catalog.active && catalog.active.id === model.id) {
+            active = catalog.active;
+          }
         }
-        setActiveModel(res.active);
+        if (!active) {
+          throw new Error("Model switch did not apply");
+        }
+        setActiveModel(active);
         setModelCatalog((prev) =>
           prev
             .filter((m) => m && typeof m.id === "string")
-            .map((m) => ({ ...m, active: m.id === res.active.id }))
+            .map((m) => ({ ...m, active: m.id === active.id }))
         );
         window.dispatchEvent(new Event("godmode:model-selected"));
-        toast.success(`Using ${res.active.label}`);
+        toast.success(`Using ${active.label}`);
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Failed to switch model"
@@ -2226,9 +2241,9 @@ export function IntelligencePanel({
     setPanelHeight,
   ]);
 
-  if (!panelOpen) return null;
+  if (!isShell && !panelOpen) return null;
   // Phone: open (playfield fullscreen) or closed only. Minimized is treated as closed.
-  if (isPhone && panelMinimized) return null;
+  if (!isShell && isPhone && panelMinimized) return null;
 
   const panelAccent = isDmMode ? "#38bdf8" : "#a78bfa";
   const panelShadow = isLight
@@ -2237,48 +2252,55 @@ export function IntelligencePanel({
   const panelBorder = isLight ? `${panelAccent}55` : `${panelAccent}88`;
   const panelBorderMax = isLight ? `${panelAccent}40` : `${panelAccent}66`;
 
+  const shellAsideStyle: CSSProperties | undefined = isShell
+    ? undefined
+    : isPhone
+      ? {
+          top: "var(--graph-top-chrome-band, 5.625rem)",
+          bottom: "var(--graph-composer-band, 7.25rem)",
+          borderColor: panelBorderMax,
+        }
+      : isMaximized
+        ? {
+            left: bounds.x,
+            top: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            maxWidth: bounds.width,
+            maxHeight: bounds.height,
+            borderColor: panelBorderMax,
+          }
+        : {
+            left: pos.x,
+            top: pos.y,
+            width: currentWidth,
+            height: currentHeight,
+            maxWidth: bounds.width,
+            maxHeight: bounds.height,
+            borderColor: panelBorder,
+            boxShadow: panelShadow,
+          };
+
   return (
     <aside
       ref={asideRef}
-      style={
-        isPhone
-          ? {
-              top: "var(--graph-top-chrome-band, 5.625rem)",
-              bottom: "var(--graph-composer-band, 7.25rem)",
-              borderColor: panelBorderMax,
-            }
-          : isMaximized
-            ? {
-                left: bounds.x,
-                top: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-                borderColor: panelBorderMax,
-              }
-            : {
-                left: pos.x,
-                top: pos.y,
-                width: currentWidth,
-                height: currentHeight,
-                maxWidth: bounds.width,
-                maxHeight: bounds.height,
-                borderColor: panelBorder,
-                boxShadow: panelShadow,
-              }
-      }
+      style={shellAsideStyle}
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-muted text-foreground shadow-xl",
-        isPhone
-          ? cn(
-              "fixed inset-x-0 rounded-t-xl border-t",
-              GRAPH_CHAT_WINDOW_Z
+        "flex min-h-0 flex-col overflow-hidden text-foreground",
+        isShell
+          ? "relative h-full w-full flex-1 border-0 bg-background shadow-none"
+          : cn(
+              "bg-muted shadow-xl",
+              isPhone
+                ? cn(
+                    "fixed inset-x-0 rounded-t-xl border-t",
+                    GRAPH_CHAT_WINDOW_Z
+                  )
+                : `absolute ${GRAPH_CHAT_WINDOW_Z} rounded-xl border-2 shadow-2xl`
             )
-          : `absolute ${GRAPH_CHAT_WINDOW_Z} rounded-xl border-2 shadow-2xl`
       )}
     >
-      {!isPhone && !isMaximized && !lockResize && (
+      {!isShell && !isPhone && !isMaximized && !lockResize && (
         <>
           <div
             role="separator"
@@ -2315,12 +2337,15 @@ export function IntelligencePanel({
         </>
       )}
 
+      {!isShell ? (
       <div
         className="h-1 w-full shrink-0"
         style={{ backgroundColor: panelAccent }}
         aria-hidden
       />
+      ) : null}
 
+      {!isShell ? (
       <header
         data-floating-title
         data-window-id="chat"
@@ -2432,6 +2457,7 @@ export function IntelligencePanel({
           </Button>
         </div>
       </header>
+      ) : null}
 
       <div
         data-phone-sole-scroll={

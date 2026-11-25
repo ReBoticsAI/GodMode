@@ -1,5 +1,7 @@
 # State of play: Graph + isolation
 
+**UI (2026-11):** The signed-in **Graph map is retired** as primary chrome. Home is the chat-first shell ([CHAT_FIRST_SHELL.md](./CHAT_FIRST_SHELL.md), epic #867). Isolation / SQLite-universe work below continues; do not assume the 3D canvas is the nav.
+
 **As of 2026-09-11 (branch `wip/graph-workspaces-agents`, draft PR [#788](https://github.com/ReBoticsAI/GodMode/pull/788)).**
 
 Use this when chat context is gone. Prefer this over assuming “Graph nodes = SQLite files = VMs.”
