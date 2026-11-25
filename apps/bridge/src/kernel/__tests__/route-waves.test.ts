@@ -110,6 +110,7 @@ describe("legacy route wave", () => {
       "godmode-inference.ts:post:/checkout/complete",
       "godmode-inference.ts:post:/cloud-checkout",
       "godmode-inference.ts:post:/cloud-checkout/claim",
+      "godmode-inference.ts:put:/admin/auto-router/roster",
       "godmode-inference.ts:put:/admin/default-trial-budget",
       "graph-missions.ts:post:/:id/complete",
       "graph-missions.ts:post:/sync",
