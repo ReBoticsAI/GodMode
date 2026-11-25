@@ -26,7 +26,8 @@ Same pattern as the chat LLM: attach to a **host** embedder — do not ship CUDA
 | `EMBEDDINGS_EXTERNAL` | `true` |
 | `EMBEDDINGS_SERVER_HOST` | `host.docker.internal` |
 | `EMBEDDINGS_PORT` | `8082` |
-| `EMBEDDINGS_MODEL_PATH` | host path to EmbeddingGemma GGUF (spawn only when not external) |
+| `EMBEDDINGS_MODEL_PATH` | host path to **EmbeddingGemma 2** GGUF (spawn only when not external) |
+| `GODMODE_ROUTER_EMBED_BASE_URL` | same `:8082` base for Auto router enrich (double-duty; fail-open if down) |
 | `EMBEDDINGS_CODE_MODEL_PATH` / `EMBEDDINGS_CODE_PORT` | optional separate **code** profile server |
 | `EMBEDDINGS_QUEUE_ENABLED` | SaaS shared embed queue (`true`/`false`; default on when `INSTALLATION_SURFACE=saas`) |
 | `EMBEDDINGS_QUEUE_RPS` | max embed HTTP calls per 10s window (default 8) |

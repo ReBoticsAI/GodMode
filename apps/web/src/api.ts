@@ -3010,7 +3010,7 @@ export const disconnectZaiApiKey = (agentId?: string | null) =>
     .then(() => fetchZaiStatus(agentId))
     .then((status) => ({ ok: true, status }));
 
-export const applyZaiToIntelligence = (model = "glm-5.2") =>
+export const applyZaiToIntelligence = (model = "glm-5.3") =>
   actionDto<{ ok: boolean }>(
     "ModelRuntime",
     "select_model",
@@ -3286,6 +3286,86 @@ export const applyOpencodeGoToIntelligence = (model = "kimi-k3") =>
     "runtime",
     true
   );
+
+export type OpencodeConsoleAuthStatus = {
+  connected: boolean;
+  source: "env" | "vault" | "none";
+  masked?: string;
+};
+
+export const fetchOpencodeConsoleStatus = async (
+  agentId?: string | null
+): Promise<OpencodeConsoleAuthStatus> => {
+  try {
+    const row = await fetchRecord(
+      "ProviderCredential",
+      "opencode-console-api-key",
+      vaultScopeOpts(agentId)
+    );
+    const data = row?.data as
+      | { provider?: string; status?: string; masked_token?: string }
+      | undefined;
+    if (data?.status === "active" || data?.provider === "opencode_console") {
+      return {
+        connected: true,
+        source: "vault",
+        masked: data.masked_token,
+      };
+    }
+  } catch {
+    /* not connected */
+  }
+  return { connected: false, source: "none" };
+};
+
+export const connectOpencodeConsoleApiKey = (
+  apiKey: string,
+  agentId?: string | null
+) =>
+  createRecordApi(
+    "ProviderCredential",
+    {
+      ...vaultAgentPayload(agentId),
+      provider: "opencode_console",
+      label: "OpenCode Console",
+      api_key: apiKey,
+    },
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpencodeConsoleStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const disconnectOpencodeConsoleApiKey = (agentId?: string | null) =>
+  deleteRecordApi(
+    "ProviderCredential",
+    "opencode-console-api-key",
+    undefined,
+    vaultScopeOpts(agentId)
+  )
+    .then(() => fetchOpencodeConsoleStatus(agentId))
+    .then((status) => ({ ok: true, status }));
+
+export const applyOpencodeConsoleToIntelligence = (model = "kimi-k3") =>
+  actionDto<{ ok: boolean }>(
+    "ModelRuntime",
+    "select_model",
+    { model_id: `provider:openai_compatible:opencode_console:${model}` },
+    "runtime",
+    true
+  );
+
+/** Live model list from the Console API for the connected vault key. */
+export const fetchOpencodeConsoleModels = async (): Promise<string[]> => {
+  try {
+    const data = await api<{ models?: unknown }>("/ai/opencode-console/models");
+    if (Array.isArray(data.models)) {
+      return data.models.filter((m): m is string => typeof m === "string");
+    }
+  } catch {
+    /* fall back to the static catalog */
+  }
+  return [];
+};
 
 export type DigitalOceanInferenceAuthStatus = {
   connected: boolean;
@@ -7362,6 +7442,9 @@ export interface GodModeInferenceConfig {
   zai: GodModeInferenceProviderStatus;
   zaiCoding: GodModeInferenceProviderStatus;
   dashscope: GodModeInferenceProviderStatus;
+  openrouter: GodModeInferenceProviderStatus;
+  groq: GodModeInferenceProviderStatus;
+  googleAi: GodModeInferenceProviderStatus;
   defaultTrialBudgetUsd: number;
 }
 
@@ -7386,6 +7469,9 @@ function mapGodModeInferenceConfig(
     zai: asStatus(raw.zai),
     zaiCoding: asStatus(raw.zai_coding ?? raw.zaiCoding),
     dashscope: asStatus(raw.dashscope),
+    openrouter: asStatus(raw.openrouter),
+    groq: asStatus(raw.groq),
+    googleAi: asStatus(raw.google_ai ?? raw.googleAi),
     defaultTrialBudgetUsd:
       Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : 0.1,
   };
@@ -7402,6 +7488,9 @@ export function updateGodModeInferenceConfig(body: {
   zaiApiKey?: string;
   zaiCodingApiKey?: string;
   dashscopeApiKey?: string;
+  openrouterApiKey?: string;
+  groqApiKey?: string;
+  googleAiApiKey?: string;
   defaultTrialBudgetUsd?: number;
 }) {
   return actionDto<RecordRowClient>(
@@ -7412,12 +7501,71 @@ export function updateGodModeInferenceConfig(body: {
       zai_api_key: body.zaiApiKey,
       zai_coding_api_key: body.zaiCodingApiKey,
       dashscope_api_key: body.dashscopeApiKey,
+      openrouter_api_key: body.openrouterApiKey,
+      groq_api_key: body.groqApiKey,
+      google_ai_api_key: body.googleAiApiKey,
       default_trial_budget_usd: body.defaultTrialBudgetUsd,
     },
     "godmode-inference",
     true
   ).then((row) =>
     mapGodModeInferenceConfig((row?.data ?? {}) as Record<string, unknown>)
+  );
+}
+
+export type AdminAutoRouterSnapshot = {
+  roster: Array<{
+    id: string;
+    provider: string;
+    model: string;
+    band: string;
+    costPer1kIn: number;
+    costPer1kOut: number;
+    caps: Record<string, number | undefined>;
+    capabilities: string[];
+    classifier?: boolean;
+    enabled?: boolean;
+    capabilityScore?: number;
+    tags?: string[];
+  }>;
+  available: Array<{ id: string; provider: string; model: string; band: string }>;
+  quotas: Array<{
+    provider: string;
+    day: string;
+    requests: number;
+    tokens: number;
+    rpmWindow: number;
+    exhausted: boolean;
+  }>;
+  decisions: Array<{
+    at: string;
+    band: string;
+    classifySource: string;
+    classifyReason: string;
+    chosenRosterId: string | null;
+    chosenModel: string | null;
+    chosenProvider: string | null;
+    attempts: string[];
+    error?: string;
+    complexityScore?: number;
+    enableThinking?: boolean;
+    maxTokens?: number;
+    toolPolicy?: string;
+    confidence?: number;
+    source?: string;
+    reasons?: string[];
+    failover?: string[];
+  }>;
+};
+
+export function fetchAdminAutoRouter() {
+  return api<AdminAutoRouterSnapshot>("/godmode-inference/admin/auto-router");
+}
+
+export function resetAdminAutoRouterRoster() {
+  return api<AdminAutoRouterSnapshot>(
+    "/godmode-inference/admin/auto-router/roster",
+    { method: "PUT", body: JSON.stringify({ reset: true }) }
   );
 }
 

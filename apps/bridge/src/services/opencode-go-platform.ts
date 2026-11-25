@@ -12,19 +12,25 @@ export const OPENCODE_GO_API_KEY_SECRET_NAME = "opencode_go_api_key";
 
 /**
  * OpenCode Go OpenAI-compatible base (subscription plan).
- * https://opencode.ai/docs/go/
+ * Go moved to the Console inference surface (2026-11 docs); the legacy
+ * `opencode.ai/zen/go/v1` path still routes but is deprecated.
+ * https://opencode.ai/docs/console/go/
  */
-export const OPENCODE_GO_API_BASE_URL = "https://opencode.ai/zen/go/v1";
+export const OPENCODE_GO_API_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 
 /**
- * OpenCode Go chat catalog snapshot (2026-08-03).
+ * OpenCode Go chat catalog snapshot (2026-11-16).
  * Prefer chat/completions-compatible ids; custom slug allowed.
  */
 export const OPENCODE_GO_CHAT_CATALOG = [
-  { id: "grok-4.5", label: "Grok 4.5" },
+  { id: "glm-5.3-flash", label: "GLM-5.3 Flash" },
+  { id: "glm-5.3", label: "GLM-5.3" },
   { id: "glm-5.2", label: "GLM-5.2" },
   { id: "kimi-k3", label: "Kimi K3" },
-  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { id: "kimi-k2.7-code", label: "Kimi K2.7 Code" },
+  { id: "gpt-6-luna", label: "GPT 6 Luna" },
+  { id: "grok-4.7", label: "Grok 4.7" },
+  { id: "deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
 ] as const;
 
 export type OpencodeGoAuthSource = "env" | "vault" | "none";
@@ -122,5 +128,7 @@ export function isOpencodeGoAgentConfig(
   if (config.opencodeGo === true || config.transport === "opencode_go") return true;
   if (config.apiKeyRef === OPENCODE_GO_API_KEY_SECRET_ID) return true;
   const base = typeof config.baseUrl === "string" ? config.baseUrl.toLowerCase() : "";
-  return base.includes("opencode.ai/zen/go");
+  return (
+    base.includes("opencode.ai/zen/go") || base.includes("opencode.ai/inference/go")
+  );
 }

@@ -1361,6 +1361,43 @@ export function resolveOpencodeGoHarnessProfile(
   return OPENCODE_GO_PROFILE;
 }
 
+/** OpenCode Console payg inference transport. */
+const OPENCODE_CONSOLE_TRANSPORT_DEFERRED = [
+  "list_subagents",
+  "list_agents",
+  "fetch_ai_agents",
+  "list_ai_agents",
+  "remember",
+] as const;
+
+export const OPENCODE_CONSOLE_PROFILE: ModelHarnessProfile = {
+  id: "opencode-console",
+  label: "OpenCode Console",
+  toolMode: "native",
+  sampling: { temperature: 1.0, topP: 1.0, topK: 0 },
+  maxChatIterations: 14,
+  enableThinkingDefault: false,
+  stripThinkingFromHistory: true,
+  requireJinja: false,
+  deferredDiscoveryTools: [...OPENCODE_CONSOLE_TRANSPORT_DEFERRED],
+  harnessDelta: [
+    '<model_profile id="opencode-console">',
+    "You are running via OpenCode Console (openai_compatible transport, metered payg).",
+    "This is not the OpenCode Go subscription and not OpenCode Zen.",
+    "Use native OpenAI-style function calling as exposed by the Console inference endpoint. Do not invent tool names.",
+    "Greetings and simple conversational questions: answer in plain language with NO tools.",
+    "Do not call discovery tools unless the USER asks about agents, org chart, or tool inventory.",
+    "OpenCode Console: lean tool surface; follow schemas closely.",
+    "</model_profile>",
+  ].join("\n"),
+};
+
+export function resolveOpencodeConsoleHarnessProfile(
+  _modelSlug?: string | null
+): ModelHarnessProfile {
+  return OPENCODE_CONSOLE_PROFILE;
+}
+
 /** DigitalOcean Gradient Inference transport (#355). */
 const DIGITALOCEAN_INFERENCE_TRANSPORT_DEFERRED = [
   "list_subagents",
@@ -1805,7 +1842,15 @@ function isCustomOpenAiTransport(input: ResolveProfileInput): boolean {
 function isOpencodeGoTransport(input: ResolveProfileInput): boolean {
   if ((input.transport ?? "").toLowerCase() === "opencode_go") return true;
   const base = (input.baseUrl ?? "").toLowerCase();
-  return base.includes("opencode.ai/zen/go");
+  return (
+    base.includes("opencode.ai/zen/go") || base.includes("opencode.ai/inference/go")
+  );
+}
+
+function isOpencodeConsoleTransport(input: ResolveProfileInput): boolean {
+  if ((input.transport ?? "").toLowerCase() === "opencode_console") return true;
+  const base = (input.baseUrl ?? "").toLowerCase();
+  return base.includes("opencode.ai/inference");
 }
 
 function isDigitalOceanInferenceTransport(input: ResolveProfileInput): boolean {
@@ -1937,6 +1982,9 @@ export function resolveHarnessProfile(input: ResolveProfileInput): ModelHarnessP
     if (p === "openai_compatible" && isOpencodeGoTransport(input)) {
       return resolveOpencodeGoHarnessProfile(input.model);
     }
+    if (p === "openai_compatible" && isOpencodeConsoleTransport(input)) {
+      return resolveOpencodeConsoleHarnessProfile(input.model);
+    }
     if (p === "openai_compatible" && isDigitalOceanInferenceTransport(input)) {
       return resolveDigitalOceanInferenceHarnessProfile(input.model);
     }
@@ -2047,9 +2095,15 @@ export function resolveProfileForAgent(
         transport = "custom_openai";
       } else if (
         cfg.opencodeGo === true ||
-        (baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go")
+        ((baseUrl ?? "").toLowerCase().includes("opencode.ai/zen/go") ||
+          (baseUrl ?? "").toLowerCase().includes("opencode.ai/inference/go"))
       ) {
         transport = "opencode_go";
+      } else if (
+        cfg.opencodeConsole === true ||
+        (baseUrl ?? "").toLowerCase().includes("opencode.ai/inference")
+      ) {
+        transport = "opencode_console";
       } else if (
         cfg.digitaloceanInference === true ||
         (baseUrl ?? "").toLowerCase().includes("inference.do-ai.run")

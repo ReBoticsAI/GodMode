@@ -30,6 +30,15 @@ export interface AgentProviderConfig {
   apiKeyRef?: string;
   baseUrl?: string;
   model?: string;
+  /** openai_compatible transport (openrouter, groq, zai, godmode_auto, …). */
+  transport?: string;
+  /** GodMode Inference Auto selection; concrete upstream resolved per turn. */
+  godmodeAuto?: boolean;
+  godmodeAutoBand?: string;
+  godmodeAutoRosterId?: string;
+  openrouter?: boolean;
+  groq?: boolean;
+  google_ai?: boolean;
 }
 
 export interface AgentCliConfig {

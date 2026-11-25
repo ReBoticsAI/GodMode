@@ -28,6 +28,7 @@ import {
   resolveMinimaxPaygHarnessProfile,
   resolveCustomOpenAiHarnessProfile,
   resolveOpencodeGoHarnessProfile,
+  resolveOpencodeConsoleHarnessProfile,
   resolveDigitalOceanInferenceHarnessProfile,
   resolveSnowflakeCortexHarnessProfile,
   resolveZaiCodingHarnessProfile,
@@ -489,6 +490,32 @@ assert.equal(
 );
 assert.equal(resolveOpencodeZenHarnessProfile("kimi-k3").id, "opencode-zen");
 assert.notEqual(resolveOpencodeZenHarnessProfile("kimi-k3").id, "opencode-go");
+assert.equal(resolveOpencodeConsoleHarnessProfile("kimi-k3").id, "opencode-console");
+assert.notEqual(resolveOpencodeConsoleHarnessProfile("kimi-k3").id, "opencode-go");
+assert.notEqual(resolveOpencodeConsoleHarnessProfile("kimi-k3").id, "opencode-zen");
+assert.equal(
+  resolveHarnessProfile({
+    source: "provider",
+    provider: "openai_compatible",
+    model: "kimi-k3",
+    transport: "opencode_console",
+    baseUrl: "https://opencode.ai/inference/openai/v1",
+  }).id,
+  "opencode-console"
+);
+assert.equal(
+  resolveProfileForAgent({
+    backend: "provider",
+    config: {
+      provider: "openai_compatible",
+      model: "gpt-6.1-sol",
+      opencodeConsole: true,
+      transport: "opencode_console",
+      baseUrl: "https://opencode.ai/inference/openai/v1",
+    },
+  }).id,
+  "opencode-console"
+);
 assert.equal(
   resolveHarnessProfile({
     source: "provider",

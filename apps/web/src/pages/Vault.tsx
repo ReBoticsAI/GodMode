@@ -22,6 +22,7 @@ import { AnthropicConsoleCard } from "@/pages/ai-settings/AnthropicConsoleCard";
 import { CursorSubscriptionCard } from "@/pages/ai-settings/CursorSubscriptionCard";
 import { ZaiCodingPlanCard } from "@/pages/ai-settings/ZaiCodingPlanCard";
 import { OpencodeGoCard } from "@/pages/ai-settings/OpencodeGoCard";
+import { OpencodeConsoleCard } from "@/pages/ai-settings/OpencodeConsoleCard";
 import { DigitalOceanInferenceCard } from "@/pages/ai-settings/DigitalOceanInferenceCard";
 import { SnowflakeCortexCard } from "@/pages/ai-settings/SnowflakeCortexCard";
 import { MinimaxTokenPlanCard } from "@/pages/ai-settings/MinimaxTokenPlanCard";
@@ -403,6 +404,7 @@ export function InferenceTab({
           <DeepSeekCard vaultAgentId={null} />
           <GoogleAiStudioCard vaultAgentId={null} />
           <XaiConsoleCard vaultAgentId={null} />
+          <OpencodeConsoleCard vaultAgentId={null} />
           <ZaiPaygCard vaultAgentId={null} />
           <MinimaxPaygCard vaultAgentId={null} />
           <QwenDashScopeCard vaultAgentId={null} />

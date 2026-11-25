@@ -7,14 +7,24 @@ import { PROVIDER_AGENT_ITERATIONS } from "../agent-loop.js";
 import { resolveSecretRefForAgent, withSecretValue } from "./agents-db.js";
 import { resolveAgentCredential } from "./agent-accounts.js";
 import {
+  GODMODE_AUTO_TRANSPORT,
+  isGodModeAutoModelId,
+  isGodModeAutoSecretId,
   isGodModeInferenceSupplySecretId,
 } from "../godmode-inference-supply.js";
 import {
   resolveGodModeInferenceSupplyForManagedChat,
 } from "../godmode-inference-grants.js";
+import {
+  filterToolsByPolicy,
+  recordQuotaAttempt,
+  resolveAutoRoute,
+  resolveAutoRouteFailover,
+  type AutoRouteResult,
+} from "../inference-router/index.js";
 import type { AppDatabase } from "../../db.js";
 import type { AgentBackend, AgentRunRequest } from "./backend.js";
-import type { AgentProviderConfig } from "./types.js";
+import type { AgentProviderConfig, AiAgent } from "./types.js";
 import type { IntelligenceChatMode } from "../chat-mode.js";
 import {
   budgetAndScrubToolResult,
@@ -23,6 +33,59 @@ import {
 import { isBridgeMcpToolName } from "../coding/mcp-host.js";
 import { buildProviderChatBody } from "./provider-chat-body.js";
 import { parseGodModeInferenceUsage } from "../godmode-inference-grants.js";
+
+/** Upstream provider HTTP failure with status (for Auto failover). */
+export class ProviderHttpError extends Error {
+  readonly status: number;
+  constructor(status: number, body: string) {
+    super(body || `HTTP ${status}`);
+    this.name = "ProviderHttpError";
+    this.status = status;
+  }
+}
+
+function applyAutoRouteToAgent(
+  agent: AiAgent,
+  cfg: AgentProviderConfig,
+  route: AutoRouteResult
+): { agent: AiAgent; cfg: AgentProviderConfig } {
+  const nextCfg: AgentProviderConfig = {
+    ...cfg,
+    provider: "openai_compatible",
+    model: route.modelId,
+    transport: route.transport,
+    baseUrl: route.baseUrl,
+    apiKeyRef: route.apiKeyRef,
+    godmodeAuto: true,
+    godmodeAutoBand: route.band,
+    godmodeAutoRosterId: route.rosterId,
+    openrouter: route.transport === "openrouter" ? true : undefined,
+    groq: route.transport === "groq" ? true : undefined,
+  };
+  let toolAllow = agent.toolAllow;
+  if (route.toolPolicy === "none") {
+    toolAllow = [];
+  } else if (route.toolPolicy === "light" && Array.isArray(agent.toolAllow)) {
+    const filtered = filterToolsByPolicy(agent.toolAllow, "light");
+    toolAllow = filtered ?? [];
+  }
+  return {
+    cfg: nextCfg,
+    agent: {
+      ...agent,
+      config: { ...agent.config, ...nextCfg },
+      thinking: {
+        ...agent.thinking,
+        enableThinking: route.enableThinking,
+      },
+      sampling: {
+        ...agent.sampling,
+        maxTokens: route.maxTokens > 0 ? route.maxTokens : agent.sampling.maxTokens,
+      },
+      toolAllow,
+    },
+  };
+}
 
 export type ProviderUsageTotals = {
   prompt_tokens: number;
@@ -137,6 +200,7 @@ async function openAiCompletion(
     onToken?: (chunk: string) => void;
     onReasoning?: (chunk: string) => void;
     onToolCallDelta?: AgentRunRequest["onToolCallDelta"];
+    extraHeaders?: Record<string, string>;
   }
 ): Promise<{
   content: string;
@@ -149,11 +213,14 @@ async function openAiCompletion(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      ...(callbacks?.extraHeaders ?? {}),
     },
     body: JSON.stringify({ model, ...body }),
     signal: callbacks?.signal,
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    throw new ProviderHttpError(res.status, await res.text());
+  }
   if (body.stream === true) {
     return readStreamedCompletion(res, callbacks);
   }
@@ -286,7 +353,9 @@ async function anthropicCompletion(
       tools: anthropicTools.length ? anthropicTools : undefined,
     }),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    throw new ProviderHttpError(res.status, await res.text());
+  }
   const json = (await res.json()) as {
     content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
   };
@@ -388,18 +457,112 @@ export class ProviderBackend implements AgentBackend {
   constructor(private db: AppDatabase) {}
 
   async run(req: AgentRunRequest): Promise<string> {
-    const cfg = req.agent.config as AgentProviderConfig;
+    let cfg = { ...(req.agent.config as AgentProviderConfig) };
+    let agent = req.agent;
+    const wantsAuto =
+      isGodModeAutoSecretId(cfg.apiKeyRef ?? "") ||
+      isGodModeAutoModelId(cfg.model) ||
+      cfg.transport === GODMODE_AUTO_TRANSPORT ||
+      cfg.godmodeAuto === true;
+    const lastUser = [...req.messages]
+      .reverse()
+      .find((m) => m.role === "user");
+    const userText =
+      typeof lastUser?.content === "string" ? lastUser.content : "";
+    const autoReqBase = {
+      userMessage: userText,
+      chatMode: req.chatMode ?? "agent",
+      hasTools: (req.chatMode ?? "agent") !== "ask",
+      historyChars: req.messages.reduce(
+        (n, m) => n + (typeof m.content === "string" ? m.content.length : 0),
+        0
+      ),
+    };
+    let excludeIds: string[] = [];
+    let lastRosterId =
+      typeof cfg.godmodeAutoRosterId === "string"
+        ? cfg.godmodeAutoRosterId
+        : "";
+    let lastProvider = "";
+
+    const needsInitialResolve =
+      wantsAuto &&
+      (isGodModeAutoModelId(cfg.model) ||
+        !cfg.apiKeyRef ||
+        isGodModeAutoSecretId(cfg.apiKeyRef));
+    if (needsInitialResolve) {
+      const route = await resolveAutoRoute({
+        ...autoReqBase,
+        excludeIds,
+      });
+      if (!route) {
+        throw new Error(
+          "GodMode Inference Auto has no healthy free supply. Connect Supported BYOK or wait for Admin quota reset."
+        );
+      }
+      recordQuotaAttempt(route.provider);
+      const applied = applyAutoRouteToAgent(agent, cfg, route);
+      agent = applied.agent;
+      cfg = applied.cfg;
+      lastRosterId = route.rosterId;
+      lastProvider = route.provider;
+    }
+
+    const maxAttempts = wantsAuto || cfg.godmodeAuto ? 4 : 1;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.runWithConfig(req, agent, cfg);
+      } catch (err) {
+        lastError = err;
+        const status =
+          err instanceof ProviderHttpError ? err.status : 0;
+        if (
+          !(wantsAuto || cfg.godmodeAuto) ||
+          (status !== 429 && status !== 503) ||
+          !lastRosterId
+        ) {
+          throw err;
+        }
+        const next = await resolveAutoRouteFailover(
+          { ...autoReqBase, excludeIds, band: undefined },
+          {
+            rosterId: lastRosterId,
+            provider: lastProvider || String(cfg.transport ?? ""),
+            status,
+          }
+        );
+        if (!next) throw err;
+        excludeIds = [...excludeIds, lastRosterId];
+        recordQuotaAttempt(next.provider);
+        const applied = applyAutoRouteToAgent(agent, cfg, next);
+        agent = applied.agent;
+        cfg = applied.cfg;
+        lastRosterId = next.rosterId;
+        lastProvider = next.provider;
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("GodMode Inference Auto failover exhausted");
+  }
+
+  private async runWithConfig(
+    req: AgentRunRequest,
+    agent: AiAgent,
+    cfg: AgentProviderConfig
+  ): Promise<string> {
     const keyRef = cfg.apiKeyRef;
     const provider = cfg.provider ?? "openai";
     const resolvedKey =
-      resolveAgentCredential(this.db, req.agent.id, {
+      resolveAgentCredential(this.db, agent.id, {
         provider,
         secretId: keyRef ?? undefined,
       }) ??
-      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, req.agent.id) : null) ??
+      (keyRef ? resolveSecretRefForAgent(this.db, keyRef, agent.id) : null) ??
       (keyRef && isGodModeInferenceSupplySecretId(keyRef)
         ? resolveGodModeInferenceSupplyForManagedChat(keyRef, {
-            agentId: req.agent.id,
+            agentId: agent.id,
             userId: req.toolCtx.userId ?? null,
           })
         : null);
@@ -428,7 +591,7 @@ export class ProviderBackend implements AgentBackend {
       const maxIter = req.maxIterations ?? PROVIDER_AGENT_ITERATIONS;
       let tools =
         req.toolSchemas ??
-        filterSchemas(req.agent.toolAllow, req.agent.id, this.db, chatMode);
+        filterSchemas(agent.toolAllow, agent.id, this.db, chatMode);
       const toolCtx: ToolExecContext = {
         ...req.toolCtx,
         delegationDepth: req.delegationDepth ?? 0,
@@ -464,36 +627,53 @@ export class ProviderBackend implements AgentBackend {
             model,
             messages,
             isLast || chatMode === "ask" ? [] : tools,
-            req.agent.sampling.maxTokens
+            agent.sampling.maxTokens
           );
           content = out.content;
           toolCalls = out.toolCalls;
         } else {
           const overlay = req.samplingOverlay;
           const temperature =
-            overlay?.temperature ?? req.agent.sampling.temperature;
-          const topP = overlay?.topP ?? req.agent.sampling.topP;
-          const extras = req.providerExtras;
+            overlay?.temperature ?? agent.sampling.temperature;
+          const topP = overlay?.topP ?? agent.sampling.topP;
+          const extras = {
+            ...(req.providerExtras ?? {}),
+            ...(agent.thinking.enableThinking
+              ? { thinkingEnabled: true }
+              : { thinkingEnabled: false }),
+          };
           const includeTools =
             !isLast &&
-            req.agent.thinking.nativeTools &&
+            agent.thinking.nativeTools &&
             tools.length > 0 &&
             chatMode !== "ask";
           const body = buildProviderChatBody({
             messages,
             temperature,
             topP,
-            maxTokens: req.agent.sampling.maxTokens,
+            maxTokens: agent.sampling.maxTokens,
             extras,
             tools,
             includeTools,
           });
           const streamed = body.stream === true;
+          // OpenCode Go routes and prompt-caches per conversation; it requires a
+          // stable x-opencode-session header (docs/console/go).
+          const goBase = baseUrl.toLowerCase();
+          const extraHeaders =
+            goBase.includes("opencode.ai/inference/go") ||
+            goBase.includes("opencode.ai/zen/go")
+              ? {
+                  "x-opencode-session":
+                    req.toolCtx.chatId ?? agent.id,
+                }
+              : undefined;
           const out = await openAiCompletion(baseUrl, apiKey, model, body, {
             signal: req.abortSignal,
             onToken: streamed ? req.onToken : undefined,
             onReasoning: req.onReasoning,
             onToolCallDelta: req.onToolCallDelta,
+            extraHeaders,
           });
           content = out.content;
           toolCalls = out.toolCalls;
@@ -524,8 +704,8 @@ export class ProviderBackend implements AgentBackend {
               tools = req.refreshToolSchemas();
             } else if (!req.toolSchemas) {
               tools = filterSchemas(
-                req.agent.toolAllow,
-                req.agent.id,
+                agent.toolAllow,
+                agent.id,
                 this.db,
                 chatMode
               );
@@ -562,8 +742,8 @@ export class ProviderBackend implements AgentBackend {
             tools = req.refreshToolSchemas();
           } else if (!req.toolSchemas) {
             tools = filterSchemas(
-              req.agent.toolAllow,
-              req.agent.id,
+              agent.toolAllow,
+              agent.id,
               this.db,
               chatMode
             );

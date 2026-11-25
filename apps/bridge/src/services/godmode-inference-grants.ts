@@ -46,8 +46,6 @@ export type GodModeInferenceGrantRow = {
   provider_key_hash: string | null;
 };
 
-const INTELLIGENCE_AGENT_ID = "intelligence";
-
 /** Default USD added when pack budget metadata is missing (legacy $1 → $5 floor). */
 export const DEFAULT_PACK_BUDGET_USD = 5;
 
@@ -729,16 +727,15 @@ export type ManagedSupplyResolveCtx = {
 };
 
 /**
- * Resolve Admin / env GodMode Inference supply for managed Intelligence chat.
- * Returns null for any other agent or when no spendable grant exists
- * (unless provisionAttach for trial ensure).
+ * Resolve Admin / env GodMode Inference supply for managed chat (Intelligence
+ * or any agent using GodMode Inference Auto / supply secret ids).
+ * Returns null when no spendable grant exists (unless provisionAttach).
  */
 export function resolveGodModeInferenceSupplyForManagedChat(
   secretId: string,
   ctx: ManagedSupplyResolveCtx
 ): string | null {
   if (!isGodModeInferenceSupplySecretId(secretId)) return null;
-  if (ctx.agentId !== INTELLIGENCE_AGENT_ID) return null;
 
   if (!ctx.provisionAttach) {
     const grant = findActiveGodModeInferenceGrant({

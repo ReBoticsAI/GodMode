@@ -63,6 +63,10 @@ import {
   isOpencodeGoPlatformReady,
 } from "./opencode-go-platform.js";
 import {
+  getOpencodeConsoleAuthStatus,
+  isOpencodeConsolePlatformReady,
+} from "./opencode-console-platform.js";
+import {
   getDigitalOceanInferenceAuthStatus,
   isDigitalOceanInferencePlatformReady,
 } from "./digitalocean-inference-platform.js";
@@ -159,6 +163,10 @@ function isHubVaultCloudPlatformReady(db: AppDatabase): boolean {
     ) ||
     vaultReady(isZaiCodingPlatformReady(db), getZaiCodingAuthStatus(db).source) ||
     vaultReady(isOpencodeGoPlatformReady(db), getOpencodeGoAuthStatus(db).source) ||
+    vaultReady(
+      isOpencodeConsolePlatformReady(db),
+      getOpencodeConsoleAuthStatus(db).source
+    ) ||
     vaultReady(
       isDigitalOceanInferencePlatformReady(db),
       getDigitalOceanInferenceAuthStatus(db).source

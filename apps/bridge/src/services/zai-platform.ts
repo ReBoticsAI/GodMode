@@ -21,10 +21,11 @@ export const ZAI_API_KEY_SECRET_NAME = "zai_api_key";
 export const ZAI_API_BASE_URL = "https://api.z.ai/api/paas/v4";
 
 /**
- * Z.AI payg chat catalog snapshot (2026-08-03).
+ * Z.AI payg chat catalog snapshot (2026-11-16).
  * Custom slug remains on the Vault card.
  */
 export const ZAI_CHAT_CATALOG = [
+  { id: "glm-5.3", label: "GLM-5.3" },
   { id: "glm-5.3-flash", label: "GLM-5.3 Flash" },
   { id: "glm-5.2", label: "GLM-5.2" },
   { id: "glm-5.1", label: "GLM-5.1" },

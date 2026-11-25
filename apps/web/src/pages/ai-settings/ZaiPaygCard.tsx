@@ -29,10 +29,13 @@ import {
 import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
- * Z.AI payg chat catalog snapshot (2026-08-03).
+ * Z.AI payg chat catalog snapshot (2026-11-16).
+ * Keep in sync with ZAI_CHAT_CATALOG in apps/bridge/src/services/zai-platform.ts.
  * Custom slug covers anything outside the list.
  */
 const ZAI_CHAT = [
+  { id: "glm-5.3", label: "GLM-5.3" },
+  { id: "glm-5.3-flash", label: "GLM-5.3 Flash" },
   { id: "glm-5.2", label: "GLM-5.2" },
   { id: "glm-5.1", label: "GLM-5.1" },
   { id: "glm-5", label: "GLM-5" },
@@ -198,7 +201,7 @@ export function ZaiPaygCard({
                 <Input
                   value={customSlug}
                   onChange={(e) => setCustomSlug(e.target.value)}
-                  placeholder="glm-5.2"
+                  placeholder="glm-5.3"
                   autoComplete="off"
                   className="font-mono text-xs"
                 />

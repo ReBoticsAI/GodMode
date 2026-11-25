@@ -8,6 +8,7 @@
  *
  * Chat resolution: personal Vault BYOK first. Supply only via
  * resolveGodModeInferenceSupplyForManagedChat (see godmode-inference-grants).
+ * Auto (`godmode/auto`) resolves per turn via inference-router.
  */
 
 import { getCloudDb, getPlatformMeta, setPlatformMeta } from "../core-db.js";
@@ -17,18 +18,42 @@ const META_DEEPSEEK = "godmode_inference.deepseek_api_key_enc";
 const META_ZAI = "godmode_inference.zai_api_key_enc";
 const META_ZAI_CODING = "godmode_inference.zai_coding_api_key_enc";
 const META_DASHSCOPE = "godmode_inference.dashscope_api_key_enc";
+const META_OPENROUTER = "godmode_inference.openrouter_api_key_enc";
+const META_GROQ = "godmode_inference.groq_api_key_enc";
+const META_GOOGLE_AI = "godmode_inference.google_ai_api_key_enc";
 
 /** Keep in sync with *-platform.ts secret ids (avoid circular imports). */
 const DEEPSEEK_SECRET_ID = "deepseek-api-key";
 const ZAI_SECRET_ID = "zai-api-key";
 const ZAI_CODING_SECRET_ID = "zai-coding-api-key";
 const DASHSCOPE_SECRET_ID = "dashscope-api-key";
+const OPENROUTER_SECRET_ID = "openrouter-api-key";
+const GROQ_SECRET_ID = "groq-api-key";
+const GOOGLE_AI_SECRET_ID = "google-ai-api-key";
+
+/** Catalog / agent selection for GodMode Inference Auto (#816). */
+export const GODMODE_AUTO_SECRET_ID = "godmode-auto";
+export const GODMODE_AUTO_MODEL_ID = "godmode/auto";
+export const GODMODE_AUTO_TRANSPORT = "godmode_auto";
 
 export type GodModeInferenceProvider =
   | "deepseek"
   | "zai"
   | "zai_coding"
-  | "dashscope";
+  | "dashscope"
+  | "openrouter"
+  | "groq"
+  | "google_ai";
+
+export const GODMODE_INFERENCE_PROVIDERS: GodModeInferenceProvider[] = [
+  "deepseek",
+  "zai",
+  "zai_coding",
+  "dashscope",
+  "openrouter",
+  "groq",
+  "google_ai",
+];
 
 export interface GodModeInferenceProviderStatus {
   connected: boolean;
@@ -42,6 +67,9 @@ export interface GodModeInferenceSupplyStatus {
   zai: GodModeInferenceProviderStatus;
   zaiCoding: GodModeInferenceProviderStatus;
   dashscope: GodModeInferenceProviderStatus;
+  openrouter: GodModeInferenceProviderStatus;
+  groq: GodModeInferenceProviderStatus;
+  googleAi: GodModeInferenceProviderStatus;
 }
 
 function maskKey(value: string): string {
@@ -109,6 +137,18 @@ export function getPlatformSupplyDashScopeKey(): string | null {
   return readEncryptedMeta(META_DASHSCOPE);
 }
 
+export function getPlatformSupplyOpenRouterKey(): string | null {
+  return readEncryptedMeta(META_OPENROUTER);
+}
+
+export function getPlatformSupplyGroqKey(): string | null {
+  return readEncryptedMeta(META_GROQ);
+}
+
+export function getPlatformSupplyGoogleAiKey(): string | null {
+  return readEncryptedMeta(META_GOOGLE_AI);
+}
+
 /**
  * Platform supply or ops env for GodMode Inference (not personal vault).
  * Prefer platform_meta, then process env dual-write.
@@ -140,6 +180,24 @@ export function resolveGodModeInferenceSupplyKey(
         process.env.QWEN_API_KEY?.trim() ||
         null
       );
+    case "openrouter":
+      return (
+        getPlatformSupplyOpenRouterKey() ||
+        process.env.OPENROUTER_API_KEY?.trim() ||
+        process.env.TRIAL_PLATFORM_API_KEY?.trim() ||
+        null
+      );
+    case "groq":
+      return (
+        getPlatformSupplyGroqKey() || process.env.GROQ_API_KEY?.trim() || null
+      );
+    case "google_ai":
+      return (
+        getPlatformSupplyGoogleAiKey() ||
+        process.env.GOOGLE_AI_API_KEY?.trim() ||
+        process.env.GEMINI_API_KEY?.trim() ||
+        null
+      );
   }
 }
 
@@ -150,11 +208,8 @@ export function isGodModeInferenceSupplyReady(): boolean {
   ) {
     return false;
   }
-  return (
-    resolveGodModeInferenceSupplyKey("deepseek") != null ||
-    resolveGodModeInferenceSupplyKey("zai") != null ||
-    resolveGodModeInferenceSupplyKey("zai_coding") != null ||
-    resolveGodModeInferenceSupplyKey("dashscope") != null
+  return GODMODE_INFERENCE_PROVIDERS.some(
+    (p) => resolveGodModeInferenceSupplyKey(p) != null
   );
 }
 
@@ -167,7 +222,10 @@ export function hasAdminGodModeInferenceSupply(): boolean {
     getPlatformSupplyDeepSeekKey() ||
       getPlatformSupplyZaiKey() ||
       getPlatformSupplyZaiCodingKey() ||
-      getPlatformSupplyDashScopeKey()
+      getPlatformSupplyDashScopeKey() ||
+      getPlatformSupplyOpenRouterKey() ||
+      getPlatformSupplyGroqKey() ||
+      getPlatformSupplyGoogleAiKey()
   );
 }
 
@@ -190,16 +248,38 @@ export function getGodModeInferenceSupplyStatus(): GodModeInferenceSupplyStatus 
       process.env.QWEN_API_KEY?.trim() ||
       null
   );
+  const openrouter = providerStatus(
+    getPlatformSupplyOpenRouterKey(),
+    process.env.OPENROUTER_API_KEY?.trim() ||
+      process.env.TRIAL_PLATFORM_API_KEY?.trim() ||
+      null
+  );
+  const groq = providerStatus(
+    getPlatformSupplyGroqKey(),
+    process.env.GROQ_API_KEY?.trim() || null
+  );
+  const googleAi = providerStatus(
+    getPlatformSupplyGoogleAiKey(),
+    process.env.GOOGLE_AI_API_KEY?.trim() ||
+      process.env.GEMINI_API_KEY?.trim() ||
+      null
+  );
   return {
     configured:
       deepseek.connected ||
       zai.connected ||
       zaiCoding.connected ||
-      dashscope.connected,
+      dashscope.connected ||
+      openrouter.connected ||
+      groq.connected ||
+      googleAi.connected,
     deepseek,
     zai,
     zaiCoding,
     dashscope,
+    openrouter,
+    groq,
+    googleAi,
   };
 }
 
@@ -208,11 +288,17 @@ export function setGodModeInferenceSupplyKeys(opts: {
   zaiApiKey?: string;
   zaiCodingApiKey?: string;
   dashscopeApiKey?: string;
+  openrouterApiKey?: string;
+  groqApiKey?: string;
+  googleAiApiKey?: string;
 }): GodModeInferenceSupplyStatus {
   writeEncryptedMeta(META_DEEPSEEK, opts.deepseekApiKey);
   writeEncryptedMeta(META_ZAI, opts.zaiApiKey);
   writeEncryptedMeta(META_ZAI_CODING, opts.zaiCodingApiKey);
   writeEncryptedMeta(META_DASHSCOPE, opts.dashscopeApiKey);
+  writeEncryptedMeta(META_OPENROUTER, opts.openrouterApiKey);
+  writeEncryptedMeta(META_GROQ, opts.groqApiKey);
+  writeEncryptedMeta(META_GOOGLE_AI, opts.googleAiApiKey);
   return getGodModeInferenceSupplyStatus();
 }
 
@@ -220,11 +306,25 @@ export function setGodModeInferenceSupplyKeys(opts: {
 export function isGodModeInferenceSupplySecretId(id: string): boolean {
   const base = id.includes("__agent__") ? id.split("__agent__")[0]! : id;
   return (
+    base === GODMODE_AUTO_SECRET_ID ||
     base === DEEPSEEK_SECRET_ID ||
     base === ZAI_SECRET_ID ||
     base === ZAI_CODING_SECRET_ID ||
-    base === DASHSCOPE_SECRET_ID
+    base === DASHSCOPE_SECRET_ID ||
+    base === OPENROUTER_SECRET_ID ||
+    base === GROQ_SECRET_ID ||
+    base === GOOGLE_AI_SECRET_ID
   );
+}
+
+export function isGodModeAutoSecretId(id: string): boolean {
+  const base = id.includes("__agent__") ? id.split("__agent__")[0]! : id;
+  return base === GODMODE_AUTO_SECRET_ID;
+}
+
+export function isGodModeAutoModelId(model: string | null | undefined): boolean {
+  const m = (model ?? "").trim().toLowerCase();
+  return m === GODMODE_AUTO_MODEL_ID || m === "auto" || m === "godmode-auto";
 }
 
 export function resolveGodModeInferenceSupplyBySecretId(
@@ -233,6 +333,10 @@ export function resolveGodModeInferenceSupplyBySecretId(
   const base = secretId.includes("__agent__")
     ? secretId.split("__agent__")[0]!
     : secretId;
+  if (base === GODMODE_AUTO_SECRET_ID) {
+    // Auto resolves a concrete upstream key per turn via inference-router.
+    return null;
+  }
   if (base === DEEPSEEK_SECRET_ID) {
     return resolveGodModeInferenceSupplyKey("deepseek");
   }
@@ -245,11 +349,65 @@ export function resolveGodModeInferenceSupplyBySecretId(
   if (base === DASHSCOPE_SECRET_ID) {
     return resolveGodModeInferenceSupplyKey("dashscope");
   }
+  if (base === OPENROUTER_SECRET_ID) {
+    return resolveGodModeInferenceSupplyKey("openrouter");
+  }
+  if (base === GROQ_SECRET_ID) {
+    return resolveGodModeInferenceSupplyKey("groq");
+  }
+  if (base === GOOGLE_AI_SECRET_ID) {
+    return resolveGodModeInferenceSupplyKey("google_ai");
+  }
   return null;
 }
 
+export function supplySecretIdForProvider(
+  provider: GodModeInferenceProvider
+): string {
+  switch (provider) {
+    case "deepseek":
+      return DEEPSEEK_SECRET_ID;
+    case "zai":
+      return ZAI_SECRET_ID;
+    case "zai_coding":
+      return ZAI_CODING_SECRET_ID;
+    case "dashscope":
+      return DASHSCOPE_SECRET_ID;
+    case "openrouter":
+      return OPENROUTER_SECRET_ID;
+    case "groq":
+      return GROQ_SECRET_ID;
+    case "google_ai":
+      return GOOGLE_AI_SECRET_ID;
+  }
+}
+
+export function supplyBaseUrlForProvider(
+  provider: GodModeInferenceProvider
+): string {
+  switch (provider) {
+    case "deepseek":
+      return "https://api.deepseek.com/v1";
+    case "zai":
+      return "https://api.z.ai/api/paas/v4";
+    case "zai_coding":
+      return "https://api.z.ai/api/coding/paas/v4";
+    case "dashscope":
+      return (
+        process.env.DASHSCOPE_API_BASE_URL?.trim() ||
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+      );
+    case "openrouter":
+      return "https://openrouter.ai/api/v1";
+    case "groq":
+      return "https://api.groq.com/openai/v1";
+    case "google_ai":
+      return "https://generativelanguage.googleapis.com/v1beta/openai";
+  }
+}
+
 export type GodModeInferenceApplyTarget = {
-  provider: GodModeInferenceProvider;
+  provider: GodModeInferenceProvider | "auto";
   modelId: string;
   transport: string;
   baseUrl: string;
@@ -257,16 +415,28 @@ export type GodModeInferenceApplyTarget = {
 };
 
 /**
- * GodMode Inference is Z.AI GLM-5.3 Flash. DeepSeek, Coding Plan, and DashScope
- * stay available as BYOK fallbacks when the Z.AI payg key is absent.
+ * Default managed selection for signup / ensure: GodMode Inference Auto when
+ * any supply key is present. Concrete upstream is chosen per turn.
  */
 export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget | null {
+  if (!isGodModeInferenceSupplyReady()) return null;
+  return {
+    provider: "auto",
+    modelId: GODMODE_AUTO_MODEL_ID,
+    transport: GODMODE_AUTO_TRANSPORT,
+    baseUrl: supplyBaseUrlForProvider("openrouter"),
+    apiKeyRef: GODMODE_AUTO_SECRET_ID,
+  };
+}
+
+/** Legacy static pin (tests / ops). Prefer Auto via pickGodModeInferenceSupplyTarget. */
+export function pickStaticGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget | null {
   if (resolveGodModeInferenceSupplyKey("zai")) {
     return {
       provider: "zai",
       modelId: "glm-5.3-flash",
       transport: "zai",
-      baseUrl: "https://api.z.ai/api/paas/v4",
+      baseUrl: supplyBaseUrlForProvider("zai"),
       apiKeyRef: ZAI_SECRET_ID,
     };
   }
@@ -275,8 +445,35 @@ export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget 
       provider: "deepseek",
       modelId: "deepseek-v4-flash",
       transport: "deepseek",
-      baseUrl: "https://api.deepseek.com/v1",
+      baseUrl: supplyBaseUrlForProvider("deepseek"),
       apiKeyRef: DEEPSEEK_SECRET_ID,
+    };
+  }
+  if (resolveGodModeInferenceSupplyKey("openrouter")) {
+    return {
+      provider: "openrouter",
+      modelId: "openrouter/free",
+      transport: "openrouter",
+      baseUrl: supplyBaseUrlForProvider("openrouter"),
+      apiKeyRef: OPENROUTER_SECRET_ID,
+    };
+  }
+  if (resolveGodModeInferenceSupplyKey("groq")) {
+    return {
+      provider: "groq",
+      modelId: "llama-3.1-8b-instant",
+      transport: "groq",
+      baseUrl: supplyBaseUrlForProvider("groq"),
+      apiKeyRef: GROQ_SECRET_ID,
+    };
+  }
+  if (resolveGodModeInferenceSupplyKey("google_ai")) {
+    return {
+      provider: "google_ai",
+      modelId: "gemini-2.5-flash",
+      transport: "google_ai",
+      baseUrl: supplyBaseUrlForProvider("google_ai"),
+      apiKeyRef: GOOGLE_AI_SECRET_ID,
     };
   }
   if (resolveGodModeInferenceSupplyKey("zai_coding")) {
@@ -284,7 +481,7 @@ export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget 
       provider: "zai_coding",
       modelId: "glm-5.1",
       transport: "zai_coding",
-      baseUrl: "https://api.z.ai/api/coding/paas/v4",
+      baseUrl: supplyBaseUrlForProvider("zai_coding"),
       apiKeyRef: ZAI_CODING_SECRET_ID,
     };
   }
@@ -293,9 +490,7 @@ export function pickGodModeInferenceSupplyTarget(): GodModeInferenceApplyTarget 
       provider: "dashscope",
       modelId: "qwen-plus",
       transport: "dashscope",
-      baseUrl:
-        process.env.DASHSCOPE_API_BASE_URL?.trim() ||
-        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      baseUrl: supplyBaseUrlForProvider("dashscope"),
       apiKeyRef: DASHSCOPE_SECRET_ID,
     };
   }

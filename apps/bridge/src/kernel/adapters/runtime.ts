@@ -219,6 +219,15 @@ import {
   upsertOpencodeGoApiKey,
 } from "../../services/opencode-go-platform.js";
 import {
+  getOpencodeConsoleAuthStatus,
+  isOpencodeConsolePlatformReady,
+  isOpencodeConsoleVaultSecretId,
+  isOpencodeConsoleVaultSecretName,
+  OPENCODE_CONSOLE_API_KEY_SECRET_ID,
+  removeOpencodeConsoleApiKey,
+  upsertOpencodeConsoleApiKey,
+} from "../../services/opencode-console-platform.js";
+import {
   getDigitalOceanInferenceAuthStatus,
   isDigitalOceanInferencePlatformReady,
   isDigitalOceanInferenceVaultSecretId,
@@ -1267,6 +1276,8 @@ function isManagedPlatformSecret(secret: {
     isZaiCodingVaultSecretName(secret.name) ||
     isOpencodeGoVaultSecretId(secret.id) ||
     isOpencodeGoVaultSecretName(secret.name) ||
+    isOpencodeConsoleVaultSecretId(secret.id) ||
+    isOpencodeConsoleVaultSecretName(secret.name) ||
     isDigitalOceanInferenceVaultSecretId(secret.id) ||
     isDigitalOceanInferenceVaultSecretName(secret.name) ||
     isSnowflakeCortexVaultSecretId(secret.id) ||
@@ -1379,6 +1390,12 @@ export const vaultSecretRuntimeAdapter: RecordAdapter = {
     }
     if (isOpencodeGoVaultSecretName(name)) {
       throw httpError(400, "OpenCode Go API keys must use the OpenCode Go credential flow");
+    }
+    if (isOpencodeConsoleVaultSecretName(name)) {
+      throw httpError(
+        400,
+        "OpenCode Console API keys must use the OpenCode Console credential flow"
+      );
     }
     if (isDigitalOceanInferenceVaultSecretName(name)) {
       throw httpError(
@@ -1665,6 +1682,19 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
             kind: "api_key",
             provider: "opencode_go",
             display_name: "OpenCode Go",
+            status: "active",
+            masked_token: status.masked ?? "****",
+          })
+        : null;
+    }
+    if (id === OPENCODE_CONSOLE_API_KEY_SECRET_ID) {
+      const status = getOpencodeConsoleAuthStatus(db, scope);
+      return status.connected
+        ? record(def, OPENCODE_CONSOLE_API_KEY_SECRET_ID, {
+            agent_id: scope,
+            kind: "api_key",
+            provider: "opencode_console",
+            display_name: "OpenCode Console",
             status: "active",
             masked_token: status.masked ?? "****",
           })
@@ -1976,6 +2006,21 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       });
     }
     if (
+      requiredText(data, "provider").toLowerCase() === "opencode_console" ||
+      requiredText(data, "provider").toLowerCase() === "opencode-console"
+    ) {
+      upsertOpencodeConsoleApiKey(db, requiredText(data, "api_key"), scope);
+      const status = getOpencodeConsoleAuthStatus(db, scope);
+      return record(def, OPENCODE_CONSOLE_API_KEY_SECRET_ID, {
+        agent_id: scope,
+        kind: "api_key",
+        provider: "opencode_console",
+        display_name: "OpenCode Console",
+        status: "active",
+        masked_token: status.masked ?? "****",
+      });
+    }
+    if (
       requiredText(data, "provider").toLowerCase() === "digitalocean_inference" ||
       requiredText(data, "provider").toLowerCase() === "digitalocean-inference"
     ) {
@@ -2148,6 +2193,10 @@ export const providerCredentialRuntimeAdapter: RecordAdapter = {
       removeOpencodeGoApiKey(db, scope);
       return;
     }
+    if (id === OPENCODE_CONSOLE_API_KEY_SECRET_ID) {
+      removeOpencodeConsoleApiKey(db, scope);
+      return;
+    }
     if (id === DIGITALOCEAN_INFERENCE_API_KEY_SECRET_ID) {
       removeDigitalOceanInferenceApiKey(db, scope);
       return;
@@ -2292,6 +2341,21 @@ export const modelRuntimeAdapter: RecordAdapter = {
             model: ocCustom[1],
             provider: "openai_compatible",
             transport: "opencode_go",
+          };
+        }
+      }
+      // Custom OpenCode Console slug when Vault is connected.
+      if (!selected) {
+        const ocConsoleCustom =
+          /^provider:openai_compatible:opencode_console:(.+)$/.exec(modelId);
+        if (ocConsoleCustom?.[1] && isOpencodeConsolePlatformReady(db)) {
+          selected = {
+            id: modelId,
+            source: "provider",
+            label: `OpenCode Console · ${ocConsoleCustom[1]}`,
+            model: ocConsoleCustom[1],
+            provider: "openai_compatible",
+            transport: "opencode_console",
           };
         }
       }
@@ -2559,6 +2623,7 @@ export const modelRuntimeAdapter: RecordAdapter = {
           !custom[1].startsWith("custom_openai:") &&
           !custom[1].startsWith("zai_coding:") &&
           !custom[1].startsWith("opencode_go:") &&
+          !custom[1].startsWith("opencode_console:") &&
           !custom[1].startsWith("digitalocean_inference:") &&
           !custom[1].startsWith("snowflake_cortex:") &&
           !custom[1].startsWith("minimax_token:") &&
@@ -2638,6 +2703,11 @@ export const modelRuntimeAdapter: RecordAdapter = {
                       ? { transport: "zai_coding", apiKeyRef: ZAI_CODING_API_KEY_SECRET_ID }
                     : transport === "opencode_go"
                       ? { transport: "opencode_go", apiKeyRef: OPENCODE_GO_API_KEY_SECRET_ID }
+                    : transport === "opencode_console"
+                      ? {
+                          transport: "opencode_console",
+                          apiKeyRef: OPENCODE_CONSOLE_API_KEY_SECRET_ID,
+                        }
                     : transport === "digitalocean_inference"
                       ? {
                           transport: "digitalocean_inference",

@@ -101,7 +101,10 @@ function PlatformVaultPanel({
   onInferenceSubChange: (value: string) => void;
 }) {
   return (
-    <Card className={cn(embedded && "border-0 shadow-none")}>
+    // shrink-0: in the embedded floating window the parent is a scrollable
+    // flex column; without it the Card shrinks to fit and overflow-hidden
+    // clips the content with no scrollbar.
+    <Card className={cn(embedded && "shrink-0 border-0 shadow-none")}>
       {!embedded ? (
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

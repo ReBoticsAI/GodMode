@@ -70,7 +70,14 @@ import {
   DASHSCOPE_API_KEY_SECRET_NAME,
   DASHSCOPE_CHAT_CATALOG,
 } from "./dashscope-platform.js";
-import { resolveGodModeInferenceSupplyKey } from "./godmode-inference-supply.js";
+import {
+  GODMODE_AUTO_MODEL_ID,
+  GODMODE_AUTO_SECRET_ID,
+  GODMODE_AUTO_TRANSPORT,
+  isGodModeAutoModelId,
+  isGodModeInferenceSupplyReady,
+  resolveGodModeInferenceSupplyKey,
+} from "./godmode-inference-supply.js";
 import {
   isGoogleAiAgentConfig,
   isGoogleAiPlatformReady,
@@ -134,6 +141,17 @@ import {
   OPENCODE_GO_API_KEY_SECRET_NAME,
   OPENCODE_GO_CHAT_CATALOG,
 } from "./opencode-go-platform.js";
+import {
+  isOpencodeConsoleAgentConfig,
+  isOpencodeConsolePlatformReady,
+  isOpencodeConsoleVaultSecretId,
+  getOpencodeConsoleModelCache,
+  refreshOpencodeConsoleModelCacheIfStale,
+  OPENCODE_CONSOLE_API_BASE_URL,
+  OPENCODE_CONSOLE_API_KEY_SECRET_ID,
+  OPENCODE_CONSOLE_API_KEY_SECRET_NAME,
+  OPENCODE_CONSOLE_CHAT_CATALOG,
+} from "./opencode-console-platform.js";
 import {
   isDigitalOceanInferenceAgentConfig,
   isDigitalOceanInferencePlatformReady,
@@ -372,6 +390,16 @@ function opencodeGoHarnessInput(model: string) {
   };
 }
 
+function opencodeConsoleHarnessInput(model: string) {
+  return {
+    source: "provider" as const,
+    model,
+    provider: "openai_compatible" as const,
+    transport: "opencode_console",
+    baseUrl: OPENCODE_CONSOLE_API_BASE_URL,
+  };
+}
+
 function digitalOceanInferenceHarnessInput(model: string) {
   return {
     source: "provider" as const,
@@ -575,6 +603,8 @@ export async function listModelCatalog(
       !isZaiCodingVaultSecretId(s.id) &&
       s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
       !isOpencodeGoVaultSecretId(s.id) &&
+      s.name !== OPENCODE_CONSOLE_API_KEY_SECRET_NAME &&
+      !isOpencodeConsoleVaultSecretId(s.id) &&
       s.name !== DIGITALOCEAN_INFERENCE_API_KEY_SECRET_NAME &&
       !isDigitalOceanInferenceVaultSecretId(s.id) &&
       s.name !== SNOWFLAKE_CORTEX_API_KEY_SECRET_NAME &&
@@ -597,8 +627,14 @@ export async function listModelCatalog(
     secrets.some(
       (s) => secretLooksLike(s.name, "anthropic") || secretLooksLike(s.name, "claude")
     );
-  const hasOpenRouter = isOpenRouterPlatformReady(db, catalogAgentId);
-  const hasGroq = isGroqPlatformReady(db, catalogAgentId);
+  const vaultOpenRouter = isOpenRouterPlatformReady(db, catalogAgentId);
+  const supplyOpenRouter = Boolean(
+    resolveGodModeInferenceSupplyKey("openrouter")
+  );
+  const hasOpenRouter = vaultOpenRouter || supplyOpenRouter;
+  const vaultGroq = isGroqPlatformReady(db, catalogAgentId);
+  const supplyGroq = Boolean(resolveGodModeInferenceSupplyKey("groq"));
+  const hasGroq = vaultGroq || supplyGroq;
   const hasTogether = isTogetherPlatformReady(db, catalogAgentId);
   const hasFireworks = isFireworksPlatformReady(db, catalogAgentId);
   const vaultDeepSeek = isDeepSeekPlatformReady(db, catalogAgentId);
@@ -607,7 +643,9 @@ export async function listModelCatalog(
   const vaultDashScope = isDashScopePlatformReady(db, catalogAgentId);
   const supplyDashScope = Boolean(resolveGodModeInferenceSupplyKey("dashscope"));
   const hasDashScope = vaultDashScope || supplyDashScope;
-  const hasGoogleAi = isGoogleAiPlatformReady(db, catalogAgentId);
+  const vaultGoogleAi = isGoogleAiPlatformReady(db, catalogAgentId);
+  const supplyGoogleAi = Boolean(resolveGodModeInferenceSupplyKey("google_ai"));
+  const hasGoogleAi = vaultGoogleAi || supplyGoogleAi;
   const hasXai = isXaiPlatformReady(db, catalogAgentId);
   const vaultZai = isZaiPlatformReady(db, catalogAgentId);
   const supplyZai = Boolean(resolveGodModeInferenceSupplyKey("zai"));
@@ -617,6 +655,7 @@ export async function listModelCatalog(
   const supplyZaiCoding = Boolean(resolveGodModeInferenceSupplyKey("zai_coding"));
   const hasZaiCoding = vaultZaiCoding || supplyZaiCoding;
   const hasOpencodeGo = isOpencodeGoPlatformReady(db, catalogAgentId);
+  const hasOpencodeConsole = isOpencodeConsolePlatformReady(db, catalogAgentId);
   const hasDigitalOceanInference = isDigitalOceanInferencePlatformReady(
     db,
     catalogAgentId
@@ -669,9 +708,34 @@ export async function listModelCatalog(
       });
     }
   }
+  if (isGodModeInferenceSupplyReady()) {
+    const agentIsAuto =
+      agent?.backend === "provider" &&
+      (isGodModeAutoModelId(agent.config?.model) ||
+        agent.config?.transport === GODMODE_AUTO_TRANSPORT ||
+        agent.config?.apiKeyRef === GODMODE_AUTO_SECRET_ID);
+    const harness = resolveHarnessProfile({
+      source: "provider",
+      model: GODMODE_AUTO_MODEL_ID,
+      provider: "openai_compatible",
+      transport: GODMODE_AUTO_TRANSPORT,
+    });
+    models.push({
+      id: `provider:openai_compatible:${GODMODE_AUTO_TRANSPORT}:${GODMODE_AUTO_MODEL_ID}`,
+      source: "provider",
+      label: "GodMode Inference · Auto",
+      model: GODMODE_AUTO_MODEL_ID,
+      provider: "openai_compatible",
+      transport: GODMODE_AUTO_TRANSPORT,
+      active: Boolean(agentIsAuto),
+      harnessProfileId: harness.id,
+      managedGodModeInference: true,
+    });
+  }
   if (hasOpenRouter) {
     const agentIsOpenRouter =
       agent?.backend === "provider" && isOpenRouterAgentConfig(agent.config);
+    const managedSupply = !vaultOpenRouter && supplyOpenRouter;
     for (const m of OPENROUTER_TOP10_CATALOG) {
       const harness = resolveHarnessProfile(openRouterHarnessInput(m.id));
       models.push({
@@ -683,12 +747,14 @@ export async function listModelCatalog(
         transport: "openrouter",
         active: Boolean(agentIsOpenRouter && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
   if (hasGroq) {
     const agentIsGroq =
       agent?.backend === "provider" && isGroqAgentConfig(agent.config);
+    const managedSupply = !vaultGroq && supplyGroq;
     for (const m of GROQ_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(groqHarnessInput(m.id));
       models.push({
@@ -700,6 +766,7 @@ export async function listModelCatalog(
         transport: "groq",
         active: Boolean(agentIsGroq && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
@@ -778,6 +845,7 @@ export async function listModelCatalog(
   if (hasGoogleAi) {
     const agentIsGoogleAi =
       agent?.backend === "provider" && isGoogleAiAgentConfig(agent.config);
+    const managedSupply = !vaultGoogleAi && supplyGoogleAi;
     for (const m of GOOGLE_AI_CHAT_CATALOG) {
       const harness = resolveHarnessProfile(googleAiHarnessInput(m.id));
       models.push({
@@ -789,6 +857,7 @@ export async function listModelCatalog(
         transport: "google_ai",
         active: Boolean(agentIsGoogleAi && agent.config?.model === m.id),
         harnessProfileId: harness.id,
+        ...(managedSupply ? { managedGodModeInference: true } : {}),
       });
     }
   }
@@ -877,6 +946,42 @@ export async function listModelCatalog(
         provider: "openai_compatible",
         transport: "opencode_go",
         active: Boolean(agentIsOc && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+  }
+  if (hasOpencodeConsole) {
+    // Warm the live model cache so the picker lists every model the key can use.
+    refreshOpencodeConsoleModelCacheIfStale(db);
+    const agentIsOcConsole =
+      agent?.backend === "provider" && isOpencodeConsoleAgentConfig(agent.config);
+    for (const m of OPENCODE_CONSOLE_CHAT_CATALOG) {
+      const harness = resolveHarnessProfile(opencodeConsoleHarnessInput(m.id));
+      models.push({
+        id: `provider:openai_compatible:opencode_console:${m.id}`,
+        source: "provider",
+        label: `OpenCode Console · ${m.label}`,
+        model: m.id,
+        provider: "openai_compatible",
+        transport: "opencode_console",
+        active: Boolean(agentIsOcConsole && agent.config?.model === m.id),
+        harnessProfileId: harness.id,
+      });
+    }
+    // Merge live models the connected key can use (workspace model access).
+    const seen = new Set<string>(OPENCODE_CONSOLE_CHAT_CATALOG.map((m) => m.id));
+    for (const id of getOpencodeConsoleModelCache()) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const harness = resolveHarnessProfile(opencodeConsoleHarnessInput(id));
+      models.push({
+        id: `provider:openai_compatible:opencode_console:${id}`,
+        source: "provider",
+        label: `OpenCode Console · ${id}`,
+        model: id,
+        provider: "openai_compatible",
+        transport: "opencode_console",
+        active: Boolean(agentIsOcConsole && agent.config?.model === id),
         harnessProfileId: harness.id,
       });
     }
@@ -1018,6 +1123,7 @@ export async function listModelCatalog(
     const isCustom = isCustomOpenAiAgentConfig(agent.config);
     const isZai = isZaiCodingAgentConfig(agent.config);
     const isOcGo = isOpencodeGoAgentConfig(agent.config);
+    const isOcConsole = isOpencodeConsoleAgentConfig(agent.config);
     const isDoInf = isDigitalOceanInferenceAgentConfig(agent.config);
     const isSfCortex = isSnowflakeCortexAgentConfig(agent.config);
     const customBase =
@@ -1048,6 +1154,8 @@ export async function listModelCatalog(
                     ? resolveHarnessProfile(zaiCodingHarnessInput(model))
                     : isOcGo
                       ? resolveHarnessProfile(opencodeGoHarnessInput(model))
+                    : isOcConsole
+                      ? resolveHarnessProfile(opencodeConsoleHarnessInput(model))
                     : isDoInf
                       ? resolveHarnessProfile(
                           digitalOceanInferenceHarnessInput(model)
@@ -1095,6 +1203,8 @@ export async function listModelCatalog(
                   ? "zai_coding"
                   : isOcGo
                     ? "opencode_go"
+                  : isOcConsole
+                    ? "opencode_console"
                   : isDoInf
                     ? "digitalocean_inference"
                   : isSfCortex
@@ -1153,6 +1263,8 @@ export async function listModelCatalog(
                                 ? "Custom"
                                 : namespacedTransport === "opencode_go"
                                   ? "OpenCode Go"
+                                : namespacedTransport === "opencode_console"
+                                  ? "OpenCode Console"
                                 : namespacedTransport === "digitalocean_inference"
                                   ? "DigitalOcean"
                                 : namespacedTransport === "snowflake_cortex"
@@ -1223,6 +1335,11 @@ export async function listModelCatalog(
                     ? { transport: "zai_coding", baseUrl: ZAI_CODING_API_BASE_URL }
                   : active.transport === "opencode_go"
                     ? { transport: "opencode_go", baseUrl: OPENCODE_GO_API_BASE_URL }
+                  : active.transport === "opencode_console"
+                    ? {
+                        transport: "opencode_console",
+                        baseUrl: OPENCODE_CONSOLE_API_BASE_URL,
+                      }
                   : active.transport === "digitalocean_inference"
                     ? {
                         transport: "digitalocean_inference",
@@ -1287,6 +1404,7 @@ const CLEAR_PROVIDER_CONFIG_FLAGS: Record<string, undefined> = {
   customOpenai: undefined,
   zaiCoding: undefined,
   opencodeGo: undefined,
+  opencodeConsole: undefined,
   digitaloceanInference: undefined,
   snowflakeCortex: undefined,
   minimaxToken: undefined,
@@ -1395,6 +1513,55 @@ export async function selectIntelligenceModel(
   if (input.source === "provider") {
     const model = input.model?.trim();
     if (!model) throw new Error("Provider model id required");
+    if (
+      isGodModeAutoModelId(model) ||
+      input.transport === GODMODE_AUTO_TRANSPORT ||
+      input.apiKeyRef === GODMODE_AUTO_SECRET_ID
+    ) {
+      if (!isGodModeInferenceSupplyReady() && !input.managedGodModeInference) {
+        throw new Error("GodMode Inference Auto requires Admin supply keys");
+      }
+      const profile = resolveHarnessProfile({
+        source: "provider",
+        model: GODMODE_AUTO_MODEL_ID,
+        provider: "openai_compatible",
+        transport: GODMODE_AUTO_TRANSPORT,
+      });
+      const patch = applyProfileToAgentPatch(
+        agent,
+        profile,
+        {
+          provider: "openai_compatible",
+          model: GODMODE_AUTO_MODEL_ID,
+          transport: GODMODE_AUTO_TRANSPORT,
+          apiKeyRef: GODMODE_AUTO_SECRET_ID,
+          baseUrl: OPENROUTER_API_BASE_URL,
+          openrouter: undefined,
+          groq: undefined,
+          godmodeAuto: true,
+        },
+        { clearProviderConfig: true }
+      );
+      updateAgent(db, "intelligence", {
+        backend: "provider",
+        ...patch,
+      });
+      markLlmReady(db);
+      return {
+        ok: true,
+        active: {
+          id: `provider:openai_compatible:${GODMODE_AUTO_TRANSPORT}:${GODMODE_AUTO_MODEL_ID}`,
+          source: "provider",
+          label: "GodMode Inference · Auto",
+          model: GODMODE_AUTO_MODEL_ID,
+          provider: "openai_compatible",
+          transport: GODMODE_AUTO_TRANSPORT,
+          active: true,
+          harnessProfileId: profile.id,
+          managedGodModeInference: true,
+        },
+      };
+    }
     const provider = input.provider ?? "openai";
     const secrets = [
       ...listSecrets(db, { kind: "platform" }),
@@ -1433,6 +1600,8 @@ export async function selectIntelligenceModel(
         !isZaiCodingVaultSecretId(s.id) &&
         s.name !== OPENCODE_GO_API_KEY_SECRET_NAME &&
         !isOpencodeGoVaultSecretId(s.id) &&
+        s.name !== OPENCODE_CONSOLE_API_KEY_SECRET_NAME &&
+        !isOpencodeConsoleVaultSecretId(s.id) &&
         s.name !== DIGITALOCEAN_INFERENCE_API_KEY_SECRET_NAME &&
         !isDigitalOceanInferenceVaultSecretId(s.id) &&
         s.name !== SNOWFLAKE_CORTEX_API_KEY_SECRET_NAME &&
@@ -1462,6 +1631,10 @@ export async function selectIntelligenceModel(
     const customOpenAiReady = isCustomOpenAiPlatformReady(db, "intelligence");
     const zaiCodingReady = isZaiCodingPlatformReady(db, "intelligence");
     const opencodeGoReady = isOpencodeGoPlatformReady(db, "intelligence");
+    const opencodeConsoleReady = isOpencodeConsolePlatformReady(
+      db,
+      "intelligence"
+    );
     const digitalOceanInferenceReady = isDigitalOceanInferencePlatformReady(
       db,
       "intelligence"
@@ -1490,6 +1663,7 @@ export async function selectIntelligenceModel(
       | "custom_openai"
       | "zai_coding"
       | "opencode_go"
+      | "opencode_console"
       | "digitalocean_inference"
       | "snowflake_cortex"
       | "minimax_token"
@@ -1563,6 +1737,7 @@ export async function selectIntelligenceModel(
       const wantsOpencodeGo =
         transport === "opencode_go" ||
         base.includes("opencode.ai/zen/go") ||
+        base.includes("opencode.ai/inference/go") ||
         keyHint === OPENCODE_GO_API_KEY_SECRET_ID;
       const wantsDigitalOceanInference =
         transport === "digitalocean_inference" ||
@@ -1588,6 +1763,10 @@ export async function selectIntelligenceModel(
         transport === "opencode_zen" ||
         (base.includes("opencode.ai/zen") && !base.includes("opencode.ai/zen/go")) ||
         keyHint === OPENCODE_ZEN_API_KEY_SECRET_ID;
+      const wantsOpencodeConsole =
+        transport === "opencode_console" ||
+        base.includes("opencode.ai/inference") ||
+        keyHint === OPENCODE_CONSOLE_API_KEY_SECRET_ID;
       const wantsZai =
         transport === "zai" ||
         (base.includes("api.z.ai/api/paas") && !base.includes("/api/coding/")) ||
@@ -1709,6 +1888,14 @@ export async function selectIntelligenceModel(
         }
         preferredId = OPENCODE_ZEN_API_KEY_SECRET_ID;
         compatibleTransport = "opencode_zen";
+      } else if (wantsOpencodeConsole) {
+        if (!opencodeConsoleReady) {
+          throw new Error(
+            "Connect OpenCode Console in Vault before using OpenCode Console models"
+          );
+        }
+        preferredId = OPENCODE_CONSOLE_API_KEY_SECRET_ID;
+        compatibleTransport = "opencode_console";
       } else if (wantsZai) {
         if (!zaiReady && !input.managedGodModeInference) {
           throw new Error("Connect Z.AI Platform in Vault before using Z.AI models");
@@ -1808,6 +1995,11 @@ export async function selectIntelligenceModel(
                         transport: "opencode_go" as const,
                         baseUrl: OPENCODE_GO_API_BASE_URL,
                       }
+                  : compatibleTransport === "opencode_console"
+                    ? {
+                        transport: "opencode_console" as const,
+                        baseUrl: OPENCODE_CONSOLE_API_BASE_URL,
+                      }
                   : compatibleTransport === "digitalocean_inference"
                     ? {
                         transport: "digitalocean_inference" as const,
@@ -1871,6 +2063,7 @@ export async function selectIntelligenceModel(
       customOpenai: undefined,
       zaiCoding: undefined,
       opencodeGo: undefined,
+      opencodeConsole: undefined,
       digitaloceanInference: undefined,
       snowflakeCortex: undefined,
       minimaxToken: undefined,
@@ -1893,6 +2086,8 @@ export async function selectIntelligenceModel(
                 ? { zaiCoding: true }
                 : transportBase.transport === "opencode_go"
                   ? { opencodeGo: true }
+                : transportBase.transport === "opencode_console"
+                  ? { opencodeConsole: true }
                 : transportBase.transport === "digitalocean_inference"
                   ? { digitaloceanInference: true }
                 : transportBase.transport === "snowflake_cortex"
@@ -1950,6 +2145,8 @@ export async function selectIntelligenceModel(
                     ? "Z.AI Coding"
                   : compatibleTransport === "opencode_go"
                     ? "OpenCode Go"
+                  : compatibleTransport === "opencode_console"
+                    ? "OpenCode Console"
                   : compatibleTransport === "digitalocean_inference"
                     ? "DigitalOcean"
                   : compatibleTransport === "snowflake_cortex"
