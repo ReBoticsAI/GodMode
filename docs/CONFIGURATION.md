@@ -305,7 +305,9 @@ Not used in local OSS installs. Private hubs ignore SaaS paywall env vars.
 | `EMBEDDINGS_EXTERNAL` | `false` | Attach to host embedder; do not spawn inside the container |
 | `EMBEDDINGS_SERVER_HOST` | `127.0.0.1` | Embedder host (`host.docker.internal` from Docker) |
 | `EMBEDDINGS_PORT` | `8082` | Embedder llama-server port |
-| `EMBEDDINGS_MODEL_PATH` | `~/llama.cpp/models/embeddinggemma-300M-Q8_0.gguf` | GGUF for spawn mode |
+| `EMBEDDINGS_MODEL_PATH` | `~/llama.cpp/models/embeddinggemma-2-Q8_0.gguf` | GGUF for spawn mode (EmbeddingGemma 2) |
+| `GODMODE_ROUTER_EMBED_BASE_URL` | `http://127.0.0.1:8082` | Auto enrich; same host as knowledge embedder |
+| `GODMODE_ROUTER_EMBED_MODEL` | `embeddinggemma-2` | Model id/alias sent to `/v1/embeddings` |
 | `EMBEDDINGS_AUTO_START` | `true` | Start/attach embedder when enabled |
 | `EMBEDDINGS_RAG_TOP_K` | `12` | Memory hybrid top-K |
 | `EMBEDDINGS_WIKI_RAG_TOP_K` | `4` | Wiki hybrid top-K for chat |

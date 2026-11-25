@@ -66,7 +66,7 @@ describe("godmode-inference isolation", () => {
     ).toBeNull();
   });
 
-  it("gates managed supply on Intelligence + active grant", () => {
+  it("gates managed supply on active grant (any agent)", () => {
     const cloud = memoryCloud();
     // No grant → no key even for Intelligence (without provisionAttach).
     expect(
@@ -77,6 +77,15 @@ describe("godmode-inference isolation", () => {
       })
     ).toBeNull();
 
+    expect(
+      resolveGodModeInferenceSupplyForManagedChat("deepseek-api-key", {
+        agentId: "other-agent",
+        userId: "u1",
+        db: cloud,
+      })
+    ).toBeNull();
+
+    // provisionAttach skips grant check but still needs a configured supply key.
     expect(
       resolveGodModeInferenceSupplyForManagedChat("deepseek-api-key", {
         agentId: "other-agent",

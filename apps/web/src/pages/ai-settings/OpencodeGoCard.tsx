@@ -29,14 +29,19 @@ import {
 import { ProviderConnectMethodBadges } from "@/pages/ai-settings/provider-connect-methods";
 
 /**
- * OpenCode Go catalog snapshot (2026-08-03).
- * Prefer chat/completions-compatible ids; custom slug allowed.
+ * OpenCode Go catalog snapshot (2026-11-16).
+ * Keep in sync with OPENCODE_GO_CHAT_CATALOG in
+ * apps/bridge/src/services/opencode-go-platform.ts.
  */
 const OPENCODE_GO_CHAT = [
-  { id: "grok-4.5", label: "Grok 4.5" },
+  { id: "glm-5.3-flash", label: "GLM-5.3 Flash" },
+  { id: "glm-5.3", label: "GLM-5.3" },
   { id: "glm-5.2", label: "GLM-5.2" },
   { id: "kimi-k3", label: "Kimi K3" },
-  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { id: "kimi-k2.7-code", label: "Kimi K2.7 Code" },
+  { id: "gpt-6-luna", label: "GPT 6 Luna" },
+  { id: "grok-4.7", label: "Grok 4.7" },
+  { id: "deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
 ] as const;
 
 const CUSTOM_VALUE = "__custom__";

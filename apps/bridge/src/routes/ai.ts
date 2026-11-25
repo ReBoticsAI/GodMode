@@ -1,5 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { v4 as uuidv4 } from "uuid";
+import {
+  resolveOpencodeConsoleApiKey,
+  setOpencodeConsoleModelCache,
+} from "../services/opencode-console-platform.js";
 import type { EventEmitter } from "node:events";
 import { config } from "../config.js";
 import { requireEditorForMutation, getReqTenantDb } from "../services/auth/middleware.js";
@@ -145,8 +149,17 @@ import {
 import { markLlmReady } from "../services/onboarding.js";
 import { listModelCatalog, selectIntelligenceModel } from "../services/model-catalog.js";
 import {
+  GODMODE_AUTO_TRANSPORT,
+  isGodModeAutoModelId,
+  isGodModeAutoSecretId,
   isGodModeInferenceSupplySecretId,
 } from "../services/godmode-inference-supply.js";
+import {
+  resolveAutoRoute,
+  recordQuotaAttempt,
+  filterToolsByPolicy,
+  type AutoRouteResult,
+} from "../services/inference-router/index.js";
 import {
   findActiveGodModeInferenceGrant,
   godModeInferenceRetailUsd,
@@ -626,6 +639,34 @@ export function createAiRouter(
   router.get("/capabilities/status", (req, res) => {
     try {
       res.json({ indexRows: countCapabilityIndex(tdb(req)) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // OpenCode Console: live model list for the connected vault key. Mirrors the
+  // workspace's enabled models so the Vault card offers what the key can use.
+  router.get("/opencode-console/models", async (req, res) => {
+    try {
+      const apiKey = resolveOpencodeConsoleApiKey(tdb(req), null);
+      if (!apiKey) {
+        res.status(400).json({ error: "Connect OpenCode Console in Vault first" });
+        return;
+      }
+      const upstream = await fetch("https://opencode.ai/inference/v1/models", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!upstream.ok) {
+        const text = await upstream.text();
+        res.status(upstream.status).json({ error: text.slice(0, 300) });
+        return;
+      }
+      const json = (await upstream.json()) as { data?: Array<{ id?: string }> };
+      const models = (json.data ?? [])
+        .map((m) => (typeof m.id === "string" ? m.id : ""))
+        .filter((id) => id.length > 0);
+      setOpencodeConsoleModelCache(models);
+      res.json({ models });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -1366,6 +1407,9 @@ export function createAiRouter(
         s.id !== "opencode-go-api-key" &&
         !s.id.startsWith("opencode-go-api-key__agent__") &&
         s.name !== "opencode_go_api_key" &&
+        s.id !== "opencode-console-api-key" &&
+        !s.id.startsWith("opencode-console-api-key__agent__") &&
+        s.name !== "opencode_console_api_key" &&
         s.id !== "digitalocean-inference-api-key" &&
         !s.id.startsWith("digitalocean-inference-api-key__agent__") &&
         s.name !== "digitalocean_inference_api_key" &&
@@ -2006,19 +2050,114 @@ export function createAiRouter(
     }
 
     const flowConfig = loadPromptFlowConfig(engineDb);
-    const harnessProfile = resolveProfileForAgent(
-      agent,
-      llm.getStatus().modelPath
-    );
     const managedSupplyKeyRef =
       typeof (agent.config as { apiKeyRef?: unknown } | undefined)?.apiKeyRef ===
       "string"
         ? String((agent.config as { apiKeyRef?: string }).apiKeyRef)
         : "";
-    const usingManagedSupply =
-      agent.id === "intelligence" &&
+    const agentModel =
+      typeof (agent.config as { model?: unknown } | undefined)?.model === "string"
+        ? String((agent.config as { model?: string }).model)
+        : "";
+    const agentTransport =
+      typeof (agent.config as { transport?: unknown } | undefined)?.transport ===
+      "string"
+        ? String((agent.config as { transport?: string }).transport)
+        : "";
+    const wantsGodModeAuto =
+      isGodModeAutoSecretId(managedSupplyKeyRef) ||
+      isGodModeAutoModelId(agentModel) ||
+      agentTransport === GODMODE_AUTO_TRANSPORT;
+    let runAgent = agent;
+    let autoRoute: AutoRouteResult | null = null;
+    if (wantsGodModeAuto) {
+      const historyChars = history.reduce(
+        (n, h) => n + (typeof h.content === "string" ? h.content.length : 0),
+        0
+      );
+      const hasImages = Array.isArray(message)
+        ? false
+        : typeof message === "object" && message != null
+          ? false
+          : false;
+      const route = await resolveAutoRoute({
+        userMessage: typeof message === "string" ? message : "",
+        chatMode,
+        hasTools: chatMode === "agent" || chatMode === "plan",
+        hasImages,
+        historyChars,
+        preference: "auto",
+      });
+      if (!route) {
+        send("error", {
+          error:
+            "GodMode Inference Auto has no healthy free supply right now. Connect Supported BYOK in Vault, or wait for Admin supply quota to reset.",
+          payPath: TRIAL_PAY_GODMODE_PATH,
+        });
+        clearInterval(statusHeartbeat);
+        markChatTurnIdle(workDb, activeChatId);
+        return;
+      }
+      autoRoute = route;
+      recordQuotaAttempt(route.provider);
+      const toolAllow =
+        route.toolPolicy === "none"
+          ? []
+          : route.toolPolicy === "light" && Array.isArray(agent.toolAllow)
+            ? (filterToolsByPolicy(agent.toolAllow, "light") ?? [])
+            : agent.toolAllow;
+      runAgent = {
+        ...agent,
+        thinking: {
+          ...agent.thinking,
+          enableThinking: route.enableThinking,
+        },
+        sampling: {
+          ...agent.sampling,
+          maxTokens:
+            route.maxTokens > 0 ? route.maxTokens : agent.sampling.maxTokens,
+        },
+        toolAllow,
+        config: {
+          ...(agent.config ?? {}),
+          provider: "openai_compatible",
+          model: route.modelId,
+          transport: route.transport,
+          baseUrl: route.baseUrl,
+          apiKeyRef: route.apiKeyRef,
+          godmodeAuto: true,
+          godmodeAutoBand: route.band,
+          godmodeAutoRosterId: route.rosterId,
+          openrouter: route.transport === "openrouter" ? true : undefined,
+          groq: route.transport === "groq" ? true : undefined,
+        },
+      };
+      send("status", {
+        phase: "preparing",
+        message: `Auto → ${route.provider} ${route.modelId} (${route.band})`,
+        autoRoute: {
+          band: route.band,
+          provider: route.provider,
+          model: route.modelId,
+          rosterId: route.rosterId,
+          classify: route.classify,
+          complexityScore: route.complexityScore,
+          enableThinking: route.enableThinking,
+          maxTokens: route.maxTokens,
+          toolPolicy: route.toolPolicy,
+          source: route.source,
+          confidence: route.confidence,
+        },
+      });
+    }
+    const harnessProfile = resolveProfileForAgent(
+      runAgent,
+      llm.getStatus().modelPath
+    );
+    const usingManagedSupply = Boolean(
       managedSupplyKeyRef &&
-      isGodModeInferenceSupplySecretId(managedSupplyKeyRef);
+        isGodModeInferenceSupplySecretId(managedSupplyKeyRef)
+    );
     const activeInferenceGrant = usingManagedSupply
       ? findActiveGodModeInferenceGrant({ userId: auth.user.id })
       : null;
@@ -2159,18 +2298,18 @@ export function createAiRouter(
       }
     );
     const assembled = assemblePrompt(engineDb, {
-      basePrompt: agent.systemPrompt,
+      basePrompt: runAgent.systemPrompt,
       platformContext: platformContextEnriched,
       chatId: activeChatId,
       historyCount: history.length,
       userPreview: message?.trim(),
       flowConfig,
-      enableThinking: agent.thinking.enableThinking,
-      thinkingEfficiency: agent.thinking.thinkingEfficiency,
-      nativeTools: agent.thinking.nativeTools,
-      agentId: agent.id,
+      enableThinking: runAgent.thinking.enableThinking,
+      thinkingEfficiency: runAgent.thinking.thinkingEfficiency,
+      nativeTools: runAgent.thinking.nativeTools,
+      agentId: runAgent.id,
       tenantId: auth.tenantId,
-      agent,
+      agent: runAgent,
       memoryOverride,
       wikiOverride: wikiOverride || undefined,
       capabilitiesOverride,
@@ -2239,15 +2378,15 @@ export function createAiRouter(
 
     const sampling = applyProfileSampling(
       {
-        temperature: agent.sampling.temperature,
-        topP: agent.sampling.topP,
-        topK: agent.sampling.topK,
-        minP: agent.sampling.minP,
-        repeatPenalty: agent.sampling.repeatPenalty,
-        presencePenalty: agent.sampling.presencePenalty,
-        frequencyPenalty: agent.sampling.frequencyPenalty,
-        maxTokens: agent.sampling.maxTokens,
-        seed: agent.sampling.seed,
+        temperature: runAgent.sampling.temperature,
+        topP: runAgent.sampling.topP,
+        topK: runAgent.sampling.topK,
+        minP: runAgent.sampling.minP,
+        repeatPenalty: runAgent.sampling.repeatPenalty,
+        presencePenalty: runAgent.sampling.presencePenalty,
+        frequencyPenalty: runAgent.sampling.frequencyPenalty,
+        maxTokens: runAgent.sampling.maxTokens,
+        seed: runAgent.sampling.seed,
       },
       harnessProfile
     );
@@ -2404,13 +2543,13 @@ export function createAiRouter(
         // Backend (LoRA/config) and advertised tool definitions come from the
         // engine DB; tool execution writes (artifacts, memory) land in the work
         // DB. Memory contribute-back (if enabled) mirrors into the engine DB.
-        const backend = getBackend(agent, engineDb, llm);
+        const backend = getBackend(runAgent, engineDb, llm);
         await ensureMcpHostBeforeRun({
-          agent,
+          agent: runAgent,
           tenantId: auth.tenantId,
           db: engineDb,
         });
-        const rawSchemas = getToolSchemasForLlm(engineDb, agent.id, chatMode);
+        const rawSchemas = getToolSchemasForLlm(engineDb, runAgent.id, chatMode);
         const profileFilterOpts = {
           userMessage: message?.trim(),
           pathname: platformContext?.pathname,
@@ -2424,21 +2563,44 @@ export function createAiRouter(
         // Trial welcome-guide: hard RBAC to orientation tools only.
         // Normal chat: drop signup-only ask_guide_choice so Support cannot
         // mis-route into Explore/buy buttons.
-        const toolSchemas = signupGuideActive
+        const guideSchemas = signupGuideActive
           ? filterSchemasForSignupGuide(profileSchemas)
           : filterSchemasOutsideSignupGuide(profileSchemas);
+        const applyAutoToolPolicy = <
+          T extends { function: { name: string } },
+        >(
+          schemas: T[]
+        ): T[] => {
+          if (!autoRoute) return schemas;
+          if (autoRoute.toolPolicy === "none") return [];
+          if (autoRoute.toolPolicy === "light") {
+            const allowed = filterToolsByPolicy(
+              schemas.map((s) => s.function.name),
+              "light"
+            );
+            if (!allowed) return schemas;
+            const allow = new Set(allowed);
+            return schemas.filter((s) => allow.has(s.function.name));
+          }
+          return schemas;
+        };
+        const toolSchemas = applyAutoToolPolicy(guideSchemas);
         const refreshGuideSchemas = () => {
           const next = filterSchemasForProfile(
-            getToolSchemasForLlm(engineDb, agent.id, chatMode),
+            getToolSchemasForLlm(engineDb, runAgent.id, chatMode),
             harnessProfile,
             profileFilterOpts
           );
-          return signupGuideActive
+          const guided = signupGuideActive
             ? filterSchemasForSignupGuide(next)
             : filterSchemasOutsideSignupGuide(next);
+          return applyAutoToolPolicy(guided);
         };
+        const thinkingFromAuto = autoRoute
+          ? autoRoute.enableThinking
+          : harnessProfile.enableThinkingDefault;
         const answer = await backend.run({
-          agent,
+          agent: runAgent,
           messages: agentMessages,
           chatMode,
           toolSchemas,
@@ -2453,9 +2615,9 @@ export function createAiRouter(
           providerExtras:
             harnessProfile.reasoningEffort ||
             harnessProfile.clearThinking != null ||
-            harnessProfile.enableThinkingDefault
+            thinkingFromAuto != null
               ? {
-                  thinkingEnabled: harnessProfile.enableThinkingDefault,
+                  thinkingEnabled: thinkingFromAuto,
                   reasoningEffort: signupGuideActive
                     ? "low"
                     : harnessProfile.reasoningEffort,

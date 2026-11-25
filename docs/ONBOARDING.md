@@ -83,16 +83,16 @@ Route: `GET /api/graph/projection?focusType=architecture`.
 
 ## First-land Intelligence + GodMode Inference
 
-**Product decision:** Primary path is **GodMode Inference**: managed chat on DeepSeek, Z.AI (GLM), and Qwen under operator accounts (Admin → GodMode Inference). Free welcome allowance, then prepaid packs ($5 / $10 / $25 / $50 / $100). Cloud with Inference seats include monthly or yearly credit. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
+**Product decision:** Primary path is **GodMode Inference Auto**: one sold model name (**Auto** / `godmode/auto`) that scores each turn (Friend-style complexity), maps to a band (`trivial` | `chat` | `tools` | `hard`), and routes to the highest-capability healthy Admin supply upstream within quota (OpenRouter free, Groq, Gemini, DeepSeek, Z.AI, Qwen). Auto also sets invisible turn knobs (thinking on/off, max tokens, tool policy none/light/full). Knowledge RAG and Auto router enrich share one **EmbeddingGemma 2** process on `:8082` (`EMBEDDINGS_*` + `GODMODE_ROUTER_EMBED_BASE_URL`, same on Cloud). Fail-open keeps Auto heuristics if the embedder is down. Free welcome allowance, then prepaid packs ($5 / $10 / $25 / $50 / $100). Cloud with Inference seats include monthly or yearly credit. Supported personal BYOK is DeepSeek / Z.AI / Qwen. Other providers remain Advanced BYOK. Local models stay first-class.
 
-Admin supply keys are isolated: Intelligence agent + active grant only. They never resolve for other agents and never appear as user Vault connections.
+Admin supply keys are isolated to users with an active GodMode Inference grant (Intelligence and agents selecting Auto). They never appear as user Vault connections.
 
 On Local and Cloud app origins, first visit lands on The Graph. Opening Intelligence seeds a greeting from `POST /api/trial-inference/ensure`.
 
 Background ensure flow:
 
 1. Soft visitor cookie + hashed IP heuristics (not a fake login).
-2. Prefer Admin GodMode Inference supply (`godmodeInferenceSupply`) when DeepSeek / Z.AI / Qwen platform keys are configured.
+2. Prefer Admin GodMode Inference Auto (`godmode/auto`) when any platform supply keys are configured (OpenRouter / Groq / Gemini / DeepSeek / Z.AI / Qwen).
 3. Optional legacy OpenRouter Management API / platform shared paths only when listed in `TRIAL_PROVISION_ORDER`.
 4. Supported BYOK: Vault → Inference → Supported. Advanced BYOK: other provider cards under Advanced tabs.
 5. Buy more: Vault → Inference → GodMode Inference (`/platform-vault?vault=inference&sub=godmode`).
@@ -106,7 +106,7 @@ Background ensure flow:
 
 **Secondary CTAs:** Connect Supported BYOK or use Local models.
 
-**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget, mechanism, masked minted key metadata), sets default trial / mint budget (also used as OpenRouter Management mint `limit`), can create complimentary Inference credit for a user id, and can revoke a grant so Intelligence hard-stops. Admin → Users can also grant complimentary Inference credit. For Management API mints, revoke also deletes the provider key and clears Vault when possible. Platform supply keys stay on the same tab.
+**Admin spend:** Admin → GodMode Inference lists recent grants (spent vs budget, mechanism, masked minted key metadata), sets default trial / mint budget (also used as OpenRouter Management mint `limit`), can create complimentary Inference credit for a user id, and can revoke a grant so managed Auto hard-stops. The same tab shows Auto router roster health, per-provider quota ledger, and recent Auto decisions. Admin → Users can also grant complimentary Inference credit. For Management API mints, revoke also deletes the provider key and clears Vault when possible. Platform supply keys stay on the same tab.
 
 Ops: configure Admin → GodMode Inference keys and default trial / mint budget. Stripe uses the same GodMode Cloud billing keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and Checkout as seats. Pack price IDs: `STRIPE_GODMODE_INFERENCE_PRICE_PACK_5` … `_100`. Cloud with Inference: `STRIPE_SAAS_PRICE_MONTHLY_INFERENCE` / `_PLUS` / `_PRO` and yearly counterparts. Webhooks demux on `/api/saas/stripe/webhook` (metadata `godmode_inference=1` for packs; SaaS plan id for bundles); `/api/godmode-inference/stripe/webhook` is an alias for local hubs.
 

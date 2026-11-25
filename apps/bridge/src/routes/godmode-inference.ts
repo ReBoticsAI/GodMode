@@ -26,6 +26,11 @@ import {
   inferenceCheckoutDelegatesToCloud,
   startDelegatedInferenceCheckout,
 } from "../services/godmode-inference-cloud-checkout.js";
+import {
+  getAutoRouterAdminSnapshot,
+  resetInferenceRoster,
+  setInferenceRoster,
+} from "../services/inference-router/index.js";
 
 export function createGodModeInferenceRouter(): Router {
   const router = Router();
@@ -303,6 +308,36 @@ export function createGodModeInferenceRouter(): Router {
           : 500;
       res.status(status).json({
         error: err instanceof Error ? err.message : "Update failed",
+      });
+    }
+  });
+
+  router.get("/admin/auto-router", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    res.json(getAutoRouterAdminSnapshot());
+  });
+
+  router.put("/admin/auto-router/roster", requireAuth, (req, res) => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    try {
+      if (req.body?.reset === true) {
+        resetInferenceRoster();
+      } else if (Array.isArray(req.body?.roster)) {
+        setInferenceRoster(req.body.roster);
+      } else {
+        res.status(400).json({ error: "roster array or reset:true required" });
+        return;
+      }
+      res.json(getAutoRouterAdminSnapshot());
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Roster update failed",
       });
     }
   });

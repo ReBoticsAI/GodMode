@@ -9,9 +9,12 @@ import {
   createAdminGodModeInferenceGrant,
   revokeAdminGodModeInferenceGrant,
   setAdminDefaultTrialBudget,
+  fetchAdminAutoRouter,
+  resetAdminAutoRouterRoster,
   type GodModeInferenceConfig,
   type GodModeInferenceProviderStatus,
   type AdminGodModeInferenceGrant,
+  type AdminAutoRouterSnapshot,
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +39,21 @@ import {
 } from "@/components/ui/table";
 
 const SIGNUP_LINKS = [
+  {
+    name: "OpenRouter",
+    href: "https://openrouter.ai/keys",
+    note: "Free :free routes + openrouter/free router",
+  },
+  {
+    name: "Groq",
+    href: "https://console.groq.com/keys",
+    note: "Free-tier GroqCloud API key",
+  },
+  {
+    name: "Google AI Studio",
+    href: "https://aistudio.google.com/apikey",
+    note: "Gemini Developer API key",
+  },
   {
     name: "DeepSeek",
     href: "https://platform.deepseek.com/",
@@ -166,6 +184,12 @@ export function AdminGodModeInferencePanel() {
   const [zaiKey, setZaiKey] = useState("");
   const [zaiCodingKey, setZaiCodingKey] = useState("");
   const [dashscopeKey, setDashscopeKey] = useState("");
+  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [groqKey, setGroqKey] = useState("");
+  const [googleAiKey, setGoogleAiKey] = useState("");
+  const [autoRouter, setAutoRouter] = useState<AdminAutoRouterSnapshot | null>(
+    null
+  );
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -173,11 +197,13 @@ export function AdminGodModeInferencePanel() {
       fetchGodModeInferenceConfig(),
       fetchAdminGodModeInferenceHealth().catch(() => null),
       fetchAdminGodModeInferenceGrants({ limit: 50 }).catch(() => null),
+      fetchAdminAutoRouter().catch(() => null),
     ])
-      .then(([config, h, g]) => {
+      .then(([config, h, g, auto]) => {
         setCfg(config);
         setHealth(h);
         setGrants(g?.grants ?? []);
+        setAutoRouter(auto);
         const budget =
           g?.defaultTrialBudgetUsd ??
           h?.defaultTrialBudgetUsd ??
@@ -201,6 +227,9 @@ export function AdminGodModeInferencePanel() {
     zaiApiKey?: string;
     zaiCodingApiKey?: string;
     dashscopeApiKey?: string;
+    openrouterApiKey?: string;
+    groqApiKey?: string;
+    googleAiApiKey?: string;
     defaultTrialBudgetUsd?: number;
   }) => {
     setBusy(true);
@@ -211,10 +240,16 @@ export function AdminGodModeInferencePanel() {
       if (patch.zaiApiKey !== undefined) setZaiKey("");
       if (patch.zaiCodingApiKey !== undefined) setZaiCodingKey("");
       if (patch.dashscopeApiKey !== undefined) setDashscopeKey("");
+      if (patch.openrouterApiKey !== undefined) setOpenrouterKey("");
+      if (patch.groqApiKey !== undefined) setGroqKey("");
+      if (patch.googleAiApiKey !== undefined) setGoogleAiKey("");
       if (patch.defaultTrialBudgetUsd != null) {
         setDefaultBudgetDraft(String(updated.defaultTrialBudgetUsd));
       }
       toast.success("GodMode Inference supply updated");
+      void fetchAdminAutoRouter()
+        .then(setAutoRouter)
+        .catch(() => null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -295,11 +330,10 @@ export function AdminGodModeInferencePanel() {
             GodMode Inference
           </CardTitle>
           <CardDescription>
-            Platform supply keys for managed GodMode Inference chat only
-            (Intelligence welcome guide and paid packs/subscriptions). Encrypted
-            in the platform database. Never appears as a user Vault connection.
-            Never powers other agents or Advanced BYOK. Not a vendor partnership
-            claim.
+            Platform supply keys for GodMode Inference Auto (complexity score,
+            knobs, capability ranking, quota-aware failover) and managed chat.
+            Encrypted in the platform database. Never appears as a user Vault
+            connection. Not a vendor partnership claim.
           </CardDescription>
           <CardAction>
             <Badge variant={cfg.configured ? "default" : "secondary"}>
@@ -514,6 +548,45 @@ export function AdminGodModeInferencePanel() {
       </Card>
 
       <ProviderKeyCard
+        title="OpenRouter"
+        description="Free :free routes and openrouter/free for Auto trivial/tools bands."
+        status={cfg.openrouter}
+        inputId="admin-openrouter-key"
+        value={openrouterKey}
+        onChange={setOpenrouterKey}
+        placeholder="sk-or-…"
+        busy={busy}
+        onSave={() => void save({ openrouterApiKey: openrouterKey.trim() })}
+        onClear={() => void save({ openrouterApiKey: "" })}
+      />
+
+      <ProviderKeyCard
+        title="Groq"
+        description="GroqCloud free-tier key for fast trivial-band Auto routes."
+        status={cfg.groq}
+        inputId="admin-groq-key"
+        value={groqKey}
+        onChange={setGroqKey}
+        placeholder="gsk_…"
+        busy={busy}
+        onSave={() => void save({ groqApiKey: groqKey.trim() })}
+        onClear={() => void save({ groqApiKey: "" })}
+      />
+
+      <ProviderKeyCard
+        title="Google AI Studio / Gemini"
+        description="Gemini Developer API key for chat/tools/hard free quotas."
+        status={cfg.googleAi}
+        inputId="admin-google-ai-key"
+        value={googleAiKey}
+        onChange={setGoogleAiKey}
+        placeholder="AIza…"
+        busy={busy}
+        onSave={() => void save({ googleAiApiKey: googleAiKey.trim() })}
+        onClear={() => void save({ googleAiApiKey: "" })}
+      />
+
+      <ProviderKeyCard
         title="DeepSeek"
         description="Metered DeepSeek platform API key for managed GodMode Inference only."
         status={cfg.deepseek}
@@ -564,6 +637,147 @@ export function AdminGodModeInferencePanel() {
         onSave={() => void save({ dashscopeApiKey: dashscopeKey.trim() })}
         onClear={() => void save({ dashscopeApiKey: "" })}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Auto router</CardTitle>
+          <CardDescription>
+            Sold model is Auto. Internal bands: trivial, chat, tools, hard.
+            Roster picks the cheapest healthy supply key per turn.
+          </CardDescription>
+          <CardAction>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void resetAdminAutoRouterRoster()
+                  .then((snap: AdminAutoRouterSnapshot) => {
+                    setAutoRouter(snap);
+                    toast.success("Roster reset to defaults");
+                  })
+                  .catch((err: unknown) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Reset failed"
+                    )
+                  )
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Reset roster
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {!autoRouter ? (
+            <p className="text-sm text-muted-foreground">
+              Auto router snapshot unavailable.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Available now ({autoRouter.available.length})
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {autoRouter.available.length === 0
+                    ? "No supply keys match the roster yet."
+                    : autoRouter.available
+                        .map((e) => `${e.band}:${e.provider}/${e.model}`)
+                        .join(" · ")}
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Provider</TableHead>
+                      <TableHead className="text-right">Day req</TableHead>
+                      <TableHead className="text-right">RPM win</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {autoRouter.quotas.map((q) => (
+                      <TableRow key={q.provider}>
+                        <TableCell className="font-mono text-xs">
+                          {q.provider}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {q.requests}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {q.rpmWindow}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={q.exhausted ? "destructive" : "secondary"}
+                          >
+                            {q.exhausted ? "Exhausted" : "OK"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>When</TableHead>
+                      <TableHead>Band</TableHead>
+                      <TableHead>Chosen</TableHead>
+                      <TableHead>Knobs</TableHead>
+                      <TableHead>Source</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {autoRouter.decisions.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-muted-foreground"
+                        >
+                          No Auto decisions yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      autoRouter.decisions.slice(0, 12).map((d) => (
+                        <TableRow key={`${d.at}-${d.chosenRosterId ?? "none"}`}>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {new Date(d.at).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {d.band}
+                            {typeof d.complexityScore === "number"
+                              ? ` (${d.complexityScore.toFixed(2)})`
+                              : ""}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {d.chosenProvider && d.chosenModel
+                              ? `${d.chosenProvider}/${d.chosenModel}`
+                              : d.error ?? "—"}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {d.maxTokens != null
+                              ? `tok=${d.maxTokens}; think=${d.enableThinking ? "on" : "off"}; tools=${d.toolPolicy ?? "—"}`
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {d.source ?? d.classifySource}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

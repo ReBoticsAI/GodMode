@@ -614,10 +614,14 @@ export const config = {
      */
     external: (process.env.EMBEDDINGS_EXTERNAL ?? "false") === "true",
     serverHost: process.env.EMBEDDINGS_SERVER_HOST ?? "127.0.0.1",
-    /** Embedding model (EmbeddingGemma). Launch with --embeddings --pooling mean. */
+    /**
+     * Embedding model (EmbeddingGemma 2). Launch with --embeddings --pooling mean.
+     * Same process serves knowledge RAG and Auto router enrich
+     * (`GODMODE_ROUTER_EMBED_BASE_URL` → this host:port).
+     */
     embedderModelPath:
       process.env.EMBEDDINGS_MODEL_PATH ??
-      path.join(os.homedir(), "llama.cpp", "models", "embeddinggemma-300M-Q8_0.gguf"),
+      path.join(os.homedir(), "llama.cpp", "models", "embeddinggemma-2-Q8_0.gguf"),
     embedderPort: Number(process.env.EMBEDDINGS_PORT ?? 8082),
     embedderCtxSize: Number(process.env.EMBEDDINGS_CTX_SIZE ?? 2048),
     /** CPU threads the embedder may use (0 = let llama.cpp decide). */

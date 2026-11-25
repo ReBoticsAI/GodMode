@@ -339,6 +339,9 @@ export const PLATFORM_SPECS: BuiltinSpec[] = [
       ["zai", "JSON"],
       ["zai_coding", "JSON"],
       ["dashscope", "JSON"],
+      ["openrouter", "JSON"],
+      ["groq", "JSON"],
+      ["google_ai", "JSON"],
     ],
   },
   {

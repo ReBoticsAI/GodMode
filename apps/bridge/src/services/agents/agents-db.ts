@@ -1058,6 +1058,11 @@ function resolveFromUserVault(
 function resolveNameFromUserVault(userId: string, name: string): string | null {
   ensureUserDb(userId);
   const userDb = getUserDb(userId);
+  // `name` may be a fixed Connect secret id (e.g. "zai-api-key") while the
+  // stored row name uses underscores ("zai_api_key"); try the id-addressed
+  // platform row first, matching resolvePlatformVaultSecret's readPlatformPlain.
+  const byId = readPlatformPlain(userDb, name, name);
+  if (byId) return byId;
   const row = findSecretByName(userDb, name, { kind: "platform" });
   if (row) {
     const plain = tryReadSecretPlain(row.value);
@@ -1077,6 +1082,8 @@ function resolveNameFromUserVault(userId: string, name: string): string | null {
     } catch {
       continue;
     }
+    const wsById = readPlatformPlain(workspaceDb, name, name);
+    if (wsById) return wsById;
     const wsRow = findSecretByName(workspaceDb, name, { kind: "platform" });
     if (!wsRow) continue;
     const value = tryReadSecretPlain(wsRow.value);
@@ -1128,6 +1135,10 @@ export function resolveSecretByName(
     });
     if (agentRow) return tryReadSecretPlain(agentRow.value);
   }
+  // `name` may be a fixed Connect secret id ("zai-api-key") whose stored row
+  // name uses underscores; check the id-addressed platform row before by-name.
+  const byId = getSecretValue(db, platformVaultSecretId(name, null));
+  if (byId) return byId;
   const platform = findSecretByName(db, name, { kind: "platform" });
   if (platform) return tryReadSecretPlain(platform.value);
   const accountId = resolveVaultAccountUserId(db, userId);

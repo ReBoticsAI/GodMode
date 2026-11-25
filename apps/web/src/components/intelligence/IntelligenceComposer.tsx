@@ -502,18 +502,29 @@ export function IntelligenceComposer({
         endpointId: model.endpointId,
         transport: model.transport,
       });
-      if (!res.active || typeof res.active.id !== "string") {
-        throw new Error("Model catalog returned no active model");
+      // select_model is queued as a durable operation; the action can resolve
+      // before the new active model is reflected in the catalog. Poll briefly.
+      let active =
+        res.active && typeof res.active.id === "string" ? res.active : null;
+      for (let attempt = 0; !active && attempt < 20; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const catalog = await fetchModelCatalog();
+        if (catalog.active && catalog.active.id === model.id) {
+          active = catalog.active;
+        }
       }
-      setActiveModel(res.active);
+      if (!active) {
+        throw new Error("Model switch did not apply");
+      }
+      setActiveModel(active);
       setCatalog((prev) =>
         prev
           .filter((m) => m && typeof m.id === "string")
-          .map((m) => ({ ...m, active: m.id === res.active.id }))
+          .map((m) => ({ ...m, active: m.id === active.id }))
       );
       window.dispatchEvent(new Event("godmode:model-selected"));
       refresh();
-      toast.success(`Using ${res.active.label}`);
+      toast.success(`Using ${active.label}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to switch model");
     }

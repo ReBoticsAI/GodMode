@@ -65,26 +65,31 @@ The Alpine GodMode image does **not** run CUDA inference. Run `llama-server` on 
 | `EMBEDDINGS_EXTERNAL` | `true` |
 | `EMBEDDINGS_SERVER_HOST` | `host.docker.internal` |
 | `EMBEDDINGS_PORT` | `8082` |
+| `EMBEDDINGS_MODEL_PATH` | host path to **EmbeddingGemma 2** GGUF (spawn only when not external) |
 | `EMBEDDINGS_CODE_MODEL_PATH` | optional separate code-profile GGUF |
 | `EMBEDDINGS_CODE_PORT` | optional separate code-profile port |
+| `GODMODE_ROUTER_EMBED_BASE_URL` | same embedder (default `http://127.0.0.1:8082`) for Auto knob enrich |
+| `GODMODE_ROUTER_EMBED_MODEL` | `embeddinggemma-2` (alias on the server) |
 
 Also see [AGENT_MEMORY.md](./AGENT_MEMORY.md) for **memory** vs **code** embed profiles and hybrid `codebase_search`.
 
 Host `llama-server` must use **`--jinja`** so chat/tool templates match. With `LLAMA_EXTERNAL=true`, Bridge defaults `LLAMA_TOOL_MODE` to **native** if unset.
 
-### Host EmbeddingGemma (sibling unit)
+### Host EmbeddingGemma 2 (knowledge + Auto router)
 
-Run a second `llama-server` on **:8082** with embeddings enabled (mean pooling). Example systemd `ExecStart` fragment:
+One CPU embedder on **:8082** does double duty: memory/wiki/code RAG and Auto router enrich. Prefer **EmbeddingGemma 2** (`embeddinggemma-2-Q8_0.gguf`) over the older 300M. Example (native or Docker `llama-server`):
 
 ```bash
 llama-server \
-  -m /path/to/embeddinggemma-300M-Q8_0.gguf \
+  -m /path/to/embeddinggemma-2-Q8_0.gguf \
   --embeddings --pooling mean \
+  -ngl 0 \
   -c 2048 -t 4 \
+  --alias embeddinggemma-2 \
   --host 0.0.0.0 --port 8082
 ```
 
-Mirror your chat `llama-server.service` as e.g. `embeddinggemma.service`. Bridge attaches with `EMBEDDINGS_EXTERNAL=true` (no CUDA in the hub image).
+Bridge: `EMBEDDINGS_EXTERNAL=true` + `GODMODE_ROUTER_EMBED_BASE_URL=http://<host>:8082`. After upgrading from 300M, re-backfill memory/wiki vectors (dimension changes; old BLOBs are not compatible).
 
 Memory layers and index-on-write: [AGENT_MEMORY.md](./AGENT_MEMORY.md).
 

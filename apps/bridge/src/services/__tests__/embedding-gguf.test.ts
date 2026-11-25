@@ -7,6 +7,8 @@ import { isEmbeddingGguf } from "../llm-manager.js";
 
 assert.equal(isEmbeddingGguf("embeddinggemma-300M-Q8_0.gguf"), true);
 assert.equal(isEmbeddingGguf("/mnt/storage/models/embeddinggemma-300M-Q8_0.gguf"), true);
+assert.equal(isEmbeddingGguf("embeddinggemma-2-Q8_0.gguf"), true);
+assert.equal(isEmbeddingGguf("/mnt/storage/models/embeddinggemma-2-Q8_0.gguf"), true);
 assert.equal(isEmbeddingGguf("nomic-embed-text-v1.5.Q8_0.gguf"), true);
 assert.equal(isEmbeddingGguf("bge-large-en-v1.5-f16.gguf"), true);
 assert.equal(isEmbeddingGguf("gemma-4-26B_q4_0-it.gguf"), false);

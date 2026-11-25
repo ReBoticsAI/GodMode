@@ -49,6 +49,9 @@ export interface PlatformConfigAdapterServices {
     zaiApiKey?: string;
     zaiCodingApiKey?: string;
     dashscopeApiKey?: string;
+    openrouterApiKey?: string;
+    groqApiKey?: string;
+    googleAiApiKey?: string;
   }): GodModeInferenceSupplyStatus;
   defaultTrialBudgetUsd(): number;
   setDefaultTrialBudgetUsd(usd: number): number;
@@ -174,6 +177,9 @@ function godModeInferenceRecord(def: ObjectTypeDef): RecordRow {
     zai: inferenceProviderData(status.zai),
     zai_coding: inferenceProviderData(status.zaiCoding),
     dashscope: inferenceProviderData(status.dashscope),
+    openrouter: inferenceProviderData(status.openrouter),
+    groq: inferenceProviderData(status.groq),
+    google_ai: inferenceProviderData(status.googleAi),
     default_trial_budget_usd: services.defaultTrialBudgetUsd(),
   });
 }
@@ -209,6 +215,18 @@ export const godModeInferenceConfigAdapter: RecordAdapter = {
         dashscopeApiKey:
           typeof input.dashscope_api_key === "string"
             ? input.dashscope_api_key
+            : undefined,
+        openrouterApiKey:
+          typeof input.openrouter_api_key === "string"
+            ? input.openrouter_api_key
+            : undefined,
+        groqApiKey:
+          typeof input.groq_api_key === "string"
+            ? input.groq_api_key
+            : undefined,
+        googleAiApiKey:
+          typeof input.google_ai_api_key === "string"
+            ? input.google_ai_api_key
             : undefined,
       });
       if (

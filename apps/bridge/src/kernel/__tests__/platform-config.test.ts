@@ -163,6 +163,9 @@ describe("platform configuration ObjectType adapters", () => {
         zai: { connected: false, source: "none" as const },
         zaiCoding: { connected: false, source: "none" as const },
         dashscope: { connected: false, source: "none" as const },
+        openrouter: { connected: false, source: "none" as const },
+        groq: { connected: false, source: "none" as const },
+        googleAi: { connected: false, source: "none" as const },
       }),
       setGodModeInferenceSupply(input) {
         if (input.deepseekApiKey !== undefined) {
@@ -180,6 +183,9 @@ describe("platform configuration ObjectType adapters", () => {
           zai: { connected: false, source: "none" as const },
           zaiCoding: { connected: false, source: "none" as const },
           dashscope: { connected: false, source: "none" as const },
+          openrouter: { connected: false, source: "none" as const },
+          groq: { connected: false, source: "none" as const },
+          googleAi: { connected: false, source: "none" as const },
         };
       },
       defaultTrialBudgetUsd: () => trialBudget,
@@ -191,7 +197,17 @@ describe("platform configuration ObjectType adapters", () => {
     const def = definition(
       "GodModeInferenceConfig",
       "godmode_inference_config_service",
-      ["id", "configured", "deepseek", "zai", "zai_coding", "dashscope"]
+      [
+        "id",
+        "configured",
+        "deepseek",
+        "zai",
+        "zai_coding",
+        "dashscope",
+        "openrouter",
+        "groq",
+        "google_ai",
+      ]
     );
     const ctx = context(db, "operator", true);
     const updated = godModeInferenceConfigAdapter.actions!.configure(

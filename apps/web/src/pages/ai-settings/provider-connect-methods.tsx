@@ -34,6 +34,7 @@ export type InferenceProviderId =
   | "zai-coding"
   | "opencode-go"
   | "opencode-zen"
+  | "opencode-console"
   | "digitalocean"
   | "snowflake"
   | "minimax-token"
@@ -312,6 +313,20 @@ export const PROVIDER_CONNECT_MATRIX: ProviderConnectEntry[] = [
         label: "API key",
         status: "available",
         note: "Metered console key. SuperGrok / X Premium OAuth is separate and not shipped.",
+      },
+    ],
+  },
+  {
+    id: "opencode-console",
+    name: "OpenCode Console",
+    bucket: "api-keys",
+    cardShipped: true,
+    methods: [
+      {
+        id: "api-key",
+        label: "API key (credits)",
+        status: "available",
+        note: "Metered payg. OpenCode Go subscription keys are a separate card.",
       },
     ],
   },

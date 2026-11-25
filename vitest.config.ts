@@ -146,6 +146,8 @@ export default defineConfig({
       "apps/bridge/src/services/__tests__/hook-run-agent-ready.test.ts",
       "apps/bridge/src/services/__tests__/github-upstream-pr.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-isolation.test.ts",
+      "apps/bridge/src/services/__tests__/godmode-inference-auto-supply.test.ts",
+      "apps/bridge/src/services/__tests__/godmode-inference-auto-router.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-retail.test.ts",
       "apps/bridge/src/services/__tests__/godmode-inference-grants-admin.test.ts",
       "apps/bridge/src/services/__tests__/openrouter-platform.test.ts",
