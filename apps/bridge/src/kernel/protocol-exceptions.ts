@@ -104,6 +104,14 @@ export const PROTOCOL_EXCEPTIONS: readonly ProtocolException[] = [
     authenticatedDomainMutations: "none",
   },
   {
+    id: "godmode-inference-admin-auto-router-roster",
+    methods: ["PUT"],
+    pathPattern: "/api/godmode-inference/admin/auto-router/roster",
+    rationale:
+      "Platform-admin Auto router roster replace/reset for godmode/auto supply selection; not ObjectType Record CRUD.",
+    authenticatedDomainMutations: "none",
+  },
+  {
     id: "godmode-inference-config",
     methods: ["GET"],
     pathPattern: "/api/godmode-inference/config",
